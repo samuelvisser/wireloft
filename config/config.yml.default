@@ -1,0 +1,5 @@
+# 5‑field cron spec: minute hour day_of_month month day_of_week
+schedule: "*/15 * * * *"
+shows:
+  - https://www.dailywire.com/show/the-ben-shapiro-show
+  - https://www.dailywire.com/show/the-matt-walsh-show

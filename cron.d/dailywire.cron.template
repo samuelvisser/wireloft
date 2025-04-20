@@ -1,0 +1,4 @@
+# Template for DailyWire downloads; keep as a separate file under /etc/cron.d/
+# The placeholder {{schedule}} will be replaced at container start.
+
+{{schedule}} root /usr/local/bin/download.sh >> /var/log/cron.log 2>&1
