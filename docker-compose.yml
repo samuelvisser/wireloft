@@ -1,0 +1,8 @@
+services:
+  dailywire:
+    build: .
+    container_name: dailywire-downloader
+    restart: no
+    volumes:
+      - ./config:/config:ro
+      - ./downloads:/downloads

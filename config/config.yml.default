@@ -9,6 +9,9 @@ start_date: "2025-01-01"
 #   /downloads/the-ben-shapiro-show/20250420 - Episode Title.mp4
 output: "%(upload_date)s - %(title)s.%(ext)s"
 
+audio_only: true         # if true, extract audio instead of video
+audio_format: "mp3"      # format to encode extracted audio into
+
 shows:
   - name: the-ben-shapiro-show
     url: https://www.dailywire.com/show/the-ben-shapiro-show
