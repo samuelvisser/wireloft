@@ -4,14 +4,15 @@ set -e
 CONFIG_FILE="${CONFIG_FILE:-/config/config.yml}"
 CRON_TMPL="/etc/cron.d/dailywire.cron.template"
 CRON_FILE="/etc/cron.d/dailywire.cron"
+DOWNLOAD_SCRIPT="/usr/local/bin/download.sh"
 
-# 1) Sanity check
+# Sanity check
 [ -f "$CONFIG_FILE" ] || {
   echo "ERROR: Config file not found at $CONFIG_FILE" >&2
   exit 1
 }
 
-# 2) Extract 'schedule' from YAML and render the cron file
+# Extract 'schedule' from YAML and render the cron file
 schedule=$(python3 -c '
 import yaml, sys
 cfg = yaml.safe_load(open(sys.argv[1]))
@@ -21,12 +22,17 @@ if not s:
 print(s)
 ' "$CONFIG_FILE")
 
-# 3) Replace placeholder in template
+# Replace placeholder in template
 sed "s|{{schedule}}|$schedule|g" "$CRON_TMPL" > "$CRON_FILE"
+printf "\n" >> "$CRON_FILE"
 chmod 0644 "$CRON_FILE"
 
-# 4) Install our cron job(s)
+# Install our cron job(s)
 crontab "$CRON_FILE"
 
-# 5) Hand off to CMD (i.e. cron -f)
+# Run one-off download immediately
+echo "$(date '+%Y-%m-%d %H:%M:%S'): Initial download on startup"
+"$DOWNLOAD_SCRIPT"
+
+# Hand off to CMD (i.e. cron -f)
 exec "$@"

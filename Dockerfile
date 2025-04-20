@@ -25,7 +25,7 @@ COPY ./scripts/ /usr/local/bin/
 RUN chmod +x /usr/local/bin/download.sh /usr/local/bin/entrypoint.sh
 
 # 5. Copy the cron‐template
-COPY dailywire.cron.template /etc/cron.d/dailywire.cron.template
+COPY ./cron.d /etc/cron.d
 RUN chmod 0644 /etc/cron.d/dailywire.cron.template
 
 # 6. Ensure cron log exists

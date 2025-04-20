@@ -12,19 +12,39 @@ touch "$ARCHIVE_FILE"
   echo "ERROR: Cookies file missing at $COOKIES_FILE" >&2
   exit 1
 }
+[ -f "$CONFIG_FILE" ] || {
+  echo "ERROR: Config file missing at $CONFIG_FILE" >&2
+  exit 1
+}
 
-# 2) Parse and iterate `shows:` from YAML
-python3 - "$CONFIG_FILE" << 'PYCODE' | while read -r SHOW_URL; do
+# 2) Load the shared output template
+OUTPUT_TEMPLATE=$(python3 - "$CONFIG_FILE" << 'PYCODE'
 import yaml, sys
 cfg = yaml.safe_load(open(sys.argv[1]))
-for url in cfg.get("shows", []):
-    print(url)
+out = cfg.get('output')
+if not out:
+    sys.exit("ERROR: `output` key missing in config.yml")
+print(out)
 PYCODE
-  echo "$(date '+%Y-%m-%d %H:%M:%S'): Downloading $SHOW_URL"
+)
+
+# 3) Iterate over shows: name|url
+python3 - "$CONFIG_FILE" << 'PYCODE' | while IFS='|' read -r SHOW_NAME SHOW_URL; do
+import yaml, sys
+cfg = yaml.safe_load(open(sys.argv[1]))
+for show in cfg.get('shows', []):
+    name = show.get('name')
+    url  = show.get('url')
+    if not (name and url):
+        sys.exit("ERROR: each show entry needs both `name` and `url`")
+    # Emit name|url
+    print(f"{name}|{url}")
+PYCODE
+  echo "$(date '+%Y-%m-%d %H:%M:%S'): Downloading '$SHOW_NAME' from $SHOW_URL"
   yt-dlp \
     --cookies "$COOKIES_FILE" \
     --download-archive "$ARCHIVE_FILE" \
-    -o "$DOWNLOAD_DIR/%(upload_date)s - %(title)s.%(ext)s" \
+    -o "$DOWNLOAD_DIR/$SHOW_NAME/${OUTPUT_TEMPLATE}" \
     --format best \
     "$SHOW_URL"
 done
