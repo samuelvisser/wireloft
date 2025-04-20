@@ -17,6 +17,24 @@ touch "$ARCHIVE_FILE"
   exit 1
 }
 
+# 2) Read start_date and output template from config.yml
+START_DATE=$(python3 - "$CONFIG_FILE" << 'PYCODE'
+import yaml, sys
+cfg = yaml.safe_load(open(sys.argv[1]))
+s = cfg.get("start_date", "").strip()
+print(s)
+PYCODE
+)
+
+if [ -n "$START_DATE" ]; then
+  # remove dashes to get YYYYMMDD for yt-dlp
+  CLEAN_DATE=$(echo "$START_DATE" | tr -d '-')
+  DATE_FILTER="--dateafter $CLEAN_DATE"
+else
+  DATE_FILTER=""
+fi
+
+
 # 2) Load the shared output template
 OUTPUT_TEMPLATE=$(python3 - "$CONFIG_FILE" << 'PYCODE'
 import yaml, sys
@@ -44,7 +62,7 @@ PYCODE
   yt-dlp \
     --cookies "$COOKIES_FILE" \
     --download-archive "$ARCHIVE_FILE" \
+    $DATE_FILTER \
     -o "$DOWNLOAD_DIR/$SHOW_NAME/${OUTPUT_TEMPLATE}" \
-    --format best \
     "$SHOW_URL"
 done

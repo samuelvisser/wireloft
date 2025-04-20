@@ -1,6 +1,9 @@
 # Cron timing: minute hour day_of_month month day_of_week
 schedule: "*/15 * * * *"
 
+# Only download episodes published on or after this date (YYYY‑MM‑DD)
+start_date: "2025-01-01"
+
 # Output template: anything after $DOWNLOAD_DIR/<show_name>/
 # E.g. this will save into:
 #   /downloads/the-ben-shapiro-show/20250420 - Episode Title.mp4
