@@ -61,7 +61,7 @@ read AUDIO_ONLY AUDIO_FORMAT SAVE_DESCRIPTIONS <<EOF
 $(python3 - "$CONFIG_FILE" << 'PYCODE'
 import yaml, sys
 cfg = yaml.safe_load(open(sys.argv[1]))
-print(f"{cfg.get('audio_only', False)} {cfg.get('audio_format','')} {cfg.get('save_descriptions', False)}")
+print(f"{cfg.get('audio_only', False)} {cfg.get('audio_format','')} {cfg.get('save_nfo_file', False)}")
 PYCODE
 )
 EOF

@@ -30,12 +30,12 @@ In `config.yml`, you can set the following options:
 - `output`: Output template for file naming
 - `audio_only`: If true, extract audio instead of video
 - `audio_format`: Format to encode extracted audio into (e.g., "mp3")
-- `save_descriptions`: If true, save video descriptions as .nfo files for Audiobookshelf
+- `save_nfo_file`: If true, save video descriptions as .nfo files for Audiobookshelf
 - `shows`: List of shows to download with their names and URLs
 
 ### Audiobookshelf Integration
 
-When `save_descriptions` is enabled, the tool will:
+When `save_nfo_file` is enabled, the tool will:
 1. Extract video descriptions and metadata using yt-dlp
 2. Extract episode titles directly from the video metadata
 3. Convert them to .nfo files in XML format with both episode title and description
