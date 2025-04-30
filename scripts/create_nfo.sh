@@ -7,13 +7,20 @@ tmp_dir="$2"
 base_name="${base_name%.*}"
 file_name=$(basename "$base_name")
 nfo_file="${base_name}.nfo"
-json_file="${tmp_dir}/${file_name}.info.json"
+
+# Extract the show name from the base_name
+# The format is expected to be /downloads/show-name/episode-name
+show_name=$(echo "$base_name" | awk -F'/' '{print $(NF-1)}')
+
+# Construct the JSON file path with the show name directory
+json_file="${tmp_dir}/${show_name}/${file_name}.info.json"
 
 # Skip if NFO file already exists
 [ -f "$nfo_file" ] && exit 0
 
 # Debug information
 echo "Creating NFO file for: $base_name"
+echo "Show name: $show_name"
 echo "Temporary directory: $tmp_dir"
 echo "JSON file path: $json_file"
 

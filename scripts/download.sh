@@ -56,8 +56,8 @@ print(out)
 PYCODE
 )
 
-# 4) Read audio and description settings
-read AUDIO_ONLY AUDIO_FORMAT SAVE_DESCRIPTIONS <<EOF
+# 4) Read audio and nfo settings
+read AUDIO_ONLY AUDIO_FORMAT SAVE_NFO <<EOF
 $(python3 - "$CONFIG_FILE" << 'PYCODE'
 import yaml, sys
 cfg = yaml.safe_load(open(sys.argv[1]))
@@ -73,8 +73,8 @@ else
   AUDIO_FLAGS=()
 fi
 
-if [ "$SAVE_DESCRIPTIONS" = "true" ]; then
-  DESCRIPTION_FLAG=( "--write-description" "--write-info-json" "--paths" "infojson:$TMP_DIR" "--paths" "description:$TMP_DIR" )
+if [ "$SAVE_NFO" = "true" ]; then
+  NFO_INFO_FLAG=( "--write-info-json" "--paths" "infojson:$TMP_DIR" )
 
   # Use the dedicated script in the scripts folder for NFO creation
   NFO_SCRIPT_FILE="/usr/local/bin/create_nfo.sh"
@@ -82,7 +82,7 @@ if [ "$SAVE_DESCRIPTIONS" = "true" ]; then
   # Set the exec flag to use the script file
   EXEC_FLAG=( "--exec" "$NFO_SCRIPT_FILE %(filepath)q $TMP_DIR" )
 else
-  DESCRIPTION_FLAG=()
+  NFO_INFO_FLAG=()
   EXEC_FLAG=()
 fi
 
@@ -103,7 +103,7 @@ PYCODE
     --download-archive "$ARCHIVE_FILE" \
     "${DATE_FILTER[@]}" \
     "${AUDIO_FLAGS[@]}" \
-    "${DESCRIPTION_FLAG[@]}" \
+    "${NFO_INFO_FLAG[@]}" \
     "${EXEC_FLAG[@]}" \
     --paths temp:"$TMP_DIR" \
     --paths home:"$DOWNLOAD_DIR" \
