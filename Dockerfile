@@ -23,7 +23,7 @@ RUN mkdir -p /downloads /config /usr/local/bin /app/cache /tmp/yt-dlp-tmp \
 
 # Copy in our scripts
 COPY ./scripts/ /usr/local/bin/
-RUN chmod +x /usr/local/bin/download.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/download.sh /usr/local/bin/entrypoint.sh /usr/local/bin/create_nfo.sh
 
 # Copy the cron‐template
 COPY ./cron.d /etc/cron.d

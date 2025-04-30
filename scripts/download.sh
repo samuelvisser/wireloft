@@ -76,46 +76,11 @@ fi
 if [ "$SAVE_DESCRIPTIONS" = "true" ]; then
   DESCRIPTION_FLAG="--write-description --write-info-json"
 
-  # Define the NFO creation script for --exec
-  NFO_SCRIPT='
-    base_name="%(filepath)q"
-    base_name="${base_name%.*}"
-    desc_file="${base_name}.description"
-    nfo_file="${base_name}.nfo"
-    json_file="${base_name}.info.json"
+  # Use the dedicated script in the scripts folder for NFO creation
+  NFO_SCRIPT_FILE="/usr/local/bin/create_nfo.sh"
 
-    # Skip if NFO file already exists or description file does not exist
-    [ -f "$nfo_file" ] && exit 0
-    [ ! -f "$desc_file" ] && exit 0
-
-    # Extract episode title from JSON metadata if available, otherwise fallback to filename
-    if [ -f "$json_file" ]; then
-      # Use Python to extract the title from JSON
-      episode_title=$(python3 -c "import json; print(json.load(open(\"$json_file\"))[\"title\"])")
-      # Remove "[Member Exclusive]" suffix if present
-      episode_title=$(echo "$episode_title" | sed -E "s/ \[Member Exclusive\]$//")
-    else
-      # Fallback: Extract episode title from filename
-      filename=$(basename "$base_name")
-      # Remove date prefix and extension to get title
-      episode_title=$(echo "$filename" | sed -E "s/^[0-9]{8} - //")
-    fi
-
-    # Create NFO file with proper XML format for Audiobookshelf
-    echo "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" > "$nfo_file"
-    echo "<episodedetails>" >> "$nfo_file"
-    echo "  <title><![CDATA[$episode_title]]></title>" >> "$nfo_file"
-    echo "  <plot><![CDATA[$(cat \"$desc_file\")]]></plot>" >> "$nfo_file"
-    echo "</episodedetails>" >> "$nfo_file"
-
-    echo "Created NFO file for $(basename \"$base_name\")"
-
-    # Remove the description and info.json files after creating the NFO file
-    rm -f "$desc_file" "$json_file"
-    echo "Removed description and info.json files for $(basename \"$base_name\")"
-  '
-
-  EXEC_FLAG="--exec $NFO_SCRIPT"
+  # Set the exec flag to use the script file
+  EXEC_FLAG="--exec $NFO_SCRIPT_FILE %(filepath)q"
 else
   DESCRIPTION_FLAG=
   EXEC_FLAG=
