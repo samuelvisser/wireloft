@@ -113,7 +113,7 @@ PYCODE
     --embed-metadata \
     --parse-metadata "description:(?s)(?P<meta_comment>.+)" \
     --parse-metadata "title:(?P<meta_title>.+?)(?:\s+\[Member Exclusive\])?$" \
-    --parse-metadata "title:(?:Ep\.\s+(?P<meta_series-part>\d+))?.*" \
+    --parse-metadata "title:(?:Ep\.\s+(?P<meta_movement>\d+))?.*" \
     --parse-metadata "title:(?:Ep\.\s+(?P<meta_track>\d+))?.*" \
     --parse-metadata "playlist_title:(?P<meta_album>.+)" \
     --parse-metadata "playlist_title:(?P<meta_series>.+)" \
