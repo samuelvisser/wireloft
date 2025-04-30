@@ -117,6 +117,9 @@ PYCODE
     --parse-metadata "title:(?:Ep\.\s+(?P<meta_track>\d+))?.*" \
     --parse-metadata "playlist_title:(?P<meta_album>.+)" \
     --parse-metadata "playlist_title:(?P<meta_series>.+)" \
+    --parse-metadata "upload_date:(?P<meta_date>\d{8})$" \
+    --replace-in-metadata "meta_date" "(.{4})(.{2})(.{2})" "\1-\2-\3" \
+    --parse-metadata "upload_date:(?P<meta_year>.{4}).*" \
     --convert-thumbnails jpg \
     --embed-thumbnail \
     --match-title "\[Member Exclusive\]" \
