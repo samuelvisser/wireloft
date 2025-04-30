@@ -61,19 +61,19 @@ read AUDIO_ONLY AUDIO_FORMAT SAVE_DESCRIPTIONS <<EOF
 $(python3 - "$CONFIG_FILE" << 'PYCODE'
 import yaml, sys
 cfg = yaml.safe_load(open(sys.argv[1]))
-print(f"{cfg.get('audio_only', False)} {cfg.get('audio_format','')} {cfg.get('save_nfo_file', False)}")
+print(f"{str(cfg.get('audio_only', False)).lower()} {cfg.get('audio_format','')} {str(cfg.get('save_nfo_file', False)).lower()}")
 PYCODE
 )
 EOF
 
-if [ "$AUDIO_ONLY" = "True" ] || [ "$AUDIO_ONLY" = "true" ]; then
+if [ "$AUDIO_ONLY" = "true" ]; then
   AUDIO_FLAGS="-x"
   [ -n "$AUDIO_FORMAT" ] && AUDIO_FLAGS="$AUDIO_FLAGS --audio-format $AUDIO_FORMAT"
 else
   AUDIO_FLAGS=
 fi
 
-if [ "$SAVE_DESCRIPTIONS" = "True" ] || [ "$SAVE_DESCRIPTIONS" = "true" ]; then
+if [ "$SAVE_DESCRIPTIONS" = "true" ]; then
   DESCRIPTION_FLAG="--write-description --write-info-json"
 else
   DESCRIPTION_FLAG=
@@ -107,7 +107,7 @@ PYCODE
     "$SHOW_URL"
 
   # Convert .description files to .nfo files for Audiobookshelf if enabled
-  if [ "$SAVE_DESCRIPTIONS" = "True" ] || [ "$SAVE_DESCRIPTIONS" = "true" ]; then
+  if [ "$SAVE_DESCRIPTIONS" = "true" ]; then
     find "$DOWNLOAD_DIR/$SHOW_NAME" -name "*.description" -type f | while read desc_file; do
       base_name="${desc_file%.description}"
       nfo_file="${base_name}.nfo"
