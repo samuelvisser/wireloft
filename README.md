@@ -65,6 +65,8 @@ docker run -d \
 ```
 
 ### Push new update to github registry (dev only)
+docker build -t dailywire-downloader .
+
 echo ACCESS_TOKEN | docker login ghcr.io -u samuelvisser --password-stdin
 
 docker tag dailywire-downloader ghcr.io/samuelvisser/dailywire-downloader:latest
