@@ -75,8 +75,50 @@ fi
 
 if [ "$SAVE_DESCRIPTIONS" = "true" ]; then
   DESCRIPTION_FLAG="--write-description --write-info-json"
+
+  # Define the NFO creation script for --exec
+  NFO_SCRIPT='
+    base_name="%(filepath)q"
+    base_name="${base_name%.*}"
+    desc_file="${base_name}.description"
+    nfo_file="${base_name}.nfo"
+    json_file="${base_name}.info.json"
+
+    # Skip if NFO file already exists or description file does not exist
+    [ -f "$nfo_file" ] && exit 0
+    [ ! -f "$desc_file" ] && exit 0
+
+    # Extract episode title from JSON metadata if available, otherwise fallback to filename
+    if [ -f "$json_file" ]; then
+      # Use Python to extract the title from JSON
+      episode_title=$(python3 -c "import json; print(json.load(open(\"$json_file\"))[\"title\"])")
+      # Remove "[Member Exclusive]" suffix if present
+      episode_title=$(echo "$episode_title" | sed -E "s/ \[Member Exclusive\]$//")
+    else
+      # Fallback: Extract episode title from filename
+      filename=$(basename "$base_name")
+      # Remove date prefix and extension to get title
+      episode_title=$(echo "$filename" | sed -E "s/^[0-9]{8} - //")
+    fi
+
+    # Create NFO file with proper XML format for Audiobookshelf
+    echo "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" > "$nfo_file"
+    echo "<episodedetails>" >> "$nfo_file"
+    echo "  <title><![CDATA[$episode_title]]></title>" >> "$nfo_file"
+    echo "  <plot><![CDATA[$(cat \"$desc_file\")]]></plot>" >> "$nfo_file"
+    echo "</episodedetails>" >> "$nfo_file"
+
+    echo "Created NFO file for $(basename \"$base_name\")"
+
+    # Remove the description and info.json files after creating the NFO file
+    rm -f "$desc_file" "$json_file"
+    echo "Removed description and info.json files for $(basename \"$base_name\")"
+  '
+
+  EXEC_FLAG="--exec $NFO_SCRIPT"
 else
   DESCRIPTION_FLAG=
+  EXEC_FLAG=
 fi
 
 # 5) Iterate shows and download
@@ -102,46 +144,10 @@ PYCODE
     --no-part \
     --windows-filenames \
     $DESCRIPTION_FLAG \
+    $EXEC_FLAG \
     --match-title "\[Member Exclusive\]" \
     -o "$SHOW_NAME/${OUTPUT_TEMPLATE}" \
     "$SHOW_URL"
 
-  # Create NFO files for this show's description files if enabled
-  if [ "$SAVE_DESCRIPTIONS" = "true" ]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S'): Creating NFO files for '$SHOW_NAME'"
-    find "$DOWNLOAD_DIR/$SHOW_NAME" -name "*.description" -type f | while read desc_file; do
-      base_name="${desc_file%.description}"
-      nfo_file="${base_name}.nfo"
-      json_file="${base_name}.info.json"
-
-      # Skip if NFO file already exists
-      [ -f "$nfo_file" ] && continue
-
-      # Extract episode title from JSON metadata if available, otherwise fallback to filename
-      if [ -f "$json_file" ]; then
-        # Use Python to extract the title from JSON
-        episode_title=$(python3 -c "import json; print(json.load(open('$json_file'))['title'])")
-        # Remove "[Member Exclusive]" suffix if present
-        episode_title=$(echo "$episode_title" | sed -E 's/ \[Member Exclusive\]$//')
-      else
-        # Fallback: Extract episode title from filename
-        filename=$(basename "$base_name")
-        # Remove date prefix and extension to get title
-        episode_title=$(echo "$filename" | sed -E 's/^[0-9]{8} - //')
-      fi
-
-      # Create NFO file with proper XML format for Audiobookshelf
-      echo "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" > "$nfo_file"
-      echo "<episodedetails>" >> "$nfo_file"
-      echo "  <title><![CDATA[$episode_title]]></title>" >> "$nfo_file"
-      echo "  <plot><![CDATA[$(cat "$desc_file")]]></plot>" >> "$nfo_file"
-      echo "</episodedetails>" >> "$nfo_file"
-
-      echo "Created NFO file for $(basename "$base_name")"
-
-      # Remove the description and info.json files after creating the NFO file
-      rm -f "$desc_file" "$json_file"
-      echo "Removed description and info.json files for $(basename "$base_name")"
-    done
-  fi
+  # NFO files are now created automatically by yt-dlp's --exec option after each download
 done
