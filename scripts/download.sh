@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/bin/bash
 set -e
 
 # === prevent overlapping runs ===
@@ -40,9 +40,9 @@ PYCODE
 )
 if [ -n "$START_DATE" ]; then
   CLEAN_DATE=$(echo "$START_DATE" | tr -d '-')
-  DATE_FILTER="--dateafter $CLEAN_DATE"
+  DATE_FILTER=( "--dateafter" "$CLEAN_DATE" )
 else
-  DATE_FILTER=
+  DATE_FILTER=()
 fi
 
 # 3) Load the shared output template
@@ -67,23 +67,23 @@ PYCODE
 EOF
 
 if [ "$AUDIO_ONLY" = "true" ]; then
-  AUDIO_FLAGS="-x"
-  [ -n "$AUDIO_FORMAT" ] && AUDIO_FLAGS="$AUDIO_FLAGS --audio-format $AUDIO_FORMAT"
+  AUDIO_FLAGS=( "-x" )
+  [ -n "$AUDIO_FORMAT" ] && AUDIO_FLAGS+=( "--audio-format" "$AUDIO_FORMAT" )
 else
-  AUDIO_FLAGS=
+  AUDIO_FLAGS=()
 fi
 
 if [ "$SAVE_DESCRIPTIONS" = "true" ]; then
-  DESCRIPTION_FLAG="--write-description --write-info-json --paths infojson:$TMPDIR --paths description:$TMPDIR"
+  DESCRIPTION_FLAG=( "--write-description" "--write-info-json" "--paths" "infojson:$TMPDIR" "--paths" "description:$TMPDIR" )
 
   # Use the dedicated script in the scripts folder for NFO creation
   NFO_SCRIPT_FILE="/usr/local/bin/create_nfo.sh"
 
   # Set the exec flag to use the script file
-  EXEC_FLAG="--exec $NFO_SCRIPT_FILE %(filepath)q $TMPDIR"
+  EXEC_FLAG=( "--exec" "$NFO_SCRIPT_FILE %(filepath)q $TMPDIR" )
 else
-  DESCRIPTION_FLAG=
-  EXEC_FLAG=
+  DESCRIPTION_FLAG=()
+  EXEC_FLAG=()
 fi
 
 # 5) Iterate shows and download
@@ -101,15 +101,15 @@ PYCODE
   yt-dlp \
     --cookies "$COOKIES_FILE" \
     --download-archive "$ARCHIVE_FILE" \
-    $DATE_FILTER \
-    $AUDIO_FLAGS \
+    "${DATE_FILTER[@]}" \
+    "${AUDIO_FLAGS[@]}" \
     --paths temp:"$TMPDIR" \
     --paths home:"$DOWNLOAD_DIR" \
     --cache-dir "/app/cache" \
     --no-part \
     --windows-filenames \
-    $DESCRIPTION_FLAG \
-    $EXEC_FLAG \
+    "${DESCRIPTION_FLAG[@]}" \
+    "${EXEC_FLAG[@]}" \
     --match-title "\[Member Exclusive\]" \
     -o "$SHOW_NAME/${OUTPUT_TEMPLATE}" \
     "$SHOW_URL"
