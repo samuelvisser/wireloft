@@ -56,12 +56,12 @@ print(out)
 PYCODE
 )
 
-# 4) Read audio settings
-read AUDIO_ONLY AUDIO_FORMAT <<EOF
+# 4) Read audio and description settings
+read AUDIO_ONLY AUDIO_FORMAT SAVE_DESCRIPTIONS <<EOF
 $(python3 - "$CONFIG_FILE" << 'PYCODE'
 import yaml, sys
 cfg = yaml.safe_load(open(sys.argv[1]))
-print(f"{cfg.get('audio_only', False)} {cfg.get('audio_format','')}")
+print(f"{cfg.get('audio_only', False)} {cfg.get('audio_format','')} {cfg.get('save_descriptions', False)}")
 PYCODE
 )
 EOF
@@ -71,6 +71,12 @@ if [ "$AUDIO_ONLY" = "True" ] || [ "$AUDIO_ONLY" = "true" ]; then
   [ -n "$AUDIO_FORMAT" ] && AUDIO_FLAGS="$AUDIO_FLAGS --audio-format $AUDIO_FORMAT"
 else
   AUDIO_FLAGS=
+fi
+
+if [ "$SAVE_DESCRIPTIONS" = "True" ] || [ "$SAVE_DESCRIPTIONS" = "true" ]; then
+  DESCRIPTION_FLAG="--write-description --write-info-json"
+else
+  DESCRIPTION_FLAG=
 fi
 
 # 5) Iterate shows and download
@@ -94,7 +100,40 @@ PYCODE
     --paths home:"$DOWNLOAD_DIR" \
     --cache-dir "/app/cache" \
     --no-part \
+    --restrict-filenames \
+    $DESCRIPTION_FLAG \
     --match-title "\[Member Exclusive\]" \
     -o "$SHOW_NAME/${OUTPUT_TEMPLATE}" \
     "$SHOW_URL"
+
+  # Convert .description files to .nfo files for Audiobookshelf if enabled
+  if [ "$SAVE_DESCRIPTIONS" = "True" ] || [ "$SAVE_DESCRIPTIONS" = "true" ]; then
+    find "$DOWNLOAD_DIR/$SHOW_NAME" -name "*.description" -type f | while read desc_file; do
+      base_name="${desc_file%.description}"
+      nfo_file="${base_name}.nfo"
+      json_file="${base_name}.info.json"
+
+      # Extract episode title from JSON metadata if available, otherwise fallback to filename
+      if [ -f "$json_file" ]; then
+        # Use Python to extract the title from JSON
+        episode_title=$(python3 -c "import json; print(json.load(open('$json_file'))['title'])")
+        # Remove "[Member Exclusive]" suffix if present
+        episode_title=$(echo "$episode_title" | sed -E 's/ \[Member Exclusive\]$//')
+      else
+        # Fallback: Extract episode title from filename
+        filename=$(basename "$base_name")
+        # Remove date prefix and extension to get title
+        episode_title=$(echo "$filename" | sed -E 's/^[0-9]{8} - //')
+      fi
+
+      # Create NFO file with proper XML format for Audiobookshelf
+      echo "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" > "$nfo_file"
+      echo "<episodedetails>" >> "$nfo_file"
+      echo "  <title><![CDATA[$episode_title]]></title>" >> "$nfo_file"
+      echo "  <plot><![CDATA[$(cat "$desc_file")]]></plot>" >> "$nfo_file"
+      echo "</episodedetails>" >> "$nfo_file"
+
+      echo "Created NFO file for $(basename "$base_name")"
+    done
+  fi
 done
