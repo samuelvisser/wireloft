@@ -10,9 +10,23 @@ nfo_file="${base_name}.nfo"
 desc_file="${tmp_dir}/${file_name}.description"
 json_file="${tmp_dir}/${file_name}.info.json"
 
-# Skip if NFO file already exists or description file does not exist
+# Skip if NFO file already exists
 [ -f "$nfo_file" ] && exit 0
-[ ! -f "$desc_file" ] && exit 0
+
+# Debug information
+echo "Creating NFO file for: $base_name"
+echo "Temporary directory: $tmp_dir"
+echo "Description file path: $desc_file"
+echo "JSON file path: $json_file"
+
+# Check if description file exists
+if [ ! -f "$desc_file" ]; then
+  echo "Warning: Description file not found at $desc_file"
+  # Continue anyway, we'll create an NFO file without the description
+  description_content="No description available"
+else
+  description_content=$(cat "$desc_file")
+fi
 
 # Extract episode title from JSON metadata if available, otherwise fallback to filename
 if [ -f "$json_file" ]; then
@@ -31,11 +45,18 @@ fi
 echo "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" > "$nfo_file"
 echo "<episodedetails>" >> "$nfo_file"
 echo "  <title><![CDATA[$episode_title]]></title>" >> "$nfo_file"
-echo "  <plot><![CDATA[$(cat "$desc_file")]]></plot>" >> "$nfo_file"
+echo "  <plot><![CDATA[$description_content]]></plot>" >> "$nfo_file"
 echo "</episodedetails>" >> "$nfo_file"
 
 echo "Created NFO file for $(basename "$base_name")"
 
-# Remove the description and info.json files after creating the NFO file
-rm -f "$desc_file" "$json_file"
-echo "Removed description and info.json files for $(basename "$base_name")"
+# Remove the description and info.json files after creating the NFO file if they exist
+if [ -f "$desc_file" ]; then
+  rm -f "$desc_file"
+  echo "Removed description file for $(basename "$base_name")"
+fi
+
+if [ -f "$json_file" ]; then
+  rm -f "$json_file"
+  echo "Removed info.json file for $(basename "$base_name")"
+fi
