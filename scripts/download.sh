@@ -1,6 +1,17 @@
 #!/usr/bin/env sh
 set -e
 
+# === prevent overlapping runs ===
+LOCKFILE="/tmp/download.lock"
+exec 9>"$LOCKFILE"
+flock -n 9 || {
+  echo "$(date '+%Y-%m-%d %H:%M:%S'): Another download.sh is still running; exiting."
+  exit 0
+}
+
+# Make all new dirs 777 and new files 666 by default
+umask 000
+
 DOWNLOAD_DIR="/downloads"
 ARCHIVE_FILE="$DOWNLOAD_DIR/downloaded.txt"
 COOKIES_FILE="${COOKIES_FILE:-/config/cookies.txt}"
@@ -9,10 +20,6 @@ CONFIG_FILE="${CONFIG_FILE:-/config/config.yml}"
 # 1) Verify prerequisites
 mkdir -p "$DOWNLOAD_DIR"
 touch "$ARCHIVE_FILE"
-
-# Make archive and downloads dir writable
-chmod a+rw "$ARCHIVE_FILE"    || true
-chmod a+rwx "$DOWNLOAD_DIR"    || true
 
 [ -f "$COOKIES_FILE" ] || {
   echo "ERROR: Cookies file missing at $COOKIES_FILE" >&2
@@ -23,7 +30,7 @@ chmod a+rwx "$DOWNLOAD_DIR"    || true
   exit 1
 }
 
-# 2) Read start_date
+# 2) Read start_date → --dateafter
 START_DATE=$(python3 - "$CONFIG_FILE" << 'PYCODE'
 import yaml, sys
 cfg = yaml.safe_load(open(sys.argv[1]))
@@ -71,7 +78,8 @@ import yaml, sys
 cfg = yaml.safe_load(open(sys.argv[1]))
 for show in cfg.get("shows", []):
     n, u = show.get("name"), show.get("url")
-    if not (n and u): sys.exit("ERROR: each show needs `name` and `url`")
+    if not (n and u):
+        sys.exit("ERROR: each show needs `name` and `url`")
     print(f"{n}|{u}")
 PYCODE
   echo "$(date '+%Y-%m-%d %H:%M:%S'): Downloading '$SHOW_NAME' from $SHOW_URL"
@@ -81,10 +89,11 @@ PYCODE
     --download-archive "$ARCHIVE_FILE" \
     $DATE_FILTER \
     $AUDIO_FLAGS \
+    --paths temp:"$TMPDIR" \
+    --paths home:"$DOWNLOAD_DIR" \
+    --cache-dir "/app/cache" \
+    --no-part \
     --match-title "\[Member Exclusive\]" \
-    -o "$DOWNLOAD_DIR/$SHOW_NAME/${OUTPUT_TEMPLATE}" \
+    -o "$SHOW_NAME/${OUTPUT_TEMPLATE}" \
     "$SHOW_URL"
-
-  # ensure show directory and its contents are writable, but only directories get exec
-  chmod -R a+rwX "$DOWNLOAD_DIR/$SHOW_NAME" || true
 done

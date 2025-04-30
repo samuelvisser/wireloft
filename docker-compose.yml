@@ -4,5 +4,5 @@ services:
     container_name: dailywire-downloader
     restart: no
     volumes:
-      - ./config:/config:ro
+      - ./config:/config
       - ./downloads:/downloads
