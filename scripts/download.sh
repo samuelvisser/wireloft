@@ -100,18 +100,22 @@ PYCODE
     --paths home:"$DOWNLOAD_DIR" \
     --cache-dir "/app/cache" \
     --no-part \
-    --restrict-filenames \
+    --windows-filenames \
     $DESCRIPTION_FLAG \
     --match-title "\[Member Exclusive\]" \
     -o "$SHOW_NAME/${OUTPUT_TEMPLATE}" \
     "$SHOW_URL"
 
-  # Convert .description files to .nfo files for Audiobookshelf if enabled
+  # Create NFO files for this show's description files if enabled
   if [ "$SAVE_DESCRIPTIONS" = "true" ]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S'): Creating NFO files for '$SHOW_NAME'"
     find "$DOWNLOAD_DIR/$SHOW_NAME" -name "*.description" -type f | while read desc_file; do
       base_name="${desc_file%.description}"
       nfo_file="${base_name}.nfo"
       json_file="${base_name}.info.json"
+
+      # Skip if NFO file already exists
+      [ -f "$nfo_file" ] && continue
 
       # Extract episode title from JSON metadata if available, otherwise fallback to filename
       if [ -f "$json_file" ]; then
@@ -134,6 +138,10 @@ PYCODE
       echo "</episodedetails>" >> "$nfo_file"
 
       echo "Created NFO file for $(basename "$base_name")"
+
+      # Remove the description and info.json files after creating the NFO file
+      rm -f "$desc_file" "$json_file"
+      echo "Removed description and info.json files for $(basename "$base_name")"
     done
   fi
 done
