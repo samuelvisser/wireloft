@@ -112,10 +112,9 @@ PYCODE
     --windows-filenames \
     --embed-metadata \
     --parse-metadata "description:(?s)(?P<meta_comment>.+)" \
-    --parse-metadata "title:%(title)s" --parse-metadata "title:%(title)s.replace(' [Member Exclusive]', '')" \
-    --parse-metadata "playlist_title:album" \
-    --parse-metadata "playlist_title:series" \
-    --parse-metadata "series-part:album" \
+    --parse-metadata "title:(?P<title>.+?)(?:\s+\[Member Exclusive\])?$" \
+    --parse-metadata "playlist_title:(?P<meta_album>.+)" \
+    --parse-metadata "playlist_title:(?P<meta_series>.+)" \
     --convert-thumbnails jpg \
     --embed-thumbnail \
     --match-title "\[Member Exclusive\]" \
