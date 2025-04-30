@@ -18,7 +18,8 @@ RUN git clone https://github.com/yt-dlp/yt-dlp.git && \
     pip install pyyaml
 
 # Create directories
-RUN mkdir -p /downloads /config /usr/local/bin
+RUN mkdir -p /downloads /config /usr/local/bin /app/cache /tmp/yt-dlp-tmp \
+    && chmod a+rwX /tmp/yt-dlp-tmp /app/cache
 
 # Copy in our scripts
 COPY ./scripts/ /usr/local/bin/
@@ -27,11 +28,6 @@ RUN chmod +x /usr/local/bin/download.sh /usr/local/bin/entrypoint.sh
 # Copy the cron‐template
 COPY ./cron.d /etc/cron.d
 RUN chmod 0644 /etc/cron.d/dailywire.cron.template
-
-# Ensure our temp & cache dirs exist
-ENV TEMP_DIR="/tmp/yt-dlp-tmp"
-RUN mkdir -p /tmp/yt-dlp-tmp /app/cache \
- && chmod a+rwX /tmp/yt-dlp-tmp /app/cache
 
 # Ensure cron log exists
 RUN touch /var/log/cron.log

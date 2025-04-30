@@ -13,6 +13,7 @@ flock -n 9 || {
 umask 000
 
 DOWNLOAD_DIR="/downloads"
+TMPDIR="/tmp/yt-dlp-tmp"
 ARCHIVE_FILE="$DOWNLOAD_DIR/downloaded.txt"
 COOKIES_FILE="${COOKIES_FILE:-/config/cookies.txt}"
 CONFIG_FILE="${CONFIG_FILE:-/config/config.yml}"
