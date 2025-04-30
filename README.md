@@ -8,6 +8,7 @@ In no way does this project help pirate premium shows, as it requires an active 
 
 - Downloads premium DailyWire shows using your account credentials (via cookies)
 - Supports audio-only mode for podcast-like experience
+- Downloads video thumbnails and sets them as cover art
 - Can extract video descriptions and save them as .nfo files for Audiobookshelf compatibility
 - Ensures filenames only use ASCII characters for maximum compatibility
 - Configurable download schedule via cron

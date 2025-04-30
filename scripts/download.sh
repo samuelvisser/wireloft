@@ -13,7 +13,7 @@ flock -n 9 || {
 umask 000
 
 DOWNLOAD_DIR="/downloads"
-TMPDIR="/tmp/yt-dlp-tmp"
+TMP_DIR="/tmp/yt-dlp-tmp"
 ARCHIVE_FILE="$DOWNLOAD_DIR/downloaded.txt"
 COOKIES_FILE="${COOKIES_FILE:-/config/cookies.txt}"
 CONFIG_FILE="${CONFIG_FILE:-/config/config.yml}"
@@ -74,13 +74,13 @@ else
 fi
 
 if [ "$SAVE_DESCRIPTIONS" = "true" ]; then
-  DESCRIPTION_FLAG=( "--write-description" "--write-info-json" "--paths" "infojson:$TMPDIR" "--paths" "description:$TMPDIR" )
+  DESCRIPTION_FLAG=( "--write-description" "--write-info-json" "--paths" "infojson:$TMP_DIR" "--paths" "description:$TMP_DIR" )
 
   # Use the dedicated script in the scripts folder for NFO creation
   NFO_SCRIPT_FILE="/usr/local/bin/create_nfo.sh"
 
   # Set the exec flag to use the script file
-  EXEC_FLAG=( "--exec" "$NFO_SCRIPT_FILE %(filepath)q $TMPDIR" )
+  EXEC_FLAG=( "--exec" "$NFO_SCRIPT_FILE %(filepath)q $TMP_DIR" )
 else
   DESCRIPTION_FLAG=()
   EXEC_FLAG=()
@@ -103,13 +103,16 @@ PYCODE
     --download-archive "$ARCHIVE_FILE" \
     "${DATE_FILTER[@]}" \
     "${AUDIO_FLAGS[@]}" \
-    --paths temp:"$TMPDIR" \
+    "${DESCRIPTION_FLAG[@]}" \
+    "${EXEC_FLAG[@]}" \
+    --paths temp:"$TMP_DIR" \
     --paths home:"$DOWNLOAD_DIR" \
     --cache-dir "/app/cache" \
     --no-part \
     --windows-filenames \
-    "${DESCRIPTION_FLAG[@]}" \
-    "${EXEC_FLAG[@]}" \
+    --embed-metadata \
+    --convert-thumbnails jpg \
+    --embed-thumbnail \
     --match-title "\[Member Exclusive\]" \
     -o "$SHOW_NAME/${OUTPUT_TEMPLATE}" \
     "$SHOW_URL"
