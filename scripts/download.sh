@@ -74,13 +74,13 @@ else
 fi
 
 if [ "$SAVE_DESCRIPTIONS" = "true" ]; then
-  DESCRIPTION_FLAG="--write-description --write-info-json"
+  DESCRIPTION_FLAG="--write-description --write-info-json --paths infojson:$TMPDIR --paths description:$TMPDIR"
 
   # Use the dedicated script in the scripts folder for NFO creation
   NFO_SCRIPT_FILE="/usr/local/bin/create_nfo.sh"
 
   # Set the exec flag to use the script file
-  EXEC_FLAG="--exec $NFO_SCRIPT_FILE %(filepath)q"
+  EXEC_FLAG="--exec $NFO_SCRIPT_FILE %(filepath)q $TMPDIR"
 else
   DESCRIPTION_FLAG=
   EXEC_FLAG=

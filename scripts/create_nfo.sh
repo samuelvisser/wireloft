@@ -3,10 +3,12 @@
 # This script is called by yt-dlp after each download
 
 base_name="$1"
+tmp_dir="${2:-/tmp/yt-dlp-tmp}"
 base_name="${base_name%.*}"
-desc_file="${base_name}.description"
+file_name=$(basename "$base_name")
 nfo_file="${base_name}.nfo"
-json_file="${base_name}.info.json"
+desc_file="${tmp_dir}/${file_name}.description"
+json_file="${tmp_dir}/${file_name}.info.json"
 
 # Skip if NFO file already exists or description file does not exist
 [ -f "$nfo_file" ] && exit 0
