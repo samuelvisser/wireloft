@@ -19,7 +19,7 @@ COOKIES_FILE="${COOKIES_FILE:-/config/cookies.txt}"
 CONFIG_FILE="${CONFIG_FILE:-/config/config.yml}"
 
 # 1) Verify prerequisites
-mkdir -p "$DOWNLOAD_DIR"
+mkdir -p "$DOWNLOAD_DIR" "$TMP_DIR"
 touch "$ARCHIVE_FILE"
 
 [ -f "$COOKIES_FILE" ] || {

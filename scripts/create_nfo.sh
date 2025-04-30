@@ -3,11 +3,10 @@
 # This script is called by yt-dlp after each download
 
 base_name="$1"
-tmp_dir="${2:-/tmp/yt-dlp-tmp}"
+tmp_dir="$2"
 base_name="${base_name%.*}"
 file_name=$(basename "$base_name")
 nfo_file="${base_name}.nfo"
-desc_file="${tmp_dir}/${file_name}.description"
 json_file="${tmp_dir}/${file_name}.info.json"
 
 # Skip if NFO file already exists
@@ -16,30 +15,21 @@ json_file="${tmp_dir}/${file_name}.info.json"
 # Debug information
 echo "Creating NFO file for: $base_name"
 echo "Temporary directory: $tmp_dir"
-echo "Description file path: $desc_file"
 echo "JSON file path: $json_file"
 
-# Check if description file exists
-if [ ! -f "$desc_file" ]; then
-  echo "Warning: Description file not found at $desc_file"
-  # Continue anyway, we'll create an NFO file without the description
-  description_content="No description available"
-else
-  description_content=$(cat "$desc_file")
+# Check if json file exists
+if [ ! -f "$json_file" ]; then
+  echo "Error: Json file not found at $json_file"
+  exit 0
 fi
 
-# Extract episode title from JSON metadata if available, otherwise fallback to filename
-if [ -f "$json_file" ]; then
-  # Use Python to extract the title from JSON
-  episode_title=$(python3 -c "import json; print(json.load(open(\"$json_file\"))[\"title\"])")
-  # Remove "[Member Exclusive]" suffix if present
-  episode_title=$(echo "$episode_title" | sed -E "s/ \[Member Exclusive\]$//")
-else
-  # Fallback: Extract episode title from filename
-  filename=$(basename "$base_name")
-  # Remove date prefix and extension to get title
-  episode_title=$(echo "$filename" | sed -E "s/^[0-9]{8} - //")
-fi
+# Use Python to extract the title and description from JSON
+episode_title=$(python3 -c "import json; print(json.load(open(\"$json_file\"))[\"title\"])")
+# Remove "[Member Exclusive]" suffix if present
+episode_title=$(echo "$episode_title" | sed -E "s/ \[Member Exclusive\]$//")
+
+# Extract description from JSON
+description_content=$(python3 -c "import json; print(json.load(open(\"$json_file\")).get(\"description\", \"No description available\"))")
 
 # Create NFO file with proper XML format for Audiobookshelf
 echo "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" > "$nfo_file"
@@ -50,13 +40,6 @@ echo "</episodedetails>" >> "$nfo_file"
 
 echo "Created NFO file for $(basename "$base_name")"
 
-# Remove the description and info.json files after creating the NFO file if they exist
-if [ -f "$desc_file" ]; then
-  rm -f "$desc_file"
-  echo "Removed description file for $(basename "$base_name")"
-fi
-
-if [ -f "$json_file" ]; then
-  rm -f "$json_file"
-  echo "Removed info.json file for $(basename "$base_name")"
-fi
+# Remove the info.json file after creating the NFO file
+rm -f "$json_file"
+echo "Removed info.json file for $(basename "$base_name")"
