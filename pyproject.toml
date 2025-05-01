@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "dailywire-downloader"
+version = "0.1.0"
+description = "A tool to download premium shows from the DailyWire website"
+authors = ["Samuël Visser <samuvisser@gmail.com>"]
+readme = "README.md"
+packages = [{include = "dailywire_downloader"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pyyaml = "^6.0"
+yt-dlp = {git = "https://github.com/yt-dlp/yt-dlp.git", rev = "pr-9920"}
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+dailywire-download = "dailywire_downloader.cli:main"

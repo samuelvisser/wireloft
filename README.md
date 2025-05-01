@@ -1,3 +1,5 @@
+> This project is mostly AI- generated. Im using it myself, but the reason for building it was mostly to get used to the AI coding tools. The project is functional, not efficient. Use at your own risk
+
 # DailyWire Show Downloader
 
 This is a simple Docker image that is made to download premium shows from the DailyWire website.<br>
@@ -45,13 +47,37 @@ When `save_nfo_file` is enabled, the tool will:
 
 Audiobookshelf will automatically read these .nfo files and include both the titles and descriptions in its RSS feed.
 
+## Development
+
+This project uses [Poetry](https://python-poetry.org/) for dependency management.
+
+### Setup for Development
+
+1. Install Poetry:
+   ```bash
+   curl -sSL https://install.python-poetry.org | python3 -
+   ```
+
+2. Install dependencies:
+   ```bash
+   poetry install
+   ```
+
+3. Run the downloader:
+   ```bash
+   poetry run dailywire-download
+   ```
+
 ## Build Docker image
+
+```bash
 docker build -t dailywire-downloader-cron .
 
 docker run -d \
   -v ./config:/config:ro \
   -v ./downloads:/downloads \
   dailywire-downloader-cron
+```
 
 ## Using the pre-built image
 You can pull the pre-built image from GitHub Container Registry:
