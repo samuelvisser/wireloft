@@ -38,11 +38,23 @@ episode_title=$(echo "$episode_title" | sed -E "s/ \[Member Exclusive\]$//")
 # Extract description from JSON
 description_content=$(python3 -c "import json; print(json.load(open(\"$json_file\")).get(\"description\", \"No description available\"))")
 
+# Extract episode number from JSON (meta_movement or meta_track)
+episode_number=$(python3 -c "import json; data = json.load(open(\"$json_file\")); print(data.get(\"meta_movement\") or data.get(\"meta_track\") or '')")
+
+# Extract date from JSON (meta_date)
+episode_date=$(python3 -c "import json; print(json.load(open(\"$json_file\")).get(\"meta_date\", \"\"))")
+
 # Create NFO file with proper XML format for Audiobookshelf
 echo "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" > "$nfo_file"
 echo "<episodedetails>" >> "$nfo_file"
 echo "  <title><![CDATA[$episode_title]]></title>" >> "$nfo_file"
 echo "  <plot><![CDATA[$description_content]]></plot>" >> "$nfo_file"
+if [ -n "$episode_number" ]; then
+  echo "  <episode>$episode_number</episode>" >> "$nfo_file"
+fi
+if [ -n "$episode_date" ]; then
+  echo "  <aired>$episode_date</aired>" >> "$nfo_file"
+fi
 echo "</episodedetails>" >> "$nfo_file"
 
 echo "Created NFO file for $(basename "$base_name")"
