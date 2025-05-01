@@ -47,6 +47,18 @@ When `save_nfo_file` is enabled, the tool will:
 
 Audiobookshelf will automatically read these .nfo files and include both the titles and descriptions in its RSS feed.
 
+### Command-line Arguments and Environment Variables
+
+The downloader supports the following command-line arguments:
+
+- `--config`: Path to the configuration file (default: `/config/config.yml` or `$CONFIG_FILE` env var)
+- `--cookies`: Path to the cookies file (default: `/config/cookies.txt` or `$COOKIES_FILE` env var)
+
+You can also set these paths using environment variables:
+
+- `CONFIG_FILE`: Path to the configuration file
+- `COOKIES_FILE`: Path to the cookies file
+
 ## Development
 
 This project uses [Poetry](https://python-poetry.org/) for dependency management.
@@ -66,6 +78,11 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
 3. Run the downloader:
    ```bash
    poetry run dailywire-download
+   ```
+
+   You can also specify custom paths for the configuration and cookies files:
+   ```bash
+   poetry run dailywire-download --config /path/to/config.yml --cookies /path/to/cookies.txt
    ```
 
 ## Build Docker image

@@ -2,6 +2,7 @@
 set -e
 
 CONFIG_FILE="${CONFIG_FILE:-/config/config.yml}"
+COOKIES_FILE="${COOKIES_FILE:-/config/cookies.txt}"
 CRON_TMPL="/etc/cron.d/dailywire.cron.template"
 CRON_FILE="/etc/cron.d/dailywire.cron"
 DOWNLOAD_CMD="python3 -m dailywire_downloader"

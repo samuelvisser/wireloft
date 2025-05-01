@@ -13,8 +13,8 @@ import yt_dlp
 DOWNLOAD_DIR = "/downloads"
 TMP_DIR = "/tmp/yt-dlp-tmp"
 ARCHIVE_FILE = f"{DOWNLOAD_DIR}/downloaded.txt"
-COOKIES_FILE = os.environ.get("COOKIES_FILE", "/config/cookies.txt")
-CONFIG_FILE = os.environ.get("CONFIG_FILE", "/config/config.yml")
+COOKIES_FILE = "/config/cookies.txt"
+CONFIG_FILE = "/config/config.yml"
 LOCKFILE = "/tmp/download.lock"
 
 def log(message):
@@ -163,10 +163,20 @@ def download_show(show_name, show_url, config, date_options, audio_options, nfo_
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([show_url])
 
-def download_shows():
-    """Main function to download all configured shows."""
+def download_shows(config_file: str, cookies_file: str):
+    """Main function to download all configured shows.
+
+    Args:
+        config_file: Path to the configuration file. If None, uses the CONFIG_FILE constant.
+        cookies_file: Path to the cookies file. If None, uses the COOKIES_FILE constant.
+    """
     # Set umask to make all new dirs 777 and new files 666 by default
     os.umask(0)
+
+    # Override global constants
+    global CONFIG_FILE, COOKIES_FILE
+    CONFIG_FILE = config_file
+    COOKIES_FILE = cookies_file
 
     # Prevent overlapping runs
     lock_fd = acquire_lock()

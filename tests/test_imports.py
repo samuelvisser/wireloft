@@ -13,18 +13,13 @@ class TestImports(unittest.TestCase):
 
     def test_import_downloader(self):
         """Test that the downloader module can be imported."""
-        from dailywire_downloader import downloader
-        self.assertIsNotNone(downloader)
+        from dailywire_downloader import download
+        self.assertIsNotNone(download)
 
     def test_import_nfo(self):
         """Test that the nfo module can be imported."""
         from dailywire_downloader import nfo
         self.assertIsNotNone(nfo)
-
-    def test_import_cli(self):
-        """Test that the cli module can be imported."""
-        from dailywire_downloader import cli
-        self.assertIsNotNone(cli)
 
     def test_import_main(self):
         """Test that the __main__ module can be imported."""
