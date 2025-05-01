@@ -1,4 +1,4 @@
-"""Command-line interface for DailyWire Downloader."""
+"""Main entry point for DailyWire Downloader when run as a module."""
 
 import sys
 from dailywire_downloader.downloader import download_shows

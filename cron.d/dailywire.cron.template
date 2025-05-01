@@ -1,4 +1,4 @@
 # Template for DailyWire downloads; keep as a separate file under /etc/cron.d/
 # The placeholder {{schedule}} will be replaced at container start.
 
-{{schedule}} root python3 -m dailywire_downloader.cli >> /var/log/cron.log 2>&1
+{{schedule}} root python3 -m dailywire_downloader >> /var/log/cron.log 2>&1
