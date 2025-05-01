@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.13-slim
 
 # System deps
 RUN apt-get update && \
@@ -23,7 +23,7 @@ RUN mkdir -p /downloads /config /usr/local/bin /app/cache /tmp/yt-dlp-tmp \
 
 # Copy in our scripts
 COPY ./scripts/ /usr/local/bin/
-RUN chmod +x /usr/local/bin/download.sh /usr/local/bin/entrypoint.sh /usr/local/bin/create_nfo.sh
+RUN chmod +x /usr/local/bin/download.py /usr/local/bin/entrypoint.sh /usr/local/bin/create_nfo.py
 
 # Copy the cron‐template
 COPY ./cron.d /etc/cron.d

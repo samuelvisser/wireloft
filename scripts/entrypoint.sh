@@ -4,7 +4,7 @@ set -e
 CONFIG_FILE="${CONFIG_FILE:-/config/config.yml}"
 CRON_TMPL="/etc/cron.d/dailywire.cron.template"
 CRON_FILE="/etc/cron.d/dailywire.cron"
-DOWNLOAD_SCRIPT="/usr/local/bin/download.sh"
+DOWNLOAD_SCRIPT="/usr/local/bin/download.py"
 
 # Sanity check
 [ -f "$CONFIG_FILE" ] || {
