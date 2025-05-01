@@ -12,6 +12,7 @@ output: "%(upload_date)s - %(title)s.%(ext)s"
 audio_only: true        # if true, extract audio instead of video
 audio_format: "mp3"     # format to encode extracted audio into
 save_nfo_file: false     # if true, save file information as .nfo files for media servers (e.g., Audiobookshelf)
+retry_download_all: false  # if false, stop downloading when an already downloaded video is encountered
 
 shows:
   - name: the-ben-shapiro-show

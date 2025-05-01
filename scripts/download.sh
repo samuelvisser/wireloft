@@ -57,12 +57,12 @@ print(out)
 PYCODE
 )
 
-# 4) Read audio and nfo settings
-read AUDIO_ONLY AUDIO_FORMAT SAVE_NFO <<EOF
+# 4) Read audio, nfo, and retry settings
+read AUDIO_ONLY AUDIO_FORMAT SAVE_NFO RETRY_DOWNLOAD_ALL <<EOF
 $(python3 - "$CONFIG_FILE" << 'PYCODE'
 import yaml, sys
 cfg = yaml.safe_load(open(sys.argv[1]))
-print(f"{str(cfg.get('audio_only', False)).lower()} {cfg.get('audio_format','')} {str(cfg.get('save_nfo_file', False)).lower()}")
+print(f"{str(cfg.get('audio_only', False)).lower()} {cfg.get('audio_format','')} {str(cfg.get('save_nfo_file', False)).lower()} {str(cfg.get('retry_download_all', True)).lower()}")
 PYCODE
 )
 EOF
@@ -87,6 +87,13 @@ else
   EXEC_FLAG=()
 fi
 
+# Set break-on-existing flag if retry_download_all is not true
+if [ "$RETRY_DOWNLOAD_ALL" != "true" ]; then
+  RETRY_DOWNLOAD_FLAG=( "--break-on-existing" )
+else
+  RETRY_DOWNLOAD_FLAG=( "--sleep-requests" "0.75" )
+fi
+
 # 5) Iterate shows and download
 python3 - "$CONFIG_FILE" << 'PYCODE' | while IFS='|' read -r SHOW_NAME SHOW_URL; do
 import yaml, sys
@@ -106,6 +113,7 @@ PYCODE
     "${AUDIO_FLAGS[@]}" \
     "${NFO_INFO_FLAG[@]}" \
     "${EXEC_FLAG[@]}" \
+    "${RETRY_DOWNLOAD_FLAG[@]}" \
     --paths temp:"$TMP_DIR" \
     --paths home:"$DOWNLOAD_DIR" \
     --cache-dir "/app/cache" \
@@ -118,8 +126,11 @@ PYCODE
     --parse-metadata "title:(?:Ep\.\s+(?P<meta_track>\d+))?.*" \
     --parse-metadata "playlist_title:(?P<meta_album>.+)" \
     --parse-metadata "playlist_title:(?P<meta_series>.+)" \
-    --parse-metadata "upload_date:(?P<meta_date>%(upload_date>%Y-%m-%d)s)" \
+    --parse-metadata "upload_date:(?P<meta_date>\d{8})$" \
+    --replace-in-metadata "meta_date" "(.{4})(.{2})(.{2})" "\1-\2-\3" \
     --parse-metadata "upload_date:(?P<meta_year>.{4}).*" \
+    --min-sleep-interval 10 \
+    --max-sleep-interval 25 \
     --convert-thumbnails jpg \
     --embed-thumbnail \
     --match-title "\[Member Exclusive\]" \
