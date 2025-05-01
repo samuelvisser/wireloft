@@ -86,11 +86,11 @@ def get_nfo_options(config):
     if save_nfo:
         options['writeinfojson'] = True
         options['paths'] = {'infojson': TMP_DIR}
-        # Use the module path for the create_nfo script
-        nfo_script_file = "/usr/local/bin/create_nfo.py"
+        # Import and use the nfo module directly
+        from dailywire_downloader.nfo import create_nfo
         # In the Python API, postprocessor_hooks is used instead of exec_cmd
         options['postprocessor_hooks'] = [
-            lambda info, ctx: os.system(f"{nfo_script_file} {info['filepath']} {TMP_DIR}")
+            lambda info, ctx: create_nfo(info['filepath'], TMP_DIR)
         ]
     return options
 
