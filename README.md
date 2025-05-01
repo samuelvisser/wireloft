@@ -12,6 +12,7 @@ In no way does this project help pirate premium shows, as it requires an active 
 - Can extract video descriptions and save them as .nfo files for Audiobookshelf compatibility
 - Ensures filenames only use ASCII characters for maximum compatibility
 - Configurable download schedule via cron
+- Displays cron job logs in the console for easy monitoring
 
 ## Configuration
 

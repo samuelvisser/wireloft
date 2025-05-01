@@ -34,5 +34,8 @@ crontab "$CRON_FILE"
 echo "$(date '+%Y-%m-%d %H:%M:%S'): Initial download on startup"
 "$DOWNLOAD_SCRIPT"
 
+# Start tailing the cron log in the background
+tail -f /var/log/cron.log &
+
 # Hand off to CMD (i.e. cron -f)
 exec "$@"
