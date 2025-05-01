@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+# We don't want to use 'set -e' here because we want to continue processing shows
+# even if one of them fails due to --break-on-existing
 
 # === prevent overlapping runs ===
 LOCKFILE="/tmp/download.lock"
@@ -136,6 +137,4 @@ PYCODE
     --match-title "\[Member Exclusive\]" \
     -o "$SHOW_NAME/${OUTPUT_TEMPLATE}" \
     "$SHOW_URL"
-
-  # NFO files are now created automatically by yt-dlp's --exec option after each download
 done
