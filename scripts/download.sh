@@ -40,7 +40,8 @@ PYCODE
 )
 if [ -n "$START_DATE" ]; then
   CLEAN_DATE=$(echo "$START_DATE" | tr -d '-')
-  DATE_FILTER=( "--dateafter" "$CLEAN_DATE" )
+#  DATE_FILTER=( "--dateafter" "$CLEAN_DATE" )
+  DATE_FILTER=( "--dateafter" "$CLEAN_DATE" "--break-match-filters" "upload_date>=$CLEAN_DATE" )
 else
   DATE_FILTER=()
 fi
