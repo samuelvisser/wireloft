@@ -7,9 +7,9 @@ readme = "README.md"
 packages = [{include = "dailywire_downloader"}]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "~3.13"
 pyyaml = "^6.0"
-yt-dlp = {git = "https://github.com/yt-dlp/yt-dlp.git", rev = "pr-9920"}
+yt-dlp = { git = "https://github.com/yt-dlp/yt-dlp.git", rev = "311bb3b" }
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
