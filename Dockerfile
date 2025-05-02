@@ -17,33 +17,32 @@ RUN git clone https://github.com/yt-dlp/yt-dlp.git && \
     git checkout pr-9920 && \
     pip install .
 
+# Set up working directory
+WORKDIR /app
+
 # Install Poetry
 RUN curl -sSL https://install.python-poetry.org | python3 -
 ENV PATH="/root/.local/bin:$PATH"
-
-# Set up working directory
-WORKDIR /app
 
 # Create directories
 RUN mkdir -p /downloads /config /usr/local/bin /app/cache /tmp/yt-dlp-tmp \
     && chmod a+rwX /tmp/yt-dlp-tmp /app/cache
 
 # Copy package files
-COPY pyproject.toml poetry.lock* ./
-COPY dailywire_downloader/ ./dailywire_downloader/
-COPY scripts/ ./scripts/
+COPY pyproject.toml poetry.lock poetry.toml /app/
+COPY ./dailywire_downloader/ /app/dailywire_downloader/
 
 # Install the package
-RUN poetry config virtualenvs.create false && \
-    poetry install --no-dev
+RUN cd /app && \
+    poetry install
 
 # Copy scripts to /usr/local/bin
-RUN cp ./scripts/* /usr/local/bin/ && \
-    chmod +x /usr/local/bin/download.py /usr/local/bin/entrypoint.sh /usr/local/bin/create_nfo.py
+COPY ./scripts/ /usr/local/bin/
+RUN chmod +x /usr/local/bin/*
 
 # Copy the cron‐template
 COPY ./cron.d /etc/cron.d
-RUN chmod 0644 /etc/cron.d/dailywire.cron.template
+RUN chmod 0644 /etc/cron.d/*
 
 # Ensure cron log exists
 RUN touch /var/log/cron.log
