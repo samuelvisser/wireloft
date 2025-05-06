@@ -23,6 +23,7 @@ WORKDIR /app
 # Install Poetry
 RUN curl -sSL https://install.python-poetry.org | python3 -
 ENV PATH="/root/.local/bin:$PATH"
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Create directories
 RUN mkdir -p /downloads /config /usr/local/bin /app/cache /tmp/yt-dlp-tmp \
