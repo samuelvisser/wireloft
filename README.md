@@ -1,8 +1,8 @@
-> This project is mostly AI- generated. Im using it myself, but the reason for building it was mostly to get used to the AI coding tools. The project is functional, not efficient. Use at your own risk
+> This project was made primarily for personal use. Im sharing it publicly in the hopes it might be useful to some. If you run into issues, let me know, but I might not always respond very quickly 
 
 # DailyWire Show Downloader
 
-This is a simple Docker image that is made to download premium shows from the DailyWire website.<br>
+This is a simple Docker image made to download premium shows from the DailyWire website.<br>
 Specifically, it is made to be used together with other tools to create a private RSS feed for premium DailyWire Shows.<br>
 In no way does this project help pirate premium shows, as it requires an active premium DailyWire account to work.
 
@@ -76,24 +76,20 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
    ```
 
 3. Run the downloader:
+   You can specify custom paths for the configuration and cookies files:
    ```bash
-   poetry run dailywire-download
-   ```
-
-   You can also specify custom paths for the configuration and cookies files:
-   ```bash
-   poetry run dailywire-download --config /path/to/config.yml --cookies /path/to/cookies.txt
+   dailywire-download --config /path/to/config.yml --cookies /path/to/cookies.txt
    ```
 
 ## Build Docker image
 
 ```bash
-docker build -t dailywire-downloader-cron .
+docker build -t dailywire-downloader .
 
 docker run -d \
   -v ./config:/config:ro \
   -v ./downloads:/downloads \
-  dailywire-downloader-cron
+  dailywire-downloader
 ```
 
 ## Using the pre-built image
@@ -109,6 +105,7 @@ docker run -d \
 ```
 
 ### Push new update to github registry (dev only)
+```bash
 docker build -t dailywire-downloader .
 
 echo ACCESS_TOKEN | docker login ghcr.io -u samuelvisser --password-stdin
@@ -116,3 +113,4 @@ echo ACCESS_TOKEN | docker login ghcr.io -u samuelvisser --password-stdin
 docker tag dailywire-downloader ghcr.io/samuelvisser/dailywire-downloader:latest
 
 docker push ghcr.io/samuelvisser/dailywire-downloader:latest
+```

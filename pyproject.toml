@@ -14,6 +14,9 @@ yt-dlp = { git = "https://github.com/yt-dlp/yt-dlp.git", rev = "311bb3b" }
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
 
+[tool.poetry.scripts]
+dailywire-downloader = "dailywire_downloader.__main__:main"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

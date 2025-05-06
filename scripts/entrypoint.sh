@@ -5,7 +5,7 @@ CONFIG_FILE="${CONFIG_FILE:-/config/config.yml}"
 COOKIES_FILE="${COOKIES_FILE:-/config/cookies.txt}"
 CRON_TMPL="/etc/cron.d/dailywire.cron.template"
 CRON_FILE="/etc/cron.d/dailywire.cron"
-DOWNLOAD_CMD="python3 -m dailywire_downloader"
+DOWNLOAD_CMD="dailywire-downloader"
 
 # Sanity check
 [ -f "$CONFIG_FILE" ] || {
@@ -14,7 +14,7 @@ DOWNLOAD_CMD="python3 -m dailywire_downloader"
 }
 
 # Extract 'schedule' from YAML and render the cron file
-schedule=$(python3 -c '
+schedule=$(cd /app && poetry run python -c '
 import yaml, sys
 cfg = yaml.safe_load(open(sys.argv[1]))
 s = cfg.get("schedule")

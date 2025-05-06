@@ -29,7 +29,7 @@ RUN mkdir -p /downloads /config /usr/local/bin /app/cache /tmp/yt-dlp-tmp \
     && chmod a+rwX /tmp/yt-dlp-tmp /app/cache
 
 # Copy package files
-COPY pyproject.toml poetry.lock poetry.toml /app/
+COPY pyproject.toml poetry.lock poetry.toml README.md /app/
 COPY ./dailywire_downloader/ /app/dailywire_downloader/
 
 # Install the package
