@@ -132,7 +132,9 @@ class DailyWireDownloader:
         if not retry_download_all:
             options['break_on_existing'] = True
         else:
-            options['sleep_interval_requests'] = 0.75
+            ## TODO there needs to be some mitigation here against http 304 responses when too many requests are made
+            ## options['sleep_interval_requests'] = 0.75
+            ...
         return options
 
     def download_show(self, show_name, show_url, date_options, audio_options, nfo_options, retry_options):
@@ -172,7 +174,6 @@ class DailyWireDownloader:
             'replace_in_metadata': [
                 ('meta_date', '(.{4})(.{2})(.{2})', '\\1-\\2-\\3')
             ],
-            'sleep_interval_requests': 0.75,
             'min_sleep_interval': 10,
             'max_sleep_interval': 25,
             'convertthumbnails': 'jpg',  # Convert thumbnails to jpg

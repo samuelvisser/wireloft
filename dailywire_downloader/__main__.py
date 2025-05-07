@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def parse_args():
     current_dir = os.getcwd()
-    default_config = os.path.join(current_dir, "config", "config.yaml")
+    default_config = os.path.join(current_dir, "config", "config.yml")
     default_cookies = os.path.join(current_dir, "config", "cookies.txt")
     default_download_dir = os.path.join(current_dir, "downloads")
 
