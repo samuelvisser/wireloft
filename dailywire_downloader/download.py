@@ -177,6 +177,7 @@ class DailyWireDownloader:
             'min_sleep_interval': 10,
             'max_sleep_interval': 25,
             'match_filter': 'title~="\\[Member Exclusive\\]"',
+            'ignoreerrors': 'only_download',    # ignore only download errors. Default when using through CLI (API default is False)
             'outtmpl': {
                 'default': f"{show_name}/{output_template}"
             },
