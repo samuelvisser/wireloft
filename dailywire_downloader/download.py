@@ -8,7 +8,6 @@ import fcntl
 import datetime
 import re
 import yt_dlp
-from yt_dlp.devscripts.cli_to_api import cli_to_api
 
 
 class DailyWireDownloader:
@@ -139,7 +138,7 @@ class DailyWireDownloader:
         return options
 
     def download_show(self, show_name, show_url, date_options, audio_options, nfo_options, retry_options):
-        """Download a single show using yt-dlp CLI-style options."""
+        """Download a single show using yt-dlp Python API."""
         self.log(f"Downloading '{show_name}' from {show_url}")
 
         output_template = self.config.get("output")
@@ -147,64 +146,49 @@ class DailyWireDownloader:
             self.log("ERROR: `output` key missing in config.yml")
             sys.exit(1)
 
-        # Build CLI-style options
-        cli_opts = [
-            # Basic options
-            '--cookies', self.cookies_file,
-            '--download-archive', self.archive_file,
-            '--paths', f'temp:{self.tmp_dir}',
-            '--paths', f'home:{self.download_dir}',
-            '--cache-dir', '/app/cache',
-            '--no-progress',
-            '--no-part',
-            '--windows-filenames',
-            '--convert-thumbnails', 'jpg',
-            '--embed-thumbnail',
-            '--embed-metadata',
-            '--parse-metadata', 'description:(?s)(?P<meta_comment>.+)',
-            '--parse-metadata', 'title:(?P<meta_title>.+?)(?:\\s+\\[Member Exclusive\\])?$',
-            '--parse-metadata', 'title:(?:Ep\\.\\s+(?P<meta_movement>\\d+))?.*',
-            '--parse-metadata', 'title:(?:Ep\\.\\s+(?P<meta_track>\\d+))?.*',
-            '--parse-metadata', 'playlist_title:(?P<meta_album>.+)',
-            '--parse-metadata', 'playlist_title:(?P<meta_series>.+)',
-            '--parse-metadata', 'upload_date:(?P<meta_date>\\d{8})$',
-            '--parse-metadata', 'upload_date:(?P<meta_year>.{4}).*',
-            '--replace-in-metadata', 'meta_date', '(.{4})(.{2})(.{2})', '\\1-\\2-\\3',
-            '--min-sleep-interval', '10',
-            '--max-sleep-interval', '25',
-            '--match-filter', 'title~="\\[Member Exclusive\\]"',
-            '--output', f"{show_name}/{output_template}",
-            '--quiet'  # Equivalent to verbose=False
-        ]
+        # Base options for YoutubeDL
+        ydl_opts = {
+            'cookiefile': self.cookies_file,
+            'download_archive': self.archive_file,
+            'paths': {
+                'temp': self.tmp_dir,
+                'home': self.download_dir
+            },
+            'cachedir': '/app/cache',
+            'noprogress': True,  # No progress bar in API mode
+            'no_part': True,
+            'windowsfilenames': True,
+            'writethumbnail': True,
+            'embedthumbnail': True,
+            'embedmetadata': True,
+            'parse_metadata': [
+                'description:(?s)(?P<meta_comment>.+)',
+                'title:(?P<meta_title>.+?)(?:\\s+\\[Member Exclusive\\])?$',
+                'title:(?:Ep\\.\\s+(?P<meta_movement>\\d+))?.*',
+                'title:(?:Ep\\.\\s+(?P<meta_track>\\d+))?.*',
+                'playlist_title:(?P<meta_album>.+)',
+                'playlist_title:(?P<meta_series>.+)',
+                'upload_date:(?P<meta_date>\\d{8})$',
+                'upload_date:(?P<meta_year>.{4}).*'
+            ],
+            'replace_in_metadata': [
+                ('meta_date', '(.{4})(.{2})(.{2})', '\\1-\\2-\\3')
+            ],
+            'min_sleep_interval': 10,
+            'max_sleep_interval': 25,
+            'convertthumbnails': 'jpg',  # Convert thumbnails to jpg
+            'match_filter': 'title~="\\[Member Exclusive\\]"',
+            'outtmpl': {
+                'default': f"{show_name}/{output_template}"
+            },
+            'verbose': False  # Reduce verbosity in API mode
+        }
 
-        # Add date options
-        if 'dateafter' in date_options:
-            cli_opts.extend(['--dateafter', date_options['dateafter']])
-        if 'break_match_filter' in date_options:
-            cli_opts.extend(['--break-match-filter', date_options['break_match_filter']])
-
-        # Add audio options
-        if audio_options.get('extractaudio', False):
-            cli_opts.append('--extract-audio')
-            if 'audioformat' in audio_options:
-                cli_opts.extend(['--audio-format', audio_options['audioformat']])
-
-        # Add NFO options
-        if nfo_options.get('writeinfojson', False):
-            cli_opts.append('--write-info-json')
-            # Note: postprocessor_hooks can't be directly translated to CLI options
-            # We'll handle this separately
-
-        # Add retry options
-        if retry_options.get('break_on_existing', False):
-            cli_opts.append('--break-on-existing')
-
-        # Convert CLI options to API parameters
-        ydl_opts = cli_to_api(cli_opts)
-
-        # Add options that can't be directly translated to CLI
-        if 'postprocessor_hooks' in nfo_options:
-            ydl_opts['postprocessor_hooks'] = nfo_options['postprocessor_hooks']
+        # Merge all option dictionaries
+        ydl_opts.update(date_options)
+        ydl_opts.update(audio_options)
+        ydl_opts.update(nfo_options)
+        ydl_opts.update(retry_options)
 
         # Use the Python API to download
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
