@@ -3,10 +3,8 @@
 import os
 import sys
 import yaml
-import time
 import fcntl
 import datetime
-import re
 import yt_dlp
 
 
@@ -90,8 +88,9 @@ class DailyWireDownloader:
         if start_date:
             clean_date = start_date.replace('-', '')
             return {
-                'dateafter': clean_date,
-                'break_match_filter': f"upload_date>={clean_date}"
+                'daterange': yt_dlp.utils.DateRange(clean_date, '99991231'),  # Equivalent for --dateafter
+                'match_filter': yt_dlp.utils.match_filter_func(None, ['upload_date>=' + clean_date]),       # Equivalent for --match-filters
+                'break_on_reject': True,        # Equivalent for --break-on-reject (this to get the full --break-match-filters functionality)
             }
         return {}
 
@@ -102,9 +101,22 @@ class DailyWireDownloader:
 
         options = {}
         if audio_only:
-            options['extractaudio'] = True
+            options = {
+                'format': 'bestaudio/best',
+                'postprocessors': [
+                    {
+                        'key': 'FFmpegExtractAudio',
+                        'nopostoverwrites': False,
+                        'preferredcodec': 'best',
+                        'preferredquality': '5'
+                    }
+                ]
+            }
+
             if audio_format:
-                options['audioformat'] = audio_format
+                options['final_ext'] = audio_format
+                options['postprocessors'][0]['preferredcodec'] = audio_format
+
         return options
 
     def get_nfo_options(self):
@@ -113,12 +125,11 @@ class DailyWireDownloader:
 
         options = {}
         if save_nfo:
-            options['writeinfojson'] = True
             options['paths'] = {'infojson': self.tmp_dir}
-            # Import and use the nfo module directly
+            options['writeinfojson'] = True
 
+            # Add nfo postprocessor hook
             from dailywire_downloader.nfo import create_nfo
-            # Call the create_nfo function
             options['postprocessor_hooks'] = [
                 lambda info, ctx: create_nfo(info['filepath'], self.tmp_dir)
             ]
@@ -155,36 +166,68 @@ class DailyWireDownloader:
                 'home': self.download_dir
             },
             'cachedir': '/app/cache',
-            'noprogress': True,  # No progress bar in API mode
             'no_part': True,
             'windowsfilenames': True,
             'writethumbnail': True,
-            'embedthumbnail': True,
-            'embedmetadata': True,
-            'parse_metadata': [
-                'description:(?s)(?P<meta_comment>.+)',
-                'title:(?P<meta_title>.+?)(?:\\s+\\[Member Exclusive\\])?$',
-                'title:(?:Ep\\.\\s+(?P<meta_movement>\\d+))?.*',
-                'title:(?:Ep\\.\\s+(?P<meta_track>\\d+))?.*',
-                'playlist_title:(?P<meta_album>.+)',
-                'playlist_title:(?P<meta_series>.+)',
-                'upload_date:(?P<meta_date>\\d{8})$',
-                'upload_date:(?P<meta_year>.{4}).*'
-            ],
-            'replace_in_metadata': [
-                ('meta_date', '(.{4})(.{2})(.{2})', '\\1-\\2-\\3')
-            ],
-            'min_sleep_interval': 10,
-            'max_sleep_interval': 25,
-            'match_filter': 'title~="\\[Member Exclusive\\]"',
-            'ignoreerrors': 'only_download',    # ignore only download errors. Default when using through CLI (API default is False)
+            'sleep_interval': 10.0,
+            'max_sleep_interval': 25.0,
+            'matchtitle': '\\[Member Exclusive\\]',
+            'ignoreerrors': 'only_download',
+            # ignore only download errors. Default when using through CLI (API default is False)
             'outtmpl': {
-                'default': f"{show_name}/{output_template}"
+                'default': f"{show_name}/{output_template}",
+                'pl_thumbnail': ''  # disables playlist thumbnail download
             },
             'postprocessors': [
                 {
                     'key': 'FFmpegThumbnailsConvertor',
                     'format': 'jpg',
+                    'when': 'before_dl'
+                },
+                {
+                    'key': 'EmbedThumbnail',
+                    'already_have_thumbnail': False
+                },
+                {
+                    'key': 'FFmpegMetadata',
+                    'add_chapters': True,
+                    'add_infojson': 'if_exists',
+                    'add_metadata': True
+                },
+                {
+                    'key': 'MetadataParser',
+                    'when': 'pre_process',
+                    'actions': [
+                        (yt_dlp.postprocessor.metadataparser.MetadataParserPP.interpretter,
+                         'description',
+                         '(?s)(?P<meta_comment>.+)'),
+                        (yt_dlp.postprocessor.metadataparser.MetadataParserPP.interpretter,
+                         'title',
+                         '(?P<meta_title>.+?)(?:\\s+\\[Member '
+                         'Exclusive\\])?$'),
+                        (yt_dlp.postprocessor.metadataparser.MetadataParserPP.interpretter,
+                         'title',
+                         '(?:Ep\\.\\s+(?P<meta_movement>\\d+))?.*'),
+                        (yt_dlp.postprocessor.metadataparser.MetadataParserPP.interpretter,
+                         'title',
+                         '(?:Ep\\.\\s+(?P<meta_track>\\d+))?.*'),
+                        (yt_dlp.postprocessor.metadataparser.MetadataParserPP.interpretter,
+                         'playlist_title',
+                         '(?P<meta_album>.+)'),
+                        (yt_dlp.postprocessor.metadataparser.MetadataParserPP.interpretter,
+                         'playlist_title',
+                         '(?P<meta_series>.+)'),
+                        (yt_dlp.postprocessor.metadataparser.MetadataParserPP.interpretter,
+                         'upload_date',
+                         '(?P<meta_date>\\d{8})$'),
+                        (yt_dlp.postprocessor.metadataparser.MetadataParserPP.replacer,
+                         'meta_date',
+                         '(.{4})(.{2})(.{2})',
+                         '\\1-\\2-\\3'),
+                        (yt_dlp.postprocessor.metadataparser.MetadataParserPP.interpretter,
+                         'upload_date',
+                         '(?P<meta_year>.{4}).*')
+                    ]
                 }
             ],
             'verbose': False  # Reduce verbosity in API mode

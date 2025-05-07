@@ -121,3 +121,8 @@ docker tag dailywire-downloader ghcr.io/samuelvisser/dailywire-downloader:latest
 
 docker push ghcr.io/samuelvisser/dailywire-downloader:latest
 ```
+
+
+    --min-sleep-interval 10 --max-sleep-interval 25 
+
+    --parse-metadata "description:(?s)(?P<meta_comment>.+)" --parse-metadata "title:(?P<meta_title>.+?)(?:\s+\[Member Exclusive\])?$" --parse-metadata "title:(?:Ep\.\s+(?P<meta_movement>\d+))?.*" --parse-metadata "title:(?:Ep\.\s+(?P<meta_track>\d+))?.*" --parse-metadata "playlist_title:(?P<meta_album>.+)" --parse-metadata "playlist_title:(?P<meta_series>.+)" --parse-metadata "upload_date:(?P<meta_date>\d{8})$" --replace-in-metadata "meta_date" "(.{4})(.{2})(.{2})" "\1-\2-\3" --parse-metadata "upload_date:(?P<meta_year>.{4}).*" 
