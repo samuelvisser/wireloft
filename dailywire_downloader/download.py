@@ -13,7 +13,7 @@ import yt_dlp
 class DailyWireDownloader:
     """Class for downloading DailyWire shows."""
 
-    def __init__(self, config_file=None, cookies_file=None, download_dir=None):
+    def __init__(self, config_file, cookies_file, download_dir):
         """Initialize the downloader with configuration.
 
         Args:
@@ -21,11 +21,11 @@ class DailyWireDownloader:
             cookies_file: Path to the cookies file.
             download_dir: Path to the download directory.
         """
-        # Default paths
-        self.download_dir = download_dir or "/downloads"
+        # Paths
+        self.download_dir = download_dir
         self.tmp_dir = "/tmp/yt-dlp-tmp"
-        self.config_file = config_file or "/config/config.yml"
-        self.cookies_file = cookies_file or "/config/cookies.txt"
+        self.config_file = config_file
+        self.cookies_file = cookies_file
         self.lockfile = "/tmp/download.lock"
         self.archive_file = f"{self.download_dir}/downloaded.txt"
 
@@ -116,8 +116,9 @@ class DailyWireDownloader:
             options['writeinfojson'] = True
             options['paths'] = {'infojson': self.tmp_dir}
             # Import and use the nfo module directly
+
             from dailywire_downloader.nfo import create_nfo
-            # In the Python API, postprocessor_hooks is used instead of exec_cmd
+            # Call the create_nfo function
             options['postprocessor_hooks'] = [
                 lambda info, ctx: create_nfo(info['filepath'], self.tmp_dir)
             ]

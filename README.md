@@ -51,13 +51,15 @@ Audiobookshelf will automatically read these .nfo files and include both the tit
 
 The downloader supports the following command-line arguments:
 
-- `--config`: Path to the configuration file (default: `/config/config.yml` or `$CONFIG_FILE` env var)
-- `--cookies`: Path to the cookies file (default: `/config/cookies.txt` or `$COOKIES_FILE` env var)
+- `--config`: Path to the configuration file (default: `/config/config.yml` or `$DW_CONFIG_FILE` env var)
+- `--cookies`: Path to the cookies file (default: `/config/cookies.txt` or `$DW_COOKIES_FILE` env var)
+- `--download-dir`: Path to the download directory (default: `/downloads` or `$DW_DOWNLOAD_DIR` env var)
 
 You can also set these paths using environment variables:
 
-- `CONFIG_FILE`: Path to the configuration file
-- `COOKIES_FILE`: Path to the cookies file
+- `DW_CONFIG_FILE`: Path to the configuration file
+- `DW_COOKIES_FILE`: Path to the cookies file
+- `DW_DOWNLOAD_DIR`: Path to the download directory
 
 ## Development
 
@@ -80,7 +82,7 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
    ```bash
    dailywire-downloader
    ```
-   
+
    Additionally, you can specify custom paths for the configuration and cookies files:
    ```bash
    dailywire-downloader --config /path/to/config.yml --cookies /path/to/cookies.txt --download-dir /path/to/download_dir
