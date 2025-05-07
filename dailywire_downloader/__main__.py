@@ -58,8 +58,15 @@ def main():
         download.download_shows(config_file=args.config_file, cookies_file=args.cookies_file, download_dir=args.download_dir)
         return 0
     except Exception as e:
-        logger.error(f"Error: {e}")
-        sys.exit(1)
+        error_message = str(e)
+        if "--break-on-existing" in error_message:
+            # This is expected behavior, log as info instead of error
+            logger.info("Download stopped: All new videos have been downloaded.")
+            return 0
+        else:
+            # This is an actual error
+            logger.error(f"Error: {e}")
+            return 1
 
 if __name__ == "__main__":
     sys.exit(main())

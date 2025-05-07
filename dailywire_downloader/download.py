@@ -234,14 +234,32 @@ class DailyWireDownloader:
         }
 
         # Merge all option dictionaries
-        ydl_opts.update(date_options)
-        ydl_opts.update(audio_options)
-        ydl_opts.update(nfo_options)
-        ydl_opts.update(retry_options)
+        self.update_dict(ydl_opts, date_options)
+        self.update_dict(ydl_opts, audio_options)
+        self.update_dict(ydl_opts, nfo_options)
+        self.update_dict(ydl_opts, retry_options)
 
         # Use the Python API to download
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([show_url])
+
+    def update_dict(self, original, update):
+        for key, value in update.items():
+
+            # Add new key values
+            if key not in original:
+                original[key] = update[key]
+                continue
+
+            # Update the old key values with the new key values
+            if key in original:
+                if isinstance(value, dict):
+                    self.update_dict(original[key], update[key])
+                if isinstance(value, list):
+                    original[key].extend(update[key])   # Add all items in the update list to the original list
+                if isinstance(value, (str, int, float)):
+                    original[key] = update[key]
+        return original
 
     def download_shows(self):
         """Main function to download all configured shows."""
