@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 
 
 def parse_args():
+    current_dir = os.getcwd()
+    default_config = os.path.join(current_dir, "config", "config.yaml")
+    default_cookies = os.path.join(current_dir, "config", "cookies.txt")
+    default_download_dir = os.path.join(current_dir, "downloads")
+
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Download DailyWire shows using your account credentials."
@@ -29,14 +34,20 @@ def parse_args():
     parser.add_argument(
         "--config", 
         dest="config_file",
-        help="Path to the configuration file (default: /config/config.yml or $CONFIG_FILE env var)",
-        default = os.environ.get("CONFIG_FILE", "config/config.yml")
+        help="Path to the configuration file (default: $(pwd)/config/config.yml or $DW_CONFIG_FILE env var)",
+        default = os.environ.get("DW_CONFIG_FILE", default_config)
     )
     parser.add_argument(
         "--cookies", 
         dest="cookies_file",
-        help="Path to the cookies file (default: /config/cookies.txt or $COOKIES_FILE env var)",
-        default = os.environ.get("COOKIES_FILE", "config/cookies.txt")
+        help="Path to the cookies file (default: $(pwd)/config/cookies.txt or $DW_COOKIES_FILE env var)",
+        default = os.environ.get("DW_COOKIES_FILE", default_cookies)
+    )
+    parser.add_argument(
+        "--download-dir",
+        dest="download_dir",
+        help="Path to the download dir (default: $(pwd)/downloads or $DW_DOWNLOAD_DIR env var)",
+        default = os.environ.get("DW_DOWNLOAD_DIR", default_download_dir)
     )
     return parser.parse_args()
 
@@ -44,7 +55,7 @@ def main():
     """Entry point for the dailywire-download command."""
     args = parse_args()
     try:
-        download.download_shows(config_file=args.config_file, cookies_file=args.cookies_file)
+        download.download_shows(config_file=args.config_file, cookies_file=args.cookies_file, download_dir=args.download_dir)
         return 0
     except Exception as e:
         logger.error(f"Error: {e}")

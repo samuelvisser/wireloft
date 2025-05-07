@@ -163,7 +163,7 @@ def download_show(show_name, show_url, config, date_options, audio_options, nfo_
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([show_url])
 
-def download_shows(config_file: str, cookies_file: str):
+def download_shows(config_file: str, cookies_file: str, download_dir: str):
     """Main function to download all configured shows.
 
     Args:

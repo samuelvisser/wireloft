@@ -76,9 +76,14 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
    ```
 
 3. Run the downloader:
-   You can specify custom paths for the configuration and cookies files:
+   Run simply like so. Make sure config.yml and cookies.txt are available at $(pwd)/config/
    ```bash
-   dailywire-download --config /path/to/config.yml --cookies /path/to/cookies.txt
+   dailywire-downloader
+   ```
+   
+   Additionally, you can specify custom paths for the configuration and cookies files:
+   ```bash
+   dailywire-downloader --config /path/to/config.yml --cookies /path/to/cookies.txt --download-dir /path/to/download_dir
    ```
 
 ## Build Docker image

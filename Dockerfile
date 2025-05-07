@@ -36,6 +36,9 @@ COPY ./dailywire_downloader/ /app/dailywire_downloader/
 # Install the package
 RUN cd /app && \
     poetry install
+ENV DW_CONFIG_FILE="/config/config.yml"
+ENV DW_COOKIES_FILE="/config/cookies.txt"
+ENV DW_DOWNLOAD_DIR="/downloads"
 
 # Copy scripts to /usr/local/bin
 COPY ./scripts/ /usr/local/bin/
