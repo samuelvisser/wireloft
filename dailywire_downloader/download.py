@@ -176,11 +176,16 @@ class DailyWireDownloader:
             ],
             'min_sleep_interval': 10,
             'max_sleep_interval': 25,
-            'convertthumbnails': 'jpg',  # Convert thumbnails to jpg
             'match_filter': 'title~="\\[Member Exclusive\\]"',
             'outtmpl': {
                 'default': f"{show_name}/{output_template}"
             },
+            'postprocessors': [
+                {
+                    'key': 'FFmpegThumbnailsConvertor',
+                    'format': 'jpg',
+                }
+            ],
             'verbose': False  # Reduce verbosity in API mode
         }
 
