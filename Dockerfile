@@ -29,16 +29,17 @@ ENV PATH="/app/.venv/bin:$PATH"
 RUN mkdir -p /downloads /config /usr/local/bin /app/cache /tmp/yt-dlp-tmp \
     && chmod a+rwX /tmp/yt-dlp-tmp /app/cache
 
-# Copy package files
-COPY pyproject.toml poetry.lock poetry.toml README.md /app/
-COPY ./dailywire_downloader/ /app/dailywire_downloader/
-
 # Install the package
+COPY pyproject.toml poetry.lock poetry.toml README.md /app/
+COPY dailywire_downloader/__init__.py /app/dailywire_downloader/__init__.py
 RUN cd /app && \
     poetry install
 ENV DW_CONFIG_FILE="/config/config.yml"
 ENV DW_COOKIES_FILE="/config/cookies.txt"
 ENV DW_DOWNLOAD_DIR="/downloads"
+
+# Copy remaining package files (we do this here to prevent poetry install from re- running for every change in the package
+COPY ./dailywire_downloader/ /app/dailywire_downloader/
 
 # Copy scripts to /usr/local/bin
 COPY ./scripts/ /usr/local/bin/
