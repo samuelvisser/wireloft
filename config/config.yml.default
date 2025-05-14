@@ -6,7 +6,7 @@ start_date: "2025-01-01"
 
 # Output template: anything after $DOWNLOAD_DIR/<show_name>/
 # E.g. this will save into:
-#   /downloads/the-ben-shapiro-show/20250420 - Episode Title.mp4
+#   /downloads/the-ben-shapiro-show/20250420 - Episode Title.mp3
 output: "%(upload_date)s - %(title)s.%(ext)s"
 
 audio_only: true        # if true, extract audio instead of video

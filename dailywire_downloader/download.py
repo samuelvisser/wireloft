@@ -155,6 +155,7 @@ class DailyWireDownloader:
             sys.exit(1)
 
         # Base options for YoutubeDL
+        # Options: https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/YoutubeDL.py#L220
         ydl_opts = {
             'cookiefile': self.cookies_file,
             'download_archive': self.archive_file,
@@ -172,8 +173,7 @@ class DailyWireDownloader:
             'ignoreerrors': 'only_download',
             # ignore only download errors. Default when using through CLI (API default is False)
             'outtmpl': {
-                'default': f"{show_name}/{output_template}",
-                'pl_thumbnail': ''  # disables playlist thumbnail download
+                'default': f"{show_name}/{output_template}"
             },
             'postprocessors': [
                 {
