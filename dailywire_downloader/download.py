@@ -289,7 +289,17 @@ class DailyWireDownloader:
                     self.log("ERROR: each show needs `name` and `url`")
                     sys.exit(1)
 
-                self.download_show(show_name, show_url, date_options, audio_options, nfo_options, retry_options)
+                try:
+                    self.download_show(show_name, show_url, date_options, audio_options, nfo_options, retry_options)
+                except Exception as e:
+                    error_message = str(e)
+                    if "--break-on-existing" in error_message:
+                        self.log(f"Download for {show_name} stopped: All new videos have been downloaded.")
+                    if " --" in error_message:
+                        # The download stopped due to some setting (expected, no error)
+                        self.log(f"Download for {show_name} stopped: {e}")
+                    else:
+                        raise e
         finally:
             # Release lock (will happen automatically when script exits, but being explicit)
             self.release_lock()
