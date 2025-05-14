@@ -5,6 +5,7 @@ import sys
 import yaml
 import fcntl
 import datetime
+import time
 import yt_dlp
 
 
@@ -303,7 +304,8 @@ class DailyWireDownloader:
                     else:
                         raise e
                 finally:
-                    consecutive_download_options['sleep_interval_requests'] = 2
+                    self.log("Waiting 120 seconds before downloading next show...")
+                    time.sleep(120)
         finally:
             # Release lock (will happen automatically when script exits, but being explicit)
             self.release_lock()
