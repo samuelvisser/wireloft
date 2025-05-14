@@ -52,6 +52,9 @@ RUN chmod 0644 /etc/cron.d/*
 # Ensure cron log exists
 RUN touch /var/log/cron.log
 
+# Make sure cron log is redirected to stdout
+RUN ln -sf /dev/stdout /var/log/cron.log
+
 # Volumes for user‑mounted config & outputs
 VOLUME ["/config","/downloads"]
 
