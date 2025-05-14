@@ -34,7 +34,8 @@ In `config.yml`, you can set the following options:
 - `output`: Output template for file naming
 - `audio_only`: If true, extract audio instead of video
 - `audio_format`: Format to encode extracted audio into (e.g., "mp3")
-- `save_nfo_file`: If true, save video descriptions as .nfo files for Audiobookshelf
+- `save_nfo_file`: If true, save video descriptions and other metadata as .nfo files for Audiobookshelf
+- `retry_download_all`: If false, stop downloading when an already downloaded video is encountered
 - `shows`: List of shows to download with their names and URLs
 
 ### Audiobookshelf Integration

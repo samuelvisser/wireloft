@@ -85,14 +85,12 @@ class DailyWireDownloader:
     def get_date_filter_options(self):
         """Get date filter options based on start_date in config."""
         start_date = self.config.get("start_date", "").strip()
+        options = {}
         if start_date:
             clean_date = start_date.replace('-', '')
-            return {
-                'daterange': yt_dlp.utils.DateRange(clean_date, '99991231'),  # Equivalent for --dateafter
-                'match_filter': yt_dlp.utils.match_filter_func(None, ['upload_date>=' + clean_date]),       # Equivalent for --match-filters
-                'break_on_reject': True,        # Equivalent for --break-on-reject (this to get the full --break-match-filters functionality)
-            }
-        return {}
+            # options['daterange'] = yt_dlp.utils.DateRange(clean_date, '99991231'),  # Equivalent for --dateafter
+            options['match_filter'] = yt_dlp.utils.match_filter_func(None, ['upload_date>=' + clean_date])       # Equivalent for --break-match-filters
+        return options
 
     def get_audio_options(self):
         """Get audio-related options based on config."""
@@ -143,9 +141,8 @@ class DailyWireDownloader:
         if not retry_download_all:
             options['break_on_existing'] = True
         else:
-            ## TODO there needs to be some mitigation here against http 304 responses when too many requests are made
-            ## options['sleep_interval_requests'] = 0.75
-            ...
+            # Add delay between HTTP requests to prevent rate limiting (HTTP 304 responses)
+            options['sleep_interval_requests'] = 0.75
         return options
 
     def download_show(self, show_name, show_url, date_options, audio_options, nfo_options, retry_options):
@@ -235,7 +232,7 @@ class DailyWireDownloader:
 
         # Merge all option dictionaries
         self.update_dict(ydl_opts, date_options)
-        self.update_dict(ydl_opts, audio_options)
+        self.update_dict(ydl_opts, audio_options, True)
         self.update_dict(ydl_opts, nfo_options)
         self.update_dict(ydl_opts, retry_options)
 
@@ -243,7 +240,7 @@ class DailyWireDownloader:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([show_url])
 
-    def update_dict(self, original, update):
+    def update_dict(self, original, update, prepend_to_lists: bool = False):
         for key, value in update.items():
 
             # Add new key values
@@ -256,7 +253,11 @@ class DailyWireDownloader:
                 if isinstance(value, dict):
                     self.update_dict(original[key], update[key])
                 if isinstance(value, list):
-                    original[key].extend(update[key])   # Add all items in the update list to the original list
+                    if prepend_to_lists:
+                        # Prepend instead of append to list
+                        original[key] = update[key] + original[key]
+                        continue
+                    original[key].extend(update[key])
                 if isinstance(value, (str, int, float)):
                     original[key] = update[key]
         return original

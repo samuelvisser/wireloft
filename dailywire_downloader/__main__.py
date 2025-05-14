@@ -60,8 +60,11 @@ def main():
     except Exception as e:
         error_message = str(e)
         if "--break-on-existing" in error_message:
-            # This is expected behavior, log as info instead of error
             logger.info("Download stopped: All new videos have been downloaded.")
+            return 0
+        if " --" in error_message:
+            # Some other setting caused the process to stop
+            logger.info(f"Download stopped: {e}")
             return 0
         else:
             # This is an actual error
