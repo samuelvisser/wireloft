@@ -17,5 +17,13 @@ retry_download_all: false  # if false, stop downloading when an already download
 shows:
   - name: the-ben-shapiro-show
     url: https://www.dailywire.com/show/the-ben-shapiro-show
+    filters:
+      matchtitle: '\\[Member Exclusive\\]'
   - name: the-matt-walsh-show
     url: https://www.dailywire.com/show/the-matt-walsh-show
+    filters:
+      matchtitle: '\\[Member Exclusive\\]'
+  - name: jordan-peterson-parenting
+    url: https://www.dailywire.com/show/parenting
+    audio_only: false
+    start_date: "2025-05-01"
