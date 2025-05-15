@@ -6,7 +6,7 @@ start_date: "2025-01-01"
 
 # Output template: anything after $DOWNLOAD_DIR/<show_name>/
 # E.g. this will save into:
-#   /downloads/the-ben-shapiro-show/20250420 - Episode Title.mp4
+#   /downloads/the-ben-shapiro-show/20250420 - Episode Title.mp3
 output: "%(upload_date)s - %(title)s.%(ext)s"
 
 audio_only: true        # if true, extract audio instead of video
@@ -17,5 +17,13 @@ retry_download_all: false  # if false, stop downloading when an already download
 shows:
   - name: the-ben-shapiro-show
     url: https://www.dailywire.com/show/the-ben-shapiro-show
+    filters:
+      matchtitle: '\[Member Exclusive\]'
   - name: the-matt-walsh-show
     url: https://www.dailywire.com/show/the-matt-walsh-show
+    start_date: "2025-05-01"
+    filters:
+      matchtitle: '\[Member Exclusive\]'
+  - name: jordan-peterson-parenting
+    url: https://www.dailywire.com/show/parenting
+    audio_only: false
