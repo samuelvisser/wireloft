@@ -21,9 +21,9 @@ shows:
       matchtitle: '\[Member Exclusive\]'
   - name: the-matt-walsh-show
     url: https://www.dailywire.com/show/the-matt-walsh-show
+    start_date: "2025-05-01"
     filters:
       matchtitle: '\[Member Exclusive\]'
   - name: jordan-peterson-parenting
     url: https://www.dailywire.com/show/parenting
     audio_only: false
-    start_date: "2025-05-01"
