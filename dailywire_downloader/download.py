@@ -344,8 +344,9 @@ class DailyWireDownloader:
                     # Wait after download to avoid rate limiting (HTTP 304 responses)
                     # This intentionally will also wait after the last show, so that the
                     # next cron cycle cannot start sooner than 120 seconds after the last
-                    self.log("Waiting 120 seconds before downloading next show...")
+                    self.log("Waiting 120 seconds after show download...")
                     time.sleep(120)
+                    self.log("...done.")
         finally:
             # Release lock (will happen automatically when script exits, but being explicit)
             self.release_lock()
