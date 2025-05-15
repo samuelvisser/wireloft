@@ -89,8 +89,7 @@ class DailyWireDownloader:
         options = {}
         if start_date:
             clean_date = start_date.replace('-', '')
-            # options['daterange'] = yt_dlp.utils.DateRange(clean_date, '99991231'),  # Equivalent for --dateafter
-            options['match_filter'] = yt_dlp.utils.match_filter_func(None, ['upload_date>=' + clean_date])       # Equivalent for --break-match-filters
+            options['match_filter'] = {'breaking_filters': ['upload_date>=' + clean_date]}
         return options
 
     def get_audio_options(self):
@@ -176,6 +175,9 @@ class DailyWireDownloader:
             'outtmpl': {
                 'default': f"{show_name}/{output_template}"
             },
+            'match_filter': {
+                'filters': ['!is_live']
+            },
             'postprocessors': [
                 {
                     'key': 'FFmpegThumbnailsConvertor',
@@ -237,6 +239,10 @@ class DailyWireDownloader:
         self.update_dict(ydl_opts, nfo_options)
         self.update_dict(ydl_opts, retry_options)
         self.update_dict(ydl_opts, consecutive_download_options)
+
+        # Convert filters
+        if 'match_filter' in ydl_opts:
+            ydl_opts['match_filter'] = yt_dlp.utils.match_filter_func(ydl_opts['match_filter'].get('filters'), ydl_opts['match_filter'].get('breaking_filters'))
 
         # Use the Python API to download
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -304,6 +310,9 @@ class DailyWireDownloader:
                     else:
                         raise e
                 finally:
+                    # Wait after download to avoid rate limiting (HTTP 304 responses)
+                    # This intentionally will also wait after the last show, so that the
+                    # next cron cycle cannot start sooner than 120 seconds after the last
                     self.log("Waiting 120 seconds before downloading next show...")
                     time.sleep(120)
         finally:
