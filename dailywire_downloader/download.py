@@ -40,7 +40,7 @@ class DailyWireDownloader:
     def log(self, message):
         """Print a timestamped log message."""
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        print(f"{timestamp}: {message}")
+        print(f"{timestamp}: {message}", flush=True)
 
     def acquire_lock(self):
         """Prevent overlapping runs using file locking."""
