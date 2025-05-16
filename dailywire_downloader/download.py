@@ -351,6 +351,7 @@ class DailyWireDownloader:
             # Release lock (will happen automatically when script exits, but being explicit)
             self.release_lock()
 
+        self.log("Finished downloading all shows. Exiting.")
 
 def download_shows(config_file: str, cookies_file: str, download_dir: str):
     """Main function to download all configured shows.
