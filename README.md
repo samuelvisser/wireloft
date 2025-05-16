@@ -7,6 +7,8 @@ For this to work, an active premium subscription to The Daily Wire is required.
 
 My main personal use for this is to download the episodes to a directory read by my Audiobookshelf instance, which I then use to create a private RSS feed from the episodes.
 
+The project uses a specific [pull request](https://github.com/yt-dlp/yt-dlp/pull/9920) to yt-dlp that adds support for downloading premium episodes and entire shows at once. This project is a wrapper around that pull request to yt-dlp and adds some convenient features.
+
 ## Features
 
 - Downloads premium DailyWire shows using your account credentials (via cookies)
