@@ -177,6 +177,9 @@ class DailyWireDownloader:
         if "matchtitle" in filters:
             options['matchtitle'] = filters['matchtitle']
 
+        if "rejecttitle" in filters:
+            options['rejecttitle'] = filters['rejecttitle']
+
         if "match_filters" in filters:
             options.setdefault('match_filter', {})['filters'] = filters['match_filters']
 
