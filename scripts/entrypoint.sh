@@ -13,6 +13,9 @@ DOWNLOAD_CMD="dailywire-downloader"
   exit 1
 }
 
+# Extract environment variables to file
+env > /etc/environment
+
 # Extract 'schedule' from YAML and render the cron file
 schedule=$(cd /app && poetry run python -c '
 import yaml, sys
@@ -34,9 +37,6 @@ crontab "$CRON_FILE"
 # Run one-off download immediately
 echo "$(date '+%Y-%m-%d %H:%M:%S'): Initial download on startup"
 $DOWNLOAD_CMD
-
-# Start tailing the cron log in the background
-tail -f /var/log/cron.log &
 
 # Hand off to CMD (i.e. cron -f)
 exec "$@"
