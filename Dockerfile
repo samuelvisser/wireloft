@@ -57,4 +57,4 @@ VOLUME ["/config","/downloads"]
 
 # Entrypoint sets up cron, then CMD runs it
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD cron -f & tail -f /var/log/cron.log
+CMD ["sh", "-c", "cron -f & tail -f /var/log/cron.log"]
