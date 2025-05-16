@@ -2,9 +2,9 @@
 
 # DailyWire Show Downloader
 
-This is a simple Docker image made to download premium shows from the DailyWire website.<br>
+This is a simple project made to download premium shows from the DailyWire website.<br>
 Specifically, it is made to be used together with other tools to create a private RSS feed for premium DailyWire Shows.<br>
-In no way does this project help pirate premium shows, as it requires an active premium DailyWire account to work.
+In no way does this project help pirate premium shows, as it requires an active premium DailyWire account to download premium shows.
 
 ## Features
 
@@ -14,7 +14,6 @@ In no way does this project help pirate premium shows, as it requires an active 
 - Can extract video descriptions and save them as .nfo files for Audiobookshelf compatibility
 - Ensures filenames only use ASCII characters for maximum compatibility
 - Configurable download schedule via cron
-- Displays cron job logs in the console for easy monitoring
 
 ## Configuration
 
@@ -62,6 +61,29 @@ You can also set these paths using environment variables:
 - `DW_COOKIES_FILE`: Path to the cookies file
 - `DW_DOWNLOAD_DIR`: Path to the download directory
 
+## Build Docker image
+
+```bash
+docker build -t dailywire-downloader .
+
+docker run -d \
+  -v ./config:/config:ro \
+  -v ./downloads:/downloads \
+  dailywire-downloader
+```
+
+## Using the pre-built image
+You can pull the pre-built image from GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/samuelvisser/dailywire-downloader:latest
+
+docker run -d \
+  -v ./config:/config:ro \
+  -v ./downloads:/downloads \
+  ghcr.io/samuelvisser/dailywire-downloader:latest
+```
+
 ## Development
 
 This project uses [Poetry](https://python-poetry.org/) for dependency management.
@@ -88,29 +110,6 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
    ```bash
    dailywire-downloader --config /path/to/config.yml --cookies /path/to/cookies.txt --download-dir /path/to/download_dir
    ```
-
-## Build Docker image
-
-```bash
-docker build -t dailywire-downloader .
-
-docker run -d \
-  -v ./config:/config:ro \
-  -v ./downloads:/downloads \
-  dailywire-downloader
-```
-
-## Using the pre-built image
-You can pull the pre-built image from GitHub Container Registry:
-
-```bash
-docker pull ghcr.io/samuelvisser/dailywire-downloader:latest
-
-docker run -d \
-  -v ./config:/config:ro \
-  -v ./downloads:/downloads \
-  ghcr.io/samuelvisser/dailywire-downloader:latest
-```
 
 ### Push new update to github registry (dev only)
 ```bash
