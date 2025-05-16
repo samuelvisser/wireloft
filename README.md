@@ -12,7 +12,7 @@ My main personal use for this is to download the episodes to a directory read by
 - Downloads premium DailyWire shows using your account credentials (via cookies)
 - Supports audio-only mode for podcast-like experience
 - Downloads video thumbnails and sets them as cover art
-- Can extract video descriptions and save them as .nfo files for Audiobookshelf compatibility
+- Can extract video descriptions and save them as .nfo files for Media Servers
 - Ensures filenames only use ASCII characters for maximum compatibility
 - Configurable download schedule via cron
 
@@ -105,8 +105,8 @@ Further, you can also set various filters either globally or per show
       filters: []
       breaking_filters: []
 ```
-- `matchtitle`: regex to filter all episode titles by. In above example, only episodes that contain `[Member Exclusive]` in their title will be downloaded
-- `rejecttitle`: regex to filter all episode titles by. In above example, only episodes that DO NOT contain `Sunday Special` in their title will be downloaded
+- `matchtitle`: regex to filter all episode titles by. In above example, only episodes that contain "[Member Exclusive]"" in their title will be downloaded
+- `rejecttitle`: regex to filter all episode titles by. In above example, only episodes that DO NOT contain "Sunday Special" in their title will be downloaded
 - `filters`: array of filters to apply. Any "OUTPUT TEMPLATE" field can be compared with a number or a string. For options, see [here](https://github.com/yt-dlp/yt-dlp/tree/311bb3b?tab=readme-ov-file#video-selection) and look for `--match-filters`
 - `breaking_filters`: array of breaking filters to apply. These filters will stop the show download if they match. For options, see [here](https://github.com/yt-dlp/yt-dlp/tree/311bb3b?tab=readme-ov-file#video-selection) and look for `--break-match-filters`
 
