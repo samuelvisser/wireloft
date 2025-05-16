@@ -2,9 +2,10 @@
 
 # DailyWire Show Downloader
 
-This is a simple project made to download premium shows from the DailyWire website.<br>
-Specifically, it is made to be used together with other tools to create a private RSS feed for premium DailyWire Shows.<br>
-In no way does this project help pirate premium shows, as it requires an active premium DailyWire account to download premium shows.
+This is a simple project made to download premium shows from The Daily Wire website using browser cookies.<br>
+For this to work, an active premium subscription to The Daily Wire is required.
+
+My main personal use for this is to download the episodes to a directory read by my Audiobookshelf instance, which I then use to create a private RSS feed from the episodes.
 
 ## Features
 
