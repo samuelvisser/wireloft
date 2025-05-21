@@ -235,3 +235,9 @@ docker tag dailywire-downloader ghcr.io/samuelvisser/dailywire-downloader:latest
 
 docker push ghcr.io/samuelvisser/dailywire-downloader:latest
 ```
+
+
+
+FIX:
+dailywire-video-downloader  | [ThumbnailsConvertor] Converting thumbnail "/tmp/yt-dlp-tmp/Personality and Its Transformations/Season 01/Personality and Its Transformations - S01E09 - 9. Existentialism： Nietzsche, Dostoevsky, and Kierkegaard.png" to jpg
+dailywire-video-downloader  | ERROR: Preprocessing: Conversion failed!

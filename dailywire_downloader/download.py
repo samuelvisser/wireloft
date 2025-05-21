@@ -198,7 +198,7 @@ class DailyWireDownloader:
             sys.exit(1)
 
         # Base options for YoutubeDL
-        # Options: https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/YoutubeDL.py#L220
+        # Options: https://github.com/yt-dlp/yt-dlp/blob/311bb3b02a3425ef7811866371ebb5a6126be95e/yt_dlp/YoutubeDL.py#L220
         ydl_opts = {
             'cookiefile': self.cookies_file,
             'download_archive': self.archive_file,
@@ -213,6 +213,7 @@ class DailyWireDownloader:
             'sleep_interval': 10.0,
             'max_sleep_interval': 25.0,
             'ignoreerrors': 'only_download',
+            'skip_playlist_after_errors': 5,
             'outtmpl': {
                 'default': f"{show_name}/{output_template}"
             },
