@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Wireloft</title>
+    <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-router-dom@5/umd/react-router-dom.min.js"></script>
+    <script crossorigin src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; }
+      nav a { margin-right: 10px; }
+      table { border-collapse: collapse; }
+      th, td { padding: 4px 8px; border: 1px solid #ccc; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel">
+      const { BrowserRouter, Switch, Route, Link, useParams } = ReactRouterDOM;
+
+      function useFetch(url) {
+        const [data, setData] = React.useState(null);
+        React.useEffect(() => {
+          fetch(url).then(r => r.json()).then(setData);
+        }, [url]);
+        return data;
+      }
+
+      function Home() {
+        const data = useFetch('/api/overview');
+        if (!data) return <div>Loading...</div>;
+        return (
+          <div>
+            <h2>Overview</h2>
+            <p>Library size: {data.library_size} bytes</p>
+            <p>Downloaded files: {data.files}</p>
+            <p>Shows added: {data.shows}</p>
+          </div>
+        );
+      }
+
+      function Shows() {
+        const shows = useFetch('/api/shows');
+        if (!shows) return <div>Loading...</div>;
+        return (
+          <div>
+            <h2>Shows</h2>
+            <table>
+              <thead>
+                <tr><th>Name</th><th>Size (bytes)</th><th></th></tr>
+              </thead>
+              <tbody>
+                {shows.map(s => (
+                  <tr key={s.name}>
+                    <td>{s.name}</td>
+                    <td>{s.size}</td>
+                    <td><Link to={`/shows/${s.name}`}>Edit</Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+
+      function ShowEdit() {
+        const { name } = useParams();
+        const data = useFetch(`/api/shows/${name}`);
+        const [text, setText] = React.useState('');
+        React.useEffect(() => { if (data) setText(JSON.stringify(data.config, null, 2)); }, [data]);
+        if (!data) return <div>Loading...</div>;
+        const save = () => {
+          fetch(`/api/shows/${name}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({config: JSON.parse(text)})})
+            .then(() => alert('Saved'));
+        };
+        return (
+          <div>
+            <h2>Edit {name}</h2>
+            <p>Total size: {data.size} bytes</p>
+            <textarea rows="20" cols="80" value={text} onChange={e=>setText(e.target.value)} />
+            <div><button onClick={save}>Save</button></div>
+          </div>
+        );
+      }
+
+      function Settings() {
+        const data = useFetch('/api/settings');
+        const [text, setText] = React.useState('');
+        React.useEffect(() => { if (data) setText(JSON.stringify(data, null, 2)); }, [data]);
+        if (!data) return <div>Loading...</div>;
+        const save = () => {
+          fetch('/api/settings', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({settings: JSON.parse(text)})})
+            .then(() => alert('Saved'));
+        };
+        return (
+          <div>
+            <h2>Settings</h2>
+            <textarea rows="20" cols="80" value={text} onChange={e=>setText(e.target.value)} />
+            <div><button onClick={save}>Save</button></div>
+          </div>
+        );
+      }
+
+      function App() {
+        return (
+          <BrowserRouter>
+            <nav>
+              <Link to="/">Home</Link>
+              <Link to="/shows">Shows</Link>
+              <Link to="/settings">Settings</Link>
+            </nav>
+            <Switch>
+              <Route exact path="/" component={Home} />
+              <Route exact path="/shows" component={Shows} />
+              <Route path="/shows/:name" component={ShowEdit} />
+              <Route path="/settings" component={Settings} />
+            </Switch>
+          </BrowserRouter>
+        );
+      }
+
+      ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+  </body>
+</html>

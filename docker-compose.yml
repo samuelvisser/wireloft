@@ -1,10 +1,12 @@
 services:
-  dailywire:
+  wireloft:
     build: .
-    container_name: dailywire-downloader
+    container_name: wireloft
     restart: no
     volumes:
       - ./config:/config
       - ./downloads:/downloads
     environment:
       - TZ=Europe/Amsterdam
+    ports:
+      - "8000:8000"

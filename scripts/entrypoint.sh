@@ -38,5 +38,7 @@ crontab "$CRON_FILE"
 echo "$(date '+%Y-%m-%d %H:%M:%S'): Initial download on startup"
 $DOWNLOAD_CMD
 
-# Hand off to CMD (i.e. cron -f)
-exec "$@"
+# Start cron in foreground and run gunicorn alongside
+cron
+/usr/local/bin/run_gunicorn.sh &
+exec tail -f /var/log/cron.log

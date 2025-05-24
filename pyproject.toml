@@ -1,20 +1,27 @@
 [tool.poetry]
-name = "dailywire-downloader"
+name = "wireloft"
 version = "0.1.0"
-description = "A tool to download premium shows from the DailyWire website"
+description = "Wireloft - manage and download DailyWire shows"
 authors = ["Samuël Visser <samuvisser@gmail.com>"]
-packages = [{include = "dailywire_downloader"}]
+packages = [
+    {include = "dailywire_downloader"},
+    {include = "wireloft_web"}
+]
 
 [tool.poetry.dependencies]
 python = "~3.13"
 pyyaml = "^6.0"
 yt-dlp = { git = "https://github.com/yt-dlp/yt-dlp.git", rev = "311bb3b" }
+fastapi = "^0.110"
+uvicorn = "^0.24"
+gunicorn = "^21.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
 
 [tool.poetry.scripts]
 dailywire-downloader = "dailywire_downloader.__main__:main"
+wireloft-api = "wireloft_web.app:app"
 
 [build-system]
 requires = ["poetry-core"]
