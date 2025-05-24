@@ -12,9 +12,9 @@ packages = [
 python = "~3.13"
 pyyaml = "^6.0"
 yt-dlp = { git = "https://github.com/yt-dlp/yt-dlp.git", rev = "311bb3b" }
-fastapi = "^0.110"
-uvicorn = "^0.24"
-gunicorn = "^21.2"
+fastapi = "^0.115.12"
+uvicorn = "^0.34.2"
+gunicorn = "^23.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"

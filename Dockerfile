@@ -9,14 +9,6 @@ RUN apt-get update && \
       curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Clone yt-dlp + PR #9920, install & add PyYAML
-WORKDIR /opt
-RUN git clone https://github.com/yt-dlp/yt-dlp.git && \
-    cd yt-dlp && \
-    git fetch origin pull/9920/head:pr-9920 && \
-    git checkout pr-9920 && \
-    pip install .
-
 # Set up working directory
 WORKDIR /app
 

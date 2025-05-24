@@ -242,3 +242,8 @@ docker tag wireloft ghcr.io/samuelvisser/wireloft:latest
 
 docker push ghcr.io/samuelvisser/wireloft:latest
 ```
+
+WireBox
+BackstageWire
+WireSync
+Wireloft
