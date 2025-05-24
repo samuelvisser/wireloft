@@ -7,6 +7,8 @@ RUN apt-get update && \
       ffmpeg \
       cron \
       curl \
+      nodejs \
+      npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up working directory
@@ -35,6 +37,11 @@ ENV DW_DOWNLOAD_DIR="/downloads"
 COPY ./dailywire_downloader/ /app/dailywire_downloader/
 COPY ./wireloft_web/ /app/wireloft_web/
 COPY ./frontend/ /app/frontend/
+
+# Build the frontend
+WORKDIR /app/frontend
+RUN npm install && npm run build
+WORKDIR /app
 
 # Copy scripts to /usr/local/bin
 COPY ./scripts/ /usr/local/bin/

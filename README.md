@@ -51,7 +51,7 @@ Wireloft exposes a small React interface with three pages:
    ```bash
    # Linux, macOS
    curl -sSL https://install.python-poetry.org | python3 -
-   
+
    # Windows
    (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | py -
    ```
@@ -191,7 +191,7 @@ docker run -d \
 
 ## Development
 
-This project uses [Poetry](https://python-poetry.org/) for dependency management.
+This project uses [Poetry](https://python-poetry.org/) for Python dependency management and [npm](https://www.npmjs.com/) for frontend dependency management.
 
 ### Setup for Development
 
@@ -206,18 +206,26 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
    curl -sSL https://install.python-poetry.org | python3 -
    ```
 
-3. Install dependencies:
+3. Install Python dependencies:
    ```bash
    poetry install
    ```
 
-4. Set up your configuration files:
+4. Install frontend dependencies and build the frontend:
+   ```bash
+   cd frontend
+   npm install
+   npm run build
+   cd ..
+   ```
+
+5. Set up your configuration files:
    ```bash
    cp config/config.yml.default config/config.yml
    cp config/cookies.txt.default config/cookies.txt
    ```
 
-5. Edit the configuration files with your settings and cookies
+6. Edit the configuration files with your settings and cookies
 
 ### Running the Downloader in Development Mode
 
@@ -231,6 +239,15 @@ Or activate the Poetry virtual environment and run directly:
 poetry shell
 dailywire-downloader
 ```
+
+### Running the Frontend in Development Mode
+
+To run the frontend in development mode with automatic rebuilding when files change:
+```bash
+./scripts/run_frontend_dev.sh
+```
+
+This will start webpack in watch mode, which will automatically rebuild the frontend when you make changes to the source files.
 
 ### Push new update to github registry (dev only)
 ```bash
