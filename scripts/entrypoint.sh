@@ -39,6 +39,6 @@ crontab "$CRON_FILE"
 #$DOWNLOAD_CMD
 
 # Start cron in foreground and run gunicorn alongside
-#cron
-/usr/local/bin/run_gunicorn.sh
-#exec tail -f /var/log/cron.log
+cron
+/usr/local/bin/run_gunicorn.sh &
+exec tail -f /var/log/cron.log
