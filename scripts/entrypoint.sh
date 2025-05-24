@@ -35,8 +35,8 @@ chmod 0644 "$CRON_FILE"
 crontab "$CRON_FILE"
 
 # Run one-off download immediately
-echo "$(date '+%Y-%m-%d %H:%M:%S'): Initial download on startup"
-$DOWNLOAD_CMD
+#echo "$(date '+%Y-%m-%d %H:%M:%S'): Initial download on startup"
+#$DOWNLOAD_CMD
 
 # Start cron in foreground and run gunicorn alongside
 cron

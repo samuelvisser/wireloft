@@ -47,9 +47,7 @@ RUN chmod 0644 /etc/cron.d/*
 # Ensure cron log exists
 RUN touch /var/log/cron.log
 
-# Volumes for user‑mounted config & outputs
+# Docker setup
 VOLUME ["/config","/downloads"]
-
-# Entrypoint sets up cron, then CMD runs it
+EXPOSE 8000
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD []
