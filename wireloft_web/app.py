@@ -16,7 +16,7 @@ FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+    return FileResponse(os.path.join(FRONTEND_DIR, "public", "index.html"))
 
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
