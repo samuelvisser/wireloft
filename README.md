@@ -1,8 +1,8 @@
 > This project was made primarily for personal use. Im sharing it publicly in the hopes it might be useful to some. If you run into issues, let me know, but I might not always respond very quickly 
 
-# DailyWire Show Downloader
+# Wireloft
 
-This is a simple project made to download premium shows from The Daily Wire website using browser cookies.<br>
+Wireloft is a simple project to manage and download premium shows from The Daily Wire website using a web interface.<br>
 For this to work, an active premium subscription to The Daily Wire is required.
 
 My main personal use for this is to download the episodes to a directory read by my Audiobookshelf instance, which I then use to create a private RSS feed from the episodes.
@@ -15,8 +15,15 @@ My main personal use for this is to download the episodes to a directory read by
 - Can extract video descriptions and save them as .nfo files for Audiobookshelf compatibility
 - Ensures filenames only use ASCII characters for maximum compatibility
 - Configurable download schedule via cron
+- Web interface built with React served by gunicorn
 
 ## Quick Start
+
+Wireloft exposes a small React interface with three pages:
+
+1. **Home** – overview of your library size, downloaded files and shows.
+2. **Shows** – list of all shows with their download size. Each show can be edited individually.
+3. **Settings** – edit global settings for the downloader.
 
 ### Using Docker
 
@@ -31,10 +38,11 @@ My main personal use for this is to download the episodes to a directory read by
 
 3. Run the Docker container:
    ```bash
-   docker run -d \
-     -v $(pwd)/config:/config:ro \
-     -v $(pwd)/downloads:/downloads \
-     ghcr.io/samuelvisser/dailywire-downloader:latest
+  docker run -d \
+    -v $(pwd)/config:/config:ro \
+    -v $(pwd)/downloads:/downloads \
+    -p 8000:8000 \
+    ghcr.io/samuelvisser/wireloft:latest
    ```
 
 ### Using Python Package
@@ -140,13 +148,14 @@ You can also set these paths using environment variables:
 The easiest way to get started is to use the pre-built image from GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/samuelvisser/dailywire-downloader:latest
+docker pull ghcr.io/samuelvisser/wireloft:latest
 
 docker run -d \
   -v $(pwd)/config:/config:ro \
   -v $(pwd)/downloads:/downloads \
-  --name dailywire-downloader \
-  ghcr.io/samuelvisser/dailywire-downloader:latest
+  -p 8000:8000 \
+  --name wireloft \
+  ghcr.io/samuelvisser/wireloft:latest
 ```
 
 ### How the Docker container works
@@ -158,26 +167,26 @@ When the container starts:
 ### Viewing logs
 To view the logs from the Docker container:
 ```bash
-docker logs -f dailywire-downloader
+docker logs -f wireloft
 ```
 
 ### Running a manual download
 To trigger a download manually:
 ```bash
-docker exec dailywire-downloader dailywire-downloader
+docker exec wireloft dailywire-downloader
 ```
 
 ### Building your own Docker image
 If you want to build the image yourself:
 
 ```bash
-docker build -t dailywire-downloader .
+docker build -t wireloft .
 
 docker run -d \
   -v $(pwd)/config:/config:ro \
   -v $(pwd)/downloads:/downloads \
-  --name dailywire-downloader \
-  dailywire-downloader
+  --name wireloft \
+  wireloft
 ```
 
 ## Development
@@ -225,11 +234,11 @@ dailywire-downloader
 
 ### Push new update to github registry (dev only)
 ```bash
-docker build -t dailywire-downloader .
+docker build -t wireloft .
 
 echo ACCESS_TOKEN | docker login ghcr.io -u samuelvisser --password-stdin
 
-docker tag dailywire-downloader ghcr.io/samuelvisser/dailywire-downloader:latest
+docker tag wireloft ghcr.io/samuelvisser/wireloft:latest
 
-docker push ghcr.io/samuelvisser/dailywire-downloader:latest
+docker push ghcr.io/samuelvisser/wireloft:latest
 ```
