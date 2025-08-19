@@ -30,7 +30,7 @@ RUN mkdir -p /downloads /config /usr/local/bin /app/cache /tmp/yt-dlp-tmp \
     && chmod a+rwX /tmp/yt-dlp-tmp /app/cache
 
 # Install the package
-COPY pyproject.toml poetry.lock poetry.toml README.md /app/
+COPY pyproject.toml poetry.lock poetry.toml /app/
 COPY dailywire_downloader/__init__.py /app/dailywire_downloader/__init__.py
 RUN cd /app && \
     poetry install
@@ -52,12 +52,9 @@ RUN chmod 0644 /etc/cron.d/*
 # Ensure cron log exists
 RUN touch /var/log/cron.log
 
-# Make sure cron log is redirected to stdout
-RUN ln -sf /dev/stdout /var/log/cron.log
-
 # Volumes for user‑mounted config & outputs
 VOLUME ["/config","/downloads"]
 
 # Entrypoint sets up cron, then CMD runs it
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["cron", "-f"]
+CMD ["sh", "-c", "cron -f & tail -f /var/log/cron.log"]

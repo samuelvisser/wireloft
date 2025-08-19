@@ -40,7 +40,7 @@ class DailyWireDownloader:
     def log(self, message):
         """Print a timestamped log message."""
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        print(f"{timestamp}: {message}")
+        print(f"{timestamp}: {message}", flush=True)
 
     def acquire_lock(self):
         """Prevent overlapping runs using file locking."""
@@ -83,20 +83,38 @@ class DailyWireDownloader:
             self.config = yaml.safe_load(f)
             return self.config
 
-    def get_date_filter_options(self):
+    def get_show_config(self, show_name):
+        """Get show-specific configuration based on show name."""
+        show_config = {}
+        for show in self.config.get("shows", []):
+            if show.get("name") == show_name:
+                show_config = show
+                break
+        return show_config
+
+    def get_show_option(self, show_name, key, default=None):
+        """Get show-specific configuration value based on show name."""
+        show_config = self.get_show_config(show_name)
+        if key in show_config:
+            return show_config[key]
+
+        # Fall back to global config
+        return self.config.get(key, default)
+
+    def get_date_filter_options(self, show_name):
         """Get date filter options based on start_date in config."""
-        start_date = self.config.get("start_date", "").strip()
+        start_date = self.get_show_option(show_name, "start_date", "").strip()
+
         options = {}
         if start_date:
             clean_date = start_date.replace('-', '')
-            # options['daterange'] = yt_dlp.utils.DateRange(clean_date, '99991231'),  # Equivalent for --dateafter
-            options['match_filter'] = yt_dlp.utils.match_filter_func(None, ['upload_date>=' + clean_date])       # Equivalent for --break-match-filters
+            options['match_filter'] = {'breaking_filters': ['upload_date>=' + clean_date]}
         return options
 
-    def get_audio_options(self):
+    def get_audio_options(self, show_name):
         """Get audio-related options based on config."""
-        audio_only = self.config.get("audio_only", False)
-        audio_format = self.config.get("audio_format", "")
+        audio_only = self.get_show_option(show_name, "audio_only", False)
+        audio_format = self.get_show_option(show_name, "audio_format", "")
 
         options = {}
         if audio_only:
@@ -118,9 +136,9 @@ class DailyWireDownloader:
 
         return options
 
-    def get_nfo_options(self):
+    def get_nfo_options(self, show_name):
         """Get NFO-related options based on config."""
-        save_nfo = self.config.get("save_nfo_file", False)
+        save_nfo = self.get_show_option(show_name, "save_nfo_file", False)
 
         options = {}
         if save_nfo:
@@ -134,9 +152,9 @@ class DailyWireDownloader:
             ]
         return options
 
-    def get_retry_options(self):
+    def get_retry_options(self, show_name):
         """Get retry-related options based on config."""
-        retry_download_all = self.config.get("retry_download_all", True)
+        retry_download_all = self.get_show_option(show_name, "retry_download_all", False)
 
         options = {}
         if not retry_download_all:
@@ -146,17 +164,41 @@ class DailyWireDownloader:
             options['sleep_interval_requests'] = 0.75
         return options
 
-    def download_show(self, show_name, show_url, date_options, audio_options, nfo_options, retry_options, consecutive_download_options):
+    def get_filter_options(self, show_name):
+        """Get show-specific filter options."""
+        show_config = self.get_show_config(show_name)
+        filters = {}
+        if "filters" in show_config:
+            filters = show_config["filters"]
+        if "filters" in self.config:
+            self.update_dict(filters, self.config["filters"])
+
+        options = {}
+        if "matchtitle" in filters:
+            options['matchtitle'] = filters['matchtitle']
+
+        if "rejecttitle" in filters:
+            options['rejecttitle'] = filters['rejecttitle']
+
+        if "match_filters" in filters:
+            options.setdefault('match_filter', {})['filters'] = filters['match_filters']
+
+        if "breaking_filters" in filters:
+            options.setdefault('match_filter', {})['breaking_filters'] = filters['breaking_filters']
+
+        return options
+
+    def download_show(self, show_name, show_url):
         """Download a single show using yt-dlp Python API."""
         self.log(f"Downloading '{show_name}' from {show_url}")
 
-        output_template = self.config.get("output")
+        output_template = self.get_show_option(show_name, "output")
         if not output_template:
             self.log("ERROR: `output` key missing in config.yml")
             sys.exit(1)
 
         # Base options for YoutubeDL
-        # Options: https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/YoutubeDL.py#L220
+        # Options: https://github.com/yt-dlp/yt-dlp/blob/311bb3b02a3425ef7811866371ebb5a6126be95e/yt_dlp/YoutubeDL.py#L220
         ydl_opts = {
             'cookiefile': self.cookies_file,
             'download_archive': self.archive_file,
@@ -170,11 +212,13 @@ class DailyWireDownloader:
             'writethumbnail': True,
             'sleep_interval': 10.0,
             'max_sleep_interval': 25.0,
-            'matchtitle': '\\[Member Exclusive\\]',
             'ignoreerrors': 'only_download',
-            # ignore only download errors. Default when using through CLI (API default is False)
+            'skip_playlist_after_errors': 5,
             'outtmpl': {
                 'default': f"{show_name}/{output_template}"
+            },
+            'match_filter': {
+                'filters': ['!is_live']
             },
             'postprocessors': [
                 {
@@ -232,11 +276,15 @@ class DailyWireDownloader:
         }
 
         # Merge all option dictionaries
-        self.update_dict(ydl_opts, date_options)
-        self.update_dict(ydl_opts, audio_options, True)
-        self.update_dict(ydl_opts, nfo_options)
-        self.update_dict(ydl_opts, retry_options)
-        self.update_dict(ydl_opts, consecutive_download_options)
+        self.update_dict(ydl_opts, self.get_date_filter_options(show_name))
+        self.update_dict(ydl_opts, self.get_audio_options(show_name), True)
+        self.update_dict(ydl_opts, self.get_nfo_options(show_name))
+        self.update_dict(ydl_opts, self.get_retry_options(show_name))
+        self.update_dict(ydl_opts, self.get_filter_options(show_name))
+
+        # Convert filters
+        if 'match_filter' in ydl_opts:
+            ydl_opts['match_filter'] = yt_dlp.utils.match_filter_func(ydl_opts['match_filter'].get('filters'), ydl_opts['match_filter'].get('breaking_filters'))
 
         # Use the Python API to download
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -276,13 +324,6 @@ class DailyWireDownloader:
             # Load configuration
             self.load_config()
 
-            # Get options based on configuration
-            date_options = self.get_date_filter_options()
-            audio_options = self.get_audio_options()
-            nfo_options = self.get_nfo_options()
-            retry_options = self.get_retry_options()
-            consecutive_download_options = {}
-
             # Process each show
             for show in self.config.get("shows", []):
                 show_name = show.get("name")
@@ -293,7 +334,7 @@ class DailyWireDownloader:
                     sys.exit(1)
 
                 try:
-                    self.download_show(show_name, show_url, date_options, audio_options, nfo_options, retry_options, consecutive_download_options)
+                    self.download_show(show_name, show_url)
                 except Exception as e:
                     error_message = str(e)
                     if "--break-on-existing" in error_message:
@@ -304,12 +345,17 @@ class DailyWireDownloader:
                     else:
                         raise e
                 finally:
-                    self.log("Waiting 120 seconds before downloading next show...")
+                    # Wait after download to avoid rate limiting (HTTP 304 responses)
+                    # This intentionally will also wait after the last show, so that the
+                    # next cron cycle cannot start sooner than 120 seconds after the last
+                    self.log("Waiting 120 seconds after show download...")
                     time.sleep(120)
+                    self.log("...done.")
         finally:
             # Release lock (will happen automatically when script exits, but being explicit)
             self.release_lock()
 
+        self.log("Finished downloading all shows. Exiting.")
 
 def download_shows(config_file: str, cookies_file: str, download_dir: str):
     """Main function to download all configured shows.

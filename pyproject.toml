@@ -3,7 +3,6 @@ name = "dailywire-downloader"
 version = "0.1.0"
 description = "A tool to download premium shows from the DailyWire website"
 authors = ["Samuël Visser <samuvisser@gmail.com>"]
-readme = "README.md"
 packages = [{include = "dailywire_downloader"}]
 
 [tool.poetry.dependencies]

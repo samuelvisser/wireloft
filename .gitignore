@@ -13,6 +13,7 @@ __pycache__/
 *$py.class
 
 # Distribution / packaging
+.DS_Store
 .Python
 build/
 develop-eggs/
