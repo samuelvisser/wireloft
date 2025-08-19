@@ -5,6 +5,7 @@ import sys
 import yaml
 import fcntl
 import datetime
+import time
 import yt_dlp
 
 
@@ -145,7 +146,7 @@ class DailyWireDownloader:
             options['sleep_interval_requests'] = 0.75
         return options
 
-    def download_show(self, show_name, show_url, date_options, audio_options, nfo_options, retry_options):
+    def download_show(self, show_name, show_url, date_options, audio_options, nfo_options, retry_options, consecutive_download_options):
         """Download a single show using yt-dlp Python API."""
         self.log(f"Downloading '{show_name}' from {show_url}")
 
@@ -155,6 +156,7 @@ class DailyWireDownloader:
             sys.exit(1)
 
         # Base options for YoutubeDL
+        # Options: https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/YoutubeDL.py#L220
         ydl_opts = {
             'cookiefile': self.cookies_file,
             'download_archive': self.archive_file,
@@ -172,8 +174,7 @@ class DailyWireDownloader:
             'ignoreerrors': 'only_download',
             # ignore only download errors. Default when using through CLI (API default is False)
             'outtmpl': {
-                'default': f"{show_name}/{output_template}",
-                'pl_thumbnail': ''  # disables playlist thumbnail download
+                'default': f"{show_name}/{output_template}"
             },
             'postprocessors': [
                 {
@@ -235,6 +236,7 @@ class DailyWireDownloader:
         self.update_dict(ydl_opts, audio_options, True)
         self.update_dict(ydl_opts, nfo_options)
         self.update_dict(ydl_opts, retry_options)
+        self.update_dict(ydl_opts, consecutive_download_options)
 
         # Use the Python API to download
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -279,6 +281,7 @@ class DailyWireDownloader:
             audio_options = self.get_audio_options()
             nfo_options = self.get_nfo_options()
             retry_options = self.get_retry_options()
+            consecutive_download_options = {}
 
             # Process each show
             for show in self.config.get("shows", []):
@@ -289,7 +292,20 @@ class DailyWireDownloader:
                     self.log("ERROR: each show needs `name` and `url`")
                     sys.exit(1)
 
-                self.download_show(show_name, show_url, date_options, audio_options, nfo_options, retry_options)
+                try:
+                    self.download_show(show_name, show_url, date_options, audio_options, nfo_options, retry_options, consecutive_download_options)
+                except Exception as e:
+                    error_message = str(e)
+                    if "--break-on-existing" in error_message:
+                        self.log(f"Download for {show_name} stopped: All new videos have been downloaded.")
+                    if " --" in error_message:
+                        # The download stopped due to some setting (expected, no error)
+                        self.log(f"Download for {show_name} stopped: {e}")
+                    else:
+                        raise e
+                finally:
+                    self.log("Waiting 120 seconds before downloading next show...")
+                    time.sleep(120)
         finally:
             # Release lock (will happen automatically when script exits, but being explicit)
             self.release_lock()
