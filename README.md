@@ -1,8 +1,8 @@
 > This project was made primarily for personal use. Im sharing it publicly in the hopes it might be useful to some. If you run into issues, let me know, but I might not always respond very quickly 
 
-# DailyWire Show Downloader
+# WireLoft
 
-This is a simple project made to download premium shows from The Daily Wire website using browser cookies.<br>
+This is a project made to download premium shows and movies from The Daily Wire website using browser cookies.<br>
 For this to work, an active premium subscription to The Daily Wire is required.
 
 My main personal use for this is to download the episodes to a directory read by my Audiobookshelf instance, which I then use to create a private RSS feed from the episodes.
@@ -233,3 +233,49 @@ docker tag dailywire-downloader ghcr.io/samuelvisser/dailywire-downloader:latest
 
 docker push ghcr.io/samuelvisser/dailywire-downloader:latest
 ```
+
+
+
+## UI (React 19, Vite + TypeScript)
+
+A web UI is included for navigation and demonstration purposes. It now uses a proper build step so you can write JSX and TypeScript.
+
+- Location: `ui` (Vite project)
+- Entry HTML: `ui\index.html` (Vite-style, loads `/src/main.tsx`)
+- Source: `ui\src\**/*` (TypeScript + JSX)
+- Features:
+  - Sidebar with: Dashboard, Media Profiles, and Settings
+  - Sidebar footer branding: WireLoft
+
+### Prerequisites
+- Node.js 18+ and npm
+
+### Develop (recommended)
+PowerShell:
+```powershell
+cd C:\Users\samuv\PycharmProjects\wireloft\ui
+npm install
+npm run dev
+```
+Open the URL shown by Vite (usually http://localhost:5173/). Edits to `.tsx` and `.css` files hot‑reload.
+
+### Build for production
+```powershell
+cd C:\Users\samuv\PycharmProjects\wireloft\ui
+npm run build
+```
+The static site will be in `ui\dist`. You can preview it locally:
+```powershell
+npm run preview
+```
+
+### Formatting
+Run Prettier across the UI project:
+```powershell
+cd C:\Users\samuv\PycharmProjects\wireloft\ui
+npm run format
+```
+
+### Notes
+- Legacy buildless files have been removed; the UI now exclusively uses the Vite + TypeScript setup.
+- The UI is still standalone and does not currently interact with the Python backend. It’s intended as a foundation you can extend.

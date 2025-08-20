@@ -1,0 +1,105 @@
+/* WireLoft UI styles - minimal, responsive, dark sidebar */
+:root {
+  --bg: #f8fafc;
+  --text: #0f172a;
+  --muted: #475569;
+  --sidebar-bg: #0f172a;
+  --sidebar-muted: rgba(255, 255, 255, 0.7);
+  --sidebar-hover: rgba(255, 255, 255, 0.08);
+  --sidebar-active: rgba(255, 255, 255, 0.14);
+  --divider: rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1220;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Noto Sans, "Apple Color Emoji", "Segoe UI Emoji";
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+}
+
+.sidebar {
+  width: 260px;
+  min-width: 220px;
+  background: var(--sidebar-bg);
+  color: white;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-inner {
+  padding: 16px;
+  flex: 1;
+  overflow: auto;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nav-item {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+}
+
+.nav-item .icon { font-size: 18px; }
+
+.nav-item:hover { background: var(--sidebar-hover); }
+.nav-item.active {
+  background: var(--sidebar-active);
+}
+
+.sidebar-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--divider);
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  background: var(--bg);
+  padding: 24px;
+}
+
+.view h1 {
+  margin: 0 0 12px 0;
+  font-size: 24px;
+}
+
+.view p {
+  margin: 0;
+  color: var(--muted);
+}
