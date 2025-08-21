@@ -244,7 +244,7 @@ A web UI is included for navigation and demonstration purposes. It now uses a pr
 - Entry HTML: `ui\index.html` (Vite-style, loads `/src/main.tsx`)
 - Source: `ui\src\**/*` (TypeScript + JSX)
 - Features:
-  - Sidebar with: Dashboard, Media Profiles, and Settings
+  - Sidebar with: Home, Media Profiles, and Settings
   - Sidebar footer branding: WireLoft
 
 ### Prerequisites

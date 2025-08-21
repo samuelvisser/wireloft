@@ -1,4 +1,6 @@
-// Types for the dashboard demo
+import React from 'react'
+
+// Types for the home (formerly dashboard) demo
 export type Episode = {
   id: string
   title: string
@@ -68,11 +70,11 @@ function EpisodeCard({ ep }: { ep: Episode }) {
   )
 }
 
-export default function Dashboard({ onAddShow }: { onAddShow: () => void }) {
+export default function Home({ onAddShow }: { onAddShow: () => void }) {
   return (
-    <section className="view shows-view" aria-labelledby="dashboard-title">
+    <section className="view shows-view" aria-labelledby="home-title">
       <div className="view-header">
-        <h1 id="dashboard-title">Shows</h1>
+        <h1 id="home-title">Shows</h1>
         <button className="btn btn-primary" onClick={onAddShow}>Add show</button>
       </div>
       {shows.map((show) => (

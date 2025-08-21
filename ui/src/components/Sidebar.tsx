@@ -6,7 +6,7 @@ type SidebarProps = {
 }
 
 const items: Array<{ id: View; label: string; emoji: string }> = [
-  { id: 'dashboard', label: 'Dashboard', emoji: '📊' },
+  { id: 'home', label: 'Home', emoji: '📊' },
   { id: 'profiles', label: 'Media Profiles', emoji: '💽' },
   { id: 'settings', label: 'Settings', emoji: '⚙️' },
 ]
