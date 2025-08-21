@@ -256,3 +256,22 @@ body {
   display: flex;
   gap: 8px;
 }
+
+
+/* Episode status icon (bottom-left of thumbnail) */
+.status {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.status > svg { width: 16px; height: 16px; }
+
+/* Status colors */
+.status.status-downloaded { color: #22c55e; } /* green */
+.status.status-downloading { color: #4ade80; } /* medium green for better contrast */
+.status.status-processing { color: #94a3b8; } /* gray */
+.status.status-error { color: #ef4444; } /* red */
