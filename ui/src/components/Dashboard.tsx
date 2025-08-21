@@ -68,10 +68,13 @@ function EpisodeCard({ ep }: { ep: Episode }) {
   )
 }
 
-export default function Dashboard() {
+export default function Dashboard({ onAddShow }: { onAddShow: () => void }) {
   return (
     <section className="view shows-view" aria-labelledby="dashboard-title">
-      <h1 id="dashboard-title">Shows</h1>
+      <div className="view-header">
+        <h1 id="dashboard-title">Shows</h1>
+        <button className="btn btn-primary" onClick={onAddShow}>Add show</button>
+      </div>
       {shows.map((show) => (
         <article className="show-section" key={show.id} aria-labelledby={`${show.id}-title`}>
           <header className="show-header">

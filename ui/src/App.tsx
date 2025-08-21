@@ -3,8 +3,9 @@ import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
 import MediaProfiles from './components/MediaProfiles'
 import Settings from './components/Settings'
+import AddShow from './components/AddShow'
 
-export type View = 'dashboard' | 'profiles' | 'settings'
+export type View = 'dashboard' | 'profiles' | 'settings' | 'add-show'
 
 export default function App() {
   const [view, setView] = useState<View>('dashboard')
@@ -12,13 +13,15 @@ export default function App() {
   const content = useMemo(() => {
     switch (view) {
       case 'dashboard':
-        return <Dashboard />
+        return <Dashboard onAddShow={() => setView('add-show')} />
       case 'profiles':
         return <MediaProfiles />
       case 'settings':
         return <Settings />
+      case 'add-show':
+        return <AddShow onCancel={() => setView('dashboard')} />
       default:
-        return <Dashboard />
+        return <Dashboard onAddShow={() => setView('add-show')} />
     }
   }, [view])
 
