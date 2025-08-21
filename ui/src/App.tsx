@@ -1,35 +1,28 @@
-import { useMemo, useState } from 'react'
+import { useCallback } from 'react'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Home from './components/Home'
 import MediaProfiles from './components/MediaProfiles'
 import Settings from './components/Settings'
 import AddShow from './components/AddShow'
 
-export type View = 'home' | 'profiles' | 'settings' | 'add-show'
-
 export default function App() {
-  const [view, setView] = useState<View>('home')
+  const navigate = useNavigate()
 
-  const content = useMemo(() => {
-    switch (view) {
-      case 'home':
-        return <Home onAddShow={() => setView('add-show')} />
-      case 'profiles':
-        return <MediaProfiles />
-      case 'settings':
-        return <Settings />
-      case 'add-show':
-        return <AddShow onCancel={() => setView('home')} />
-      default:
-        return <Home onAddShow={() => setView('add-show')} />
-    }
-  }, [view])
+  const goToAddShow = useCallback(() => navigate('/add-show'), [navigate])
+  const cancelAddShow = useCallback(() => navigate('/'), [navigate])
 
   return (
     <div className="app">
-      <Sidebar currentView={view} onSelect={setView} />
+      <Sidebar />
       <main className="content" role="main">
-        {content}
+        <Routes>
+          <Route path="/" element={<Home onAddShow={goToAddShow} />} />
+          <Route path="/profiles" element={<MediaProfiles />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/add-show" element={<AddShow onCancel={cancelAddShow} />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
     </div>
   )
