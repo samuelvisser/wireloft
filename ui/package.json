@@ -10,6 +10,7 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@awesome.me/kit-83fa1ac5a9": "^1.0.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
