@@ -1,8 +1,7 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
-import { useShow } from '../../lib/queries'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
