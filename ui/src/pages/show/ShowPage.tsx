@@ -173,7 +173,20 @@ export default function ShowPage() {
                     ? 'Waiting for processing'
                     : 'Error'
             return (
-              <div key={ep.id} className="episode-list-item" role="listitem" aria-label={ep.title}>
+              <div
+                key={ep.id}
+                className="episode-list-item"
+                role="listitem"
+                aria-label={ep.title}
+                tabIndex={0}
+                onClick={() => navigate(`/show/${id}/episode/${ep.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    navigate(`/show/${id}/episode/${ep.id}`)
+                  }
+                }}
+              >
                 <div className="episode-thumb" aria-hidden>
                   <div className="thumb-inner">
                     <span className={`status status-${ep.status}`} aria-label={label} title={label}>
@@ -233,7 +246,7 @@ export default function ShowPage() {
       <style>{`
         /* Basic large list thumbnail styling leveraging existing classes */
         .episodes-list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
-        .episode-list-item { display: flex; gap: 12px; align-items: center; border: 1px solid var(--border-color, #ddd); border-radius: 8px; padding: 8px; }
+        .episode-list-item { display: flex; gap: 12px; align-items: center; border: 1px solid var(--border-color, #ddd); border-radius: 8px; padding: 8px; cursor: pointer; }
         .episode-thumb { width: 120px; height: 68px; border-radius: 6px; background: var(--cover-bg, #222); position: relative; overflow: hidden; flex: 0 0 auto; }
         .episode-thumb .thumb-inner { position: relative; width: 100%; height: 100%; display: flex; align-items: end; justify-content: start; }
         .episode-info { flex: 1 1 auto; min-width: 0; }

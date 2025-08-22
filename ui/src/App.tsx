@@ -9,6 +9,7 @@ import AddMediaProfilePage from './pages/media-profile/AddMediaProfilePage'
 import EditMediaProfilePage from './pages/media-profile/EditMediaProfilePage'
 import ShowPage from './pages/show/ShowPage'
 import EditShow from './pages/show/EditShowPage'
+import EpisodePage from './pages/episode/EpisodePage'
 
 export default function App() {
   const navigate = useNavigate()
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/add-media-profile" element={<AddMediaProfilePage />} />
           <Route path="/edit-media-profile/:id" element={<EditMediaProfilePage />} />
           <Route path="/show/:id" element={<ShowPage />} />
+          <Route path="/show/:id/episode/:episodeId" element={<EpisodePage />} />
           <Route path="/edit-show/:id" element={<EditShow />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

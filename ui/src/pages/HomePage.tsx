@@ -1,7 +1,8 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import type React from 'react'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -94,9 +95,9 @@ function makeEpisodeRecords(
 
 // Flat list of episode records (mock) — each entry is an episode with its show metadata
 const EPISODES: EpisodeRecord[] = [
-  ...makeEpisodeRecords(30, 'tbs', 'the-ben-shapiro-show', 'Ben Shapiro', 'The Ben Shapiro Show', '2015-2025'),
-  ...makeEpisodeRecords(20, 'tmws', 'the-matt-walsh-show', 'Matt Walsh', 'The Matt Walsh Show', '2018 – 2025'),
-  ...makeEpisodeRecords(7, 'bad', 'ben-after-dark', 'Ben Shapiro', 'Ben After Dark', '2025 - 2025'),
+  ...makeEpisodeRecords(30, 'the-ben-shapiro-show', 'the-ben-shapiro-show', 'Ben Shapiro', 'The Ben Shapiro Show', '2015-2025'),
+  ...makeEpisodeRecords(20, 'the-matt-walsh-show', 'the-matt-walsh-show', 'Matt Walsh', 'The Matt Walsh Show', '2018 – 2025'),
+  ...makeEpisodeRecords(7, 'ben-after-dark', 'ben-after-dark', 'Ben Shapiro', 'Ben After Dark', '2025 - 2025'),
 ]
 
 // Ensure all four statuses are represented in the demo set
@@ -156,7 +157,7 @@ function statusLabel(status: EpisodeStatus) {
   }
 }
 
-function EpisodeCard({ ep }: { ep: Episode }) {
+function EpisodeCard({ ep, showId }: { ep: Episode; showId: string }) {
   const initials = ep.title
     .split(' ')
     .map((w) => w[0])
@@ -168,9 +169,18 @@ function EpisodeCard({ ep }: { ep: Episode }) {
   const label = statusLabel(ep.status)
   const isProcessing = ep.status === 'processing'
 
+  const navigate = useNavigate()
+  const goToEpisode = () => navigate(`/show/${showId}/episode/${ep.id}`)
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      goToEpisode()
+    }
+  }
+
   return (
-    <div className="episode-card" role="listitem" aria-label={ep.title} tabIndex={0}>
-      <div className="cover" style={style}>
+    <div className="episode-card" role="listitem" aria-label={ep.title} tabIndex={0} onKeyDown={onKeyDown}>
+      <div className="cover" style={style} onClick={goToEpisode}>
         {/* status icon in bottom-left */}
         <span className={`status status-${ep.status}`} aria-label={label} title={label}>
           <FontAwesomeIcon icon={icon as any} spin={isProcessing} />
@@ -209,7 +219,7 @@ export default function HomePage({ onAddShow }: { onAddShow: () => void }) {
           </Link>
           <div className="episodes-row" role="list" aria-label={`${show.title} episodes`}>
             {show.episodes.map((ep) => (
-              <EpisodeCard key={ep.id} ep={ep} />
+              <EpisodeCard key={ep.id} ep={ep} showId={show.id} />
             ))}
           </div>
         </article>
