@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import MediaProfileForm, { MediaProfileFormValue } from './MediaProfileForm'
 
 type AddShowProps = {
   onCancel: () => void
@@ -20,12 +21,7 @@ type MediaProfile = {
   downloadSeriesImages: boolean
 }
 
-type NewProfileForm = {
-  name: string
-  outputPathTemplate: string
-  preferredFormat: MediaProfile['preferredFormat']
-  downloadSeriesImages: boolean
-}
+type NewProfileForm = MediaProfileFormValue
 
 function ensureProtocol(input: string): string {
   let v = input.trim()
@@ -222,65 +218,14 @@ export default function AddShow({ onCancel }: AddShowProps) {
           <div className="divider-label" aria-hidden="true">Or create a new profile</div>
 
           {/* New profile form */}
-          <div className="form-row">
-            <label htmlFor="mp-name">Name</label>
-            <input
-              id="mp-name"
-              className="input"
-              type="text"
-              placeholder="My 4k Profile"
-              value={newProfile.name}
-              onChange={(e) => {
-                setSelectedProfileId(null)
-                setNewProfile({ ...newProfile, name: e.target.value })
-              }}
-            />
-          </div>
-          <div className="form-row">
-            <label htmlFor="mp-path">Output path template</label>
-            <input
-              id="mp-path"
-              className="input"
-              type="text"
-              placeholder="D:/Media/Shows/{show}/{season}"
-              value={newProfile.outputPathTemplate}
-              onChange={(e) => {
-                setSelectedProfileId(null)
-                setNewProfile({ ...newProfile, outputPathTemplate: e.target.value })
-              }}
-            />
-            <div className="help">Use placeholders like {`{show}`} and {`{season}`}.</div>
-          </div>
-          <div className="form-row">
-            <label htmlFor="mp-format">Preferred format</label>
-            <select
-              id="mp-format"
-              className="input"
-              value={newProfile.preferredFormat}
-              onChange={(e) => {
-                const value = e.target.value as MediaProfile['preferredFormat']
-                setSelectedProfileId(null)
-                setNewProfile({ ...newProfile, preferredFormat: value })
-              }}
-            >
-              <option value="4k">4k</option>
-              <option value="1080p">1080p</option>
-              <option value="720p">720p</option>
-              <option value="Audio Only">Audio Only</option>
-            </select>
-          </div>
-          <div className="form-row" style={{ alignItems: 'center' }}>
-            <label htmlFor="mp-images">Download series images</label>
-            <input
-              id="mp-images"
-              type="checkbox"
-              checked={newProfile.downloadSeriesImages}
-              onChange={(e) => {
-                setSelectedProfileId(null)
-                setNewProfile({ ...newProfile, downloadSeriesImages: e.target.checked })
-              }}
-            />
-          </div>
+          <MediaProfileForm
+            value={newProfile}
+            onChange={(v) => {
+              setSelectedProfileId(null)
+              setNewProfile(v)
+            }}
+            autoFocusName
+          />
 
           <div className="actions">
             <button type="button" className="btn" onClick={() => setStep(1)}>
