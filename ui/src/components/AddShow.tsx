@@ -99,12 +99,14 @@ export default function AddShow({ onCancel }: AddShowProps) {
     },
   ])
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
-  const [newProfile, setNewProfile] = useState<NewProfileForm>({
+  const emptyProfile: NewProfileForm = {
     name: '',
     outputPathTemplate: '',
     preferredFormat: '1080p',
     downloadSeriesImages: true,
-  })
+  }
+  const [newProfile, setNewProfile] = useState<NewProfileForm>(emptyProfile)
+  const [newProfileState, setNewProfileState] = useState<NewProfileForm | null>(null)
 
   const creatingProfileValid =
     newProfile.name.trim().length > 0 && newProfile.outputPathTemplate.trim().length > 0
@@ -113,16 +115,12 @@ export default function AddShow({ onCancel }: AddShowProps) {
   // Step 3: Show (summary for now)
 
   function handleFinish() {
-    const selection: MediaProfile | NewProfileForm | undefined =
-      selectedProfileId
-        ? profiles.find((p) => p.id === selectedProfileId)
-        : creatingProfileValid
-        ? newProfile
-        : undefined
+    // Always use the current form values (which may be based on a selected profile and edited)
+    const profile = newProfile
 
     const summary = {
       url: result.normalized ?? rawUrl,
-      profile: selection ?? null,
+      profile,
     }
     alert('Add show request:\n' + JSON.stringify(summary, null, 2))
     onCancel()
@@ -199,7 +197,27 @@ export default function AddShow({ onCancel }: AddShowProps) {
                     role="listitem"
                     className={selected ? 'card selected' : 'card'}
                     aria-pressed={selected}
-                    onClick={() => setSelectedProfileId(selected ? null : p.id)}
+                    onClick={() => {
+                      if (selected) {
+                        // Deselect: restore previous form state (if any)
+                        setSelectedProfileId(null)
+                        setNewProfile(newProfileState ?? emptyProfile)
+                        setNewProfileState(null)
+                      } else {
+                        // Selecting a profile
+                        if (selectedProfileId === null) {
+                          // Save current form before replacing it with the selected profile
+                          setNewProfileState(newProfile)
+                        }
+                        setSelectedProfileId(p.id)
+                        setNewProfile({
+                          name: p.name,
+                          outputPathTemplate: p.outputPathTemplate,
+                          preferredFormat: p.preferredFormat,
+                          downloadSeriesImages: p.downloadSeriesImages,
+                        })
+                      }
+                    }}
                   >
                     <div className="card-title">{p.name}</div>
                     <div className="card-sub">{p.outputPathTemplate}</div>
@@ -215,13 +233,12 @@ export default function AddShow({ onCancel }: AddShowProps) {
 
           {/* Divider and label under it */}
           <hr className="divider" aria-hidden="true" />
-          <div className="divider-label" aria-hidden="true">Or create a new profile</div>
+          <div className="divider-label" aria-hidden="true">{selectedProfileId ? 'Update current profile' : 'Or create a new profile'}</div>
 
           {/* New profile form */}
           <MediaProfileForm
             value={newProfile}
             onChange={(v) => {
-              setSelectedProfileId(null)
               setNewProfile(v)
             }}
             autoFocusName
@@ -255,24 +272,11 @@ export default function AddShow({ onCancel }: AddShowProps) {
 
           <div className="form-row">
             <label>Media Profile</label>
-            {selectedProfileId ? (
-              (() => {
-                const p = profiles.find((x) => x.id === selectedProfileId)!
-                return (
-                  <div>
-                    <div><strong>{p.name}</strong></div>
-                    <div className="help">{p.outputPathTemplate}</div>
-                    <div className="help">{p.preferredFormat} • {p.downloadSeriesImages ? 'Series images ✓' : 'Series images ✕'}</div>
-                  </div>
-                )
-              })()
-            ) : (
-              <div>
-                <div><strong>{newProfile.name || '(unnamed profile)'}</strong></div>
-                <div className="help">{newProfile.outputPathTemplate || '(no path set)'}</div>
-                <div className="help">{newProfile.preferredFormat} • {newProfile.downloadSeriesImages ? 'Series images ✓' : 'Series images ✕'}</div>
-              </div>
-            )}
+            <div>
+              <div><strong>{newProfile.name || '(unnamed profile)'}</strong></div>
+              <div className="help">{newProfile.outputPathTemplate || '(no path set)'}</div>
+              <div className="help">{newProfile.preferredFormat} • {newProfile.downloadSeriesImages ? 'Series images ✓' : 'Series images ✕'}</div>
+            </div>
           </div>
 
           <div className="actions">
