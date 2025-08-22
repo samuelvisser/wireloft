@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import MediaProfileForm, { MediaProfileFormValue } from './MediaProfileForm'
 
 type AddShowProps = {
@@ -22,6 +22,43 @@ type MediaProfile = {
 }
 
 type NewProfileForm = MediaProfileFormValue
+
+// Wizard state persistence
+const STORAGE_KEY = 'addShowWizardV1'
+
+type WizardState = {
+  step: 1 | 2 | 3
+  rawUrl: string
+  selectedProfileId: string | null
+  newProfile: NewProfileForm
+  newProfileState: NewProfileForm | null
+}
+
+function loadWizardState(): WizardState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as WizardState
+  } catch {
+    return null
+  }
+}
+
+function saveWizardState(state: WizardState) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  } catch {
+    // ignore write errors (quota, etc.)
+  }
+}
+
+function clearWizardState() {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+}
 
 function ensureProtocol(input: string): string {
   let v = input.trim()
@@ -73,10 +110,10 @@ function validateShowUrl(input: string): ValidationResult {
 
 export default function AddShow({ onCancel }: AddShowProps) {
   // Wizard step: 1 = URL, 2 = Media Profile, 3 = Show
-  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [step, setStep] = useState<1 | 2 | 3>(() => loadWizardState()?.step ?? 1)
 
   // Step 1: URL
-  const [rawUrl, setRawUrl] = useState('')
+  const [rawUrl, setRawUrl] = useState(() => loadWizardState()?.rawUrl ?? '')
   const result = useMemo(() => validateShowUrl(rawUrl), [rawUrl])
   const urlValid = result.domainOk && result.pathOk && result.slugOk
   const showUrlErrors = rawUrl.trim().length > 0
@@ -98,21 +135,31 @@ export default function AddShow({ onCancel }: AddShowProps) {
       downloadSeriesImages: false,
     },
   ])
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(() => loadWizardState()?.selectedProfileId ?? null)
   const emptyProfile: NewProfileForm = {
     name: '',
     outputPathTemplate: '',
     preferredFormat: '1080p',
     downloadSeriesImages: true,
   }
-  const [newProfile, setNewProfile] = useState<NewProfileForm>(emptyProfile)
-  const [newProfileState, setNewProfileState] = useState<NewProfileForm | null>(null)
+  const [newProfile, setNewProfile] = useState<NewProfileForm>(() => loadWizardState()?.newProfile ?? emptyProfile)
+  const [newProfileState, setNewProfileState] = useState<NewProfileForm | null>(() => loadWizardState()?.newProfileState ?? null)
 
   const creatingProfileValid =
     newProfile.name.trim().length > 0 && newProfile.outputPathTemplate.trim().length > 0
   const canContinueFromProfile = selectedProfileId !== null || creatingProfileValid
 
   // Step 3: Show (summary for now)
+
+  // Persist wizard state on any change
+  useEffect(() => {
+    saveWizardState({ step, rawUrl, selectedProfileId, newProfile, newProfileState })
+  }, [step, rawUrl, selectedProfileId, newProfile, newProfileState])
+
+  function handleCancel() {
+    clearWizardState()
+    onCancel()
+  }
 
   function handleFinish() {
     // Always use the current form values (which may be based on a selected profile and edited)
@@ -123,6 +170,7 @@ export default function AddShow({ onCancel }: AddShowProps) {
       profile,
     }
     alert('Add show request:\n' + JSON.stringify(summary, null, 2))
+    clearWizardState()
     onCancel()
   }
 
@@ -175,7 +223,7 @@ export default function AddShow({ onCancel }: AddShowProps) {
             >
               Continue
             </button>
-            <button type="button" className="btn" onClick={onCancel}>
+            <button type="button" className="btn" onClick={handleCancel}>
               Cancel
             </button>
           </div>
@@ -256,7 +304,7 @@ export default function AddShow({ onCancel }: AddShowProps) {
             >
               Continue
             </button>
-            <button type="button" className="btn" onClick={onCancel}>
+            <button type="button" className="btn" onClick={handleCancel}>
               Cancel
             </button>
           </div>
@@ -286,7 +334,7 @@ export default function AddShow({ onCancel }: AddShowProps) {
             <button type="button" className="btn btn-primary" onClick={handleFinish}>
               Finish
             </button>
-            <button type="button" className="btn" onClick={onCancel}>
+            <button type="button" className="btn" onClick={handleCancel}>
               Cancel
             </button>
           </div>
