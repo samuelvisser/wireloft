@@ -1,4 +1,3 @@
-import React from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
