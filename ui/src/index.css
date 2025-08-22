@@ -356,3 +356,154 @@ body {
   text-overflow: ellipsis;
   white-space: normal;
 }
+
+
+/* Professional table styles for profiles */
+.table-wrapper {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+}
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+}
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: #f1f5f9;
+  color: #0f172a;
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid #cbd5e1;
+  font-weight: 700;
+}
+.table tbody td {
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: middle;
+}
+.table tbody tr:nth-child(odd) td { background: #fafbfc; }
+.table tbody tr:hover td { background: #f8fafc; }
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+.truncate { max-width: 520px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@media (prefers-color-scheme: dark) {
+  .table-wrapper { background: #0b1220; border-color: rgba(255,255,255,0.12); }
+  .table thead th { background: #0f172a; color: var(--text); border-bottom-color: rgba(255,255,255,0.12); }
+  .table tbody td { border-bottom-color: rgba(255,255,255,0.08); }
+  .table tbody tr:nth-child(odd) td { background: rgba(255,255,255,0.02); }
+  .table tbody tr:hover td { background: rgba(255,255,255,0.04); }
+}
+
+/* Responsive labels for narrow screens */
+@media (max-width: 640px) {
+  .table thead { display: none; }
+  .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
+  .table tr { border-bottom: 1px solid #e2e8f0; }
+  .table tbody td { display: grid; grid-template-columns: 140px 1fr; gap: 8px; }
+  .table tbody td::before { content: attr(data-label); font-weight: 600; color: var(--muted); }
+  .truncate { max-width: none; }
+  @media (prefers-color-scheme: dark) {
+    .table tr { border-bottom-color: rgba(255,255,255,0.12); }
+  }
+}
+
+/* Icon button for actions */
+.icon-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+}
+.icon-btn:hover { background: rgba(0,0,0,0.05); }
+@media (prefers-color-scheme: dark) {
+  .icon-btn:hover { background: rgba(255,255,255,0.06); }
+}
+
+/* Fancy modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 1000;
+  animation: fadeIn 150ms ease-out;
+}
+.modal {
+  width: 100%;
+  max-width: 460px;
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.08);
+  padding: 20px;
+  animation: scaleIn 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.modal-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: inline-grid;
+  place-items: center;
+  background: #e2e8f0;
+  color: #0f172a;
+}
+.modal-icon.danger { background: #fee2e2; color: #b91c1c; }
+.modal-title {
+  margin: 0;
+  font-size: 18px;
+}
+.modal-text {
+  margin: 8px 0 16px;
+  color: var(--muted);
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Danger button */
+.btn-danger {
+  background: #ef4444;
+  color: white;
+  border-color: #ef4444;
+}
+.btn-danger:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-color-scheme: dark) {
+  .modal { background: #0b1220; color: var(--text); border-color: rgba(255,255,255,0.14); }
+  .modal-icon { background: rgba(255,255,255,0.08); color: var(--text); }
+  .modal-icon.danger { background: rgba(239,68,68,0.18); color: #fecaca; }
+}
