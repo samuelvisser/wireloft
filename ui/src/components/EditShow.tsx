@@ -1,12 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import ShowForm, { ShowFormValue } from './ShowForm'
-
-// Local fallback profiles (to populate select)
-const fallbackProfiles = [
-  { id: 'p1', name: 'Default 1080p' },
-  { id: 'p2', name: 'Mobile 720p' },
-]
 
 type RouteParams = { id?: string }
 
@@ -51,6 +45,36 @@ export default function EditShow() {
       titleFilter: '',
     }
   })
+
+  type MediaProfileName = { id: string; name: string }
+  const [profiles, setProfiles] = useState<MediaProfileName[] | null>(null)
+  const [profilesError, setProfilesError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch('http://localhost:5000/api/media-profiles', { signal: controller.signal })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        const data = await r.json()
+        const items = (data as any[]).map((p) => ({ id: p.id, name: p.name }))
+        setProfiles(items)
+        // Ensure selected value is valid
+        setForm((prev) => {
+          if (!prev.mediaProfileId || !items.some((x) => x.id === prev.mediaProfileId)) {
+            return { ...prev, mediaProfileId: items[0]?.id ?? '' }
+          }
+          return prev
+        })
+      })
+      .catch((e: any) => {
+        if (e.name !== 'AbortError') {
+          console.error('Failed to load media profiles', e)
+          setProfilesError('Failed to load media profiles')
+          setProfiles([])
+        }
+      })
+    return () => controller.abort()
+  }, [])
 
   const onCancel = () => navigate(`/show/${id ?? ''}`)
   const onSave = () => {
@@ -102,10 +126,17 @@ export default function EditShow() {
             className="input"
             value={form.mediaProfileId}
             onChange={(e) => setForm({ ...form, mediaProfileId: e.target.value })}
+            disabled={profiles === null || profiles.length === 0}
           >
-            {fallbackProfiles.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
+            {profiles === null ? (
+              <option>Loading profiles...</option>
+            ) : profiles.length === 0 ? (
+              <option>{profilesError ?? 'No profiles found'}</option>
+            ) : (
+              profiles.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))
+            )}
           </select>
         </div>
 

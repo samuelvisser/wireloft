@@ -234,8 +234,6 @@ docker tag dailywire-downloader ghcr.io/samuelvisser/dailywire-downloader:latest
 docker push ghcr.io/samuelvisser/dailywire-downloader:latest
 ```
 
-
-
 ## UI (React 19, Vite + TypeScript)
 
 A web UI is included for navigation and demonstration purposes. It now uses a proper build step so you can write JSX and TypeScript.
@@ -279,3 +277,27 @@ npm run format
 ### Notes
 - Legacy buildless files have been removed; the UI now exclusively uses the Vite + TypeScript setup.
 - The UI is still standalone and does not currently interact with the Python backend. It’s intended as a foundation you can extend.
+
+# Dev backend (Flask) + UI
+
+A simple Flask backend is included to serve the UI with hardcoded media profiles.
+
+Run the backend (in repo root):
+
+```
+poetry install
+poetry run backend-api
+```
+
+This starts Flask at http://127.0.0.1:5000 with endpoints:
+- GET /api/health
+- GET /api/media-profiles
+
+Run the React UI (in ui/):
+
+```
+npm install
+npm run dev
+```
+
+The UI will fetch media profiles from http://localhost:5000/api/media-profiles.

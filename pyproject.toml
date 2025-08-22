@@ -3,18 +3,21 @@ name = "wireloft"
 version = "0.2.0"
 description = "A tool to download premium shows and movies from the DailyWire website"
 authors = ["Samuël Visser <samuvisser@gmail.com>"]
-packages = [{include = "dailywire_downloader"}]
+packages = [{include = "dailywire_downloader"}, {include = "backend"}]
 
 [tool.poetry.dependencies]
 python = "~3.13"
 pyyaml = "^6.0"
 yt-dlp = { git = "https://github.com/yt-dlp/yt-dlp.git", rev = "311bb3b" }
+flask = "^3.0"
+flask-cors = "^4.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
 
 [tool.poetry.scripts]
 dailywire-downloader = "dailywire_downloader.__main__:main"
+backend-api = "backend.__main__:main"
 
 [build-system]
 requires = ["poetry-core"]

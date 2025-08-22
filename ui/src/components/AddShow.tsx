@@ -121,22 +121,26 @@ export default function AddShow({ onCancel }: AddShowProps) {
   const showUrlErrors = rawUrl.trim().length > 0
 
   // Step 2: Media Profile
-  const [profiles] = useState<MediaProfile[]>([
-    {
-      id: 'p1',
-      name: 'Default 1080p',
-      outputPathTemplate: 'D:/Media/Shows/{show}/{season}',
-      preferredFormat: '1080p',
-      downloadSeriesImages: true,
-    },
-    {
-      id: 'p2',
-      name: 'Mobile 720p',
-      outputPathTemplate: 'E:/Mobile/Shows/{show}',
-      preferredFormat: '720p',
-      downloadSeriesImages: false,
-    },
-  ])
+  const [profiles, setProfiles] = useState<MediaProfile[] | null>(null)
+  const [profilesError, setProfilesError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch('http://localhost:5000/api/media-profiles', { signal: controller.signal })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        const data = await r.json()
+        setProfiles(data)
+      })
+      .catch((e: any) => {
+        if (e.name !== 'AbortError') {
+          console.error('Failed to load media profiles', e)
+          setProfilesError('Failed to load media profiles')
+          setProfiles([] as any)
+        }
+      })
+    return () => controller.abort()
+  }, [])
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(() => loadWizardState()?.selectedProfileId ?? null)
   const emptyProfile: NewProfileForm = {
     name: '',
@@ -247,46 +251,52 @@ export default function AddShow({ onCancel }: AddShowProps) {
           <div className="form-row">
             <label>Choose a media profile</label>
             <div className="card-grid" role="list">
-              {profiles.map((p) => {
-                const selected = selectedProfileId === p.id
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    role="listitem"
-                    className={selected ? 'card selected' : 'card'}
-                    aria-pressed={selected}
-                    onClick={() => {
-                      if (selected) {
-                        // Deselect: restore previous form state (if any)
-                        setSelectedProfileId(null)
-                        setNewProfile(newProfileState ?? emptyProfile)
-                        setNewProfileState(null)
-                      } else {
-                        // Selecting a profile
-                        if (selectedProfileId === null) {
-                          // Save current form before replacing it with the selected profile
-                          setNewProfileState(newProfile)
+              {profiles === null ? (
+                <div role="listitem" className="card">Loading profiles...</div>
+              ) : profiles.length === 0 ? (
+                <div role="listitem" className="card">{profilesError ?? 'No profiles found'}</div>
+              ) : (
+                profiles.map((p) => {
+                  const selected = selectedProfileId === p.id
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="listitem"
+                      className={selected ? 'card selected' : 'card'}
+                      aria-pressed={selected}
+                      onClick={() => {
+                        if (selected) {
+                          // Deselect: restore previous form state (if any)
+                          setSelectedProfileId(null)
+                          setNewProfile(newProfileState ?? emptyProfile)
+                          setNewProfileState(null)
+                        } else {
+                          // Selecting a profile
+                          if (selectedProfileId === null) {
+                            // Save current form before replacing it with the selected profile
+                            setNewProfileState(newProfile)
+                          }
+                          setSelectedProfileId(p.id)
+                          setNewProfile({
+                            name: p.name,
+                            outputPathTemplate: p.outputPathTemplate,
+                            preferredFormat: p.preferredFormat,
+                            downloadSeriesImages: p.downloadSeriesImages,
+                          })
                         }
-                        setSelectedProfileId(p.id)
-                        setNewProfile({
-                          name: p.name,
-                          outputPathTemplate: p.outputPathTemplate,
-                          preferredFormat: p.preferredFormat,
-                          downloadSeriesImages: p.downloadSeriesImages,
-                        })
-                      }
-                    }}
-                  >
-                    <div className="card-title">{p.name}</div>
-                    <div className="card-sub">{p.outputPathTemplate}</div>
-                    <div className="card-meta">
-                      <span>{p.preferredFormat}</span>
-                      <span>• {p.downloadSeriesImages ? 'Series images ✓' : 'Series images ✕'}</span>
-                    </div>
-                  </button>
-                )
-              })}
+                      }}
+                    >
+                      <div className="card-title">{p.name}</div>
+                      <div className="card-sub">{p.outputPathTemplate}</div>
+                      <div className="card-meta">
+                        <span>{p.preferredFormat}</span>
+                        <span>• {p.downloadSeriesImages ? 'Series images ✓' : 'Series images ✕'}</span>
+                      </div>
+                    </button>
+                  )
+                })
+              )}
             </div>
           </div>
 

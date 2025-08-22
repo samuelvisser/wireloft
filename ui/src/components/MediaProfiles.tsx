@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import type { IconProp } from '@fortawesome/fontawesome-svg-core'
@@ -26,22 +26,26 @@ export default function MediaProfiles() {
     setConfirmProfile(null)
   }
 
-  const profiles: MediaProfileItem[] = [
-    {
-      id: 'p1',
-      name: 'Default 1080p',
-      outputPathTemplate: 'D:/Media/Shows/{show}/{season}',
-      preferredFormat: '1080p',
-      downloadSeriesImages: true,
-    },
-    {
-      id: 'p2',
-      name: 'Mobile 720p',
-      outputPathTemplate: 'E:/Mobile/Shows/{show}',
-      preferredFormat: '720p',
-      downloadSeriesImages: false,
-    },
-  ]
+  const [profiles, setProfiles] = useState<MediaProfileItem[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch('http://localhost:5000/api/media-profiles', { signal: controller.signal })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        const data = await r.json()
+        setProfiles(data)
+      })
+      .catch((e: any) => {
+        if (e.name !== 'AbortError') {
+          console.error('Failed to load media profiles', e)
+          setError('Failed to load media profiles')
+          setProfiles([])
+        }
+      })
+    return () => controller.abort()
+  }, [])
 
   return (
     <section className="view" aria-labelledby="profiles-title">
@@ -63,36 +67,42 @@ export default function MediaProfiles() {
               </tr>
             </thead>
             <tbody>
-              {profiles.map((p) => (
-                <tr key={p.id} aria-label={p.name}>
-                  <td data-label="Name">{p.name}</td>
-                  <td data-label="Output Path Template" className="mono truncate">{p.outputPathTemplate}</td>
-                  <td data-label="Preferred Format">{p.preferredFormat}</td>
-                  <td data-label="Series Images">{p.downloadSeriesImages ? '✓' : '✕'}</td>
-                  <td data-label="Actions" style={{ textAlign: 'right' }}>
-                    <div style={{ display: 'inline-flex', gap: 6 }}>
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        aria-label={`Edit ${p.name}`}
-                        title="Edit"
-                        onClick={() => navigate(`/edit-media-profile/${p.id}`, { state: p })}
-                      >
-                        <FontAwesomeIcon icon={editIcon} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        aria-label={`Delete ${p.name}`}
-                        title="Delete"
-                        onClick={() => openConfirm(p)}
-                      >
-                        <FontAwesomeIcon icon={deleteIcon} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {profiles === null ? (
+                <tr><td colSpan={5}>Loading profiles...</td></tr>
+              ) : profiles.length === 0 ? (
+                <tr><td colSpan={5}>{error ?? 'No profiles found'}</td></tr>
+              ) : (
+                profiles.map((p) => (
+                  <tr key={p.id} aria-label={p.name}>
+                    <td data-label="Name">{p.name}</td>
+                    <td data-label="Output Path Template" className="mono truncate">{p.outputPathTemplate}</td>
+                    <td data-label="Preferred Format">{p.preferredFormat}</td>
+                    <td data-label="Series Images">{p.downloadSeriesImages ? '✓' : '✕'}</td>
+                    <td data-label="Actions" style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: 6 }}>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          aria-label={`Edit ${p.name}`}
+                          title="Edit"
+                          onClick={() => navigate(`/edit-media-profile/${p.id}`, { state: p })}
+                        >
+                          <FontAwesomeIcon icon={editIcon} />
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          aria-label={`Delete ${p.name}`}
+                          title="Delete"
+                          onClick={() => openConfirm(p)}
+                        >
+                          <FontAwesomeIcon icon={deleteIcon} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
