@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import ShowForm, { ShowFormValue } from './ShowForm'
+import ShowForm, { ShowFormValue } from '../../components/ShowForm'
 
 type RouteParams = { id?: string }
 
@@ -28,7 +28,7 @@ function defaultShowData(id?: string): { url: string; name: string; author: stri
   return { url: `https://www.dailywire.com/show/${id}`, name: found.name, author: found.author }
 }
 
-export default function EditShow() {
+export default function EditShowPage() {
   const { id } = useParams<RouteParams>()
   const navigate = useNavigate()
 

@@ -187,7 +187,7 @@ function EpisodeCard({ ep }: { ep: Episode }) {
   )
 }
 
-export default function Home({ onAddShow }: { onAddShow: () => void }) {
+export default function HomePage({ onAddShow }: { onAddShow: () => void }) {
   return (
     <section className="view shows-view" aria-labelledby="home-title">
       <div className="view-header">

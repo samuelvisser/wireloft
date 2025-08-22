@@ -99,7 +99,7 @@ function makeShow(showId: string): Show | null {
   }
 }
 
-export default function Show() {
+export default function ShowPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [page, setPage] = useState(1)

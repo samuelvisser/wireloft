@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import MediaProfileForm, { MediaProfileFormValue } from './MediaProfileForm'
-import ShowForm, { ShowFormValue } from './ShowForm'
+import MediaProfileForm, { MediaProfileFormValue } from '../../components/MediaProfileForm'
+import ShowForm, { ShowFormValue } from '../../components/ShowForm'
 
-type AddShowProps = {
+export type AddShowPageProps = {
   onCancel: () => void
 }
 
@@ -110,7 +110,7 @@ function validateShowUrl(input: string): ValidationResult {
   }
 }
 
-export default function AddShow({ onCancel }: AddShowProps) {
+export default function AddShowPage({ onCancel }: AddShowPageProps) {
   // Wizard step: 1 = URL, 2 = Media Profile, 3 = Show
   const [step, setStep] = useState<1 | 2 | 3>(() => loadWizardState()?.step ?? 1)
 

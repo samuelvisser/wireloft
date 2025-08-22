@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useState } from 'react'
-import MediaProfileForm, { MediaProfileFormValue } from './MediaProfileForm'
+import MediaProfileForm, { MediaProfileFormValue } from '../../components/MediaProfileForm'
 import { useNavigate } from 'react-router-dom'
 
-export default function AddMediaProfile() {
+export default function AddMediaProfilePage() {
   const navigate = useNavigate()
   const [value, setValue] = useState<MediaProfileFormValue>({
     name: '',

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import type { IconProp } from '@fortawesome/fontawesome-svg-core'
 
-export default function MediaProfiles() {
+export default function MediaProfilesPage() {
   const navigate = useNavigate()
   const onAdd = useCallback(() => navigate('/add-media-profile'), [navigate])
   const editIcon: IconProp = ['fas', 'pen-to-square']

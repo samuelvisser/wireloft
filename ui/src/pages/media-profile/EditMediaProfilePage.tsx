@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import MediaProfileForm, { MediaProfileFormValue } from './MediaProfileForm'
+import MediaProfileForm, { MediaProfileFormValue } from '../../components/MediaProfileForm'
 
 // Minimal local fallback data to support direct URL access without backend
 const fallbackProfiles = [
@@ -24,7 +24,7 @@ type RouteParams = {
   id?: string
 }
 
-export default function EditMediaProfile() {
+export default function EditMediaProfilePage() {
   const navigate = useNavigate()
   const { id } = useParams<RouteParams>()
   const location = useLocation() as { state?: any }

@@ -1,4 +1,5 @@
-export default function Settings() {
+
+export default function SettingsPage() {
   return (
     <section className="view" aria-labelledby="settings-title">
       <h1 id="settings-title">Settings</h1>
