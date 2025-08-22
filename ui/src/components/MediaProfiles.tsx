@@ -73,7 +73,19 @@ export default function MediaProfiles() {
                 <tr><td colSpan={5}>{error ?? 'No profiles found'}</td></tr>
               ) : (
                 profiles.map((p) => (
-                  <tr key={p.id} aria-label={p.name}>
+                  <tr
+                    key={p.id}
+                    aria-label={p.name}
+                    tabIndex={0}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => navigate(`/edit-media-profile/${p.id}`, { state: p })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        navigate(`/edit-media-profile/${p.id}`, { state: p })
+                      }
+                    }}
+                  >
                     <td data-label="Name">{p.name}</td>
                     <td data-label="Output Path Template" className="mono truncate">{p.outputPathTemplate}</td>
                     <td data-label="Preferred Format">{p.preferredFormat}</td>
@@ -85,7 +97,7 @@ export default function MediaProfiles() {
                           className="icon-btn"
                           aria-label={`Edit ${p.name}`}
                           title="Edit"
-                          onClick={() => navigate(`/edit-media-profile/${p.id}`, { state: p })}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/edit-media-profile/${p.id}`, { state: p }) }}
                         >
                           <FontAwesomeIcon icon={editIcon} />
                         </button>
@@ -94,7 +106,7 @@ export default function MediaProfiles() {
                           className="icon-btn"
                           aria-label={`Delete ${p.name}`}
                           title="Delete"
-                          onClick={() => openConfirm(p)}
+                          onClick={(e) => { e.stopPropagation(); openConfirm(p) }}
                         >
                           <FontAwesomeIcon icon={deleteIcon} />
                         </button>
