@@ -340,3 +340,19 @@ body {
   .card { background: #0b1220; color: var(--text); border-color: rgba(255, 255, 255, 0.12); }
   .divider { border-top-color: rgba(255, 255, 255, 0.12); }
 }
+
+
+/* Episode title (below thumbnail) - two-line clamp like YouTube */
+.episode-title {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: inherit;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+}

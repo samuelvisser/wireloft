@@ -42,10 +42,38 @@ const randomStatus = (): EpisodeStatus => {
   return s
 }
 
+function randomEpisodeTitle(showTitle: string, i: number): string {
+  const topics = [
+    'free speech',
+    'AI and the future',
+    'parenting',
+    'college campuses',
+    'elections',
+    'the economy',
+    'culture wars',
+    'movies and media',
+    'sports',
+    'education',
+    'technology',
+    'faith and culture',
+  ]
+  const t = topics[rand(topics.length)]
+  const n = i + 1
+  const patterns = [
+    `${showTitle} — Quick Take on ${t}`,
+    `${showTitle}: Full Episode #${n} — ${t} Explained in Depth With Examples and Context` ,
+    `${showTitle} Clip: ${t} in 60 Seconds` ,
+    `${showTitle} — ${t} | Highlights and Reactions` ,
+    `${showTitle} (Ep ${n}): ${t}, Mailbag, and More` ,
+    `${showTitle}: ${t} — What You Need To Know Right Now` ,
+    `${showTitle} — ${t} and Why It Matters More Than You Think in 2025` ,
+  ]
+  return patterns[rand(patterns.length)]
+}
+
 function makeEpisodeRecords(
   n: number,
   prefix: string,
-  titlePrefix: string,
   showId: string,
   showAuthor: string,
   showTitle: string,
@@ -53,7 +81,7 @@ function makeEpisodeRecords(
 ): EpisodeRecord[] {
   return Array.from({ length: n }, (_, i) => ({
     id: `${prefix}-${i + 1}`,
-    title: `${titlePrefix} #${i + 1}`,
+    title: randomEpisodeTitle(showTitle, i),
     index: i + 1,
     status: randomStatus(),
     showId,
@@ -65,9 +93,9 @@ function makeEpisodeRecords(
 
 // Flat list of episode records (mock) — each entry is an episode with its show metadata
 const EPISODES: EpisodeRecord[] = [
-  ...makeEpisodeRecords(30, 'tbs', 'Ben Shapiro', 'the-ben-shapiro-show', 'Ben Shapiro', 'The Ben Shapiro Show', '2015-2025'),
-  ...makeEpisodeRecords(20, 'tmws', 'Matt Walsh', 'the-matt-walsh-show', 'Matt Walsh', 'The Matt Walsh Show', '2018 – 2025'),
-  ...makeEpisodeRecords(7, 'bad', 'Ben After Dark', 'ben-after-dark', 'Ben Shapiro', 'Ben After Dark', '2025 - 2025'),
+  ...makeEpisodeRecords(30, 'tbs', 'the-ben-shapiro-show', 'Ben Shapiro', 'The Ben Shapiro Show', '2015-2025'),
+  ...makeEpisodeRecords(20, 'tmws', 'the-matt-walsh-show', 'Matt Walsh', 'The Matt Walsh Show', '2018 – 2025'),
+  ...makeEpisodeRecords(7, 'bad', 'ben-after-dark', 'Ben Shapiro', 'Ben After Dark', '2025 - 2025'),
 ]
 
 // Ensure all four statuses are represented in the demo set
@@ -153,6 +181,7 @@ function EpisodeCard({ ep }: { ep: Episode }) {
         )}
         <span className="badge">#{ep.index}</span>
       </div>
+      <div className="episode-title" title={ep.title}>{ep.title}</div>
     </div>
   )
 }
