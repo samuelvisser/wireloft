@@ -116,7 +116,30 @@ body {
   .show-section { border-color: rgba(255, 255, 255, 0.08); }
 }
 
-.show-header { margin-bottom: 12px; }
+.show-header {
+  margin-bottom: 12px;
+  display: block;
+}
+
+/* Make clickable show headers look like non-links */
+a.show-header {
+  color: inherit;
+  text-decoration: none;
+  padding: 8px 8px;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+  display: block;
+}
+a.show-header:hover {
+  background: rgba(15, 23, 42, 0.06);
+}
+@media (prefers-color-scheme: dark) {
+  a.show-header:hover { background: rgba(255, 255, 255, 0.06); }
+}
+a.show-header:focus-visible {
+  outline: 3px solid #3b82f6;
+  outline-offset: 2px;
+}
 .show-author {
   color: var(--muted);
   font-weight: 600;

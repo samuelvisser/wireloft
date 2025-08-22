@@ -1,6 +1,7 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
+import { Link } from 'react-router-dom'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -197,7 +198,7 @@ export default function Home({ onAddShow }: { onAddShow: () => void }) {
       </div>
       {shows.map((show) => (
         <article className="show-section" key={show.id} aria-labelledby={`${show.id}-title`}>
-          <header className="show-header">
+          <Link to={`/show/${show.id}`} className="show-header" aria-labelledby={`${show.id}-title`}>
             <div className="show-author">{show.author}</div>
             <h2 id={`${show.id}-title`} className="show-title">
               {show.title}
@@ -205,7 +206,7 @@ export default function Home({ onAddShow }: { onAddShow: () => void }) {
             <div className="show-meta">
               {show.count} episodes{show.years ? ` • ${show.years}` : ''}
             </div>
-          </header>
+          </Link>
           <div className="episodes-row" role="list" aria-label={`${show.title} episodes`}>
             {show.episodes.map((ep) => (
               <EpisodeCard key={ep.id} ep={ep} />
