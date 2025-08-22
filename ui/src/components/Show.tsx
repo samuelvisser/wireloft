@@ -127,8 +127,7 @@ export default function Show() {
 
   const onDelete = () => setConfirm(true)
   const onEdit = () => {
-    // Edit page intentionally not implemented yet
-    alert('Edit show is not implemented yet.')
+    navigate(`/edit-show/${id}`)
   }
 
   const [confirm, setConfirm] = useState(false)

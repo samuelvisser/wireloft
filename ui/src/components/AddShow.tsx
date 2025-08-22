@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import MediaProfileForm, { MediaProfileFormValue } from './MediaProfileForm'
+import ShowForm, { ShowFormValue } from './ShowForm'
 
 type AddShowProps = {
   onCancel: () => void
@@ -32,6 +33,7 @@ type WizardState = {
   selectedProfileId: string | null
   newProfile: NewProfileForm
   newProfileState: NewProfileForm | null
+  showForm: ShowFormValue
 }
 
 function loadWizardState(): WizardState | null {
@@ -144,6 +146,14 @@ export default function AddShow({ onCancel }: AddShowProps) {
   }
   const [newProfile, setNewProfile] = useState<NewProfileForm>(() => loadWizardState()?.newProfile ?? emptyProfile)
   const [newProfileState, setNewProfileState] = useState<NewProfileForm | null>(() => loadWizardState()?.newProfileState ?? null)
+  const [showForm, setShowForm] = useState<ShowFormValue>(() => loadWizardState()?.showForm ?? {
+    name: '',
+    author: '',
+    downloadMedia: true,
+    downloadDays: '180',
+    deleteOlder: true,
+    titleFilter: '',
+  })
 
   const creatingProfileValid =
     newProfile.name.trim().length > 0 && newProfile.outputPathTemplate.trim().length > 0
@@ -153,8 +163,8 @@ export default function AddShow({ onCancel }: AddShowProps) {
 
   // Persist wizard state on any change
   useEffect(() => {
-    saveWizardState({ step, rawUrl, selectedProfileId, newProfile, newProfileState })
-  }, [step, rawUrl, selectedProfileId, newProfile, newProfileState])
+    saveWizardState({ step, rawUrl, selectedProfileId, newProfile, newProfileState, showForm })
+  }, [step, rawUrl, selectedProfileId, newProfile, newProfileState, showForm])
 
   function handleCancel() {
     clearWizardState()
@@ -168,6 +178,7 @@ export default function AddShow({ onCancel }: AddShowProps) {
     const summary = {
       url: result.normalized ?? rawUrl,
       profile,
+      show: showForm,
     }
     alert('Add show request:\n' + JSON.stringify(summary, null, 2))
     clearWizardState()
@@ -326,6 +337,8 @@ export default function AddShow({ onCancel }: AddShowProps) {
               <div className="help">{newProfile.preferredFormat} • {newProfile.downloadSeriesImages ? 'Series images ✓' : 'Series images ✕'}</div>
             </div>
           </div>
+
+          <ShowForm value={showForm} onChange={setShowForm} />
 
           <div className="actions">
             <button type="button" className="btn" onClick={() => setStep(2)}>

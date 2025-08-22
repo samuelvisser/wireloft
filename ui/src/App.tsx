@@ -8,6 +8,7 @@ import AddShow from './components/AddShow'
 import AddMediaProfile from './components/AddMediaProfile'
 import EditMediaProfile from './components/EditMediaProfile'
 import Show from './components/Show'
+import EditShow from './components/EditShow'
 
 export default function App() {
   const navigate = useNavigate()
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/add-media-profile" element={<AddMediaProfile />} />
           <Route path="/edit-media-profile/:id" element={<EditMediaProfile />} />
           <Route path="/show/:id" element={<Show />} />
+          <Route path="/edit-show/:id" element={<EditShow />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
