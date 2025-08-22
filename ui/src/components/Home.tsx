@@ -16,6 +16,14 @@ export type Episode = {
   status: EpisodeStatus
 }
 
+// Each episode is a full mock data record, including its parent show metadata
+export type EpisodeRecord = Episode & {
+  showId: string
+  showAuthor: string
+  showTitle: string
+  showYears?: string
+}
+
 export type Show = {
   id: string
   author: string
@@ -34,41 +42,32 @@ const randomStatus = (): EpisodeStatus => {
   return s
 }
 
-function makeEpisodes(n: number, prefix: string, titlePrefix: string): Episode[] {
+function makeEpisodeRecords(
+  n: number,
+  prefix: string,
+  titlePrefix: string,
+  showId: string,
+  showAuthor: string,
+  showTitle: string,
+  showYears?: string,
+): EpisodeRecord[] {
   return Array.from({ length: n }, (_, i) => ({
     id: `${prefix}-${i + 1}`,
     title: `${titlePrefix} #${i + 1}`,
     index: i + 1,
     status: randomStatus(),
+    showId,
+    showAuthor,
+    showTitle,
+    showYears,
   }))
 }
 
-// Demo data (mock) — replace with real data when backend is ready
-const shows: Show[] = [
-  {
-    id: 'the-ben-shapiro-show',
-    author: 'Ben Shapiro',
-    title: 'The Ben Shapiro Show',
-    years: '2015-2025',
-    count: 30,
-    episodes: makeEpisodes(30, 'tbs', 'Ben Shapiro'),
-  },
-  {
-    id: 'the-matt-walsh-show',
-    author: 'Matt Walsh',
-    title: 'The Matt Walsh Show',
-    years: '2018 – 2025',
-    count: 20,
-    episodes: makeEpisodes(20, 'tmws', 'Matt Walsh'),
-  },
-  {
-    id: 'ben-after-dark',
-    author: 'Ben Shapiro',
-    title: 'Ben After Dark',
-    years: '2025 - 2025',
-    count: 7,
-    episodes: makeEpisodes(7, 'bad', 'Ben After Dark'),
-  },
+// Flat list of episode records (mock) — each entry is an episode with its show metadata
+const EPISODES: EpisodeRecord[] = [
+  ...makeEpisodeRecords(30, 'tbs', 'Ben Shapiro', 'the-ben-shapiro-show', 'Ben Shapiro', 'The Ben Shapiro Show', '2015-2025'),
+  ...makeEpisodeRecords(20, 'tmws', 'Matt Walsh', 'the-matt-walsh-show', 'Matt Walsh', 'The Matt Walsh Show', '2018 – 2025'),
+  ...makeEpisodeRecords(7, 'bad', 'Ben After Dark', 'ben-after-dark', 'Ben Shapiro', 'Ben After Dark', '2025 - 2025'),
 ]
 
 // Ensure all four statuses are represented in the demo set
@@ -77,11 +76,30 @@ if (missing.length > 0) {
   let i = 0
   for (const m of missing) {
     // Place missing statuses on the first show's first episodes
-    const target = shows[0]?.episodes[i]
+    const target = EPISODES[i]
     if (target) target.status = m
     i++
   }
 }
+
+// Group the flat episodes into shows for display
+const shows: Show[] = Object.values(
+  EPISODES.reduce<Record<string, Show>>((acc, ep) => {
+    if (!acc[ep.showId]) {
+      acc[ep.showId] = {
+        id: ep.showId,
+        author: ep.showAuthor,
+        title: ep.showTitle,
+        years: ep.showYears,
+        count: 0,
+        episodes: [],
+      }
+    }
+    acc[ep.showId].episodes.push({ id: ep.id, title: ep.title, index: ep.index, cover: ep.cover, status: ep.status })
+    acc[ep.showId].count += 1
+    return acc
+  }, {}),
+)
 
 function statusIcon(status: EpisodeStatus) {
   switch (status) {
