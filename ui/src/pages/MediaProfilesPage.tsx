@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import type { IconProp } from '@fortawesome/fontawesome-svg-core'
+import { useMediaProfiles } from '../lib/queries'
 
 export default function MediaProfilesPage() {
   const navigate = useNavigate()
@@ -26,26 +27,7 @@ export default function MediaProfilesPage() {
     setConfirmProfile(null)
   }
 
-  const [profiles, setProfiles] = useState<MediaProfileItem[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetch('http://localhost:5000/api/media-profiles', { signal: controller.signal })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        const data = await r.json()
-        setProfiles(data)
-      })
-      .catch((e: any) => {
-        if (e.name !== 'AbortError') {
-          console.error('Failed to load media profiles', e)
-          setError('Failed to load media profiles')
-          setProfiles([])
-        }
-      })
-    return () => controller.abort()
-  }, [])
+  const { data: profiles, isLoading, error } = useMediaProfiles()
 
   return (
     <section className="view" aria-labelledby="profiles-title">
@@ -67,10 +49,10 @@ export default function MediaProfilesPage() {
               </tr>
             </thead>
             <tbody>
-              {profiles === null ? (
+              {isLoading && !profiles ? (
                 <tr><td colSpan={5}>Loading profiles...</td></tr>
-              ) : profiles.length === 0 ? (
-                <tr><td colSpan={5}>{error ?? 'No profiles found'}</td></tr>
+              ) : !profiles || profiles.length === 0 ? (
+                <tr><td colSpan={5}>{(error as any)?.message ?? 'No profiles found'}</td></tr>
               ) : (
                 profiles.map((p) => (
                   <tr

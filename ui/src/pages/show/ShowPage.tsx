@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
+import { useShow } from '../../lib/queries'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -45,29 +46,8 @@ export default function ShowPage() {
   const [page, setPage] = useState(1)
   const pageSize = 25
 
-  const [show, setShow] = useState<Show | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { data: show, isLoading, error } = useShow(id)
   const [confirm, setConfirm] = useState(false)
-
-  useEffect(() => {
-    if (!id) return
-    const controller = new AbortController()
-    setShow(null)
-    fetch(`http://localhost:5000/api/shows/${id}`, { signal: controller.signal })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        const data = (await r.json()) as Show
-        setShow(data)
-      })
-      .catch((e: any) => {
-        if (e.name !== 'AbortError') {
-          console.error('Failed to load show', e)
-          setError('Failed to load show')
-          setShow(undefined as unknown as Show) // use undefined sentinel to show not found/error below
-        }
-      })
-    return () => controller.abort()
-  }, [id])
 
   if (!id) {
     return (
@@ -80,7 +60,7 @@ export default function ShowPage() {
     )
   }
 
-  if (show === null && !error) {
+  if (isLoading && !show) {
     return (
       <section className="view show-view">
         <div className="view-header">
@@ -91,13 +71,13 @@ export default function ShowPage() {
     )
   }
 
-  if (!show || (Array.isArray(show) as any)) {
+  if (!show) {
     return (
       <section className="view show-view">
         <div className="view-header">
           <h1>Show</h1>
         </div>
-        <p>{error ?? 'Show not found.'}</p>
+        <p>{(error as any)?.message ?? 'Show not found.'}</p>
       </section>
     )
   }

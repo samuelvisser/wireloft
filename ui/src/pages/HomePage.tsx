@@ -2,7 +2,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
 import { Link, useNavigate } from 'react-router-dom'
-import React, { useEffect, useState } from 'react'
+import React from 'react'
+import { useShows } from '../lib/queries'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -93,26 +94,7 @@ function EpisodeCard({ ep, showId }: { ep: Episode; showId: string }) {
 }
 
 export default function HomePage({ onAddShow }: { onAddShow: () => void }) {
-  const [shows, setShows] = useState<Show[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetch('http://localhost:5000/api/shows', { signal: controller.signal })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        const data = await r.json()
-        setShows(data)
-      })
-      .catch((e: any) => {
-        if (e.name !== 'AbortError') {
-          console.error('Failed to load shows', e)
-          setError('Failed to load shows')
-          setShows([])
-        }
-      })
-    return () => controller.abort()
-  }, [])
+  const { data: shows, isLoading, error } = useShows()
 
   return (
     <section className="view shows-view" aria-labelledby="home-title">
@@ -122,10 +104,10 @@ export default function HomePage({ onAddShow }: { onAddShow: () => void }) {
           Add show
         </button>
       </div>
-      {shows === null ? (
+      {isLoading && !shows ? (
         <p>Loading shows...</p>
-      ) : shows.length === 0 ? (
-        <p>{error ?? 'No shows found'}</p>
+      ) : !shows || shows.length === 0 ? (
+        <p>{(error as any)?.message ?? 'No shows found'}</p>
       ) : (
         shows.map((show) => (
           <article className="show-section" key={show.id} aria-labelledby={`${show.id}-title`}>
