@@ -2,12 +2,12 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
 import { Link, useNavigate } from 'react-router-dom'
-import type React from 'react'
+import React, { useEffect, useState } from 'react'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
 
-// Types for the home (formerly dashboard) demo
+// Types align with backend API
 export type EpisodeStatus = 'downloaded' | 'downloading' | 'processing' | 'error'
 
 export type Episode = {
@@ -18,118 +18,13 @@ export type Episode = {
   status: EpisodeStatus
 }
 
-// Each episode is a full mock data record, including its parent show metadata
-export type EpisodeRecord = Episode & {
-  showId: string
-  showAuthor: string
-  showTitle: string
-  showYears?: string
-}
-
 export type Show = {
   id: string
   author: string
   title: string
   years?: string
-  count: number
   episodes: Episode[]
 }
-
-const STATUS_LIST: EpisodeStatus[] = ['downloaded', 'downloading', 'processing', 'error']
-const seenStatuses = new Set<EpisodeStatus>()
-const rand = (max: number) => Math.floor(Math.random() * max)
-const randomStatus = (): EpisodeStatus => {
-  const s = STATUS_LIST[rand(STATUS_LIST.length)]
-  seenStatuses.add(s)
-  return s
-}
-
-function randomEpisodeTitle(showTitle: string, i: number): string {
-  const topics = [
-    'free speech',
-    'AI and the future',
-    'parenting',
-    'college campuses',
-    'elections',
-    'the economy',
-    'culture wars',
-    'movies and media',
-    'sports',
-    'education',
-    'technology',
-    'faith and culture',
-  ]
-  const t = topics[rand(topics.length)]
-  const n = i + 1
-  const patterns = [
-    `${showTitle} — Quick Take on ${t}`,
-    `${showTitle}: Full Episode #${n} — ${t} Explained in Depth With Examples and Context` ,
-    `${showTitle} Clip: ${t} in 60 Seconds` ,
-    `${showTitle} — ${t} | Highlights and Reactions` ,
-    `${showTitle} (Ep ${n}): ${t}, Mailbag, and More` ,
-    `${showTitle}: ${t} — What You Need To Know Right Now` ,
-    `${showTitle} — ${t} and Why It Matters More Than You Think in 2025` ,
-  ]
-  return patterns[rand(patterns.length)]
-}
-
-function makeEpisodeRecords(
-  n: number,
-  prefix: string,
-  showId: string,
-  showAuthor: string,
-  showTitle: string,
-  showYears?: string,
-): EpisodeRecord[] {
-  return Array.from({ length: n }, (_, i) => ({
-    id: `${prefix}-${i + 1}`,
-    title: randomEpisodeTitle(showTitle, i),
-    index: i + 1,
-    status: randomStatus(),
-    showId,
-    showAuthor,
-    showTitle,
-    showYears,
-  }))
-}
-
-// Flat list of episode records (mock) — each entry is an episode with its show metadata
-const EPISODES: EpisodeRecord[] = [
-  ...makeEpisodeRecords(30, 'the-ben-shapiro-show', 'the-ben-shapiro-show', 'Ben Shapiro', 'The Ben Shapiro Show', '2015-2025'),
-  ...makeEpisodeRecords(20, 'the-matt-walsh-show', 'the-matt-walsh-show', 'Matt Walsh', 'The Matt Walsh Show', '2018 – 2025'),
-  ...makeEpisodeRecords(7, 'ben-after-dark', 'ben-after-dark', 'Ben Shapiro', 'Ben After Dark', '2025 - 2025'),
-]
-
-// Ensure all four statuses are represented in the demo set
-const missing = STATUS_LIST.filter((s) => !seenStatuses.has(s))
-if (missing.length > 0) {
-  let i = 0
-  for (const m of missing) {
-    // Place missing statuses on the first show's first episodes
-    const target = EPISODES[i]
-    if (target) target.status = m
-    i++
-  }
-}
-
-// Group the flat episodes into shows for display
-const shows: Show[] = Object.values(
-  EPISODES.reduce<Record<string, Show>>((acc, ep) => {
-    if (!acc[ep.showId]) {
-      acc[ep.showId] = {
-        id: ep.showId,
-        author: ep.showAuthor,
-        title: ep.showTitle,
-        years: ep.showYears,
-        count: 0,
-        episodes: [],
-      }
-    }
-    acc[ep.showId].episodes.push({ id: ep.id, title: ep.title, index: ep.index, cover: ep.cover, status: ep.status })
-    acc[ep.showId].count += 1
-    return acc
-  }, {}),
-)
 
 function statusIcon(status: EpisodeStatus) {
   switch (status) {
@@ -198,6 +93,27 @@ function EpisodeCard({ ep, showId }: { ep: Episode; showId: string }) {
 }
 
 export default function HomePage({ onAddShow }: { onAddShow: () => void }) {
+  const [shows, setShows] = useState<Show[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch('http://localhost:5000/api/shows', { signal: controller.signal })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        const data = await r.json()
+        setShows(data)
+      })
+      .catch((e: any) => {
+        if (e.name !== 'AbortError') {
+          console.error('Failed to load shows', e)
+          setError('Failed to load shows')
+          setShows([])
+        }
+      })
+    return () => controller.abort()
+  }, [])
+
   return (
     <section className="view shows-view" aria-labelledby="home-title">
       <div className="view-header">
@@ -206,24 +122,30 @@ export default function HomePage({ onAddShow }: { onAddShow: () => void }) {
           Add show
         </button>
       </div>
-      {shows.map((show) => (
-        <article className="show-section" key={show.id} aria-labelledby={`${show.id}-title`}>
-          <Link to={`/show/${show.id}`} className="show-header" aria-labelledby={`${show.id}-title`}>
-            <div className="show-author">{show.author}</div>
-            <h2 id={`${show.id}-title`} className="show-title">
-              {show.title}
-            </h2>
-            <div className="show-meta">
-              {show.count} episodes{show.years ? ` • ${show.years}` : ''}
+      {shows === null ? (
+        <p>Loading shows...</p>
+      ) : shows.length === 0 ? (
+        <p>{error ?? 'No shows found'}</p>
+      ) : (
+        shows.map((show) => (
+          <article className="show-section" key={show.id} aria-labelledby={`${show.id}-title`}>
+            <Link to={`/show/${show.id}`} className="show-header" aria-labelledby={`${show.id}-title`}>
+              <div className="show-author">{show.author}</div>
+              <h2 id={`${show.id}-title`} className="show-title">
+                {show.title}
+              </h2>
+              <div className="show-meta">
+                {show.episodes.length} episodes{show.years ? ` • ${show.years}` : ''}
+              </div>
+            </Link>
+            <div className="episodes-row" role="list" aria-label={`${show.title} episodes`}>
+              {show.episodes.map((ep) => (
+                <EpisodeCard key={ep.id} ep={ep} showId={show.id} />
+              ))}
             </div>
-          </Link>
-          <div className="episodes-row" role="list" aria-label={`${show.title} episodes`}>
-            {show.episodes.map((ep) => (
-              <EpisodeCard key={ep.id} ep={ep} showId={show.id} />
-            ))}
-          </div>
-        </article>
-      ))}
+          </article>
+        ))
+      )}
     </section>
   )
 }

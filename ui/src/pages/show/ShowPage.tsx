@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
@@ -7,7 +7,7 @@ import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
 
-// Local mock types (mirroring Home.tsx for demo purposes)
+// Types align with backend API
 export type EpisodeStatus = 'downloaded' | 'downloading' | 'processing' | 'error'
 
 export type Episode = {
@@ -39,81 +39,65 @@ function statusIcon(status: EpisodeStatus) {
   }
 }
 
-function randomEpisodeTitle(showTitle: string, i: number): string {
-  const topics = [
-    'free speech',
-    'AI and the future',
-    'parenting',
-    'college campuses',
-    'elections',
-    'the economy',
-    'culture wars',
-    'movies and media',
-    'sports',
-    'education',
-    'technology',
-    'faith and culture',
-  ]
-  const t = topics[Math.floor(Math.random() * topics.length)]
-  const n = i + 1
-  const patterns = [
-    `${showTitle} — Quick Take on ${t}`,
-    `${showTitle}: Full Episode #${n} — ${t} Explained in Depth With Examples and Context`,
-    `${showTitle} Clip: ${t} in 60 Seconds`,
-    `${showTitle} — ${t} | Highlights and Reactions`,
-    `${showTitle} (Ep ${n}): ${t}, Mailbag, and More`,
-    `${showTitle}: ${t} — What You Need To Know Right Now`,
-    `${showTitle} — ${t} and Why It Matters More Than You Think in 2025`,
-  ]
-  return patterns[Math.floor(Math.random() * patterns.length)]
-}
-
-function makeShow(showId: string): Show | null {
-  // Simple demo data aligned with Home.tsx IDs
-  const map: Record<string, { author: string; title: string; years?: string; count: number }> = {
-    'the-ben-shapiro-show': { author: 'Ben Shapiro', title: 'The Ben Shapiro Show', years: '2015-2025', count: 30 },
-    'the-matt-walsh-show': { author: 'Matt Walsh', title: 'The Matt Walsh Show', years: '2018 – 2025', count: 20 },
-    'ben-after-dark': { author: 'Ben Shapiro', title: 'Ben After Dark', years: '2025 - 2025', count: 7 },
-  }
-  const base = map[showId]
-  if (!base) return null
-
-  // Build episodes list for the show
-  const statuses: EpisodeStatus[] = ['downloaded', 'downloading', 'processing', 'error']
-  const episodes: Episode[] = Array.from({ length: base.count }, (_, i) => {
-    const status = statuses[i % statuses.length]
-    return {
-      id: `${showId}-${i + 1}`,
-      title: randomEpisodeTitle(base.title, i),
-      index: i + 1,
-      status,
-    }
-  })
-
-  return {
-    id: showId,
-    author: base.author,
-    title: base.title,
-    years: base.years,
-    episodes,
-  }
-}
-
 export default function ShowPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const pageSize = 25
 
-  const show = useMemo(() => (id ? makeShow(id) : null), [id])
+  const [show, setShow] = useState<Show | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [confirm, setConfirm] = useState(false)
 
-  if (!id || !show) {
+  useEffect(() => {
+    if (!id) return
+    const controller = new AbortController()
+    setShow(null)
+    fetch(`http://localhost:5000/api/shows/${id}`, { signal: controller.signal })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        const data = (await r.json()) as Show
+        setShow(data)
+      })
+      .catch((e: any) => {
+        if (e.name !== 'AbortError') {
+          console.error('Failed to load show', e)
+          setError('Failed to load show')
+          setShow(undefined as unknown as Show) // use undefined sentinel to show not found/error below
+        }
+      })
+    return () => controller.abort()
+  }, [id])
+
+  if (!id) {
     return (
       <section className="view show-view">
         <div className="view-header">
           <h1>Show</h1>
         </div>
         <p>Show not found.</p>
+      </section>
+    )
+  }
+
+  if (show === null && !error) {
+    return (
+      <section className="view show-view">
+        <div className="view-header">
+          <h1>Show</h1>
+        </div>
+        <p>Loading show...</p>
+      </section>
+    )
+  }
+
+  if (!show || (Array.isArray(show) as any)) {
+    return (
+      <section className="view show-view">
+        <div className="view-header">
+          <h1>Show</h1>
+        </div>
+        <p>{error ?? 'Show not found.'}</p>
       </section>
     )
   }
@@ -130,7 +114,6 @@ export default function ShowPage() {
     navigate(`/edit-show/${id}`)
   }
 
-  const [confirm, setConfirm] = useState(false)
   const closeConfirm = () => setConfirm(false)
   const onConfirmDelete = () => {
     alert(`Delete show:\n${show.title} (${show.id})`)
