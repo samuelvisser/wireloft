@@ -6,8 +6,19 @@ import App from './App'
 import './index.css'
 import { queryClient } from './lib/queryClient'
 import { prefetchCoreData } from './lib/queries'
+import { loadShowsFromStorage, loadProfilesFromStorage } from './lib/cache'
 
-// Warm the cache on startup to avoid loading flashes
+// Restore cached data synchronously before initial render to prevent flashes
+const cachedShows = loadShowsFromStorage()
+if (cachedShows) {
+  queryClient.setQueryData(['shows'], cachedShows)
+}
+const cachedProfiles = loadProfilesFromStorage()
+if (cachedProfiles) {
+  queryClient.setQueryData(['mediaProfiles'], cachedProfiles)
+}
+
+// Warm the cache on startup; this will background-refresh the restored data
 prefetchCoreData(queryClient)
 
 const rootEl = document.getElementById('root') as HTMLElement

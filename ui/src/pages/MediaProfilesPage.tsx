@@ -54,7 +54,7 @@ export default function MediaProfilesPage() {
               ) : !profiles || profiles.length === 0 ? (
                 <tr><td colSpan={5}>{(error as any)?.message ?? 'No profiles found'}</td></tr>
               ) : (
-                profiles.map((p) => (
+                profiles.map((p: MediaProfileItem) => (
                   <tr
                     key={p.id}
                     aria-label={p.name}

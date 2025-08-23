@@ -4,54 +4,11 @@ import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
 import { Link, useNavigate } from 'react-router-dom'
 import React from 'react'
 import { useShows } from '../lib/queries'
+import type { Episode } from '../domain/show'
+import { statusIcon, statusLabel } from '../utils/showStatus'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
-
-// Types align with backend API
-export type EpisodeStatus = 'downloaded' | 'downloading' | 'processing' | 'error'
-
-export type Episode = {
-  id: string
-  title: string
-  index: number
-  cover?: string
-  status: EpisodeStatus
-}
-
-export type Show = {
-  id: string
-  author: string
-  title: string
-  years?: string
-  episodes: Episode[]
-}
-
-function statusIcon(status: EpisodeStatus) {
-  switch (status) {
-    case 'downloaded':
-      return ['fas', 'circle-check'] as const
-    case 'downloading':
-      return ['fas', 'arrow-down'] as const
-    case 'processing':
-      return ['fas', 'spinner'] as const
-    case 'error':
-      return ['fas', 'circle-exclamation'] as const
-  }
-}
-
-function statusLabel(status: EpisodeStatus) {
-  switch (status) {
-    case 'downloaded':
-      return 'Downloaded'
-    case 'downloading':
-      return 'Downloading'
-    case 'processing':
-      return 'Waiting for processing'
-    case 'error':
-      return 'Error'
-  }
-}
 
 function EpisodeCard({ ep, showId }: { ep: Episode; showId: string }) {
   const initials = ep.title
@@ -121,7 +78,7 @@ export default function HomePage({ onAddShow }: { onAddShow: () => void }) {
               </div>
             </Link>
             <div className="episodes-row" role="list" aria-label={`${show.title} episodes`}>
-              {show.episodes.map((ep) => (
+              {show.episodes.map((ep: Episode) => (
                 <EpisodeCard key={ep.id} ep={ep} showId={show.id} />
               ))}
             </div>

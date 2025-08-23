@@ -4,41 +4,12 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
 import { useShow } from '../../lib/queries'
+import type { Episode } from '../../domain/show'
+import { statusIcon } from '../../utils/showStatus'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
 
-// Types align with backend API
-export type EpisodeStatus = 'downloaded' | 'downloading' | 'processing' | 'error'
-
-export type Episode = {
-  id: string
-  title: string
-  index: number
-  cover?: string
-  status: EpisodeStatus
-}
-
-export type Show = {
-  id: string
-  author: string
-  title: string
-  years?: string
-  episodes: Episode[]
-}
-
-function statusIcon(status: EpisodeStatus) {
-  switch (status) {
-    case 'downloaded':
-      return ['fas', 'circle-check'] as const
-    case 'downloading':
-      return ['fas', 'arrow-down'] as const
-    case 'processing':
-      return ['fas', 'spinner'] as const
-    case 'error':
-      return ['fas', 'circle-exclamation'] as const
-  }
-}
 
 export default function ShowPage() {
   const { id } = useParams()
@@ -124,7 +95,7 @@ export default function ShowPage() {
         </header>
 
         <div className="episodes-list" role="list" aria-label={`${show.title} episodes`}>
-          {pageItems.map((ep) => {
+          {pageItems.map((ep: Episode) => {
             const icon = statusIcon(ep.status)
             const isProcessing = ep.status === 'processing'
             const label =

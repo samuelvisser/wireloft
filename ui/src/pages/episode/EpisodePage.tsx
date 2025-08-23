@@ -1,29 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
+import { useShow } from '../../lib/queries'
+import type { Episode } from '../../domain/show'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
 
-// Types align with backend API
-export type EpisodeStatus = 'downloaded' | 'downloading' | 'processing' | 'error'
-
-export type Episode = {
-  id: string
-  title: string
-  index: number
-  cover?: string
-  status: EpisodeStatus
-}
-
-export type Show = {
-  id: string
-  author: string
-  title: string
-  years?: string
-  episodes: Episode[]
-}
+// Types centralized in domain module
 
 function formatDate(d: Date | null | undefined) {
   if (!d) return '—'
@@ -43,30 +28,9 @@ function formatDate(d: Date | null | undefined) {
 export default function EpisodePage() {
   const { id: showId, episodeId } = useParams()
 
-  const [show, setShow] = useState<Show | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { data: show, isLoading, error } = useShow(showId)
 
-  useEffect(() => {
-    if (!showId) return
-    const controller = new AbortController()
-    setShow(null)
-    fetch(`http://localhost:5000/api/shows/${showId}`, { signal: controller.signal })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        const data = (await r.json()) as Show
-        setShow(data)
-      })
-      .catch((e: any) => {
-        if (e.name !== 'AbortError') {
-          console.error('Failed to load show', e)
-          setError('Failed to load show')
-          setShow(undefined as unknown as Show)
-        }
-      })
-    return () => controller.abort()
-  }, [showId])
-
-  const episode = useMemo(() => show?.episodes.find((e) => e.id === episodeId), [show, episodeId])
+  const episode = useMemo(() => show?.episodes.find((e: Episode) => e.id === episodeId), [show, episodeId])
 
   if (!showId) {
     return (
@@ -80,7 +44,7 @@ export default function EpisodePage() {
     )
   }
 
-  if (show === null && !error) {
+  if (isLoading && !show) {
     return (
       <section className="view episode-view">
         <div className="view-header">
@@ -91,13 +55,13 @@ export default function EpisodePage() {
     )
   }
 
-  if (!show || (Array.isArray(show) as any)) {
+  if (!show) {
     return (
       <section className="view episode-view">
         <div className="view-header">
           <h1>Episode</h1>
         </div>
-        <p>{error ?? 'Show not found.'}</p>
+        <p>{(error as any)?.message ?? 'Show not found.'}</p>
         <p><Link to="/">Go home</Link></p>
       </section>
     )
