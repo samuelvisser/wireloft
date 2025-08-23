@@ -530,3 +530,30 @@ a.show-header:focus-visible {
   .modal-icon { background: rgba(255,255,255,0.08); color: var(--text); }
   .modal-icon.danger { background: rgba(239,68,68,0.18); color: #fecaca; }
 }
+
+
+/* Sidebar footer links */
+.footer-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.footer-link {
+  color: white;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.footer-link .icon { font-size: 18px; }
+
+.footer-link:hover {
+  background: var(--sidebar-hover);
+  color: #8ecbff;
+}

@@ -11,8 +11,9 @@
   },
   "dependencies": {
     "@awesome.me/kit-83fa1ac5a9": "^1.0.4",
-    "@fortawesome/fontawesome-svg-core": "^6.7.2",
-    "@fortawesome/react-fontawesome": "^0.2.0",
+    "@fortawesome/fontawesome-svg-core": "^7.0.0",
+    "@fortawesome/free-brands-svg-icons": "^7.0.0",
+    "@fortawesome/react-fontawesome": "^0.2.6",
     "@tanstack/react-query": "^5.51.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

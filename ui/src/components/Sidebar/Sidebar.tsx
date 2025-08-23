@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library, IconProp } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
+import {faGithub} from "@fortawesome/free-brands-svg-icons";
 
 // Register the kit's solid icon pack so we can reference icons by [prefix, name]
 library.add(fas)
@@ -33,6 +34,19 @@ export default function Sidebar() {
         </nav>
       </div>
       <footer className="sidebar-footer">
+        <div className="footer-links">
+          <a
+            href="https://github.com/samuelvisser/wireloft"
+            target="_blank"
+            rel="noreferrer"
+            className="footer-link"
+          >
+            <span className="icon" aria-hidden>
+              <FontAwesomeIcon icon={faGithub} />
+            </span>
+            <span>Github</span>
+          </a>
+        </div>
         <span className="brand" style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <img src="/logo-3-2.png" alt="WireLoft logo" width={230} height={125} style={{ borderRadius: 2 }} />
         </span>
