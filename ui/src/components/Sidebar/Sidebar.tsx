@@ -33,7 +33,9 @@ export default function Sidebar() {
         </nav>
       </div>
       <footer className="sidebar-footer">
-        <span className="brand">WireLoft</span>
+        <span className="brand" style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <img src="/logo-3-2.png" alt="WireLoft logo" width={230} height={125} style={{ borderRadius: 2 }} />
+        </span>
       </footer>
     </aside>
   )
