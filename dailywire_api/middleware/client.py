@@ -42,16 +42,20 @@ class MiddlewareClient:
     def get_user_info(self, no_cache: bool = True) -> Dict[str, Any]:
         return self._get('v3/getUserInfo', {'nocache': 1 if no_cache else 0})
 
-    def get_page(self, slug: str, membership_plan: Optional[str] = None) -> Dict[str, Any]:
-        params = {'slug': slug}
+    def get_page(self, slug: str, membership_plan: Optional[str] = None, extra_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        params: Dict[str, Any] = {'slug': slug}
         if membership_plan:
             params['membershipPlan'] = membership_plan
+        if extra_params:
+            params.update({k: v for k, v in extra_params.items() if v is not None})
         return self._get('v4/getPage', params)
 
-    def get_show_page(self, slug: str, membership_plan: Optional[str] = None) -> Dict[str, Any]:
-        params = {'slug': slug}
+    def get_show_page(self, slug: str, membership_plan: Optional[str] = None, extra_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        params: Dict[str, Any] = {'slug': slug}
         if membership_plan:
             params['membershipPlan'] = membership_plan
+        if extra_params:
+            params.update({k: v for k, v in extra_params.items() if v is not None})
         return self._get('v4/getShowPage', params)
 
     def get_episode(self, slug: str) -> Dict[str, Any]:

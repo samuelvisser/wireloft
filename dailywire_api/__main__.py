@@ -45,6 +45,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Output JSON instead of plain lines.",
     )
+    parser.add_argument(
+        "--all",
+        dest="all",
+        action="store_true",
+        help="Include all episodes (enumerate across seasons and pages) instead of just the latest.",
+    )
     return parser
 
 
@@ -61,7 +67,7 @@ def main(argv: List[str] | None = None) -> int:
     api = DailyWireAPI(access_token=token, membership_plan=args.membership_plan)
 
     try:
-        episodes = api.list_show_episodes(args.show_slug)
+        episodes = api.list_show_episodes(args.show_slug, all_episodes=getattr(args, 'all', False))
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
