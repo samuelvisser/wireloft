@@ -3,7 +3,7 @@ name = "wireloft"
 version = "0.2.0"
 description = "A tool to download premium shows and movies from the DailyWire website"
 authors = ["Samuël Visser <samuvisser@gmail.com>"]
-packages = [{include = "dailywire_downloader"}, {include = "backend"}]
+packages = [{include = "dailywire_downloader"}, {include = "backend"}, {include = "dailywire_api"}]
 
 [tool.poetry.dependencies]
 python = "~3.13"

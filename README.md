@@ -303,3 +303,48 @@ npm run dev
 ```
 
 The UI will fetch media profiles from http://localhost:5000/api/media-profiles.
+
+
+
+
+
+# Backend for playlist
+
+
+--lazy-playlist
+Immediately receive playlist items
+
+--skip-download
+ Do not download the video but write all related files
+
+--simulate
+ Do not download the video and do not write anything to disk
+
+--ignore-no-formats-error
+Ignore "No video formats" error. Useful for extracting metadata even if the videos are not actually available for download
+
+--print
+Field name or output template to print to screen, optionally prefixed with when to print it, separated by a ":". 
+Supported values of "WHEN" are the same as that of --use-postprocessor (default: video). 
+Implies --quiet. Implies --simulate unless --no-simulate or later stages of WHEN are used. This option can be used multiple times
+
+--progress                      
+Show progress bar, even if in quiet mode
+
+
+--print title
+--print upload_date
+--print live_status
+
+
+
+
+yt-dlp --lazy-playlist --simulate --ignore-no-formats-error --sleep-requests 2 https://www.dailywire.com/show/the-ben-shapiro-show
+
+
+
+yt-dlp --simulate --progress --ignore-no-formats-error --sleep-requests 2 --print title --print upload_date --print live_status https://www.dailywire.com/show/the-ben-shapiro-show
+
+
+
+yt-dlp --simulate --progress --ignore-no-formats-error --sleep-requests 2 https://www.dailywire.com/show/the-ben-shapiro-show
