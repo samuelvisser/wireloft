@@ -7,8 +7,6 @@ Usage examples (PowerShell):
   python -m dailywire_api --show what-we-saw --access-token <JWT>
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import os
