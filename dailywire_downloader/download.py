@@ -136,22 +136,6 @@ class DailyWireDownloader:
 
         return options
 
-    def get_nfo_options(self, show_name):
-        """Get NFO-related options based on config."""
-        save_nfo = self.get_show_option(show_name, "save_nfo_file", False)
-
-        options = {}
-        if save_nfo:
-            options['paths'] = {'infojson': self.tmp_dir}
-            options['writeinfojson'] = True
-
-            # Add nfo postprocessor hook
-            from dailywire_downloader.nfo import create_nfo
-            options['postprocessor_hooks'] = [
-                lambda info, ctx: create_nfo(info['filepath'], self.tmp_dir)
-            ]
-        return options
-
     def get_retry_options(self, show_name):
         """Get retry-related options based on config."""
         retry_download_all = self.get_show_option(show_name, "retry_download_all", False)
@@ -187,6 +171,10 @@ class DailyWireDownloader:
             options.setdefault('match_filter', {})['breaking_filters'] = filters['breaking_filters']
 
         return options
+
+    def get_show_playlist(self, show_name):
+        """Get show playlist based on show name."""
+        return None
 
     def download_show(self, show_name, show_url):
         """Download a single show using yt-dlp Python API."""
@@ -278,7 +266,6 @@ class DailyWireDownloader:
         # Merge all option dictionaries
         self.update_dict(ydl_opts, self.get_date_filter_options(show_name))
         self.update_dict(ydl_opts, self.get_audio_options(show_name), True)
-        self.update_dict(ydl_opts, self.get_nfo_options(show_name))
         self.update_dict(ydl_opts, self.get_retry_options(show_name))
         self.update_dict(ydl_opts, self.get_filter_options(show_name))
 
