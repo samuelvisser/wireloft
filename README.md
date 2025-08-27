@@ -308,7 +308,13 @@ The UI will fetch media profiles from http://localhost:5000/api/media-profiles.
 
 
 
-# Backend for playlist
+# Dailywire API
+python -m dailywire_api --help
+
+
+
+
+
 
 
 --lazy-playlist

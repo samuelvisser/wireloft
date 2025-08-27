@@ -18,6 +18,7 @@ pytest = "^7.0"
 [tool.poetry.scripts]
 dailywire-downloader = "dailywire_downloader.__main__:main"
 backend-api = "backend.__main__:main"
+dailywire-api = "dailywire_api.__main__:main"
 
 [build-system]
 requires = ["poetry-core"]

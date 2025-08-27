@@ -18,13 +18,13 @@ from .app import DailyWireAPI
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m dailywire_api",
+        prog="dailywire-api",
         description="List episodes for a DailyWire show using the Middleware API.",
     )
     parser.add_argument(
         "--show",
         dest="show_slug",
-        help="Show slug (e.g. 'what-we-saw'). If omitted, only help is shown.",
+        help="Show slug (e.g. 'the-ben-shapiro-show'). If omitted, only help is shown.",
     )
     parser.add_argument(
         "--access-token",
