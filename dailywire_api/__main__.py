@@ -2,54 +2,89 @@
 Command-line entry point for the dailywire_api package.
 
 Usage examples (PowerShell):
-  python -m dailywire_api --show what-we-saw
-  python -m dailywire_api --show what-we-saw --json
-  python -m dailywire_api --show what-we-saw --access-token <JWT>
+  dailywire-api show list --slug the-ben-shapiro-show
 """
 
 import argparse
 import json
 import os
 import sys
-from typing import Any, List
+from typing import Any, Callable, Dict, List
 
-from .app import DailyWireAPI
+from dailywire_api.middleware.client import MiddlewareAPIError, MiddlewareClient
+
+
+# -------- Dynamic command registry --------
+CommandHandler = Callable[[argparse.Namespace], int]
+
+COMMANDS: Dict[str, Dict[str, Dict[str, Any]]] = {
+    "show": {
+        "list": {
+            "help": "List info for a show (prints normalized JSON)",
+            "args": [
+                {"name": "--slug", "dest": "slug", "required": True, "help": "Show slug (e.g. 'the-ben-shapiro-show')."},
+            ],
+        }
+    }
+}
+
+COMMON_ARGS = [
+    {"name": "--access-token", "dest": "access_token", "default": None, "help": "Optional JWT access token (if needed for premium content)."},
+    {"name": "--membership-plan", "dest": "membership_plan", "default": None, "help": "Optional membership plan to influence content selection (e.g., AllAccess)."},
+    {"name": "--json", "action": "store_true", "help": "Output JSON instead of plain lines."},
+    {"name": "--all", "dest": "all", "action": "store_true", "help": "Include all episodes."},
+]
+
+
+def _apply_args(parser: argparse.ArgumentParser, arg_specs: List[Dict[str, Any]]) -> None:
+    for spec in arg_specs:
+        kwargs = dict(spec)
+        name = kwargs.pop("name")
+        parser.add_argument(name, **kwargs)
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dailywire-api",
-        description="List episodes for a DailyWire show using the Middleware API.",
+        description="DailyWire API CLI",
     )
-    parser.add_argument(
-        "--show",
-        dest="show_slug",
-        help="Show slug (e.g. 'the-ben-shapiro-show'). If omitted, only help is shown.",
-    )
-    parser.add_argument(
-        "--access-token",
-        dest="access_token",
-        default=None,
-        help="Optional JWT access token (if needed for premium content).",
-    )
-    parser.add_argument(
-        "--membership-plan",
-        dest="membership_plan",
-        default=None,
-        help="Optional membership plan to influence content selection (e.g., AllAccess).",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Output JSON instead of plain lines.",
-    )
-    parser.add_argument(
-        "--all",
-        dest="all",
-        action="store_true",
-        help="Include all episodes (enumerate across seasons and pages) instead of just the latest.",
-    )
+
+    # Top-level common args
+    _apply_args(parser, COMMON_ARGS)
+
+    # Dynamic subcommands from registry
+    subparsers = parser.add_subparsers(dest="command")
+    for group, actions in COMMANDS.items():
+        group_parser = subparsers.add_parser(group, help=f"{group.capitalize()}-related commands")
+        group_parser.set_defaults(group=group)
+        group_sub = group_parser.add_subparsers(dest=f"{group}_command")
+        for action, meta in actions.items():
+            action_parser = group_sub.add_parser(action, help=meta.get("help"))
+            _apply_args(action_parser, meta.get("args", []))
+            # Allow common options after subcommand as well
+            _apply_args(action_parser, COMMON_ARGS)
+            action_parser.set_defaults(action=action)
+
     return parser
+
+
+# -------- Handlers --------
+
+def handle_show_list(args: argparse.Namespace) -> int:
+    token = args.access_token or os.getenv("DAILYWIRE_ACCESS_TOKEN")
+    client = MiddlewareClient(access_token=token)
+    payload = client.get_show_page(slug=args.slug, membership_plan=args.membership_plan)
+
+    # Output
+    print(json.dumps(payload, ensure_ascii=False, indent=2, separators=(",", ": ")))
+    return 0
+
+
+HANDLERS: Dict[str, Dict[str, CommandHandler]] = {
+    "show": {
+        "list": handle_show_list,
+    }
+}
 
 
 def main(argv: List[str] | None = None) -> int:
@@ -57,31 +92,25 @@ def main(argv: List[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    if not args.show_slug:
+    group = getattr(args, "group", None) or getattr(args, "command", None)
+    action = getattr(args, "action", None) or getattr(args, f"{group}_command", None)
+
+    if not group or not action:
         parser.print_help()
         return 0
 
-    token = args.access_token or os.getenv("DAILYWIRE_ACCESS_TOKEN")
-    api = DailyWireAPI(access_token=token, membership_plan=args.membership_plan)
-
     try:
-        episodes = api.list_show_episodes(args.show_slug, all_episodes=getattr(args, 'all', False))
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        handler = HANDLERS[group][action]
+    except Exception:
+        parser.print_help()
         return 1
 
-    if args.json:
-        # serialize dataclasses as dicts
-        payload: Any = [
-            {"slug": e.slug, "url": e.url, "season_slug": e.season_slug}
-            for e in episodes
-        ]
-        print(json.dumps(payload, indent=2))
-        return 0
-
-    for e in episodes:
-        print(e.url)
-    return 0
+    try:
+        return handler(args)
+    except MiddlewareAPIError:
+        raise
+    except Exception as e:
+        raise MiddlewareAPIError(str(e)) from e
 
 
 if __name__ == "__main__":

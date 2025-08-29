@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from dailywire_api.records.ShowRecord import ShowRecord
 
 from ..config import MIDDLEWARE_API
 
@@ -13,13 +14,7 @@ class MiddlewareAPIError(Exception):
 
 class MiddlewareClient:
     """
-    Minimal HTTP client for DailyWire Middleware API.
-
-    Endpoints (based on provided C# reference):
-      - GET v3/getUserInfo?nocache={0|1}
-      - GET v4/getPage?slug=...&membershipPlan=...
-      - GET v4/getShowPage?slug=...&membershipPlan=...
-      - GET v4/getEpisode?slug=...
+    HTTP client for DailyWire Middleware API.
 
     Pass an access token if you have one; premium content typically requires it.
     """
@@ -37,16 +32,7 @@ class MiddlewareClient:
         self._headers = headers
 
     # --------------- public methods ---------------
-    def get_user_info(self, no_cache: bool = True) -> Dict[str, Any]:
-        return self._get('v3/getUserInfo', {'nocache': 1 if no_cache else 0})
 
-    def get_page(self, slug: str, membership_plan: Optional[str] = None, extra_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        params: Dict[str, Any] = {'slug': slug}
-        if membership_plan:
-            params['membershipPlan'] = membership_plan
-        if extra_params:
-            params.update({k: v for k, v in extra_params.items() if v is not None})
-        return self._get('v4/getPage', params)
 
     def get_show_page(self, slug: str, membership_plan: Optional[str] = None, extra_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         params: Dict[str, Any] = {'slug': slug}
@@ -54,10 +40,12 @@ class MiddlewareClient:
             params['membershipPlan'] = membership_plan
         if extra_params:
             params.update({k: v for k, v in extra_params.items() if v is not None})
-        return self._get('v4/getShowPage', params)
 
-    def get_episode(self, slug: str) -> Dict[str, Any]:
-        return self._get('v4/getEpisode', {'slug': slug})
+        payload = self._get('v4/getShowPage', params)
+        record = ShowRecord.model_validate(payload)
+
+        return record.model_dump(by_alias=True, exclude_none=True, mode="json")
+
 
     # --------------- internals ---------------
     def _get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

@@ -18,158 +18,7 @@ The project uses a specific [pull request](https://github.com/yt-dlp/yt-dlp/pull
 - Ensures filenames only use ASCII characters for maximum compatibility
 - Configurable download schedule via cron
 
-## Quick Start
-
-### Using Docker
-
-1. Create configuration directory and files:
-   ```bash
-   mkdir -p config downloads
-   cp /path/to/repo/config/config.yml.default config/config.yml
-   cp /path/to/repo/config/cookies.txt.default config/cookies.txt
-   ```
-
-2. Edit the configuration files with your settings and cookies
-
-3. Run the Docker container:
-   ```bash
-   docker run -d \
-     -v $(pwd)/config:/config:ro \
-     -v $(pwd)/downloads:/downloads \
-     ghcr.io/samuelvisser/dailywire-downloader:latest
-   ```
-
-### Using Python Package
-
-0. Install Poetry if not already installed:
-   ```bash
-   # Linux, macOS
-   curl -sSL https://install.python-poetry.org | python3 -
-   
-   # Windows
-   (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | py -
-   ```
-
-1. Install the package:
-   ```bash
-   cd /path/to/repo
-   poetry install
-   ```
-
-2. Set up your configuration files:
-   ```bash
-   mkdir -p config
-   cp /path/to/repo/config/config.yml.default config/config.yml
-   cp /path/to/repo/config/cookies.txt.default config/cookies.txt
-   ```
-
-3. Edit the configuration files with your settings and cookies
-
-4. Run the downloader:
-   ```bash
-   dailywire-downloader
-   ```
-   By default, it will try to get the config and cookies files at `$(pwd)/config/`
-
-You can specify custom paths for the configuration, cookies, and download directory:
-```bash
-dailywire-downloader --config /path/to/config.yml --cookies /path/to/cookies.txt --download-dir /path/to/download_dir
-```
-
-## Configuration
-
-Copy the default configuration files and customize them:
-
-```bash
-cp config/config.yml.default config/config.yml
-cp config/cookies.txt.default config/cookies.txt
-```
-
-### Configuration Options
-
-In `config.yml`, you can set the following options:
-
-- `schedule`: Cron schedule for automated downloads
-- `start_date`: Only download episodes published on or after this date (YYYY-MM-DD)
-- `output`: Output template for file naming. See [here](https://github.com/yt-dlp/yt-dlp/tree/311bb3b?tab=readme-ov-file#output-template) for possible values
-- `audio_only`: If true, extract audio instead of video
-- `audio_format`: Format to encode extracted audio into (e.g., "mp3"). Ignored if `audio_only` is false
-- `save_nfo_file`: If true, save video descriptions and other metadata as .nfo files for Media Servers to read (e.g. Audiobookshelf, Jellyfin, ect). Note: metadata is additionally embedded in the media file, making the nfo file in most cases redundant
-- `retry_download_all`: If false, stop downloading when an already downloaded video is encountered. If true, it will attempt to re-download every episode which is useful if some older episodes where not correctly downloaded on an earlier run
-- `shows`: List of shows to download with their names and URLs. Additionally, you can add any setting except the schedule for a specific show, allowing granular control over how exactly shows are downloaded
-
-#### Filters
-Further, you can also set various filters either globally or per show
-```yaml
-    filters:
-      matchtitle: '\[Member Exclusive\]'
-      rejecttitle: 'Sunday Special'
-      filters: []
-      breaking_filters: []
-```
-- `matchtitle`: regex to filter all episode titles by. In above example, only episodes that contain "[Member Exclusive]"" in their title will be downloaded
-- `rejecttitle`: regex to filter all episode titles by. In above example, only episodes that DO NOT contain "Sunday Special" in their title will be downloaded
-- `filters`: array of filters to apply. Any "OUTPUT TEMPLATE" field can be compared with a number or a string. For options, see [here](https://github.com/yt-dlp/yt-dlp/tree/311bb3b?tab=readme-ov-file#video-selection) and look for `--match-filters`
-- `breaking_filters`: array of breaking filters to apply. These filters will stop the show download if they match. For options, see [here](https://github.com/yt-dlp/yt-dlp/tree/311bb3b?tab=readme-ov-file#video-selection) and look for `--break-match-filters`
-
-#### Cookies
-To download premium DailyWire shows, you will need to export your browser cookies for `dailywire.com`
-
-* Install in your browser an extension to extract cookies:
-  * [Firefox](https://addons.mozilla.org/en-US/firefox/addon/export-cookies-txt/)
-  * [Chrome](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
-* Extract the cookies you need with the extension and rename the file `cookies.txt`
-* Drop the file in the folder you configured
-* Restart the container
-
-### Command-line Arguments and Environment Variables
-
-The downloader supports the following command-line arguments:
-
-- `--config`: Path to the configuration file (default: `/config/config.yml` or `$DW_CONFIG_FILE` env var)
-- `--cookies`: Path to the cookies file (default: `/config/cookies.txt` or `$DW_COOKIES_FILE` env var)
-- `--download-dir`: Path to the download directory (default: `/downloads` or `$DW_DOWNLOAD_DIR` env var)
-
-You can also set these paths using environment variables:
-
-- `DW_CONFIG_FILE`: Path to the configuration file
-- `DW_COOKIES_FILE`: Path to the cookies file
-- `DW_DOWNLOAD_DIR`: Path to the download directory
-
-## Docker Usage Details
-
-### Using the pre-built image
-The easiest way to get started is to use the pre-built image from GitHub Container Registry:
-
-```bash
-docker pull ghcr.io/samuelvisser/dailywire-downloader:latest
-
-docker run -d \
-  -v $(pwd)/config:/config:ro \
-  -v $(pwd)/downloads:/downloads \
-  --name dailywire-downloader \
-  ghcr.io/samuelvisser/dailywire-downloader:latest
-```
-
-### How the Docker container works
-When the container starts:
-1. It immediately runs a download job for all configured shows
-2. It sets up a cron job based on the schedule in your config.yml
-3. The cron job will run the downloader according to your schedule
-
-### Viewing logs
-To view the logs from the Docker container:
-```bash
-docker logs -f dailywire-downloader
-```
-
-### Running a manual download
-To trigger a download manually:
-```bash
-docker exec dailywire-downloader dailywire-downloader
-```
-
-### Building your own Docker image
+## Building your own Docker image
 If you want to build the image yourself:
 
 ```bash
@@ -183,48 +32,6 @@ docker run -d \
 ```
 
 ## Development
-
-This project uses [Poetry](https://python-poetry.org/) for dependency management.
-
-### Setup for Development
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/samuelvisser/dailywire-show-download.git
-   cd dailywire-show-download
-   ```
-
-2. Install Poetry:
-   ```bash
-   curl -sSL https://install.python-poetry.org | python3 -
-   ```
-
-3. Install dependencies:
-   ```bash
-   poetry install
-   ```
-
-4. Set up your configuration files:
-   ```bash
-   cp config/config.yml.default config/config.yml
-   cp config/cookies.txt.default config/cookies.txt
-   ```
-
-5. Edit the configuration files with your settings and cookies
-
-### Running the Downloader in Development Mode
-
-Run the downloader using Poetry:
-```bash
-poetry run dailywire-downloader
-```
-
-Or activate the Poetry virtual environment and run directly:
-```bash
-poetry shell
-dailywire-downloader
-```
-
 ### Push new update to github registry (dev only)
 ```bash
 docker build -t dailywire-downloader .
@@ -354,3 +161,22 @@ yt-dlp --simulate --progress --ignore-no-formats-error --sleep-requests 2 --prin
 
 
 yt-dlp --simulate --progress --ignore-no-formats-error --sleep-requests 2 https://www.dailywire.com/show/the-ben-shapiro-show
+
+
+## DailyWire API CLI
+
+You can list episodes for a DailyWire show using the dailywire-api helper.
+
+Examples (PowerShell):
+
+- dailywire-api show list --slug the-ben-shapiro-show
+- python -m dailywire_api show list --slug the-ben-shapiro-show
+
+Options:
+- --all: include all episodes by following seasons and pagination
+- --json: output JSON instead of plain lines
+- --access-token <JWT>: optional bearer token for premium content
+- --membership-plan <PLAN>: optional membership plan (e.g., AllAccess)
+
+Backward compatibility (deprecated):
+- python -m dailywire_api --show the-ben-shapiro-show
