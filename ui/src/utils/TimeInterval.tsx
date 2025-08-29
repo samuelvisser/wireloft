@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 export type TimeIntervalProps = {
   value: string // total minutes as string (can be empty)
@@ -37,6 +37,8 @@ export default function TimeInterval({
   const initial = useMemo(() => splitMinutes(value), [value])
   const [hours, setHours] = useState<number>(initial.hours)
   const [minutes, setMinutes] = useState<number>(initial.minutes)
+  const hoursJustFocused = useRef(false)
+  const minutesJustFocused = useRef(false)
 
   // Keep local state in sync if parent value changes externally
   useEffect(() => {
@@ -112,8 +114,8 @@ export default function TimeInterval({
           step={1}
           value={hours}
           onChange={onHoursChange}
-          onFocus={(e) => { e.target.select() }}
-          onMouseUp={(e) => { e.preventDefault(); }}
+          onFocus={(e) => { e.target.select(); hoursJustFocused.current = true }}
+          onMouseUp={(e) => { if (hoursJustFocused.current) { e.preventDefault(); hoursJustFocused.current = false } }}
           disabled={disabled}
           aria-label={hoursLabel}
         />
@@ -131,8 +133,8 @@ export default function TimeInterval({
           value={minutes}
           onChange={onMinutesChange}
           onBlur={onMinutesBlur}
-          onFocus={(e) => { e.target.select() }}
-          onMouseUp={(e) => { e.preventDefault(); }}
+          onFocus={(e) => { e.target.select(); minutesJustFocused.current = true }}
+          onMouseUp={(e) => { if (minutesJustFocused.current) { e.preventDefault(); minutesJustFocused.current = false } }}
           disabled={disabled}
           aria-label={minutesLabel}
         />

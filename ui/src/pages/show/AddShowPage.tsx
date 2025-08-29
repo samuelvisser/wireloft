@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import MediaProfileForm, { MediaProfileFormValue } from '../../components/MediaProfileForm'
-import ShowForm, { ShowFormValue } from '../../components/ShowForm'
+import ShowForm, { ShowFormValue, defaultShowFormValue } from '../../components/ShowForm'
 
 export type AddShowPageProps = {
   onCancel: () => void
@@ -150,14 +150,7 @@ export default function AddShowPage({ onCancel }: AddShowPageProps) {
   }
   const [newProfile, setNewProfile] = useState<NewProfileForm>(() => loadWizardState()?.newProfile ?? emptyProfile)
   const [newProfileState, setNewProfileState] = useState<NewProfileForm | null>(() => loadWizardState()?.newProfileState ?? null)
-  const [showForm, setShowForm] = useState<ShowFormValue>(() => loadWizardState()?.showForm ?? {
-    name: '',
-    author: '',
-    downloadMedia: true,
-    downloadDays: '180',
-    deleteOlder: true,
-    titleFilter: '',
-  })
+  const [showForm, setShowForm] = useState<ShowFormValue>(() => loadWizardState()?.showForm ?? { ...defaultShowFormValue })
 
   const creatingProfileValid =
     newProfile.name.trim().length > 0 && newProfile.outputPathTemplate.trim().length > 0

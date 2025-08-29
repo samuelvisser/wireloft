@@ -557,3 +557,34 @@ a.show-header:focus-visible {
   background: var(--sidebar-hover);
   color: #8ecbff;
 }
+
+
+/* TimeInterval component */
+.time-interval {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.time-interval-field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.time-interval-field .input {
+  width: 90px;
+  padding-right: 40px;
+  text-align: right;
+}
+.time-interval-unit {
+  position: absolute;
+  right: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+.time-interval-sep {
+  color: var(--muted);
+  font-weight: 600;
+  user-select: none;
+}

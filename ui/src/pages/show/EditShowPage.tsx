@@ -1,20 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import ShowForm, { ShowFormValue } from '../../components/ShowForm'
+import ShowForm, { ShowFormValue, defaultShowFormValue } from '../../components/ShowForm'
 
 type RouteParams = { id?: string }
 
-type FormState = {
+type FormState = ShowFormValue & {
   url: string
-  name: string
-  author: string
   mediaProfileId: string
-  downloadMedia: boolean
-  downloadDays: string // keep as string to allow empty input
-  deleteOlder: boolean
-  titleFilter: string
 }
-
 
 function defaultShowData(id?: string): { url: string; name: string; author: string } | undefined {
   if (!id) return undefined
@@ -36,13 +29,10 @@ export default function EditShowPage() {
     const base = defaultShowData(id)
     return {
       url: base?.url ?? '',
-      name: base?.name ?? '',
-      author: base?.author ?? '',
       mediaProfileId: 'p1',
-      downloadMedia: true,
-      downloadDays: '',
-      deleteOlder: false,
-      titleFilter: '',
+      ...defaultShowFormValue,
+      name: base?.name ?? defaultShowFormValue.name,
+      author: base?.author ?? defaultShowFormValue.author,
     }
   })
 
@@ -141,25 +131,8 @@ export default function EditShowPage() {
         </div>
 
         <ShowForm
-          value={{
-            name: form.name,
-            author: form.author,
-            downloadMedia: form.downloadMedia,
-            downloadDays: form.downloadDays,
-            deleteOlder: form.deleteOlder,
-            titleFilter: form.titleFilter,
-          }}
-          onChange={(v: ShowFormValue) =>
-            setForm({
-              ...form,
-              name: v.name,
-              author: v.author,
-              downloadMedia: v.downloadMedia,
-              downloadDays: v.downloadDays,
-              deleteOlder: v.deleteOlder,
-              titleFilter: v.titleFilter,
-            })
-          }
+          value={form}
+          onChange={(v: ShowFormValue) => setForm((prev) => ({ ...prev, ...v }))}
         />
 
         <div className="actions">
