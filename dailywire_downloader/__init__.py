@@ -1,3 +1,3 @@
-"""DailyWire Downloader - A tool to download premium shows from the DailyWire website."""
+"""DailyWire Downloader - Downloads shows and movies from Dailywire."""
 
 __version__ = "0.1.0"

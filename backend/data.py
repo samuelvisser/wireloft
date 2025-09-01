@@ -23,19 +23,29 @@ media_profiles = [
 # Hardcoded shows (no embedded episodes)
 shows = [
     {
-        "id": "the-ben-shapiro-show",
+        "id": "1",
+        "uuid": "uuid-1",
+        "dw_id": "dw-1",
+        "slug": "the-ben-shapiro-show",
+        "url": "https://www.dailywire.com/show/the-ben-shapiro-show",
         "author": "Ben Shapiro",
         "title": "The Ben Shapiro Show",
         "years": "2015-2025",
     },
     {
-        "id": "the-matt-walsh-show",
+        "id": "2",
+        "uuid": "uuid-2",
+        "dw_id": "dw-2",
+        "slug": "the-matt-walsh-show",
         "author": "Matt Walsh",
         "title": "The Matt Walsh Show",
         "years": "2018 – 2025",
     },
     {
-        "id": "ben-after-dark",
+        "id": "3",
+        "uuid": "uuid-3",
+        "dw_id": "dw-3",
+        "slug": "ben-after-dark",
         "author": "Ben Shapiro",
         "title": "Ben After Dark",
         "years": "2025 - 2025",
@@ -65,7 +75,7 @@ episodes = []
 for i in range(1, 31):
     episodes.append({
         "id": i,
-        "show_id": "the-ben-shapiro-show",
+        "show_id": 1,
         "uuid": f"uuid-{i}",
         "dw_id": f"dw-{i}",
         "title": f"The Ben Shapiro Show — Episode {i}",
@@ -83,7 +93,7 @@ for i in range(1, 31):
 for i in range(1, 21):
     episodes.append({
         "id": i,
-        "show_id": "the-matt-walsh-show",
+        "show_id": 2,
         "uuid": f"uuid-{i}",
         "dw_id": f"dw-{i}",
         "title": f"The Matt Walsh Show — Episode {i}",
@@ -101,7 +111,7 @@ for i in range(1, 21):
 for i in range(1, 8):
     episodes.append({
         "id": i,
-        "show_id": "ben-after-dark",
+        "show_id": 3,
         "uuid": f"uuid-{i}",
         "dw_id": f"dw-{i}",
         "title": f"Ben After Dark — Episode {i}",
