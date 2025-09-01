@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
-import { useShow } from '../../lib/queries'
+import { useShow, useEpisodes } from '../../lib/queries'
 import type { Episode } from '../../domain/show'
 import { statusIcon } from '../../utils/showStatus'
 
@@ -18,6 +18,8 @@ export default function ShowPage() {
   const pageSize = 25
 
   const { data: show, isLoading, error } = useShow(id)
+  const { data: episodesData } = useEpisodes(id)
+  const episodes: Episode[] = episodesData ?? []
   const [confirm, setConfirm] = useState(false)
 
   if (!id) {
@@ -53,12 +55,12 @@ export default function ShowPage() {
     )
   }
 
-  const total = show.episodes.length
+  const total = episodes.length
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const currentPage = Math.min(page, totalPages)
   const start = (currentPage - 1) * pageSize
   const end = start + pageSize
-  const pageItems = show.episodes.slice(start, end)
+  const pageItems = episodes.slice(start, end)
 
   const onDelete = () => setConfirm(true)
   const onEdit = () => {

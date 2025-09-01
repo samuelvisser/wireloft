@@ -27,6 +27,19 @@ type NewProfileForm = MediaProfileFormValue
 // Wizard state persistence
 const STORAGE_KEY = 'addShowWizardV1'
 
+type Versioned<T> = {
+  version: string
+  data: T
+}
+
+function getCurrentAppVersion(): string | undefined {
+  try {
+    return (window as any).appConfig?.APP_VERSION
+  } catch {
+    return undefined
+  }
+}
+
 type WizardState = {
   step: 1 | 2 | 3
   rawUrl: string
@@ -40,7 +53,28 @@ function loadWizardState(): WizardState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as WizardState
+    const parsed = JSON.parse(raw) as any
+    const current = getCurrentAppVersion()
+    // New format { version, data }
+    if (parsed && typeof parsed === 'object' && 'version' in parsed && 'data' in parsed) {
+      if (typeof current === 'string') {
+        if (parsed.version === current) {
+          return parsed.data as WizardState
+        } else {
+          // Version mismatch: clear and invalidate
+          localStorage.removeItem(STORAGE_KEY)
+          return null
+        }
+      } else {
+        // Current version unknown: don't use, but also don't clear
+        return null
+      }
+    }
+    // Legacy format (no version): only invalidate if we know current version
+    if (typeof current === 'string') {
+      localStorage.removeItem(STORAGE_KEY)
+    }
+    return null
   } catch {
     return null
   }
@@ -48,7 +82,13 @@ function loadWizardState(): WizardState | null {
 
 function saveWizardState(state: WizardState) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    const ver = getCurrentAppVersion()
+    if (!ver) {
+      // If version is unknown, don't persist to avoid stale format
+      return
+    }
+    const payload: Versioned<WizardState> = { version: ver, data: state }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
   } catch {
     // ignore write errors (quota, etc.)
   }

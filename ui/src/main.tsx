@@ -7,27 +7,34 @@ import './index.css'
 import { queryClient } from './lib/queryClient'
 import { prefetchCoreData } from './lib/queries'
 import { loadShowsFromStorage, loadProfilesFromStorage } from './lib/cache'
+import { loadAppConfig } from './general_utils.js'
 
-// Restore cached data synchronously before initial render to prevent flashes
-const cachedShows = loadShowsFromStorage()
-if (cachedShows) {
-  queryClient.setQueryData(['shows'], cachedShows)
+async function bootstrap() {
+  // Load app config before anything renders
+  await loadAppConfig()
+
+  // Restore cached data synchronously before initial render to prevent flashes
+  const cachedShows = loadShowsFromStorage()
+  if (cachedShows) {
+    queryClient.setQueryData(['shows'], cachedShows)
+  }
+  const cachedProfiles = loadProfilesFromStorage()
+  if (cachedProfiles) {
+    queryClient.setQueryData(['mediaProfiles'], cachedProfiles)
+  }
+
+  // Warm the cache on startup; this will background-refresh the restored data
+  prefetchCoreData(queryClient)
+
+  const rootEl = document.getElementById('root') as HTMLElement
+  createRoot(rootEl).render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </React.StrictMode>,
+  )
 }
-const cachedProfiles = loadProfilesFromStorage()
-if (cachedProfiles) {
-  queryClient.setQueryData(['mediaProfiles'], cachedProfiles)
-}
-
-// Warm the cache on startup; this will background-refresh the restored data
-prefetchCoreData(queryClient)
-
-const rootEl = document.getElementById('root') as HTMLElement
-createRoot(rootEl).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </QueryClientProvider>
-  </React.StrictMode>,
-)
+void bootstrap()

@@ -1,9 +1,7 @@
-import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
-import { useShow } from '../../lib/queries'
-import type { Episode } from '../../domain/show'
+import { useShow, useEpisode } from '../../lib/queries'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -29,8 +27,7 @@ export default function EpisodePage() {
   const { id: showId, episodeId } = useParams()
 
   const { data: show, isLoading, error } = useShow(showId)
-
-  const episode = useMemo(() => show?.episodes.find((e: Episode) => e.id === episodeId), [show, episodeId])
+  const { data: episode, isLoading: isLoadingEpisode } = useEpisode(showId, episodeId)
 
   if (!showId) {
     return (
@@ -63,6 +60,17 @@ export default function EpisodePage() {
         </div>
         <p>{(error as any)?.message ?? 'Show not found.'}</p>
         <p><Link to="/">Go home</Link></p>
+      </section>
+    )
+  }
+
+  if (isLoadingEpisode && !episode) {
+    return (
+      <section className="view episode-view">
+        <div className="view-header">
+          <h1>Episode</h1>
+        </div>
+        <p>Loading episode...</p>
       </section>
     )
   }

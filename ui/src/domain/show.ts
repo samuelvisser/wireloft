@@ -14,5 +14,4 @@ export type Show = {
   author: string
   title: string
   years?: string
-  episodes: Episode[]
 }

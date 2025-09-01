@@ -3,12 +3,33 @@ import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
 import { Link, useNavigate } from 'react-router-dom'
 import React from 'react'
-import { useShows } from '../lib/queries'
+import { useShows, useEpisodes } from '../lib/queries'
 import type { Episode } from '../domain/show'
 import { statusIcon, statusLabel } from '../utils/showStatus'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
+
+function ShowSection({ show }: { show: any }) {
+  const { data: episodes, isLoading } = useEpisodes(show.id)
+  const eps: Episode[] = episodes ?? []
+  return (
+    <article className="show-section" key={show.id} aria-labelledby={`${show.id}-title`}>
+      <Link to={`/show/${show.id}`} className="show-header" aria-labelledby={`${show.id}-title`}>
+        <div className="show-author">{show.author}</div>
+        <h2 id={`${show.id}-title`} className="show-title">{show.title}</h2>
+        <div className="show-meta">
+          {isLoading && !episodes ? 'Loading episodes…' : `${eps.length} episodes${show.years ? ` • ${show.years}` : ''}`}
+        </div>
+      </Link>
+      <div className="episodes-row" role="list" aria-label={`${show.title} episodes`}>
+        {eps.map((ep: Episode) => (
+          <EpisodeCard key={ep.id} ep={ep} showId={show.id} />
+        ))}
+      </div>
+    </article>
+  )
+}
 
 function EpisodeCard({ ep, showId }: { ep: Episode; showId: string }) {
   const initials = ep.title
@@ -67,22 +88,7 @@ export default function HomePage({ onAddShow }: { onAddShow: () => void }) {
         <p>{(error as any)?.message ?? 'No shows found'}</p>
       ) : (
         shows.map((show) => (
-          <article className="show-section" key={show.id} aria-labelledby={`${show.id}-title`}>
-            <Link to={`/show/${show.id}`} className="show-header" aria-labelledby={`${show.id}-title`}>
-              <div className="show-author">{show.author}</div>
-              <h2 id={`${show.id}-title`} className="show-title">
-                {show.title}
-              </h2>
-              <div className="show-meta">
-                {show.episodes.length} episodes{show.years ? ` • ${show.years}` : ''}
-              </div>
-            </Link>
-            <div className="episodes-row" role="list" aria-label={`${show.title} episodes`}>
-              {show.episodes.map((ep: Episode) => (
-                <EpisodeCard key={ep.id} ep={ep} showId={show.id} />
-              ))}
-            </div>
-          </article>
+          <ShowSection key={show.id} show={show} />
         ))
       )}
     </section>

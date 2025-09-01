@@ -27,6 +27,7 @@ export function useShows() {
     queryKey: ['shows'] as const,
     queryFn: ({ signal }) => fetchJSON<any[]>(`${API_BASE}/shows`, signal),
     placeholderData: keepPreviousData,
+    refetchOnMount: 'always',
   })
   useEffect(() => {
     if (result.data) saveShowsToStorage(result.data)
@@ -47,6 +48,25 @@ export function useShow(id?: string) {
       return shows?.find((s) => s.id === id)
     },
     initialDataUpdatedAt: () => qc.getQueryState(['shows'])?.dataUpdatedAt,
+  })
+}
+
+export function useEpisodes(showId?: string) {
+  return useQuery<any[], Error, any[], readonly ['episodes', string | undefined]>({
+    queryKey: ['episodes', showId] as const,
+    enabled: !!showId,
+    queryFn: ({ signal }) => fetchJSON<any[]>(`${API_BASE}/shows/${showId}/episodes`, signal),
+    placeholderData: keepPreviousData,
+    refetchOnMount: 'always',
+  })
+}
+
+export function useEpisode(showId?: string, episodeId?: string) {
+  return useQuery<any, Error, any, readonly ['episode', string | undefined, string | undefined]>({
+    queryKey: ['episode', showId, episodeId] as const,
+    enabled: !!showId && !!episodeId,
+    queryFn: ({ signal }) => fetchJSON<any>(`${API_BASE}/shows/${showId}/episodes/${episodeId}`, signal),
+    placeholderData: keepPreviousData,
   })
 }
 
