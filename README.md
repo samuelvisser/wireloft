@@ -47,16 +47,6 @@ docker push ghcr.io/samuelvisser/dailywire-downloader:latest
 
 A web UI is included for navigation and demonstration purposes. It now uses a proper build step so you can write JSX and TypeScript.
 
-- Location: `ui` (Vite project)
-- Entry HTML: `ui\index.html` (Vite-style, loads `/src/main.tsx`)
-- Source: `ui\src\**/*` (TypeScript + JSX)
-- Features:
-  - Sidebar with: Home, Media Profiles, and Settings
-  - Sidebar footer branding: WireLoft
-
-### Prerequisites
-- Node.js 18+ and npm
-
 ### Develop (recommended)
 PowerShell:
 ```powershell
@@ -83,14 +73,8 @@ cd C:\Users\samuv\PycharmProjects\wireloft\ui
 npm run format
 ```
 
-### Notes
-- Legacy buildless files have been removed; the UI now exclusively uses the Vite + TypeScript setup.
-- The UI is still standalone and does not currently interact with the Python backend. It’s intended as a foundation you can extend.
-
 # Dev backend (Flask) + UI
-
-A simple Flask backend is included to serve the UI with hardcoded media profiles.
-
+A simple Flask backend is included and reads its data from the required SQLite database.
 Run the backend (in repo root):
 
 ```
@@ -99,8 +83,12 @@ poetry run backend-api
 ```
 
 This starts Flask at http://127.0.0.1:5000 with endpoints:
-- GET /api/health
 - GET /api/media-profiles
+- GET /api/shows
+- GET /api/shows/<slug>
+- GET /api/shows/<slug>/episodes
+- GET /api/shows/<slug>/episodes/<episode_slug>
+- GET /api/health
 
 Run the React UI (in ui/):
 
@@ -111,66 +99,13 @@ npm run dev
 
 The UI will fetch media profiles from http://localhost:5000/api/media-profiles.
 
-
-
-
-
 # Dailywire API
-python -m dailywire_api --help
-
-
-
-
-
-
-
---lazy-playlist
-Immediately receive playlist items
-
---skip-download
- Do not download the video but write all related files
-
---simulate
- Do not download the video and do not write anything to disk
-
---ignore-no-formats-error
-Ignore "No video formats" error. Useful for extracting metadata even if the videos are not actually available for download
-
---print
-Field name or output template to print to screen, optionally prefixed with when to print it, separated by a ":". 
-Supported values of "WHEN" are the same as that of --use-postprocessor (default: video). 
-Implies --quiet. Implies --simulate unless --no-simulate or later stages of WHEN are used. This option can be used multiple times
-
---progress                      
-Show progress bar, even if in quiet mode
-
-
---print title
---print upload_date
---print live_status
-
-
-
-
-yt-dlp --lazy-playlist --simulate --ignore-no-formats-error --sleep-requests 2 https://www.dailywire.com/show/the-ben-shapiro-show
-
-
-
-yt-dlp --simulate --progress --ignore-no-formats-error --sleep-requests 2 --print title --print upload_date --print live_status https://www.dailywire.com/show/the-ben-shapiro-show
-
-
-
-yt-dlp --simulate --progress --ignore-no-formats-error --sleep-requests 2 https://www.dailywire.com/show/the-ben-shapiro-show
-
-
 ## DailyWire API CLI
 
 You can list episodes for a DailyWire show using the dailywire-api helper.
 
-Examples (PowerShell):
-
+Example (PowerShell):
 - dailywire-api show list --slug the-ben-shapiro-show
-- python -m dailywire_api show list --slug the-ben-shapiro-show
 
 Options:
 - --all: include all episodes by following seasons and pagination
@@ -178,5 +113,28 @@ Options:
 - --access-token <JWT>: optional bearer token for premium content
 - --membership-plan <PLAN>: optional membership plan (e.g., AllAccess)
 
-Backward compatibility (deprecated):
-- python -m dailywire_api --show the-ben-shapiro-show
+## Database (SQLite)
+
+This project includes a required SQLite database for the backend.
+
+- Default DB path: data\wireloft.db
+
+### Create and seed the database 
+These scripts only run when you call them explicitly. They do nothing during normal server start.
+
+PowerShell (repo root):
+
+```powershell
+# Create database and tables
+poetry run backend-api --init-db
+
+# Seed database with the same demo data currently hardcoded in the backend
+poetry run backend-api --seed-db
+
+# Use a custom database path
+poetry run backend-api --init-db --db C:\Users\samuv\PycharmProjects\wireloft\data\wireloft.db
+poetry run backend-api --seed-db --db C:\Users\samuv\PycharmProjects\wireloft\data\wireloft.db
+```
+
+Notes:
+- Seeding is idempotent: running it multiple times won’t duplicate rows.
