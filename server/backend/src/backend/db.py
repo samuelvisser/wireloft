@@ -10,8 +10,19 @@ from .data import shows as seed_shows
 from .data import episodes as seed_episodes
 
 # Default DB location: project_root\\data\\wireloft.db
-PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+
+def _compute_project_root() -> str:
+    # Starting from this file: ...\\server\\backend\\src\\backend\\db.py
+    # Go up 4 levels to reach the repository root
+    here = os.path.dirname(__file__)
+    root = os.path.abspath(os.path.join(here, "..", "..", "..", ".."))
+    return root
+
+PROJECT_ROOT = _compute_project_root()
 DEFAULT_DB_PATH = os.path.join(PROJECT_ROOT, "data", "wireloft.db")
+
+print(f"Using project root: {PROJECT_ROOT}")
+print(f"Using DB path: {DEFAULT_DB_PATH}")
 
 def connect_db(db_path: Optional[str] = None, require_exists: bool = True) -> sqlite3.Connection:
     path = db_path or os.environ.get("WIRELOFT_DB_PATH") or DEFAULT_DB_PATH

@@ -13,6 +13,24 @@ files = [
 ]
 
 [[package]]
+name = "backend"
+version = "0.1.0"
+description = "WireLoft Flask backend API and DB utilities"
+optional = false
+python-versions = "~3.13"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+flask = "^3.0"
+flask-cors = "^4.0"
+
+[package.source]
+type = "directory"
+url = "server/backend"
+
+[[package]]
 name = "blinker"
 version = "1.9.0"
 description = "Fast, simple object-to-object and broadcast signaling"
@@ -51,6 +69,41 @@ files = [
     {file = "colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"},
 ]
 markers = {main = "platform_system == \"Windows\"", dev = "sys_platform == \"win32\""}
+
+[[package]]
+name = "dailywire-api"
+version = "0.1.0"
+description = "DailyWire API client and CLI"
+optional = false
+python-versions = "~3.13"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+pydantic = "^2.11.7"
+
+[package.source]
+type = "directory"
+url = "server/dailywire_api"
+
+[[package]]
+name = "dailywire-downloader"
+version = "0.1.0"
+description = "DailyWire show downloader built on yt-dlp"
+optional = false
+python-versions = "~3.13"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+pyyaml = "^6.0"
+yt-dlp = {git = "https://github.com/yt-dlp/yt-dlp.git", rev = "311bb3b"}
+
+[package.source]
+type = "directory"
+url = "server/dailywire_downloader"
 
 [[package]]
 name = "flask"
@@ -524,4 +577,4 @@ resolved_reference = "311bb3b02a3425ef7811866371ebb5a6126be95e"
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.13"
-content-hash = "b0471729f7738d8b86afcc602fbf4709396b9a594fa4e5aec073e1f0fece8447"
+content-hash = "f66807dd0c7f5c4ea5c1c054b172ea73a98da7ead722e702d8f7a989e566d11c"

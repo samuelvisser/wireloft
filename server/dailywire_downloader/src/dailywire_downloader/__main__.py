@@ -4,7 +4,7 @@ import os
 import sys
 import argparse
 import logging
-from dailywire_downloader import download, __version__
+from dailywire_downloader import __version__
 
 # Configure logging
 logging.basicConfig(
@@ -55,8 +55,13 @@ def main():
     """Entry point for the dailywire-download command."""
     args = parse_args()
     try:
+        # Lazy import to avoid importing fcntl on Windows when just showing --help
+        from dailywire_downloader import download
         download.download_shows(config_file=args.config_file, cookies_file=args.cookies_file, download_dir=args.download_dir)
         return 0
+    except SystemExit:
+        # argparse --help triggers SystemExit; re-raise to allow proper exit code/behavior
+        raise
     except Exception as e:
         logger.error(f"Fatal Error: {e}")
         return 1

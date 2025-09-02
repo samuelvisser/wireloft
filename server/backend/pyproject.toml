@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "backend"
+version = "0.1.0"
+description = "WireLoft Flask backend API and DB utilities"
+authors = ["Samuël Visser <samuvisser@gmail.com>"]
+packages = [{ include = "backend", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "~3.13"
+flask = "^3.0"
+flask-cors = "^4.0"
+
+[tool.poetry.scripts]
+backend-api = "backend.__main__:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
