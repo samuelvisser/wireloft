@@ -49,19 +49,15 @@ def create_app() -> Flask:
         conn = connect_db()
         try:
             cur = conn.cursor()
-            cur.execute("SELECT slug, name, author, description FROM shows ORDER BY id")
+            cur.execute("SELECT slug, title, author FROM shows ORDER BY id")
             rows = cur.fetchall()
-            def _years_from_desc(desc: str | None) -> str | None:
-                if not desc:
-                    return None
-                prefix = "Years: "
-                return desc[len(prefix):] if desc.startswith(prefix) else desc
+
             result = [
                 {
                     "id": r["slug"],
                     "author": r["author"],
-                    "title": r["name"],
-                    "years": _years_from_desc(r["description"]),
+                    "title": r["title"],
+                    "years": "unknown",
                 }
                 for r in rows
             ]

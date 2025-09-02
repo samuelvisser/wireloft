@@ -126,14 +126,14 @@ PowerShell (repo root):
 
 ```powershell
 # Create database and tables
-poetry run backend-api --init-db
+backend-api --init-db
 
 # Seed database with the same demo data currently hardcoded in the backend
-poetry run backend-api --seed-db
+backend-api --seed-db
 
 # Use a custom database path
-poetry run backend-api --init-db --db C:\Users\samuv\PycharmProjects\wireloft\data\wireloft.db
-poetry run backend-api --seed-db --db C:\Users\samuv\PycharmProjects\wireloft\data\wireloft.db
+backend-api --init-db --db C:\Users\samuv\PycharmProjects\wireloft\data\wireloft.db
+backend-api --seed-db --db C:\Users\samuv\PycharmProjects\wireloft\data\wireloft.db
 ```
 
 Notes:

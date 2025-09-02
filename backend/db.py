@@ -166,11 +166,13 @@ def seed_db(db_path: Optional[str] = None) -> None:
             if row is None:
                 cur.execute(
                     """
-                    INSERT INTO shows (uuid, dw_id, slug, name, description, author,
+                    INSERT INTO shows (uuid, dw_id, slug, title, url, description, author,
                                        download_media, download_delay_minutes, redownload_delay_minutes,
                                        download_days_in_past, delete_older_episodes, title_filter,
-                                       created_date, modified_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       created_date, modified_date, media_type, author_slug,
+                                    author_headshot_path, background_image_path, logo_image_path,
+                                    thumbnail_landscape_path, thumbnail_portrait_path, thumbnail_square_path)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         None,  # uuid
