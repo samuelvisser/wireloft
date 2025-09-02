@@ -13,7 +13,6 @@ from .data import episodes as seed_episodes
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 DEFAULT_DB_PATH = os.path.join(PROJECT_ROOT, "data", "wireloft.db")
 
-
 def connect_db(db_path: Optional[str] = None, require_exists: bool = True) -> sqlite3.Connection:
     path = db_path or os.environ.get("WIRELOFT_DB_PATH") or DEFAULT_DB_PATH
     # Ensure directory exists
@@ -26,10 +25,8 @@ def connect_db(db_path: Optional[str] = None, require_exists: bool = True) -> sq
     conn.row_factory = sqlite3.Row
     return conn
 
-
 def _now_iso() -> str:
     return datetime.utcnow().isoformat(timespec="seconds")
-
 
 def init_db(db_path: Optional[str] = None) -> None:
     conn = connect_db(db_path, require_exists=False)
@@ -116,7 +113,6 @@ def init_db(db_path: Optional[str] = None) -> None:
         conn.commit()
     finally:
         conn.close()
-
 
 def seed_db(db_path: Optional[str] = None) -> None:
     """Seed database using the hardcoded data from backend.data.

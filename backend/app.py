@@ -4,7 +4,6 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from .db import connect_db
 
-
 def create_app() -> Flask:
     app = Flask(__name__)
 

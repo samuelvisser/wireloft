@@ -8,7 +8,6 @@ from typing import Optional
 from .app import create_app
 from .db import init_db, seed_db, DEFAULT_DB_PATH, connect_db
 
-
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="backend-api", description="WireLoft backend API and DB utilities")
     parser.add_argument("--db", dest="db", help=f"Path to SQLite database file (default: {DEFAULT_DB_PATH})")
@@ -18,7 +17,6 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=5000, help="Flask port (when running server)")
     parser.add_argument("--debug", action="store_true", help="Enable Flask debug mode")
     return parser.parse_args(argv)
-
 
 def main(argv: Optional[list[str]] = None) -> None:
     args = _parse_args(argv)
@@ -50,7 +48,6 @@ def main(argv: Optional[list[str]] = None) -> None:
     app = create_app()
     debug = args.debug
     app.run(host=args.host, port=args.port, debug=debug)
-
 
 if __name__ == "__main__":
     main(sys.argv[1:])
