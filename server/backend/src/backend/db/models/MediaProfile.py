@@ -12,7 +12,7 @@ class MediaProfile(Base):
     name: Mapped[str]
     output_template: Mapped[str]
     preferred_format: Mapped[str]
-    download_series_images: Mapped[bool] = True
+    download_series_images: Mapped[bool] = mapped_column(default=True)
     created_date: Mapped[datetime]
     modified_date: Mapped[datetime]
 

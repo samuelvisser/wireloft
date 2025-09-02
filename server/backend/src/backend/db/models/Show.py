@@ -22,11 +22,11 @@ class Show(Base):
     author_name: Mapped[str]
     author_slug: Mapped[str]
     author_headshot_path: Mapped[Optional[str]] = mapped_column(String(510))
-    download_media: Mapped[bool] = True
-    download_delay_minutes: Mapped[int] = 0
-    redownload_delay_minutes: Mapped[int] = 0
-    download_days_in_past: Mapped[int] = 0
-    delete_older_episodes: Mapped[int] = 1
+    download_media: Mapped[bool] = mapped_column(default=True)
+    download_delay_minutes: Mapped[int] = mapped_column(default=0)
+    redownload_delay_minutes: Mapped[int] = mapped_column(default=0)
+    download_days_in_past: Mapped[int] = mapped_column(default=0)
+    delete_older_episodes: Mapped[bool] = mapped_column(default=True)
     title_filter: Mapped[Optional[str]]
     background_image_path: Mapped[Optional[str]] = mapped_column(String(510))
     logo_image_path: Mapped[Optional[str]] = mapped_column(String(510))
