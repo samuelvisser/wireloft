@@ -7,7 +7,7 @@ class Setting(Base):
     __tablename__ = "settings"
 
     id: Mapped[str] = mapped_column(primary_key=True)
-    slug: Mapped[str]
+    slug: Mapped[str] = mapped_column(index=True)
     name: Mapped[str]
     value: Mapped[Optional[str]]
     created_date: Mapped[str]

@@ -1,18 +1,20 @@
 from typing import Optional
 
-from sqlalchemy import Integer, String
+from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.models.Episode import Episode
+from backend.db.models.MediaProfile import MediaProfile
 
 class Show(Base):
     __tablename__ = "shows"
 
     # Columns
     id: Mapped[str] = mapped_column(primary_key=True)
-    uuid: Mapped[str]
-    dw_id: Mapped[str]
-    slug: Mapped[str]
+    uuid: Mapped[str] = mapped_column(index=True)
+    dw_id: Mapped[str] = mapped_column(index=True)
+    slug: Mapped[str] = mapped_column(index=True)
+    media_profile_id: Mapped[int] = mapped_column(ForeignKey("media_profiles.id"))
     title: Mapped[str]
     description: Mapped[Optional[str]] = mapped_column(String(10-000))
     url: Mapped[str] = mapped_column(String(510))
@@ -39,6 +41,7 @@ class Show(Base):
     episodes: Mapped[list["Episode"]] = relationship(
         back_populates="show", cascade="all, delete-orphan"
     )
+    media_profile: Mapped["MediaProfile"] = relationship(back_populates="shows")
 
     def __repr__(self) -> str:
         return f"<Show(id={self.id}, uuid={self.uuid}, dw_id={self.dw_id}, slug={self.slug}, title={self.title}, created_date={self.created_date}, modified_date={self.modified_date})>"

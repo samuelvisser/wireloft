@@ -1,22 +1,18 @@
 from typing import Optional
 
-import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey
 from backend.db import Base
-from backend.db.models.Show import Show
-
 
 class Episode(Base):
     __tablename__ = "episodes"
 
     # Fields
     id: Mapped[str] = mapped_column(primary_key=True)
-    show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"))
-
-    uuid: Mapped[str]
-    dw_id: Mapped[str]
-    slug: Mapped[str]
+    show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"), primary_key=True)
+    uuid: Mapped[str] = mapped_column(index=True)
+    dw_id: Mapped[str] = mapped_column(index=True)
+    slug: Mapped[str] = mapped_column(index=True)
     title: Mapped[str]
     description: Mapped[Optional[str]]
     status: Mapped[str]
