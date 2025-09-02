@@ -1,10 +1,9 @@
+from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Integer, String, ForeignKey
+from sqlalchemy import String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
-from backend.db.models.Episode import Episode
-from backend.db.models.MediaProfile import MediaProfile
 
 class Show(Base):
     __tablename__ = "shows"
@@ -16,7 +15,7 @@ class Show(Base):
     slug: Mapped[str] = mapped_column(index=True)
     media_profile_id: Mapped[int] = mapped_column(ForeignKey("media_profiles.id"))
     title: Mapped[str]
-    description: Mapped[Optional[str]] = mapped_column(String(10-000))
+    description: Mapped[Optional[str]] = mapped_column(String(10000))
     url: Mapped[str] = mapped_column(String(510))
     status: Mapped[str]
     media_type: Mapped[str]
@@ -34,8 +33,8 @@ class Show(Base):
     thumbnail_landscape_path: Mapped[Optional[str]] = mapped_column(String(510))
     thumbnail_portrait_path: Mapped[Optional[str]] = mapped_column(String(510))
     thumbnail_square_path: Mapped[Optional[str]] = mapped_column(String(510))
-    created_date: Mapped[str]
-    modified_date: Mapped[str]
+    created_date: Mapped[datetime]
+    modified_date: Mapped[datetime]
 
     # Relationships
     episodes: Mapped[list["Episode"]] = relationship(

@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-from sqlalchemy import String, Boolean, DateTime
+from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
-from backend.db.models.Show import Show
 
 class MediaProfile(Base):
     __tablename__ = "media_profiles"
 
     # Columns
-    id: Mapped[str] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
     output_template: Mapped[str]
     preferred_format: Mapped[str]
     download_series_images: Mapped[bool]
-    created_date: Mapped[DateTime]
-    modified_date: Mapped[DateTime]
+    created_date: Mapped[datetime]
+    modified_date: Mapped[datetime]
 
     # Relationships
     shows: Mapped[list["Show"]] = relationship(

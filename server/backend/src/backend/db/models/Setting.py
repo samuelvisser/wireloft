@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.orm import Mapped, mapped_column
@@ -10,5 +11,5 @@ class Setting(Base):
     slug: Mapped[str] = mapped_column(index=True)
     name: Mapped[str]
     value: Mapped[Optional[str]]
-    created_date: Mapped[str]
-    modified_date: Mapped[str]
+    created_date: Mapped[datetime]
+    modified_date: Mapped[datetime]
