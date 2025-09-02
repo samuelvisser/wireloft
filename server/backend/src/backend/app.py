@@ -1,8 +1,13 @@
 from __future__ import annotations
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from .db import connect_db
+from .records.MediaProfileRecord import MediaProfileRecord
+from .records.ShowRecord import ShowRecord
+from .records.EpisodeRecord import EpisodeRecord
+from .records.SettingRecord import SettingRecord
+from .records.SettingValueUpdate import SettingValueUpdate
 
 def create_app() -> Flask:
     app = Flask(__name__)
@@ -21,7 +26,6 @@ def create_app() -> Flask:
 
     @app.get("/api/media-profiles")
     def get_media_profiles():
-        # Return media profiles from DB
         conn = connect_db()
         try:
             cur = conn.cursor()
@@ -29,17 +33,17 @@ def create_app() -> Flask:
                 "SELECT id, name, output_template, preferred_format, download_series_images FROM media_profiles ORDER BY id"
             )
             rows = cur.fetchall()
-            result = [
-                {
-                    "id": str(r["id"]),
-                    "name": r["name"],
-                    "outputPathTemplate": r["output_template"],
-                    "preferredFormat": r["preferred_format"],
-                    "downloadSeriesImages": bool(r["download_series_images"]) if r["download_series_images"] is not None else False,
-                }
+            records = [
+                MediaProfileRecord(
+                    id=str(r["id"]),
+                    name=r["name"],
+                    output_path_template=r["output_template"],
+                    preferred_format=r["preferred_format"],
+                    download_series_images=bool(r["download_series_images"]) if r["download_series_images"] is not None else False,
+                )
                 for r in rows
             ]
-            return jsonify(result)
+            return jsonify([rec.model_dump(by_alias=True) for rec in records])
         finally:
             conn.close()
 
@@ -48,19 +52,19 @@ def create_app() -> Flask:
         conn = connect_db()
         try:
             cur = conn.cursor()
-            cur.execute("SELECT slug, title, author FROM shows ORDER BY id")
+            cur.execute("SELECT slug, name, author FROM shows ORDER BY id")
             rows = cur.fetchall()
 
-            result = [
-                {
-                    "id": r["slug"],
-                    "author": r["author"],
-                    "title": r["title"],
-                    "years": "unknown",
-                }
+            records = [
+                ShowRecord(
+                    id=r["slug"],
+                    title=r["name"],
+                    author=r["author"],
+                    years="unknown",
+                )
                 for r in rows
             ]
-            return jsonify(result)
+            return jsonify([rec.model_dump(by_alias=True) for rec in records])
         finally:
             conn.close()
 
@@ -76,16 +80,16 @@ def create_app() -> Flask:
             row = cur.fetchone()
             if row is None:
                 return jsonify({"error": "Show not found"}), 404
-            # Derive years from description if prefixed
             desc = row["description"]
             prefix = "Years: "
             years = desc[len(prefix):] if (isinstance(desc, str) and desc.startswith(prefix)) else desc
-            return jsonify({
-                "id": row["slug"],
-                "author": row["author"],
-                "title": row["name"],
-                "years": years,
-            })
+            record = ShowRecord(
+                id=row["slug"],
+                title=row["name"],
+                author=row["author"],
+                years=years,
+            )
+            return jsonify(record.model_dump(by_alias=True))
         finally:
             conn.close()
 
@@ -98,28 +102,26 @@ def create_app() -> Flask:
         conn = connect_db()
         try:
             cur = conn.cursor()
-            # Ensure show exists and get its numeric id
             cur.execute("SELECT id FROM shows WHERE slug = ?", (show_id,))
             show_row = cur.fetchone()
             if show_row is None:
                 return jsonify({"error": "Show not found"}), 404
             sid = show_row["id"]
-            # Load episodes for the show
             cur.execute(
                 "SELECT id, slug, title, description FROM episodes WHERE show_id = ? ORDER BY id",
                 (sid,),
             )
             rows = cur.fetchall()
-            result = [
-                {
-                    "id": r["slug"] or str(r["id"]),
-                    "title": r["title"],
-                    "index": int(r["id"]) if r["id"] is not None else None,
-                    "status": (r["description"] or "downloaded"),
-                }
+            records = [
+                EpisodeRecord(
+                    id=(r["slug"] or str(r["id"])) ,
+                    title=r["title"],
+                    index=(int(r["id"]) if r["id"] is not None else None),
+                    status=(r["description"] or "downloaded"),
+                )
                 for r in rows
             ]
-            return jsonify(result)
+            return jsonify([rec.model_dump(by_alias=True) for rec in records])
         finally:
             conn.close()
 
@@ -128,13 +130,11 @@ def create_app() -> Flask:
         conn = connect_db()
         try:
             cur = conn.cursor()
-            # Validate show
             cur.execute("SELECT id FROM shows WHERE slug = ?", (show_id,))
             show_row = cur.fetchone()
             if show_row is None:
                 return jsonify({"error": "Show not found"}), 404
             sid = show_row["id"]
-            # Find episode by slug within this show
             cur.execute(
                 "SELECT id, slug, title, description FROM episodes WHERE show_id = ? AND slug = ?",
                 (sid, episode_slug),
@@ -142,13 +142,62 @@ def create_app() -> Flask:
             r = cur.fetchone()
             if r is None:
                 return jsonify({"error": "Episode not found"}), 404
-            ep = {
-                "id": r["slug"] or str(r["id"]),
-                "title": r["title"],
-                "index": int(r["id"]) if r["id"] is not None else None,
-                "status": (r["description"] or "downloaded"),
-            }
-            return jsonify(ep)
+            record = EpisodeRecord(
+                id=(r["slug"] or str(r["id"])) ,
+                title=r["title"],
+                index=(int(r["id"]) if r["id"] is not None else None),
+                status=(r["description"] or "downloaded"),
+            )
+            return jsonify(record.model_dump(by_alias=True))
+        finally:
+            conn.close()
+
+    @app.get("/api/settings/<slug>")
+    def get_setting(slug: str):
+        conn = connect_db()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT slug, name, value FROM settings WHERE slug = ?",
+                (slug,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return jsonify({"error": "Setting not found"}), 404
+            record = SettingRecord(slug=row["slug"], name=row["name"], value=row["value"])
+            return jsonify(record.model_dump(by_alias=True))
+        finally:
+            conn.close()
+
+    @app.put("/api/settings/<slug>")
+    def put_setting(slug: str):
+        conn = connect_db()
+        try:
+            payload = request.get_json(silent=True) or {}
+            update = SettingValueUpdate(**payload)
+            cur = conn.cursor()
+            # Check existing
+            cur.execute("SELECT id, name FROM settings WHERE slug = ?", (slug,))
+            row = cur.fetchone()
+            now_val = update.value
+            now_str = __import__("datetime").datetime.utcnow().isoformat(timespec="seconds")
+            if row is None:
+                # Insert new setting with name = slug if no name known
+                cur.execute(
+                    "INSERT INTO settings (slug, name, value, created_date, modified_date) VALUES (?, ?, ?, ?, ?)",
+                    (slug, slug, now_val, now_str, now_str),
+                )
+            else:
+                cur.execute(
+                    "UPDATE settings SET value = ?, modified_date = ? WHERE slug = ?",
+                    (now_val, now_str, slug),
+                )
+            conn.commit()
+            # Return the updated record
+            cur.execute("SELECT slug, name, value FROM settings WHERE slug = ?", (slug,))
+            r2 = cur.fetchone()
+            record = SettingRecord(slug=r2["slug"], name=r2["name"], value=r2["value"])
+            return jsonify(record.model_dump(by_alias=True))
         finally:
             conn.close()
 

@@ -162,7 +162,7 @@ def seed_db(db_path: Optional[str] = None) -> None:
         # Seed shows first, build slug -> show_id map
         slug_to_show_id: dict[str, int] = {}
         for s in seed_shows:
-            slug = s.get("id")
+            slug = s.get("slug")
             name = s.get("title")
             author = s.get("author")
             description = f"Years: {s.get('years')}" if s.get("years") else None
@@ -173,13 +173,11 @@ def seed_db(db_path: Optional[str] = None) -> None:
             if row is None:
                 cur.execute(
                     """
-                    INSERT INTO shows (uuid, dw_id, slug, title, url, description, author,
+                    INSERT INTO shows (uuid, dw_id, slug, name, description, author,
                                        download_media, download_delay_minutes, redownload_delay_minutes,
                                        download_days_in_past, delete_older_episodes, title_filter,
-                                       created_date, modified_date, media_type, author_slug,
-                                    author_headshot_path, background_image_path, logo_image_path,
-                                    thumbnail_landscape_path, thumbnail_portrait_path, thumbnail_square_path)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       created_date, modified_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         None,  # uuid
@@ -203,6 +201,12 @@ def seed_db(db_path: Optional[str] = None) -> None:
                 show_id = row["id"]
 
             slug_to_show_id[slug] = show_id
+            sid_key = s.get("id")
+            if sid_key is not None:
+                try:
+                    slug_to_show_id[str(int(sid_key))] = show_id
+                except Exception:
+                    slug_to_show_id[str(sid_key)] = show_id
 
         # Detect current episodes table columns (handle legacy schemas gracefully)
         cur.execute("PRAGMA table_info(episodes);")
