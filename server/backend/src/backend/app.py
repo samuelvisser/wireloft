@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from .db import connect_db
+from .dblegacy import connect_db
 from .records.MediaProfileRecord import MediaProfileRecord
 from .records.ShowRecord import ShowRecord
 from .records.EpisodeRecord import EpisodeRecord

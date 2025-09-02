@@ -6,7 +6,7 @@ import sys
 from typing import Optional
 
 from .app import create_app
-from .db import init_db, seed_db, DEFAULT_DB_PATH, connect_db
+from .dblegacy import init_db, seed_db, DEFAULT_DB_PATH, connect_db
 
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="backend-api", description="WireLoft backend API and DB utilities")

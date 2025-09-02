@@ -12,7 +12,7 @@ from .data import episodes as seed_episodes
 # Default DB location: project_root\\data\\wireloft.db
 
 def _compute_project_root() -> str:
-    # Starting from this file: ...\\server\\backend\\src\\backend\\db.py
+    # Starting from this file: ...\\server\\backend\\src\\backend\\dblegacy.py
     # Go up 4 levels to reach the repository root
     here = os.path.dirname(__file__)
     root = os.path.abspath(os.path.join(here, "..", "..", "..", ".."))
