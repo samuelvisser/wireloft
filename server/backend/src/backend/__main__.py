@@ -6,9 +6,9 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from backend.db import configure, create_all, get_db_path, seed_db
+from backend.db import configure, create_all, get_db_path, seed_db, get_engine
+from sqlalchemy import text
 from .app import create_app
-from .dblegacy import connect_db
 from .config import DEFAULT_DB_PATH
 
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -25,6 +25,34 @@ def _get_db_path(args) -> Path:
     if args.db:
         return Path(args.db)
     return Path(os.environ.get("WIRELOFT_DB_PATH", DEFAULT_DB_PATH))
+
+def _validate_db_health() -> None:
+    # 1) Ensure the SQLite file exists to avoid silent auto-creation
+    if not get_db_path().exists():
+        print(
+            f"Database file not found: {get_db_path()}\nRun with --init-db to initialize the schema, or provide --db to set the path.",
+            file=sys.stderr)
+        sys.exit(1)
+
+    # 2) Validate connectivity via SQLAlchemy (fail fast)
+    engine = get_engine()
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as e:
+        print(f"Failed to connect to database: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # 3) Optionally, check that tables exist; guide user if schema missing
+    try:
+        from sqlalchemy import inspect as _sa_inspect
+        inspector = _sa_inspect(engine)
+        if not inspector.get_table_names():
+            print("Database is empty (no tables). Run with --init-db to initialize the schema.", file=sys.stderr)
+            sys.exit(1)
+    except Exception:
+        # If inspection fails, let the app start; runtime errors will surface
+        pass
 
 def main(argv: Optional[list[str]] = None) -> None:
     args = _parse_args(argv)
@@ -44,13 +72,7 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     # Otherwise, start the Flask API server
     # Ensure DB exists before creating the app (fail fast with a clear message)
-    try:
-        conn = connect_db(db_path.as_posix())
-        conn.close()
-    except FileNotFoundError as e:
-        print(str(e), file=sys.stderr)
-        sys.exit(1)
-
+    _validate_db_health()
     app = create_app()
     debug = args.debug
     app.run(host=args.host, port=args.port, debug=debug)
