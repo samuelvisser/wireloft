@@ -2,7 +2,7 @@ from flask import jsonify
 
 from backend.app import db_session
 from backend.db.models import Show
-from backend.api.schemas import ShowItem, ErrorResponse
+from .response_models import ShowItem, ErrorResponse
 
 
 def get_show_list():

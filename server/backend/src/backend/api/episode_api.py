@@ -1,6 +1,6 @@
 from flask import Blueprint
 
-from backend.services.episode_service import get_episode_list, get_episode
+from backend.services.episode import get_episode_list, get_episode
 
 episode_api = Blueprint("episode_api", __name__)
 

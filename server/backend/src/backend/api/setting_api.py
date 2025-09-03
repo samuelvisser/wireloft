@@ -1,5 +1,5 @@
 from flask import Blueprint
-from backend.services.setting_service import get_setting
+from backend.services.setting import get_setting
 
 
 setting_api = Blueprint("setting_api", __name__)

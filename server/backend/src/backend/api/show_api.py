@@ -1,6 +1,6 @@
 from flask import Blueprint
 
-from backend.services.show_service import get_show_list, get_show
+from backend.services.show import get_show_list, get_show
 
 show_api = Blueprint("show_api", __name__)
 

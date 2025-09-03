@@ -1,6 +1,6 @@
 from flask import Blueprint
 
-from backend.services.media_profile_service import get_media_profiles_list
+from backend.services.media_profile import get_media_profiles_list
 
 media_profile_api = Blueprint("media_profile_api", __name__)
 

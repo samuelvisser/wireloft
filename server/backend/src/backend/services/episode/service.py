@@ -3,7 +3,7 @@ from sqlalchemy import cast, Integer
 
 from backend.app import db_session
 from backend.db.models import Show, Episode
-from backend.api.schemas import EpisodeItem, ErrorResponse
+from .response_models import EpisodeItem, ErrorResponse
 
 
 def get_episode_list(show_id: str):

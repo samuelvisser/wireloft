@@ -1,7 +1,9 @@
+from flask import jsonify
+
 from backend.app import db_session
 from backend.db.models import MediaProfile
-from backend.api.schemas import MediaProfileItem
-from flask import jsonify
+from .response_models import MediaProfileItem
+
 
 def get_media_profiles_list():
     with db_session() as s:

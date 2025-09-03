@@ -8,6 +8,7 @@ dependencies = [
   "Flask>=3.0",
   "Flask-Cors>=4.0",
   "SQLAlchemy>=2.0.43",
+  "pydantic>=2.6",
 ]
 
 [project.scripts]
