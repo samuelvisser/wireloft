@@ -2,7 +2,8 @@ from backend.app import db_session
 from flask import jsonify
 
 from backend.db.models import Setting
-from .response_models import SettingItem, ErrorResponse
+from .response_models import SettingItem
+from ..common import ErrorResponse
 
 
 def get_setting(id: int):
