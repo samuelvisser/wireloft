@@ -1,15 +1,15 @@
-from backend.app import db_session
-from flask import jsonify
+from fastapi import HTTPException
 
+from backend.app import db_session
 from backend.db.models import Setting
 from .response_models import SettingItem
-from ..common import ErrorResponse
 
 
-def get_setting(id: int):
+def get_setting(setting_id: int) -> SettingItem:
     with db_session() as s:
-        setting = s.query(Setting).filter_by(id=id).one_or_none()
+        setting = s.query(Setting).filter_by(id=setting_id).one_or_none()
         if setting is None:
-            return jsonify(ErrorResponse(error="Setting not found").model_dump()), 404
-        payload = SettingItem(slug=setting.slug, name=setting.name, value=setting.value).model_dump()
-        return jsonify(payload)
+            raise HTTPException(status_code=404, detail="Setting not found")
+
+        payload = SettingItem(slug=setting.slug, name=setting.name, value=setting.value)
+        return payload

@@ -1,8 +1,14 @@
-from flask import Blueprint
+from fastapi import APIRouter
 
-from backend.services.episode import get_episode_list, get_episode
+from backend.services.episode.service import get_episode_list, get_episode
+from backend.services.episode.response_models import EpisodeItem
 
-episode_api = Blueprint("episode_api", __name__)
+router = APIRouter()
 
-episode_api.add_url_rule("/list", view_func=get_episode_list, methods=["GET"])
-episode_api.add_url_rule("/<int:episode_id>", view_func=get_episode, methods=["GET"])
+@router.get("/list", response_model=list[EpisodeItem])
+def episode_list(show_id: str):
+    return get_episode_list(show_id)
+
+@router.get("/{episode_slug}", response_model=EpisodeItem)
+def episode_detail(show_id: str, episode_slug: str):
+    return get_episode(show_id, episode_slug)

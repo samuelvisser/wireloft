@@ -1,7 +1,10 @@
-from flask import Blueprint
-from backend.services.setting import get_setting
+from fastapi import APIRouter
 
+from backend.services.setting.service import get_setting
+from backend.services.setting.response_models import SettingItem
 
-setting_api = Blueprint("setting_api", __name__)
+router = APIRouter()
 
-setting_api.add_url_rule("/<int:setting_id>", view_func=get_setting, methods=["GET"])
+@router.get("/{setting_id}", response_model=SettingItem)
+def setting_detail(setting_id: int):
+    return get_setting(setting_id)

@@ -1,7 +1,10 @@
-from flask import Blueprint
+from fastapi import APIRouter
 
-from backend.services.media_profile import get_media_profiles_list
+from backend.services.media_profile.service import get_media_profiles_list
+from backend.services.media_profile.response_models import MediaProfileItem
 
-media_profile_api = Blueprint("media_profile_api", __name__)
+router = APIRouter()
 
-media_profile_api.add_url_rule("/list", view_func=get_media_profiles_list, methods=["GET"])
+@router.get("/list", response_model=list[MediaProfileItem])
+def media_profiles_list():
+    return get_media_profiles_list()

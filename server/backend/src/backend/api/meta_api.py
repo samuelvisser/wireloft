@@ -1,7 +1,10 @@
-from flask import Blueprint
+from fastapi import APIRouter
 
-from backend.services.meta import health
+from backend.services.meta import get_health
+from backend.services.meta.response_models import HealthResponse
 
-meta_api = Blueprint("meta_api", __name__)
+router = APIRouter()
 
-meta_api.add_url_rule("/health", view_func=health, methods=["GET"])
+@router.get("/list", response_model=list[HealthResponse])
+def health():
+    return get_health()

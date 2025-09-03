@@ -1,5 +1,5 @@
-from .service import health
+from .service import get_health
 
 __all__ = [
-    "health",
+    "get_health",
 ]

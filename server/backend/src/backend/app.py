@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
-from flask import Flask
-from flask_cors import CORS
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.db import get_session
 
@@ -16,20 +16,25 @@ def db_session():
         s.close()
 
 
-def create_app() -> Flask:
-    app = Flask(__name__)
+def create_app() -> FastAPI:
+    app = FastAPI(title="WireLoft API")
 
     # Allow the React dev server to call the API during development
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-    # Import blueprints lazily to avoid circular imports during app module import
-    from backend.api import media_profile_api, setting_api, show_api, meta_api
+    # Import routers lazily to avoid circular imports during app module import
+    from backend.api import show_router, episode_router, setting_router, media_profile_router, meta_router
 
-    app.register_blueprint(media_profile_api, url_prefix="/api/media-profile")
-    app.register_blueprint(show_api, url_prefix="/api/show/<int:show_id>/episode")
-    app.register_blueprint(show_api, url_prefix="/api/show")
-    app.register_blueprint(setting_api, url_prefix="/api/setting")
-    app.register_blueprint(meta_api, url_prefix="/api/meta")
-
+    app.include_router(show_router, prefix="/api/show")
+    app.include_router(episode_router, prefix="/api/show/{show_id}/episode")
+    app.include_router(setting_router, prefix="/api/setting")
+    app.include_router(media_profile_router, prefix="/api/media-profile")
+    app.include_router(meta_router, prefix="/api/meta")
 
     return app

@@ -16,9 +16,9 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--db", dest="db", help=f"Path to SQLite database file")
     parser.add_argument("--init-db", action="store_true", help="Initialize the database schema using SQLAlchemy ORM and exit")
     parser.add_argument("--seed-db", action="store_true", help="Seed the database with demo data and exit")
-    parser.add_argument("--host", default="127.0.0.1", help="Flask host (when running server)")
-    parser.add_argument("--port", type=int, default=5000, help="Flask port (when running server)")
-    parser.add_argument("--debug", action="store_true", help="Enable Flask debug mode")
+    parser.add_argument("--host", default="127.0.0.1", help="Host to bind when running server")
+    parser.add_argument("--port", type=int, default=5000, help="Port to bind when running server")
+    parser.add_argument("--debug", action="store_true", help="Enable debug/reload mode")
     return parser.parse_args(argv)
 
 def _get_db_path(args) -> Path:
@@ -70,12 +70,14 @@ def main(argv: Optional[list[str]] = None) -> None:
         print(f"Seeded database at: {db_path}")
         return
 
-    # Otherwise, start the Flask API server
+    # Otherwise, start the FastAPI server via Uvicorn
     # Ensure DB exists before creating the app (fail fast with a clear message)
     _validate_db_health()
-    app = create_app()
     debug = args.debug
-    app.run(host=args.host, port=args.port, debug=debug)
+
+    # Prefer factory import path so reload works properly without holding onto app instance
+    import uvicorn
+    uvicorn.run("backend.app:create_app", factory=True, host=args.host, port=args.port, reload=debug, log_level="debug" if debug else "info")
 
 if __name__ == "__main__":
     main(sys.argv[1:])

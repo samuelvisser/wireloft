@@ -1,8 +1,14 @@
-from flask import Blueprint
+from fastapi import APIRouter
 
-from backend.services.show import get_show_list, get_show
+from backend.services.show.service import get_show_list, get_show
+from backend.services.show.response_models import ShowItem
 
-show_api = Blueprint("show_api", __name__)
+router = APIRouter()
 
-show_api.add_url_rule("/list", view_func=get_show_list, methods=["GET"])
-show_api.add_url_rule("/<int:show_id>", view_func=get_show, methods=["GET"])
+@router.get("/list", response_model=list[ShowItem])
+def show_list():
+    return get_show_list()
+
+@router.get("/{show_id}", response_model=ShowItem)
+def show_detail(show_id: int):
+    return get_show(show_id)

@@ -1,5 +1,5 @@
 from .response_models import HealthResponse
 
 
-def health():
-    return HealthResponse(status="ok").model_dump()
+def get_health() -> list[HealthResponse]:
+    return [HealthResponse(status="ok")]
