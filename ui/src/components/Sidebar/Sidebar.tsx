@@ -1,63 +1,64 @@
-import { NavLink } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { library, IconProp } from '@fortawesome/fontawesome-svg-core'
-import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
-import { faGithub } from '@fortawesome/free-brands-svg-icons'
+import {NavLink} from 'react-router-dom'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {library, IconProp} from '@fortawesome/fontawesome-svg-core'
+import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
+import {faGithub} from '@fortawesome/free-brands-svg-icons'
 
 // Register the kit's solid icon pack so we can reference icons by [prefix, name]
 library.add(fas)
 
 const items: Array<{ path: string; label: string; icon: IconProp; end?: boolean }> = [
-  { path: '/', label: 'Home', icon: ['fas', 'house'], end: true },
-  { path: '/profiles', label: 'Media Profiles', icon: ['fas', 'clapperboard'] },
-  { path: '/settings', label: 'Settings', icon: ['fas', 'gear'] },
+    {path: '/', label: 'Home', icon: ['fas', 'house'], end: true},
+    {path: '/profiles', label: 'Media Profiles', icon: ['fas', 'clapperboard']},
+    {path: '/settings', label: 'Settings', icon: ['fas', 'gear']},
 ]
 
 export default function Sidebar() {
-  return (
-    <aside className="sidebar" aria-label="Sidebar">
-      <header className="sidebar-header">
-        <span className="brand" style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <img src="/logo-3-2.png" alt="WireLoft logo" width={230} height={125} style={{ borderRadius: 2 }} />
-        </span>
-      </header>
-      <div className="sidebar-inner">
-        <nav className="nav" aria-label="Primary">
-          {items.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.end}
-              className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
-            >
+    return (
+        <aside className="sidebar" aria-label="Sidebar">
+            <header className="sidebar-header" style={{display: 'flex', justifyContent: 'center', paddingTop: 6}}>
+                <span className="brand" style={{display: 'flex', alignItems: 'center', gap: 2}}>
+                    <img src="/logo-wide-wireloft.png" alt="WireLoft logo" width={150} style={{borderRadius: 2}} />
+                </span>
+            </header>
+
+            <div className="sidebar-inner">
+                <nav className="nav" aria-label="Primary">
+                    {items.map((item) => (
+                        <NavLink
+                            key={item.path}
+                            to={item.path}
+                            end={item.end}
+                            className={({isActive}) => 'nav-item' + (isActive ? ' active' : '')}
+                        >
               <span className="icon" aria-hidden>
                 <FontAwesomeIcon icon={item.icon} />
               </span>
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
-      </div>
-      <footer className="sidebar-footer">
-        <div className="footer-links">
-          <a
-            href="https://github.com/samuelvisser/wireloft"
-            target="_blank"
-            rel="noreferrer"
-            className="footer-link"
-          >
-            <span className="icon" aria-hidden>
-              <FontAwesomeIcon icon={faGithub} />
-            </span>
-            <span>Github</span>
-          </a>
-        </div>
-        <div className="footer-meta" style={{ textAlign: 'center' }}>
-          <span className="version" aria-label="App version" style={{ color: 'gray' }}>
-            v{(window as any).appConfig?.APP_VERSION ?? 'Unknown app version'}
-          </span>
-        </div>
-      </footer>
-    </aside>
-  )
+                            <span>{item.label}</span>
+                        </NavLink>
+                    ))}
+                </nav>
+            </div>
+            <footer className="sidebar-footer">
+                <div className="footer-links">
+                    <a
+                        href="https://github.com/samuelvisser/wireloft"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="footer-link"
+                    >
+                        <span className="icon" aria-hidden>
+                          <FontAwesomeIcon icon={faGithub} />
+                        </span>
+                        <span>Github</span>
+                    </a>
+                </div>
+                <div className="footer-meta" style={{textAlign: 'center'}}>
+                    <span className="version" aria-label="App version" style={{color: 'gray'}}>
+                    v{(window as any).appConfig?.APP_VERSION ?? 'Unknown app version'}
+                    </span>
+                </div>
+            </footer>
+        </aside>
+    )
 }
