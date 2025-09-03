@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 import importlib
 import os
+from datetime import datetime, timezone
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
@@ -71,3 +72,83 @@ def create_all() -> None:
     importlib.import_module("backend.db.models.Setting")
 
     Base.metadata.create_all(bind=get_engine())
+
+
+def seed_db() -> None:
+    """Seed database using SQLAlchemy ORM and the hardcoded data in backend.data.
+
+    Idempotent: checks for existing rows before inserting to avoid duplicates.
+    Assumes the database has already been configured via backend.db.configure.
+    It will create tables if they don't exist.
+    """
+    # Ensure tables are present
+    create_all()
+
+    # Import here to avoid circular imports at module import time
+    from backend.db.models.MediaProfile import MediaProfile
+    from backend.db.models.Show import Show
+    from backend.db.models.Episode import Episode
+    from backend.db.models.Setting import Setting
+    from backend.data import media_profiles as seed_media_profiles
+    from backend.data import shows as seed_shows
+    from backend.data import episodes as seed_episodes
+
+    session = get_session()
+    try:
+        # Media Profiles: upsert by id
+        for mp in seed_media_profiles:
+            pk = mp.get("id")
+            if pk is None:
+                continue
+            existing = session.get(MediaProfile, pk)
+            if existing is None:
+                session.add(MediaProfile(**mp))
+
+        # Shows: upsert by id
+        for s in seed_shows:
+            pk = s.get("id")
+            if pk is None:
+                continue
+            existing = session.get(Show, pk)
+            if existing is None:
+                session.add(Show(**s))
+
+        # Episodes: upsert by composite (show_id, id)
+        for e in seed_episodes:
+            sid = e.get("show_id")
+            eid = e.get("id")
+            if sid is None or eid is None:
+                continue
+            existing_ep = (
+                session.query(Episode)
+                .filter_by(show_id=str(sid), id=str(eid))
+                .one_or_none()
+            )
+            if existing_ep is None:
+                session.add(Episode(**e))
+
+        # Settings: seed some defaults if empty
+        has_settings = session.query(Setting).count() > 0
+        if not has_settings:
+            now = datetime.now(timezone.utc)
+            defaults = [
+                {"slug": "download_root", "name": "Download root path", "value": "D:\\Downloads\\DailyWire"},
+                {"slug": "concurrency", "name": "Concurrent downloads", "value": "2"},
+            ]
+            for s in defaults:
+                rec = Setting(
+                    id=s["slug"],
+                    slug=s["slug"],
+                    name=s["name"],
+                    value=s["value"],
+                    created_date=now,
+                    modified_date=now,
+                )
+                session.add(rec)
+
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()

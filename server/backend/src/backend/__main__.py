@@ -6,9 +6,9 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from backend.db import configure, create_all, get_db_path
+from backend.db import configure, create_all, get_db_path, seed_db
 from .app import create_app
-from .dblegacy import seed_db, connect_db
+from .dblegacy import connect_db
 from .config import DEFAULT_DB_PATH
 
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -38,7 +38,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         return
 
     if args.seed_db:
-        seed_db(db_path.as_posix())
+        seed_db()
         print(f"Seeded database at: {db_path}")
         return
 
