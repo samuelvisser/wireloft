@@ -213,3 +213,23 @@ for i in range(1, 8):
         "created_date": random_datetime(),
         "modified_date": random_datetime(),
     })
+
+# Hardcoded settings
+settings: List[Dict[str, Any]] = [
+    {
+        "id": "download_root",
+        "slug": "download_root",
+        "name": "Download root path",
+        "value": "D:\\Downloads\\DailyWire",
+        "created_date": _now(),
+        "modified_date": _now(),
+    },
+    {
+        "id": "concurrency",
+        "slug": "concurrency",
+        "name": "Concurrent downloads",
+        "value": "2",
+        "created_date": _now(),
+        "modified_date": _now(),
+    },
+]

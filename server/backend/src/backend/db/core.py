@@ -15,7 +15,7 @@ Base = declarative_base()
 
 # Internal state for engine and session factory
 _engine: Optional[Engine] = None
-_SessionLocal: Optional[sessionmaker] = None
+_SessionLocal: Optional[Session] = None
 _db_path: Optional[Path] = None
 
 
@@ -92,6 +92,7 @@ def seed_db() -> None:
     from backend.data import media_profiles as seed_media_profiles
     from backend.data import shows as seed_shows
     from backend.data import episodes as seed_episodes
+    from backend.data import settings as seed_settings
 
     session = get_session()
     try:
@@ -127,24 +128,14 @@ def seed_db() -> None:
             if existing_ep is None:
                 session.add(Episode(**e))
 
-        # Settings: seed some defaults if empty
-        has_settings = session.query(Setting).count() > 0
-        if not has_settings:
-            now = datetime.now(timezone.utc)
-            defaults = [
-                {"slug": "download_root", "name": "Download root path", "value": "D:\\Downloads\\DailyWire"},
-                {"slug": "concurrency", "name": "Concurrent downloads", "value": "2"},
-            ]
-            for s in defaults:
-                rec = Setting(
-                    id=s["slug"],
-                    slug=s["slug"],
-                    name=s["name"],
-                    value=s["value"],
-                    created_date=now,
-                    modified_date=now,
-                )
-                session.add(rec)
+        # Settings: upsert by id
+        for s in seed_settings:
+            pk = s.get("id")
+            if pk is None:
+                continue
+            existing = session.get(Setting, pk)
+            if existing is None:
+                session.add(Setting(**s))
 
         session.commit()
     except Exception:
