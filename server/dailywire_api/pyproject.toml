@@ -1,17 +1,19 @@
-[tool.poetry]
+[project]
 name = "dailywire-api"
 version = "0.1.0"
 description = "DailyWire API client and CLI"
-authors = ["Samuël Visser <samuvisser@gmail.com>"]
-packages = [{ include = "dailywire_api", from = "src" }]
+authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "pydantic>=2.11.7",
+]
 
-[tool.poetry.dependencies]
-python = "~3.13"
-pydantic = "^2.11.7"
-
-[tool.poetry.scripts]
+[project.scripts]
 dailywire-api = "dailywire_api.__main__:main"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

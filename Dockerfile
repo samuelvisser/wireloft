@@ -20,8 +20,8 @@ RUN git clone https://github.com/yt-dlp/yt-dlp.git && \
 # Set up working directory
 WORKDIR /app
 
-# Install Poetry
-RUN curl -sSL https://install.python-poetry.org | python3 -
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh -s -- -y
 ENV PATH="/root/.local/bin:$PATH"
 ENV PATH="/app/.venv/bin:$PATH"
 
@@ -29,8 +29,8 @@ ENV PATH="/app/.venv/bin:$PATH"
 RUN mkdir -p /downloads /config /usr/local/bin /app/cache /tmp/yt-dlp-tmp \
     && chmod a+rwX /tmp/yt-dlp-tmp /app/cache
 
-# Install the package
-COPY pyproject.toml poetry.lock poetry.toml /app/
+# Prepare workspace manifests
+COPY pyproject.toml /app/
 # Provide subpackage manifests early for dependency resolution and caching
 COPY server/backend/pyproject.toml /app/server/backend/pyproject.toml
 COPY server/dailywire_api/pyproject.toml /app/server/dailywire_api/pyproject.toml
@@ -39,13 +39,12 @@ COPY server/dailywire_downloader/pyproject.toml /app/server/dailywire_downloader
 COPY server/dailywire_downloader/src/dailywire_downloader/__init__.py /app/server/dailywire_downloader/src/dailywire_downloader/__init__.py
 COPY server/backend/src/backend/__init__.py /app/server/backend/src/backend/__init__.py
 COPY server/dailywire_api/src/dailywire_api/__init__.py /app/server/dailywire_api/src/dailywire_api/__init__.py
-RUN cd /app && \
-    poetry install
+RUN cd /app && uv venv && uv pip install -e server/dailywire_downloader -e server/dailywire_api -e server/backend
 ENV DW_CONFIG_FILE="/config/config.yml"
 ENV DW_COOKIES_FILE="/config/cookies.txt"
 ENV DW_DOWNLOAD_DIR="/downloads"
 
-# Copy remaining package files (we do this here to prevent poetry install from re-running for every change in the package)
+# Copy remaining package files (we do this here to prevent re-installation for every change in the package)
 COPY ./server/ /app/server/
 
 # Copy scripts to /usr/local/bin

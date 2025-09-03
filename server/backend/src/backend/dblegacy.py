@@ -30,7 +30,7 @@ def connect_db(db_path: Optional[str] = None, require_exists: bool = True) -> sq
     os.makedirs(os.path.dirname(path), exist_ok=True)
     if require_exists and not os.path.exists(path):
         raise FileNotFoundError(
-            f"Database not found at: {path}. Initialize it with 'poetry run backend-api --init-db' or provide --db."
+            f"Database not found at: {path}. Initialize it with 'backend-api --init-db' or provide --db."
         )
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row

@@ -17,7 +17,7 @@ DOWNLOAD_CMD="dailywire-downloader"
 env > /etc/environment
 
 # Extract 'schedule' from YAML and render the cron file
-schedule=$(cd /app && poetry run python -c '
+schedule=$(cd /app && python -c '
 import yaml, sys
 cfg = yaml.safe_load(open(sys.argv[1]))
 s = cfg.get("schedule")

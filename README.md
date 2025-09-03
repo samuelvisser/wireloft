@@ -78,8 +78,8 @@ A simple Flask backend is included and reads its data from the required SQLite d
 Run the backend (in repo root):
 
 ```
-poetry install
-poetry run backend-api
+uv sync
+backend-api
 ```
 
 This starts Flask at http://127.0.0.1:5000 with endpoints:

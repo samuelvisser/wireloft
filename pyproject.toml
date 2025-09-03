@@ -1,19 +1,6 @@
-[tool.poetry]
-name = "wireloft"
-version = "0.2.0"
-description = "A tool to download premium shows and movies from the DailyWire website"
-authors = ["Samuël Visser <samuvisser@gmail.com>"]
-package-mode = false
-
-[tool.poetry.dependencies]
-python = "~3.13"
-backend = { path = "server/backend", develop = true }
-dailywire-api = { path = "server/dailywire_api", develop = true }
-dailywire-downloader = { path = "server/dailywire_downloader", develop = true }
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.0"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.uv.workspace]
+members = [
+  "server/backend",
+  "server/dailywire_api",
+  "server/dailywire_downloader",
+]
