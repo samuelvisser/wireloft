@@ -1,5 +1,5 @@
-from .show_item import ShowItem
+from .show_item_response import ShowItemResponse
 
 __all__ = [
-    "ShowItem",
+    "ShowItemResponse",
 ]

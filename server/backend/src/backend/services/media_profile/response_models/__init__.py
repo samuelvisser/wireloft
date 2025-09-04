@@ -1,5 +1,5 @@
-from .media_profile_item import MediaProfileItem
+from .media_profile_item_response import MediaProfileItemResponse
 
 __all__ = [
-    "MediaProfileItem",
+    "MediaProfileItemResponse",
 ]

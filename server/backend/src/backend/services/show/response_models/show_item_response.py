@@ -5,11 +5,11 @@ from typing import Optional
 from pydantic import BaseModel
 
 
-class ShowItem(BaseModel):
+class ShowItemResponse(BaseModel):
     """Represents a show summary/detail item returned by the API."""
 
     id: int
     slug: str
     title: str
-    author: str
+    author_name: str
     years: Optional[str] = None

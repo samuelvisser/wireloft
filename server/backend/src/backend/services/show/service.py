@@ -2,43 +2,28 @@ from fastapi import HTTPException
 
 from backend.app import db_session
 from backend.db.models import Show
-from .response_models import ShowItem
+from .response_models import ShowItemResponse
 
 
-def get_show_list() -> list[ShowItem]:
+def get_show_list() -> list[ShowItemResponse]:
     with db_session() as s:
         shows = (
             s.query(Show)
             .order_by(Show.id)
             .all()
         )
-
         payload = [
-            ShowItem(
-                id=sh.id,
-                slug=sh.slug,
-                title=sh.title,
-                author=sh.author_name,
-                years="unknown",
-            )
+            ShowItemResponse.model_validate(sh, from_attributes=True)
             for sh in shows
         ]
         return payload
 
 
-def get_show(show_id: int) -> ShowItem:
+def get_show(show_slug: str) -> ShowItemResponse:
     with db_session() as s:
-        show = s.query(Show).filter_by(id=show_id).one_or_none()
+        show = s.query(Show).filter_by(slug=show_slug).one_or_none()
         if show is None:
             raise HTTPException(status_code=404, detail="Show not found")
-        desc = show.description
-        prefix = "Years: "
-        years = desc[len(prefix):] if (isinstance(desc, str) and desc.startswith(prefix)) else desc
-        payload = ShowItem(
-            id=show.id,
-            slug=show.slug,
-            title=show.title,
-            author=show.author_name,
-            years=years,
-        )
+
+        payload = ShowItemResponse.model_validate(show, from_attributes=True)
         return payload

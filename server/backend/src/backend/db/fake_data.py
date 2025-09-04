@@ -68,7 +68,7 @@ media_profiles: List[Dict[str, Any]] = [
 # Hardcoded shows (no embedded episodes)
 shows: List[Dict[str, Any]] = [
     {
-        "id": "1",
+        "id": 1,
         "uuid": "uuid-1",
         "dw_id": "dw-1",
         "slug": "the-ben-shapiro-show",
@@ -96,7 +96,7 @@ shows: List[Dict[str, Any]] = [
         "modified_date": _now(),
     },
     {
-        "id": "2",
+        "id": 2,
         "uuid": "uuid-2",
         "dw_id": "dw-2",
         "slug": "the-matt-walsh-show",
@@ -124,7 +124,7 @@ shows: List[Dict[str, Any]] = [
         "modified_date": _now(),
     },
     {
-        "id": "3",
+        "id": 3,
         "uuid": "uuid-3",
         "dw_id": "dw-3",
         "slug": "ben-after-dark",
@@ -160,8 +160,9 @@ episodes: List[Dict[str, Any]] = []
 # The Ben Shapiro Show: 30 episodes, starting with "downloaded"
 for i in range(1, 31):
     episodes.append({
-        "id": str(i),
-        "show_id": "1",
+        "id": i,
+        "index": i,
+        "show_id": 1,
         "uuid": f"uuid-1-{i}",
         "dw_id": f"dw-1-{i}",
         "slug": f"the-ben-shapiro-show-{i}",
@@ -179,8 +180,9 @@ for i in range(1, 31):
 # The Matt Walsh Show: 20 episodes, starting with "processing"
 for i in range(1, 21):
     episodes.append({
-        "id": str(i),
-        "show_id": "2",
+        "id": i,
+        "index": i,
+        "show_id": 2,
         "uuid": f"uuid-2-{i}",
         "dw_id": f"dw-2-{i}",
         "slug": f"the-matt-walsh-show-{i}",
@@ -198,8 +200,9 @@ for i in range(1, 21):
 # Ben After Dark: 7 episodes, starting with "processing"
 for i in range(1, 8):
     episodes.append({
-        "id": str(i),
-        "show_id": "3",
+        "id": i,
+        "index": i,
+        "show_id": 3,
         "uuid": f"uuid-3-{i}",
         "dw_id": f"dw-3-{i}",
         "slug": f"ben-after-dark-{i}",
@@ -217,7 +220,7 @@ for i in range(1, 8):
 # Hardcoded settings
 settings: List[Dict[str, Any]] = [
     {
-        "id": "download_root",
+        "id": 1,
         "slug": "download_root",
         "name": "Download root path",
         "value": "D:\\Downloads\\DailyWire",
@@ -225,7 +228,7 @@ settings: List[Dict[str, Any]] = [
         "modified_date": _now(),
     },
     {
-        "id": "concurrency",
+        "id": 2,
         "slug": "concurrency",
         "name": "Concurrent downloads",
         "value": "2",

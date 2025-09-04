@@ -1,5 +1,5 @@
-from .setting_item import SettingItem
+from .setting_item_response import SettingItemResponse
 
 __all__ = [
-    "SettingItem",
+    "SettingItemResponse",
 ]

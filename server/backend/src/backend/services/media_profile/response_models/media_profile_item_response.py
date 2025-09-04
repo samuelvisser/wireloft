@@ -5,7 +5,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 
-class MediaProfileItem(BaseModel):
+class MediaProfileItemResponse(BaseModel):
     """Represents a media profile item returned by the API."""
 
     id: str

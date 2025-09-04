@@ -5,11 +5,12 @@ import os
 import sys
 from pathlib import Path
 from typing import Optional
+import uvicorn
 
-from backend.db import configure, create_all, get_db_path, seed_db, get_engine
+from backend.db import configure_db, create_tables, get_db_path, seed_db, get_engine
 from sqlalchemy import text
-from .app import create_app
-from .config import DEFAULT_DB_PATH
+from .config import DEFAULT_DB_PATH, PACKAGE_ROOT, PROJECT_ROOT
+
 
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="backend-api", description="WireLoft backend API and DB utilities")
@@ -56,28 +57,34 @@ def _validate_db_health() -> None:
 
 def main(argv: Optional[list[str]] = None) -> None:
     args = _parse_args(argv)
-    db_path = _get_db_path(args)
-    configure(db_path)
+    os.environ["WIRELOFT_DB_PATH"] = str(_get_db_path(args))
+
+    print("Starting Wireloft backend...")
+    configure_db()
 
     # Manual CLI utilities: only run when flags are provided
     if args.init_db:
-        create_all()
-        print(f"Initialized database at: {db_path}")
+        create_tables()
+        print(f"Initialized database at: {os.environ.get("WIRELOFT_DB_PATH")}")
         return
 
     if args.seed_db:
         seed_db()
-        print(f"Seeded database at: {db_path}")
+        print(f"Seeded database at: {os.environ.get("WIRELOFT_DB_PATH")}")
         return
 
     # Otherwise, start the FastAPI server via Uvicorn
-    # Ensure DB exists before creating the app (fail fast with a clear message)
     _validate_db_health()
     debug = args.debug
-
-    # Prefer factory import path so reload works properly without holding onto app instance
-    import uvicorn
-    uvicorn.run("backend.app:create_app", factory=True, host=args.host, port=args.port, reload=debug, log_level="debug" if debug else "info")
+    uvicorn.run(
+        "backend.app:create_app",
+        factory=True,
+        host=args.host,
+        port=args.port,
+        reload=debug,
+        reload_dirs=[PACKAGE_ROOT.as_posix()],
+        log_level="debug" if debug else "info"
+    )
 
 if __name__ == "__main__":
     main(sys.argv[1:])

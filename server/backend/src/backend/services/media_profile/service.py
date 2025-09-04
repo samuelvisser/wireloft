@@ -1,9 +1,9 @@
 from backend.app import db_session
 from backend.db.models import MediaProfile
-from .response_models import MediaProfileItem
+from .response_models import MediaProfileItemResponse
 
 
-def get_media_profiles_list() -> list[MediaProfileItem]:
+def get_media_profiles_list() -> list[MediaProfileItemResponse]:
     with db_session() as s:
         profiles = (
             s.query(MediaProfile)
@@ -11,7 +11,7 @@ def get_media_profiles_list() -> list[MediaProfileItem]:
             .all()
         )
         payload = [
-            MediaProfileItem(
+            MediaProfileItemResponse(
                 id=str(mp.id),
                 name=mp.name,
                 output_template=mp.output_template,

@@ -1,5 +1,5 @@
-from .episode_item import EpisodeItem
+from .episode_item_response import EpisodeItemResponse
 
 __all__ = [
-    "EpisodeItem",
+    "EpisodeItemResponse",
 ]

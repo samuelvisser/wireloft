@@ -19,14 +19,17 @@ _SessionLocal: Optional[Session] = None
 _db_path: Optional[Path] = None
 
 
-def configure(db_path: Path | str) -> None:
+def configure_db() -> None:
     """
     Configure the global SQLAlchemy engine and Session factory.
     Safe to call multiple times; will recreate engine/session if path changes.
     """
     global _engine, _SessionLocal, _db_path
 
-    path = Path(db_path)
+    if os.environ.get("WIRELOFT_DB_PATH", "").strip() == "":
+        raise ValueError("WIRELOFT_DB_PATH environment variable is not set.")
+
+    path = Path(os.environ.get("WIRELOFT_DB_PATH"))
     if _db_path is not None and path.resolve() == _db_path.resolve():
         # Already configured to this path, nothing to do
         return
@@ -45,23 +48,23 @@ def configure(db_path: Path | str) -> None:
 
 def get_engine() -> Engine:
     if _engine is None:
-        raise RuntimeError("Database not configured. Call backend.db.configure(db_path) first.")
+        configure_db()
     return _engine
 
 
 def get_session() -> Session:
     if _SessionLocal is None:
-        raise RuntimeError("Database not configured. Call backend.db.configure(db_path) first.")
+        configure_db()
     return _SessionLocal()
 
 
 def get_db_path() -> Path:
     if _db_path is None:
-        raise RuntimeError("Database not configured. Call backend.db.configure(db_path) first.")
+        configure_db()
     return _db_path
 
 
-def create_all() -> None:
+def create_tables() -> None:
     """
     Import model modules so they are registered with Base, then create tables.
     """
@@ -82,17 +85,17 @@ def seed_db() -> None:
     It will create tables if they don't exist.
     """
     # Ensure tables are present
-    create_all()
+    create_tables()
 
     # Import here to avoid circular imports at module import time
     from backend.db.models.MediaProfile import MediaProfile
     from backend.db.models.Show import Show
     from backend.db.models.Episode import Episode
     from backend.db.models.Setting import Setting
-    from backend.data import media_profiles as seed_media_profiles
-    from backend.data import shows as seed_shows
-    from backend.data import episodes as seed_episodes
-    from backend.data import settings as seed_settings
+    from backend.db.fake_data import media_profiles as seed_media_profiles
+    from backend.db.fake_data import shows as seed_shows
+    from backend.db.fake_data import episodes as seed_episodes
+    from backend.db.fake_data import settings as seed_settings
 
     session = get_session()
     try:

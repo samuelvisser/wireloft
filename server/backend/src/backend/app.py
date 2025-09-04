@@ -32,7 +32,7 @@ def create_app() -> FastAPI:
     from backend.api import show_router, episode_router, setting_router, media_profile_router, meta_router
 
     app.include_router(show_router, prefix="/api/show")
-    app.include_router(episode_router, prefix="/api/show/{show_id}/episode")
+    app.include_router(episode_router, prefix="/api/show/{show_slug}/episode")
     app.include_router(setting_router, prefix="/api/setting")
     app.include_router(media_profile_router, prefix="/api/media-profile")
     app.include_router(meta_router, prefix="/api/meta")

@@ -9,10 +9,11 @@ class Episode(Base):
     __tablename__ = "episodes"
 
     # Fields
-    id: Mapped[str] = mapped_column(primary_key=True)
-    show_id: Mapped[str] = mapped_column(ForeignKey("shows.id"), primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"), primary_key=True)
     uuid: Mapped[str] = mapped_column(index=True)
     dw_id: Mapped[str] = mapped_column(index=True)
+    index: Mapped[int] = mapped_column(index=True)
     slug: Mapped[str] = mapped_column(index=True)
     title: Mapped[str]
     description: Mapped[Optional[str]]

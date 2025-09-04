@@ -7,7 +7,7 @@ from backend.db import Base
 class Setting(Base):
     __tablename__ = "settings"
 
-    id: Mapped[str] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     slug: Mapped[str] = mapped_column(index=True)
     name: Mapped[str]
     value: Mapped[Optional[str]]

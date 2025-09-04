@@ -8,7 +8,7 @@ class MediaProfile(Base):
     __tablename__ = "media_profiles"
 
     # Columns
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str]
     output_template: Mapped[str]
     preferred_format: Mapped[str]
