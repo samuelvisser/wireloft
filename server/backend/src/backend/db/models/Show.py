@@ -11,9 +11,9 @@ class Show(Base):
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     media_profile_id: Mapped[int] = mapped_column(ForeignKey("media_profiles.id"))
-    uuid: Mapped[str] = mapped_column(index=True)
-    dw_id: Mapped[str] = mapped_column(index=True)
-    slug: Mapped[str] = mapped_column(index=True)
+    uuid: Mapped[str] = mapped_column(index=True, unique=True)
+    dw_id: Mapped[str] = mapped_column(index=True, unique=True)
+    slug: Mapped[str] = mapped_column(index=True, unique=True)
     title: Mapped[str]
     description: Mapped[Optional[str]] = mapped_column(String(10000))
     url: Mapped[str] = mapped_column(String(510))

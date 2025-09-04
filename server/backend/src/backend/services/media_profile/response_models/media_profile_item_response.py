@@ -9,6 +9,7 @@ class MediaProfileItemResponse(BaseModel):
     """Represents a media profile item returned by the API."""
 
     id: str
+    slug: str
     name: str
     output_template: Optional[str] = None
     preferred_format: Optional[str] = None

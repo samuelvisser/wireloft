@@ -5,10 +5,25 @@ from backend.services.show.response_models import ShowItemResponse
 
 router = APIRouter()
 
-@router.get("/list", response_model=list[ShowItemResponse])
+@router.get("", response_model=list[ShowItemResponse])
 def show_list():
     return get_show_list()
+
+@router.post("", response_model=ShowItemResponse)
+def show_create():
+    # Create a show
+    ...
 
 @router.get("/{show_slug}", response_model=ShowItemResponse)
 def show_detail(show_slug: str):
     return get_show(show_slug)
+
+@router.patch("/{show_slug}", response_model=ShowItemResponse)
+def show_update(show_slug: str):
+    # Update the show
+    ...
+
+@router.delete("/{show_slug}", response_model=ShowItemResponse)
+def show_delete(show_slug: str):
+    # Delete the show
+    ...

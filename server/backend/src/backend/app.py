@@ -31,10 +31,10 @@ def create_app() -> FastAPI:
     # Import routers lazily to avoid circular imports during app module import
     from backend.api import show_router, episode_router, setting_router, media_profile_router, meta_router
 
-    app.include_router(show_router, prefix="/api/show")
-    app.include_router(episode_router, prefix="/api/show/{show_slug}/episode")
-    app.include_router(setting_router, prefix="/api/setting")
-    app.include_router(media_profile_router, prefix="/api/media-profile")
+    app.include_router(show_router, prefix="/api/shows")
+    app.include_router(episode_router, prefix="/api/shows/{show_slug}/episodes")
+    app.include_router(setting_router, prefix="/api/settings")
+    app.include_router(media_profile_router, prefix="/api/media-profiles")
     app.include_router(meta_router, prefix="/api/meta")
 
     return app

@@ -11,10 +11,10 @@ class Episode(Base):
     # Fields
     id: Mapped[int] = mapped_column(primary_key=True)
     show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"), primary_key=True)
-    uuid: Mapped[str] = mapped_column(index=True)
-    dw_id: Mapped[str] = mapped_column(index=True)
+    uuid: Mapped[str] = mapped_column(index=True, unique=True)
+    dw_id: Mapped[str] = mapped_column(index=True, unique=True)
     index: Mapped[int] = mapped_column(index=True)
-    slug: Mapped[str] = mapped_column(index=True)
+    slug: Mapped[str] = mapped_column(index=True, unique=True)
     title: Mapped[str]
     description: Mapped[Optional[str]]
     status: Mapped[str]

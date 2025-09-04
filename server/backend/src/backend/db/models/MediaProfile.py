@@ -9,6 +9,7 @@ class MediaProfile(Base):
 
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    slug: Mapped[str] = mapped_column(index=True, unique=True)
     name: Mapped[str]
     output_template: Mapped[str]
     preferred_format: Mapped[str]
