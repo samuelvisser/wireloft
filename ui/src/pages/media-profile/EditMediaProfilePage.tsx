@@ -1,24 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import MediaProfileForm, { MediaProfileFormValue } from '../../components/MediaProfileForm'
+import { useQueryClient } from '@tanstack/react-query'
 
-// Minimal local fallback data to support direct URL access without backend
-const fallbackProfiles = [
-  {
-    id: 'p1',
-    name: 'Default 1080p',
-    outputPathTemplate: 'D:/Media/Shows/{show}/{season}',
-    preferredFormat: '1080p' as const,
-    downloadSeriesImages: true,
-  },
-  {
-    id: 'p2',
-    name: 'Mobile 720p',
-    outputPathTemplate: 'E:/Mobile/Shows/{show}',
-    preferredFormat: '720p' as const,
-    downloadSeriesImages: false,
-  },
-]
+const API_BASE = 'http://localhost:5000/api'
 
 type RouteParams = {
   id?: string
@@ -28,6 +13,7 @@ export default function EditMediaProfilePage() {
   const navigate = useNavigate()
   const { id } = useParams<RouteParams>()
   const location = useLocation() as { state?: any }
+  const qc = useQueryClient()
 
   const initialFromState = location.state as (MediaProfileFormValue & { id?: string }) | undefined
 
@@ -37,14 +23,8 @@ export default function EditMediaProfilePage() {
       const { name, outputPathTemplate, preferredFormat, downloadSeriesImages } = initialFromState
       return { name, outputPathTemplate, preferredFormat, downloadSeriesImages }
     }
-    // Fallback: simple lookup from local array by id
-    const found = fallbackProfiles.find((p) => p.id === id)
-    if (found) {
-      const { name, outputPathTemplate, preferredFormat, downloadSeriesImages } = found
-      return { name, outputPathTemplate, preferredFormat, downloadSeriesImages }
-    }
     return undefined
-  }, [id, initialFromState])
+  }, [initialFromState])
 
   const [value, setValue] = useState<MediaProfileFormValue | undefined>(resolvedInitial)
 
@@ -58,12 +38,22 @@ export default function EditMediaProfilePage() {
   }, [value])
 
   const onCancel = useCallback(() => navigate('/profiles'), [navigate])
-  const onSave = useCallback(() => {
-    if (!value || !valid) return
-    // Placeholder save: show what would be saved and go back
-    alert('Save media profile changes:\n' + JSON.stringify({ id, ...value }, null, 2))
+  const onSave = useCallback(async () => {
+    if (!value || !valid || !id) return
+    const r = await fetch(`${API_BASE}/media-profiles/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(value),
+    })
+    if (!r.ok) {
+      const msg = `Failed to save media profile (HTTP ${r.status})`
+      console.error(msg)
+      alert(msg)
+      return
+    }
+    await qc.invalidateQueries({ queryKey: ['mediaProfiles'] })
     navigate('/profiles')
-  }, [id, navigate, valid, value])
+  }, [id, navigate, qc, valid, value])
 
   if (!value) {
     return (

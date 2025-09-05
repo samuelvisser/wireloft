@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import MediaProfileForm, { MediaProfileFormValue } from '../../components/MediaProfileForm'
 import ShowForm, { ShowFormValue, defaultShowFormValue } from '../../components/ShowForm'
+import { useQueryClient } from '@tanstack/react-query'
+
+const API_BASE = 'http://localhost:5000/api'
 
 export type AddShowPageProps = {
   onCancel: () => void
@@ -15,9 +18,10 @@ type ValidationResult = {
 }
 
 type MediaProfile = {
-  id: string
+  id: number
+  slug: string
   name: string
-  outputPathTemplate: string
+  outputTemplate: string
   preferredFormat: '4k' | '1080p' | '720p' | 'Audio Only'
   downloadSeriesImages: boolean
 }
@@ -151,6 +155,7 @@ function validateShowUrl(input: string): ValidationResult {
 }
 
 export default function AddShowPage({ onCancel }: AddShowPageProps) {
+  const qc = useQueryClient()
   // Wizard step: 1 = URL, 2 = Media Profile, 3 = Show
   const [step, setStep] = useState<1 | 2 | 3>(() => loadWizardState()?.step ?? 1)
 
@@ -166,7 +171,7 @@ export default function AddShowPage({ onCancel }: AddShowPageProps) {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch('http://localhost:5000/api/media-profiles', { signal: controller.signal })
+    fetch(`${API_BASE}/media-profiles`, { signal: controller.signal })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const data = await r.json()
@@ -208,16 +213,51 @@ export default function AddShowPage({ onCancel }: AddShowPageProps) {
     onCancel()
   }
 
-  function handleFinish() {
-    // Always use the current form values (which may be based on a selected profile and edited)
-    const profile = newProfile
-
-    const summary = {
-      url: result.normalized ?? rawUrl,
-      profile,
-      show: showForm,
+  async function handleFinish() {
+    // Ensure we have a media profile slug: use selected or create new
+    let mediaProfileSlug = selectedProfileId
+    if (!mediaProfileSlug) {
+      const r = await fetch(`${API_BASE}/media-profiles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newProfile),
+      })
+      if (!r.ok) {
+        const msg = `Failed to create media profile (HTTP ${r.status})`
+        console.error(msg)
+        alert(msg)
+        return
+      }
+      const created = await r.json()
+      mediaProfileSlug = created.slug
+      await qc.invalidateQueries({ queryKey: ['mediaProfiles'] })
     }
-    alert('Add show request:\n' + JSON.stringify(summary, null, 2))
+
+    const payload = {
+      url: result.normalized ?? rawUrl,
+      mediaProfileSlug,
+      name: showForm.name,
+      author: showForm.author,
+      downloadMedia: showForm.downloadMedia,
+      downloadDelayMinutes: showForm.downloadDelayMinutes,
+      redownloadAfterMinutes: showForm.redownloadAfterMinutes,
+      downloadDays: showForm.downloadDays,
+      deleteOlder: showForm.deleteOlder,
+      titleFilter: showForm.titleFilter,
+    }
+
+    const rs = await fetch(`${API_BASE}/shows`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!rs.ok) {
+      const msg = `Failed to create show (HTTP ${rs.status})`
+      console.error(msg)
+      alert(msg)
+      return
+    }
+    await qc.invalidateQueries({ queryKey: ['shows'] })
     clearWizardState()
     onCancel()
   }
@@ -290,10 +330,10 @@ export default function AddShowPage({ onCancel }: AddShowPageProps) {
                 <div role="listitem" className="card">{profilesError ?? 'No profiles found'}</div>
               ) : (
                 profiles.map((p) => {
-                  const selected = selectedProfileId === p.id
+                  const selected = selectedProfileId === p.slug
                   return (
                     <button
-                      key={p.id}
+                      key={p.slug}
                       type="button"
                       role="listitem"
                       className={selected ? 'card selected' : 'card'}
@@ -310,10 +350,10 @@ export default function AddShowPage({ onCancel }: AddShowPageProps) {
                             // Save current form before replacing it with the selected profile
                             setNewProfileState(newProfile)
                           }
-                          setSelectedProfileId(p.id)
+                          setSelectedProfileId(p.slug)
                           setNewProfile({
                             name: p.name,
-                            outputPathTemplate: p.outputPathTemplate,
+                            outputPathTemplate: p.outputTemplate,
                             preferredFormat: p.preferredFormat,
                             downloadSeriesImages: p.downloadSeriesImages,
                           })
@@ -321,7 +361,7 @@ export default function AddShowPage({ onCancel }: AddShowPageProps) {
                       }}
                     >
                       <div className="card-title">{p.name}</div>
-                      <div className="card-sub">{p.outputPathTemplate}</div>
+                      <div className="card-sub">{p.outputTemplate}</div>
                       <div className="card-meta">
                         <span>{p.preferredFormat}</span>
                         <span>• {p.downloadSeriesImages ? 'Series images ✓' : 'Series images ✕'}</span>

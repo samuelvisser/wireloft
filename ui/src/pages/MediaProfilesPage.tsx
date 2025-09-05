@@ -3,17 +3,22 @@ import { useNavigate } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import type { IconProp } from '@fortawesome/fontawesome-svg-core'
 import { useMediaProfiles } from '../lib/queries'
+import { useQueryClient } from '@tanstack/react-query'
+
+const API_BASE = 'http://localhost:5000/api'
 
 export default function MediaProfilesPage() {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const onAdd = useCallback(() => navigate('/add-media-profile'), [navigate])
   const editIcon: IconProp = ['fas', 'pen-to-square']
   const deleteIcon: IconProp = ['fas', 'trash']
 
   type MediaProfileItem = {
-    id: string
+    id: number
+    slug: string
     name: string
-    outputPathTemplate: string
+    outputTemplate: string
     preferredFormat: '4k' | '1080p' | '720p' | 'Audio Only'
     downloadSeriesImages: boolean
   }
@@ -21,9 +26,16 @@ export default function MediaProfilesPage() {
   const [confirmProfile, setConfirmProfile] = useState<MediaProfileItem | null>(null)
   const openConfirm = (p: MediaProfileItem) => setConfirmProfile(p)
   const closeConfirm = () => setConfirmProfile(null)
-  const onConfirmDelete = () => {
+  const onConfirmDelete = async () => {
     if (!confirmProfile) return
-    alert(`Delete media profile:\n${confirmProfile.name} (${confirmProfile.id})`)
+    const r = await fetch(`${API_BASE}/media-profiles/${confirmProfile.slug}`, { method: 'DELETE' })
+    if (!r.ok) {
+      const msg = `Failed to delete media profile (HTTP ${r.status})`
+      console.error(msg)
+      alert(msg)
+      return
+    }
+    await qc.invalidateQueries({ queryKey: ['mediaProfiles'] })
     setConfirmProfile(null)
   }
 
@@ -60,16 +72,16 @@ export default function MediaProfilesPage() {
                     aria-label={p.name}
                     tabIndex={0}
                     style={{ cursor: 'pointer' }}
-                    onClick={() => navigate(`/edit-media-profile/${p.id}`, { state: p })}
+                    onClick={() => navigate(`/edit-media-profile/${p.slug}`, { state: { ...p, outputPathTemplate: p.outputTemplate } })}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
-                        navigate(`/edit-media-profile/${p.id}`, { state: p })
+                        navigate(`/edit-media-profile/${p.slug}`, { state: { ...p, outputPathTemplate: p.outputTemplate } })
                       }
                     }}
                   >
                     <td data-label="Name">{p.name}</td>
-                    <td data-label="Output Path Template" className="mono truncate">{p.outputPathTemplate}</td>
+                    <td data-label="Output Path Template" className="mono truncate">{p.outputTemplate}</td>
                     <td data-label="Preferred Format">{p.preferredFormat}</td>
                     <td data-label="Series Images">{p.downloadSeriesImages ? '✓' : '✕'}</td>
                     <td data-label="Actions" style={{ textAlign: 'right' }}>
@@ -79,7 +91,7 @@ export default function MediaProfilesPage() {
                           className="icon-btn"
                           aria-label={`Edit ${p.name}`}
                           title="Edit"
-                          onClick={(e) => { e.stopPropagation(); navigate(`/edit-media-profile/${p.id}`, { state: p }) }}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/edit-media-profile/${p.slug}`, { state: { ...p, outputPathTemplate: p.outputTemplate } }) }}
                         >
                           <FontAwesomeIcon icon={editIcon} />
                         </button>

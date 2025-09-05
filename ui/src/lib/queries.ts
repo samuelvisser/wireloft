@@ -45,7 +45,7 @@ export function useShow(id?: string) {
     initialData: () => {
       if (!id) return undefined
       const shows = qc.getQueryData<any[]>(['shows'])
-      return shows?.find((s) => s.id === id)
+      return shows?.find((s) => s.slug === id)
     },
     initialDataUpdatedAt: () => qc.getQueryState(['shows'])?.dataUpdatedAt,
   })

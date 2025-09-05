@@ -46,6 +46,7 @@ def _slugify(text: str | None) -> str:
 media_profiles: List[Dict[str, Any]] = [
     {
         "id": 1,
+        "slug": "default-1080p",
         "name": "Default 1080p",
         "output_template": "D:/Media/Shows/{show}/{season}",
         "preferred_format": "1080p",
@@ -55,6 +56,7 @@ media_profiles: List[Dict[str, Any]] = [
     },
     {
         "id": 2,
+        "slug": "mobile-720p",
         "name": "Mobile 720p backend",
         "output_template": "E:/Mobile/Shows/{show}",
         "preferred_format": "720p",

@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import ShowForm, { ShowFormValue, defaultShowFormValue } from '../../components/ShowForm'
+import { useQueryClient } from '@tanstack/react-query'
+
+const API_BASE = 'http://localhost:5000/api'
 
 type RouteParams = { id?: string }
 
@@ -24,6 +27,7 @@ function defaultShowData(id?: string): { url: string; name: string; author: stri
 export default function EditShowPage() {
   const { id } = useParams<RouteParams>()
   const navigate = useNavigate()
+  const qc = useQueryClient()
 
   const [form, setForm] = useState<FormState>(() => {
     const base = defaultShowData(id)
@@ -42,11 +46,11 @@ export default function EditShowPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch('http://localhost:5000/api/media-profiles', { signal: controller.signal })
+    fetch(`${API_BASE}/media-profiles`, { signal: controller.signal })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const data = await r.json()
-        const items = (data as any[]).map((p) => ({ id: p.id, name: p.name }))
+        const items = (data as any[]).map((p) => ({ id: p.slug, name: p.name }))
         setProfiles(items)
         // Ensure selected value is valid
         setForm((prev) => {
@@ -67,9 +71,32 @@ export default function EditShowPage() {
   }, [])
 
   const onCancel = () => navigate(`/show/${id ?? ''}`)
-  const onSave = () => {
-    // Placeholder save behavior
-    alert('Save show changes:\n' + JSON.stringify({ id, ...form }, null, 2))
+  const onSave = async () => {
+    if (!id) return
+    const payload = {
+      url: form.url,
+      mediaProfileSlug: form.mediaProfileId,
+      name: form.name,
+      author: form.author,
+      downloadMedia: form.downloadMedia,
+      downloadDelayMinutes: form.downloadDelayMinutes,
+      redownloadAfterMinutes: form.redownloadAfterMinutes,
+      downloadDays: form.downloadDays,
+      deleteOlder: form.deleteOlder,
+      titleFilter: form.titleFilter,
+    }
+    const r = await fetch(`${API_BASE}/shows/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!r.ok) {
+      const msg = `Failed to save show (HTTP ${r.status})`
+      console.error(msg)
+      alert(msg)
+      return
+    }
+    await qc.invalidateQueries({ queryKey: ['shows'] })
     navigate(`/show/${id ?? ''}`)
   }
 
