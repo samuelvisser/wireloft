@@ -13,7 +13,7 @@ The project uses a specific [pull request](https://github.com/yt-dlp/yt-dlp/pull
 
 Currently, this project is made only to download episodes from DailyWire podcasts and is therefore only really useful
 for people who have a DailyWire premium subscription, as downloading free versions of the episodes is already straightforward with
-any RSS app. Where this project shines is in the ability to download premium versions of the shows and consume those in your RSS app.<br><br>
+any RSS app. Where this project shines is in the ability to download premium versions of the shows and consume those in your RSS app.
 
 I am planning to add support for downloading other shows and movies as well. 
 Anything that is free on DailyWire is downloadable using this project even without a subscription, so in the future this project
