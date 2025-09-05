@@ -11,11 +11,18 @@ The project uses a specific [pull request](https://github.com/yt-dlp/yt-dlp/pull
 
 ## Features
 
-- Downloads premium DailyWire shows using your account credentials (via cookies)
+Currently, this project is made only to download episodes from DailyWire podcasts and is therefore only really useful
+for people who have a DailyWire premium subscription, as downloading free versions of the episodes is already straightforward with
+any RSS app. Where this project shines is in the ability to download premium versions of the shows and consume those in your RSS app.<br><br>
+
+I am planning to add support for downloading other shows and movies as well. 
+Anything that is free on DailyWire is downloadable using this project even without a subscription, so in the future this project
+will also be useful for users without a DailyWire subscription.
+
+- Fully-featured web UI for navigation and configuration
+- Downloads premium DailyWire shows using your account credentials
 - Supports audio-only mode for podcast-like experience
 - Downloads video thumbnails and sets them as cover art
-- Can extract video descriptions and save them as .nfo files for Media Servers
-- Ensures filenames only use ASCII characters for maximum compatibility
 - Configurable download schedule via cron
 
 ## Building your own Docker image
