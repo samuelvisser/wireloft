@@ -3,8 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import ShowForm, { ShowFormValue, defaultShowFormValue } from '../../components/ShowForm'
 import { useQueryClient } from '@tanstack/react-query'
 
-const API_BASE = 'http://localhost:5000/api'
-
 type RouteParams = { id?: string }
 
 type FormState = ShowFormValue & {
@@ -46,7 +44,7 @@ export default function EditShowPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${API_BASE}/media-profiles`, { signal: controller.signal })
+    fetch(`${(window as any).appConfig.API_URL}/media-profiles`, { signal: controller.signal })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const data = await r.json()
@@ -85,7 +83,7 @@ export default function EditShowPage() {
       deleteOlder: form.deleteOlder,
       titleFilter: form.titleFilter,
     }
-    const r = await fetch(`${API_BASE}/shows/${id}`, {
+    const r = await fetch(`${(window as any).appConfig.API_URL}/shows/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

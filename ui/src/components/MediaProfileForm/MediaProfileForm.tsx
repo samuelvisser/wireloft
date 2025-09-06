@@ -10,9 +10,11 @@ type Props = {
   value: MediaProfileFormValue
   onChange: (value: MediaProfileFormValue) => void
   autoFocusName?: boolean
+  nameError?: string | null
+  onNameBlur?: () => void
 }
 
-export default function MediaProfileForm({ value, onChange, autoFocusName }: Props) {
+export default function MediaProfileForm({ value, onChange, autoFocusName, nameError, onNameBlur }: Props) {
   return (
     <>
       <div className="form-row">
@@ -25,7 +27,15 @@ export default function MediaProfileForm({ value, onChange, autoFocusName }: Pro
           value={value.name}
           autoFocus={autoFocusName}
           onChange={(e) => onChange({ ...value, name: e.target.value })}
+          onBlur={onNameBlur}
+          aria-invalid={!!nameError}
+          aria-describedby={nameError ? 'mp-name-error' : undefined}
         />
+        {nameError && (
+          <div id="mp-name-error" className="help" role="alert" aria-live="polite">
+            {nameError}
+          </div>
+        )}
       </div>
       <div className="form-row">
         <label htmlFor="mp-path">Output path template</label>

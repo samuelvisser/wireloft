@@ -3,8 +3,6 @@ import MediaProfileForm, { MediaProfileFormValue } from '../../components/MediaP
 import ShowForm, { ShowFormValue, defaultShowFormValue } from '../../components/ShowForm'
 import { useQueryClient } from '@tanstack/react-query'
 
-const API_BASE = 'http://localhost:5000/api'
-
 export type AddShowPageProps = {
   onCancel: () => void
 }
@@ -171,7 +169,7 @@ export default function AddShowPage({ onCancel }: AddShowPageProps) {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${API_BASE}/media-profiles`, { signal: controller.signal })
+    fetch(`${(window as any).appConfig.API_URL}/media-profiles`, { signal: controller.signal })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const data = await r.json()
@@ -217,7 +215,7 @@ export default function AddShowPage({ onCancel }: AddShowPageProps) {
     // Ensure we have a media profile slug: use selected or create new
     let mediaProfileSlug = selectedProfileId
     if (!mediaProfileSlug) {
-      const r = await fetch(`${API_BASE}/media-profiles`, {
+      const r = await fetch(`${(window as any).appConfig.API_URL}/media-profiles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newProfile),
@@ -246,7 +244,7 @@ export default function AddShowPage({ onCancel }: AddShowPageProps) {
       titleFilter: showForm.titleFilter,
     }
 
-    const rs = await fetch(`${API_BASE}/shows`, {
+    const rs = await fetch(`${(window as any).appConfig.API_URL}/shows`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

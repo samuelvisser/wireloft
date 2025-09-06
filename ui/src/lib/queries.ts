@@ -2,8 +2,6 @@ import { keepPreviousData, useQuery, useQueryClient, QueryClient } from '@tansta
 import { useEffect } from 'react'
 import { saveProfilesToStorage, saveShowsToStorage } from './cache'
 
-const API_BASE = 'http://localhost:5000/api'
-
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
   const r = await fetch(url, { signal })
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -13,7 +11,7 @@ async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
 export function useMediaProfiles() {
   const result = useQuery<any[], Error, any[], readonly ['mediaProfiles']>({
     queryKey: ['mediaProfiles'] as const,
-    queryFn: ({ signal }) => fetchJSON<any[]>(`${API_BASE}/media-profiles`, signal),
+    queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/media-profiles`, signal),
     placeholderData: keepPreviousData,
   })
   useEffect(() => {
@@ -25,7 +23,7 @@ export function useMediaProfiles() {
 export function useShows() {
   const result = useQuery<any[], Error, any[], readonly ['shows']>({
     queryKey: ['shows'] as const,
-    queryFn: ({ signal }) => fetchJSON<any[]>(`${API_BASE}/shows`, signal),
+    queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/shows`, signal),
     placeholderData: keepPreviousData,
     refetchOnMount: 'always',
   })
@@ -40,7 +38,7 @@ export function useShow(id?: string) {
   return useQuery<any, Error, any, readonly ['show', string | undefined]>({
     queryKey: ['show', id] as const,
     enabled: !!id,
-    queryFn: ({ signal }) => fetchJSON<any>(`${API_BASE}/shows/${id}`, signal),
+    queryFn: ({ signal }) => fetchJSON<any>(`${(window as any).appConfig.API_URL}/shows/${id}`, signal),
     placeholderData: keepPreviousData,
     initialData: () => {
       if (!id) return undefined
@@ -55,7 +53,7 @@ export function useEpisodes(showId?: string) {
   return useQuery<any[], Error, any[], readonly ['episodes', string | undefined]>({
     queryKey: ['episodes', showId] as const,
     enabled: !!showId,
-    queryFn: ({ signal }) => fetchJSON<any[]>(`${API_BASE}/shows/${showId}/episodes`, signal),
+    queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/shows/${showId}/episodes`, signal),
     placeholderData: keepPreviousData,
     refetchOnMount: 'always',
   })
@@ -65,7 +63,7 @@ export function useEpisode(showId?: string, episodeId?: string) {
   return useQuery<any, Error, any, readonly ['episode', string | undefined, string | undefined]>({
     queryKey: ['episode', showId, episodeId] as const,
     enabled: !!showId && !!episodeId,
-    queryFn: ({ signal }) => fetchJSON<any>(`${API_BASE}/shows/${showId}/episodes/${episodeId}`, signal),
+    queryFn: ({ signal }) => fetchJSON<any>(`${(window as any).appConfig.API_URL}/shows/${showId}/episodes/${episodeId}`, signal),
     placeholderData: keepPreviousData,
   })
 }
@@ -75,7 +73,7 @@ export function prefetchCoreData(qc: QueryClient) {
   void qc
     .prefetchQuery({
       queryKey: ['shows'],
-      queryFn: ({ signal }) => fetchJSON<any[]>(`${API_BASE}/shows`, signal),
+      queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/shows`, signal),
     })
     .then(() => {
       const shows = qc.getQueryData<any[]>(['shows'])
@@ -84,7 +82,7 @@ export function prefetchCoreData(qc: QueryClient) {
   void qc
     .prefetchQuery({
       queryKey: ['mediaProfiles'],
-      queryFn: ({ signal }) => fetchJSON<any[]>(`${API_BASE}/media-profiles`, signal),
+      queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/media-profiles`, signal),
     })
     .then(() => {
       const profiles = qc.getQueryData<any[]>(['mediaProfiles'])

@@ -3,8 +3,6 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import MediaProfileForm, { MediaProfileFormValue } from '../../components/MediaProfileForm'
 import { useQueryClient } from '@tanstack/react-query'
 
-const API_BASE = 'http://localhost:5000/api'
-
 type RouteParams = {
   id?: string
 }
@@ -40,7 +38,7 @@ export default function EditMediaProfilePage() {
   const onCancel = useCallback(() => navigate('/profiles'), [navigate])
   const onSave = useCallback(async () => {
     if (!value || !valid || !id) return
-    const r = await fetch(`${API_BASE}/media-profiles/${id}`, {
+    const r = await fetch(`${(window as any).appConfig.API_URL}/media-profiles/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(value),
