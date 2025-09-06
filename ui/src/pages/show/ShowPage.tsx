@@ -115,11 +115,11 @@ export default function ShowPage() {
                 role="listitem"
                 aria-label={ep.title}
                 tabIndex={0}
-                onClick={() => navigate(`/show/${id}/episode/${ep.id}`)}
+                onClick={() => navigate(`/show/${id}/episode/${ep.slug}`)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    navigate(`/show/${id}/episode/${ep.id}`)
+                    navigate(`/show/${id}/episode/${ep.slug}`)
                   }
                 }}
               >

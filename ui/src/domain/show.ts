@@ -2,7 +2,8 @@
 export type EpisodeStatus = 'downloaded' | 'downloading' | 'processing' | 'error'
 
 export type Episode = {
-  id: string
+  id: number
+  slug: string
   title: string
   index: number
   cover?: string
@@ -10,7 +11,8 @@ export type Episode = {
 }
 
 export type Show = {
-  id: string
+  id: number
+  slug: string
   author: string
   title: string
   years?: string

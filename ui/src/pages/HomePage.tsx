@@ -11,27 +11,27 @@ import { statusIcon, statusLabel } from '../utils/showStatus'
 library.add(fas)
 
 function ShowSection({ show }: { show: any }) {
-  const { data: episodes, isLoading } = useEpisodes(show.id)
+  const { data: episodes, isLoading } = useEpisodes(show.slug)
   const eps: Episode[] = episodes ?? []
   return (
-    <article className="show-section" key={show.id} aria-labelledby={`${show.id}-title`}>
-      <Link to={`/show/${show.id}`} className="show-header" aria-labelledby={`${show.id}-title`}>
+    <article className="show-section" key={show.id} aria-labelledby={`${show.slug}-title`}>
+      <Link to={`/show/${show.slug}`} className="show-header" aria-labelledby={`${show.slug}-title`}>
         <div className="show-author">{show.author}</div>
-        <h2 id={`${show.id}-title`} className="show-title">{show.title}</h2>
+        <h2 id={`${show.slug}-title`} className="show-title">{show.title}</h2>
         <div className="show-meta">
           {isLoading && !episodes ? 'Loading episodes…' : `${eps.length} episodes${show.years ? ` • ${show.years}` : ''}`}
         </div>
       </Link>
       <div className="episodes-row" role="list" aria-label={`${show.title} episodes`}>
         {eps.map((ep: Episode) => (
-          <EpisodeCard key={ep.id} ep={ep} showId={show.id} />
+          <EpisodeCard key={ep.id} ep={ep} showSlug={show.slug} />
         ))}
       </div>
     </article>
   )
 }
 
-function EpisodeCard({ ep, showId }: { ep: Episode; showId: string }) {
+function EpisodeCard({ ep, showSlug }: { ep: Episode; showSlug: string }) {
   const initials = ep.title
     .split(' ')
     .map((w) => w[0])
@@ -44,7 +44,7 @@ function EpisodeCard({ ep, showId }: { ep: Episode; showId: string }) {
   const isProcessing = ep.status === 'processing'
 
   const navigate = useNavigate()
-  const goToEpisode = () => navigate(`/show/${showId}/episode/${ep.id}`)
+  const goToEpisode = () => navigate(`/show/${showSlug}/episode/${ep.slug}`)
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
