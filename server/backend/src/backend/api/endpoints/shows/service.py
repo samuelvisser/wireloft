@@ -31,7 +31,7 @@ def _slugify(text: str | None) -> str:
 
 def _serialize(sh: Show) -> ShowItemResponse:
     return ShowItemResponse(
-        id=sh.slug,
+        id=sh.id,
         slug=sh.slug,
         title=sh.title,
         author=sh.author_name,

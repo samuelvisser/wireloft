@@ -10,6 +10,13 @@ class EpisodeItemResponse(BaseModel):
 
     id: int
     slug: str
+    index: int
     title: str
+    description: str
+    status: str
     index: Optional[int] = None
     status: str
+    went_live_date: Optional[str] = None
+    published_date: Optional[str] = None
+    downloaded_date: Optional[str] = None
+    redownloaded_date: Optional[str] = None

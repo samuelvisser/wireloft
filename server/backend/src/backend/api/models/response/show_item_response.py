@@ -10,6 +10,20 @@ class ShowItemResponse(ResponseModel):
 
     id: int
     slug: str
+    media_profile_id: int
     title: str
+    description: str
+    url: str
     author_name: str
+    author_headshot_path: Optional[str] = None
+    download_media: bool
+    download_delay_minutes: int
+    redownload_after_minutes: int
+    download_days: int
+    delete_older: bool
+    title_filter: Optional[str] = None
+    background_image_path: Optional[str] = None
+    logo_image_path: Optional[str] = None
+    thumbnail_landscape_path: Optional[str] = None
+    thumbnail_portrait_path: Optional[str] = None
     years: Optional[str] = None
