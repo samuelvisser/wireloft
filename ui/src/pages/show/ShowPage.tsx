@@ -4,8 +4,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
 import { useShow, useEpisodes } from '../../lib/queries'
-import type { Episode } from '../../domain/show'
-import { statusIcon } from '../../utils/showStatus'
+import type { Episode } from '../../types/show'
+import {statusIcon, statusLabel} from '../../utils/showStatus'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -98,16 +98,9 @@ export default function ShowPage() {
 
         <div className="episodes-list" role="list" aria-label={`${show.title} episodes`}>
           {pageItems.map((ep: Episode) => {
-            const icon = statusIcon(ep.status)
-            const isProcessing = ep.status === 'processing'
-            const label =
-              ep.status === 'downloaded'
-                ? 'Downloaded'
-                : ep.status === 'downloading'
-                  ? 'Downloading'
-                  : ep.status === 'processing'
-                    ? 'Waiting for processing'
-                    : 'Error'
+            const icon = statusIcon(ep.unified_status)
+            const isProcessing = ep.unified_status === 'dw_processing' || ep.unified_status === 'local_processing'
+            const label = statusLabel(ep.unified_status)
             return (
               <div
                 key={ep.id}
@@ -125,7 +118,7 @@ export default function ShowPage() {
               >
                 <div className="episode-thumb" aria-hidden>
                   <div className="thumb-inner">
-                    <span className={`status status-${ep.status}`} aria-label={label} title={label}>
+                    <span className={`status status-${ep.unified_status}`} aria-label={label} title={label}>
                       <FontAwesomeIcon icon={icon as any} spin={isProcessing} />
                     </span>
                     <span className="badge">#{ep.index}</span>

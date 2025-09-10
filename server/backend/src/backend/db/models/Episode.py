@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
+from backend.types import EpisodePublishStatus, EpisodeDownloadStatus
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey
 from backend.db import Base
@@ -17,7 +18,8 @@ class Episode(Base):
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     title: Mapped[str]
     description: Mapped[Optional[str]]
-    status: Mapped[str]
+    publish_status: Mapped[EpisodePublishStatus]
+    download_status: Mapped[Optional[EpisodeDownloadStatus]]
     went_live_date: Mapped[Optional[datetime]]
     published_date: Mapped[Optional[datetime]]
     downloaded_date: Mapped[Optional[datetime]]

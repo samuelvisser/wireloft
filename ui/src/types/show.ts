@@ -1,5 +1,5 @@
 // Domain types: shared everywhere
-export type EpisodeStatus = 'downloaded' | 'downloading' | 'processing' | 'error'
+export type EpisodeStatus = 'scheduled' | 'live' | 'dw_processing' | 'published' | 'downloaded' | 'downloading' | 'local_processing' | 'error'
 
 export type Episode = {
   id: number
@@ -7,7 +7,7 @@ export type Episode = {
   title: string
   index: number
   cover?: string
-  status: EpisodeStatus
+  unified_status: EpisodeStatus
 }
 
 export type Show = {

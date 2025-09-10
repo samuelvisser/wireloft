@@ -4,7 +4,7 @@ import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
 import { Link, useNavigate } from 'react-router-dom'
 import React from 'react'
 import { useShows, useEpisodes } from '../lib/queries'
-import type { Episode } from '../domain/show'
+import type { Episode } from '../types/show'
 import { statusIcon, statusLabel } from '../utils/showStatus'
 
 // Ensure icons from the kit are registered (idempotent)
@@ -39,9 +39,9 @@ function EpisodeCard({ ep, showSlug }: { ep: Episode; showSlug: string }) {
     .slice(0, 3)
     .toUpperCase()
   const style = ep.cover ? { backgroundImage: `url(${ep.cover})` } : undefined
-  const icon = statusIcon(ep.status)
-  const label = statusLabel(ep.status)
-  const isProcessing = ep.status === 'processing'
+  const icon = statusIcon(ep.unified_status)
+  const label = statusLabel(ep.unified_status)
+  const isProcessing = ep.unified_status === 'dw_processing' || ep.unified_status === 'local_processing'
 
   const navigate = useNavigate()
   const goToEpisode = () => navigate(`/show/${showSlug}/episode/${ep.slug}`)
@@ -56,7 +56,7 @@ function EpisodeCard({ ep, showSlug }: { ep: Episode; showSlug: string }) {
     <div className="episode-card" role="listitem" aria-label={ep.title} tabIndex={0} onKeyDown={onKeyDown}>
       <div className="cover" style={style} onClick={goToEpisode}>
         {/* status icon in bottom-left */}
-        <span className={`status status-${ep.status}`} aria-label={label} title={label}>
+        <span className={`status status-${ep.unified_status}`} aria-label={label} title={label}>
           <FontAwesomeIcon icon={icon as any} spin={isProcessing} />
         </span>
         {!ep.cover && (
