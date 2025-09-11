@@ -18,12 +18,13 @@ class ShowItemResponse(ResponseModel):
     author_headshot_path: Optional[str] = None
     download_media: bool
     download_delay_minutes: int
-    redownload_after_minutes: int
-    download_days: int
-    delete_older: bool
+    redownload_delay_minutes: int
+    download_days_in_past: int
+    delete_older_episodes: bool
     title_filter: Optional[str] = None
     background_image_path: Optional[str] = None
     logo_image_path: Optional[str] = None
     thumbnail_landscape_path: Optional[str] = None
     thumbnail_portrait_path: Optional[str] = None
+    thumbnail_square_path: Optional[str] = None
     years: Optional[str] = None

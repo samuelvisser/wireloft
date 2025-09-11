@@ -1,7 +1,6 @@
-from pydantic import BaseModel
+from .request_base import RequestModel
+from backend.api.models.response import MediaProfileItemResponse
 
-class MediaProfileUpdateBody(BaseModel):
-    name: str | None = None
-    outputPathTemplate: str | None = None
-    preferredFormat: str | None = None
-    downloadSeriesImages: bool | None = None
+
+class MediaProfileUpdateBody(MediaProfileItemResponse, RequestModel):
+    ...

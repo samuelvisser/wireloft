@@ -12,5 +12,6 @@ dependencies = [
 [project.scripts]
 dailywire-downloader = "dailywire_downloader.__main__:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"
