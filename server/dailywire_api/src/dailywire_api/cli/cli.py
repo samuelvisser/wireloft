@@ -20,7 +20,7 @@ COMMANDS: Dict[str, Dict[str, Dict[str, Any]]] = {
 COMMON_ARGS = [
     {"name": "--access-token", "dest": "access_token", "default": None, "help": "Optional JWT access token (if needed for premium content)."},
     {"name": "--membership-plan", "dest": "membership_plan", "default": None, "help": "Optional membership plan to influence content selection (e.g., AllAccess)."},
-    {"name": "--debug", "dest": "debug_mode", "default": None, "help": "Enable debug mode, use while developing the package."},
+    {"name": "--debug", "dest": "debug_mode", "action": "store_true", "help": "Enable debug mode, use while developing the package."},
     {"name": "--host", "dest": "host", "default": "127.0.0.1", "help": "Host to bind when running server."},
     {"name": "--port", "dest": "port", "default": 5001, "help": "Port to bind when running server."},
 ]
@@ -33,6 +33,7 @@ def _apply_args(parser: ArgumentParser, arg_specs: List[Dict[str, Any]]) -> None
         kwargs = dict(spec)
         name = kwargs.pop("name")
         parser.add_argument(name, **kwargs)
+
 
 def build_parser() -> ArgumentParser:
     parser = ArgumentParser(
@@ -59,10 +60,11 @@ def build_parser() -> ArgumentParser:
 
     return parser
 
+
 def configure_cli(args: Namespace) -> None:
     global _group, _action
 
-    _group = getattr(args, "group", None) or getattr(args, "command", None)
+    _group = getattr(args, "group", None)
     _action = getattr(args, "action", None) or getattr(args, f"{_group}_command", None)
 
 
@@ -72,6 +74,7 @@ def is_cli_mode(args: Namespace) -> bool:
     if not _group:
         configure_cli(args)
     return _group is not None
+
 
 def perform_cli_action(parser: ArgumentParser, args: Namespace) -> int:
     global _group, _action
