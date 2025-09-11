@@ -5,7 +5,7 @@ from dailywire_api.records.BaseRecord import BaseRecord
 class ThumbnailRecord(BaseRecord):
     landscape: str | None = Field(default=None, validation_alias="land")
     portrait: str | None = Field(default=None, validation_alias="port")
-    square: str | None = None
+    square: str | None = Field(default=None, validation_alias="square")
 
     # The API sometimes sends "" for missing images; normalize that to None.
     @field_validator("landscape", "portrait", "square", mode="before")

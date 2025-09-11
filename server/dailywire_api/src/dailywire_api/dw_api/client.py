@@ -44,7 +44,7 @@ class MiddlewareClient:
         payload = self._get('v4/getShowPage', params)
         record = ShowRecord.model_validate(payload)
 
-        return record.model_dump(by_alias=True, exclude_none=True, mode="json")
+        return record.model_dump(by_alias=True, mode="json")
 
 
     # --------------- internals ---------------
