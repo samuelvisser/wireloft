@@ -10,6 +10,7 @@ from typing import List
 
 import uvicorn
 
+from backend.config import PACKAGE_ROOT
 from dailywire_api.cli import is_cli_mode, build_parser, perform_cli_action
 
 

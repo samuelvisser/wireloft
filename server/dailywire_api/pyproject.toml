@@ -5,11 +5,14 @@ description = "DailyWire API client and CLI"
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [
+  "fastapi>=0.116.1",
   "pydantic>=2.11.7",
+  "uvicorn>=0.35.0",
 ]
 
 [project.scripts]
 dailywire-api = "dailywire_api.__main__:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"

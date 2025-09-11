@@ -21,6 +21,8 @@ COMMON_ARGS = [
     {"name": "--access-token", "dest": "access_token", "default": None, "help": "Optional JWT access token (if needed for premium content)."},
     {"name": "--membership-plan", "dest": "membership_plan", "default": None, "help": "Optional membership plan to influence content selection (e.g., AllAccess)."},
     {"name": "--debug", "dest": "debug_mode", "default": None, "help": "Enable debug mode, use while developing the package."},
+    {"name": "--host", "dest": "host", "default": "127.0.0.1", "help": "Host to bind when running server."},
+    {"name": "--port", "dest": "port", "default": 5001, "help": "Port to bind when running server."},
 ]
 
 _group: str| None = None
