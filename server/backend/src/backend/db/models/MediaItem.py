@@ -28,7 +28,7 @@ class MediaItem(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    modified_at: Mapped[datetime] = mapped_column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
@@ -38,4 +38,4 @@ class MediaItem(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<MediaItem(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, modified_at={self.modified_at})>"
+        return f"<MediaItem(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

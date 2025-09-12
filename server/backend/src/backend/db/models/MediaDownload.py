@@ -19,7 +19,7 @@ class MediaDownload(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    modified_at: Mapped[datetime] = mapped_column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
@@ -28,4 +28,4 @@ class MediaDownload(Base):
 
 
     def __repr__(self) -> str:
-        return f"<MediaDownload(id={self.id}, download_status={self.download_status}, file_path={self.file_path}, created_at={self.created_at}, modified_at={self.modified_at})>"
+        return f"<MediaDownload(id={self.id}, download_status={self.download_status}, file_path={self.file_path}, created_at={self.created_at}, updated_at={self.updated_at})>"
