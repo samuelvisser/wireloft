@@ -1,7 +1,7 @@
 from typing import Any
 from enum import Enum
 
-from pydantic import BaseModel, Field, ConfigDict, AwareDatetime, AliasChoices, model_validator, field_validator, computed_field
+from pydantic import Field, ConfigDict, model_validator, computed_field
 
 from pydantic.alias_generators import to_camel
 
@@ -66,6 +66,10 @@ class ShowRecord(BaseRecord):
         # Podcast if all seasons are year-labeled between 2015 and 2115
         seasons_list = [s for s in (self.seasons or []) if isinstance(s, SeasonRecord)]
         if seasons_list and all(isinstance(s.name, str) and len(s.name) == 4 and s.name.isdigit() and 2015 <= int(s.name) <= 2115 for s in seasons_list):
+            return ProbableShowType.podcast
+
+        # Podcast if the slug contains the literal word "podcast"
+        if "podcast" in self.slug.lower():
             return ProbableShowType.podcast
 
         # Unknown if fewer than 5 episodes

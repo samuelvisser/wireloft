@@ -111,7 +111,10 @@ export default function ChooseShowStep({
                                 <div className="help" id="show-type-help">
                                     <ReadMore summary={<span>Why do I need to choose this?</span>}>
                                         Selecting the correct show type helps WireLoft apply sensible defaults for how
-                                        episodes are grouped and presented.
+                                        episodes are grouped and presented.<br/><br/>
+                                        Though WireLoft tries to guess the show type automatically based on various factors,
+                                        Dailywire unfortunately does not provide a reliable way to determine this.
+                                        If you're unsure, select "Podcast".
                                     </ReadMore>
                                 </div>
                             </div>
