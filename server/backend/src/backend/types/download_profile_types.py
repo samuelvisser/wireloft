@@ -1,8 +1,5 @@
 import enum
 
-class DownloadProfileType(enum.Enum):
-    show = "show"
-
 class MediaDownloadStatus(enum.Enum):
     downloaded = "downloaded"
     downloading = "downloading"

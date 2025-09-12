@@ -2,11 +2,11 @@ from datetime import datetime
 from typing import Optional
 
 from backend.db.models.MediaItem import MediaItem
-from backend.types import EpisodePublishStatus
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey, DateTime, func
 
-from backend.types import MediaType
+from backend.types.episode_types import EpisodePublishStatus
+from backend.types.media_types import MediaType
 
 
 class Episode(MediaItem):

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, DateTime, func
 
 from backend.db import Base
-from backend.types import MediaType
+from backend.types.media_types import MediaType
 
 
 class MediaItem(Base):

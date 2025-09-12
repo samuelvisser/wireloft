@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
-from backend.types import ShowType
+from backend.types.show_types import ShowType, EpisodeIdentifier
 
 
 class Show(Base):
@@ -19,6 +19,7 @@ class Show(Base):
     description: Mapped[Optional[str]]
     url: Mapped[str] = mapped_column(unique=True)
     type: Mapped[ShowType]
+    episode_identifier: Mapped[EpisodeIdentifier]
     author_name: Mapped[str]
     author_slug: Mapped[str]
     author_headshot_path: Mapped[Optional[str]]

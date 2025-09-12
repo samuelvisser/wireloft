@@ -2,7 +2,7 @@ from backend.db.models.MediaItem import MediaItem
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import ForeignKey
 
-from backend.types import MediaType
+from backend.types.media_types import MediaType
 
 
 class Movie(MediaItem):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import AwareDatetime
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.types import MediaDownloadStatus
+from backend.types.download_profile_types import MediaDownloadStatus
 
 
 class MediaDownloadAPIBase:

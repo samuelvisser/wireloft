@@ -5,7 +5,7 @@ from sqlalchemy import DateTime, func
 from sqlalchemy.sql.schema import ForeignKey
 
 from backend.db import Base
-from backend.types import MediaDownloadStatus
+from backend.types.download_profile_types import MediaDownloadStatus
 
 
 class MediaDownload(Base):

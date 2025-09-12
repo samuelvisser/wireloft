@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column

@@ -1,42 +1,51 @@
 from typing import Optional
 
-from pydantic import AwareDatetime
+from pydantic import AwareDatetime, computed_field
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.types.show_types import ShowType, EpisodeIdentifier
+from backend.utils.helpers import generate_uuid
 
 
 class ShowAPIBase:
     """Fields common to all show models."""
-    media_profile_id: int
     title: str
     description: str
     url: str
     author_name: str
     author_headshot_path: Optional[str] = None
-    download_media: bool
-    download_delay_minutes: int
-    redownload_delay_minutes: int
-    download_days_in_past: int
-    delete_older_episodes: bool
-    title_filter: Optional[str] = None
     background_image_path: Optional[str] = None
     logo_image_path: Optional[str] = None
     thumbnail_landscape_path: Optional[str] = None
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
-    years: Optional[str] = None
 
 
 class ShowAPICreate(ShowAPIBase, RequestBase):
     """Request body for creating a show."""
-    slug: str = ""
+    dw_id: str
+    slug: str
+    type: ShowType
+    episode_identifier: EpisodeIdentifier
+    author_slug: str
+
+    @computed_field(return_type=str)
+    @property
+    def uuid(self) -> str:
+        return generate_uuid()
 
 
 class ShowAPIRead(ShowAPIBase, ResponseBase):
     """Response body for a show."""
 
     id: int
+    uuid: str
+    dw_id: str
     slug: str
+    type: ShowType
+    episode_identifier: EpisodeIdentifier
+    author_slug: str
+    years: Optional[str] = None
     created_at: AwareDatetime
     updated_at: AwareDatetime
 

@@ -5,7 +5,8 @@ from typing import Optional
 from pydantic import AwareDatetime, computed_field
 
 from backend.api.models.base import ResponseBase, RequestBase
-from backend.types import EpisodePublishStatus
+from backend.types.episode_types import EpisodePublishStatus
+
 from backend.utils.helpers import generate_uuid
 
 
@@ -30,7 +31,7 @@ class EpisodeAPICreate(EpisodeAPIBase, RequestBase):
     index: int
 
     # Fields in the media_items table
-    dw_id: str
+    dw_id: Optional[str]
     slug: str
 
     @computed_field(return_type=str)
@@ -48,7 +49,7 @@ class EpisodeAPIRead(EpisodeAPIBase, ResponseBase):
 
     # Fields in the media_items table
     uuid: str
-    dw_id: str
+    dw_id: Optional[str]
     slug: str
     created_at: AwareDatetime
     updated_at: AwareDatetime
@@ -56,4 +57,5 @@ class EpisodeAPIRead(EpisodeAPIBase, ResponseBase):
 
 class EpisodeAPIUpdate(EpisodeAPIBase, RequestBase):
     """Request body for updating an episode."""
-    pass
+    # Fields in the media_items table
+    dw_id: Optional[str]
