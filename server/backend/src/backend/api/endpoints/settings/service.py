@@ -1,28 +1,49 @@
 from fastapi import HTTPException
 
-from backend.api.models.response import SettingItemResponse
+from backend.api.helpers import update_database_fields
+from backend.api.models.settings import *
 from backend.app import db_session
 from backend.db.models import Settings
 
-def get_settings_list() -> list[SettingItemResponse]:
+def get_settings() -> SettingsAPIRead:
     with db_session() as s:
         settings = (
             s.query(Settings)
-            .order_by(Settings.id)
-            .all()
+            .first()
         )
-        payload = [
-            SettingItemResponse.model_validate(setting, from_attributes=True)
-            for setting in settings
-        ]
-        return payload
+        return SettingsAPIRead.model_validate(settings, from_attributes=True)
 
-def get_setting(setting_slug: str) -> SettingItemResponse:
+
+def create_settings_record(body: SettingsAPICreate) -> SettingsAPIRead:
     with db_session() as s:
-        setting = s.query(Settings).filter_by(slug=setting_slug).one_or_none()
-        if setting is None:
-            raise HTTPException(status_code=404, detail="Setting not found")
+        settings = (
+            s.query(Settings)
+            .one_or_none()
+        )
+        if settings is not None:
+            raise HTTPException(status_code=409, detail="Settings record already exists")
 
-        payload = SettingItemResponse.model_validate(setting, from_attributes=True)
+        # Build model from validated Pydantic data
+        data = body.model_dump(by_alias=True)
 
-        return payload
+        settings = Settings(**data)
+        s.add(settings)
+        s.commit()
+        s.refresh(settings)
+        return SettingsAPIRead.model_validate(settings, from_attributes=True)
+
+
+def update_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
+    with db_session() as s:
+        settings = (
+            s.query(Settings)
+            .one_or_none()
+        )
+        if settings is None:
+            raise HTTPException(status_code=404, detail="Settings record not found")
+
+        # Commit and return
+        update_database_fields(settings, body)
+        s.commit()
+        s.refresh(settings)
+        return SettingsAPIRead.model_validate(settings, from_attributes=True)

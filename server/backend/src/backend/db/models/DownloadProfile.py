@@ -21,10 +21,10 @@ class DownloadProfile(Base):
     download_days_in_past: Mapped[int] = mapped_column(default=0)
     delete_older_episodes: Mapped[bool] = mapped_column(default=True)
 
-    created_date: Mapped[datetime] = mapped_column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    modified_date: Mapped[datetime] = mapped_column(
+    modified_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
@@ -34,4 +34,4 @@ class DownloadProfile(Base):
 
 
     def __repr__(self) -> str:
-        return f"<DownloadProfile(id={self.id}, enable_profile={self.enable_profile}, download_days_in_past={self.download_days_in_past}, delete_older_episodes={self.delete_older_episodes}, created_date={self.created_date}, modified_date={self.modified_date})>"
+        return f"<DownloadProfile(id={self.id}, enable_profile={self.enable_profile}, download_days_in_past={self.download_days_in_past}, delete_older_episodes={self.delete_older_episodes}, created_at={self.created_at}, modified_at={self.modified_at})>"

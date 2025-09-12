@@ -10,9 +10,9 @@ class Settings(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
-    created_date: Mapped[datetime] = mapped_column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    modified_date: Mapped[datetime] = mapped_column(
+    modified_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

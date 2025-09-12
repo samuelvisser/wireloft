@@ -3,6 +3,8 @@ import datetime as dt
 import random
 from typing import List, Dict, Any
 
+from backend.utils.helpers import slugify
+
 
 def _now() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
@@ -24,22 +26,6 @@ def random_datetime(start: dt.datetime | None = None, end: dt.datetime | None = 
 def _status_for(start: int, index: int) -> str:
     _status_cycle = ["downloaded", "downloading", "processing", "error"]
     return _status_cycle[(start + (index - 1)) % len(_status_cycle)]
-
-
-def _slugify(text: str | None) -> str:
-    if not text:
-        return ""
-    s = str(text).strip().lower()
-    out = []
-    for ch in s:
-        if ch.isalnum() or ch in "-_.":
-            out.append(ch)
-        elif ch.isspace() or ch in "/\\":
-            out.append("-")
-    slug = "".join(out)
-    while "--" in slug:
-        slug = slug.replace("--", "-")
-    return slug.strip("-")
 
 
 # Hardcoded media profiles
@@ -81,7 +67,7 @@ shows: List[Dict[str, Any]] = [
         "status": "active",
         "media_type": "show",
         "author_name": "Ben Shapiro",
-        "author_slug": _slugify("Ben Shapiro"),
+        "author_slug": slugify("Ben Shapiro"),
         "author_headshot_path": None,
         "download_media": True,
         "download_delay_minutes": 0,
@@ -109,7 +95,7 @@ shows: List[Dict[str, Any]] = [
         "status": "active",
         "media_type": "show",
         "author_name": "Matt Walsh",
-        "author_slug": _slugify("Matt Walsh"),
+        "author_slug": slugify("Matt Walsh"),
         "author_headshot_path": None,
         "download_media": True,
         "download_delay_minutes": 0,
@@ -137,7 +123,7 @@ shows: List[Dict[str, Any]] = [
         "status": "active",
         "media_type": "show",
         "author_name": "Ben Shapiro",
-        "author_slug": _slugify("Ben Shapiro"),
+        "author_slug": slugify("Ben Shapiro"),
         "author_headshot_path": None,
         "download_media": True,
         "download_delay_minutes": 0,

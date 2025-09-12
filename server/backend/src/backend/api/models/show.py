@@ -1,15 +1,12 @@
-from __future__ import annotations
-
 from typing import Optional
 
-from backend.api.models.response.response_base import ResponseModel
+from pydantic import AwareDatetime
+
+from backend.api.models.base import RequestBase, ResponseBase
 
 
-class ShowItemResponse(ResponseModel):
-    """Represents a show summary/detail item returned by the API."""
-
-    id: int
-    slug: str
+class ShowAPIBase:
+    """Fields common to all show models."""
     media_profile_id: int
     title: str
     description: str
@@ -28,3 +25,22 @@ class ShowItemResponse(ResponseModel):
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
     years: Optional[str] = None
+
+
+class ShowAPICreate(ShowAPIBase, RequestBase):
+    """Request body for creating a show."""
+    slug: str = ""
+
+
+class ShowAPIRead(ShowAPIBase, ResponseBase):
+    """Response body for a show."""
+
+    id: int
+    slug: str
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+
+
+class ShowAPIUpdate(ShowAPIBase, RequestBase):
+    """Request body for updating a show."""
+    pass

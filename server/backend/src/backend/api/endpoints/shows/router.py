@@ -1,31 +1,30 @@
 from fastapi import APIRouter
 
 from .service import *
-from ...models.request import ShowCreateBody, ShowUpdateBody
-from ...models.response import ShowItemResponse
+from ...models.show import *
 
 router = APIRouter()
 
-@router.get("", response_model=list[ShowItemResponse])
+@router.get("", response_model=list[ShowAPIRead])
 def show_list():
-    return get_show_list()
+    return get_shows_list()
 
 
-@router.post("", response_model=ShowItemResponse)
-def show_create(body: ShowCreateBody):
-    return create_show(**body.model_dump())
+@router.post("", response_model=ShowAPIRead)
+def show_create(body: ShowAPICreate):
+    return create_show(body)
 
 
-@router.get("/{show_slug}", response_model=ShowItemResponse)
+@router.get("/{show_slug}", response_model=ShowAPIRead)
 def show_detail(show_slug: str):
     return get_show(show_slug)
 
 
-@router.patch("/{show_slug}", response_model=ShowItemResponse)
-def show_update(show_slug: str, body: ShowUpdateBody):
-    return update_show(show_slug, **body.model_dump(exclude_unset=True))
+@router.patch("/{show_slug}", response_model=ShowAPIRead)
+def show_update(show_slug: str, body: ShowAPIUpdate):
+    return update_show(show_slug, body)
 
 
-@router.delete("/{show_slug}", response_model=ShowItemResponse)
+@router.delete("/{show_slug}", response_model=ShowAPIRead)
 def show_delete(show_slug: str):
     return delete_show(show_slug)

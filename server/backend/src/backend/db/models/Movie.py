@@ -13,4 +13,4 @@ class Movie(MediaItem):
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
 
     def __repr__(self) -> str:
-        return f"<Movie(id={self.id}, slug={self.slug}, title={self.title}, created_date={self.created_date}, modified_date={self.modified_date})>"
+        return f"<Movie(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, modified_at={self.modified_at})>"

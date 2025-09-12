@@ -28,10 +28,10 @@ class Show(Base):
     thumbnail_portrait_path: Mapped[Optional[str]]
     thumbnail_square_path: Mapped[Optional[str]]
 
-    created_date: Mapped[datetime] = mapped_column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    modified_date: Mapped[datetime] = mapped_column(
+    modified_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
@@ -44,4 +44,4 @@ class Show(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_date={self.created_date}, modified_date={self.modified_date})>"
+        return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, modified_at={self.modified_at})>"

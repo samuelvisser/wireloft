@@ -26,4 +26,4 @@ class Episode(MediaItem):
     show: Mapped["Show"] = relationship(back_populates="episodes")
 
     def __repr__(self) -> str:
-        return f"<Episode(id={self.id}, show_id={self.show_id}, slug={self.slug}, title={self.title}, created_date={self.created_date}, modified_date={self.modified_date})>"
+        return f"<Episode(id={self.id}, show_id={self.show_id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, modified_at={self.modified_at})>"
