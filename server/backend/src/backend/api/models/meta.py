@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-class HealthResponse(BaseModel):
+from backend.api.models.base import ResponseBase
+
+
+class HealthAPIRead(ResponseBase):
     """Health check payload."""
 
     status: str = Field(default="ok", description="Service status indicator")

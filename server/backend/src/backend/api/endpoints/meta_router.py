@@ -1,10 +1,11 @@
 from fastapi import APIRouter
 
 from .meta_service import *
-from ..models.response import HealthResponse
+from ..models.meta import *
 
 router = APIRouter()
 
-@router.get("/health", response_model=list[HealthResponse])
+
+@router.get("/health", response_model=HealthAPIRead)
 def health():
     return get_health()

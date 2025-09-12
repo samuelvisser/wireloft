@@ -1,5 +1,5 @@
-from backend.api.models.response import HealthResponse
+from backend.api.models.meta import HealthAPIRead
 
 
-def get_health() -> list[HealthResponse]:
-    return [HealthResponse(status="ok")]
+def get_health() -> HealthAPIRead:
+    return HealthAPIRead(status="ok")
