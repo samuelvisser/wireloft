@@ -56,7 +56,7 @@ export default function DailywireShowCard({ slug, membershipPlan }: Props) {
         <div className="dw-card-body">
           <div className="dw-card-title">We could not find that show</div>
           <div className="dw-card-author">HTTP error code {code ?? 'unknown'}</div>
-          <div className="dw-card-desc">{longLine}</div>
+          <div className="dw-card-desc line-clamp-6">{longLine}</div>
         </div>
       </div>
     )
@@ -82,7 +82,7 @@ export default function DailywireShowCard({ slug, membershipPlan }: Props) {
       <div className="dw-card-body">
         <div className="dw-card-title">{data.title}</div>
         {author ? <div className="dw-card-author">{author}</div> : null}
-        {data.description && <div className="dw-card-desc">{data.description}</div>}
+        {data.description && <div className="dw-card-desc line-clamp-6">{data.description}</div>}
       </div>
     </div>
   )

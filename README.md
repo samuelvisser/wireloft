@@ -145,3 +145,28 @@ backend-api --seed-db --db C:\Users\samuv\PycharmProjects\wireloft\data\wireloft
 
 Notes:
 - Seeding is idempotent: running it multiple times won’t duplicate rows.
+
+
+
+
+
+WHAT MEDIA TYPES TO SUPPORT<br>
+Recurring<br>
+- Shows
+  - Podcasts
+  - Series
+
+One-Time
+- Movies
+- Bentkey
+
+
+
+
+
+
+
+
+
+
+

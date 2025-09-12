@@ -317,6 +317,7 @@ export default function AddShowPage({ onCancel }: Props) {
           onBack={() => setStep(1)}
           onContinue={() => canContinueFromProfile && setStep(3)}
           onCancel={handleCancel}
+          slug={debouncedSlug}
         />
       )}
 
