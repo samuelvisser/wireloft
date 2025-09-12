@@ -28,7 +28,7 @@ type Props = {
 
 import DailywireShowCard from './DailywireShowCard'
 
-export default function ProfileStep({
+export default function MediaProfileStep({
   profiles,
   profilesError,
   selectedProfileId,

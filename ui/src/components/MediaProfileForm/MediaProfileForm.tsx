@@ -1,4 +1,6 @@
 
+import Switch from 'react-switch'
+
 export type MediaProfileFormValue = {
   name: string
   outputPathTemplate: string
@@ -68,11 +70,14 @@ export default function MediaProfileForm({ value, onChange, autoFocusName, nameE
       </div>
       <div className="form-row" style={{ alignItems: 'center' }}>
         <label htmlFor="mp-images">Download series images</label>
-        <input
+        <Switch
           id="mp-images"
-          type="checkbox"
           checked={value.downloadSeriesImages}
-          onChange={(e) => onChange({ ...value, downloadSeriesImages: e.target.checked })}
+          onChange={(checked) => onChange({ ...value, downloadSeriesImages: checked })}
+          onColor="#0ea5e9"
+          offColor="#d1d5db"
+          uncheckedIcon={false}
+          checkedIcon={false}
         />
       </div>
     </>

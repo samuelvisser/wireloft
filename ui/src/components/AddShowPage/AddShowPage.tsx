@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import UrlStep from './UrlStep'
-import ProfileStep from './ProfileStep'
-import ShowStep, {NewShowFormValue} from './ShowStep'
+import ChooseShowStep from './ChooseShowStep'
+import MediaProfileStep from './MediaProfileStep'
+import LegacyShowStep, {NewShowFormValue} from './LegacyShowStep'
+import DownloadProfileStep, { type DownloadProfileFormValue } from './DownloadProfileStep'
 import type { MediaProfileFormValue } from '../MediaProfileForm'
 import { defaultShowFormValue, type ShowFormValue } from '../ShowForm'
 
@@ -52,6 +53,7 @@ type WizardState = {
   newProfile: NewProfileForm
   newProfileState: NewProfileForm | null
   newShowForm: NewShowFormValue
+  downloadProfile: DownloadProfileFormValue
 }
 
 function loadWizardState(): WizardState | null {
@@ -220,14 +222,25 @@ export default function AddShowPage({ onCancel }: Props) {
   const [newProfileState, setNewProfileState] = useState<NewProfileForm | null>(() => loadWizardState()?.newProfileState ?? null)
   const [showForm, setShowForm] = useState<NewShowFormValue>(() => loadWizardState()?.newShowForm ?? { ...defaultShowFormValue })
 
+  const defaultDownloadProfile: DownloadProfileFormValue = {
+    enableProfile: true,
+    downloadWithCountdown: false,
+    redownloadFinal: false,
+    downloadDaysInPast: 0,
+    deleteOlderEpisodes: true,
+  }
+  const [downloadProfile, setDownloadProfile] = useState<DownloadProfileFormValue>(
+    () => loadWizardState()?.downloadProfile ?? { ...defaultDownloadProfile }
+  )
+
   const creatingProfileValid =
     newProfile.name.trim().length > 0 && newProfile.outputPathTemplate.trim().length > 0
   const canContinueFromProfile = selectedProfileId !== null || creatingProfileValid
 
   // Persist wizard state on any change
   useEffect(() => {
-    saveWizardState({ step, rawUrl, selectedProfileId, newProfile, newProfileState, newShowForm: showForm })
-  }, [step, rawUrl, selectedProfileId, newProfile, newProfileState, showForm])
+    saveWizardState({ step, rawUrl, selectedProfileId, newProfile, newProfileState, newShowForm: showForm, downloadProfile })
+  }, [step, rawUrl, selectedProfileId, newProfile, newProfileState, showForm, downloadProfile])
 
   function handleCancel() {
     clearWizardState()
@@ -286,11 +299,11 @@ export default function AddShowPage({ onCancel }: Props) {
   return (
     <div>
       <div className="help" aria-live="polite" style={{ marginBottom: 12 }}>
-        Step {step} of 3: {step === 1 ? 'URL' : step === 2 ? 'Media Profile' : 'Show'}
+        Step {step} of 3: {step === 1 ? 'Choose show' : step === 2 ? 'Media Profile' : 'Download Profile'}
       </div>
 
       {step === 1 && (
-        <UrlStep
+        <ChooseShowStep
           rawUrl={rawUrl}
           onChangeRawUrl={setRawUrl}
           urlValid={urlValid}
@@ -303,7 +316,7 @@ export default function AddShowPage({ onCancel }: Props) {
       )}
 
       {step === 2 && (
-        <ProfileStep
+        <MediaProfileStep
           profiles={profiles}
           profilesError={profilesError}
           selectedProfileId={selectedProfileId}
@@ -322,15 +335,13 @@ export default function AddShowPage({ onCancel }: Props) {
       )}
 
       {step === 3 && (
-        <ShowStep
-          normalizedUrl={result.normalized}
-          rawUrl={rawUrl}
-          newProfile={newProfile}
-          showForm={showForm}
-          setShowForm={setShowForm}
+        <DownloadProfileStep
+          value={downloadProfile}
+          onChange={setDownloadProfile}
           onBack={() => setStep(2)}
           onFinish={handleFinish}
           onCancel={handleCancel}
+          slug={debouncedSlug}
         />
       )}
     </div>
