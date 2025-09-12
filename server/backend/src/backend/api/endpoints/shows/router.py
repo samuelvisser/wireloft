@@ -1,9 +1,12 @@
 from fastapi import APIRouter
 
+from .show_with_profiles import show_with_profiles_router
 from .service import *
 from ...models.show import *
 
 router = APIRouter()
+
+router.include_router(show_with_profiles_router, prefix = "/show-with-profiles")
 
 @router.get("", response_model=list[ShowAPIRead])
 def show_list():
@@ -11,6 +14,11 @@ def show_list():
 
 
 @router.post("", response_model=ShowAPIRead)
+def show_create(body: ShowAPICreate):
+    return create_show(body)
+
+
+@router.post("/bundle", response_model=ShowAPIRead)
 def show_create(body: ShowAPICreate):
     return create_show(body)
 
