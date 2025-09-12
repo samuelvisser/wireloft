@@ -1,46 +1,47 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, ForeignKey
+from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
+from backend.types import ShowType
+
 
 class Show(Base):
     __tablename__ = "shows"
 
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    media_profile_id: Mapped[int] = mapped_column(ForeignKey("media_profiles.id"))
     uuid: Mapped[str] = mapped_column(index=True, unique=True)
     dw_id: Mapped[str] = mapped_column(index=True, unique=True)
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     title: Mapped[str]
-    description: Mapped[Optional[str]] = mapped_column(String(10000))
-    url: Mapped[str] = mapped_column(String(510))
-    status: Mapped[str]
-    media_type: Mapped[str]
+    description: Mapped[Optional[str]]
+    url: Mapped[str] = mapped_column(unique=True)
+    type: Mapped[ShowType]
     author_name: Mapped[str]
     author_slug: Mapped[str]
-    author_headshot_path: Mapped[Optional[str]] = mapped_column(String(510))
-    download_media: Mapped[bool] = mapped_column(default=True)
-    download_delay_minutes: Mapped[int] = mapped_column(default=0)
-    redownload_delay_minutes: Mapped[int] = mapped_column(default=0)
-    download_days_in_past: Mapped[int] = mapped_column(default=0)
-    delete_older_episodes: Mapped[bool] = mapped_column(default=True)
-    title_filter: Mapped[Optional[str]]
-    background_image_path: Mapped[Optional[str]] = mapped_column(String(510))
-    logo_image_path: Mapped[Optional[str]] = mapped_column(String(510))
-    thumbnail_landscape_path: Mapped[Optional[str]] = mapped_column(String(510))
-    thumbnail_portrait_path: Mapped[Optional[str]] = mapped_column(String(510))
-    thumbnail_square_path: Mapped[Optional[str]] = mapped_column(String(510))
-    created_date: Mapped[datetime]
-    modified_date: Mapped[datetime]
+    author_headshot_path: Mapped[Optional[str]]
+    background_image_path: Mapped[Optional[str]]
+    logo_image_path: Mapped[Optional[str]]
+    thumbnail_landscape_path: Mapped[Optional[str]]
+    thumbnail_portrait_path: Mapped[Optional[str]]
+    thumbnail_square_path: Mapped[Optional[str]]
+
+    created_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    modified_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     # Relationships
     episodes: Mapped[list["Episode"]] = relationship(
         back_populates="show", cascade="all, delete-orphan"
     )
-    media_profile: Mapped["MediaProfile"] = relationship(back_populates="shows")
+    download_profiles: Mapped[list["DownloadProfile"]] = relationship(
+        back_populates="show", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
-        return f"<Show(id={self.id}, uuid={self.uuid}, dw_id={self.dw_id}, slug={self.slug}, title={self.title}, created_date={self.created_date}, modified_date={self.modified_date})>"
+        return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_date={self.created_date}, modified_date={self.modified_date})>"

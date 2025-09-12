@@ -22,9 +22,3 @@ class EpisodePublishStatus(enum.Enum):
     # The episode file size changed, meaning it was edited by DW likely meaning it now no longer contains the countdown
     published_final = "published_final"
 
-class EpisodeDownloadStatus(enum.Enum):
-    downloaded = "downloaded"
-    downloading = "downloading"
-    redownloaded = "redownloaded"
-    local_processing = "local_processing"
-    error = "error"

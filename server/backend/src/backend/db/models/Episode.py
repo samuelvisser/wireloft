@@ -1,31 +1,26 @@
 from datetime import datetime
 from typing import Optional
 
-from backend.types import EpisodePublishStatus, EpisodeDownloadStatus
+from backend.db.models.MediaItem import MediaItem
+from backend.types import EpisodePublishStatus
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey
-from backend.db import Base
+from sqlalchemy import ForeignKey, DateTime, func
 
-class Episode(Base):
+from backend.types import MediaType
+
+
+class Episode(MediaItem):
     __tablename__ = "episodes"
+    __mapper_args__ = {"polymorphic_identity": MediaType.episode}
 
     # Fields
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
     show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"), primary_key=True)
-    uuid: Mapped[str] = mapped_column(index=True, unique=True)
-    dw_id: Mapped[Optional[str]] = mapped_column(index=True, unique=True)
     index: Mapped[int] = mapped_column(index=True)
-    slug: Mapped[str] = mapped_column(index=True, unique=True)
-    title: Mapped[str]
-    description: Mapped[Optional[str]]
     publish_status: Mapped[EpisodePublishStatus]
-    download_status: Mapped[Optional[EpisodeDownloadStatus]]
     went_live_date: Mapped[Optional[datetime]]
     published_date: Mapped[Optional[datetime]]
-    downloaded_date: Mapped[Optional[datetime]]
     redownloaded_date: Mapped[Optional[datetime]]
-    created_date: Mapped[datetime]
-    modified_date: Mapped[datetime]
 
     # Relationships
     show: Mapped["Show"] = relationship(back_populates="episodes")

@@ -69,10 +69,15 @@ def create_tables() -> None:
     Import model modules so they are registered with Base, then create tables.
     """
     # Import models explicitly to ensure mappings are registered
-    importlib.import_module("backend.db.models.MediaProfile")
+    # Order matters due to FKs/inheritance: Base tables first, dependents after
+    importlib.import_module("backend.db.models.MediaItem")
     importlib.import_module("backend.db.models.Show")
     importlib.import_module("backend.db.models.Episode")
-    importlib.import_module("backend.db.models.Setting")
+    importlib.import_module("backend.db.models.MediaProfile")
+    importlib.import_module("backend.db.models.DownloadProfile")
+    importlib.import_module("backend.db.models.MediaDownload")
+    importlib.import_module("backend.db.models.Movie")
+    importlib.import_module("backend.db.models.Settings")
 
     Base.metadata.create_all(bind=get_engine())
 
@@ -91,7 +96,7 @@ def seed_db() -> None:
     from backend.db.models.MediaProfile import MediaProfile
     from backend.db.models.Show import Show
     from backend.db.models.Episode import Episode
-    from backend.db.models.Setting import Setting
+    from backend.db.models.Settings import Settings
     from backend.db.fake_data import media_profiles as seed_media_profiles
     from backend.db.fake_data import shows as seed_shows
     from backend.db.fake_data import episodes as seed_episodes
@@ -136,9 +141,9 @@ def seed_db() -> None:
             pk = s.get("id")
             if pk is None:
                 continue
-            existing = session.get(Setting, pk)
+            existing = session.get(Settings, pk)
             if existing is None:
-                session.add(Setting(**s))
+                session.add(Settings(**s))
 
         session.commit()
     except Exception:

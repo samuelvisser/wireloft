@@ -3,4 +3,4 @@ from backend.api.models.response import MediaProfileItemResponse
 
 
 class MediaProfileUpdateBody(MediaProfileItemResponse, RequestModel):
-    ...
+    pass

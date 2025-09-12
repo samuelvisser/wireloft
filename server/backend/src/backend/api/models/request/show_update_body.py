@@ -3,4 +3,4 @@ from backend.api.models.response import ShowItemResponse
 
 
 class ShowUpdateBody(ShowItemResponse, RequestModel):
-    ...
+    pass
