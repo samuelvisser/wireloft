@@ -29,16 +29,6 @@ def _slugify(text: str | None) -> str:
     return slug.strip("-")
 
 
-def _serialize(sh: Show) -> ShowItemResponse:
-    return ShowItemResponse(
-        id=sh.id,
-        slug=sh.slug,
-        title=sh.title,
-        author=sh.author_name,
-        years=None,
-    )
-
-
 def get_show_list() -> list[ShowItemResponse]:
     with db_session() as s:
         shows = (
