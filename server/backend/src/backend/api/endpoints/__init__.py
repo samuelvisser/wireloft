@@ -1,3 +1,4 @@
+from .dailywire import dailywire_router
 from .shows import show_router
 from .episodes import episode_router
 from .media_profiles import media_profile_router

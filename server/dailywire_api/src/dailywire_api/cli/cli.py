@@ -68,14 +68,6 @@ def configure_cli(args: Namespace) -> None:
     _action = getattr(args, "action", None) or getattr(args, f"{_group}_command", None)
 
 
-def is_cli_mode(args: Namespace) -> bool:
-    global _group, _action
-
-    if not _group:
-        configure_cli(args)
-    return _group is not None
-
-
 def perform_cli_action(parser: ArgumentParser, args: Namespace) -> int:
     global _group, _action
 

@@ -29,8 +29,9 @@ def create_app() -> FastAPI:
     )
 
     # Import routers lazily to avoid circular imports during app module import
-    from backend.api.endpoints import show_router, episode_router, setting_router, media_profile_router, meta_router
+    from backend.api.endpoints import dailywire_router, show_router, episode_router, setting_router, media_profile_router, meta_router
 
+    app.include_router(dailywire_router, prefix="/api/dailywire")
     app.include_router(show_router, prefix="/api/shows")
     app.include_router(episode_router, prefix="/api/shows/{show_slug}/episodes")
     app.include_router(setting_router, prefix="/api/settings")

@@ -9,7 +9,8 @@ import uvicorn
 
 from backend.db import configure_db, create_tables, get_db_path, seed_db, get_engine
 from sqlalchemy import text
-from .config import DEFAULT_DB_PATH, PACKAGE_ROOT, PROJECT_ROOT
+from .config import DEFAULT_DB_PATH, PACKAGE_ROOT
+from dailywire_api.config import PACKAGE_ROOT as DAILYWIRE_API_PACKAGE_ROOT
 
 
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -82,7 +83,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         host=args.host,
         port=args.port,
         reload=debug,
-        reload_dirs=[PACKAGE_ROOT.as_posix()],
+        reload_dirs=[PACKAGE_ROOT.as_posix(), DAILYWIRE_API_PACKAGE_ROOT.as_posix()],
         log_level="debug" if debug else "info"
     )
 

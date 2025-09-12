@@ -30,6 +30,7 @@ class EpisodeRecord(BaseRecord):
     sharing_url: str | None = None
     parent_title: str | None = None
     status: str | None = None
+    is_downloadable: bool | None = None
 
     published_at: AwareDatetime | None = None
     scheduled_at: AwareDatetime | None = None

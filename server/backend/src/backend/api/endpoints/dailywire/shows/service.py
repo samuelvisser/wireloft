@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from dailywire_api.api.models.response import ShowItemResponse
 from dailywire_api.dw_api.client import MiddlewareClient, MiddlewareAPIError
+from dailywire_api.records import ShowRecord
 
 
 def get_show(
@@ -11,7 +11,7 @@ def get_show(
     *,
     access_token: Optional[str] = None,
     membership_plan: Optional[str] = None,
-) -> ShowItemResponse:
+) -> ShowRecord:
     """Fetch a DailyWire show by slug from the middleware API and normalize it.
 
     Parameters
@@ -21,5 +21,6 @@ def get_show(
     """
     client = MiddlewareClient(access_token=access_token)
     payload = client.get_show_page(slug=show_slug, membership_plan=membership_plan)
+
     # Map the normalized ShowRecord payload into our response model
-    return ShowItemResponse.model_validate(payload)
+    return ShowRecord.model_validate(payload, from_attributes=True)

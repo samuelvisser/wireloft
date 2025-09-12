@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Header, Query, HTTPException
 
-from dailywire_api.records.ShowRecord import ShowRecord
+from dailywire_api.records import ShowRecord
 from .service import get_show
 
 router = APIRouter()
