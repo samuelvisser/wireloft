@@ -17,7 +17,7 @@ export type NewShowFormValue = ShowFormValue & {
     mediaProfile: MediaProfileFormValue
 }
 
-export default function ShowStep({
+export default function LegacyShowStep({
                                      normalizedUrl,
                                      rawUrl,
                                      newProfile,
