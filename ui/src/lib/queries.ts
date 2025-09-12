@@ -13,6 +13,7 @@ export function useMediaProfiles() {
     queryKey: ['mediaProfiles'] as const,
     queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/media-profiles`, signal),
     placeholderData: keepPreviousData,
+    refetchOnMount: 'always',
   })
   useEffect(() => {
     if (result.data) saveProfilesToStorage(result.data)
@@ -65,6 +66,37 @@ export function useEpisode(showId?: string, episodeId?: string) {
     enabled: !!showId && !!episodeId,
     queryFn: ({ signal }) => fetchJSON<any>(`${(window as any).appConfig.API_URL}/shows/${showId}/episodes/${episodeId}`, signal),
     placeholderData: keepPreviousData,
+  })
+}
+
+// Fetch DailyWire show preview by slug for Add Show URL step
+export function useDailywireShow(slug?: string, membershipPlan?: string) {
+  return useQuery<any, Error, any, readonly ['dwShow', string | undefined, string | undefined]>({
+    queryKey: ['dwShow', slug, membershipPlan] as const,
+    enabled: !!slug,
+    queryFn: async ({ signal }) => {
+      const urlBase = (window as any).appConfig.API_URL
+      const params = membershipPlan ? `?membership_plan=${encodeURIComponent(membershipPlan)}` : ''
+      const url = `${urlBase}/dailywire/shows/${encodeURIComponent(slug!)}` + params
+      const r = await fetch(url, { signal })
+      if (!r.ok) {
+        // Try to surface server-provided error detail and attach status
+        try {
+          const body = await r.json()
+          const detail = typeof body?.detail === 'string' ? body.detail : null
+          const err: any = new Error(detail || `HTTP ${r.status}`)
+          err.status = r.status
+          err.detail = detail
+          throw err
+        } catch (_) {
+          const err: any = new Error(`HTTP ${r.status}`)
+          err.status = r.status
+          throw err
+        }
+      }
+      return r.json()
+    },
+    retry: false,
   })
 }
 

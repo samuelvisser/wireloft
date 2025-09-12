@@ -6,9 +6,16 @@ type Props = {
   errors: string[]
   onContinue: () => void
   onCancel: () => void
+  slug?: string
 }
 
-export default function UrlStep({ rawUrl, onChangeRawUrl, urlValid, showUrlErrors, errors, onContinue, onCancel }: Props) {
+import DailywireShowCard from './DailywireShowCard'
+import { useDailywireShow } from '../../lib/queries'
+
+export default function UrlStep({ rawUrl, onChangeRawUrl, urlValid, showUrlErrors, errors, onContinue, onCancel, slug }: Props) {
+  const dw = useDailywireShow(slug)
+  const canContinue = urlValid && !!slug && dw.isSuccess && !!dw.data
+
   return (
     <form className="form" onSubmit={(e) => e.preventDefault()} noValidate>
       <div className="form-row">
@@ -37,12 +44,19 @@ export default function UrlStep({ rawUrl, onChangeRawUrl, urlValid, showUrlError
         )}
       </div>
 
+      {/* Preview fetched DailyWire show info */}
+      {urlValid && (
+        <div className="form-row" aria-live="polite">
+          <DailywireShowCard slug={slug} />
+        </div>
+      )}
+
       <div className="actions">
         <button
           type="button"
           className="btn btn-primary"
-          onClick={onContinue}
-          disabled={!urlValid}
+          onClick={() => canContinue && onContinue()}
+          disabled={!canContinue}
         >
           Continue
         </button>

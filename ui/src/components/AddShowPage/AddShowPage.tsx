@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import UrlStep from './UrlStep'
 import ProfileStep from './ProfileStep'
-import ShowStep from './ShowStep'
+import ShowStep, {NewShowFormValue} from './ShowStep'
 import type { MediaProfileFormValue } from '../MediaProfileForm'
 import { defaultShowFormValue, type ShowFormValue } from '../ShowForm'
 
@@ -51,7 +51,7 @@ type WizardState = {
   selectedProfileId: string | null
   newProfile: NewProfileForm
   newProfileState: NewProfileForm | null
-  showForm: ShowFormValue
+  newShowForm: NewShowFormValue
 }
 
 function loadWizardState(): WizardState | null {
@@ -166,6 +166,28 @@ export default function AddShowPage({ onCancel }: Props) {
   const urlValid = result.domainOk && result.pathOk && result.slugOk
   const showUrlErrors = rawUrl.trim().length > 0
 
+  // Extract DailyWire show slug from the URL when valid
+  const showSlug = useMemo(() => {
+    if (!urlValid) return undefined
+    try {
+      const u = new URL(result.normalized ?? ensureProtocol(rawUrl))
+      const path = u.pathname
+      if (!path.startsWith('/show/')) return undefined
+      const slug = path.slice('/show/'.length).split('/')[0]
+      return slug || undefined
+    } catch {
+      return undefined
+    }
+  }, [urlValid, rawUrl, result.normalized])
+
+  // Debounce to detect "done typing"
+  const [debouncedSlug, setDebouncedSlug] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    const h = setTimeout(() => setDebouncedSlug(showSlug), 500)
+    return () => clearTimeout(h)
+  }, [showSlug])
+
+
   // Step 2: Media Profile
   const [profiles, setProfiles] = useState<MediaProfile[] | null>(null)
   const [profilesError, setProfilesError] = useState<string | null>(null)
@@ -196,7 +218,7 @@ export default function AddShowPage({ onCancel }: Props) {
   }
   const [newProfile, setNewProfile] = useState<NewProfileForm>(() => loadWizardState()?.newProfile ?? emptyProfile)
   const [newProfileState, setNewProfileState] = useState<NewProfileForm | null>(() => loadWizardState()?.newProfileState ?? null)
-  const [showForm, setShowForm] = useState<ShowFormValue>(() => loadWizardState()?.showForm ?? { ...defaultShowFormValue })
+  const [showForm, setShowForm] = useState<NewShowFormValue>(() => loadWizardState()?.newShowForm ?? { ...defaultShowFormValue })
 
   const creatingProfileValid =
     newProfile.name.trim().length > 0 && newProfile.outputPathTemplate.trim().length > 0
@@ -204,7 +226,7 @@ export default function AddShowPage({ onCancel }: Props) {
 
   // Persist wizard state on any change
   useEffect(() => {
-    saveWizardState({ step, rawUrl, selectedProfileId, newProfile, newProfileState, showForm })
+    saveWizardState({ step, rawUrl, selectedProfileId, newProfile, newProfileState, newShowForm: showForm })
   }, [step, rawUrl, selectedProfileId, newProfile, newProfileState, showForm])
 
   function handleCancel() {
@@ -276,6 +298,7 @@ export default function AddShowPage({ onCancel }: Props) {
           errors={result.errors}
           onContinue={() => urlValid && setStep(2)}
           onCancel={handleCancel}
+          slug={debouncedSlug}
         />
       )}
 

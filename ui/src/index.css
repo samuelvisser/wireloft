@@ -280,6 +280,66 @@ a.show-header:focus-visible {
   gap: 8px;
 }
 
+/* DW show preview card */
+.dw-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 12px;
+}
+.dw-card-error { background: #fef2f2; border-color: #fecaca; }
+.dw-card-error .dw-card-title { color: #b91c1c; }
+.dw-card-media { flex-shrink: 0; }
+.dw-card-img {
+  width: 120px;
+  height: auto; /* preserve intrinsic aspect ratio */
+  display: block;
+  border-radius: 10px;
+}
+/* Placeholder variant keeps minimal dimensions with a neutral background */
+.dw-card-img-placeholder {
+  height: 160px;
+  background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
+  border-radius: 10px;
+}
+.dw-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.dw-card-title { font-size: 18px; font-weight: 800; line-height: 1.2; }
+.dw-card-author { color: var(--muted); font-weight: 600; }
+.dw-card-desc { font-size: 14px; opacity: 0.95; }
+
+/* 2-line clamp utility */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+@media (max-width: 520px) {
+  .dw-card-img { width: 96px; }
+  .dw-card-img-placeholder { height: 128px; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .dw-card { background: #0b1220; color: var(--text); border-color: rgba(255, 255, 255, 0.12); }
+  .dw-card-error { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.35); }
+  .dw-card-error .dw-card-title { color: #fecaca; }
+}
+
 
 /* Episode status icon (bottom-left of thumbnail) */
 .status {
@@ -587,4 +647,42 @@ a.show-header:focus-visible {
   color: var(--muted);
   font-weight: 600;
   user-select: none;
+}
+
+
+/* Blurred background layer for DW card */
+.dw-card-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(18px);
+  transform: scale(1.08);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+
+/* Error placeholder media for DW card */
+.dw-card-img-error {
+  display: grid;
+  place-items: center;
+  height: 160px; /* minimal height to mirror success placeholder */
+  background: #e5e7eb; /* gray */
+  color: #111827;
+  border-radius: 10px; /* ensure rounded when not using <img> */
+}
+.dw-error-code {
+  font-weight: 800;
+  font-size: 20px;
+  opacity: 0.9;
+}
+@media (max-width: 520px) {
+  .dw-card-img-error { height: 128px; }
+}
+@media (prefers-color-scheme: dark) {
+  .dw-card-img-error {
+    background: #1f2937; /* dark gray */
+    color: #e5e7eb;
+  }
 }
