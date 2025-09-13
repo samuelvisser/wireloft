@@ -36,8 +36,6 @@ def create_media_profile(body: MediaProfileAPICreate) -> MediaProfileAPIRead:
         # Build model from validated Pydantic data
         data = body.model_dump(by_alias=True)
 
-        print(data)
-
         mp = MediaProfile(**data)
         s.add(mp)
         s.commit()

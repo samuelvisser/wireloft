@@ -1,6 +1,7 @@
 from typing import Optional
+from datetime import datetime
 
-from pydantic import AwareDatetime, computed_field
+from pydantic import computed_field
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.types.show_types import ShowType, EpisodeIdentifier
@@ -46,8 +47,8 @@ class ShowAPIRead(ShowAPIBase, ResponseBase):
     episode_identifier: EpisodeIdentifier
     author_slug: str
     years: Optional[str] = None
-    created_at: AwareDatetime
-    updated_at: AwareDatetime
+    created_at: datetime
+    updated_at: datetime
 
 
 class ShowAPIUpdate(ShowAPIBase, RequestBase):

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from typing import Optional
+from datetime import datetime
 
-from pydantic import AwareDatetime, computed_field
+from pydantic import computed_field
 
 from backend.api.models.base import ResponseBase, RequestBase
 from backend.utils.helpers import generate_uuid
@@ -14,7 +15,7 @@ class MovieAPIBase:
     # Fields in the media_items table
     title: str
     description: Optional[str]
-    downloaded_date: Optional[AwareDatetime]
+    downloaded_date: Optional[datetime]
 
 
 class MovieAPICreate(MovieAPIBase, RequestBase):
@@ -38,8 +39,8 @@ class MovieAPIRead(MovieAPIBase, ResponseBase):
     uuid: str
     dw_id: Optional[str] = None
     slug: str
-    created_at: AwareDatetime
-    updated_at: AwareDatetime
+    created_at: datetime
+    updated_at: datetime
 
 
 class MovieAPIUpdate(MovieAPIBase, RequestBase):

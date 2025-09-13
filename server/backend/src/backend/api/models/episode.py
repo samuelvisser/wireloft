@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from typing import Optional
+from datetime import datetime
 
-from pydantic import AwareDatetime, computed_field
+from pydantic import computed_field
 
 from backend.api.models.base import ResponseBase, RequestBase
 from backend.types.episode_types import EpisodePublishStatus
@@ -14,14 +15,14 @@ class EpisodeAPIBase:
     """Fields common to all episode models."""
     # Fields in the episodes' table
     publish_status: EpisodePublishStatus
-    went_live_date: Optional[AwareDatetime]
-    published_date: Optional[AwareDatetime]
-    redownloaded_date: Optional[AwareDatetime]
+    went_live_date: Optional[datetime]
+    published_date: Optional[datetime]
+    redownloaded_date: Optional[datetime]
 
     # Fields in the media_items table
     title: str
     description: str
-    downloaded_date: Optional[AwareDatetime]
+    downloaded_date: Optional[datetime]
 
 
 class EpisodeAPICreate(EpisodeAPIBase, RequestBase):
@@ -51,8 +52,8 @@ class EpisodeAPIRead(EpisodeAPIBase, ResponseBase):
     uuid: str
     dw_id: Optional[str]
     slug: str
-    created_at: AwareDatetime
-    updated_at: AwareDatetime
+    created_at: datetime
+    updated_at: datetime
 
 
 class EpisodeAPIUpdate(EpisodeAPIBase, RequestBase):

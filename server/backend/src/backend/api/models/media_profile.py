@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import AwareDatetime, computed_field
+from datetime import datetime
+
+from pydantic import computed_field
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.utils.helpers import slugify
@@ -30,8 +32,8 @@ class MediaProfileAPIRead(MediaProfileAPIBase, ResponseBase):
     """Response body for a media profile."""
     id: int
     slug: str
-    created_at: AwareDatetime
-    updated_at: AwareDatetime
+    created_at: datetime
+    updated_at: datetime
 
 
 class MediaProfileAPIUpdate(MediaProfileAPIBase, RequestBase):

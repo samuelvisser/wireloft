@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional
-
-from pydantic import BaseModel, AwareDatetime
+from datetime import datetime
 
 from backend.api.models.base import RequestBase, ResponseBase
 
@@ -21,8 +20,8 @@ class SettingsAPIRead(SettingsAPIBase, ResponseBase):
     """Represents the settings record."""
 
     id: int
-    created_at: AwareDatetime
-    updated_at: AwareDatetime
+    created_at: datetime
+    updated_at: datetime
 
 
 class SettingsAPIUpdate(SettingsAPIBase, RequestBase):

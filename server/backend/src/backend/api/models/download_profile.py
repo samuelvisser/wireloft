@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import AwareDatetime
+from datetime import datetime
 
 from backend.api.models.base import RequestBase, ResponseBase
 
@@ -26,8 +26,8 @@ class DownloadProfileAPIRead(DownloadProfileAPIBase, ResponseBase):
 
     id: int
     show_id: int
-    created_at: AwareDatetime
-    updated_at: AwareDatetime
+    created_at: datetime
+    updated_at: datetime
 
 
 class DownloadProfileAPIUpdate(DownloadProfileAPIBase, RequestBase):
