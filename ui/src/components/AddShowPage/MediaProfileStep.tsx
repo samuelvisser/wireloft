@@ -1,4 +1,7 @@
+import { useEffect, useState } from 'react'
 import MediaProfileForm, { type MediaProfileFormValue } from '../MediaProfileForm'
+import { useMediaProfiles } from '../../lib/queries'
+import type { AddShowMediaProfileUpsert } from '../../types/addShow'
 
 type MediaProfile = {
   id: number
@@ -10,16 +13,8 @@ type MediaProfile = {
 }
 
 type Props = {
-  profiles: MediaProfile[] | null
-  profilesError: string | null
-  selectedProfileId: string | null
-  setSelectedProfileId: (id: string | null) => void
-  newProfile: MediaProfileFormValue
-  setNewProfile: (v: MediaProfileFormValue) => void
-  newProfileState: MediaProfileFormValue | null
-  setNewProfileState: (v: MediaProfileFormValue | null) => void
-  emptyProfile: MediaProfileFormValue
-  canContinue: boolean
+  value: AddShowMediaProfileUpsert
+  onChange: (v: AddShowMediaProfileUpsert) => void
   onBack: () => void
   onContinue: () => void
   onCancel: () => void
@@ -28,22 +23,47 @@ type Props = {
 
 import DailywireShowCard from './DailywireShowCard'
 
-export default function MediaProfileStep({
-  profiles,
-  profilesError,
-  selectedProfileId,
-  setSelectedProfileId,
-  newProfile,
-  setNewProfile,
-  newProfileState,
-  setNewProfileState,
-  emptyProfile,
-  canContinue,
-  onBack,
-  onContinue,
-  onCancel,
-  slug,
-}: Props) {
+export default function MediaProfileStep({ value, onChange, onBack, onContinue, onCancel, slug }: Props) {
+  const profilesQuery = useMediaProfiles()
+  const profiles: MediaProfile[] | undefined = profilesQuery.data as any
+  const profilesError = profilesQuery.isError ? ((profilesQuery.error as any)?.message ?? 'Failed to load media profiles') : null
+
+  const defaultEmptyForm: MediaProfileFormValue = {
+    name: '',
+    outputPathTemplate: '',
+    preferredFormat: '1080p',
+    downloadSeriesImages: true,
+  }
+
+  const initialSelectedId = (value as any)?.op === 'update_by_slug' ? (value as any)?.slug ?? null : null
+  const initialForm: MediaProfileFormValue = {
+    name: (value as any)?.name ?? '',
+    outputPathTemplate: (value as any)?.outputTemplate ?? '',
+    preferredFormat: ((value as any)?.preferredFormat ?? '1080p') as MediaProfileFormValue['preferredFormat'],
+    downloadSeriesImages: (value as any)?.downloadSeriesImages ?? true,
+  }
+
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(initialSelectedId)
+  const [formValue, setFormValue] = useState<MediaProfileFormValue>(initialForm)
+  const [formSnapshot, setFormSnapshot] = useState<MediaProfileFormValue | null>(null)
+
+  // Keep parent in sync whenever selection or form changes
+  useEffect(() => {
+    const base = {
+      name: formValue.name,
+      outputTemplate: formValue.outputPathTemplate,
+      preferredFormat: formValue.preferredFormat,
+      downloadSeriesImages: formValue.downloadSeriesImages,
+    }
+    if (selectedProfileId) {
+      onChange({ op: 'update_by_slug', slug: selectedProfileId, ...base })
+    } else {
+      onChange({ op: 'create_new', ...base })
+    }
+  }, [selectedProfileId, formValue])
+
+  const canContinue = !!selectedProfileId || (formValue.name.trim().length > 0 && formValue.outputPathTemplate.trim().length > 0)
+
   return (
     <div className="wizard-with-aside">
       <div className="wizard-main">
@@ -52,9 +72,9 @@ export default function MediaProfileStep({
           <div className="form-row">
             <label>Choose a media profile</label>
             <div className="card-grid" role="list">
-              {profiles === null ? (
+              {profilesQuery.isPending ? (
                 <div role="listitem" className="card">Loading profiles...</div>
-              ) : profiles.length === 0 ? (
+              ) : !profiles || profiles.length === 0 ? (
                 <div role="listitem" className="card">{profilesError ?? 'No profiles found'}</div>
               ) : (
                 profiles.map((p) => {
@@ -70,19 +90,19 @@ export default function MediaProfileStep({
                         if (selected) {
                           // Deselect: restore previous form state (if any)
                           setSelectedProfileId(null)
-                          setNewProfile(newProfileState ?? emptyProfile)
-                          setNewProfileState(null)
+                          setFormValue(formSnapshot ?? defaultEmptyForm)
+                          setFormSnapshot(null)
                         } else {
                           // Selecting a profile
                           if (selectedProfileId === null) {
                             // Save current form before replacing it with the selected profile
-                            setNewProfileState(newProfile)
+                            setFormSnapshot(formValue)
                           }
                           setSelectedProfileId(p.slug)
-                          setNewProfile({
+                          setFormValue({
                             name: p.name,
                             outputPathTemplate: p.outputTemplate,
-                            preferredFormat: p.preferredFormat,
+                            preferredFormat: p.preferredFormat as any,
                             downloadSeriesImages: p.downloadSeriesImages,
                           })
                         }
@@ -107,9 +127,9 @@ export default function MediaProfileStep({
 
           {/* New profile form */}
           <MediaProfileForm
-            value={newProfile}
+            value={formValue}
             onChange={(v) => {
-              setNewProfile(v)
+              setFormValue(v)
             }}
             autoFocusName
           />

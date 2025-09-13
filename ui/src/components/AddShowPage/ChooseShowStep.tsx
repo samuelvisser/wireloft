@@ -1,62 +1,134 @@
-import {useEffect, useState} from 'react'
+import {useEffect, useMemo, useState} from 'react'
+
+export type ShowFormValue = {
+    rawUrl: string
+    showType: 'podcast' | 'series' | null
+    episodeIdentifier: 'date_based' | 'numbered' | null
+}
 
 type Props = {
-    rawUrl: string
-    onChangeRawUrl: (v: string) => void
-    urlValid: boolean
-    showUrlErrors: boolean
-    errors: string[]
+    value: ShowFormValue
+    onChange: (v: ShowFormValue) => void
     onContinue: () => void
     onCancel: () => void
-    slug?: string
+    onSlugChange?: (slug?: string) => void
 }
 
 import DailywireShowCard from './DailywireShowCard'
 import {useDailywireShow} from '../../lib/queries'
 import ReadMore from '../../utils/ReadMore'
 
+// Local helpers for URL validation and normalization (moved from parent)
+
+type ValidationResult = {
+    domainOk: boolean
+    pathOk: boolean
+    slugOk: boolean
+    errors: string[]
+    normalized?: string
+}
+
+function ensureProtocol(input: string): string {
+    let v = input.trim()
+    if (!v) return v
+    // If the string doesn't start with a URL scheme, prepend https://
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(v)) {
+        v = 'https://' + v
+    }
+    return v
+}
+
+function validateShowUrl(input: string): ValidationResult {
+    const withProto = ensureProtocol(input)
+    try {
+        const url = new URL(withProto)
+        const host = url.hostname.toLowerCase()
+        const domainOk = host === 'dailywire.com' || host === 'www.dailywire.com'
+        const path = url.pathname
+        const pathOk = path.startsWith('/show/')
+        let slugOk = false
+        if (pathOk) {
+            const slug = path.slice('/show/'.length).split('/')[0]
+            slugOk = !!slug
+        }
+        const errors: string[] = []
+        if (!domainOk) errors.push('URL must be on dailywire.com')
+        if (!pathOk) errors.push('URL must include /show/ in the path')
+        if (!slugOk) errors.push('URL must include a show name after /show/ (e.g., the-ben-shapiro-show)')
+        return {domainOk, pathOk, slugOk, errors, normalized: url.toString()}
+    } catch {
+        return {
+            domainOk: false,
+            pathOk: false,
+            slugOk: false,
+            errors: [
+                'URL must be on dailywire.com',
+                'URL must include /show/ in the path',
+                'URL must include a show name after /show/ (e.g., the-ben-shapiro-show)',
+            ],
+        }
+    }
+}
+
 export default function ChooseShowStep({
-                                    rawUrl,
-                                    onChangeRawUrl,
-                                    urlValid,
-                                    showUrlErrors,
-                                    errors,
-                                    onContinue,
-                                    onCancel,
-                                    slug
-                                }: Props) {
-    const dw = useDailywireShow(slug)
+                                           value,
+                                           onChange,
+                                           onContinue,
+                                           onCancel,
+                                           onSlugChange,
+                                       }: Props) {
+    // Validate URL locally
+    const result = useMemo(() => validateShowUrl(value.rawUrl), [value.rawUrl])
+    const urlValid = result.domainOk && result.pathOk && result.slugOk
+    const showUrlErrors = value.rawUrl.trim().length > 0
 
-    // Show type selection (Podcast/Series)
-    const [showType, setShowType] = useState<string>('')
+    // Extract DailyWire show slug from the URL when valid
+    const showSlug = useMemo(() => {
+        if (!urlValid) return undefined
+        try {
+            const u = new URL(result.normalized ?? ensureProtocol(value.rawUrl))
+            const path = u.pathname
+            if (!path.startsWith('/show/')) return undefined
+            const s = path.slice('/show/'.length).split('/')[0]
+            return s || undefined
+        } catch {
+            return undefined
+        }
+    }, [urlValid, value.rawUrl, result.normalized])
 
-    // Initialize from API probableShowType when data loads/changes
+    // Debounce to detect "done typing"
+    const [debouncedSlug, setDebouncedSlug] = useState<string | undefined>(undefined)
+    useEffect(() => {
+        const h = setTimeout(() => setDebouncedSlug(showSlug), 500)
+        return () => clearTimeout(h)
+    }, [showSlug])
+
+    // Notify parent of slug changes for later wizard steps
+    useEffect(() => {
+        onSlugChange?.(debouncedSlug)
+    }, [debouncedSlug, onSlugChange])
+
+    const dw = useDailywireShow(debouncedSlug)
+
+    // Initialize from API probable values when data loads/changes, but only if missing in current value
     useEffect(() => {
         const anyData = dw.data as any
         const v = (anyData?.probableShowType ?? anyData?.probable_show_type) as string | undefined
-        if (v === 'podcast' || v === 'series') {
-            setShowType(v)
-        } else {
-            setShowType('')
+        if (!value.showType && (v === 'podcast' || v === 'series')) {
+            onChange({ ...value, showType: v as 'podcast' | 'series' })
         }
     }, [dw.data])
 
-    // Episode identification selection (Date-based/Numbered), only relevant to podcasts
-    const [episodeIdentification, setEpisodeIdentification] = useState<string>('')
-
-    // Initialize from API probableEpisodeIdentification when data loads/changes
     useEffect(() => {
         const anyData = dw.data as any
         const v = (anyData?.probableEpisodeIdentification ?? anyData?.probable_episode_identification) as string | undefined
-        if (v === 'date_based' || v === 'numbered') {
-            setEpisodeIdentification(v)
-        } else {
-            setEpisodeIdentification('')
+        if (value.showType === 'podcast' && !value.episodeIdentifier && (v === 'date_based' || v === 'numbered')) {
+            onChange({ ...value, episodeIdentifier: v as 'date_based' | 'numbered' })
         }
-    }, [dw.data])
+    }, [dw.data, value.showType, value.episodeIdentifier])
 
-    const episodeIdOk = showType !== 'podcast' || episodeIdentification !== ''
-    const canContinue = urlValid && !!slug && dw.isSuccess && !!dw.data && showType !== '' && episodeIdOk
+    const episodeIdOk = value.showType !== 'podcast' || value.episodeIdentifier !== null
+    const canContinue = urlValid && !!debouncedSlug && dw.isSuccess && !!dw.data && value.showType !== null && episodeIdOk
 
     return (
         <form className="form" onSubmit={(e) => e.preventDefault()} noValidate>
@@ -69,17 +141,17 @@ export default function ChooseShowStep({
                     inputMode="url"
                     autoFocus
                     placeholder="https://www.dailywire.com/show/the-ben-shapiro-show"
-                    value={rawUrl}
-                    onChange={(e) => onChangeRawUrl(e.target.value)}
+                    value={value.rawUrl}
+                    onChange={(e) => onChange({ ...value, rawUrl: e.target.value })}
                     aria-invalid={showUrlErrors && !urlValid}
                     aria-describedby="url-help url-errors"
                 />
                 <div id="url-help" className="help">
                     Must be on dailywire.com, include /show/, and a show name.
                 </div>
-                {showUrlErrors && errors.length > 0 && (
+                {showUrlErrors && result.errors.length > 0 && (
                     <ul id="url-errors" className="error-list" role="alert">
-                        {errors.map((msg, i) => (
+                        {result.errors.map((msg, i) => (
                             <li key={i}>{msg}</li>
                         ))}
                     </ul>
@@ -90,7 +162,7 @@ export default function ChooseShowStep({
             {urlValid && (
                 <>
                     <div className="form-row" aria-live="polite">
-                        <DailywireShowCard slug={slug} />
+                        <DailywireShowCard slug={debouncedSlug} />
                     </div>
 
                     {/* Show type selector under the card */}
@@ -101,8 +173,13 @@ export default function ChooseShowStep({
                                 <select
                                     id="show-type"
                                     className="input"
-                                    value={showType}
-                                    onChange={(e) => setShowType(e.target.value)}
+                                    value={value.showType ?? ''}
+                                    onChange={(e) => {
+                                        const v = e.target.value as 'podcast' | 'series' | ''
+                                        const nextType = v === '' ? null : (v as 'podcast' | 'series')
+                                        const nextEpisodeId = nextType === 'series' ? null : value.episodeIdentifier
+                                        onChange({ ...value, showType: nextType, episodeIdentifier: nextEpisodeId })
+                                    }}
                                 >
                                     <option value="">Select a type…</option>
                                     <option value="podcast">Podcast</option>
@@ -111,8 +188,9 @@ export default function ChooseShowStep({
                                 <div className="help" id="show-type-help">
                                     <ReadMore summary={<span>Why do I need to choose this?</span>}>
                                         Selecting the correct show type helps WireLoft apply sensible defaults for how
-                                        episodes are grouped and presented.<br/><br/>
-                                        Though WireLoft tries to guess the show type automatically based on various factors,
+                                        episodes are grouped and presented.<br /><br />
+                                        Though WireLoft tries to guess the show type automatically based on various
+                                        factors,
                                         Dailywire unfortunately does not provide a reliable way to determine this.
                                         If you're unsure, select "Podcast".
                                     </ReadMore>
@@ -120,14 +198,17 @@ export default function ChooseShowStep({
                             </div>
 
                             {/* Episode identification selector (only for Podcast) */}
-                            {showType === 'podcast' && (
+                            {value.showType === 'podcast' && (
                                 <div className="form-row">
                                     <label htmlFor="episode-identification">Episode identification</label>
                                     <select
                                         id="episode-identification"
                                         className="input"
-                                        value={episodeIdentification}
-                                        onChange={(e) => setEpisodeIdentification(e.target.value)}
+                                        value={value.episodeIdentifier ?? ''}
+                                        onChange={(e) => {
+                                            const v = e.target.value as 'date_based' | 'numbered' | ''
+                                            onChange({ ...value, episodeIdentifier: v === '' ? null : (v as 'date_based' | 'numbered') })
+                                        }}
                                     >
                                         <option value="">Select episode identification…</option>
                                         <option value="date_based">Date-based</option>
@@ -135,11 +216,15 @@ export default function ChooseShowStep({
                                     </select>
                                     <div className="help" id="show-type-help">
                                         <ReadMore summary={<span>How are episodes in this show identified?</span>}>
-                                            Some shows identify their episodes by a number. In this case, WireLoft expects to see
-                                            a string "Ep. " in the title. The number that follows it, is taken as the episode number.
-                                            Episodes without this format will be regarded as auxiliary content.<br/><br/>
-                                            Sometimes however, shows use a date-based format. In this case, the episodes are identified
-                                            simply by their release date.<br/><br/>
+                                            Some shows identify their episodes by a number. In this case, WireLoft
+                                            expects to see
+                                            a string "Ep. " in the title. The number that follows it, is taken as the
+                                            episode number.
+                                            Episodes without this format will be regarded as auxiliary
+                                            content.<br /><br />
+                                            Sometimes however, shows use a date-based format. In this case, the episodes
+                                            are identified
+                                            simply by their release date.<br /><br />
                                             If you're unsure, select "Date-based".
                                         </ReadMore>
                                     </div>
