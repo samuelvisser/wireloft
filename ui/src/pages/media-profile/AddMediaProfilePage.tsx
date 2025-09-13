@@ -21,14 +21,14 @@ export default function AddMediaProfilePage() {
   const qc = useQueryClient()
   const [value, setValue] = useState<MediaProfileFormValue>({
     name: '',
-    outputPathTemplate: '',
+    outputTemplate: '',
     preferredFormat: '1080p',
     downloadSeriesImages: true,
   })
   const [nameError, setNameError] = useState<string | null>(null)
 
   const valid = useMemo(() => {
-    return value.name.trim().length > 0 && value.outputPathTemplate.trim().length > 0
+    return value.name.trim().length > 0 && value.outputTemplate.trim().length > 0
   }, [value])
 
   // Clear name error when user edits the name

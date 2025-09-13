@@ -3,7 +3,7 @@ import Switch from 'react-switch'
 
 export type MediaProfileFormValue = {
   name: string
-  outputPathTemplate: string
+  outputTemplate: string
   preferredFormat: '4k' | '1080p' | '720p' | 'Audio Only'
   downloadSeriesImages: boolean
 }
@@ -46,8 +46,8 @@ export default function MediaProfileForm({ value, onChange, autoFocusName, nameE
           className="input"
           type="text"
           placeholder="D:/Media/Shows/{show}/{season}"
-          value={value.outputPathTemplate}
-          onChange={(e) => onChange({ ...value, outputPathTemplate: e.target.value })}
+          value={value.outputTemplate}
+          onChange={(e) => onChange({ ...value, outputTemplate: e.target.value })}
         />
         <div className="help">Use placeholders like {`{show}`} and {`{season}`}.</div>
       </div>

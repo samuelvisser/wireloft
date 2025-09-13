@@ -30,7 +30,7 @@ export default function MediaProfileStep({ value, onChange, onBack, onContinue, 
 
   const defaultEmptyForm: MediaProfileFormValue = {
     name: '',
-    outputPathTemplate: '',
+    outputTemplate: '',
     preferredFormat: '1080p',
     downloadSeriesImages: true,
   }
@@ -38,7 +38,7 @@ export default function MediaProfileStep({ value, onChange, onBack, onContinue, 
   const initialSelectedId = (value as any)?.op === 'update_by_slug' ? (value as any)?.slug ?? null : null
   const initialForm: MediaProfileFormValue = {
     name: (value as any)?.name ?? '',
-    outputPathTemplate: (value as any)?.outputTemplate ?? '',
+    outputTemplate: (value as any)?.outputTemplate ?? '',
     preferredFormat: ((value as any)?.preferredFormat ?? '1080p') as MediaProfileFormValue['preferredFormat'],
     downloadSeriesImages: (value as any)?.downloadSeriesImages ?? true,
   }
@@ -51,7 +51,7 @@ export default function MediaProfileStep({ value, onChange, onBack, onContinue, 
   useEffect(() => {
     const base = {
       name: formValue.name,
-      outputTemplate: formValue.outputPathTemplate,
+      outputTemplate: formValue.outputTemplate,
       preferredFormat: formValue.preferredFormat,
       downloadSeriesImages: formValue.downloadSeriesImages,
     }
@@ -62,7 +62,7 @@ export default function MediaProfileStep({ value, onChange, onBack, onContinue, 
     }
   }, [selectedProfileId, formValue])
 
-  const canContinue = !!selectedProfileId || (formValue.name.trim().length > 0 && formValue.outputPathTemplate.trim().length > 0)
+  const canContinue = !!selectedProfileId || (formValue.name.trim().length > 0 && formValue.outputTemplate.trim().length > 0)
 
   return (
     <div className="wizard-with-aside">
@@ -101,7 +101,7 @@ export default function MediaProfileStep({ value, onChange, onBack, onContinue, 
                           setSelectedProfileId(p.slug)
                           setFormValue({
                             name: p.name,
-                            outputPathTemplate: p.outputTemplate,
+                            outputTemplate: p.outputTemplate,
                             preferredFormat: p.preferredFormat as any,
                             downloadSeriesImages: p.downloadSeriesImages,
                           })

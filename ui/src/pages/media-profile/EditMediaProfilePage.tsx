@@ -18,8 +18,8 @@ export default function EditMediaProfilePage() {
   const resolvedInitial: MediaProfileFormValue | undefined = useMemo(() => {
     if (initialFromState) {
       // Use values passed from the list
-      const { name, outputPathTemplate, preferredFormat, downloadSeriesImages } = initialFromState
-      return { name, outputPathTemplate, preferredFormat, downloadSeriesImages }
+      const { name, outputTemplate, preferredFormat, downloadSeriesImages } = initialFromState
+      return { name, outputTemplate: outputTemplate, preferredFormat, downloadSeriesImages }
     }
     return undefined
   }, [initialFromState])
@@ -32,7 +32,7 @@ export default function EditMediaProfilePage() {
 
   const valid = useMemo(() => {
     if (!value) return false
-    return value.name.trim().length > 0 && value.outputPathTemplate.trim().length > 0
+    return value.name.trim().length > 0 && value.outputTemplate.trim().length > 0
   }, [value])
 
   const onCancel = useCallback(() => navigate('/profiles'), [navigate])
