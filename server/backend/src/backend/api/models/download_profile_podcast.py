@@ -5,7 +5,7 @@ from datetime import datetime
 from backend.api.models.base import RequestBase, ResponseBase
 
 
-class DownloadProfileAPIBase:
+class DownloadProfilePodcastAPIBase:
     """Fields common to all download profile models."""
 
     media_profile_id: int
@@ -16,12 +16,12 @@ class DownloadProfileAPIBase:
     delete_older_episodes: bool
 
 
-class DownloadProfileAPICreate(DownloadProfileAPIBase, RequestBase):
+class DownloadProfilePodcastAPICreate(DownloadProfilePodcastAPIBase, RequestBase):
     """Request body for creating a download profile."""
     show_id: int
 
 
-class DownloadProfileAPIRead(DownloadProfileAPIBase, ResponseBase):
+class DownloadProfilePodcastAPIRead(DownloadProfilePodcastAPIBase, ResponseBase):
     """Response body for a download profile."""
 
     id: int
@@ -30,6 +30,6 @@ class DownloadProfileAPIRead(DownloadProfileAPIBase, ResponseBase):
     updated_at: datetime
 
 
-class DownloadProfileAPIUpdate(DownloadProfileAPIBase, RequestBase):
+class DownloadProfilePodcastAPIUpdate(DownloadProfilePodcastAPIBase, RequestBase):
     """Request body for updating a download profile."""
     pass

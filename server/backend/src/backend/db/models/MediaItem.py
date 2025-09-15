@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, DateTime, func
+from sqlalchemy import DateTime, func
 
 from backend.db import Base
 from backend.types.media_types import MediaType

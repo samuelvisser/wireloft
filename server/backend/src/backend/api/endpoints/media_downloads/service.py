@@ -15,7 +15,7 @@ def get_media_downloads_list() -> list[MediaDownloadAPIRead]:
             .order_by(MediaDownload.id)
             .all()
         )
-        return [MediaDownloadAPIRead.model_validate(it, from_attributes=True) for it in items]
+        return [MediaDownloadAPIRead.model_validate(it) for it in items]
 
 
 def get_media_download(media_download_id: int) -> MediaDownloadAPIRead:
@@ -28,7 +28,7 @@ def get_media_download(media_download_id: int) -> MediaDownloadAPIRead:
         if item is None:
             raise HTTPException(status_code=404, detail="Media download not found")
 
-        return MediaDownloadAPIRead.model_validate(item, from_attributes=True)
+        return MediaDownloadAPIRead.model_validate(item)
 
 
 def create_media_download(body: MediaDownloadAPICreate) -> MediaDownloadAPIRead:
@@ -38,7 +38,7 @@ def create_media_download(body: MediaDownloadAPICreate) -> MediaDownloadAPIRead:
         s.add(item)
         s.commit()
         s.refresh(item)
-        return MediaDownloadAPIRead.model_validate(item, from_attributes=True)
+        return MediaDownloadAPIRead.model_validate(item)
 
 
 def update_media_download(media_download_id: int, body: MediaDownloadAPIUpdate) -> MediaDownloadAPIRead:
@@ -54,7 +54,7 @@ def update_media_download(media_download_id: int, body: MediaDownloadAPIUpdate) 
         update_database_fields(item, body)
         s.commit()
         s.refresh(item)
-        return MediaDownloadAPIRead.model_validate(item, from_attributes=True)
+        return MediaDownloadAPIRead.model_validate(item)
 
 
 def delete_media_download(media_download_id: int) -> MediaDownloadAPIRead:
@@ -67,7 +67,7 @@ def delete_media_download(media_download_id: int) -> MediaDownloadAPIRead:
         if item is None:
             raise HTTPException(status_code=404, detail="Media download not found")
 
-        payload = MediaDownloadAPIRead.model_validate(item, from_attributes=True)
+        payload = MediaDownloadAPIRead.model_validate(item)
         s.delete(item)
         s.commit()
         return payload

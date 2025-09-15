@@ -3,48 +3,48 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
-from backend.api.models.download_profile import *
+from backend.api.models.download_profile_podcast import *
 from backend.app import db_session
-from backend.db.models import DownloadProfile
+from backend.db.models import DownloadProfilePodcast
 
 
-def get_download_profiles_list() -> list[DownloadProfileAPIRead]:
+def get_podcast_download_profiles_list() -> list[DownloadProfilePodcastAPIRead]:
     with db_session() as s:
         items = (
-            s.query(DownloadProfile)
-            .order_by(DownloadProfile.id)
+            s.query(DownloadProfilePodcast)
+            .order_by(DownloadProfilePodcast.id)
             .all()
         )
-        return [DownloadProfileAPIRead.model_validate(it, from_attributes=True) for it in items]
+        return [DownloadProfilePodcastAPIRead.model_validate(it) for it in items]
 
 
-def get_download_profile(download_profile_id: int) -> DownloadProfileAPIRead:
+def get_download_profile_podcast(download_profile_id: int) -> DownloadProfilePodcastAPIRead:
     with db_session() as s:
         item = (
-            s.query(DownloadProfile)
+            s.query(DownloadProfilePodcast)
             .filter_by(id=download_profile_id)
             .one_or_none()
         )
         if item is None:
             raise HTTPException(status_code=404, detail="Download profile not found")
 
-        return DownloadProfileAPIRead.model_validate(item, from_attributes=True)
+        return DownloadProfilePodcastAPIRead.model_validate(item)
 
 
-def create_download_profile(body: DownloadProfileAPICreate) -> DownloadProfileAPIRead:
+def create_download_profile_podcast(body: DownloadProfilePodcastAPICreate) -> DownloadProfilePodcastAPIRead:
     with db_session() as s:
         data = body.model_dump(by_alias=True)
-        item = DownloadProfile(**data)
+        item = DownloadProfilePodcast(**data)
         s.add(item)
         s.commit()
         s.refresh(item)
-        return DownloadProfileAPIRead.model_validate(item, from_attributes=True)
+        return DownloadProfilePodcastAPIRead.model_validate(item)
 
 
-def update_download_profile(download_profile_id: int, body: DownloadProfileAPIUpdate) -> DownloadProfileAPIRead:
+def update_download_profile_podcast(download_profile_id: int, body: DownloadProfilePodcastAPIUpdate) -> DownloadProfilePodcastAPIRead:
     with db_session() as s:
         item = (
-            s.query(DownloadProfile)
+            s.query(DownloadProfilePodcast)
             .filter_by(id=download_profile_id)
             .one_or_none()
         )
@@ -54,20 +54,20 @@ def update_download_profile(download_profile_id: int, body: DownloadProfileAPIUp
         update_database_fields(item, body)
         s.commit()
         s.refresh(item)
-        return DownloadProfileAPIRead.model_validate(item, from_attributes=True)
+        return DownloadProfilePodcastAPIRead.model_validate(item)
 
 
-def delete_download_profile(download_profile_id: int) -> DownloadProfileAPIRead:
+def delete_download_profile_podcast(download_profile_id: int) -> DownloadProfilePodcastAPIRead:
     with db_session() as s:
         item = (
-            s.query(DownloadProfile)
+            s.query(DownloadProfilePodcast)
             .filter_by(id=download_profile_id)
             .one_or_none()
         )
         if item is None:
             raise HTTPException(status_code=404, detail="Download profile not found")
 
-        payload = DownloadProfileAPIRead.model_validate(item, from_attributes=True)
+        payload = DownloadProfilePodcastAPIRead.model_validate(item)
         s.delete(item)
         s.commit()
         return payload

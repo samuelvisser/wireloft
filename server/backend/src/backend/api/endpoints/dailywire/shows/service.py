@@ -23,4 +23,4 @@ def get_show(
     payload = client.get_show_page(slug=show_slug, membership_plan=membership_plan)
 
     # Map the normalized ShowRecord payload into our response model
-    return ShowRecord.model_validate(payload, from_attributes=True)
+    return ShowRecord.model_validate(payload)

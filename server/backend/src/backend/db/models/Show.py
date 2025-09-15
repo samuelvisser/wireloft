@@ -43,6 +43,9 @@ class Show(Base):
     download_profiles: Mapped[list["DownloadProfile"]] = relationship(
         back_populates="show", cascade="all, delete-orphan"
     )
+    seasons: Mapped[list["Season"]] = relationship(
+        back_populates="show", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

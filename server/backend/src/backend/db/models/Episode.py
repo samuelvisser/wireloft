@@ -16,6 +16,7 @@ class Episode(MediaItem):
     # Fields
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
     show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"), primary_key=True)
+    season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
     index: Mapped[int] = mapped_column(index=True)
     publish_status: Mapped[EpisodePublishStatus]
     went_live_date: Mapped[Optional[datetime]]
@@ -24,6 +25,7 @@ class Episode(MediaItem):
 
     # Relationships
     show: Mapped["Show"] = relationship(back_populates="episodes")
+    season: Mapped["Season"] = relationship(back_populates="episodes")
 
     def __repr__(self) -> str:
         return f"<Episode(id={self.id}, show_id={self.show_id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

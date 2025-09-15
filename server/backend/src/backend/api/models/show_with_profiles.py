@@ -1,10 +1,10 @@
 from __future__ import annotations
-from typing import Optional, Annotated, Literal, Union
-from pydantic import BaseModel, Field, model_validator
+from typing import Literal, Union
+from pydantic import Field
 
 from backend.api.models.base import RequestBase
 from backend.api.models.media_profile import MediaProfileAPICreate, MediaProfileAPIUpdate
-from backend.api.models.download_profile import DownloadProfileAPICreate
+from backend.api.models.download_profile_podcast import DownloadProfilePodcastAPICreate
 from backend.api.models.show import ShowAPICreate
 
 
@@ -25,5 +25,5 @@ MediaProfileAPIUpsert = Union[
 
 class ShowAPICreateBundle(RequestBase):
     show: ShowAPICreate
-    download_profile: DownloadProfileAPICreate
+    download_profile: DownloadProfilePodcastAPICreate
     media_profile: MediaProfileAPIUpsert = Field(discriminator="op")
