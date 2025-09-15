@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from pydantic import Field
+
 from backend.api.models.base import RequestBase, ResponseBase
 
 
@@ -12,7 +14,7 @@ class DownloadProfilePodcastAPIBase:
     enable_profile: bool
     download_with_countdown: bool
     redownload_final: bool
-    download_days_in_past: int
+    download_days_in_past: int = Field(ge=0)
     delete_older_episodes: bool
 
 
