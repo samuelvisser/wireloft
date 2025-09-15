@@ -69,15 +69,22 @@ def create_tables() -> None:
     Import model modules so they are registered with Base, then create tables.
     """
     # Import models explicitly to ensure mappings are registered
-    # Order matters due to FKs/inheritance: Base tables first, dependents after
-    importlib.import_module("backend.db.models.MediaItem")
-    importlib.import_module("backend.db.models.Show")
+    # Order matters due to inheritance: Base tables first, dependents after
+    # Base tables
+    importlib.import_module("backend.db.models.DownloadProfileBase")
+    importlib.import_module("backend.db.models.DownloadProfileSeriesSeasonAssociation")
     importlib.import_module("backend.db.models.Episode")
-    importlib.import_module("backend.db.models.MediaProfile")
-    importlib.import_module("backend.db.models.DownloadProfile")
     importlib.import_module("backend.db.models.MediaDownload")
-    importlib.import_module("backend.db.models.Movie")
+    importlib.import_module("backend.db.models.MediaItem")
+    importlib.import_module("backend.db.models.MediaProfile")
+    importlib.import_module("backend.db.models.Season")
     importlib.import_module("backend.db.models.Settings")
+
+    # Dependent tables
+    importlib.import_module("backend.db.models.DownloadProfilePodcast")
+    importlib.import_module("backend.db.models.DownloadProfileSeries")
+    importlib.import_module("backend.db.models.Movie")
+    importlib.import_module("backend.db.models.Show")
 
     Base.metadata.create_all(bind=get_engine())
 
