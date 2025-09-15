@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
         show_router,
         movie_router,
         episode_router,
+        season_router,
         setting_router,
         media_profile_router,
         meta_router
@@ -46,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(download_profile_podcast_router, prefix="/api/podcast-download-profiles")
     app.include_router(download_profile_series_router, prefix="/api/series-download-profiles")
     app.include_router(episode_router, prefix="/api/shows/{show_slug}/episodes")
+    app.include_router(season_router, prefix="/api/seasons")
     app.include_router(media_download_router, prefix="/api/media-downloads")
     app.include_router(show_router, prefix="/api/shows")
     app.include_router(movie_router, prefix="/api/movies")
