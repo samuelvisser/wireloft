@@ -1,30 +1,9 @@
-// Domain types: shared everywhere
-export type EpisodeStatus =
-    'scheduled' |
-    'delayed' |
-    'live' |
-    'dw_processing' |
-    'published_with_countdown' |
-    'published_final' |
-    'downloaded' |
-    'downloading' |
-    'redownloaded' |
-    'local_processing' |
-    'error'
-
-export type Episode = {
-  id: number
-  slug: string
-  title: string
-  index: number
-  cover?: string
-  unified_status: EpisodeStatus
+export enum ShowType {
+    podcast = 'Podcast',
+    series = 'Series'
 }
 
-export type Show = {
-  id: number
-  slug: string
-  author: string
-  title: string
-  years?: string
+export enum EpisodeIdentifier {
+    date_based = 'Date-based',
+    numbered = 'Numbered'
 }

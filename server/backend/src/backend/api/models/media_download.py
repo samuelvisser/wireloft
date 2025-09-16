@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import datetime
 
 from backend.api.models.base import RequestBase, ResponseBase

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional
 from datetime import datetime
 
@@ -46,9 +48,13 @@ class ShowAPIRead(ShowAPIBase, ResponseBase):
     type: ShowType
     episode_identifier: EpisodeIdentifier
     author_slug: str
-    years: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field(return_type=Optional[str])
+    @property
+    def years(self) -> Optional[str]:
+        return None
 
 
 class ShowAPIUpdate(ShowAPIBase, RequestBase):

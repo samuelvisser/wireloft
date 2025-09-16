@@ -12,8 +12,8 @@ class MediaProfileAPIBase:
     """Fields common to all media profile models."""
 
     name: str
-    output_template: str = None
-    preferred_format: str = None
+    output_template: str
+    preferred_format: str
     download_series_images: bool
 
 
