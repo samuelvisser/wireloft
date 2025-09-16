@@ -9,7 +9,7 @@ from backend.api.models.base import ResponseBase, RequestBase
 from backend.utils.helpers import generate_uuid
 
 
-class MovieAPIBase:
+class _MovieAPIBase:
     """Fields common to all movie models."""
 
     # Fields in the media_items table
@@ -18,7 +18,7 @@ class MovieAPIBase:
     downloaded_date: Optional[datetime]
 
 
-class MovieAPICreate(MovieAPIBase, RequestBase):
+class MovieAPICreate(_MovieAPIBase, RequestBase):
     """Request body for creating a movie."""
 
     # Fields in the media_items table
@@ -31,7 +31,7 @@ class MovieAPICreate(MovieAPIBase, RequestBase):
         return generate_uuid()
 
 
-class MovieAPIRead(MovieAPIBase, ResponseBase):
+class MovieAPIRead(_MovieAPIBase, ResponseBase):
     """Represents a movie summary/detail item returned by the API."""
 
     # Fields in the media_items table
@@ -43,6 +43,6 @@ class MovieAPIRead(MovieAPIBase, ResponseBase):
     updated_at: datetime
 
 
-class MovieAPIUpdate(MovieAPIBase, RequestBase):
+class MovieAPIUpdate(_MovieAPIBase, RequestBase):
     """Request body for updating a movie."""
     pass

@@ -10,7 +10,7 @@ from backend.types.show_types import ShowType, EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
 
 
-class ShowAPIBase:
+class _ShowAPIBase:
     """Fields common to all show models."""
     title: str
     description: str
@@ -24,7 +24,7 @@ class ShowAPIBase:
     thumbnail_square_path: Optional[str] = None
 
 
-class ShowAPICreate(ShowAPIBase, RequestBase):
+class ShowAPICreate(_ShowAPIBase, RequestBase):
     """Request body for creating a show."""
     dw_id: str
     slug: str
@@ -38,7 +38,7 @@ class ShowAPICreate(ShowAPIBase, RequestBase):
         return generate_uuid()
 
 
-class ShowAPIRead(ShowAPIBase, ResponseBase):
+class ShowAPIRead(_ShowAPIBase, ResponseBase):
     """Response body for a show."""
 
     id: int
@@ -57,6 +57,6 @@ class ShowAPIRead(ShowAPIBase, ResponseBase):
         return None
 
 
-class ShowAPIUpdate(ShowAPIBase, RequestBase):
+class ShowAPIUpdate(_ShowAPIBase, RequestBase):
     """Request body for updating a show."""
     pass

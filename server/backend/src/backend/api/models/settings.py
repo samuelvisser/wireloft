@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-from typing import Optional
 from datetime import datetime
 
 from backend.api.models.base import RequestBase, ResponseBase
 
 
-class SettingsAPIBase:
+class _SettingsAPIBase:
     """Fields common to all settings models."""
     pass
 
 
-class SettingsAPICreate(SettingsAPIBase, RequestBase):
+class SettingsAPICreate(_SettingsAPIBase, RequestBase):
     """Creates the settings record"""
     pass
 
 
-class SettingsAPIRead(SettingsAPIBase, ResponseBase):
+class SettingsAPIRead(_SettingsAPIBase, ResponseBase):
     """Represents the settings record."""
 
     id: int
@@ -24,6 +23,6 @@ class SettingsAPIRead(SettingsAPIBase, ResponseBase):
     updated_at: datetime
 
 
-class SettingsAPIUpdate(SettingsAPIBase, RequestBase):
+class SettingsAPIUpdate(_SettingsAPIBase, RequestBase):
     """Updates a setting"""
     pass

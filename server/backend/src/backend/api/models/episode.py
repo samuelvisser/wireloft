@@ -11,7 +11,7 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.helpers import generate_uuid
 
 
-class EpisodeAPIBase:
+class _EpisodeAPIBase:
     """Fields common to all episode models."""
     # Fields in the episodes' table
     publish_status: EpisodePublishStatus
@@ -25,7 +25,7 @@ class EpisodeAPIBase:
     downloaded_date: Optional[datetime]
 
 
-class EpisodeAPICreate(EpisodeAPIBase, RequestBase):
+class EpisodeAPICreate(_EpisodeAPIBase, RequestBase):
     """Request body for creating an episode."""
     # Fields in the episodes' table
     show_id: int
@@ -41,7 +41,7 @@ class EpisodeAPICreate(EpisodeAPIBase, RequestBase):
         return generate_uuid()
 
 
-class EpisodeAPIRead(EpisodeAPIBase, ResponseBase):
+class EpisodeAPIRead(_EpisodeAPIBase, ResponseBase):
     """Represents an episode summary/detail item returned by the API."""
     # Fields in the episodes' table
     id: int
@@ -56,7 +56,7 @@ class EpisodeAPIRead(EpisodeAPIBase, ResponseBase):
     updated_at: datetime
 
 
-class EpisodeAPIUpdate(EpisodeAPIBase, RequestBase):
+class EpisodeAPIUpdate(_EpisodeAPIBase, RequestBase):
     """Request body for updating an episode."""
     # Fields in the media_items table
     dw_id: Optional[str]

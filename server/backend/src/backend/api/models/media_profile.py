@@ -8,7 +8,7 @@ from backend.api.models.base import RequestBase, ResponseBase
 from backend.utils.helpers import slugify
 
 
-class MediaProfileAPIBase:
+class _MediaProfileAPIBase:
     """Fields common to all media profile models."""
 
     name: str
@@ -17,7 +17,7 @@ class MediaProfileAPIBase:
     download_series_images: bool
 
 
-class MediaProfileAPICreate(MediaProfileAPIBase, RequestBase):
+class MediaProfileAPICreate(_MediaProfileAPIBase, RequestBase):
     """Request body for creating a media profile.
     Slug is generated automatically from the provided name.
     """
@@ -28,7 +28,7 @@ class MediaProfileAPICreate(MediaProfileAPIBase, RequestBase):
         return slugify(self.name)
 
 
-class MediaProfileAPIRead(MediaProfileAPIBase, ResponseBase):
+class MediaProfileAPIRead(_MediaProfileAPIBase, ResponseBase):
     """Response body for a media profile."""
     id: int
     slug: str
@@ -36,6 +36,6 @@ class MediaProfileAPIRead(MediaProfileAPIBase, ResponseBase):
     updated_at: datetime
 
 
-class MediaProfileAPIUpdate(MediaProfileAPIBase, RequestBase):
+class MediaProfileAPIUpdate(_MediaProfileAPIBase, RequestBase):
     """Request body for updating a media profile."""
     pass

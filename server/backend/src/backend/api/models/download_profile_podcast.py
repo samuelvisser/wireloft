@@ -7,7 +7,7 @@ from pydantic import Field
 from backend.api.models.base import RequestBase, ResponseBase
 
 
-class DownloadProfilePodcastAPIBase:
+class _DownloadProfilePodcastAPIBase:
     """Fields common to all download profile models."""
 
     media_profile_id: int
@@ -18,12 +18,12 @@ class DownloadProfilePodcastAPIBase:
     delete_older_episodes: bool
 
 
-class DownloadProfilePodcastAPICreate(DownloadProfilePodcastAPIBase, RequestBase):
+class DownloadProfilePodcastAPICreate(_DownloadProfilePodcastAPIBase, RequestBase):
     """Request body for creating a download profile."""
     show_id: int
 
 
-class DownloadProfilePodcastAPIRead(DownloadProfilePodcastAPIBase, ResponseBase):
+class DownloadProfilePodcastAPIRead(_DownloadProfilePodcastAPIBase, ResponseBase):
     """Response body for a download profile."""
 
     id: int
@@ -32,6 +32,6 @@ class DownloadProfilePodcastAPIRead(DownloadProfilePodcastAPIBase, ResponseBase)
     updated_at: datetime
 
 
-class DownloadProfilePodcastAPIUpdate(DownloadProfilePodcastAPIBase, RequestBase):
+class DownloadProfilePodcastAPIUpdate(_DownloadProfilePodcastAPIBase, RequestBase):
     """Request body for updating a download profile."""
     pass
