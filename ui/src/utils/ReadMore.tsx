@@ -1,4 +1,4 @@
-import { PropsWithChildren, useId, useState } from 'react'
+import React, { PropsWithChildren, useId, useState } from 'react'
 
 export type ReadMoreProps = {
   summary: React.ReactNode

@@ -1,50 +1,52 @@
-import type {EpisodeStatus} from '../types/show'
+import {EpisodePublishStatus} from "../types/episode";
+import {MediaDownloadStatus} from "../types/media_download";
 
-export function statusIcon(status: EpisodeStatus) {
+
+export function statusIcon(status: EpisodePublishStatus | MediaDownloadStatus) {
     switch (status) {
-        case 'scheduled':
+        case EpisodePublishStatus.scheduled:
             return ['fas', 'clock'] as const
-        case 'delayed':
+        case EpisodePublishStatus.delayed:
             return ['fas', 'clock-rotate-left'] as const
-        case 'live':
+        case EpisodePublishStatus.live:
             return ['fas', 'circle-video'] as const
-        case 'dw_processing':
-        case 'local_processing':
+        case EpisodePublishStatus.dwProcessing:
+        case MediaDownloadStatus.localProcessing:
             return ['fas', 'spinner'] as const
-        case 'published_with_countdown':
-        case 'published_final':
+        case EpisodePublishStatus.publishedWithCountdown:
+        case EpisodePublishStatus.publishedFinal:
             return ['fas', 'circle-play'] as const
-        case 'downloaded':
-        case 'redownloaded':
+        case MediaDownloadStatus.downloaded:
+        case MediaDownloadStatus.redownloaded:
             return ['fas', 'circle-check'] as const
-        case 'downloading':
+        case MediaDownloadStatus.downloading:
             return ['fas', 'circle-down'] as const
-        case 'error':
+        case MediaDownloadStatus.error:
             return ['fas', 'circle-exclamation'] as const
     }
 }
 
-export function statusLabel(status: EpisodeStatus) {
+export function statusLabel(status: EpisodePublishStatus | MediaDownloadStatus) {
     switch (status) {
-        case 'scheduled':
+        case EpisodePublishStatus.scheduled:
             return 'Scheduled'
-        case 'delayed':
+        case EpisodePublishStatus.delayed:
             return 'Officially delayed'
-        case 'live':
+        case EpisodePublishStatus.live:
             return 'Live'
-        case 'published_with_countdown':
-        case 'published_final':
+        case EpisodePublishStatus.publishedWithCountdown:
+        case EpisodePublishStatus.publishedFinal:
             return 'Published'
-        case 'downloaded':
-        case 'redownloaded':
+        case MediaDownloadStatus.downloaded:
+        case MediaDownloadStatus.redownloaded:
             return 'Downloaded'
-        case 'downloading':
+        case MediaDownloadStatus.downloading:
             return 'Downloading'
-        case 'dw_processing':
+        case EpisodePublishStatus.dwProcessing:
             return 'Dailywire is processing the episode'
-        case 'local_processing':
+        case MediaDownloadStatus.localProcessing:
             return 'Locally processing the episode'
-        case 'error':
+        case MediaDownloadStatus.error:
             return 'Error'
     }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 export type TimeIntervalProps = {
   value: string // total minutes as string (can be empty)
@@ -92,7 +92,7 @@ export default function TimeInterval({
   }
 
   const onMinutesBlur: React.FocusEventHandler<HTMLInputElement> = () => {
-    // Normalize minutes overflow on blur for visual consistency
+    // Normalize minute overflow on blur for visual consistency
     if (minutes >= 60) {
       const h = hours + Math.floor(minutes / 60)
       const m = minutes % 60

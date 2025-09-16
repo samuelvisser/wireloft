@@ -4,6 +4,6 @@ export enum ShowType {
 }
 
 export enum EpisodeIdentifier {
-    date_based = 'Date-based',
+    dateBased = 'Date-based',
     numbered = 'Numbered'
 }

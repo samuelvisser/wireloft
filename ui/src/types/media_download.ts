@@ -2,6 +2,6 @@ export enum MediaDownloadStatus {
     downloaded = 'Downloaded',
     downloading = 'Downloading...',
     redownloaded = 'Redownloaded',
-    local_processing = 'Processing locally...',
+    localProcessing = 'Processing locally...',
     error = 'Download error'
 }

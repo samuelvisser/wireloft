@@ -11,8 +11,8 @@ export type SettingsCreate = z.infer<typeof SettingsCreateSchema>;
 
 export const SettingsReadSchema = SettingsBaseSchema.extend({
     id: z.number(),
-    created_at: z.date(),
-    updated_at: z.date(),
+    createdAt: z.date(),
+    updatedAt: z.date(),
 })
 export type SettingsRead = z.infer<typeof SettingsReadSchema>;
 

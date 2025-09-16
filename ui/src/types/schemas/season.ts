@@ -6,8 +6,8 @@ const SeasonBaseSchema = z.object({
 
 
 export const SeasonCreateSchema = SeasonBaseSchema.extend({
-    dw_id: z.string(),
-    show_id: z.string(),
+    dwId: z.string(),
+    showId: z.string(),
     slug: z.string(),
 })
 export type SeasonCreate = z.infer<typeof SeasonCreateSchema>;
@@ -15,11 +15,11 @@ export type SeasonCreate = z.infer<typeof SeasonCreateSchema>;
 
 export const SeasonReadSchema = SeasonBaseSchema.extend({
     id: z.number(),
-    dw_id: z.string(),
-    show_id: z.string(),
+    dwId: z.string(),
+    showId: z.string(),
     slug: z.string(),
-    created_at: z.date(),
-    updated_at: z.date(),
+    createdAt: z.date(),
+    updatedAt: z.date(),
 })
 export type SeasonRead = z.infer<typeof SeasonReadSchema>;
 

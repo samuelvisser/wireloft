@@ -3,8 +3,8 @@ import {MediaDownloadStatus} from "../media_download";
 
 
 const MediaDownloadBaseSchema = z.object({
-    download_status: z.enum(MediaDownloadStatus),
-    file_path: z.string(),
+    downloadStatus: z.enum(MediaDownloadStatus),
+    filePath: z.string(),
 })
 
 
@@ -15,8 +15,8 @@ export type MediaDownloadCreate = z.infer<typeof MediaDownloadCreateSchema>;
 
 export const MediaDownloadReadSchema = MediaDownloadBaseSchema.extend({
     id: z.number(),
-    created_at: z.date(),
-    updated_at: z.date(),
+    createdAt: z.date(),
+    updatedAt: z.date(),
 })
 export type MediaDownloadRead = z.infer<typeof MediaDownloadReadSchema>;
 
