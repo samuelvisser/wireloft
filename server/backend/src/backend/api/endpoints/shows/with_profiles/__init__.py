@@ -1,1 +1,1 @@
-from .router import router as show_with_profiles_router
+from .router import router as show_with_profile_router

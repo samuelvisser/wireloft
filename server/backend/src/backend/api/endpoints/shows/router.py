@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .with_profiles import show_with_profiles_router
+from .with_profiles import show_with_profile_router
 from .views import show_view_router
 from .service import *
 from ...models.show import *
@@ -8,7 +8,7 @@ from ...models.show import *
 router = APIRouter()
 
 router.include_router(show_view_router, prefix = "/views")
-router.include_router(show_with_profiles_router, prefix = "/with-profiles")
+router.include_router(show_with_profile_router, prefix = "/with-profiles")
 
 @router.get("", response_model=list[ShowAPIRead])
 def show_list():
