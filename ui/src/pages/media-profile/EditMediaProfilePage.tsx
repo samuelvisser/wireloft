@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import MediaProfileForm, { MediaProfileFormValue } from '../../components/MediaProfileForm'
 import { useQueryClient } from '@tanstack/react-query'
@@ -25,6 +25,7 @@ export default function EditMediaProfilePage() {
   }, [initialFromState])
 
   const [value, setValue] = useState<MediaProfileFormValue | undefined>(resolvedInitial)
+  const setErrorRef = useRef<((name: any, error: any) => void) | null>(null)
 
   useEffect(() => {
     setValue(resolvedInitial)
@@ -44,6 +45,22 @@ export default function EditMediaProfilePage() {
       body: JSON.stringify(value),
     })
     if (!r.ok) {
+      if (r.status === 422) {
+        try {
+          const data = await r.json()
+          const details = Array.isArray(data?.detail) ? data.detail : []
+          for (const err of details) {
+            const field = err?.loc?.[1]
+            const msg = err?.msg ?? 'Invalid value'
+            if (field && setErrorRef.current) {
+              setErrorRef.current(field, { type: 'server', message: msg })
+            }
+          }
+        } catch (_) {
+          // ignore JSON parse errors
+        }
+        return
+      }
       const msg = `Failed to save media profile (HTTP ${r.status})`
       console.error(msg)
       alert(msg)
@@ -74,7 +91,7 @@ export default function EditMediaProfilePage() {
       </div>
 
       <div className="form">
-        <MediaProfileForm value={value} onChange={setValue} />
+        <MediaProfileForm mode="update" value={value} onChange={setValue} onRegisterSetError={(fn) => { setErrorRef.current = fn as any }} />
         <div className="actions">
           <button type="button" className="btn" onClick={onCancel}>Cancel</button>
           <button type="button" className="btn btn-primary" disabled={!valid} onClick={onSave}>
