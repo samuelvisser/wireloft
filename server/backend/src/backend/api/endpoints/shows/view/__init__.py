@@ -1,0 +1,1 @@
+from .router import router as show_view_router

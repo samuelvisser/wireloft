@@ -51,6 +51,10 @@ class ShowAPIRead(_ShowAPIBase, ResponseBase):
     created_at: datetime
     updated_at: datetime
 
+
+class ShowAPIReadView(ShowAPIRead):
+    """Response body for a show view."""
+
     @computed_field(return_type=Optional[str])
     @property
     def years(self) -> Optional[str]:
