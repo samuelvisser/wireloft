@@ -1,6 +1,7 @@
-import enum
+from enum import Enum
 
-class MediaType(enum.Enum):
+
+class MediaType(Enum):
     episode = "episode"
     movie = "movie"
 

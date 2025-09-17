@@ -1,9 +1,10 @@
-import enum
+from enum import Enum
 
-class ShowType(enum.Enum):
+
+class ShowType(Enum):
     podcast = "podcast"
     series = "series"
 
-class EpisodeIdentifier(enum.Enum):
+class EpisodeIdentifier(Enum):
     date_based = "date_based"
     numbered = "numbered"

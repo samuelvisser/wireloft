@@ -1,5 +1,7 @@
 import Switch from 'react-switch'
 import {Controller, UseFormReturn} from 'react-hook-form'
+import Select from 'react-select'
+import {PreferredFormat} from '../../types/media_profile'
 
 type Props = {
     mode?: 'create' | 'update'
@@ -10,6 +12,7 @@ export default function MediaProfileForm({form}: Props) {
 
     const {register, control, formState: {errors}} = form;
 
+    const preferredFormatOptions = Object.values(PreferredFormat).map((v) => ({ value: v, label: v }))
 
     return (
         <>
@@ -19,6 +22,9 @@ export default function MediaProfileForm({form}: Props) {
                 </div>
             )}
 
+            {/* Hidden fields for id and slug to include them in submit when present */}
+            <input type="hidden" {...register('id', { setValueAs: (v) => (v === '' || v == null ? undefined : Number(v)) })} />
+            <input type="hidden" {...register('slug')} />
 
             <div className="form-row">
                 <label htmlFor="mp-name">Name</label>
@@ -59,18 +65,23 @@ export default function MediaProfileForm({form}: Props) {
 
             <div className="form-row">
                 <label htmlFor="mp-format">Preferred format</label>
-                <select
-                    id="mp-format"
-                    className="input"
-                    {...register('preferredFormat')}
-                    aria-invalid={!!errors.preferredFormat}
-                    aria-describedby={errors.preferredFormat ? 'mp-format-error' : undefined}
-                >
-                    <option value="4k">4k</option>
-                    <option value="1080p">1080p</option>
-                    <option value="720p">720p</option>
-                    <option value="audio_only">Audio Only</option>
-                </select>
+                <Controller
+                    control={control}
+                    name="preferredFormat"
+                    render={({ field }) => (
+                        <Select
+                            inputId="mp-format"
+                            classNamePrefix="select"
+                            options={preferredFormatOptions}
+                            value={preferredFormatOptions.find((o) => o.value === field.value) ?? null}
+                            onChange={(opt) => field.onChange((opt as any)?.value ?? null)}
+                            onBlur={field.onBlur}
+                            aria-invalid={!!errors.preferredFormat}
+                            aria-describedby={errors.preferredFormat ? 'mp-format-error' : undefined}
+                            isClearable={false}
+                        />
+                    )}
+                />
                 {errors.preferredFormat && (
                     <div id="mp-format-error" className="error" role="alert" aria-live="polite">
                         {String(errors.preferredFormat.message)}

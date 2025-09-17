@@ -1,29 +1,19 @@
 import {useEffect, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
+import {getCurrentAppVersion} from '../../utils/helpers'
 import ChooseShowStep, {type ShowFormValue} from './ChooseShowStep'
 import MediaProfileStep from './MediaProfileStep'
 import DownloadProfileStep, {type DownloadProfileFormValue} from './DownloadProfileStep'
+
 import type {AddShowMediaProfileUpsert} from '../../types/addShow'
+import type {Versioned} from '../../types/data'
 
 export type Props = {
     onCancel: () => void
 }
 
 // Wizard state persistence
-const STORAGE_KEY = 'addShowWizardV1'
-
-type Versioned<T> = {
-    version: string
-    data: T
-}
-
-function getCurrentAppVersion(): string | undefined {
-    try {
-        return (window as any).appConfig?.APP_VERSION
-    } catch {
-        return undefined
-    }
-}
+const STORAGE_KEY = 'addShowWizardV2'
 
 type WizardState = {
     step: 1 | 2 | 3
@@ -67,7 +57,7 @@ function saveWizardState(state: WizardState) {
     try {
         const ver = getCurrentAppVersion()
         if (!ver) {
-            // If version is unknown, don't persist to avoid stale format
+            // If the version is unknown, don't persist to avoid a stale format
             return
         }
         const payload: Versioned<WizardState> = {version: ver, data: state}
@@ -85,44 +75,54 @@ function clearWizardState() {
     }
 }
 
-
 export default function AddShowPage({onCancel}: Props) {
     const qc = useQueryClient()
     // Wizard step: 1 = URL, 2 = Media Profile, 3 = Show
     const [step, setStep] = useState<1 | 2 | 3>(() => loadWizardState()?.step ?? 1)
 
-    // Step 1: Show (managed inside ChooseShowStep)
-    const [show, setShow] = useState<ShowFormValue>(() => loadWizardState()?.show ?? ({
-        rawUrl: '',
-        showType: null,
-        episodeIdentifier: null
-    }))
+    // Step 1: Show
+    const [show, setShow] = useState<ShowFormValue>(
+        () => loadWizardState()?.show ?? ({
+            // Form values
+            url: '',
+            type: null,
+            episodeIdentifier: null,
+
+            // DW API values
+            dwId: null,
+            slug: null,
+            authorSlug: null,
+            title: null,
+            description: null,
+            authorName: null,
+            authorHeadshotPath: null,
+            backgroundImagePath: null,
+            logoImagePath: null,
+            thumbnailLandscapePath: null,
+            thumbnailPortraitPath: null,
+            thumbnailSquarePath: null,
+        }))
     const [slug, setSlug] = useState<string | undefined>(undefined)
 
-
-    // Step 2: Media Profile (managed inside MediaProfileStep)
-    const defaultMediaProfile: AddShowMediaProfileUpsert = {
-        op: 'create_new',
-        name: '',
-        outputTemplate: '',
-        preferredFormat: '1080p',
-        downloadSeriesImages: true,
-    }
+    // Step 2: Media Profile
     const [mediaProfile, setMediaProfile] = useState<AddShowMediaProfileUpsert>(
-        () => (loadWizardState() as any)?.mediaProfile ?? {...defaultMediaProfile}
-    )
+        () => (loadWizardState() as any)?.mediaProfile ?? ({
+            op: 'create_new',
+            name: '',
+            outputTemplate: '',
+            preferredFormat: '1080p',
+            downloadSeriesImages: true,
+        }))
 
-    const defaultDownloadProfile: DownloadProfileFormValue = {
-        enableProfile: true,
-        downloadWithCountdown: false,
-        redownloadFinal: false,
-        downloadDaysInPast: 0,
-        deleteOlderEpisodes: true,
-    }
+    // Step 3: Download Profile
     const [downloadProfile, setDownloadProfile] = useState<DownloadProfileFormValue>(
-        () => loadWizardState()?.downloadProfile ?? {...defaultDownloadProfile}
-    )
-
+        () => loadWizardState()?.downloadProfile ?? ({
+            enableProfile: true,
+            downloadWithCountdown: false,
+            redownloadFinal: false,
+            downloadDaysInPast: 180,
+            deleteOlderEpisodes: true,
+        }))
 
     // Persist wizard state on any change
     useEffect(() => {
@@ -142,12 +142,43 @@ export default function AddShowPage({onCancel}: Props) {
     async function handleFinish() {
         // Ensure we have a media profile slug: use selected or create new
 
+
+        const r = await fetch(`${(window as any).appConfig.API_URL}/shows/show-with-profiles`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                show: show,
+                mediaProfile: mediaProfile,
+                downloadProfile: downloadProfile,
+            }),
+        })
+        if (!r.ok) {
+            if (r.status === 422) {
+                try {
+                    const data = await r.json()
+                    const details = Array.isArray(data?.detail) ? data.detail : []
+                    const messages = details.map((d: any) => d?.msg).filter(Boolean)
+                    alert(messages.length ? messages.join('\n') : `Validation error (HTTP 422)`)
+                } catch {
+                    alert(`Validation error (HTTP 422)`)
+                }
+                return
+            }
+            const msg = `Failed to create media profile (HTTP ${r.status})`
+            console.error(msg)
+            alert(msg)
+            return
+        }
+        await qc.invalidateQueries({queryKey: ['mediaProfiles']})
+
+
         // TODO save show to /api/shows/show-with-profiles
 
         await qc.invalidateQueries({queryKey: ['shows']})
         clearWizardState()
         onCancel()
     }
+
 
     return (
         <div>

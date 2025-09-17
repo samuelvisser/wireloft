@@ -4,6 +4,8 @@ from datetime import datetime
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
+from backend.types.media_profile_types import PreferredFormat
+
 
 class MediaProfile(Base):
     __tablename__ = "media_profiles"
@@ -13,7 +15,7 @@ class MediaProfile(Base):
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     name: Mapped[str] = mapped_column(unique=True)
     output_template: Mapped[str]
-    preferred_format: Mapped[str]
+    preferred_format: Mapped[PreferredFormat]
     download_series_images: Mapped[bool] = mapped_column(default=True)
 
     created_at: Mapped[datetime] = mapped_column(

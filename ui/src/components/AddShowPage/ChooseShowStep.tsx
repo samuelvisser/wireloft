@@ -1,10 +1,8 @@
 import {useEffect, useMemo, useState} from 'react'
-
-export type ShowFormValue = {
-    rawUrl: string
-    showType: 'podcast' | 'series' | null
-    episodeIdentifier: 'date_based' | 'numbered' | null
-}
+import DailywireShowCard, {DailywireShow} from './DailywireShowCard'
+import {useDailywireShow} from '../../lib/queries'
+import ReadMore from '../../utils/ReadMore'
+import {EpisodeIdentifier, ShowType} from "../../types/show";
 
 type Props = {
     value: ShowFormValue
@@ -14,12 +12,15 @@ type Props = {
     onSlugChange?: (slug?: string) => void
 }
 
-import DailywireShowCard from './DailywireShowCard'
-import {useDailywireShow} from '../../lib/queries'
-import ReadMore from '../../utils/ReadMore'
+type ShowForm = {
+    url: string
+    type: ShowType | ""
+    episodeIdentifier: EpisodeIdentifier | ""
+}
 
-// Local helpers for URL validation and normalization (moved from parent)
+export type ShowFormValue = ShowForm & DailywireShow
 
+// Helpers for URL validation and normalization
 type ValidationResult = {
     domainOk: boolean
     pathOk: boolean
@@ -78,15 +79,15 @@ export default function ChooseShowStep({
                                            onSlugChange,
                                        }: Props) {
     // Validate URL locally
-    const result = useMemo(() => validateShowUrl(value.rawUrl), [value.rawUrl])
+    const result = useMemo(() => validateShowUrl(value.url), [value.url])
     const urlValid = result.domainOk && result.pathOk && result.slugOk
-    const showUrlErrors = value.rawUrl.trim().length > 0
+    const showUrlErrors = value.url.trim().length > 0
 
     // Extract DailyWire show slug from the URL when valid
     const showSlug = useMemo(() => {
         if (!urlValid) return undefined
         try {
-            const u = new URL(result.normalized ?? ensureProtocol(value.rawUrl))
+            const u = new URL(result.normalized ?? ensureProtocol(value.url))
             const path = u.pathname
             if (!path.startsWith('/show/')) return undefined
             const s = path.slice('/show/'.length).split('/')[0]
@@ -94,7 +95,7 @@ export default function ChooseShowStep({
         } catch {
             return undefined
         }
-    }, [urlValid, value.rawUrl, result.normalized])
+    }, [urlValid, value.url, result.normalized])
 
     // Debounce to detect "done typing"
     const [debouncedSlug, setDebouncedSlug] = useState<string | undefined>(undefined)
@@ -114,21 +115,22 @@ export default function ChooseShowStep({
     useEffect(() => {
         const anyData = dw.data as any
         const v = (anyData?.probableShowType ?? anyData?.probable_show_type) as string | undefined
-        if (!value.showType && (v === 'podcast' || v === 'series')) {
-            onChange({ ...value, showType: v as 'podcast' | 'series' })
+
+        if (!value.type && (v === 'podcast' || v === 'series')) {
+            onChange({ ...value, type: v as ShowType })
         }
     }, [dw.data])
 
     useEffect(() => {
         const anyData = dw.data as any
         const v = (anyData?.probableEpisodeIdentification ?? anyData?.probable_episode_identification) as string | undefined
-        if (value.showType === 'podcast' && !value.episodeIdentifier && (v === 'date_based' || v === 'numbered')) {
+        if (value.type === 'podcast' && !value.episodeIdentifier && (v === 'date_based' || v === 'numbered')) {
             onChange({ ...value, episodeIdentifier: v as 'date_based' | 'numbered' })
         }
-    }, [dw.data, value.showType, value.episodeIdentifier])
+    }, [dw.data, value.type, value.episodeIdentifier])
 
-    const episodeIdOk = value.showType !== 'podcast' || value.episodeIdentifier !== null
-    const canContinue = urlValid && !!debouncedSlug && dw.isSuccess && !!dw.data && value.showType !== null && episodeIdOk
+    const episodeIdOk = value.type !== 'podcast' || value.episodeIdentifier !== null
+    const canContinue = urlValid && !!debouncedSlug && dw.isSuccess && !!dw.data && value.type !== null && episodeIdOk
 
     return (
         <form className="form" onSubmit={(e) => e.preventDefault()} noValidate>
@@ -141,8 +143,8 @@ export default function ChooseShowStep({
                     inputMode="url"
                     autoFocus
                     placeholder="https://www.dailywire.com/show/the-ben-shapiro-show"
-                    value={value.rawUrl}
-                    onChange={(e) => onChange({ ...value, rawUrl: e.target.value })}
+                    value={value.url}
+                    onChange={(e) => onChange({ ...value, url: e.target.value })}
                     aria-invalid={showUrlErrors && !urlValid}
                     aria-describedby="url-help url-errors"
                 />
@@ -173,12 +175,14 @@ export default function ChooseShowStep({
                                 <select
                                     id="show-type"
                                     className="input"
-                                    value={value.showType ?? ''}
+                                    value={value.type ?? ''}
                                     onChange={(e) => {
-                                        const v = e.target.value as 'podcast' | 'series' | ''
-                                        const nextType = v === '' ? null : (v as 'podcast' | 'series')
-                                        const nextEpisodeId = nextType === 'series' ? null : value.episodeIdentifier
-                                        onChange({ ...value, showType: nextType, episodeIdentifier: nextEpisodeId })
+                                        const v = e.target.value as ShowType | ''
+                                        const nextType = v === '' ? '' : (v as ShowType)
+                                        const nextEpisodeId = nextType === 'series' ? '' : value.episodeIdentifier
+
+
+                                        onChange({ ...value, type: nextType, episodeIdentifier: nextEpisodeId })
                                     }}
                                 >
                                     <option value="">Select a type…</option>
@@ -198,7 +202,7 @@ export default function ChooseShowStep({
                             </div>
 
                             {/* Episode identification selector (only for Podcast) */}
-                            {value.showType === 'podcast' && (
+                            {value.type === 'podcast' && (
                                 <div className="form-row">
                                     <label htmlFor="episode-identification">Episode identification</label>
                                     <select

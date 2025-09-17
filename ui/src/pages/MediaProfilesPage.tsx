@@ -4,6 +4,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {useMediaProfiles} from '../lib/queries'
 import {useQueryClient} from '@tanstack/react-query'
+import {MediaProfileRead} from "../types/schemas/media_profile";
 
 export default function MediaProfilesPage() {
     const navigate = useNavigate()
@@ -12,17 +13,8 @@ export default function MediaProfilesPage() {
     const editIcon: IconProp = ['fas', 'pen-to-square']
     const deleteIcon: IconProp = ['fas', 'trash']
 
-    type MediaProfileItem = {
-        id: number
-        slug: string
-        name: string
-        outputTemplate: string
-        preferredFormat: '4k' | '1080p' | '720p' | 'Audio Only'
-        downloadSeriesImages: boolean
-    }
-
-    const [confirmProfile, setConfirmProfile] = useState<MediaProfileItem | null>(null)
-    const openConfirm = (p: MediaProfileItem) => setConfirmProfile(p)
+    const [confirmProfile, setConfirmProfile] = useState<MediaProfileRead | null>(null)
+    const openConfirm = (p: MediaProfileRead) => setConfirmProfile(p)
     const closeConfirm = () => setConfirmProfile(null)
     const onConfirmDelete = async () => {
         if (!confirmProfile) return
@@ -69,7 +61,7 @@ export default function MediaProfilesPage() {
                                 <td colSpan={5}>{(error as any)?.message ?? 'No profiles found'}</td>
                             </tr>
                         ) : (
-                            profiles.map((p: MediaProfileItem) => (
+                            profiles.map((p: MediaProfileRead) => (
                                 <tr
                                     key={p.id}
                                     aria-label={p.name}
@@ -107,12 +99,7 @@ export default function MediaProfilesPage() {
                                                 title="Edit"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    navigate(`/edit-media-profile/${p.slug}`, {
-                                                        state: {
-                                                            ...p,
-                                                            outputPathTemplate: p.outputTemplate
-                                                        }
-                                                    })
+                                                    navigate(`/edit-media-profile/${p.slug}`, {state: p})
                                                 }}
                                             >
                                                 <FontAwesomeIcon icon={editIcon} />

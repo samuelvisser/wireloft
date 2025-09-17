@@ -29,6 +29,7 @@ export function applyFieldErrors<TFieldValues extends FieldValues>(
         return false;
     }
 
+    const prefix = "server:";
     for (const e of items) {
         const path = (locToPath(e.loc) as Path<TFieldValues>) || fallbackField || ("root" as Path<TFieldValues>);
         const field = typeof path === "string" ? path : "root";
@@ -36,8 +37,9 @@ export function applyFieldErrors<TFieldValues extends FieldValues>(
         // Prefer your per-field override; else use server msg; else minimal default
         const override = opts?.mapMessage?.(e, field as Path<TFieldValues>);
         const message = override ?? e.msg ?? opts?.defaultMessage ?? "Invalid value";
+        const errorType = e.type ? (prefix + e.type) : "server";
 
-        setError(path, {type: (e.type as any) || "server", message});
+        setError(path, {type: errorType as any, message});
     }
     return true;
 }

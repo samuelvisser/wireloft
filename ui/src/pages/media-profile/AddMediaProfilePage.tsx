@@ -7,6 +7,7 @@ import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {buildServerAwareSubmit} from "../../utils/buildServerAwareSubmit";
 import {WithRoot} from "../../types/form";
+import {PreferredFormat} from "../../types/media_profile";
 
 export default function AddMediaProfilePage() {
     const navigate = useNavigate()
@@ -18,8 +19,8 @@ export default function AddMediaProfilePage() {
         shouldFocusError: true,
         defaultValues: {
             name: "",
-            outputTemplate: "",
-            preferredFormat: "1080p",
+            outputTemplate: "/downloads/",
+            preferredFormat: PreferredFormat.format1080p,
             downloadSeriesImages: false,
         },
     })

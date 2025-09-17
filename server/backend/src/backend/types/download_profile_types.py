@@ -1,13 +1,14 @@
-import enum
+from enum import Enum
 
-class DownloadProfileType(enum.Enum):
+
+class DownloadProfileType(Enum):
     podcast = "podcast"
     series = "series"
 
     # For instances of DownloadProfileBase class (parent class)
     base = "base"
 
-class MediaDownloadStatus(enum.Enum):
+class MediaDownloadStatus(Enum):
     downloaded = "downloaded"
     downloading = "downloading"
     redownloaded = "redownloaded"

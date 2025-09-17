@@ -27,7 +27,7 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/add-show" element={<AddShowPage onCancel={cancelAddShow} />} />
           <Route path="/add-media-profile" element={<AddMediaProfilePage />} />
-          <Route path="/edit-media-profile/:id" element={<EditMediaProfilePage />} />
+          <Route path="/edit-media-profile/:slug" element={<EditMediaProfilePage />} />
           <Route path="/show/:id" element={<ShowPage />} />
           <Route path="/show/:id/episode/:episodeId" element={<EpisodePage />} />
           <Route path="/edit-show/:id" element={<EditShow />} />

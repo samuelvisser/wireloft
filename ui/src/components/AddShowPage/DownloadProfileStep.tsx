@@ -3,14 +3,7 @@ import DailywireShowCard from './DailywireShowCard'
 import ReadMore from '../../utils/ReadMore'
 import { useDailywireShow } from '../../lib/queries'
 import Switch from 'react-switch'
-
-export type DownloadProfileFormValue = {
-  enableProfile: boolean
-  downloadWithCountdown: boolean
-  redownloadFinal: boolean
-  downloadDaysInPast: number
-  deleteOlderEpisodes: boolean
-}
+import { z } from 'zod';
 
 type Props = {
   value: DownloadProfileFormValue
@@ -19,6 +12,26 @@ type Props = {
   onFinish: () => void
   onCancel: () => void
   slug?: string
+}
+
+const DownloadProfileSchema = z.object({
+  enableProfile: z.boolean(),
+  downloadWithCountdown: z.boolean(),
+  redownloadFinal: z.boolean(),
+  downloadDaysInPast: z.number().min(0),
+  deleteOlderEpisodes: z.boolean(),
+})
+
+type DownloadProfile = z.infer<typeof DownloadProfileSchema>
+
+
+
+export type DownloadProfileFormValue = {
+  enableProfile: boolean
+  downloadWithCountdown: boolean
+  redownloadFinal: boolean
+  downloadDaysInPast: number
+  deleteOlderEpisodes: boolean
 }
 
 export default function DownloadProfileStep({ value, onChange, onBack, onFinish, onCancel, slug }: Props) {

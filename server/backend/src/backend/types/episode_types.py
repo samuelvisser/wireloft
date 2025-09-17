@@ -1,6 +1,7 @@
-import enum
+from enum import Enum
 
-class EpisodePublishStatus(enum.Enum):
+
+class EpisodePublishStatus(Enum):
     # DW API returns the episode as scheduled
     scheduled = "scheduled"
 
