@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 
 from .service import *
 from ...models.settings import *
@@ -11,7 +11,7 @@ def settings_get():
     return get_settings()
 
 
-@router.post("", response_model=SettingsAPIRead)
+@router.post("", response_model=SettingsAPIRead, status_code=status.HTTP_201_CREATED)
 def settings_create(body: SettingsAPICreate):
    return create_settings_record(body)
 

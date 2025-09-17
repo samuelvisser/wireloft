@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 
 from .service import *
 from ...models.episode import EpisodeAPIRead
@@ -10,7 +10,7 @@ def episode_list(show_slug: str):
     return get_episodes_list(show_slug)
 
 
-@router.post("", response_model=EpisodeAPIRead)
+@router.post("", response_model=EpisodeAPIRead, status_code=status.HTTP_201_CREATED)
 def episode_create(body: EpisodeAPICreate):
     return create_episode(body)
 

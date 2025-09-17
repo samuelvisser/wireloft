@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 
 from .service import *
 from ...models.season import *
@@ -10,7 +10,7 @@ def seasons_list():
     return get_seasons_list()
 
 
-@router.post("", response_model=SeasonAPIRead)
+@router.post("", response_model=SeasonAPIRead, status_code=status.HTTP_201_CREATED)
 def seasons_create(body: SeasonAPICreate):
     return create_season(body)
 

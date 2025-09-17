@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 
 from .service import *
 from ...models.movie import MovieAPIRead
@@ -10,7 +10,7 @@ def movie_list():
     return get_movies_list()
 
 
-@router.post("", response_model=MovieAPIRead)
+@router.post("", response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)
 def movie_create(body: MovieAPICreate):
     return create_movie(body)
 

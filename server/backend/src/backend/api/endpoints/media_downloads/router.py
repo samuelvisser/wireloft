@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 
 from .service import *
 from ...models.media_download import *
@@ -10,7 +10,7 @@ def media_downloads_list():
     return get_media_downloads_list()
 
 
-@router.post("", response_model=MediaDownloadAPIRead)
+@router.post("", response_model=MediaDownloadAPIRead, status_code=status.HTTP_201_CREATED)
 def media_downloads_create(body: MediaDownloadAPICreate):
     return create_media_download(body)
 

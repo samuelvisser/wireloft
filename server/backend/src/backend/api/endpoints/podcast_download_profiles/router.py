@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 
 from .service import *
 from ...models.download_profile_podcast import *
@@ -10,7 +10,7 @@ def podcast_download_profiles_list():
     return get_podcast_download_profiles_list()
 
 
-@router.post("", response_model=DownloadProfilePodcastAPIRead)
+@router.post("", response_model=DownloadProfilePodcastAPIRead, status_code=status.HTTP_201_CREATED)
 def podcast_download_profiles_create(body: DownloadProfilePodcastAPICreate):
     return create_download_profile_podcast(body)
 

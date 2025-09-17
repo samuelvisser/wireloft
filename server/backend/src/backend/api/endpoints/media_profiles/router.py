@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 
 from .service import *
 from ...models.media_profile import *
@@ -10,7 +10,7 @@ def media_profiles_list():
     return get_media_profiles_list()
 
 
-@router.post("", response_model=MediaProfileAPIRead)
+@router.post("", response_model=MediaProfileAPIRead, status_code=status.HTTP_201_CREATED)
 def media_profiles_create(body: MediaProfileAPICreate):
     return create_media_profile(body)
 

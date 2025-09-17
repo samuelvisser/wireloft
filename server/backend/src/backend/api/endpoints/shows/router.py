@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 
 from .with_profiles import show_with_profile_router
 from .views import show_view_router
@@ -15,7 +15,7 @@ def show_list():
     return get_shows_list()
 
 
-@router.post("", response_model=ShowAPIRead)
+@router.post("", response_model=ShowAPIRead, status_code=status.HTTP_201_CREATED)
 def show_create(body: ShowAPICreate):
     return create_show(body)
 
