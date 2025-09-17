@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from .with_profiles import show_with_profiles_router
-from .view import show_view_router
+from .views import show_view_router
 from .service import *
 from ...models.show import *
 
