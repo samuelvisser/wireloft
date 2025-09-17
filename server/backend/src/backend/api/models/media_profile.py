@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import computed_field
+from pydantic import computed_field, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.utils.helpers import slugify
@@ -11,7 +11,7 @@ from backend.utils.helpers import slugify
 class _MediaProfileAPIBase:
     """Fields common to all media profile models."""
 
-    name: str
+    name: str = Field(min_length=1)
     output_template: str
     preferred_format: str
     download_series_images: bool

@@ -6,12 +6,21 @@ import importlib
 import os
 from datetime import datetime, timezone
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, MetaData
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy.orm import declarative_base, sessionmaker, Session, DeclarativeBase
 
-# Central declarative Base for all ORM models
-Base = declarative_base()
+# include more patterns if you want; the key one is "uq"
+naming_convention = {
+    "ix": "ix_%(table_name)s_%(column_0_name)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",  # or include multiple: %(column_0_name)s_%(column_1_name)s
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
+
+class Base(DeclarativeBase):
+    metadata = MetaData(naming_convention=naming_convention)
 
 # Internal state for engine and session factory
 _engine: Optional[Engine] = None

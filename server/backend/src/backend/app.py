@@ -5,6 +5,9 @@ from contextlib import contextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from sqlalchemy.exc import IntegrityError
+
+from backend.api.errors import integrity_error_handler
 from backend.db import get_session
 
 @contextmanager
@@ -27,6 +30,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Exception handlers
+    app.add_exception_handler(IntegrityError, integrity_error_handler)
 
     # Import routers lazily to avoid circular imports during app module import
     from backend.api.endpoints import (

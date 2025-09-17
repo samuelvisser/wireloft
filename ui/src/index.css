@@ -3,6 +3,7 @@
   --bg: #f8fafc;
   --text: #0f172a;
   --muted: #475569;
+  --error: #a03e3e;
   --sidebar-bg: #0f172a;
   --sidebar-muted: rgba(255, 255, 255, 0.7);
   --sidebar-hover: rgba(255, 255, 255, 0.08);
@@ -290,11 +291,37 @@ a.show-header:focus-visible {
   font-size: 12px;
   color: var(--muted);
 }
+.error {
+  font-size: 14px;
+  color: var(--error);
+}
 .error-list {
   margin: 4px 0 0;
   padding-left: 20px;
   color: #ef4444;
 }
+
+/* Prominent form-level error card */
+.form-error-card {
+  width: 100%;
+  max-width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #fecaca; /* red-200 */
+  background: #fef2f2; /* red-50 */
+  color: #7f1d1d; /* red-900 */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+@media (prefers-color-scheme: dark) {
+  .form-error-card {
+    background: rgba(239, 68, 68, 0.12); /* red-500 at 12% */
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fecaca; /* red-200 */
+    box-shadow: none;
+  }
+}
+
 .actions {
   display: flex;
   gap: 8px;

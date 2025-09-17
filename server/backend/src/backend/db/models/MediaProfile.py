@@ -11,7 +11,7 @@ class MediaProfile(Base):
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     slug: Mapped[str] = mapped_column(index=True, unique=True)
-    name: Mapped[str]
+    name: Mapped[str] = mapped_column(unique=True)
     output_template: Mapped[str]
     preferred_format: Mapped[str]
     download_series_images: Mapped[bool] = mapped_column(default=True)
