@@ -2,7 +2,7 @@ import {useCallback} from 'react'
 import MediaProfileForm from '../../components/MediaProfileForm'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
-import {MediaProfileCreate, MediaProfileCreateSchema} from "../../types/schemas/media_profile";
+import {MediaProfileCreate, MediaProfileCreateSchema, MediaProfileServerErrors} from "../../types/schemas/media_profile";
 import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {buildServerAwareSubmit} from "../../utils/buildServerAwareSubmit";
@@ -25,8 +25,6 @@ export default function AddMediaProfilePage() {
     })
 
     const submitFn = async (data: MediaProfileCreate) => {
-        console.log("submitFn", data)
-
         return fetch(`${(window as any).appConfig.API_URL}/media-profiles`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -45,6 +43,7 @@ export default function AddMediaProfilePage() {
         onSuccess,
         successStatuses: [201], // only accept 201 Created
         fallbackField: "name",
+        mapMessage: MediaProfileServerErrors,
     });
 
     const {formState: {isSubmitting}} = form;

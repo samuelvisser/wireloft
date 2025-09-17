@@ -1,4 +1,12 @@
 import {z} from "zod";
+import { createServerErrorMapper } from "../../utils/serverMessageMap";
+
+// Only override what you care about for this form.
+export const MediaProfileServerErrors = createServerErrorMapper({
+  name: { unique_violation: "Name is already taken." },
+  slug: { unique_violation: "Slug is already taken." },
+});
+
 
 const MediaProfileBaseSchema = z.object({
     name: z.string().min(1, "Name is required"),

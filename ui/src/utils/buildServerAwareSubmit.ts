@@ -1,5 +1,6 @@
 import type {UseFormReturn, FieldValues, Path} from "react-hook-form";
 import {applyFieldErrors} from "./serverErrors";
+import type {ServerErrorItem} from "./serverMessageMap";
 
 type SubmitFn<TValues> = (data: TValues) => Promise<Response | void>;
 
@@ -22,6 +23,9 @@ export type ServerAwareSubmitOptions<TValues extends FieldValues, TSuccess = unk
     /** Message used for unmapped server errors */
     genericMessage?: string;
 
+    /** Override server error message for a specific field */
+    mapMessage?: (err: ServerErrorItem, field: string) => string | undefined;
+
     /** Set a root-level summary when any field returns an error */
     rootOnFieldErrors?: boolean;                    // default: true
 
@@ -38,7 +42,7 @@ export function buildServerAwareSubmit<TValues extends FieldValues, TSuccess = u
     submitFn: SubmitFn<TValues>,
     options?: ServerAwareSubmitOptions<TValues, TSuccess>
 ) {
-    const {handleSubmit, setError, reset} = form;
+    const {handleSubmit, setError, reset, clearErrors} = form;
 
     const successStatuses = options?.successStatuses ?? [200, 201, 204];
     const parseSuccess = options?.parseSuccess ?? (async (res: Response) => {
@@ -55,6 +59,7 @@ export function buildServerAwareSubmit<TValues extends FieldValues, TSuccess = u
 
     const fallbackField = options?.fallbackField;
     const genericMessage = options?.genericMessage ?? "Something went wrong";
+    const mapMessage = options?.mapMessage;
     const rootOnFieldErrors = options?.rootOnFieldErrors ?? true;
     const rootServerValidationMessage = options?.rootServerValidationMessage ?? "Please fix the highlighted fields.";
     const rootClientValidationMessage = options?.rootClientValidationMessage ?? "Please fix the highlighted fields.";
@@ -70,20 +75,20 @@ export function buildServerAwareSubmit<TValues extends FieldValues, TSuccess = u
             if (!res) return; // caller handled it
 
             if (successStatuses.includes(res.status)) {
+                clearErrors("root" as Path<TValues>);
                 const result = await parseSuccess(res);
                 await options?.onSuccess?.(result as TSuccess, {form, response: res, resetForm});
                 return;
             }
 
-            // Try to map FastAPI-style errors
             let body: any = null;
             try {
                 body = await res.clone().json();
-            } catch { /* not JSON */
+            } catch {
             }
 
             // Set field-level errors
-            if (body && applyFieldErrors<TValues>(body, setError, fallbackField)) {
+            if (body && applyFieldErrors<TValues>(body, setError, fallbackField, {mapMessage})) {
                 console.error("RHF field-level errors:", body);
                 if (rootOnFieldErrors) {
                     setError("root" as Path<TValues>, {type: "server", message: rootServerValidationMessage});
@@ -100,7 +105,7 @@ export function buildServerAwareSubmit<TValues extends FieldValues, TSuccess = u
             if (response) {
                 try {
                     const body = await response.clone().json();
-                    if (body && applyFieldErrors<TValues>(body, setError, fallbackField)) {
+                    if (body && applyFieldErrors<TValues>(body, setError, fallbackField, {mapMessage})) {
                         console.error("RHF field-level errors:", body);
                         if (rootOnFieldErrors) {
                             setError("root" as Path<TValues>, {type: "server", message: rootServerValidationMessage});
@@ -110,10 +115,7 @@ export function buildServerAwareSubmit<TValues extends FieldValues, TSuccess = u
                 } catch { /* ignore */
                 }
 
-                setError("root" as Path<TValues>, {
-                    type: "server",
-                    message: `${genericMessage} (HTTP ${response.status})`
-                });
+                setError("root" as Path<TValues>, {type: "server", message: `${genericMessage} (HTTP ${response.status})`});
                 return;
             }
 
@@ -123,10 +125,7 @@ export function buildServerAwareSubmit<TValues extends FieldValues, TSuccess = u
         console.error("RHF invalid submit. Errors:", errs);
 
         if (rootOnFieldErrors) {
-            form.setError("root" as Path<TValues>, {
-                type: "validation",
-                message: rootClientValidationMessage
-            });
+            form.setError("root" as Path<TValues>, {type: "validation", message: rootClientValidationMessage});
         }
     });
 }
