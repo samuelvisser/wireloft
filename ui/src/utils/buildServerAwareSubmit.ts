@@ -8,11 +8,6 @@ type SubmitFn<TValues> = (data: TValues) => Promise<Response | void>;
 const SERVER_PREFIX = "server:" as const;
 const INIT_FLAG: unique symbol = Symbol("serverErrorAutoClearInit");
 
-// safe getter for nested paths (e.g., "items.0.name")
-function get(obj: any, path: string) {
-    return path.split(".").reduce((o, k) => (o ? o[k] : undefined), obj);
-}
-
 export type ServerAwareSubmitOptions<TValues extends FieldValues, TSuccess = unknown> = {
     onSuccess?: (result: TSuccess, ctx: {
         form: UseFormReturn<TValues>;
@@ -35,6 +30,9 @@ export type ServerAwareSubmitOptions<TValues extends FieldValues, TSuccess = unk
     /** Override server error message for a specific field */
     mapMessage?: (err: ServerErrorItem, field: string) => string | undefined;
 
+    /** Move errors for these fields under another field (e.g. { slug: "name" }) */
+    fieldAlias?: Record<string, string>;
+
     /** Set a root-level summary when any field returns an error */
     rootOnFieldErrors?: boolean;                    // default: true
 
@@ -55,20 +53,21 @@ function ensureAutoClearSubscription<TValues extends FieldValues>(
     const f = form as any;
     if (f[INIT_FLAG]) return; // already installed
 
-    const {watch, clearErrors, formState} = form;
+    const {watch, clearErrors} = form;
 
     const sub = watch((_, info) => {
-        const name = info?.name as Path<TValues> | undefined;
-        if (!name) return;
+        const fieldName = info?.name as Path<TValues> | undefined;
+        if (!fieldName) return;
 
-        // If the edited field has a server-tagged error, clear it
-        const err = get(formState.errors, String(name));
-        if (err?.type && String(err.type).startsWith(SERVER_PREFIX)) {
-            clearErrors(name);
+        // If the edited field currently has a server-tagged error, clear it.
+        const fieldState = form.getFieldState(fieldName as any);
+        const err = (fieldState as any)?.error;
+        if (err?.type && (String(err.type) === 'server' || String(err.type).startsWith(SERVER_PREFIX))) {
+            clearErrors(fieldName);
         }
 
         // Optionally clear root banner as user starts editing
-        if (clearRootOnAnyChange && (formState.errors as any)?.root) {
+        if (clearRootOnAnyChange) {
             clearErrors("root" as Path<TValues>);
         }
     });
@@ -76,12 +75,20 @@ function ensureAutoClearSubscription<TValues extends FieldValues>(
     f[INIT_FLAG] = {unsubscribe: () => sub.unsubscribe()};
 }
 
+function focusFirstError<TValues extends FieldValues>(form: UseFormReturn<TValues>) {
+    try {
+        const firstKey = Object.keys((form as any).formState.errors || {}).find(k => k !== "root");
+        if (firstKey) form.setFocus(firstKey as Path<TValues>);
+    } catch {
+    }
+}
+
 export function buildServerAwareSubmit<TValues extends FieldValues, TSuccess = unknown>(
     form: UseFormReturn<TValues>,
     submitFn: SubmitFn<TValues>,
     options?: ServerAwareSubmitOptions<TValues, TSuccess>
 ) {
-    const {handleSubmit, setError, reset, clearErrors, setFocus} = form;
+    const {handleSubmit, setError, reset, clearErrors} = form;
 
     const successStatuses = options?.successStatuses ?? [200, 201, 204];
     const parseSuccess = options?.parseSuccess ?? (async (res: Response) => {
@@ -99,6 +106,7 @@ export function buildServerAwareSubmit<TValues extends FieldValues, TSuccess = u
     const fallbackField = options?.fallbackField;
     const genericMessage = options?.genericMessage ?? "Something went wrong";
     const mapMessage = options?.mapMessage;
+    const fieldAlias = options?.fieldAlias;
     const rootOnFieldErrors = options?.rootOnFieldErrors ?? true;
     const rootServerValidationMessage = options?.rootServerValidationMessage ?? "Please fix the highlighted fields.";
     const rootClientValidationMessage = options?.rootClientValidationMessage ?? "Please fix the highlighted fields.";
@@ -132,17 +140,12 @@ export function buildServerAwareSubmit<TValues extends FieldValues, TSuccess = u
                 }
 
                 // Set field-level errors
-                if (body && applyFieldErrors<TValues>(body, setError, fallbackField, {mapMessage})) {
+                if (body && applyFieldErrors<TValues>(body, setError, fallbackField, {mapMessage, fieldAlias})) {
                     console.error("RHF field-level errors:", body);
                     if (rootOnFieldErrors) {
                         setError("root" as Path<TValues>, {type: "server", message: rootServerValidationMessage});
                     }
-                    // Focus first field error (nice UX)
-                    try {
-                        const firstKey = Object.keys((form as any).formState.errors || {}).find(k => k !== "root");
-                        if (firstKey) setFocus(firstKey as Path<TValues>);
-                    } catch {
-                    }
+                    focusFirstError(form);
                     return;
                 }
 
@@ -155,7 +158,7 @@ export function buildServerAwareSubmit<TValues extends FieldValues, TSuccess = u
                 if (response) {
                     try {
                         const body = await response.clone().json();
-                        if (body && applyFieldErrors<TValues>(body, setError, fallbackField, {mapMessage})) {
+                        if (body && applyFieldErrors<TValues>(body, setError, fallbackField, {mapMessage, fieldAlias})) {
                             console.error("RHF field-level errors:", body);
 
                             if (rootOnFieldErrors) {
@@ -164,11 +167,8 @@ export function buildServerAwareSubmit<TValues extends FieldValues, TSuccess = u
                                     message: rootServerValidationMessage
                                 });
                             }
-                            try {
-                                const firstKey = Object.keys((form as any).formState.errors || {}).find(k => k !== "root");
-                                if (firstKey) setFocus(firstKey as Path<TValues>);
-                            } catch {
-                            }
+                            focusFirstError(form);
+
                             return;
                         }
                     } catch { /* ignore */
@@ -188,11 +188,7 @@ export function buildServerAwareSubmit<TValues extends FieldValues, TSuccess = u
             console.error("RHF invalid submit. Errors:", errs);
 
             // client-side (Zod) invalid
-            try {
-                const firstKey = Object.keys(errs)[0];
-                if (firstKey) setFocus(firstKey as Path<TValues>);
-            } catch {
-            }
+            focusFirstError(form);
             if (rootOnFieldErrors) {
                 form.setError("root" as Path<TValues>, {type: "validation", message: rootClientValidationMessage});
             }

@@ -8,20 +8,21 @@ function locToPath(loc?: (string | number)[]): string | null {
     return parts.length ? parts.join(".") : null; // supports nested: items.0.name
 }
 
-type ApplyOpts<TFieldValues extends FieldValues> = {
-    mapMessage?: (err: ServerErrorItem, field: Path<TFieldValues>) => string | undefined;
+type FieldOpts = {
+    mapMessage?: (err: ServerErrorItem, fieldName: string) => string | undefined;
     defaultMessage?: string;
+    fieldAlias?: Record<string, string>;
 };
 
 export function applyFieldErrors<TFieldValues extends FieldValues>(
     payload: any,
     setError: UseFormSetError<TFieldValues>,
     fallbackField?: Path<TFieldValues>,
-    opts?: ApplyOpts<TFieldValues>
+    opts?: FieldOpts
 ): boolean {
-    const items: ServerErrorItem[] = (Array.isArray(payload?.detail) && payload.detail) || [];
+    const errorItems: ServerErrorItem[] = (Array.isArray(payload?.detail) && payload.detail) || [];
 
-    if (!items.length) {
+    if (!errorItems.length) {
         if (typeof payload?.detail === "string") {
             setError(("root" as unknown) as Path<TFieldValues>, {type: "server", message: payload.detail});
             return true;
@@ -30,16 +31,20 @@ export function applyFieldErrors<TFieldValues extends FieldValues>(
     }
 
     const prefix = "server:";
-    for (const e of items) {
-        const path = (locToPath(e.loc) as Path<TFieldValues>) || fallbackField || ("root" as Path<TFieldValues>);
-        const field = typeof path === "string" ? path : "root";
+    for (const serverError of errorItems) {
+        // 1) Determine the *source* field from loc/fallback
+        const fieldPath = (locToPath(serverError.loc) as Path<TFieldValues>) || fallbackField || ("root" as Path<TFieldValues>);
+        const fieldName = typeof fieldPath === "string" ? fieldPath : "root";
 
-        // Prefer your per-field override; else use server msg; else minimal default
-        const override = opts?.mapMessage?.(e, field as Path<TFieldValues>);
-        const message = override ?? e.msg ?? opts?.defaultMessage ?? "Invalid value";
-        const errorType = e.type ? (prefix + e.type) : "server";
+        // Field to display error on (resolve alias if needed)
+        const routedField = (opts?.fieldAlias?.[fieldName] ?? fieldName) as Path<TFieldValues>;
 
-        setError(path, {type: errorType as any, message});
+        // Resolve message using the **source field** (not the routed one)
+        const override = opts?.mapMessage?.(serverError, fieldName as Path<TFieldValues>);
+        const message = override ?? serverError.msg ?? opts?.defaultMessage ?? "Invalid value";
+        const errorType = serverError.type ? (prefix + serverError.type) : "server";
+
+        setError(routedField, {type: errorType as any, message});
     }
     return true;
 }

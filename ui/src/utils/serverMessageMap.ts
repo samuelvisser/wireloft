@@ -17,6 +17,6 @@ export function createServerErrorMapper(overrides: FieldOverrides) {
         const byField = overrides[field];
         if (!byField) return undefined;
         const type = err.type ?? "";
-        return byField[type]; // may be undefined
+        return byField[type]; // might be undefined
     };
 }

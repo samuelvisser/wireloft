@@ -37,9 +37,9 @@ export default function MediaProfileForm({form}: Props) {
                     aria-invalid={!!errors.name}
                     aria-describedby={errors.name ? 'mp-name-validate' : undefined}
                 />
-                {(errors.name || errors.slug) && (
+                {(errors.name) && (
                     <div id="mp-name-validate" className="error" role="alert" aria-live="polite">
-                        {String((errors.name ?? errors.slug)?.message)}
+                        {String((errors.name)?.message)}
                     </div>
                 )}
             </div>

@@ -2,7 +2,11 @@ import {useCallback} from 'react'
 import MediaProfileForm from '../../components/MediaProfileForm'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
-import {MediaProfileCreate, MediaProfileCreateSchema, MediaProfileServerErrors} from "../../types/schemas/media_profile";
+import {
+    MediaProfileCreate,
+    MediaProfileCreateSchema,
+    MediaProfileServerErrors
+} from "../../types/schemas/media_profile";
 import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {buildServerAwareSubmit} from "../../utils/buildServerAwareSubmit";
@@ -45,6 +49,7 @@ export default function AddMediaProfilePage() {
         successStatuses: [201], // only accept 201 Created
         fallbackField: "name",
         mapMessage: MediaProfileServerErrors,
+        fieldAlias: {slug: "name"},
     });
 
     const {formState: {isSubmitting}} = form;
