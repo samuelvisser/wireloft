@@ -19,7 +19,7 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--init-db", action="store_true", help="Initialize the database schema using SQLAlchemy ORM and exit")
     parser.add_argument("--seed-db", action="store_true", help="Seed the database with demo data and exit")
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind when running server")
-    parser.add_argument("--port", type=int, default=5000, help="Port to bind when running server")
+    parser.add_argument("--port", type=int, default=5001, help="Port to bind when running server")
     parser.add_argument("--debug", action="store_true", help="Enable debug/reload mode")
     return parser.parse_args(argv)
 
