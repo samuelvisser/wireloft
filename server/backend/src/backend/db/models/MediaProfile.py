@@ -24,7 +24,7 @@ class MediaProfile(Base):
     )
 
     # Relationships
-    download_profiles: Mapped[list["DownloadProfile"]] = relationship(back_populates="media_profile")
+    download_profiles: Mapped[list["DownloadProfileBase"]] = relationship(back_populates="media_profile")
 
 
     def __repr__(self) -> str:
