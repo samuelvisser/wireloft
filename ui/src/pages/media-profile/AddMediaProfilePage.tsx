@@ -64,10 +64,7 @@ export default function AddMediaProfilePage() {
                 <MediaProfileForm form={form} />
 
                 <div className="actions">
-                    <button type="button" className="btn" onClick={onCancel}>
-                        Cancel
-                    </button>
-
+                    <button type="button" className="btn" onClick={onCancel}>Cancel</button>
                     <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting} />
                 </div>
             </form>
