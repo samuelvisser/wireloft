@@ -15,7 +15,7 @@ def get_series_download_profiles_list() -> list[DownloadProfileSeriesAPIRead]:
             .order_by(DownloadProfileSeries.id)
             .all()
         )
-        return [DownloadProfileSeriesAPIRead.model_construct(it) for it in items]
+        return [DownloadProfileSeriesAPIRead.model_validate(it) for it in items]
 
 
 def get_download_profile_series(download_profile_series_id: int) -> DownloadProfileSeriesAPIRead:
@@ -28,7 +28,7 @@ def get_download_profile_series(download_profile_series_id: int) -> DownloadProf
         if item is None:
             raise HTTPException(status_code=404, detail="Download profile for series not found")
 
-        return DownloadProfileSeriesAPIRead.model_construct(item)
+        return DownloadProfileSeriesAPIRead.model_validate(item)
 
 
 def create_download_profile_series(body: DownloadProfileSeriesAPICreate) -> DownloadProfileSeriesAPIRead:
@@ -38,7 +38,7 @@ def create_download_profile_series(body: DownloadProfileSeriesAPICreate) -> Down
         s.add(item)
         s.commit()
         s.refresh(item)
-        return DownloadProfileSeriesAPIRead.model_construct(item)
+        return DownloadProfileSeriesAPIRead.model_validate(item)
 
 
 def update_download_profile_series(download_profile_series_id: int, body: DownloadProfileSeriesAPIUpdate) -> DownloadProfileSeriesAPIRead:
@@ -54,7 +54,7 @@ def update_download_profile_series(download_profile_series_id: int, body: Downlo
         update_database_fields(item, body)
         s.commit()
         s.refresh(item)
-        return DownloadProfileSeriesAPIRead.model_construct(item)
+        return DownloadProfileSeriesAPIRead.model_validate(item)
 
 
 def delete_download_profile_series(download_profile_series_id: int) -> DownloadProfileSeriesAPIRead:
@@ -67,7 +67,7 @@ def delete_download_profile_series(download_profile_series_id: int) -> DownloadP
         if item is None:
             raise HTTPException(status_code=404, detail="Download profile for series not found")
 
-        payload = DownloadProfileSeriesAPIRead.model_construct(item)
+        payload = DownloadProfileSeriesAPIRead.model_validate(item)
         s.delete(item)
         s.commit()
         return payload

@@ -15,7 +15,7 @@ def get_movies_list() -> list[MovieAPIRead]:
             .order_by(Movie.title.asc())
             .all()
         )
-        return [MovieAPIRead.model_construct(it) for it in items]
+        return [MovieAPIRead.model_validate(it) for it in items]
 
 
 def get_movie(movie_slug: str) -> MovieAPIRead:
@@ -28,7 +28,7 @@ def get_movie(movie_slug: str) -> MovieAPIRead:
         if item is None:
             raise HTTPException(status_code=404, detail="Movie not found")
 
-        return MovieAPIRead.model_construct(item)
+        return MovieAPIRead.model_validate(item)
 
 
 def create_movie(body: MovieAPICreate) -> MovieAPIRead:
@@ -38,7 +38,7 @@ def create_movie(body: MovieAPICreate) -> MovieAPIRead:
         s.add(item)
         s.commit()
         s.refresh(item)
-        return MovieAPIRead.model_construct(item)
+        return MovieAPIRead.model_validate(item)
 
 
 def update_movie(movie_slug: str, body: MovieAPIUpdate) -> MovieAPIRead:
@@ -54,7 +54,7 @@ def update_movie(movie_slug: str, body: MovieAPIUpdate) -> MovieAPIRead:
         update_database_fields(item, body)
         s.commit()
         s.refresh(item)
-        return MovieAPIRead.model_construct(item)
+        return MovieAPIRead.model_validate(item)
 
 
 def delete_movie(movie_slug: str) -> MovieAPIRead:
@@ -67,7 +67,7 @@ def delete_movie(movie_slug: str) -> MovieAPIRead:
         if item is None:
             raise HTTPException(status_code=404, detail="Movie not found")
 
-        payload = MovieAPIRead.model_construct(item)
+        payload = MovieAPIRead.model_validate(item)
         s.delete(item)
         s.commit()
         return payload

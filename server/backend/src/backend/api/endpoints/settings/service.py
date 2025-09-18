@@ -11,7 +11,7 @@ def get_settings() -> SettingsAPIRead:
             s.query(Settings)
             .first()
         )
-        return SettingsAPIRead.model_construct(settings)
+        return SettingsAPIRead.model_validate(settings)
 
 
 def create_settings_record(body: SettingsAPICreate) -> SettingsAPIRead:
@@ -30,7 +30,7 @@ def create_settings_record(body: SettingsAPICreate) -> SettingsAPIRead:
         s.add(settings)
         s.commit()
         s.refresh(settings)
-        return SettingsAPIRead.model_construct(settings)
+        return SettingsAPIRead.model_validate(settings)
 
 
 def update_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
@@ -46,4 +46,4 @@ def update_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
         update_database_fields(settings, body)
         s.commit()
         s.refresh(settings)
-        return SettingsAPIRead.model_construct(settings)
+        return SettingsAPIRead.model_validate(settings)

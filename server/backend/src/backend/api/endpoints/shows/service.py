@@ -16,7 +16,7 @@ def get_shows_list() -> list[ShowAPIRead]:
             .order_by(Show.title.asc())
             .all()
         )
-        return [ShowAPIRead.model_construct(show) for show in shows]
+        return [ShowAPIRead.model_validate(show) for show in shows]
 
 
 def get_show(show_slug: str) -> ShowAPIRead:
@@ -30,7 +30,7 @@ def get_show(show_slug: str) -> ShowAPIRead:
         if show is None:
             raise HTTPException(status_code=404, detail="Show not found")
 
-        return ShowAPIRead.model_construct(show)
+        return ShowAPIRead.model_validate(show)
 
 
 def create_show(body: ShowAPICreate) -> ShowAPIRead:
@@ -42,7 +42,7 @@ def create_show(body: ShowAPICreate) -> ShowAPIRead:
         s.add(show)
         s.commit()
         s.refresh(show)
-        return ShowAPIRead.model_construct(show)
+        return ShowAPIRead.model_validate(show)
 
 
 def update_show(show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
@@ -59,7 +59,7 @@ def update_show(show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
         update_database_fields(show, body)
         s.commit()
         s.refresh(show)
-        return ShowAPIRead.model_construct(show)
+        return ShowAPIRead.model_validate(show)
 
 
 def delete_show(show_slug: str) -> ShowAPIRead:
@@ -72,7 +72,7 @@ def delete_show(show_slug: str) -> ShowAPIRead:
         if show is None:
             raise HTTPException(status_code=404, detail="Show not found")
 
-        payload = ShowAPIRead.model_construct(show)
+        payload = ShowAPIRead.model_validate(show)
         s.delete(show)
         s.commit()
         return payload

@@ -15,7 +15,7 @@ def get_podcast_download_profiles_list() -> list[DownloadProfilePodcastAPIRead]:
             .order_by(DownloadProfilePodcast.id)
             .all()
         )
-        return [DownloadProfilePodcastAPIRead.model_construct(it) for it in items]
+        return [DownloadProfilePodcastAPIRead.model_validate(it) for it in items]
 
 
 def get_download_profile_podcast(download_profile_id: int) -> DownloadProfilePodcastAPIRead:
@@ -28,7 +28,7 @@ def get_download_profile_podcast(download_profile_id: int) -> DownloadProfilePod
         if item is None:
             raise HTTPException(status_code=404, detail="Download profile not found")
 
-        return DownloadProfilePodcastAPIRead.model_construct(item)
+        return DownloadProfilePodcastAPIRead.model_validate(item)
 
 
 def create_download_profile_podcast(body: DownloadProfilePodcastAPICreate) -> DownloadProfilePodcastAPIRead:
@@ -38,7 +38,7 @@ def create_download_profile_podcast(body: DownloadProfilePodcastAPICreate) -> Do
         s.add(item)
         s.commit()
         s.refresh(item)
-        return DownloadProfilePodcastAPIRead.model_construct(item)
+        return DownloadProfilePodcastAPIRead.model_validate(item)
 
 
 def update_download_profile_podcast(download_profile_id: int, body: DownloadProfilePodcastAPIUpdate) -> DownloadProfilePodcastAPIRead:
@@ -54,7 +54,7 @@ def update_download_profile_podcast(download_profile_id: int, body: DownloadProf
         update_database_fields(item, body)
         s.commit()
         s.refresh(item)
-        return DownloadProfilePodcastAPIRead.model_construct(item)
+        return DownloadProfilePodcastAPIRead.model_validate(item)
 
 
 def delete_download_profile_podcast(download_profile_id: int) -> DownloadProfilePodcastAPIRead:
@@ -67,7 +67,7 @@ def delete_download_profile_podcast(download_profile_id: int) -> DownloadProfile
         if item is None:
             raise HTTPException(status_code=404, detail="Download profile not found")
 
-        payload = DownloadProfilePodcastAPIRead.model_construct(item)
+        payload = DownloadProfilePodcastAPIRead.model_validate(item)
         s.delete(item)
         s.commit()
         return payload
