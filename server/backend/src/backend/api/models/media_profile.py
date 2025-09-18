@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Union
 
 from pydantic import computed_field, Field, field_validator
 
@@ -9,29 +10,14 @@ from backend.types.media_profile_types import PreferredFormat
 from backend.utils.helpers import slugify
 
 
-def validate_output_template(v: str) -> str:
-    """Validates the output template."""
-    if not v.endswith(".ext"):
-        raise ValueError("Output template must end with '.ext'")
-
-    if not v.startswith("/downloads/"):
-        raise ValueError("Output template must start with '/downloads/'")
-    return v
-
-
-class _MediaProfileAPIBase:
-    """Fields common to all media profile models."""
+# ---------- Strict input (create/update) ----------
+class _MediaProfileAPIBaseIn(RequestBase):
+    """Fields for requests: validate hard here."""
 
     name: str = Field(min_length=1)
     output_template: str
     preferred_format: PreferredFormat
     download_series_images: bool
-
-
-class MediaProfileAPICreate(_MediaProfileAPIBase, RequestBase):
-    """Request body for creating a media profile.
-    Slug is generated automatically from the provided name.
-    """
 
     @computed_field(return_type=str)
     @property
@@ -40,28 +26,38 @@ class MediaProfileAPICreate(_MediaProfileAPIBase, RequestBase):
 
     @field_validator("output_template")
     @classmethod
-    def validate_output_template(cls, v: str) -> str:
-        return validate_output_template(v)
+    def _validate_output_template(cls, v: str) -> str:
+        if not v.endswith(".ext"):
+            raise ValueError("Output template must end with '.ext'")
+        if not v.startswith("/downloads/"):
+            raise ValueError("Output template must start with '/downloads/'")
+        return v
 
 
+class MediaProfileAPICreate(_MediaProfileAPIBaseIn):
+    """Request body for creating a media profile. Slug derived from name."""
+    pass
 
-class MediaProfileAPIRead(_MediaProfileAPIBase, ResponseBase):
-    """Response body for a media profile."""
+
+class MediaProfileAPIUpdate(_MediaProfileAPIBaseIn):
+    """Request body for updating a media profile."""
+    pass
+
+
+# ---------- Lenient output (read) ----------
+class _MediaProfileAPIBaseOut(ResponseBase):
+    """Fields for responses: no validators, no constraints."""
+
     id: int
     slug: str
+    name: str
+    output_template: str
+    preferred_format: Union[PreferredFormat, str]
+    download_series_images: bool
+
+
+class MediaProfileAPIRead(_MediaProfileAPIBaseOut):
+    """Response body for a media profile."""
+
     created_at: datetime
     updated_at: datetime
-
-
-class MediaProfileAPIUpdate(_MediaProfileAPIBase, RequestBase):
-    """Request body for updating a media profile."""
-
-    @field_validator("output_template")
-    @classmethod
-    def validate_output_template(cls, v: str) -> str:
-        return validate_output_template(v)
-
-    # @computed_field(return_type=str)
-    # @property
-    # def slug(self) -> str:
-    #     return slugify(self.name)

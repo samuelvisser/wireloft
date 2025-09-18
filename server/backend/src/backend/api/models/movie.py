@@ -9,8 +9,9 @@ from backend.api.models.base import ResponseBase, RequestBase
 from backend.utils.helpers import generate_uuid
 
 
-class _MovieAPIBase:
-    """Fields common to all movie models."""
+# ---------- Strict input (create/update) ----------
+class _MovieAPIBaseIn(RequestBase):
+    """Fields for requests: validate here if needed."""
 
     # Fields in the media_items table
     title: str
@@ -18,7 +19,7 @@ class _MovieAPIBase:
     downloaded_date: Optional[datetime]
 
 
-class MovieAPICreate(_MovieAPIBase, RequestBase):
+class MovieAPICreate(_MovieAPIBaseIn):
     """Request body for creating a movie."""
 
     # Fields in the media_items table
@@ -31,18 +32,27 @@ class MovieAPICreate(_MovieAPIBase, RequestBase):
         return generate_uuid()
 
 
-class MovieAPIRead(_MovieAPIBase, ResponseBase):
-    """Represents a movie summary/detail item returned by the API."""
+class MovieAPIUpdate(_MovieAPIBaseIn):
+    """Request body for updating a movie."""
+    pass
+
+
+# ---------- Lenient output (read) ----------
+class _MovieAPIBaseOut(ResponseBase):
+    """Fields for responses: no validators, no constraints."""
 
     # Fields in the media_items table
     id: int
     uuid: str
     dw_id: Optional[str] = None
     slug: str
+    title: str
+    description: Optional[str]
+    downloaded_date: Optional[datetime]
+
+
+class MovieAPIRead(_MovieAPIBaseOut):
+    """Represents a movie summary/detail item returned by the API."""
+
     created_at: datetime
     updated_at: datetime
-
-
-class MovieAPIUpdate(_MovieAPIBase, RequestBase):
-    """Request body for updating a movie."""
-    pass

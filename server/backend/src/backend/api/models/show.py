@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Union
 from datetime import datetime
 
 from pydantic import computed_field
@@ -10,8 +10,10 @@ from backend.types.show_types import ShowType, EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
 
 
-class _ShowAPIBase:
-    """Fields common to all show models."""
+# ---------- Strict input (create/update) ----------
+class _ShowAPIBaseIn(RequestBase):
+    """Fields for requests: validate here if needed."""
+
     title: str
     description: str
     url: str
@@ -24,8 +26,9 @@ class _ShowAPIBase:
     thumbnail_square_path: Optional[str] = None
 
 
-class ShowAPICreate(_ShowAPIBase, RequestBase):
+class ShowAPICreate(_ShowAPIBaseIn):
     """Request body for creating a show."""
+
     dw_id: str
     slug: str
     type: ShowType
@@ -38,16 +41,36 @@ class ShowAPICreate(_ShowAPIBase, RequestBase):
         return generate_uuid()
 
 
-class ShowAPIRead(_ShowAPIBase, ResponseBase):
-    """Response body for a show."""
+class ShowAPIUpdate(_ShowAPIBaseIn):
+    """Request body for updating a show."""
+    pass
+
+
+# ---------- Lenient output (read) ----------
+class _ShowAPIBaseOut(ResponseBase):
+    """Fields for responses: no validators, no constraints."""
 
     id: int
     uuid: str
     dw_id: str
     slug: str
-    type: ShowType
-    episode_identifier: EpisodeIdentifier
+    type: Union[ShowType, str]
+    episode_identifier: Union[EpisodeIdentifier, str]
     author_slug: str
+    title: str
+    description: str
+    url: str
+    author_name: str
+    author_headshot_path: Optional[str] = None
+    background_image_path: Optional[str] = None
+    logo_image_path: Optional[str] = None
+    thumbnail_landscape_path: Optional[str] = None
+    thumbnail_portrait_path: Optional[str] = None
+    thumbnail_square_path: Optional[str] = None
+
+
+class ShowAPIRead(_ShowAPIBaseOut):
+    """Response body for a show."""
     created_at: datetime
     updated_at: datetime
 
@@ -59,8 +82,3 @@ class ShowAPIReadView(ShowAPIRead):
     @property
     def years(self) -> Optional[str]:
         return None
-
-
-class ShowAPIUpdate(_ShowAPIBase, RequestBase):
-    """Request body for updating a show."""
-    pass

@@ -8,13 +8,15 @@ from backend.api.models.download_profile_podcast import DownloadProfilePodcastAP
 from backend.api.models.show import ShowAPICreate
 
 
-class MediaProfileCreateNew(MediaProfileAPICreate):
+class MediaProfileCreateNew(RequestBase):
     op: Literal["create_new"] = "create_new"
+    create: MediaProfileAPICreate
 
 
-class MediaProfileUpdateBySlug(MediaProfileAPIUpdate):
+class MediaProfileUpdateBySlug(RequestBase):
     op: Literal["update_by_slug"] = "update_by_slug"
-    slug: str  # key to find-or-create
+    slug: str
+    update: MediaProfileAPIUpdate
 
 
 MediaProfileAPIUpsert = Union[

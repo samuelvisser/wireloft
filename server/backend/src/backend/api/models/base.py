@@ -14,7 +14,8 @@ class ResponseBase(BaseModel):
             validation_alias=to_snake,
         ),
         populate_by_name=True,
-        from_attributes=True
+        from_attributes=True,
+        extra='ignore'
     )
 
 class RequestBase(BaseModel):
@@ -26,5 +27,6 @@ class RequestBase(BaseModel):
             validation_alias=to_camel,
         ),
         populate_by_name=True,
-        from_attributes=True
+        from_attributes=True,
+        extra='ignore'
     )

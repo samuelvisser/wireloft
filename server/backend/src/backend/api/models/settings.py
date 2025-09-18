@@ -5,24 +5,29 @@ from datetime import datetime
 from backend.api.models.base import RequestBase, ResponseBase
 
 
-class _SettingsAPIBase:
-    """Fields common to all settings models."""
+# ---------- Strict input (create/update) ----------
+class _SettingsAPIBaseIn(RequestBase):
+    """Fields for requests: validate here if needed."""
     pass
 
 
-class SettingsAPICreate(_SettingsAPIBase, RequestBase):
+class SettingsAPICreate(_SettingsAPIBaseIn):
     """Creates the settings record"""
     pass
 
 
-class SettingsAPIRead(_SettingsAPIBase, ResponseBase):
-    """Represents the settings record."""
-
-    id: int
-    created_at: datetime
-    updated_at: datetime
-
-
-class SettingsAPIUpdate(_SettingsAPIBase, RequestBase):
+class SettingsAPIUpdate(_SettingsAPIBaseIn):
     """Updates a setting"""
     pass
+
+
+# ---------- Lenient output (read) ----------
+class _SettingsAPIBaseOut(ResponseBase):
+    """Fields for responses: no validators, no constraints."""
+    id: int
+
+
+class SettingsAPIRead(_SettingsAPIBaseOut):
+    """Represents the settings record."""
+    created_at: datetime
+    updated_at: datetime
