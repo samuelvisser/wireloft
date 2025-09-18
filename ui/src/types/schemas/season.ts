@@ -1,5 +1,7 @@
 import {z} from "zod";
 
+
+// ---------- Strict request (create/update) ----------
 const SeasonBaseSchema = z.object({
     name: z.string(),
 })
@@ -13,17 +15,19 @@ export const SeasonCreateSchema = SeasonBaseSchema.extend({
 export type SeasonCreate = z.infer<typeof SeasonCreateSchema>;
 
 
-export const SeasonReadSchema = SeasonBaseSchema.extend({
-    id: z.number(),
-    dwId: z.string(),
-    showId: z.string(),
-    slug: z.string(),
-    createdAt: z.date(),
-    updatedAt: z.date(),
-})
-export type SeasonRead = z.infer<typeof SeasonReadSchema>;
-
-
 export const SeasonUpdateSchema = SeasonBaseSchema.extend({
 })
 export type SeasonUpdate = z.infer<typeof SeasonUpdateSchema>;
+
+
+// ------------ Lenient response (read) ------------
+export const SeasonReadSchema = z.looseObject({
+    id: z.number(),
+    name: z.string(),
+    dwId: z.string(),
+    showId: z.string(),
+    slug: z.string(),
+    createdAt: z.iso.datetime().transform((s) => new Date(s)),
+    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+})
+export type SeasonRead = z.infer<typeof SeasonReadSchema>;

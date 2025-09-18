@@ -1,6 +1,7 @@
 import {z} from "zod";
 
 
+// ---------- Strict request (create/update) ----------
 const MovieBaseSchema = z.object({
     title: z.string(),
     description: z.string().optional(),
@@ -15,17 +16,21 @@ export const MovieCreateSchema = MovieBaseSchema.extend({
 export type MovieCreate = z.infer<typeof MovieCreateSchema>;
 
 
-export const MovieReadSchema = MovieBaseSchema.extend({
+export const MovieUpdateSchema = MovieBaseSchema.extend({
+})
+export type MovieUpdate = z.infer<typeof MovieUpdateSchema>;
+
+
+// ------------ Lenient response (read) ------------
+export const MovieReadSchema = z.looseObject({
     id: z.number(),
     uuid: z.string(),
     dwId: z.string().optional(),
     slug: z.string(),
-    createdAt: z.date(),
-    updatedAt: z.date(),
+    title: z.string(),
+    description: z.string().optional(),
+    downloadedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
+    createdAt: z.iso.datetime().transform((s) => new Date(s)),
+    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })
 export type MovieRead = z.infer<typeof MovieReadSchema>;
-
-
-export const MovieUpdateSchema = MovieBaseSchema.extend({
-})
-export type MovieUpdate = z.infer<typeof MovieUpdateSchema>;

@@ -2,6 +2,7 @@ import {z} from 'zod';
 import {EpisodePublishStatus} from "../episode";
 
 
+// ---------- Strict request (create/update) ----------
 const EpisodeBaseSchema = z.object({
     publishStatus: z.enum(EpisodePublishStatus),
     wentLiveDate: z.date().optional(),
@@ -22,20 +23,28 @@ export const EpisodeCreateSchema = EpisodeBaseSchema.extend({
 export type EpisodeCreate = z.infer<typeof EpisodeCreateSchema>
 
 
-export const EpisodeReadSchema = EpisodeBaseSchema.extend({
-    id: z.number(),
-    showId: z.number(),
-    index: z.number(),
-    uuid: z.string(),
-    dwId: z.string().optional(),
-    slug: z.string(),
-    createdAt: z.date(),
-    updatedAt: z.date(),
-})
-export type EpisodeRead = z.infer<typeof EpisodeReadSchema>
-
-
 export const EpisodeUpdateSchema = EpisodeBaseSchema.extend({
     dwId: z.string().optional(),
 })
 export type EpisodeUpdate = z.infer<typeof EpisodeUpdateSchema>
+
+
+// ------------ Lenient response (read) ------------
+export const EpisodeReadSchema = z.looseObject({
+    id: z.number(),
+    showId: z.number(),
+    index: z.number(),
+    publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),
+    wentLiveDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
+    publishedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
+    redownloadedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
+    title: z.string(),
+    description: z.string(),
+    downloadedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
+    uuid: z.string(),
+    dwId: z.string().optional(),
+    slug: z.string(),
+    createdAt: z.iso.datetime().transform((s) => new Date(s)),
+    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+})
+export type EpisodeRead = z.infer<typeof EpisodeReadSchema>

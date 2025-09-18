@@ -1,6 +1,7 @@
 import {z} from 'zod';
 
 
+// ---------- Strict request (create/update) ----------
 const DownloadProfilePodcastBaseSchema = z.object({
     mediaProfileId: z.number().optional(),
     enableProfile: z.boolean(),
@@ -16,15 +17,22 @@ export const DownloadProfilePodcastCreateSchema = DownloadProfilePodcastBaseSche
 export type DownloadProfilePodcastCreate = z.infer<typeof DownloadProfilePodcastCreateSchema>
 
 
-export const DownloadProfilePodcastReadSchema = DownloadProfilePodcastBaseSchema.extend({
-    id: z.number(),
-    showId: z.number(),
-    createdAt: z.date(),
-    updatedAt: z.date(),
-})
-export type DownloadProfilePodcastRead = z.infer<typeof DownloadProfilePodcastReadSchema>
-
-
 export const DownloadProfilePodcastUpdateSchema = DownloadProfilePodcastBaseSchema.extend({
 })
 export type DownloadProfilePodcastUpdate = z.infer<typeof DownloadProfilePodcastUpdateSchema>
+
+
+// ------------ Lenient response (read) ------------
+export const DownloadProfilePodcastReadSchema = z.looseObject({
+    id: z.number(),
+    showId: z.number(),
+    mediaProfileId: z.number().optional(),
+    enableProfile: z.boolean(),
+    downloadWithCountdown: z.boolean(),
+    redownloadFinal: z.boolean(),
+    downloadDaysInPast: z.number(),
+    deleteOlderEpisodes: z.boolean(),
+    createdAt: z.iso.datetime().transform((s) => new Date(s)),
+    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+})
+export type DownloadProfilePodcastRead = z.infer<typeof DownloadProfilePodcastReadSchema>
