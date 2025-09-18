@@ -2,10 +2,27 @@ import Switch from 'react-switch'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
 import {PreferredFormat} from '../../types/media_profile'
+import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
+import {MediaProfileServerErrors} from '../../types/schemas/media_profile'
 
-type Props = {
+ type Props = {
     mode?: 'create' | 'update'
     form: UseFormReturn<any>
+}
+
+export function buildMediaProfileOnSubmit<T extends Record<string, any>>(
+    form: UseFormReturn<T>,
+    submitFn: (data: T) => Promise<Response>,
+    opts?: { mode?: 'create' | 'update'; onSuccess?: (result: any, ctx: any) => void }
+) {
+    const mode = opts?.mode ?? 'update'
+    return buildServerAwareSubmit(form, submitFn, {
+        onSuccess: opts?.onSuccess,
+        successStatuses: mode === 'create' ? [201] : undefined,
+        fallbackField: 'name' as any,
+        mapMessage: MediaProfileServerErrors,
+        fieldAlias: {slug: 'name'},
+    })
 }
 
 export default function MediaProfileForm({form}: Props) {

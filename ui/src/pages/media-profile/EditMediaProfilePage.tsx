@@ -4,9 +4,9 @@ import MediaProfileForm from '../../components/MediaProfileForm'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {MediaProfileServerErrors, MediaProfileUpdate, MediaProfileUpdateSchema} from '../../types/schemas/media_profile'
+import {MediaProfileUpdate, MediaProfileUpdateSchema} from '../../types/schemas/media_profile'
 import {WithRoot} from '../../types/form'
-import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
+import {buildMediaProfileOnSubmit} from '../../components/MediaProfileForm/MediaProfileForm'
 
 export default function EditMediaProfilePage() {
     const navigate = useNavigate()
@@ -25,8 +25,6 @@ export default function EditMediaProfilePage() {
         },
     })
 
-    const onCancel = useCallback(() => navigate('/profiles'), [navigate])
-
     // Initialize form unconditionally to keep hooks order consistent
     const form = useForm<WithRoot<MediaProfileUpdate>>({
         resolver: zodResolver(MediaProfileUpdateSchema),
@@ -41,6 +39,8 @@ export default function EditMediaProfilePage() {
             form.reset(profile)
         }
     }, [profile, form])
+
+    const onCancel = useCallback(() => navigate('/profiles'), [navigate])
 
     if (isLoading) {
         return (
@@ -81,10 +81,9 @@ export default function EditMediaProfilePage() {
         navigate('/profiles')
     }
 
-    const onUpdate = buildServerAwareSubmit(form, submitFn, {
+    const onUpdate = buildMediaProfileOnSubmit(form, submitFn, {
         onSuccess,
-        fallbackField: 'name',
-        mapMessage: MediaProfileServerErrors,
+        mode: 'update',
     })
 
     const {formState: {isSubmitting}} = form

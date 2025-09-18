@@ -5,13 +5,12 @@ import {useQueryClient} from '@tanstack/react-query'
 import {
     MediaProfileCreate,
     MediaProfileCreateSchema,
-    MediaProfileServerErrors
 } from "../../types/schemas/media_profile";
 import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
-import {buildServerAwareSubmit} from "../../utils/buildServerAwareSubmit";
 import {WithRoot} from "../../types/form";
 import {PreferredFormat} from "../../types/media_profile";
+import {buildMediaProfileOnSubmit} from '../../components/MediaProfileForm/MediaProfileForm'
 
 export default function AddMediaProfilePage() {
     const navigate = useNavigate()
@@ -44,12 +43,9 @@ export default function AddMediaProfilePage() {
     };
 
     const onCancel = useCallback(() => navigate('/profiles'), [navigate])
-    const onCreate = buildServerAwareSubmit(form, submitFn, {
+    const onCreate = buildMediaProfileOnSubmit(form, submitFn, {
         onSuccess,
-        successStatuses: [201], // only accept 201 Created
-        fallbackField: "name",
-        mapMessage: MediaProfileServerErrors,
-        fieldAlias: {slug: "name"},
+        mode: 'create',
     });
 
     const {formState: {isSubmitting}} = form;
