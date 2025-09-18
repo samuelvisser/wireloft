@@ -17,7 +17,7 @@ def get_episodes_list(show_slug: str) -> list[EpisodeAPIRead]:
             .all()
         )
 
-        return [EpisodeAPIRead.model_validate(mp) for mp in episodes]
+        return [EpisodeAPIRead.model_construct(mp) for mp in episodes]
 
 
 def get_episode(show_slug: str, episode_slug: str) -> EpisodeAPIRead:
@@ -34,7 +34,7 @@ def get_episode(show_slug: str, episode_slug: str) -> EpisodeAPIRead:
         if episode is None:
             raise HTTPException(status_code=404, detail="Episode not found")
 
-        return EpisodeAPIRead.model_validate(episode)
+        return EpisodeAPIRead.model_construct(episode)
 
 
 def create_episode(body: EpisodeAPICreate) -> EpisodeAPIRead:
@@ -42,11 +42,11 @@ def create_episode(body: EpisodeAPICreate) -> EpisodeAPIRead:
         # Build model from validated Pydantic data
         data = body.model_dump(by_alias=True)
 
-        ep = Episode(**data)
-        s.add(ep)
+        episode = Episode(**data)
+        s.add(episode)
         s.commit()
-        s.refresh(ep)
-        return EpisodeAPIRead.model_validate(ep)
+        s.refresh(episode)
+        return EpisodeAPIRead.model_construct(episode)
 
 
 def update_episode(show_slug: str, episode_slug: str, body: EpisodeAPIUpdate) -> EpisodeAPIRead:
@@ -66,7 +66,7 @@ def update_episode(show_slug: str, episode_slug: str, body: EpisodeAPIUpdate) ->
         update_database_fields(episode, body)
         s.commit()
         s.refresh(episode)
-        return EpisodeAPIRead.model_validate(episode)
+        return EpisodeAPIRead.model_construct(episode)
 
 
 def delete_episode(show_slug: str, episode_slug: str) -> EpisodeAPIRead:
@@ -82,7 +82,7 @@ def delete_episode(show_slug: str, episode_slug: str) -> EpisodeAPIRead:
         if episode is None:
             raise HTTPException(status_code=404, detail="Episode not found")
 
-        payload = EpisodeAPIRead.model_validate(episode)
+        payload = EpisodeAPIRead.model_construct(episode)
         s.delete(episode)
         s.commit()
         return payload

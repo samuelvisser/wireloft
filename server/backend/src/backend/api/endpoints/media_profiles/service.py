@@ -15,7 +15,7 @@ def get_media_profiles_list() -> list[MediaProfileAPIRead]:
             .order_by(MediaProfile.id)
             .all()
         )
-        return [MediaProfileAPIRead.model_validate(mp) for mp in media_profiles]
+        return [MediaProfileAPIRead.model_construct(mp) for mp in media_profiles]
 
 
 def get_media_profile(media_profile_slug: str) -> MediaProfileAPIRead:
@@ -28,7 +28,7 @@ def get_media_profile(media_profile_slug: str) -> MediaProfileAPIRead:
         if media_profile is None:
             raise HTTPException(status_code=404, detail="Media profile not found")
 
-        return MediaProfileAPIRead.model_validate(media_profile)
+        return MediaProfileAPIRead.model_construct(media_profile)
 
 
 def create_media_profile(body: MediaProfileAPICreate) -> MediaProfileAPIRead:
@@ -40,7 +40,7 @@ def create_media_profile(body: MediaProfileAPICreate) -> MediaProfileAPIRead:
         s.add(mp)
         s.commit()
         s.refresh(mp)
-        return MediaProfileAPIRead.model_validate(mp)
+        return MediaProfileAPIRead.model_construct(mp)
 
 
 def update_media_profile(media_profile_slug: str, body: MediaProfileAPIUpdate) -> MediaProfileAPIRead:
@@ -57,7 +57,7 @@ def update_media_profile(media_profile_slug: str, body: MediaProfileAPIUpdate) -
         update_database_fields(media_profile, body)
         s.commit()
         s.refresh(media_profile)
-        return MediaProfileAPIRead.model_validate(media_profile)
+        return MediaProfileAPIRead.model_construct(media_profile)
 
 
 def delete_media_profile(media_profile_slug: str) -> MediaProfileAPIRead:
@@ -70,7 +70,7 @@ def delete_media_profile(media_profile_slug: str) -> MediaProfileAPIRead:
         if media_profile is None:
             raise HTTPException(status_code=404, detail="Media profile not found")
 
-        payload = MediaProfileAPIRead.model_validate(media_profile)
+        payload = MediaProfileAPIRead.model_construct(media_profile)
         s.delete(media_profile)
         s.commit()
         return payload

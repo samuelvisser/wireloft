@@ -15,7 +15,7 @@ def get_seasons_list() -> list[SeasonAPIRead]:
             .order_by(Season.id)
             .all()
         )
-        return [SeasonAPIRead.model_validate(season) for season in seasons]
+        return [SeasonAPIRead.model_construct(season) for season in seasons]
 
 
 def get_season(season_slug: str) -> SeasonAPIRead:
@@ -28,7 +28,7 @@ def get_season(season_slug: str) -> SeasonAPIRead:
         if season is None:
             raise HTTPException(status_code=404, detail="Season not found")
 
-        return SeasonAPIRead.model_validate(season)
+        return SeasonAPIRead.model_construct(season)
 
 
 def create_season(body: SeasonAPICreate) -> SeasonAPIRead:
@@ -40,7 +40,7 @@ def create_season(body: SeasonAPICreate) -> SeasonAPIRead:
         s.add(season)
         s.commit()
         s.refresh(season)
-        return SeasonAPIRead.model_validate(season)
+        return SeasonAPIRead.model_construct(season)
 
 
 def update_season(season_slug: str, body: SeasonAPIUpdate) -> SeasonAPIRead:
@@ -57,7 +57,7 @@ def update_season(season_slug: str, body: SeasonAPIUpdate) -> SeasonAPIRead:
         update_database_fields(season, body)
         s.commit()
         s.refresh(season)
-        return SeasonAPIRead.model_validate(season)
+        return SeasonAPIRead.model_construct(season)
 
 
 def delete_season(season_slug: str) -> SeasonAPIRead:
@@ -70,7 +70,7 @@ def delete_season(season_slug: str) -> SeasonAPIRead:
         if season is None:
             raise HTTPException(status_code=404, detail="Season not found")
 
-        payload = SeasonAPIRead.model_validate(season)
+        payload = SeasonAPIRead.model_construct(season)
         s.delete(season)
         s.commit()
         return payload
