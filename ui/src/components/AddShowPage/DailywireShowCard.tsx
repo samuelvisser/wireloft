@@ -1,7 +1,7 @@
 import { useDailywireShow } from '../../lib/queries'
 
 type Props = {
-  slug?: string
+  showSlug?: string
   membershipPlan?: string
 }
 
@@ -20,11 +20,11 @@ export type DailywireShow = {
     thumbnailSquarePath: string | null
 }
 
-export default function DailywireShowCard({ slug, membershipPlan }: Props) {
-  const q = useDailywireShow(slug, membershipPlan)
+export default function DailywireShowCard({ showSlug, membershipPlan }: Props) {
+  const q = useDailywireShow(showSlug, membershipPlan)
 
   // Nothing to show until URL is valid and slug exists
-  if (!slug) return null
+  if (!showSlug) return null
 
   if (q.isPending) {
     return (
