@@ -8,7 +8,7 @@ from backend.types.download_profile_types import DownloadProfileType
 
 class DownloadProfileSeries(DownloadProfileBase):
     __tablename__ = "series_download_profiles"
-    __mapper_args__ = {"polymorphic_identity": DownloadProfileType.series}
+    __mapper_args__ = {"polymorphic_identity": DownloadProfileType.SERIES}
 
     # Columns
     id: Mapped[int] = mapped_column(ForeignKey("download_profiles.id", ondelete="CASCADE"), primary_key=True)

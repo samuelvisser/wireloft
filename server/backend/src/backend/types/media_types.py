@@ -2,8 +2,8 @@ from enum import Enum
 
 
 class MediaType(Enum):
-    episode = "episode"
-    movie = "movie"
+    EPISODE = "episode"
+    MOVIE = "movie"
 
     # For instances of MediaItem class (parent class)
-    media = "media"
+    MEDIA = "media"

@@ -2,7 +2,7 @@ from enum import Enum
 
 
 class PreferredFormat(Enum):
-    format_4k = '4k'
-    format_1080p = '1080p'
-    format_720p = '720p'
-    format_audio_only = 'Audio Only'
+    FORMAT_4K = '4k'
+    FORMAT_1080P = '1080p'
+    FORMAT_720P = '720p'
+    FORMAT_AUDIO_ONLY = 'Audio Only'

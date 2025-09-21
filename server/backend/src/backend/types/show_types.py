@@ -2,9 +2,9 @@ from enum import Enum
 
 
 class ShowType(Enum):
-    podcast = "podcast"
-    series = "series"
+    PODCAST = "podcast"
+    SERIES = "series"
 
 class EpisodeIdentifier(Enum):
-    date_based = "date_based"
-    numbered = "numbered"
+    DATE_BASED = "date_based"
+    NUMBERED = "numbered"

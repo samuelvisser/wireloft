@@ -11,7 +11,7 @@ from backend.types.media_types import MediaType
 
 class Episode(MediaItem):
     __tablename__ = "episodes"
-    __mapper_args__ = {"polymorphic_identity": MediaType.episode}
+    __mapper_args__ = {"polymorphic_identity": MediaType.EPISODE}
 
     # Fields
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)

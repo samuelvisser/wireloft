@@ -2,15 +2,15 @@ from enum import Enum
 
 
 class DownloadProfileType(Enum):
-    podcast = "podcast"
-    series = "series"
+    PODCAST = "podcast"
+    SERIES = "series"
 
     # For instances of DownloadProfileBase class (parent class)
-    base = "base"
+    BASE = "base"
 
 class MediaDownloadStatus(Enum):
-    downloaded = "downloaded"
-    downloading = "downloading"
-    redownloaded = "redownloaded"
-    local_processing = "local_processing"
-    error = "error"
+    DOWNLOADED = "downloaded"
+    DOWNLOADING = "downloading"
+    REDOWNLOADED = "redownloaded"
+    LOCAL_PROCESSING = "local_processing"
+    ERROR = "error"

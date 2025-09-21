@@ -12,7 +12,7 @@ class DownloadProfileBase(Base):
     )
     __mapper_args__ = {
         "polymorphic_on": "type",
-        "polymorphic_identity": DownloadProfileType.base,
+        "polymorphic_identity": DownloadProfileType.BASE,
     }
 
     # Columns
