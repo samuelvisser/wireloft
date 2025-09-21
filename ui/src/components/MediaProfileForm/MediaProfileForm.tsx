@@ -1,9 +1,9 @@
 import Switch from 'react-switch'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
-import {PreferredFormat} from '../../types/media_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {MediaProfileServerErrors} from '../../types/schemas/media_profile'
+import {PreferredFormatReg} from "../../types/media_profile";
 
  type Props = {
     mode?: 'create' | 'update'
@@ -29,7 +29,6 @@ export default function MediaProfileForm({form}: Props) {
 
     const {register, control, formState: {errors}} = form;
 
-    const preferredFormatOptions = Object.values(PreferredFormat).map((v) => ({ value: v, label: v }))
 
     return (
         <>
@@ -89,8 +88,8 @@ export default function MediaProfileForm({form}: Props) {
                         <Select
                             inputId="mp-format"
                             classNamePrefix="select"
-                            options={preferredFormatOptions}
-                            value={preferredFormatOptions.find((o) => o.value === field.value) ?? null}
+                            options={PreferredFormatReg.options}
+                            value={PreferredFormatReg.options.find(o => o.value === field.value) ?? null}
                             onChange={(opt) => field.onChange((opt as any)?.value ?? null)}
                             onBlur={field.onBlur}
                             aria-invalid={!!errors.preferredFormat}

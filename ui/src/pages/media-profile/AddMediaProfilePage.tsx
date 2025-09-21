@@ -9,7 +9,6 @@ import {
 import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {WithRoot} from "../../types/form";
-import {PreferredFormat} from "../../types/media_profile";
 import {buildMediaProfileOnSubmit} from '../../components/MediaProfileForm/MediaProfileForm'
 
 export default function AddMediaProfilePage() {
@@ -23,7 +22,7 @@ export default function AddMediaProfilePage() {
         defaultValues: {
             name: "",
             outputTemplate: "/downloads/",
-            preferredFormat: PreferredFormat.format1080p,
+            preferredFormat: '1080p',
             downloadSeriesImages: false,
         },
     })

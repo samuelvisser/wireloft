@@ -1,6 +1,6 @@
 import {z} from "zod";
 import {createServerErrorMapper} from "../../utils/serverMessageMap";
-import {PreferredFormat} from "../media_profile";
+import {PreferredFormatReg} from "../media_profile";
 
 // Only override what you care about for this form.
 export const MediaProfileServerErrors = createServerErrorMapper({
@@ -12,7 +12,7 @@ export const MediaProfileServerErrors = createServerErrorMapper({
 const MediaProfileBaseSchema = z.object({
     name: z.string().min(1, "Name is required"),
     outputTemplate: z.string().min(4).regex(/^\/downloads\//, "Output template must start with '/downloads/'").regex(/\.ext$/, "Output template must end with '.ext'"),
-    preferredFormat: z.enum(PreferredFormat),
+    preferredFormat: z.enum(PreferredFormatReg.values),
     downloadSeriesImages: z.boolean(),
 })
 
@@ -34,7 +34,7 @@ export const MediaProfileReadSchema = z.looseObject({
     slug: z.string(),
     name: z.string(),
     outputTemplate: z.string(),
-    preferredFormat: z.union([z.enum(PreferredFormat), z.string()]),
+    preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
     downloadSeriesImages: z.boolean(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
