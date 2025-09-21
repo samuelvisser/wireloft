@@ -1,12 +1,13 @@
 import {useEffect, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {getCurrentAppVersion} from '../../utils/helpers'
-import ChooseShowStep, {type ShowFormValue} from './ChooseShowStep'
+import ChooseShowStep from './ChooseShowStep'
 import MediaProfileStep from './MediaProfileStep'
-import DownloadProfileStep, {type DownloadProfileFormValue} from './DownloadProfileStep'
+import DownloadProfileStep from './DownloadProfileStep'
 
-import type {AddShowMediaProfileUpsert} from '../../types/addShow'
 import type {Versioned} from '../../types/data'
+import {ShowCreatePayload, ShowCreatePayloadInput, ShowCreatePayloadSchema} from "../../types/schemas/show";
+import {getZodDefaults} from "../../utils/defaultZod";
 
 export type Props = {
     onCancel: () => void
@@ -17,9 +18,12 @@ const STORAGE_KEY = 'addShowWizardV2'
 
 type WizardState = {
     step: 1 | 2 | 3
-    show: ShowFormValue
-    mediaProfile: AddShowMediaProfileUpsert
-    downloadProfile: DownloadProfileFormValue
+    show: {
+        input: ShowCreatePayloadInput,
+        submit: ShowCreatePayload | undefined,
+    }
+    // mediaProfile: MediaProfileCreate
+    // downloadProfile: DownloadProfileSeriesCreate | DownloadProfilePodcastCreate
 }
 
 function loadWizardState(): WizardState | null {
@@ -80,59 +84,28 @@ export default function AddShowPage({onCancel}: Props) {
     // Wizard step: 1 = URL, 2 = Media Profile, 3 = Show
     const [step, setStep] = useState<1 | 2 | 3>(() => loadWizardState()?.step ?? 1)
 
-    // Step 1: Show
-    const [show, setShow] = useState<ShowFormValue>(
-        () => loadWizardState()?.show ?? ({
-            // Form values
-            url: '',
-            type: null,
-            episodeIdentifier: null,
 
-            // DW API values
-            dwId: null,
-            slug: null,
-            authorSlug: null,
-            title: null,
-            description: null,
-            authorName: null,
-            authorHeadshotPath: null,
-            backgroundImagePath: null,
-            logoImagePath: null,
-            thumbnailLandscapePath: null,
-            thumbnailPortraitPath: null,
-            thumbnailSquarePath: null,
-        }))
-    const [slug, setSlug] = useState<string | undefined>(undefined)
+    const [showInput, setShowInput] = useState<ShowCreatePayloadInput>(
+        () => loadWizardState()?.show.input ?? getZodDefaults(ShowCreatePayloadSchema))
+    const [showSubmit, setShowSubmit] = useState<ShowCreatePayload>()
 
-    // Step 2: Media Profile
-    const [mediaProfile, setMediaProfile] = useState<AddShowMediaProfileUpsert>(
-        () => (loadWizardState() as any)?.mediaProfile ?? ({
-            op: 'create_new',
-            name: '',
-            outputTemplate: '',
-            preferredFormat: '1080p',
-            downloadSeriesImages: true,
-        }))
 
-    // Step 3: Download Profile
-    const [downloadProfile, setDownloadProfile] = useState<DownloadProfileFormValue>(
-        () => loadWizardState()?.downloadProfile ?? ({
-            enableProfile: true,
-            downloadWithCountdown: false,
-            redownloadFinal: false,
-            downloadDaysInPast: 180,
-            deleteOlderEpisodes: true,
-        }))
 
     // Persist wizard state on any change
     useEffect(() => {
         saveWizardState({
             step,
-            show,
-            mediaProfile,
-            downloadProfile,
+            show: {
+                input: showInput,
+                submit: showSubmit
+            },
+            // mediaProfile,
+            // downloadProfile,
         })
-    }, [step, show, mediaProfile, downloadProfile])
+    }, [step, showInput, showSubmit,
+        // mediaProfile,
+        // downloadProfile
+    ])
 
     function handleCancel() {
         clearWizardState()
@@ -141,44 +114,11 @@ export default function AddShowPage({onCancel}: Props) {
 
     async function handleFinish() {
         // Ensure we have a media profile slug: use selected or create new
-
-
-        const r = await fetch(`${(window as any).appConfig.API_URL}/shows/show-with-profiles`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                show: show,
-                mediaProfile: mediaProfile,
-                downloadProfile: downloadProfile,
-            }),
-        })
-        if (!r.ok) {
-            if (r.status === 422) {
-                try {
-                    const data = await r.json()
-                    const details = Array.isArray(data?.detail) ? data.detail : []
-                    const messages = details.map((d: any) => d?.msg).filter(Boolean)
-                    alert(messages.length ? messages.join('\n') : `Validation error (HTTP 422)`)
-                } catch {
-                    alert(`Validation error (HTTP 422)`)
-                }
-                return
-            }
-            const msg = `Failed to create media profile (HTTP ${r.status})`
-            console.error(msg)
-            alert(msg)
-            return
-        }
         await qc.invalidateQueries({queryKey: ['mediaProfiles']})
-
-
-        // TODO save show to /api/shows/show-with-profiles
-
         await qc.invalidateQueries({queryKey: ['shows']})
         clearWizardState()
         onCancel()
     }
-
 
     return (
         <div>
@@ -188,33 +128,31 @@ export default function AddShowPage({onCancel}: Props) {
 
             {step === 1 && (
                 <ChooseShowStep
-                    value={show}
-                    onChange={setShow}
-                    onContinue={() => setStep(2)}
+                    value={showInput}
+                    onChange={setShowInput}
+                    onContinue={(data: ShowCreatePayload) => {
+                        setShowSubmit(data)
+                        setStep(2)
+                    }}
                     onCancel={handleCancel}
-                    onSlugChange={setSlug}
                 />
             )}
 
             {step === 2 && (
                 <MediaProfileStep
-                    value={mediaProfile}
-                    onChange={setMediaProfile}
                     onBack={() => setStep(1)}
                     onContinue={() => setStep(3)}
                     onCancel={handleCancel}
-                    slug={slug}
+                    showSlug={''}
                 />
             )}
 
             {step === 3 && (
                 <DownloadProfileStep
-                    value={downloadProfile}
-                    onChange={setDownloadProfile}
                     onBack={() => setStep(2)}
                     onFinish={handleFinish}
                     onCancel={handleCancel}
-                    slug={slug}
+                    showSlug={''}
                 />
             )}
         </div>

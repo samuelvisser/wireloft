@@ -14,6 +14,7 @@ function ensureProtocol(input: string): string {
 const dailyWireUrl = z
     .string()
     .nonempty({message: "URL is required"})
+    .default('')
     .transform(ensureProtocol)
     .refine((s) => {
         try {
@@ -47,9 +48,9 @@ const dailyWireUrl = z
 /* ------------------------------------------------------------------ */
 const ShowBaseFormSchema = z.object({
     url: dailyWireUrl,
-    type: z.union([z.enum(ShowTypeReg.values), z.literal('')])
+    type: z.union([z.enum(ShowTypeReg.values), z.literal('')]).default('')
         .pipe(z.enum(ShowTypeReg.values)),
-    episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.literal('')])
+    episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.literal('')]).default('')
         .pipe(z.enum(EpisodeIdentifierReg.values)),
 });
 export type ShowCreateFormInput = z.input<typeof ShowCreateFormSchema>;
@@ -64,19 +65,18 @@ export type ShowUpdateForm = z.infer<typeof ShowUpdateFormSchema>;
 
 
 /* ------------------------------------------------------------------ */
-/* 2) DERIVED schema (what the Dailywire API returns)                 */
+/* 2) DAILYWIRE schema (what the Dailywire API returns)               */
 /*    These are NOT user-editable; we compute them from the URL.      */
 /* ------------------------------------------------------------------ */
 export const ShowDailywireSchema = z.object({
-    // Required by your local API, produced by external API:
-    dwId: z.string().min(1, "dwId missing"),
-    slug: z.string().min(1, "slug missing"),
-    authorSlug: z.string().min(1, "authorSlug missing"),
+    dwId: z.string().min(1, "dwId missing").default(''),
+    slug: z.string().min(1, "slug missing").default(''),
+    authorSlug: z.string().min(1, "authorSlug missing").default(''),
 
     // Content metadata from external API:
-    title: z.string().min(1, "title missing"),
-    description: z.string().min(1, "description missing"),
-    authorName: z.string().min(1, "authorName missing"),
+    title: z.string().min(1, "title missing").default(''),
+    description: z.string().min(1, "description missing").default(''),
+    authorName: z.string().min(1, "authorName missing").default(''),
 
     // Optional image paths:
     authorHeadshotPath: z.string().optional(),
@@ -88,11 +88,13 @@ export const ShowDailywireSchema = z.object({
 });
 export type ShowDailywire = z.infer<typeof ShowDailywireSchema>;
 
+
 /* ------------------------------------------------------------------ */
 /* 3) PAYLOAD schema (what we POST to the backend)                    */
 /* ------------------------------------------------------------------ */
 export const ShowCreatePayloadSchema = ShowCreateFormSchema.extend(ShowDailywireSchema.shape);
-export type ShowCreatePayload = z.infer<typeof ShowCreatePayloadSchema>;
+export type ShowCreatePayloadInput = z.input<typeof ShowCreatePayloadSchema>;
+export type ShowCreatePayload = z.output<typeof ShowCreatePayloadSchema>;
 
 
 export const ShowUpdatePayloadSchema = ShowUpdateFormSchema.extend(ShowDailywireSchema.shape);

@@ -9,26 +9,28 @@ import {
     ShowCreateFormSchema,
     ShowCreatePayloadSchema,
     ShowDailywireSchema,
-    type ShowCreateFormInput,
+    type ShowCreateFormInput, ShowCreatePayload, ShowCreatePayloadInput,
 } from "../../types/schemas/show";
 import {EpisodeIdentifierReg, EpisodeIdentifierValue, ShowTypeReg, ShowTypeValue} from "../../types/show";
 import Select from "react-select";
 
 type Props = {
-    onContinue: () => void;
+    value: ShowCreatePayloadInput
+    onChange: (v: ShowCreatePayloadInput) => void;
+    onContinue: (v: ShowCreatePayload) => void;
     onCancel: () => void;
 };
 
-export default function ChooseShowStep({onContinue, onCancel}: Props) {
+export default function ChooseShowStep({value, onChange, onContinue, onCancel}: Props) {
     // --- Form: only user-editable fields are in this schema
     const form = useForm<WithRoot<ShowCreateFormInput>>({
         resolver: zodResolver(ShowCreateFormSchema),
         mode: "onBlur",
         shouldFocusError: true,
         defaultValues: {
-            url: "",
-            type: "",
-            episodeIdentifier: "",
+            url: value.url,
+            type: value.type,
+            episodeIdentifier: value.episodeIdentifier,
         },
     });
 
@@ -42,8 +44,16 @@ export default function ChooseShowStep({onContinue, onCancel}: Props) {
         formState: {isSubmitting, errors},
     } = form;
 
+    // Subscribe to ALL changes
+    useEffect(() => {
+        const subscription = watch((values: ShowCreatePayloadInput) => {
+            onChange(values); // push up on every change
+        });
+        return () => subscription.unsubscribe();
+    }, [watch, onChange]);
+
     // --- Watch the URL and extract the slug when valid
-    const watchedUrl: string = watch("url");
+    const watchedUrl = watch("url");
     const urlParsed = useMemo(() => ShowCreateFormSchema.shape.url.safeParse(watchedUrl ?? ""), [watchedUrl]);
     const urlValid = urlParsed.success;
 
@@ -60,6 +70,17 @@ export default function ChooseShowStep({onContinue, onCancel}: Props) {
         }
     }, [urlParsed, urlValid]);
 
+    // Watch the type and set the episodeIdentifier to numbered when the type is series
+    const watchedType = watch("type");
+    useEffect(() => {
+        if (watchedType === ShowTypeReg.Enum.series) {
+            setValue("episodeIdentifier", EpisodeIdentifierReg.Enum.numbered, {
+                shouldValidate: true,
+                shouldDirty: true,
+            });
+        }
+    }, [watchedType, setValue]);
+
     // --- Fetch DailyWire data using the slug
     const dw = useDailywireShow(slugFromUrl);
 
@@ -74,7 +95,7 @@ export default function ChooseShowStep({onContinue, onCancel}: Props) {
         setValue("episodeIdentifier", inferredEpisodeId ?? "", {shouldValidate: true});
     }, [dw.data]);
 
-
+    // --- Submit handler
     const onSubmit: SubmitHandler<WithRoot<ShowCreateFormInput>> = (formOnly) => {
         // Gather/normalize derived fields from the API response
         const anyData = dw.data as any;
@@ -89,15 +110,17 @@ export default function ChooseShowStep({onContinue, onCancel}: Props) {
             const first = dailywireParsed.error.issues[0];
 
             // Attach to URL (actionable) and rethrow to stop submit chain
-            setError("url", {type: "validate", message: "Dailywire api returned invalid data: " + (first?.message ?? "Invalid data from dailywire")});
+            setError("url", {
+                type: "validate",
+                message: "Dailywire api returned invalid data: " + (first?.message ?? "Invalid data from dailywire")
+            });
             throw dailywireParsed.error;
         }
 
         // Validate final payload. We do not save anything yet (only in the final widget step)
-        ShowCreatePayloadSchema.parse({...formOnly, ...dailywireParsed.data});
-        onContinue();
+        const payload = ShowCreatePayloadSchema.parse({...formOnly, ...dailywireParsed.data});
+        onContinue(payload);
     }
-
 
     // --- Render
     return (
@@ -162,14 +185,10 @@ export default function ChooseShowStep({onContinue, onCancel}: Props) {
                                     <ReadMore summary={<span>Why do I need to choose this?</span>}>
                                         Selecting the correct show type helps WireLoft apply sensible defaults for how
                                         episodes are
-                                        grouped and presented.
-                                        <br/>
-                                        <br/>
+                                        grouped and presented.<br/><br/>
                                         Though WireLoft tries to guess the show type automatically based on various
-                                        factors, Dailywire
-                                        unfortunately does not provide a reliable way to determine this. If you're
-                                        unsure, select
-                                        "Podcast".
+                                        factors, Dailywire unfortunately does not provide a reliable way to determine
+                                        this. If you're unsure, select "Podcast".
                                     </ReadMore>
                                 </div>
                             </div>
