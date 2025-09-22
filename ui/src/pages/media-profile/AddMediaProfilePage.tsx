@@ -3,31 +3,32 @@ import MediaProfileForm from '../../components/MediaProfileForm'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {
-    MediaProfileCreate,
+    MediaProfileCreateIn, MediaProfileCreateOut,
     MediaProfileCreateSchema,
 } from "../../types/schemas/media_profile";
 import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {WithRoot} from "../../types/form";
 import {buildMediaProfileOnSubmit} from '../../components/MediaProfileForm/MediaProfileForm'
+import {PreferredFormatReg} from "../../types/media_profile";
 
 export default function AddMediaProfilePage() {
     const navigate = useNavigate()
     const qc = useQueryClient()
 
-    const form = useForm<WithRoot<MediaProfileCreate>>({
+    const form = useForm<WithRoot<MediaProfileCreateIn>>({
         resolver: zodResolver(MediaProfileCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
         defaultValues: {
             name: "",
             outputTemplate: "/downloads/",
-            preferredFormat: '1080p',
+            preferredFormat: PreferredFormatReg.Enum.format_audio_only,
             downloadSeriesImages: false,
         },
     })
 
-    const submitFn = async (data: MediaProfileCreate) => {
+    const submitFn = async (data: MediaProfileCreateOut) => {
         return fetch(`${(window as any).appConfig.API_URL}/media-profiles`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -35,7 +36,7 @@ export default function AddMediaProfilePage() {
         })
     };
 
-    const onSuccess = async (_result: any, {resetForm}: { resetForm: (v?: Partial<MediaProfileCreate>) => void }) => {
+    const onSuccess = async (_result: any, {resetForm}: { resetForm: (v?: Partial<MediaProfileCreateOut>) => void }) => {
         await qc.invalidateQueries({queryKey: ['mediaProfiles']})
         resetForm();
         navigate('/profiles')

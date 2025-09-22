@@ -4,7 +4,7 @@ import MediaProfileForm from '../../components/MediaProfileForm'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {MediaProfileUpdate, MediaProfileUpdateSchema} from '../../types/schemas/media_profile'
+import {MediaProfileUpdateIn, MediaProfileUpdateOut, MediaProfileUpdateSchema} from '../../types/schemas/media_profile'
 import {WithRoot} from '../../types/form'
 import {buildMediaProfileOnSubmit} from '../../components/MediaProfileForm/MediaProfileForm'
 
@@ -14,19 +14,19 @@ export default function EditMediaProfilePage() {
     const qc = useQueryClient()
 
     // Fetch the latest profile by slug
-    const {data: profile, isLoading, error} = useQuery<MediaProfileUpdate | undefined>({
+    const {data: profile, isLoading, error} = useQuery<MediaProfileUpdateIn | undefined>({
         queryKey: ['mediaProfile', slug],
         enabled: !!slug,
         refetchOnMount: 'always',
         queryFn: async ({signal}) => {
             const res = await fetch(`${(window as any).appConfig.API_URL}/media-profiles/${slug}`, {signal})
             if (!res.ok) throw new Error(`Failed to load profile (${res.status})`)
-            return res.json() as Promise<MediaProfileUpdate>
+            return await res.json() as Promise<MediaProfileUpdateIn>
         },
     })
 
     // Initialize form unconditionally to keep hooks order consistent
-    const form = useForm<WithRoot<MediaProfileUpdate>>({
+    const form = useForm<WithRoot<MediaProfileUpdateIn>>({
         resolver: zodResolver(MediaProfileUpdateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
@@ -67,7 +67,7 @@ export default function EditMediaProfilePage() {
         )
     }
 
-    const submitFn = async (data: MediaProfileUpdate) => {
+    const submitFn = async (data: MediaProfileUpdateOut) => {
         return fetch(`${(window as any).appConfig.API_URL}/media-profiles/${data.slug}`, {
             method: 'PATCH',
             headers: {'Content-Type': 'application/json'},

@@ -6,7 +6,7 @@ import MediaProfileStep from './MediaProfileStep'
 import DownloadProfileStep from './DownloadProfileStep'
 
 import type {Versioned} from '../../types/data'
-import {ShowCreatePayload, ShowCreatePayloadInput, ShowCreatePayloadSchema} from "../../types/schemas/show";
+import {ShowCreatePayloadOut, ShowCreatePayloadIn, ShowCreatePayloadSchema} from "../../types/schemas/show";
 import {getZodDefaults} from "../../utils/defaultZod";
 
 export type Props = {
@@ -19,8 +19,8 @@ const STORAGE_KEY = 'addShowWizardV2'
 type WizardState = {
     step: 1 | 2 | 3
     show: {
-        input: ShowCreatePayloadInput,
-        submit: ShowCreatePayload | undefined,
+        input: ShowCreatePayloadIn,
+        submit: ShowCreatePayloadOut | undefined,
     }
     // mediaProfile: MediaProfileCreate
     // downloadProfile: DownloadProfileSeriesCreate | DownloadProfilePodcastCreate
@@ -85,9 +85,9 @@ export default function AddShowPage({onCancel}: Props) {
     const [step, setStep] = useState<1 | 2 | 3>(() => loadWizardState()?.step ?? 1)
 
 
-    const [showInput, setShowInput] = useState<ShowCreatePayloadInput>(
+    const [showInput, setShowInput] = useState<ShowCreatePayloadIn>(
         () => loadWizardState()?.show.input ?? getZodDefaults(ShowCreatePayloadSchema))
-    const [showSubmit, setShowSubmit] = useState<ShowCreatePayload>()
+    const [showSubmit, setShowSubmit] = useState<ShowCreatePayloadOut>()
 
 
 
@@ -130,7 +130,7 @@ export default function AddShowPage({onCancel}: Props) {
                 <ChooseShowStep
                     value={showInput}
                     onChange={setShowInput}
-                    onContinue={(data: ShowCreatePayload) => {
+                    onContinue={(data: ShowCreatePayloadOut) => {
                         setShowSubmit(data)
                         setStep(2)
                     }}

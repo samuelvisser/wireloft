@@ -9,21 +9,21 @@ import {
     ShowCreateFormSchema,
     ShowCreatePayloadSchema,
     ShowDailywireSchema,
-    type ShowCreateFormInput, ShowCreatePayload, ShowCreatePayloadInput,
+    type ShowCreateFormIn, ShowCreatePayloadOut, ShowCreatePayloadIn,
 } from "../../types/schemas/show";
 import {EpisodeIdentifierReg, EpisodeIdentifierValue, ShowTypeReg, ShowTypeValue} from "../../types/show";
 import Select from "react-select";
 
 type Props = {
-    value: ShowCreatePayloadInput
-    onChange: (v: ShowCreatePayloadInput) => void;
-    onContinue: (v: ShowCreatePayload) => void;
+    value: ShowCreatePayloadIn
+    onChange: (v: ShowCreatePayloadIn) => void;
+    onContinue: (v: ShowCreatePayloadOut) => void;
     onCancel: () => void;
 };
 
 export default function ChooseShowStep({value, onChange, onContinue, onCancel}: Props) {
     // --- Form: only user-editable fields are in this schema
-    const form = useForm<WithRoot<ShowCreateFormInput>>({
+    const form = useForm<WithRoot<ShowCreateFormIn>>({
         resolver: zodResolver(ShowCreateFormSchema),
         mode: "onBlur",
         shouldFocusError: true,
@@ -46,7 +46,7 @@ export default function ChooseShowStep({value, onChange, onContinue, onCancel}: 
 
     // Subscribe to ALL changes
     useEffect(() => {
-        const subscription = watch((values: ShowCreatePayloadInput) => {
+        const subscription = watch((values: ShowCreatePayloadIn) => {
             onChange(values); // push up on every change
         });
         return () => subscription.unsubscribe();
@@ -96,7 +96,7 @@ export default function ChooseShowStep({value, onChange, onContinue, onCancel}: 
     }, [dw.data]);
 
     // --- Submit handler
-    const onSubmit: SubmitHandler<WithRoot<ShowCreateFormInput>> = (formOnly) => {
+    const onSubmit: SubmitHandler<WithRoot<ShowCreateFormIn>> = (formOnly) => {
         // Gather/normalize derived fields from the API response
         const anyData = dw.data as any;
 

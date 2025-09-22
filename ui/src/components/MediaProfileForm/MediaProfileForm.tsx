@@ -1,5 +1,5 @@
 import Switch from 'react-switch'
-import {Controller, UseFormReturn} from 'react-hook-form'
+import {Controller, type FieldValues, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {MediaProfileServerErrors} from '../../types/schemas/media_profile'
@@ -10,9 +10,9 @@ import {PreferredFormatReg} from "../../types/media_profile";
     form: UseFormReturn<any>
 }
 
-export function buildMediaProfileOnSubmit<T extends Record<string, any>>(
-    form: UseFormReturn<T>,
-    submitFn: (data: T) => Promise<Response>,
+export function buildMediaProfileOnSubmit<TIn extends FieldValues, TOut extends FieldValues = TIn>(
+    form: UseFormReturn<TIn>,
+    submitFn: (data: TOut) => Promise<Response>,
     opts?: { mode?: 'create' | 'update'; onSuccess?: (result: any, ctx: any) => void }
 ) {
     const mode = opts?.mode ?? 'update'
@@ -66,7 +66,7 @@ export default function MediaProfileForm({form}: Props) {
                     id="mp-path"
                     className="input"
                     type="text"
-                    placeholder="D:/Media/Shows/{show}/{season}"
+                    placeholder="/downloads/podcasts/{show}/{episode_name}.ext"
                     {...register('outputTemplate')}
                     aria-invalid={!!errors.outputTemplate}
                     aria-describedby={errors.outputTemplate ? 'mp-path-error' : undefined}

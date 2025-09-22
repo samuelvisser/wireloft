@@ -15,7 +15,8 @@ class ResponseBase(BaseModel):
         ),
         populate_by_name=True,
         from_attributes=True,
-        extra='ignore'
+        extra='ignore',
+        use_enum_values=True
     )
 
 class RequestBase(BaseModel):
@@ -28,5 +29,6 @@ class RequestBase(BaseModel):
         ),
         populate_by_name=True,
         from_attributes=True,
-        extra='ignore'
+        extra='ignore',
+        use_enum_values=True
     )

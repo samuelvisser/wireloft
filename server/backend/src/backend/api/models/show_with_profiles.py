@@ -3,6 +3,7 @@ from typing import Literal, Union
 from pydantic import Field
 
 from backend.api.models.base import RequestBase
+from backend.api.models.download_profile_series import DownloadProfileSeriesAPICreate
 from backend.api.models.media_profile import MediaProfileAPICreate, MediaProfileAPIUpdate
 from backend.api.models.download_profile_podcast import DownloadProfilePodcastAPICreate
 from backend.api.models.show import ShowAPICreate
@@ -27,5 +28,8 @@ MediaProfileAPIUpsert = Union[
 
 class ShowAPICreateBundle(RequestBase):
     show: ShowAPICreate
-    download_profile: DownloadProfilePodcastAPICreate
+    download_profile: Union[
+        DownloadProfilePodcastAPICreate,
+        DownloadProfileSeriesAPICreate
+    ]
     media_profile: MediaProfileAPIUpsert = Field(discriminator="op")

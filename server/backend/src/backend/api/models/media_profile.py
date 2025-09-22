@@ -15,7 +15,7 @@ class _MediaProfileAPIBaseIn(RequestBase):
     """Fields for requests: validate hard here."""
 
     name: str = Field(min_length=1)
-    output_template: str
+    output_template: str = Field(min_length=16)
     preferred_format: PreferredFormat
     download_series_images: bool
 

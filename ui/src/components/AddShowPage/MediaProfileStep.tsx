@@ -1,164 +1,149 @@
-import { useEffect, useState } from 'react'
-import MediaProfileForm, { type MediaProfileFormValue } from '../MediaProfileForm'
-import { useMediaProfiles } from '../../lib/queries'
-import type { AddShowMediaProfileUpsert } from '../../types/addShow'
-
-type MediaProfile = {
-  id: number
-  slug: string
-  name: string
-  outputTemplate: string
-  preferredFormat: '4k' | '1080p' | '720p' | 'Audio Only'
-  downloadSeriesImages: boolean
-}
-
-type Props = {
-  value: AddShowMediaProfileUpsert
-  onChange: (v: AddShowMediaProfileUpsert) => void
-  onBack: () => void
-  onContinue: () => void
-  onCancel: () => void
-  slug?: string
-}
-
+import {useRef} from 'react'
+import {SubmitHandler, useForm} from 'react-hook-form'
+import {zodResolver} from '@hookform/resolvers/zod'
 import DailywireShowCard from './DailywireShowCard'
+import MediaProfileForm from '../MediaProfileForm'
+import {useMediaProfiles} from '../../lib/queries'
+import {MediaProfileCreateSchema, MediaProfileRead} from '../../types/schemas/media_profile'
+import {
+    MediaProfileCreateUnionIn, MediaProfileUpsertIn, MediaProfileUpsertSchema
+} from "../../types/schemas/show_with_profiles";
+import {getZodDefaults} from "../../utils/defaultZod";
 
-export default function MediaProfileStep({ value, onChange, onBack, onContinue, onCancel, slug }: Props) {
-  const profilesQuery = useMediaProfiles()
-  const profiles: MediaProfile[] | undefined = profilesQuery.data as any
-  const profilesError = profilesQuery.isError ? ((profilesQuery.error as any)?.message ?? 'Failed to load media profiles') : null
+// Local upsert type and schema for the form
+type Props = {
+    onBack: () => void
+    onContinue: () => void
+    onCancel: () => void
+    showSlug?: string
+}
 
-  const defaultEmptyForm: MediaProfileFormValue = {
-    name: '',
-    outputTemplate: '',
-    preferredFormat: '1080p',
-    downloadSeriesImages: true,
-  }
+export default function MediaProfileStep({onBack, onContinue, onCancel, showSlug}: Props) {
+    const profilesQuery = useMediaProfiles()
+    const profiles: MediaProfileRead[] | undefined = profilesQuery.data as any
+    const profilesError = profilesQuery.isError ? ((profilesQuery.error as any)?.message ?? 'Failed to load media profiles') : null
 
-  const initialSelectedId = (value as any)?.op === 'update_by_slug' ? (value as any)?.slug ?? null : null
-  const initialForm: MediaProfileFormValue = {
-    name: (value as any)?.name ?? '',
-    outputTemplate: (value as any)?.outputTemplate ?? '',
-    preferredFormat: ((value as any)?.preferredFormat ?? '1080p') as MediaProfileFormValue['preferredFormat'],
-    downloadSeriesImages: (value as any)?.downloadSeriesImages ?? true,
-  }
+    // React Hook Form setup
+    const form = useForm<MediaProfileUpsertIn>({
+        resolver: zodResolver(MediaProfileUpsertSchema),
+        mode: 'onBlur',
+        shouldFocusError: true,
+        defaultValues: {
+            op: 'create_new',
+            ...getZodDefaults(MediaProfileCreateSchema)
+        },
+    })
 
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(initialSelectedId)
-  const [formValue, setFormValue] = useState<MediaProfileFormValue>(initialForm)
-  const [formSnapshot, setFormSnapshot] = useState<MediaProfileFormValue | null>(null)
+    const {handleSubmit, watch, setValue, formState: {isSubmitting}} = form
 
-  // Keep parent in sync whenever selection or form changes
-  useEffect(() => {
-    const base = {
-      name: formValue.name,
-      outputTemplate: formValue.outputTemplate,
-      preferredFormat: formValue.preferredFormat,
-      downloadSeriesImages: formValue.downloadSeriesImages,
+    // Snapshot previous values when switching to an existing profile, so we can restore on deselect
+    const snapshotRef = useRef<Pick<MediaProfileCreateUnionIn, 'name' | 'outputTemplate' | 'preferredFormat' | 'downloadSeriesImages'> | null>(null)
+
+    const watchedOp = watch('op')
+    const watchedSlug = watch('slug')
+
+    // Selection handler for profile cards
+    const handleSelect = (p: MediaProfileRead) => {
+        const selected = watchedOp === 'update_by_slug' && watchedSlug === p.slug
+        if (selected) {
+            // Deselect: switch back to create_new and restore snapshot if any
+            setValue('op', 'create_new', {shouldValidate: true, shouldDirty: true})
+            setValue('id', undefined as any, {shouldValidate: true, shouldDirty: true})
+            const snap = snapshotRef.current
+            setValue('name', snap?.name ?? '', {shouldValidate: true})
+            setValue('outputTemplate', snap?.outputTemplate ?? '', {shouldValidate: true})
+            setValue('preferredFormat', (snap?.preferredFormat ?? '1080p') as any, {shouldValidate: true})
+            setValue('downloadSeriesImages', snap?.downloadSeriesImages ?? true, {shouldValidate: true})
+            snapshotRef.current = null
+        } else {
+            // Selecting a profile
+            if (!(watchedOp === 'update_by_slug')) {
+                // Save current values before replacing
+                snapshotRef.current = {
+                    name: watch('name'),
+                    outputTemplate: watch('outputTemplate'),
+                    preferredFormat: watch('preferredFormat'),
+                    downloadSeriesImages: watch('downloadSeriesImages'),
+                }
+            }
+            setValue('op', 'update_by_slug', {shouldValidate: true, shouldDirty: true})
+            setValue('slug', p.slug, {shouldValidate: true, shouldDirty: true})
+            setValue('id', p.id as any, {shouldValidate: true, shouldDirty: true})
+            setValue('name', p.name, {shouldValidate: true})
+            setValue('outputTemplate', p.outputTemplate, {shouldValidate: true})
+            setValue('preferredFormat', p.preferredFormat as any, {shouldValidate: true})
+            setValue('downloadSeriesImages', p.downloadSeriesImages, {shouldValidate: true})
+        }
     }
-    if (selectedProfileId) {
-      onChange({ op: 'update_by_slug', slug: selectedProfileId, ...base })
-    } else {
-      onChange({ op: 'create_new', ...base })
+
+    const onSubmit: SubmitHandler<MediaProfileUpsertIn> = () => {
+        // Final payload assembly will be done in the last step of the wizard.
+        onContinue()
     }
-  }, [selectedProfileId, formValue])
 
-  const canContinue = !!selectedProfileId || (formValue.name.trim().length > 0 && formValue.outputTemplate.trim().length > 0)
+    return (
+        <div className="wizard-with-aside">
+            <div className="wizard-main">
+                <form className="form form-fluid" onSubmit={handleSubmit(onSubmit)} noValidate>
+                    {/* Existing profiles list */}
+                    <div className="form-row">
+                        <label>Choose a media profile</label>
+                        <div className="card-grid" role="list">
+                            {profilesQuery.isPending ? (
+                                <div role="listitem" className="card">Loading profiles...</div>
+                            ) : !profiles || profiles.length === 0 ? (
+                                <div role="listitem" className="card">{profilesError ?? 'No profiles found'}</div>
+                            ) : (
+                                profiles.map((p) => {
+                                    const selected = watchedOp === 'update_by_slug' && watchedSlug === p.slug
+                                    return (
+                                        <button
+                                            key={p.slug}
+                                            type="button"
+                                            role="listitem"
+                                            className={selected ? 'card selected' : 'card'}
+                                            aria-pressed={selected}
+                                            onClick={() => handleSelect(p)}
+                                        >
+                                            <div className="card-title">{p.name}</div>
+                                            <div className="card-sub">{p.outputTemplate}</div>
+                                            <div className="card-meta">
+                                                <span>{String(p.preferredFormat)}</span>
+                                                <span>• {p.downloadSeriesImages ? 'Series images ✓' : 'Series images ✕'}</span>
+                                            </div>
+                                        </button>
+                                    )
+                                })
+                            )}
+                        </div>
+                    </div>
 
-  return (
-    <div className="wizard-with-aside">
-      <div className="wizard-main">
-        <div className="form form-fluid">
-          {/* Existing profiles list */}
-          <div className="form-row">
-            <label>Choose a media profile</label>
-            <div className="card-grid" role="list">
-              {profilesQuery.isPending ? (
-                <div role="listitem" className="card">Loading profiles...</div>
-              ) : !profiles || profiles.length === 0 ? (
-                <div role="listitem" className="card">{profilesError ?? 'No profiles found'}</div>
-              ) : (
-                profiles.map((p) => {
-                  const selected = selectedProfileId === p.slug
-                  return (
-                    <button
-                      key={p.slug}
-                      type="button"
-                      role="listitem"
-                      className={selected ? 'card selected' : 'card'}
-                      aria-pressed={selected}
-                      onClick={() => {
-                        if (selected) {
-                          // Deselect: restore previous form state (if any)
-                          setSelectedProfileId(null)
-                          setFormValue(formSnapshot ?? defaultEmptyForm)
-                          setFormSnapshot(null)
-                        } else {
-                          // Selecting a profile
-                          if (selectedProfileId === null) {
-                            // Save current form before replacing it with the selected profile
-                            setFormSnapshot(formValue)
-                          }
-                          setSelectedProfileId(p.slug)
-                          setFormValue({
-                            name: p.name,
-                            outputTemplate: p.outputTemplate,
-                            preferredFormat: p.preferredFormat as any,
-                            downloadSeriesImages: p.downloadSeriesImages,
-                          })
-                        }
-                      }}
-                    >
-                      <div className="card-title">{p.name}</div>
-                      <div className="card-sub">{p.outputTemplate}</div>
-                      <div className="card-meta">
-                        <span>{p.preferredFormat}</span>
-                        <span>• {p.downloadSeriesImages ? 'Series images ✓' : 'Series images ✕'}</span>
-                      </div>
-                    </button>
-                  )
-                })
-              )}
+                    {/* Divider and label under it */}
+                    <hr className="divider" aria-hidden="true"/>
+                    <div className="divider-label"
+                         aria-hidden="true">{watchedOp === 'update_by_slug' ? 'Update current profile' : 'Or create a new profile'}</div>
+
+                    {/* New or update profile form (user-editable fields) */}
+                    <MediaProfileForm form={form as any}/>
+
+                    <div className="actions">
+                        <button type="button" className="btn" onClick={onBack}>
+                            Back
+                        </button>
+                        <input type="submit" className="btn btn-primary" value="Continue" disabled={isSubmitting}/>
+                        <button type="button" className="btn" onClick={onCancel}>
+                            Cancel
+                        </button>
+                    </div>
+                </form>
             </div>
-          </div>
 
-          {/* Divider and label under it */}
-          <hr className="divider" aria-hidden="true" />
-          <div className="divider-label" aria-hidden="true">{selectedProfileId ? 'Update current profile' : 'Or create a new profile'}</div>
-
-          {/* New profile form */}
-          <MediaProfileForm
-            value={formValue}
-            onChange={(v) => {
-              setFormValue(v)
-            }}
-            autoFocusName
-          />
-
-          <div className="actions">
-            <button type="button" className="btn" onClick={onBack}>
-              Back
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={onContinue}
-              disabled={!canContinue}
-            >
-              Continue
-            </button>
-            <button type="button" className="btn" onClick={onCancel}>
-              Cancel
-            </button>
-          </div>
+            {/* Sidebar with DailyWire show details */}
+            {showSlug ? (
+                <aside className="wizard-aside" aria-label="Selected show details">
+                    <DailywireShowCard showSlug={showSlug}/>
+                </aside>
+            ) : null}
         </div>
-      </div>
-
-      {/* Sidebar with DailyWire show details */}
-      {slug ? (
-        <aside className="wizard-aside" aria-label="Selected show details">
-          <DailywireShowCard slug={slug} />
-        </aside>
-      ) : null}
-    </div>
-  )
+    )
 }
