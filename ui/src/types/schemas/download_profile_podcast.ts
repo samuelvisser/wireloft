@@ -14,12 +14,14 @@ const DownloadProfilePodcastBaseSchema = z.object({
 export const DownloadProfilePodcastCreateSchema = DownloadProfilePodcastBaseSchema.extend({
     showId: z.number(),
 })
-export type DownloadProfilePodcastCreate = z.infer<typeof DownloadProfilePodcastCreateSchema>
+export type DownloadProfilePodcastCreateIn = z.input<typeof DownloadProfilePodcastCreateSchema>
+export type DownloadProfilePodcastCreateOut = z.output<typeof DownloadProfilePodcastCreateSchema>
 
 
 export const DownloadProfilePodcastUpdateSchema = DownloadProfilePodcastBaseSchema.extend({
 })
-export type DownloadProfilePodcastUpdate = z.infer<typeof DownloadProfilePodcastUpdateSchema>
+export type DownloadProfilePodcastUpdateIn = z.input<typeof DownloadProfilePodcastUpdateSchema>
+export type DownloadProfilePodcastUpdateOut = z.output<typeof DownloadProfilePodcastUpdateSchema>
 
 
 // ------------ Lenient response (read) ------------

@@ -13,12 +13,14 @@ export const MovieCreateSchema = MovieBaseSchema.extend({
     dwId: z.string().optional(),
     slug: z.string(),
 })
-export type MovieCreate = z.infer<typeof MovieCreateSchema>;
+export type MovieCreateIn = z.input<typeof MovieCreateSchema>;
+export type MovieCreateOut = z.output<typeof MovieCreateSchema>;
 
 
 export const MovieUpdateSchema = MovieBaseSchema.extend({
 })
-export type MovieUpdate = z.infer<typeof MovieUpdateSchema>;
+export type MovieUpdateIn = z.input<typeof MovieUpdateSchema>;
+export type MovieUpdateOut = z.output<typeof MovieUpdateSchema>;
 
 
 // ------------ Lenient response (read) ------------

@@ -53,15 +53,16 @@ const ShowBaseFormSchema = z.object({
     episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.literal('')]).default('')
         .pipe(z.enum(EpisodeIdentifierReg.values)),
 });
-export type ShowCreateFormInput = z.input<typeof ShowCreateFormSchema>;
 
 
 export const ShowCreateFormSchema = ShowBaseFormSchema.extend({})
-export type ShowCreateForm = z.infer<typeof ShowCreateFormSchema>;
+export type ShowCreateFormIn = z.input<typeof ShowCreateFormSchema>;
+export type ShowCreateFormOut = z.output<typeof ShowCreateFormSchema>;
 
 
 export const ShowUpdateFormSchema = ShowBaseFormSchema.extend({})
-export type ShowUpdateForm = z.infer<typeof ShowUpdateFormSchema>;
+export type ShowUpdateFormIn = z.input<typeof ShowUpdateFormSchema>;
+export type ShowUpdateFormOut = z.output<typeof ShowUpdateFormSchema>;
 
 
 /* ------------------------------------------------------------------ */
@@ -93,12 +94,13 @@ export type ShowDailywire = z.infer<typeof ShowDailywireSchema>;
 /* 3) PAYLOAD schema (what we POST to the backend)                    */
 /* ------------------------------------------------------------------ */
 export const ShowCreatePayloadSchema = ShowCreateFormSchema.extend(ShowDailywireSchema.shape);
-export type ShowCreatePayloadInput = z.input<typeof ShowCreatePayloadSchema>;
-export type ShowCreatePayload = z.output<typeof ShowCreatePayloadSchema>;
+export type ShowCreatePayloadIn = z.input<typeof ShowCreatePayloadSchema>;
+export type ShowCreatePayloadOut = z.output<typeof ShowCreatePayloadSchema>;
 
 
 export const ShowUpdatePayloadSchema = ShowUpdateFormSchema.extend(ShowDailywireSchema.shape);
-export type ShowUpdatePayload = z.infer<typeof ShowUpdatePayloadSchema>;
+export type ShowUpdatePayloadIn = z.input<typeof ShowUpdatePayloadSchema>;
+export type ShowUpdatePayloadOut = z.output<typeof ShowUpdatePayloadSchema>;
 
 
 /* ------------------------------------------------------------------ */

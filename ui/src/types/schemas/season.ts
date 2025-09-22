@@ -12,12 +12,14 @@ export const SeasonCreateSchema = SeasonBaseSchema.extend({
     showId: z.string(),
     slug: z.string(),
 })
-export type SeasonCreate = z.infer<typeof SeasonCreateSchema>;
+export type SeasonCreateIn = z.input<typeof SeasonCreateSchema>;
+export type SeasonCreateOut = z.output<typeof SeasonCreateSchema>;
 
 
 export const SeasonUpdateSchema = SeasonBaseSchema.extend({
 })
-export type SeasonUpdate = z.infer<typeof SeasonUpdateSchema>;
+export type SeasonUpdateIn = z.input<typeof SeasonUpdateSchema>;
+export type SeasonUpdateOut = z.output<typeof SeasonUpdateSchema>;
 
 
 // ------------ Lenient response (read) ------------

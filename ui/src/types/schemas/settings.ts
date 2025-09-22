@@ -8,12 +8,14 @@ const SettingsBaseSchema = z.object({
 
 export const SettingsCreateSchema = SettingsBaseSchema.extend({
 })
-export type SettingsCreate = z.infer<typeof SettingsCreateSchema>;
+export type SettingsCreateIn = z.input<typeof SettingsCreateSchema>;
+export type SettingsCreateOut = z.output<typeof SettingsCreateSchema>;
 
 
 export const SettingsUpdateSchema = SettingsBaseSchema.extend({
 })
-export type SettingsUpdate = z.infer<typeof SettingsUpdateSchema>;
+export type SettingsUpdateIn = z.input<typeof SettingsUpdateSchema>;
+export type SettingsUpdateOut = z.output<typeof SettingsUpdateSchema>;
 
 
 // ------------ Lenient response (read) ------------

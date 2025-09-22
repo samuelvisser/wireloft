@@ -20,13 +20,15 @@ export const EpisodeCreateSchema = EpisodeBaseSchema.extend({
     dwId: z.string().optional(),
     slug: z.string(),
 })
-export type EpisodeCreate = z.infer<typeof EpisodeCreateSchema>
+export type EpisodeCreateIn = z.input<typeof EpisodeCreateSchema>
+export type EpisodeCreateOut = z.output<typeof EpisodeCreateSchema>
 
 
 export const EpisodeUpdateSchema = EpisodeBaseSchema.extend({
     dwId: z.string().optional(),
 })
-export type EpisodeUpdate = z.infer<typeof EpisodeUpdateSchema>
+export type EpisodeUpdateIn = z.input<typeof EpisodeUpdateSchema>
+export type EpisodeUpdateOut = z.output<typeof EpisodeUpdateSchema>
 
 
 // ------------ Lenient response (read) ------------

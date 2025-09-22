@@ -11,21 +11,30 @@ export const MediaProfileServerErrors = createServerErrorMapper({
 // ---------- Strict request (create/update) ----------
 const MediaProfileBaseSchema = z.object({
     name: z.string().min(1, "Name is required"),
-    outputTemplate: z.string().min(4).regex(/^\/downloads\//, "Output template must start with '/downloads/'").regex(/\.ext$/, "Output template must end with '.ext'"),
+    outputTemplate: z.string()
+        .regex(/^\/downloads\//, "Output template must start with '/downloads/'")
+        .regex(/\.ext$/, "Output template must end with '.ext'")
+        .min(16),
     preferredFormat: z.enum(PreferredFormatReg.values),
     downloadSeriesImages: z.boolean(),
 })
 
 
-export const MediaProfileCreateSchema = MediaProfileBaseSchema.extend({})
-export type MediaProfileCreate = z.infer<typeof MediaProfileCreateSchema>;
+export const MediaProfileCreateSchema = MediaProfileBaseSchema.extend({
+    outputTemplate: MediaProfileBaseSchema.shape.outputTemplate.default('/downloads/'),
+    preferredFormat: MediaProfileBaseSchema.shape.preferredFormat.default('format_1080p'),
+    downloadSeriesImages: MediaProfileBaseSchema.shape.downloadSeriesImages.default(true),
+})
+export type MediaProfileCreateIn = z.input<typeof MediaProfileCreateSchema>;
+export type MediaProfileCreateOut = z.output<typeof MediaProfileCreateSchema>;
 
 
 export const MediaProfileUpdateSchema = MediaProfileBaseSchema.extend({
     id: z.number(),
     slug: z.string(),
 })
-export type MediaProfileUpdate = z.infer<typeof MediaProfileUpdateSchema>;
+export type MediaProfileUpdateIn = z.input<typeof MediaProfileUpdateSchema>;
+export type MediaProfileUpdateOut = z.output<typeof MediaProfileUpdateSchema>;
 
 
 // ------------ Lenient response (read) ------------

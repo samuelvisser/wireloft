@@ -11,12 +11,14 @@ const MediaDownloadBaseSchema = z.object({
 
 export const MediaDownloadCreateSchema = MediaDownloadBaseSchema.extend({
 })
-export type MediaDownloadCreate = z.infer<typeof MediaDownloadCreateSchema>;
+export type MediaDownloadCreateIn = z.input<typeof MediaDownloadCreateSchema>;
+export type MediaDownloadCreateOut = z.output<typeof MediaDownloadCreateSchema>;
 
 
 export const MediaDownloadUpdateSchema = MediaDownloadBaseSchema.extend({
 })
-export type MediaDownloadUpdate = z.infer<typeof MediaDownloadUpdateSchema>;
+export type MediaDownloadUpdateIn = z.input<typeof MediaDownloadUpdateSchema>;
+export type MediaDownloadUpdateOut = z.output<typeof MediaDownloadUpdateSchema>;
 
 
 // ------------ Lenient response (read) ------------

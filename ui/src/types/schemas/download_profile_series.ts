@@ -12,12 +12,14 @@ const DownloadProfileSeriesBaseSchema = z.object({
 export const DownloadProfileSeriesCreateSchema = DownloadProfileSeriesBaseSchema.extend({
     showId: z.number(),
 })
-export type DownloadProfileSeriesCreate = z.infer<typeof DownloadProfileSeriesCreateSchema>
+export type DownloadProfileSeriesCreateIn = z.input<typeof DownloadProfileSeriesCreateSchema>
+export type DownloadProfileSeriesCreateOut = z.output<typeof DownloadProfileSeriesCreateSchema>
 
 
 export const DownloadProfileSeriesUpdateSchema = DownloadProfileSeriesBaseSchema.extend({
 })
-export type DownloadProfileSeriesUpdate = z.infer<typeof DownloadProfileSeriesUpdateSchema>
+export type DownloadProfileSeriesUpdateIn = z.input<typeof DownloadProfileSeriesUpdateSchema>
+export type DownloadProfileSeriesUpdateOut = z.output<typeof DownloadProfileSeriesUpdateSchema>
 
 
 // ------------ Lenient response (read) ------------
