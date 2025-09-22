@@ -18,8 +18,8 @@ class Show(Base):
     title: Mapped[str]
     description: Mapped[Optional[str]]
     url: Mapped[str] = mapped_column(unique=True)
-    type: Mapped[ShowType]
-    episode_identifier: Mapped[EpisodeIdentifier]
+    type: Mapped[str]
+    episode_identifier: Mapped[str]
     author_name: Mapped[str]
     author_slug: Mapped[str]
     author_headshot_path: Mapped[Optional[str]]

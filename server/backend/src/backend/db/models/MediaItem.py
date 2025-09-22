@@ -19,7 +19,7 @@ class MediaItem(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     uuid: Mapped[str] = mapped_column(index=True, unique=True)
     dw_id: Mapped[Optional[str]] = mapped_column(index=True, unique=True)
-    type: Mapped[MediaType]
+    type: Mapped[str]
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     title: Mapped[str]
     description: Mapped[Optional[str]]

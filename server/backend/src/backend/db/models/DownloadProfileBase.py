@@ -19,7 +19,7 @@ class DownloadProfileBase(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"))
     media_profile_id: Mapped[int] = mapped_column(ForeignKey("media_profiles.id"))
-    type: Mapped[DownloadProfileType]
+    type: Mapped[str]
     enable_profile: Mapped[bool] = mapped_column(default=True)
 
     created_at: Mapped[datetime] = mapped_column(

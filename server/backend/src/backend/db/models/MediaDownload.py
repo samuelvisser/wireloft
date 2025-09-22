@@ -13,7 +13,7 @@ class MediaDownload(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     media_item_id: Mapped[int] = mapped_column(ForeignKey("media_items.id"))
-    download_status: Mapped[MediaDownloadStatus]
+    download_status: Mapped[str]
     file_path: Mapped[str]
 
     created_at: Mapped[datetime] = mapped_column(

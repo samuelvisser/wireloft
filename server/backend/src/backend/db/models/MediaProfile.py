@@ -15,7 +15,7 @@ class MediaProfile(Base):
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     name: Mapped[str] = mapped_column(unique=True)
     output_template: Mapped[str]
-    preferred_format: Mapped[PreferredFormat]
+    preferred_format: Mapped[str]
     download_series_images: Mapped[bool] = mapped_column(default=True)
 
     created_at: Mapped[datetime] = mapped_column(
