@@ -8,7 +8,11 @@ import DownloadProfileStep from './DownloadProfileStep'
 import type {Versioned} from '../../types/data'
 import {ShowCreatePayloadOut, ShowCreatePayloadIn, ShowCreatePayloadSchema} from "../../types/schemas/show";
 import {getZodDefaults} from "../../utils/defaultZod";
-import {MediaProfileUpsertIn, MediaProfileUpsertOut} from "../../types/schemas/show_with_profiles";
+import {
+    MediaProfileUpsertIn,
+    MediaProfileUpsertOut,
+    MediaProfileUpsertSchema
+} from "../../types/schemas/show_with_profiles";
 import {ShowTypeReg} from "../../types/show";
 import {
     DownloadProfilePodcastCreateIn,
@@ -113,13 +117,7 @@ export default function AddShowPage({onCancel}: Props) {
     const [showSubmit, setShowSubmit] = useState<ShowCreatePayloadOut>()
 
     const [mediaProfileInput, setMediaProfileInput] = useState<Partial<MediaProfileUpsertIn>>(
-        () => loadWizardState()?.mediaProfile.input ?? {
-            op: "create_new",
-            name: "",
-            outputTemplate: "/downloads/",
-            preferredFormat: "format_1080p",
-            downloadSeriesImages: false,
-        })
+        () => loadWizardState()?.mediaProfile.input ?? getZodDefaults(MediaProfileUpsertSchema))
     const [mediaProfileSubmit, setMediaProfileSubmit] = useState<MediaProfileUpsertOut>()
 
     const [downloadProfilePodcastInput, setDownloadProfilePodcastInput] = useState<Partial<DownloadProfilePodcastCreateIn>>(
