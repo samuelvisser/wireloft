@@ -8,19 +8,24 @@ import DownloadProfileStep from './DownloadProfileStep'
 import type {Versioned} from '../../types/data'
 import {ShowCreatePayloadOut, ShowCreatePayloadIn, ShowCreatePayloadSchema} from "../../types/schemas/show";
 import {getZodDefaults} from "../../utils/defaultZod";
+import {MediaProfileUpsertIn, MediaProfileUpsertOut} from "../../types/schemas/show_with_profiles";
 
 export type Props = {
     onCancel: () => void
 }
 
 // Wizard state persistence
-const STORAGE_KEY = 'addShowWizardV2'
+const STORAGE_KEY = 'addShowWizardV3'
 
 type WizardState = {
     step: 1 | 2 | 3
     show: {
         input: ShowCreatePayloadIn,
         submit: ShowCreatePayloadOut | undefined,
+    },
+    mediaProfile: {
+        input: MediaProfileUpsertIn,
+        submit: MediaProfileUpsertOut | undefined,
     }
     // mediaProfile: MediaProfileCreate
     // downloadProfile: DownloadProfileSeriesCreate | DownloadProfilePodcastCreate
@@ -89,6 +94,16 @@ export default function AddShowPage({onCancel}: Props) {
         () => loadWizardState()?.show.input ?? getZodDefaults(ShowCreatePayloadSchema))
     const [showSubmit, setShowSubmit] = useState<ShowCreatePayloadOut>()
 
+    const [mediaProfileInput, setMediaProfileInput] = useState<MediaProfileUpsertIn>(
+        () => loadWizardState()?.mediaProfile.input ?? {
+            op: "create_new",
+            name: "",
+            outputTemplate: "/downloads/",
+            preferredFormat: "format_1080p",
+            downloadSeriesImages: false,
+        })
+    const [mediaProfileSubmit, setMediaProfileSubmit] = useState<MediaProfileUpsertOut>()
+
 
 
     // Persist wizard state on any change
@@ -99,11 +114,13 @@ export default function AddShowPage({onCancel}: Props) {
                 input: showInput,
                 submit: showSubmit
             },
-            // mediaProfile,
+            mediaProfile: {
+                input: mediaProfileInput,
+                submit: mediaProfileSubmit,
+            }
             // downloadProfile,
         })
-    }, [step, showInput, showSubmit,
-        // mediaProfile,
+    }, [step, showInput, showSubmit, mediaProfileInput, mediaProfileSubmit,
         // downloadProfile
     ])
 
@@ -140,10 +157,15 @@ export default function AddShowPage({onCancel}: Props) {
 
             {step === 2 && (
                 <MediaProfileStep
+                    value={mediaProfileInput}
+                    onChange={setMediaProfileInput}
                     onBack={() => setStep(1)}
-                    onContinue={() => setStep(3)}
+                    onContinue={(data: MediaProfileUpsertOut) => {
+                        setMediaProfileSubmit(data)
+                        setStep(3)
+                    }}
                     onCancel={handleCancel}
-                    showSlug={''}
+                    showSlug={showSubmit?.slug}
                 />
             )}
 
@@ -152,7 +174,8 @@ export default function AddShowPage({onCancel}: Props) {
                     onBack={() => setStep(2)}
                     onFinish={handleFinish}
                     onCancel={handleCancel}
-                    showSlug={''}
+                    showSlug={showSubmit?.slug}
+                    showType={showSubmit?.type}
                 />
             )}
         </div>

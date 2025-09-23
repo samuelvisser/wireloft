@@ -1,0 +1,144 @@
+import {useMemo} from 'react'
+import {Controller, SubmitHandler, useForm} from 'react-hook-form'
+import {z} from 'zod'
+import {zodResolver} from '@hookform/resolvers/zod'
+import Select from 'react-select'
+import Switch from 'react-switch'
+import {DownloadProfileSeriesCreateSchema, type DownloadProfileSeriesCreateOut} from '../../types/schemas/download_profile_series'
+
+export type DownloadProfileSeriesForm = DownloadProfileSeriesCreateOut
+
+export type SeasonItem = { slug: string; name: string }
+
+export type DownloadProfileSeriesProps = {
+  seasons: SeasonItem[]
+  onBack: () => void
+  onFinish: (data: DownloadProfileSeriesForm) => void
+  onCancel: () => void
+}
+
+// Special value to represent the boolean includeUpcomingSeasons inside the select UI
+const INCLUDE_UPCOMING_VALUE = '__include_upcoming__'
+
+export default function DownloadProfileSeries({ seasons, onBack, onFinish, onCancel }: DownloadProfileSeriesProps) {
+  // Extend schema to require at least one season chosen if includeUpcomingSeasons is false
+  const Schema = useMemo(() => (
+    DownloadProfileSeriesCreateSchema.superRefine((v, ctx) => {
+      if (!v.includeUpcomingSeasons && (!v.downloadSeasonList || v.downloadSeasonList.length === 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['downloadSeasonList'],
+          message: 'Choose at least one season or enable "Include upcoming seasons".',
+        })
+      }
+    })
+  ), [])
+
+  const form = useForm<DownloadProfileSeriesForm>({
+    resolver: zodResolver(Schema),
+    mode: 'onBlur',
+    shouldFocusError: true,
+    defaultValues: {
+      // Note: showId is unknown in the wizard; use 0 as a placeholder (schema only requires a number)
+      showId: 0,
+      enableProfile: true,
+      downloadSeasonList: [],
+      includeUpcomingSeasons: true,
+    },
+  })
+
+  const { control, setValue, watch, handleSubmit, formState: { errors, isSubmitting } } = form
+
+  const seasonOptions = useMemo(() => (
+    seasons.map(s => ({ value: s.slug, label: s.name }))
+  ), [seasons])
+
+  // Build the select value from form state (multi select + special include option)
+  const selectedSeasonSlugs = watch('downloadSeasonList') || []
+  const selectedInclude = watch('includeUpcomingSeasons') || false
+  const selectValue = useMemo(() => {
+    const vals = [...selectedSeasonSlugs.map(slug => ({ value: slug, label: seasonOptions.find(o => o.value === slug)?.label || slug }))]
+    if (selectedInclude) vals.push({ value: INCLUDE_UPCOMING_VALUE, label: 'Include upcoming seasons' })
+    return vals
+  }, [selectedSeasonSlugs, selectedInclude, seasonOptions])
+
+  const onSubmit: SubmitHandler<DownloadProfileSeriesForm> = (data) => {
+    onFinish(data)
+  }
+
+  const handleSelectChange = (opts: readonly { value: string; label: string }[] | null) => {
+    const arr = Array.isArray(opts) ? [...opts] : []
+    const include = arr.some(o => o.value === INCLUDE_UPCOMING_VALUE)
+    const slugs = arr.filter(o => o.value !== INCLUDE_UPCOMING_VALUE).map(o => o.value)
+    setValue('includeUpcomingSeasons', include, { shouldDirty: true, shouldValidate: true })
+    setValue('downloadSeasonList', slugs, { shouldDirty: true, shouldValidate: true })
+  }
+
+  const handleSelectAll = () => {
+    setValue('downloadSeasonList', seasonOptions.map(o => o.value), { shouldDirty: true, shouldValidate: true })
+  }
+
+  const handleClearAll = () => {
+    setValue('downloadSeasonList', [], { shouldDirty: true, shouldValidate: true })
+  }
+
+  return (
+    <form className="form form-fluid" onSubmit={handleSubmit(onSubmit)} noValidate>
+      <div className="form-row">
+        <label htmlFor="enable-profile">Enable automatic downloads</label>
+        <Controller
+          control={control}
+          name="enableProfile"
+          render={({ field }) => (
+            <Switch
+              id="enable-profile"
+              checked={!!field.value}
+              onChange={(checked) => field.onChange(checked)}
+              onColor="#0ea5e9"
+              offColor="#d1d5db"
+              uncheckedIcon={false}
+              checkedIcon={false}
+              onBlur={field.onBlur}
+              aria-invalid={!!errors.enableProfile}
+            />
+          )}
+        />
+      </div>
+
+      <div className="form-row">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <label htmlFor="season-select">Seasons to download</label>
+          <div>
+            <button type="button" className="btn btn-link" onClick={handleSelectAll}>Select all</button>
+            <button type="button" className="btn btn-link" onClick={handleClearAll}>Clear</button>
+          </div>
+        </div>
+        <Controller
+          control={control}
+          name="downloadSeasonList"
+          render={() => (
+            <Select
+              inputId="season-select"
+              isMulti
+              options={[...seasonOptions, { value: INCLUDE_UPCOMING_VALUE, label: 'Include upcoming seasons' }]}
+              value={selectValue}
+              onChange={handleSelectChange as any}
+              closeMenuOnSelect={false}
+            />
+          )}
+        />
+        {errors.downloadSeasonList && (
+          <div className="error" role="alert" aria-live="polite">
+            {errors.downloadSeasonList.message as string}
+          </div>
+        )}
+      </div>
+
+      <div className="actions">
+        <button type="button" className="btn" onClick={onBack}>Back</button>
+        <input type="submit" className="btn btn-primary" value="Finish" disabled={isSubmitting} />
+        <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  )
+}
