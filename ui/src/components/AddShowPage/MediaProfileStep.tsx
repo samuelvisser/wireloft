@@ -1,5 +1,5 @@
 import {useEffect, useRef} from 'react'
-import {SubmitHandler, useForm} from 'react-hook-form'
+import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import DailywireShowCard from './DailywireShowCard'
 import MediaProfileForm from '../MediaProfile/MediaProfileForm'
@@ -9,6 +9,7 @@ import {
     MediaProfileCreateUnionIn, MediaProfileUpsertIn, MediaProfileUpsertOut, MediaProfileUpsertSchema
 } from "../../types/schemas/show_with_profiles";
 import MediaProfileCard from '../MediaProfile/MediaProfileCard'
+import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 
 // Local upsert type and schema for the form
 type Props = {
@@ -31,9 +32,9 @@ export default function MediaProfileStep({value, onChange, onSubmit: onSubmitPar
         resolver: zodResolver(MediaProfileUpsertSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: value,
+        defaultValues: { op: 'create_new', ...(value as any) },
     })
-    const {handleSubmit, watch, setValue, formState: {isSubmitting}} = form
+    const {watch, setValue, formState: {isSubmitting}} = form
 
     // Subscribe to ALL changes
     useEffect(() => {
@@ -83,16 +84,19 @@ export default function MediaProfileStep({value, onChange, onSubmit: onSubmitPar
         }
     }
 
-    const onSubmit: SubmitHandler<MediaProfileUpsertIn> = (dataIn: MediaProfileUpsertIn) => {
+    const onSubmit = buildServerAwareSubmit(form, async (dataIn: MediaProfileUpsertIn) => {
         const dataOut = MediaProfileUpsertSchema.parse(dataIn)
         onSubmitParent(dataOut)
         onContinue()
-    }
+    }, {
+        fallbackField: 'name',
+        rootClientValidationMessage: 'Please fix the highlighted fields.',
+    })
 
     return (
         <div className="wizard-with-aside">
             <div className="wizard-main">
-                <form className="form form-fluid" onSubmit={handleSubmit(onSubmit)} noValidate>
+                <form className="form form-fluid" onSubmit={onSubmit} noValidate>
                     {/* Existing profiles list */}
                     <div className="form-row">
                         <label>Choose a media profile</label>

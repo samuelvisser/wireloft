@@ -1,11 +1,12 @@
 import {useEffect} from 'react'
-import {SubmitHandler, useForm} from 'react-hook-form'
+import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {
     DownloadProfilePodcastCreateSchema,
     type DownloadProfilePodcastCreateOut, DownloadProfilePodcastCreateIn
 } from '../../../types/schemas/download_profile_podcast'
 import DownloadProfilePodcastForm from '../../DownloadProfile/DownloadProfilePodcastForm'
+import {buildServerAwareSubmit} from '../../../utils/buildServerAwareSubmit'
 
 export type DownloadProfilePodcastProps = {
     value: Partial<DownloadProfilePodcastCreateIn>
@@ -26,7 +27,7 @@ export default function DownloadProfilePodcastStep({
         defaultValues: value,
     })
 
-    const {watch, setValue, handleSubmit, formState: {isSubmitting}} = form
+    const {watch, setValue, formState: {isSubmitting}} = form
 
     // Subscribe to ALL changes
     useEffect(() => {
@@ -45,14 +46,19 @@ export default function DownloadProfilePodcastStep({
     }, [withCountdown, setValue])
 
 
-    const onSubmit: SubmitHandler<DownloadProfilePodcastCreateIn> = (dataIn: DownloadProfilePodcastCreateIn) => {
+    const onSubmit = buildServerAwareSubmit(form, async (dataIn: DownloadProfilePodcastCreateIn) => {
+        console.log('submitting', dataIn)
         const dataOut = DownloadProfilePodcastCreateSchema.parse(dataIn)
         onSubmitParent(dataOut)
         onFinish()
-    }
+    }, {
+        fallbackField: 'enableProfile',
+        aliasToFallback: ['showId'],
+        rootClientValidationMessage: 'Please fix the highlighted fields.',
+    })
 
     return (
-        <form className="form form-fluid" onSubmit={handleSubmit(onSubmit)} noValidate>
+        <form className="form form-fluid" onSubmit={onSubmit} noValidate>
             <DownloadProfilePodcastForm form={form} />
 
             <div className="actions">

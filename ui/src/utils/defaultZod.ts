@@ -1,6 +1,8 @@
 import {z} from "zod";
 
 export function getZodDefaults<Schema extends z.core.$ZodLooseShape>(schema: Schema): Partial<z.input<Schema>> {
+    if (!(schema instanceof z.ZodObject)) return {}
+
     const shape = schema.shape
     const entries = Object.entries(shape).map(([key, value]) => {
         if (value instanceof z.ZodDefault) {

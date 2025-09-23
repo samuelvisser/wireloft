@@ -28,7 +28,7 @@ export type Props = {
 }
 
 // Wizard state persistence
-const STORAGE_KEY = 'addShowWizardV4'
+const STORAGE_KEY = 'addShowWizardV5'
 
 type WizardState = {
     step: 1 | 2 | 3
@@ -114,19 +114,19 @@ export default function AddShowPage({onCancel}: Props) {
 
     const [showInput, setShowInput] = useState<Partial<ShowCreatePayloadIn>>(
         () => loadWizardState()?.show.input ?? getZodDefaults(ShowCreatePayloadSchema))
-    const [showSubmit, setShowSubmit] = useState<ShowCreatePayloadOut>()
+    const [showSubmit, setShowSubmit] = useState<ShowCreatePayloadOut | undefined>(() => loadWizardState()?.show.submit)
 
     const [mediaProfileInput, setMediaProfileInput] = useState<Partial<MediaProfileUpsertIn>>(
         () => loadWizardState()?.mediaProfile.input ?? getZodDefaults(MediaProfileUpsertSchema))
-    const [mediaProfileSubmit, setMediaProfileSubmit] = useState<MediaProfileUpsertOut>()
+    const [mediaProfileSubmit, setMediaProfileSubmit] = useState<MediaProfileUpsertOut | undefined>(() => loadWizardState()?.mediaProfile.submit)
 
     const [downloadProfilePodcastInput, setDownloadProfilePodcastInput] = useState<Partial<DownloadProfilePodcastCreateIn>>(
         () => loadWizardState()?.downloadProfile.podcast.input ?? getZodDefaults(DownloadProfilePodcastCreateSchema))
-    const [downloadProfilePodcastSubmit, setDownloadProfilePodcastSubmit] = useState<DownloadProfilePodcastCreateOut>()
+    const [downloadProfilePodcastSubmit, setDownloadProfilePodcastSubmit] = useState<DownloadProfilePodcastCreateOut | undefined>(() => loadWizardState()?.downloadProfile.podcast.submit)
 
     const [downloadProfileSeriesInput, setDownloadProfileSeriesInput] = useState<Partial<DownloadProfileSeriesCreateIn>>(
         () => loadWizardState()?.downloadProfile.series.input ?? getZodDefaults(DownloadProfileSeriesCreateSchema))
-    const [downloadProfileSeriesSubmit, setDownloadProfileSeriesSubmit] = useState<DownloadProfileSeriesCreateOut>()
+    const [downloadProfileSeriesSubmit, setDownloadProfileSeriesSubmit] = useState<DownloadProfileSeriesCreateOut | undefined>(() => loadWizardState()?.downloadProfile.series.submit)
 
     const [dwSeasons, setDwSeasons] = useState<{ slug: string; name: string }[]>(
         () => loadWizardState()?.dwSeasons ?? []
@@ -164,7 +164,26 @@ export default function AddShowPage({onCancel}: Props) {
     }
 
     async function handleFinish() {
-        // Ensure we have a media profile slug: use selected or create new
+        // Build payload from wizard state and submit via validated RHF form
+        console.log('handleFinish')
+
+
+        const wizard = loadWizardState();
+        if (!wizard) return;
+        if (!wizard.show.submit) return;
+        if (!wizard.mediaProfile.submit) return;
+        if (!wizard.downloadProfile.podcast.submit && !wizard.downloadProfile.series.submit) return;
+
+        console.log('handleFinish', wizard)
+
+        const downloadProfile = wizard.downloadProfile.podcast.submit
+            ? ({...wizard.downloadProfile.podcast.submit, op: 'podcast'} as const)
+            : wizard.downloadProfile.series.submit
+                ? ({...wizard.downloadProfile.series.submit, op: 'series'} as const)
+                : undefined;
+        if (!downloadProfile) return;
+
+
         await qc.invalidateQueries({queryKey: ['mediaProfiles']})
         await qc.invalidateQueries({queryKey: ['shows']})
         clearWizardState()
@@ -174,7 +193,10 @@ export default function AddShowPage({onCancel}: Props) {
     return (
         <div>
             <div className="help" aria-live="polite" style={{marginBottom: 12}}>
-                Step {step} of 3: {step === 1 ? 'Choose show' : step === 2 ? 'Media Profile' : (showSubmit?.type === ShowTypeReg.Enum.podcast ? 'Download Profile for Podcasts' : showSubmit?.type === ShowTypeReg.Enum.series ? 'Download Profile for Series' : 'Download Profile')}
+                Step {step} of 3: {step === 1 ? 'Choose show' : step === 2 ? 'Media Profile' :
+                (showSubmit?.type === ShowTypeReg.Enum.podcast ? 'Download Profile for Podcasts' :
+                    showSubmit?.type === ShowTypeReg.Enum.series ? 'Download Profile for Series' :
+                        'Download Profile')}
             </div>
 
             {step === 1 && (

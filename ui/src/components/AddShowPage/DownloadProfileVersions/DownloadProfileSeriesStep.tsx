@@ -1,11 +1,12 @@
 import {useEffect} from 'react'
-import {SubmitHandler, useForm} from 'react-hook-form'
+import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {
     DownloadProfileSeriesCreateIn, DownloadProfileSeriesCreateOut,
     DownloadProfileSeriesCreateSchema,
 } from '../../../types/schemas/download_profile_series'
 import DownloadProfileSeriesForm from '../../DownloadProfile/DownloadProfileSeriesForm'
+import {buildServerAwareSubmit} from '../../../utils/buildServerAwareSubmit'
 
 export type SeasonItem = { slug: string; name: string }
 
@@ -41,7 +42,7 @@ export default function DownloadProfileSeriesStep({
         shouldFocusError: true,
         defaultValues: value,
     })
-    const {watch, handleSubmit, formState: {isSubmitting}} = form
+    const {watch, formState: {isSubmitting}} = form
 
     // Subscribe to ALL changes
     useEffect(() => {
@@ -51,14 +52,17 @@ export default function DownloadProfileSeriesStep({
         return () => subscription.unsubscribe();
     }, [watch, onChange]);
 
-    const onSubmit: SubmitHandler<DownloadProfileSeriesCreateIn> = (dataIn: DownloadProfileSeriesCreateIn) => {
+    const onSubmit = buildServerAwareSubmit(form, async (dataIn: DownloadProfileSeriesCreateIn) => {
         const dataOut = Schema.parse(dataIn)
         onSubmitParent(dataOut)
         onFinish()
-    }
+    }, {
+        fallbackField: 'enableProfile',
+        rootClientValidationMessage: 'Please fix the highlighted fields.',
+    })
 
     return (
-        <form className="form form-fluid" onSubmit={handleSubmit(onSubmit)} noValidate>
+        <form className="form form-fluid" onSubmit={onSubmit} noValidate>
             <DownloadProfileSeriesForm form={form} seasons={seasons} />
 
             <div className="actions">

@@ -28,6 +28,11 @@ export default function DownloadProfilePodcastForm({form}: Props) {
 
   return (
     <>
+      {errors.root && (
+        <div className="form-error-card" role="alert" aria-live="polite">
+          {String(errors.root.message)}
+        </div>
+      )}
       <div className="form-row">
         <label htmlFor="enable-profile">Enable automatic downloads</label>
         <Controller

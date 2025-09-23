@@ -1,4 +1,4 @@
-import {ShowCreateFormSchema} from "./show";
+import {ShowCreatePayloadSchema} from "./show";
 import {DownloadProfilePodcastCreateSchema} from "./download_profile_podcast";
 import {DownloadProfileSeriesCreateSchema} from "./download_profile_series";
 import {MediaProfileCreateSchema, MediaProfileUpdateSchema} from "./media_profile";
@@ -29,7 +29,7 @@ export type MediaProfileUpsertOut = z.output<typeof MediaProfileUpsertSchema>
 
 
 export const ShowCreateWithProfilesSchema = z.object({
-    show: ShowCreateFormSchema,
+    show: ShowCreatePayloadSchema,
     mediaProfile: MediaProfileUpsertSchema,
     downloadProfile: z.discriminatedUnion('op', [
         DownloadProfilePodcastCreateSchema.extend({

@@ -4,9 +4,9 @@ import {z} from 'zod';
 // ---------- Strict request (create/update) ----------
 const DownloadProfileSeriesBaseSchema = z.object({
     mediaProfileId: z.number().optional(),
-    enableProfile: z.boolean(),
+    enableProfile: z.boolean().default(true),
     downloadSeasonList: z.array(z.string()),
-    includeUpcomingSeasons: z.boolean(),
+    includeUpcomingSeasons: z.boolean().default(true),
 })
 
 
