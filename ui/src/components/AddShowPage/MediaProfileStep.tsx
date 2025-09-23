@@ -1,40 +1,46 @@
-import {useRef} from 'react'
+import {useEffect, useRef} from 'react'
 import {SubmitHandler, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import DailywireShowCard from './DailywireShowCard'
 import MediaProfileForm from '../MediaProfileForm'
 import {useMediaProfiles} from '../../lib/queries'
-import {MediaProfileCreateSchema, MediaProfileRead} from '../../types/schemas/media_profile'
+import {MediaProfileRead} from '../../types/schemas/media_profile'
 import {
-    MediaProfileCreateUnionIn, MediaProfileUpsertIn, MediaProfileUpsertSchema
+    MediaProfileCreateUnionIn, MediaProfileUpsertIn, MediaProfileUpsertOut, MediaProfileUpsertSchema
 } from "../../types/schemas/show_with_profiles";
-import {getZodDefaults} from "../../utils/defaultZod";
+import MediaProfileCard from '../MediaProfile/MediaProfileCard'
 
 // Local upsert type and schema for the form
 type Props = {
+    value: MediaProfileUpsertIn
+    onChange: (v: MediaProfileUpsertIn) => void
     onBack: () => void
-    onContinue: () => void
+    onContinue: (v: MediaProfileUpsertOut) => void
     onCancel: () => void
     showSlug?: string
 }
 
-export default function MediaProfileStep({onBack, onContinue, onCancel, showSlug}: Props) {
+export default function MediaProfileStep({value, onChange, onBack, onContinue, onCancel, showSlug}: Props) {
     const profilesQuery = useMediaProfiles()
-    const profiles: MediaProfileRead[] | undefined = profilesQuery.data as any
-    const profilesError = profilesQuery.isError ? ((profilesQuery.error as any)?.message ?? 'Failed to load media profiles') : null
+    const profiles: MediaProfileRead[] | undefined = profilesQuery.data
+    const profilesError = profilesQuery.isError ? ((profilesQuery.error)?.message ?? 'Failed to load media profiles') : null
 
     // React Hook Form setup
     const form = useForm<MediaProfileUpsertIn>({
         resolver: zodResolver(MediaProfileUpsertSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: {
-            op: 'create_new',
-            ...getZodDefaults(MediaProfileCreateSchema)
-        },
+        defaultValues: value,
     })
-
     const {handleSubmit, watch, setValue, formState: {isSubmitting}} = form
+
+    // Subscribe to ALL changes
+    useEffect(() => {
+        const subscription = watch((values) => {
+            onChange(values); // push up on every change
+        });
+        return () => subscription.unsubscribe();
+    }, [watch, onChange]);
 
     // Snapshot previous values when switching to an existing profile, so we can restore on deselect
     const snapshotRef = useRef<Pick<MediaProfileCreateUnionIn, 'name' | 'outputTemplate' | 'preferredFormat' | 'downloadSeriesImages'> | null>(null)
@@ -76,9 +82,8 @@ export default function MediaProfileStep({onBack, onContinue, onCancel, showSlug
         }
     }
 
-    const onSubmit: SubmitHandler<MediaProfileUpsertIn> = () => {
-        // Final payload assembly will be done in the last step of the wizard.
-        onContinue()
+    const onSubmit: SubmitHandler<MediaProfileUpsertOut> = (data) => {
+        onContinue(data)
     }
 
     return (
@@ -97,21 +102,12 @@ export default function MediaProfileStep({onBack, onContinue, onCancel, showSlug
                                 profiles.map((p) => {
                                     const selected = watchedOp === 'update_by_slug' && watchedSlug === p.slug
                                     return (
-                                        <button
+                                        <MediaProfileCard
                                             key={p.slug}
-                                            type="button"
-                                            role="listitem"
-                                            className={selected ? 'card selected' : 'card'}
-                                            aria-pressed={selected}
+                                            profile={p}
+                                            selected={selected}
                                             onClick={() => handleSelect(p)}
-                                        >
-                                            <div className="card-title">{p.name}</div>
-                                            <div className="card-sub">{p.outputTemplate}</div>
-                                            <div className="card-meta">
-                                                <span>{String(p.preferredFormat)}</span>
-                                                <span>• {p.downloadSeriesImages ? 'Series images ✓' : 'Series images ✕'}</span>
-                                            </div>
-                                        </button>
+                                        />
                                     )
                                 })
                             )}
