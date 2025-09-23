@@ -1,12 +1,12 @@
 import {useCallback, useEffect} from 'react'
 import {useNavigate, useParams} from 'react-router-dom'
-import MediaProfileForm from '../../components/MediaProfileForm'
+import MediaProfileForm from '../../components/MediaProfile/MediaProfileForm'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {MediaProfileUpdateIn, MediaProfileUpdateOut, MediaProfileUpdateSchema} from '../../types/schemas/media_profile'
 import {WithRoot} from '../../types/form'
-import {buildMediaProfileOnSubmit} from '../../components/MediaProfileForm/MediaProfileForm'
+import {buildMediaProfileOnSubmit} from '../../components/MediaProfile/MediaProfileForm'
 
 export default function EditMediaProfilePage() {
     const navigate = useNavigate()

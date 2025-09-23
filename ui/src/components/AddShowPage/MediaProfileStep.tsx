@@ -2,7 +2,7 @@ import {useEffect, useRef} from 'react'
 import {SubmitHandler, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import DailywireShowCard from './DailywireShowCard'
-import MediaProfileForm from '../MediaProfileForm'
+import MediaProfileForm from '../MediaProfile/MediaProfileForm'
 import {useMediaProfiles} from '../../lib/queries'
 import {MediaProfileRead} from '../../types/schemas/media_profile'
 import {

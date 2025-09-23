@@ -5,7 +5,7 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {MediaProfileServerErrors} from '../../types/schemas/media_profile'
 import {PreferredFormatReg} from "../../types/media_profile";
 
- type Props = {
+type Props = {
     mode?: 'create' | 'update'
     form: UseFormReturn<any>
 }
@@ -29,7 +29,6 @@ export default function MediaProfileForm({form}: Props) {
 
     const {register, control, formState: {errors}} = form;
 
-
     return (
         <>
             {errors.root && (
@@ -39,7 +38,7 @@ export default function MediaProfileForm({form}: Props) {
             )}
 
             {/* Hidden fields for id and slug to include them in submit when present */}
-            <input type="hidden" {...register('id', { setValueAs: (v) => (v === '' || v == null ? undefined : Number(v)) })} />
+            <input type="hidden" {...register('id', {setValueAs: (v) => (v === '' || v == null ? undefined : Number(v))})} />
             <input type="hidden" {...register('slug')} />
 
             <div className="form-row">
@@ -76,7 +75,7 @@ export default function MediaProfileForm({form}: Props) {
                         {String(errors.outputTemplate.message)}
                     </div>
                 )}
-                <div className="help">Use placeholders like {`{show}`} and {`{season}`}.</div>
+                <div className="help">Use placeholders like {'{show}'} and {'{season}'}.</div>
             </div>
 
             <div className="form-row">
@@ -84,7 +83,7 @@ export default function MediaProfileForm({form}: Props) {
                 <Controller
                     control={control}
                     name="preferredFormat"
-                    render={({ field }) => (
+                    render={({field}) => (
                         <Select
                             inputId="mp-format"
                             classNamePrefix="select"

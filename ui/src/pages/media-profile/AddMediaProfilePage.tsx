@@ -1,5 +1,5 @@
 import {useCallback} from 'react'
-import MediaProfileForm from '../../components/MediaProfileForm'
+import MediaProfileForm from '../../components/MediaProfile/MediaProfileForm'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {
@@ -9,7 +9,7 @@ import {
 import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {WithRoot} from "../../types/form";
-import {buildMediaProfileOnSubmit} from '../../components/MediaProfileForm/MediaProfileForm'
+import {buildMediaProfileOnSubmit} from '../../components/MediaProfile/MediaProfileForm'
 import {PreferredFormatReg} from "../../types/media_profile";
 
 export default function AddMediaProfilePage() {
