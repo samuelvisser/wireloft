@@ -87,7 +87,8 @@ export const ShowDailywireSchema = z.object({
     thumbnailPortraitPath: z.string().optional(),
     thumbnailSquarePath: z.string().optional(),
 });
-export type ShowDailywire = z.infer<typeof ShowDailywireSchema>;
+export type ShowDailywireIn = z.input<typeof ShowDailywireSchema>;
+export type ShowDailywireOut = z.output<typeof ShowDailywireSchema>;
 
 
 /* ------------------------------------------------------------------ */

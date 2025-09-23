@@ -1,4 +1,4 @@
-import {useEffect, useMemo} from "react";
+import {useEffect, useMemo, useRef} from "react";
 import DailywireShowCard from "./DailywireShowCard";
 import {useDailywireShow} from "../../lib/queries";
 import ReadMore from "../../utils/ReadMore";
@@ -13,15 +13,17 @@ import {
 } from "../../types/schemas/show";
 import {EpisodeIdentifierReg, EpisodeIdentifierValue, ShowTypeReg, ShowTypeValue} from "../../types/show";
 import Select from "react-select";
+import {UseQueryResult} from "@tanstack/react-query";
 
 type Props = {
     value: ShowCreatePayloadIn
     onChange: (v: ShowCreatePayloadIn) => void;
     onContinue: (v: ShowCreatePayloadOut) => void;
     onCancel: () => void;
+    onDailywireSeasons?: (seasons: { slug: string; name: string }[]) => void;
 };
 
-export default function ChooseShowStep({value, onChange, onContinue, onCancel}: Props) {
+export default function ChooseShowStep({value, onChange, onContinue, onCancel, onDailywireSeasons}: Props) {
     // --- Form: only user-editable fields are in this schema
     const form = useForm<WithRoot<ShowCreateFormIn>>({
         resolver: zodResolver(ShowCreateFormSchema),
@@ -82,18 +84,54 @@ export default function ChooseShowStep({value, onChange, onContinue, onCancel}: 
     }, [watchedType, setValue]);
 
     // --- Fetch DailyWire data using the slug
-    const dw = useDailywireShow(slugFromUrl);
+    const lastPrefilledUrlRef = useRef<string | undefined>(value.url);
+    const dw: UseQueryResult<any> = useDailywireShow(slugFromUrl);
 
     // --- Prefill defaults for type & episodeIdentifier from the external API when available
+    // Only apply when the URL actually changed (avoid overwriting persisted values on reload)
     useEffect(() => {
         if (!dw.data) return;
+        const currentUrl = watchedUrl ?? "";
+        if (currentUrl === (lastPrefilledUrlRef.current ?? "")) {
+            // URL hasn't changed since last prefill; do not override current values
+            return;
+        }
 
         const inferredType: ShowTypeValue | "" = ShowTypeReg.normalize(dw.data.probableShowType) ?? "";
         const inferredEpisodeId: EpisodeIdentifierValue | null = EpisodeIdentifierReg.normalize(dw.data.probableEpisodeIdentification);
 
         setValue("type", inferredType, {shouldValidate: true});
         setValue("episodeIdentifier", inferredEpisodeId ?? "", {shouldValidate: true});
-    }, [dw.data]);
+
+        // Remember that we prefetched for this URL to prevent reapplying on mount/reload
+        lastPrefilledUrlRef.current = currentUrl;
+    }, [dw.data, watchedUrl, setValue]);
+
+    // --- Save DailyWire data (typed) + seasons up to parent whenever it changes
+    useEffect(() => {
+        if (!dw.data || !slugFromUrl) return;
+        const anyData = dw.data as any;
+
+        // Validate strictly using Zod schema; only update parent if valid
+        const dailywireParsed = ShowDailywireSchema.safeParse({
+            dwId: anyData?.id,
+            slug: slugFromUrl,
+            ...anyData,
+        });
+        if (dailywireParsed.success) {
+            // Merge DW-derived fields into parent input state, preserving current form values
+            const current = form.getValues() as any;
+            onChange({ ...current, ...dailywireParsed.data });
+        }
+
+        // Forward seasons list (if available) for the Series step
+        const seasonsArr: { slug: string; name: string }[] = (anyData?.seasons || [])
+            .map((s: any) => ({ slug: s?.slug ?? '', name: s?.name ?? s?.slug ?? 'Unknown' }))
+            .filter((s: any) => !!s.slug);
+        if (seasonsArr.length > 0 && typeof (onDailywireSeasons) === 'function') {
+            onDailywireSeasons(seasonsArr);
+        }
+    }, [dw.data, slugFromUrl]);
 
     // --- Submit handler
     const onSubmit: SubmitHandler<WithRoot<ShowCreateFormIn>> = (formOnly) => {

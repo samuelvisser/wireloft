@@ -72,7 +72,6 @@ export default function DownloadProfilePodcast({ onBack, onFinish, onCancel }: D
               offColor="#d1d5db"
               uncheckedIcon={false}
               checkedIcon={false}
-              onBlur={field.onBlur}
               aria-invalid={!!errors.enableProfile}
               aria-describedby={errors.enableProfile ? 'enable-profile-errors' : undefined}
             />
@@ -99,7 +98,6 @@ export default function DownloadProfilePodcast({ onBack, onFinish, onCancel }: D
               offColor="#d1d5db"
               uncheckedIcon={false}
               checkedIcon={false}
-              onBlur={field.onBlur}
               aria-invalid={!!errors.downloadWithCountdown}
               aria-describedby={errors.downloadWithCountdown ? 'with-countdown-errors' : 'with-countdown-help'}
             />
@@ -132,7 +130,6 @@ export default function DownloadProfilePodcast({ onBack, onFinish, onCancel }: D
                 offColor="#d1d5db"
                 uncheckedIcon={false}
                 checkedIcon={false}
-                onBlur={field.onBlur}
                 aria-invalid={!!errors.redownloadFinal}
                 aria-describedby={errors.redownloadFinal ? 'redownload-final-errors' : undefined}
               />
@@ -189,7 +186,6 @@ export default function DownloadProfilePodcast({ onBack, onFinish, onCancel }: D
                 offColor="#d1d5db"
                 uncheckedIcon={false}
                 checkedIcon={false}
-                onBlur={field.onBlur}
                 aria-invalid={!!errors.deleteOlderEpisodes}
                 aria-describedby={errors.deleteOlderEpisodes ? 'delete-older-errors' : undefined}
               />

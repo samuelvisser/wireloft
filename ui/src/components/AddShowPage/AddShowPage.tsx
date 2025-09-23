@@ -9,6 +9,7 @@ import type {Versioned} from '../../types/data'
 import {ShowCreatePayloadOut, ShowCreatePayloadIn, ShowCreatePayloadSchema} from "../../types/schemas/show";
 import {getZodDefaults} from "../../utils/defaultZod";
 import {MediaProfileUpsertIn, MediaProfileUpsertOut} from "../../types/schemas/show_with_profiles";
+import {ShowTypeReg} from "../../types/show";
 
 export type Props = {
     onCancel: () => void
@@ -27,6 +28,7 @@ type WizardState = {
         input: MediaProfileUpsertIn,
         submit: MediaProfileUpsertOut | undefined,
     }
+    dwSeasons?: { slug: string; name: string }[]
     // mediaProfile: MediaProfileCreate
     // downloadProfile: DownloadProfileSeriesCreate | DownloadProfilePodcastCreate
 }
@@ -104,7 +106,9 @@ export default function AddShowPage({onCancel}: Props) {
         })
     const [mediaProfileSubmit, setMediaProfileSubmit] = useState<MediaProfileUpsertOut>()
 
-
+    const [dwSeasons, setDwSeasons] = useState<{ slug: string; name: string }[]>(
+        () => loadWizardState()?.dwSeasons ?? []
+    )
 
     // Persist wizard state on any change
     useEffect(() => {
@@ -117,10 +121,11 @@ export default function AddShowPage({onCancel}: Props) {
             mediaProfile: {
                 input: mediaProfileInput,
                 submit: mediaProfileSubmit,
-            }
+            },
+            dwSeasons,
             // downloadProfile,
         })
-    }, [step, showInput, showSubmit, mediaProfileInput, mediaProfileSubmit,
+    }, [step, showInput, showSubmit, mediaProfileInput, mediaProfileSubmit, dwSeasons,
         // downloadProfile
     ])
 
@@ -140,7 +145,7 @@ export default function AddShowPage({onCancel}: Props) {
     return (
         <div>
             <div className="help" aria-live="polite" style={{marginBottom: 12}}>
-                Step {step} of 3: {step === 1 ? 'Choose show' : step === 2 ? 'Media Profile' : 'Download Profile'}
+                Step {step} of 3: {step === 1 ? 'Choose show' : step === 2 ? 'Media Profile' : (showSubmit?.type === ShowTypeReg.Enum.podcast ? 'Download Profile for Podcasts' : showSubmit?.type === ShowTypeReg.Enum.series ? 'Download Profile for Series' : 'Download Profile')}
             </div>
 
             {step === 1 && (
@@ -152,6 +157,7 @@ export default function AddShowPage({onCancel}: Props) {
                         setStep(2)
                     }}
                     onCancel={handleCancel}
+                    onDailywireSeasons={setDwSeasons}
                 />
             )}
 
@@ -176,6 +182,7 @@ export default function AddShowPage({onCancel}: Props) {
                     onCancel={handleCancel}
                     showSlug={showSubmit?.slug}
                     showType={showSubmit?.type}
+                    seasons={dwSeasons}
                 />
             )}
         </div>

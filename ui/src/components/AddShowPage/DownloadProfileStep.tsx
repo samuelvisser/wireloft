@@ -1,6 +1,7 @@
 import DailywireShowCard from './DailywireShowCard'
 import DownloadProfile from '../DownloadProfile/DownloadProfile'
 import type {ShowTypeValue} from '../../types/show'
+import type { SeasonItem } from '../DownloadProfile/DownloadProfileSeries'
 
 
 type Props = {
@@ -9,15 +10,16 @@ type Props = {
   onCancel: () => void
   showSlug?: string
   showType?: ShowTypeValue | ''
+  seasons?: SeasonItem[]
 }
 
-export default function DownloadProfileStep({onBack, onFinish, onCancel, showSlug, showType}: Props) {
+export default function DownloadProfileStep({onBack, onFinish, onCancel, showSlug, showType, seasons}: Props) {
   return (
     <div className="wizard-with-aside">
       <div className="wizard-main">
         <DownloadProfile
-          showSlug={showSlug}
           showType={showType}
+          seasons={seasons}
           onBack={onBack}
           onFinish={onFinish}
           onCancel={onCancel}

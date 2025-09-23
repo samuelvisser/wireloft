@@ -50,7 +50,7 @@ export default function DownloadProfileSeries({ seasons, onBack, onFinish, onCan
   const { control, setValue, watch, handleSubmit, formState: { errors, isSubmitting } } = form
 
   const seasonOptions = useMemo(() => (
-    seasons.map(s => ({ value: s.slug, label: s.name }))
+    seasons.map(s => ({ value: s.slug, label: s.name })).reverse()
   ), [seasons])
 
   // Build the select value from form state (multi select + special include option)
@@ -75,11 +75,9 @@ export default function DownloadProfileSeries({ seasons, onBack, onFinish, onCan
   }
 
   const handleSelectAll = () => {
+    // Select all seasons and also include upcoming seasons
+    setValue('includeUpcomingSeasons', true, { shouldDirty: true, shouldValidate: true })
     setValue('downloadSeasonList', seasonOptions.map(o => o.value), { shouldDirty: true, shouldValidate: true })
-  }
-
-  const handleClearAll = () => {
-    setValue('downloadSeasonList', [], { shouldDirty: true, shouldValidate: true })
   }
 
   return (
@@ -98,7 +96,6 @@ export default function DownloadProfileSeries({ seasons, onBack, onFinish, onCan
               offColor="#d1d5db"
               uncheckedIcon={false}
               checkedIcon={false}
-              onBlur={field.onBlur}
               aria-invalid={!!errors.enableProfile}
             />
           )}
@@ -110,7 +107,6 @@ export default function DownloadProfileSeries({ seasons, onBack, onFinish, onCan
           <label htmlFor="season-select">Seasons to download</label>
           <div>
             <button type="button" className="btn btn-link" onClick={handleSelectAll}>Select all</button>
-            <button type="button" className="btn btn-link" onClick={handleClearAll}>Clear</button>
           </div>
         </div>
         <Controller
@@ -120,7 +116,7 @@ export default function DownloadProfileSeries({ seasons, onBack, onFinish, onCan
             <Select
               inputId="season-select"
               isMulti
-              options={[...seasonOptions, { value: INCLUDE_UPCOMING_VALUE, label: 'Include upcoming seasons' }]}
+              options={[{ value: INCLUDE_UPCOMING_VALUE, label: 'Include upcoming seasons' }, ...seasonOptions]}
               value={selectValue}
               onChange={handleSelectChange as any}
               closeMenuOnSelect={false}
