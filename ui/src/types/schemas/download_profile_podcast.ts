@@ -4,11 +4,11 @@ import {z} from 'zod';
 // ---------- Strict request (create/update) ----------
 const DownloadProfilePodcastBaseSchema = z.object({
     mediaProfileId: z.number().optional(),
-    enableProfile: z.boolean(),
-    downloadWithCountdown: z.boolean(),
-    redownloadFinal: z.boolean(),
-    downloadDaysInPast: z.number().min(0),
-    deleteOlderEpisodes: z.boolean(),
+    enableProfile: z.boolean().default(true),
+    downloadWithCountdown: z.boolean().default(false),
+    redownloadFinal: z.boolean().default(true),
+    downloadDaysInPast: z.number().min(0).default(180),
+    deleteOlderEpisodes: z.boolean().default(true),
 })
 
 export const DownloadProfilePodcastCreateSchema = DownloadProfilePodcastBaseSchema.extend({

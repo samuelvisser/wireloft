@@ -10,27 +10,43 @@ import {ShowCreatePayloadOut, ShowCreatePayloadIn, ShowCreatePayloadSchema} from
 import {getZodDefaults} from "../../utils/defaultZod";
 import {MediaProfileUpsertIn, MediaProfileUpsertOut} from "../../types/schemas/show_with_profiles";
 import {ShowTypeReg} from "../../types/show";
+import {
+    DownloadProfilePodcastCreateIn,
+    DownloadProfilePodcastCreateOut, DownloadProfilePodcastCreateSchema
+} from "../../types/schemas/download_profile_podcast";
+import {
+    DownloadProfileSeriesCreateIn,
+    DownloadProfileSeriesCreateOut, DownloadProfileSeriesCreateSchema
+} from "../../types/schemas/download_profile_series";
 
 export type Props = {
     onCancel: () => void
 }
 
 // Wizard state persistence
-const STORAGE_KEY = 'addShowWizardV3'
+const STORAGE_KEY = 'addShowWizardV4'
 
 type WizardState = {
     step: 1 | 2 | 3
     show: {
-        input: ShowCreatePayloadIn,
+        input: Partial<ShowCreatePayloadIn>,
         submit: ShowCreatePayloadOut | undefined,
     },
     mediaProfile: {
-        input: MediaProfileUpsertIn,
+        input: Partial<MediaProfileUpsertIn>,
         submit: MediaProfileUpsertOut | undefined,
+    },
+    downloadProfile: {
+        podcast: {
+            input: Partial<DownloadProfilePodcastCreateIn>,
+            submit: DownloadProfilePodcastCreateOut | undefined,
+        },
+        series: {
+            input: Partial<DownloadProfileSeriesCreateIn>,
+            submit: DownloadProfileSeriesCreateOut | undefined,
+        }
     }
     dwSeasons?: { slug: string; name: string }[]
-    // mediaProfile: MediaProfileCreate
-    // downloadProfile: DownloadProfileSeriesCreate | DownloadProfilePodcastCreate
 }
 
 function loadWizardState(): WizardState | null {
@@ -92,11 +108,11 @@ export default function AddShowPage({onCancel}: Props) {
     const [step, setStep] = useState<1 | 2 | 3>(() => loadWizardState()?.step ?? 1)
 
 
-    const [showInput, setShowInput] = useState<ShowCreatePayloadIn>(
+    const [showInput, setShowInput] = useState<Partial<ShowCreatePayloadIn>>(
         () => loadWizardState()?.show.input ?? getZodDefaults(ShowCreatePayloadSchema))
     const [showSubmit, setShowSubmit] = useState<ShowCreatePayloadOut>()
 
-    const [mediaProfileInput, setMediaProfileInput] = useState<MediaProfileUpsertIn>(
+    const [mediaProfileInput, setMediaProfileInput] = useState<Partial<MediaProfileUpsertIn>>(
         () => loadWizardState()?.mediaProfile.input ?? {
             op: "create_new",
             name: "",
@@ -105,6 +121,14 @@ export default function AddShowPage({onCancel}: Props) {
             downloadSeriesImages: false,
         })
     const [mediaProfileSubmit, setMediaProfileSubmit] = useState<MediaProfileUpsertOut>()
+
+    const [downloadProfilePodcastInput, setDownloadProfilePodcastInput] = useState<Partial<DownloadProfilePodcastCreateIn>>(
+        () => loadWizardState()?.downloadProfile.podcast.input ?? getZodDefaults(DownloadProfilePodcastCreateSchema))
+    const [downloadProfilePodcastSubmit, setDownloadProfilePodcastSubmit] = useState<DownloadProfilePodcastCreateOut>()
+
+    const [downloadProfileSeriesInput, setDownloadProfileSeriesInput] = useState<Partial<DownloadProfileSeriesCreateIn>>(
+        () => loadWizardState()?.downloadProfile.series.input ?? getZodDefaults(DownloadProfileSeriesCreateSchema))
+    const [downloadProfileSeriesSubmit, setDownloadProfileSeriesSubmit] = useState<DownloadProfileSeriesCreateOut>()
 
     const [dwSeasons, setDwSeasons] = useState<{ slug: string; name: string }[]>(
         () => loadWizardState()?.dwSeasons ?? []
@@ -122,12 +146,19 @@ export default function AddShowPage({onCancel}: Props) {
                 input: mediaProfileInput,
                 submit: mediaProfileSubmit,
             },
+            downloadProfile: {
+                podcast: {
+                    input: downloadProfilePodcastInput,
+                    submit: downloadProfilePodcastSubmit
+                },
+                series: {
+                    input: downloadProfileSeriesInput,
+                    submit: downloadProfileSeriesSubmit
+                }
+            },
             dwSeasons,
-            // downloadProfile,
         })
-    }, [step, showInput, showSubmit, mediaProfileInput, mediaProfileSubmit, dwSeasons,
-        // downloadProfile
-    ])
+    }, [step, showInput, showSubmit, mediaProfileInput, mediaProfileSubmit, downloadProfilePodcastInput, downloadProfilePodcastSubmit, downloadProfileSeriesInput, downloadProfileSeriesSubmit, dwSeasons])
 
     function handleCancel() {
         clearWizardState()
@@ -152,10 +183,8 @@ export default function AddShowPage({onCancel}: Props) {
                 <ChooseShowStep
                     value={showInput}
                     onChange={setShowInput}
-                    onContinue={(data: ShowCreatePayloadOut) => {
-                        setShowSubmit(data)
-                        setStep(2)
-                    }}
+                    onSubmit={setShowSubmit}
+                    onContinue={() => setStep(2)}
                     onCancel={handleCancel}
                     onDailywireSeasons={setDwSeasons}
                 />
@@ -165,11 +194,9 @@ export default function AddShowPage({onCancel}: Props) {
                 <MediaProfileStep
                     value={mediaProfileInput}
                     onChange={setMediaProfileInput}
+                    onSubmit={setMediaProfileSubmit}
                     onBack={() => setStep(1)}
-                    onContinue={(data: MediaProfileUpsertOut) => {
-                        setMediaProfileSubmit(data)
-                        setStep(3)
-                    }}
+                    onContinue={() => setStep(3)}
                     onCancel={handleCancel}
                     showSlug={showSubmit?.slug}
                 />
@@ -177,6 +204,18 @@ export default function AddShowPage({onCancel}: Props) {
 
             {step === 3 && (
                 <DownloadProfileStep
+                    value={{
+                        podcast: downloadProfilePodcastInput,
+                        series: downloadProfileSeriesInput,
+                    }}
+                    onChange={{
+                        podcast: setDownloadProfilePodcastInput,
+                        series: setDownloadProfileSeriesInput,
+                    }}
+                    onSubmit={{
+                        podcast: setDownloadProfilePodcastSubmit,
+                        series: setDownloadProfileSeriesSubmit,
+                    }}
                     onBack={() => setStep(2)}
                     onFinish={handleFinish}
                     onCancel={handleCancel}

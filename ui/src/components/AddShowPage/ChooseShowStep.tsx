@@ -16,14 +16,15 @@ import Select from "react-select";
 import {UseQueryResult} from "@tanstack/react-query";
 
 type Props = {
-    value: ShowCreatePayloadIn
+    value: Partial<ShowCreatePayloadIn>
     onChange: (v: ShowCreatePayloadIn) => void;
-    onContinue: (v: ShowCreatePayloadOut) => void;
+    onSubmit: (v: ShowCreatePayloadOut) => void;
+    onContinue: () => void;
     onCancel: () => void;
     onDailywireSeasons?: (seasons: { slug: string; name: string }[]) => void;
 };
 
-export default function ChooseShowStep({value, onChange, onContinue, onCancel, onDailywireSeasons}: Props) {
+export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParent,  onContinue, onCancel, onDailywireSeasons}: Props) {
     // --- Form: only user-editable fields are in this schema
     const form = useForm<WithRoot<ShowCreateFormIn>>({
         resolver: zodResolver(ShowCreateFormSchema),
@@ -157,7 +158,8 @@ export default function ChooseShowStep({value, onChange, onContinue, onCancel, o
 
         // Validate final payload. We do not save anything yet (only in the final widget step)
         const payload = ShowCreatePayloadSchema.parse({...formOnly, ...dailywireParsed.data});
-        onContinue(payload);
+        onSubmitParent(payload);
+        onContinue();
     }
 
     // --- Render

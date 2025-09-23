@@ -12,15 +12,16 @@ import MediaProfileCard from '../MediaProfile/MediaProfileCard'
 
 // Local upsert type and schema for the form
 type Props = {
-    value: MediaProfileUpsertIn
+    value: Partial<MediaProfileUpsertIn>
     onChange: (v: MediaProfileUpsertIn) => void
+    onSubmit: (v: MediaProfileUpsertOut) => void;
     onBack: () => void
-    onContinue: (v: MediaProfileUpsertOut) => void
+    onContinue: () => void
     onCancel: () => void
     showSlug?: string
 }
 
-export default function MediaProfileStep({value, onChange, onBack, onContinue, onCancel, showSlug}: Props) {
+export default function MediaProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, showSlug}: Props) {
     const profilesQuery = useMediaProfiles()
     const profiles: MediaProfileRead[] | undefined = profilesQuery.data
     const profilesError = profilesQuery.isError ? ((profilesQuery.error)?.message ?? 'Failed to load media profiles') : null
@@ -83,7 +84,8 @@ export default function MediaProfileStep({value, onChange, onBack, onContinue, o
     }
 
     const onSubmit: SubmitHandler<MediaProfileUpsertOut> = (data) => {
-        onContinue(data)
+        onSubmitParent(data)
+        onContinue()
     }
 
     return (
