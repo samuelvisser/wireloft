@@ -13,7 +13,7 @@ import MediaProfileCard from '../MediaProfile/MediaProfileCard'
 // Local upsert type and schema for the form
 type Props = {
     value: Partial<MediaProfileUpsertIn>
-    onChange: (v: MediaProfileUpsertIn) => void
+    onChange: (v: Partial<MediaProfileUpsertIn>) => void
     onSubmit: (v: MediaProfileUpsertOut) => void;
     onBack: () => void
     onContinue: () => void
@@ -59,7 +59,7 @@ export default function MediaProfileStep({value, onChange, onSubmit: onSubmitPar
             const snap = snapshotRef.current
             setValue('name', snap?.name ?? '', {shouldValidate: true})
             setValue('outputTemplate', snap?.outputTemplate ?? '', {shouldValidate: true})
-            setValue('preferredFormat', (snap?.preferredFormat ?? '1080p') as any, {shouldValidate: true})
+            setValue('preferredFormat', (snap?.preferredFormat ?? 'format_1080p') as any, {shouldValidate: true})
             setValue('downloadSeriesImages', snap?.downloadSeriesImages ?? true, {shouldValidate: true})
             snapshotRef.current = null
         } else {
@@ -83,8 +83,9 @@ export default function MediaProfileStep({value, onChange, onSubmit: onSubmitPar
         }
     }
 
-    const onSubmit: SubmitHandler<MediaProfileUpsertOut> = (data) => {
-        onSubmitParent(data)
+    const onSubmit: SubmitHandler<MediaProfileUpsertIn> = (dataIn: MediaProfileUpsertIn) => {
+        const dataOut = MediaProfileUpsertSchema.parse(dataIn)
+        onSubmitParent(dataOut)
         onContinue()
     }
 
@@ -122,7 +123,7 @@ export default function MediaProfileStep({value, onChange, onSubmit: onSubmitPar
                          aria-hidden="true">{watchedOp === 'update_by_slug' ? 'Update current profile' : 'Or create a new profile'}</div>
 
                     {/* New or update profile form (user-editable fields) */}
-                    <MediaProfileForm form={form as any}/>
+                    <MediaProfileForm form={form}/>
 
                     <div className="actions">
                         <button type="button" className="btn" onClick={onBack}>

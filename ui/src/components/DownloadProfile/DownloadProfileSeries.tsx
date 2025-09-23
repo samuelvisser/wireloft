@@ -1,6 +1,5 @@
 import {useEffect, useMemo} from 'react'
 import {Controller, SubmitHandler, useForm} from 'react-hook-form'
-import {z} from 'zod'
 import {zodResolver} from '@hookform/resolvers/zod'
 import Select from 'react-select'
 import Switch from 'react-switch'
@@ -14,7 +13,7 @@ export type SeasonItem = { slug: string; name: string }
 
 export type DownloadProfileSeriesProps = {
     value: Partial<DownloadProfileSeriesCreateIn>
-    onChange: (v: DownloadProfileSeriesCreateIn) => void;
+    onChange: (v: Partial<DownloadProfileSeriesCreateIn>) => void;
     onSubmit: (v: DownloadProfileSeriesCreateOut) => void;
     seasons: SeasonItem[]
     onBack: () => void
@@ -26,26 +25,19 @@ export type DownloadProfileSeriesProps = {
 const INCLUDE_UPCOMING_VALUE = '__include_upcoming__'
 
 export default function DownloadProfileSeries({
-                                                  value,
-                                                  onChange,
-                                                  onSubmit: onSubmitParent,
-                                                  seasons,
-                                                  onBack,
-                                                  onFinish,
-                                                  onCancel
+                                                  value, onChange, onSubmit: onSubmitParent, seasons, onBack,
+                                                  onFinish, onCancel
                                               }: DownloadProfileSeriesProps) {
     // Extend schema to require at least one season chosen if includeUpcomingSeasons is false
-    const Schema = useMemo(() => (
-        DownloadProfileSeriesCreateSchema.superRefine((v, ctx) => {
-            if (!v.includeUpcomingSeasons && (!v.downloadSeasonList || v.downloadSeasonList.length === 0)) {
-                ctx.addIssue({
-                    code: z.ZodIssueCode.custom,
-                    path: ['downloadSeasonList'],
-                    message: 'Choose at least one season or enable "Include upcoming seasons".',
-                })
-            }
-        })
-    ), [])
+    const Schema = DownloadProfileSeriesCreateSchema.superRefine((v, ctx) => {
+        if (!v.includeUpcomingSeasons && (!v.downloadSeasonList || v.downloadSeasonList.length === 0)) {
+            ctx.addIssue({
+                code: 'custom',
+                path: ['downloadSeasonList'],
+                message: 'Choose at least one season or enable "Include upcoming seasons".',
+            })
+        }
+    })
 
     const form = useForm<DownloadProfileSeriesCreateIn>({
         resolver: zodResolver(Schema),
@@ -80,8 +72,9 @@ export default function DownloadProfileSeries({
         return vals
     }, [selectedSeasonSlugs, selectedInclude, seasonOptions])
 
-    const onSubmit: SubmitHandler<DownloadProfileSeriesCreateOut> = (data) => {
-        onSubmitParent(onSubmitParent)
+    const onSubmit: SubmitHandler<DownloadProfileSeriesCreateIn> = (dataIn: DownloadProfileSeriesCreateIn) => {
+        const dataOut = Schema.parse(dataIn)
+        onSubmitParent(dataOut)
         onFinish()
     }
 

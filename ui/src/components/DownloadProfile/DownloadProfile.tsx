@@ -17,8 +17,8 @@ export type DownloadProfileProps = {
         series: Partial<DownloadProfileSeriesCreateIn>
     }
     onChange: {
-        podcast: (v: DownloadProfilePodcastCreateIn) => void,
-        series: (v: DownloadProfileSeriesCreateIn) => void,
+        podcast: (v: Partial<DownloadProfilePodcastCreateIn>) => void,
+        series: (v: Partial<DownloadProfileSeriesCreateIn>) => void,
     }
     onSubmit: {
         podcast: (v: DownloadProfilePodcastCreateOut) => void,

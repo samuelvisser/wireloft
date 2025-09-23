@@ -8,10 +8,9 @@ import {
     type DownloadProfilePodcastCreateOut, DownloadProfilePodcastCreateIn
 } from '../../types/schemas/download_profile_podcast'
 
-
 export type DownloadProfilePodcastProps = {
     value: Partial<DownloadProfilePodcastCreateIn>
-    onChange: (v: DownloadProfilePodcastCreateIn) => void;
+    onChange: (v: Partial<DownloadProfilePodcastCreateIn>) => void;
     onSubmit: (v: DownloadProfilePodcastCreateOut) => void;
     onBack: () => void
     onFinish: () => void
@@ -19,12 +18,7 @@ export type DownloadProfilePodcastProps = {
 }
 
 export default function DownloadProfilePodcast({
-                                                   value,
-                                                   onChange,
-                                                   onSubmit: onSubmitParent,
-                                                   onBack,
-                                                   onFinish,
-                                                   onCancel
+                                                   value, onChange, onSubmit: onSubmitParent, onBack, onFinish, onCancel
                                                }: DownloadProfilePodcastProps) {
     const form = useForm<DownloadProfilePodcastCreateIn>({
         resolver: zodResolver(DownloadProfilePodcastCreateSchema),
@@ -64,8 +58,9 @@ export default function DownloadProfilePodcast({
         return `${yyyy}-${mm}-${dd}`
     }, [watchedDays])
 
-    const onSubmit: SubmitHandler<DownloadProfilePodcastCreateOut> = (data) => {
-        onSubmitParent(data)
+    const onSubmit: SubmitHandler<DownloadProfilePodcastCreateIn> = (dataIn: DownloadProfilePodcastCreateIn) => {
+        const dataOut = DownloadProfilePodcastCreateSchema.parse(dataIn)
+        onSubmitParent(dataOut)
         onFinish()
     }
 

@@ -17,7 +17,7 @@ import {UseQueryResult} from "@tanstack/react-query";
 
 type Props = {
     value: Partial<ShowCreatePayloadIn>
-    onChange: (v: ShowCreatePayloadIn) => void;
+    onChange: (v: Partial<ShowCreatePayloadIn>) => void;
     onSubmit: (v: ShowCreatePayloadOut) => void;
     onContinue: () => void;
     onCancel: () => void;
@@ -135,7 +135,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
     }, [dw.data, slugFromUrl]);
 
     // --- Submit handler
-    const onSubmit: SubmitHandler<WithRoot<ShowCreateFormIn>> = (formOnly) => {
+    const onSubmit: SubmitHandler<WithRoot<ShowCreateFormIn>> = (formOnly: WithRoot<ShowCreateFormIn>) => {
         // Gather/normalize derived fields from the API response
         const anyData = dw.data as any;
 
