@@ -39,6 +39,11 @@ export function createSelectRegistry<const T extends string>(name: string, spec:
     // Convenience accessors
     const meta = (v: T) => spec[v];
     const getLabel = (v: T) => spec[v].label;
+    const getLabelLoose = (x: T | string) => {
+        const n = normalize(x);
+        if (n !== null) return spec[n].label;
+        return x
+    }
 
     // Helpful string for debugging
     const describe = () => `${name}(${values.join(", ")})`;
@@ -54,6 +59,7 @@ export function createSelectRegistry<const T extends string>(name: string, spec:
         is,
         meta,
         getLabel,
+        getLabelLoose,
         describe,
     };
 }

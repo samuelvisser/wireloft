@@ -5,6 +5,7 @@ import {z} from 'zod';
 const DownloadProfileSeriesBaseSchema = z.object({
     mediaProfileId: z.number().optional(),
     enableProfile: z.boolean(),
+    downloadSeasonList: z.array(z.string()),
     includeUpcomingSeasons: z.boolean(),
 })
 
@@ -28,6 +29,7 @@ export const DownloadProfileSeriesReadSchema = z.looseObject({
     showId: z.number(),
     mediaProfileId: z.number().optional(),
     enableProfile: z.boolean(),
+    downloadSeasonList: z.array(z.string()),
     includeUpcomingSeasons: z.boolean(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),

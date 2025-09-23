@@ -5,6 +5,7 @@ import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {useMediaProfiles} from '../lib/queries'
 import {useQueryClient} from '@tanstack/react-query'
 import {MediaProfileRead} from "../types/schemas/media_profile";
+import {PreferredFormatReg} from "../types/media_profile";
 
 export default function MediaProfilesPage() {
     const navigate = useNavigate()
@@ -88,7 +89,7 @@ export default function MediaProfilesPage() {
                                     <td data-label="Name">{p.name}</td>
                                     <td data-label="Output Path Template"
                                         className="mono truncate">{p.outputTemplate}</td>
-                                    <td data-label="Preferred Format">{p.preferredFormat}</td>
+                                    <td data-label="Preferred Format">{PreferredFormatReg.getLabelLoose(p.preferredFormat)}</td>
                                     <td data-label="Series Images">{p.downloadSeriesImages ? '✓' : '✕'}</td>
                                     <td data-label="Actions" style={{textAlign: 'right'}}>
                                         <div style={{display: 'inline-flex', gap: 6}}>

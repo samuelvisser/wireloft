@@ -22,8 +22,10 @@ export const MediaProfileUpsertSchema = z.discriminatedUnion('op', [
   MediaProfileCreateUnionSchema,
   MediaProfileUpdateUnionSchema,
 ])
-export type MediaProfileUpsertIn = MediaProfileCreateUnionIn | MediaProfileUpdateUnionIn
-export type MediaProfileUpsertOut = MediaProfileCreateUnionOut | MediaProfileUpdateUnionOut
+export type MediaProfileUpsertIn = z.input<typeof MediaProfileUpsertSchema>
+// export type MediaProfileUpsertUnionIn = MediaProfileCreateUnionIn | MediaProfileUpdateUnionIn
+export type MediaProfileUpsertOut = z.output<typeof MediaProfileUpsertSchema>
+// export type MediaProfileUpsertUnionOut = MediaProfileCreateUnionOut | MediaProfileUpdateUnionOut
 
 
 export const ShowCreateWithProfilesSchema = z.object({

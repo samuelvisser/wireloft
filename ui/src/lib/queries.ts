@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery, useQueryClient, QueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { saveProfilesToStorage, saveShowsToStorage } from './cache'
+import {MediaProfileRead} from "../types/schemas/media_profile";
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
   const r = await fetch(url, { signal })
@@ -9,7 +10,7 @@ async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
 }
 
 export function useMediaProfiles() {
-  const result = useQuery<any[], Error, any[], readonly ['mediaProfiles']>({
+  const result = useQuery<any[], Error, MediaProfileRead[], readonly ['mediaProfiles']>({
     queryKey: ['mediaProfiles'] as const,
     queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/media-profiles`, signal),
     placeholderData: keepPreviousData,
@@ -117,7 +118,7 @@ export function prefetchCoreData(qc: QueryClient) {
       queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/media-profiles`, signal),
     })
     .then(() => {
-      const profiles = qc.getQueryData<any[]>(['mediaProfiles'])
+      const profiles = qc.getQueryData<MediaProfileRead[]>(['mediaProfiles'])
       if (profiles) saveProfilesToStorage(profiles)
     })
 }
