@@ -4,7 +4,7 @@ from .with_profiles import show_with_profile_router
 from .views import show_view_router
 from .service import get_shows_list, create_show, get_show, update_show, delete_show
 from ...models.show import ShowAPIRead, ShowAPICreate, ShowAPIUpdate
-from ...app import db_session
+from backend.app import db_session
 
 router = APIRouter()
 

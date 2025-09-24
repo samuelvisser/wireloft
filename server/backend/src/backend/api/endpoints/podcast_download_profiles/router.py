@@ -2,7 +2,7 @@ from fastapi import APIRouter, status
 
 from .service import *
 from ...models.download_profile_podcast import *
-from ...app import db_session
+from backend.app import db_session
 
 router = APIRouter()
 

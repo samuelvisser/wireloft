@@ -2,7 +2,7 @@ from fastapi import APIRouter, status
 
 from .service import *
 from ...models.episode import *
-from ...app import db_session
+from backend.app import db_session
 
 router = APIRouter()
 
