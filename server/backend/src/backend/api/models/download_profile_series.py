@@ -9,20 +9,26 @@ from backend.api.models.base import RequestBase, ResponseBase
 class _DownloadProfileSeriesAPIBaseIn(RequestBase):
     """Fields for requests: validate here if needed."""
 
-    media_profile_id: int
     enable_profile: bool
     include_upcoming_seasons: bool
 
 
+class DownloadProfileSeriesAPICreateBundle(_DownloadProfileSeriesAPIBaseIn):
+    """Request body for creating a download profile for series while bundleing it with a show and media profile."""
+    pass
+
+
 class DownloadProfileSeriesAPICreate(_DownloadProfileSeriesAPIBaseIn):
-    """Request body for creating a download profile."""
+    """Request body for creating a download profile for series."""
 
     show_id: int
+    media_profile_id: int
 
 
 class DownloadProfileSeriesAPIUpdate(_DownloadProfileSeriesAPIBaseIn):
-    """Request body for updating a download profile."""
-    pass
+    """Request body for updating a download profile for series."""
+
+    media_profile_id: int
 
 
 # ---------- Lenient output (read) ----------
@@ -35,9 +41,8 @@ class _DownloadProfileSeriesAPIBaseOut(ResponseBase):
     id: int
     show_id: int
 
-
 class DownloadProfileSeriesAPIRead(_DownloadProfileSeriesAPIBaseOut):
-    """Response body for a download profile."""
+    """Response body for a download profile for series."""
 
     created_at: datetime
     updated_at: datetime
