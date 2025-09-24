@@ -15,6 +15,7 @@ import {
     MediaProfileUpsertOut,
 } from "../../types/schemas/show_with_profiles";
 import {ShowTypeReg} from "../../types/show";
+import {useQueryClient} from "@tanstack/react-query";
 
 export type Props = {
     onCancel: () => void
@@ -115,6 +116,8 @@ export default function AddShowPage({onCancel}: Props) {
         setGlobalMessage({ text: message, type })
     }
     const clearWizardMessage = () => setGlobalMessage(null)
+    const qc = useQueryClient()
+
     // Wizard step: 1 = URL, 2 = Media Profile, 3 = Show
     const [step, setStep] = useState<1 | 2 | 3>(() => loadWizardState()?.step ?? 1)
 
@@ -176,8 +179,6 @@ export default function AddShowPage({onCancel}: Props) {
 
     async function handleFinish() {
         // Build payload from current in-memory state to avoid race with async persistence
-        console.log('handleFinish')
-
         const show = showSubmit
         const mediaProfile = mediaProfileSubmit
 
@@ -210,32 +211,48 @@ export default function AddShowPage({onCancel}: Props) {
                 downloadProfile
             }))
 
+        try {
+            const response = await fetch(`${(window as any).appConfig.API_URL}/shows/with-profiles`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    show,
+                    mediaProfile,
+                    downloadProfile
+                }),
+            })
 
+            console.log('queryResult', response)
 
+            if (response.status !== 201) {
+                // Attempt to read server-provided error message
+                let errorMessage: string | undefined = undefined
+                try {
+                    const data = await response.clone().json()
+                    if (data && (data.detail || data.message)) {
+                        errorMessage = String(data.detail || data.message)
+                    }
+                } catch {}
+                if (!errorMessage) {
+                    try {
+                        const text = await response.text()
+                        if (text) errorMessage = text
+                    } catch {}
+                }
+                setWizardMessage(errorMessage ?? `HTTP ${response.status}`, 'ERROR')
+                return
+            }
 
-        const result = fetch(`${(window as any).appConfig.API_URL}/shows/with-profiles`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                show,
-                mediaProfile,
-                downloadProfile
-            }),
-        })
-
-        console.log('queryResult', result)
-
-
-        result.then(() => {
             clearWizardMessage()
-        })
+        } catch (err) {
+            setWizardMessage('Network error, please try again.', 'ERROR')
+            return
+        }
 
-
-        // TODO finish and navigate to home
-        // await qc.invalidateQueries({queryKey: ['mediaProfiles']})
-        // await qc.invalidateQueries({queryKey: ['shows']})
-        // clearWizardState()
-        // onCancel()
+        await qc.invalidateQueries({queryKey: ['mediaProfiles']})
+        await qc.invalidateQueries({queryKey: ['shows']})
+        clearWizardState()
+        onCancel()
     }
 
     return (
