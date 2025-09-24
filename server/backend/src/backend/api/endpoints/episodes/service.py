@@ -1,88 +1,81 @@
+from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.episode import *
-from backend.app import db_session
 from backend.db.models import Episode
 
 
-def get_episodes_list(show_slug: str) -> list[EpisodeAPIRead]:
-    with db_session() as s:
-        episodes = (
-            s.query(Episode)
-            .filter(
-                Episode.show.has(slug=show_slug)
-            )
-            .order_by(Episode.index.desc())
-            .all()
+def get_episodes_list(s: Session, show_slug: str) -> list[EpisodeAPIRead]:
+    episodes = (
+        s.query(Episode)
+        .filter(
+            Episode.show.has(slug=show_slug)
         )
+        .order_by(Episode.index.desc())
+        .all()
+    )
 
-        return [EpisodeAPIRead.model_validate(mp) for mp in episodes]
+    return [EpisodeAPIRead.model_validate(mp) for mp in episodes]
 
 
-def get_episode(show_slug: str, episode_slug: str) -> EpisodeAPIRead:
-    with db_session() as s:
-        episode = (
-            s.query(Episode)
-            .filter(
-                Episode.slug == episode_slug,
-                Episode.show.has(slug=show_slug)
-            )
-            .one_or_none()
+def get_episode(s: Session, show_slug: str, episode_slug: str) -> EpisodeAPIRead:
+    episode = (
+        s.query(Episode)
+        .filter(
+            Episode.slug == episode_slug,
+            Episode.show.has(slug=show_slug)
         )
+        .one_or_none()
+    )
 
-        if episode is None:
-            raise HTTPException(status_code=404, detail="Episode not found")
+    if episode is None:
+        raise HTTPException(status_code=404, detail="Episode not found")
 
-        return EpisodeAPIRead.model_validate(episode)
-
-
-def create_episode(body: EpisodeAPICreate) -> EpisodeAPIRead:
-    with db_session() as s:
-        # Build model from validated Pydantic data
-        data = body.model_dump(by_alias=True)
-
-        episode = Episode(**data)
-        s.add(episode)
-        s.commit()
-        s.refresh(episode)
-        return EpisodeAPIRead.model_validate(episode)
+    return EpisodeAPIRead.model_validate(episode)
 
 
-def update_episode(show_slug: str, episode_slug: str, body: EpisodeAPIUpdate) -> EpisodeAPIRead:
-    with db_session() as s:
-        episode = (
-            s.query(Episode)
-            .filter(
-                Episode.slug == episode_slug,
-                Episode.show.has(slug=show_slug)
-            )
-            .one_or_none()
+def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:
+    # Build model from validated Pydantic data
+    data = body.model_dump(by_alias=True)
+
+    episode = Episode(**data)
+    s.add(episode)
+    s.flush()
+    return EpisodeAPIRead.model_validate(episode)
+
+
+def update_episode(s: Session, show_slug: str, episode_slug: str, body: EpisodeAPIUpdate) -> EpisodeAPIRead:
+    episode = (
+        s.query(Episode)
+        .filter(
+            Episode.slug == episode_slug,
+            Episode.show.has(slug=show_slug)
         )
-        if episode is None:
-            raise HTTPException(status_code=404, detail="Episode not found")
+        .one_or_none()
+    )
+    if episode is None:
+        raise HTTPException(status_code=404, detail="Episode not found")
 
-        # Commit and return
-        update_database_fields(episode, body)
-        s.commit()
-        s.refresh(episode)
-        return EpisodeAPIRead.model_validate(episode)
+    # Apply updates and flush; commit in router
+    update_database_fields(episode, body)
+    s.flush()
+    return EpisodeAPIRead.model_validate(episode)
 
 
-def delete_episode(show_slug: str, episode_slug: str) -> EpisodeAPIRead:
-    with db_session() as s:
-        episode = (
-            s.query(Episode)
-            .filter(
-                Episode.slug == episode_slug,
-                Episode.show.has(slug=show_slug)
-            )
-            .one_or_none()
+def delete_episode(s: Session, show_slug: str, episode_slug: str) -> EpisodeAPIRead:
+    episode = (
+        s.query(Episode)
+        .filter(
+            Episode.slug == episode_slug,
+            Episode.show.has(slug=show_slug)
         )
-        if episode is None:
-            raise HTTPException(status_code=404, detail="Episode not found")
+        .one_or_none()
+    )
+    if episode is None:
+        raise HTTPException(status_code=404, detail="Episode not found")
 
-        payload = EpisodeAPIRead.model_validate(episode)
-        s.delete(episode)
-        s.commit()
-        return payload
+    payload = EpisodeAPIRead.model_validate(episode)
+    s.delete(episode)
+    s.flush()
+    return payload

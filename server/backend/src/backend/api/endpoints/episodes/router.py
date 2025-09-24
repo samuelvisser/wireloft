@@ -1,30 +1,54 @@
 from fastapi import APIRouter, status
 
 from .service import *
-from ...models.episode import EpisodeAPIRead
+from ...models.episode import *
+from ...app import db_session
 
 router = APIRouter()
 
 @router.get("", response_model=list[EpisodeAPIRead])
 def episode_list(show_slug: str):
-    return get_episodes_list(show_slug)
+    with db_session() as s:
+        return get_episodes_list(s, show_slug)
 
 
 @router.post("", response_model=EpisodeAPIRead, status_code=status.HTTP_201_CREATED)
 def episode_create(body: EpisodeAPICreate):
-    return create_episode(body)
+    with db_session() as s:
+        try:
+            result = create_episode(s, body)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
 
 
 @router.get("/{episode_slug}", response_model=EpisodeAPIRead)
 def episode_detail(show_slug: str, episode_slug: str):
-    return get_episode(show_slug, episode_slug)
+    with db_session() as s:
+        return get_episode(s, show_slug, episode_slug)
 
 
 @router.patch("/{episode_slug}", response_model=EpisodeAPIRead)
 def episode_update(show_slug: str, episode_slug: str, body: EpisodeAPIUpdate):
-    return update_episode(show_slug, episode_slug, body)
+    with db_session() as s:
+        try:
+            result = update_episode(s, show_slug, episode_slug, body)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
 
 
 @router.delete("/{episode_slug}", response_model=EpisodeAPIRead)
 def episode_delete(show_slug: str, episode_slug: str):
-    return delete_episode(show_slug, episode_slug)
+    with db_session() as s:
+        try:
+            result = delete_episode(s, show_slug, episode_slug)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
