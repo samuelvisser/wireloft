@@ -1,30 +1,25 @@
 import DailywireShowCard from './DailywireShowCard'
 import {ShowTypeReg, ShowTypeValue} from '../../types/show'
 import DownloadProfileSeriesStep, {SeasonItem} from './DownloadProfileVersions/DownloadProfileSeriesStep'
-import {
-    DownloadProfileSeriesCreateIn,
-    DownloadProfileSeriesCreateOut
-} from "../../types/schemas/download_profile_series";
 import {useMemo} from "react";
 import DownloadProfilePodcastStep from "./DownloadProfileVersions/DownloadProfilePodcastStep";
 import {
-    DownloadProfilePodcastWithProfilesIn,
-    DownloadProfilePodcastWithProfilesOut
+    DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut
 } from "../../types/schemas/show_with_profiles";
 
 
 type Props = {
     value: {
-        podcast: Partial<DownloadProfilePodcastWithProfilesIn>,
-        series: Partial<DownloadProfileSeriesCreateIn>
+        podcast: Partial<DownloadProfileUnifiedCreateIn>,
+        series: Partial<DownloadProfileUnifiedCreateIn>
     }
     onChange: {
-        podcast: (v: Partial<DownloadProfilePodcastWithProfilesIn>) => void,
-        series: (v: Partial<DownloadProfileSeriesCreateIn>) => void,
+        podcast: (v: Partial<DownloadProfileUnifiedCreateIn>) => void,
+        series: (v: Partial<DownloadProfileUnifiedCreateIn>) => void,
     }
     onSubmit: {
-        podcast: (v: DownloadProfilePodcastWithProfilesOut) => void,
-        series: (v: DownloadProfileSeriesCreateOut) => void,
+        podcast: (v: DownloadProfileUnifiedCreateOut) => void,
+        series: (v: DownloadProfileUnifiedCreateOut) => void,
     }
     onBack: () => void
     onFinish: () => void

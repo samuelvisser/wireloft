@@ -4,14 +4,14 @@ import {zodResolver} from '@hookform/resolvers/zod'
 import DownloadProfilePodcastForm from '../../DownloadProfile/DownloadProfilePodcastForm'
 import {buildServerAwareSubmit} from '../../../utils/buildServerAwareSubmit'
 import {
-    DownloadProfilePodcastWithProfilesIn, DownloadProfilePodcastWithProfilesOut,
-    DownloadProfilePodcastWithProfilesSchema
+    DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut,
+    DownloadProfileUnifiedCreateSchema
 } from "../../../types/schemas/show_with_profiles";
 
 export type DownloadProfilePodcastProps = {
-    value: Partial<DownloadProfilePodcastWithProfilesIn>
-    onChange: (v: Partial<DownloadProfilePodcastWithProfilesIn>) => void;
-    onSubmit: (v: DownloadProfilePodcastWithProfilesOut) => void;
+    value: Partial<DownloadProfileUnifiedCreateIn>
+    onChange: (v: Partial<DownloadProfileUnifiedCreateIn>) => void;
+    onSubmit: (v: DownloadProfileUnifiedCreateOut) => void;
     onBack: () => void
     onFinish: () => void
     onCancel: () => void
@@ -20,8 +20,8 @@ export type DownloadProfilePodcastProps = {
 export default function DownloadProfilePodcastStep({
                                                    value, onChange, onSubmit: onSubmitParent, onBack, onFinish, onCancel
                                                }: DownloadProfilePodcastProps) {
-    const form = useForm<DownloadProfilePodcastWithProfilesIn>({
-        resolver: zodResolver(DownloadProfilePodcastWithProfilesSchema),
+    const form = useForm<DownloadProfileUnifiedCreateIn>({
+        resolver: zodResolver(DownloadProfileUnifiedCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
         defaultValues: value,
@@ -46,7 +46,7 @@ export default function DownloadProfilePodcastStep({
     }, [withCountdown, setValue])
 
 
-    const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfilePodcastWithProfilesOut) => {
+    const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfileUnifiedCreateOut) => {
         onSubmitParent(dataOut)
         onFinish()
     })

@@ -1,19 +1,19 @@
 import {useEffect} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {
-    DownloadProfileSeriesCreateIn, DownloadProfileSeriesCreateOut,
-    DownloadProfileSeriesCreateSchema,
-} from '../../../types/schemas/download_profile_series'
 import DownloadProfileSeriesForm from '../../DownloadProfile/DownloadProfileSeriesForm'
 import {buildServerAwareSubmit} from '../../../utils/buildServerAwareSubmit'
+import {
+    DownloadProfileUnifiedCreateIn,
+    DownloadProfileUnifiedCreateOut, DownloadProfileUnifiedCreateSchema
+} from "../../../types/schemas/show_with_profiles";
 
 export type SeasonItem = { slug: string; name: string }
 
 export type DownloadProfileSeriesProps = {
-    value: Partial<DownloadProfileSeriesCreateIn>
-    onChange: (v: Partial<DownloadProfileSeriesCreateIn>) => void;
-    onSubmit: (v: DownloadProfileSeriesCreateOut) => void;
+    value: Partial<DownloadProfileUnifiedCreateIn>
+    onChange: (v: Partial<DownloadProfileUnifiedCreateIn>) => void;
+    onSubmit: (v: DownloadProfileUnifiedCreateOut) => void;
     seasons: SeasonItem[]
     onBack: () => void
     onFinish: () => void
@@ -25,19 +25,8 @@ export default function DownloadProfileSeriesStep({
                                                   value, onChange, onSubmit: onSubmitParent, seasons, onBack,
                                                   onFinish, onCancel
                                               }: DownloadProfileSeriesProps) {
-    // Extend schema to require at least one season chosen if includeUpcomingSeasons is false
-    const Schema = DownloadProfileSeriesCreateSchema.superRefine((v, ctx) => {
-        if (!v.includeUpcomingSeasons && (!v.downloadSeasonList || v.downloadSeasonList.length === 0)) {
-            ctx.addIssue({
-                code: 'custom',
-                path: ['downloadSeasonList'],
-                message: 'Choose at least one season or enable "Include upcoming seasons".',
-            })
-        }
-    })
-
-    const form = useForm<DownloadProfileSeriesCreateIn>({
-        resolver: zodResolver(Schema),
+    const form = useForm<DownloadProfileUnifiedCreateIn>({
+        resolver: zodResolver(DownloadProfileUnifiedCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
         defaultValues: value,
@@ -52,8 +41,8 @@ export default function DownloadProfileSeriesStep({
         return () => subscription.unsubscribe();
     }, [watch, onChange]);
 
-    const onSubmit = buildServerAwareSubmit(form, async (dataIn: DownloadProfileSeriesCreateIn) => {
-        const dataOut = Schema.parse(dataIn)
+    const onSubmit = buildServerAwareSubmit(form, async (dataIn: DownloadProfileUnifiedCreateIn) => {
+        const dataOut = DownloadProfileUnifiedCreateSchema.parse(dataIn)
         onSubmitParent(dataOut)
         onFinish()
     }, {

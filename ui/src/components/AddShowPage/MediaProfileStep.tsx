@@ -32,7 +32,7 @@ export default function MediaProfileStep({value, onChange, onSubmit: onSubmitPar
         resolver: zodResolver(MediaProfileUpsertSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: { op: 'create_new', ...(value as any) },
+        defaultValues: { op: 'create_new', ...(value) },
     })
     const {watch, setValue, formState: {isSubmitting}} = form
 

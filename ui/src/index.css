@@ -760,3 +760,25 @@ a.show-header:focus-visible {
 
 
 /* Responsive fixes: prevent sidebar card overlapping at 1000–1085px and cap size mid-range */
+
+
+/* Prominent form-level info card */
+.form-info-card {
+  width: 100%;
+  max-width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #bfdbfe; /* blue-200 */
+  background: #eff6ff; /* blue-50 */
+  color: #1e3a8a; /* blue-900 */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+@media (prefers-color-scheme: dark) {
+  .form-info-card {
+    background: rgba(59, 130, 246, 0.12); /* blue-500 at 12% */
+    border-color: rgba(59, 130, 246, 0.35);
+    color: #bfdbfe; /* blue-200 */
+    box-shadow: none;
+  }
+}

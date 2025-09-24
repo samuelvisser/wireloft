@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {getCurrentAppVersion} from '../../utils/helpers'
 import ChooseShowStep from './ChooseShowStep'
 import MediaProfileStep from './MediaProfileStep'
@@ -8,17 +8,13 @@ import type {Versioned} from '../../types/data'
 import {ShowCreatePayloadOut, ShowCreatePayloadIn, ShowCreatePayloadSchema} from "../../types/schemas/show";
 import {getZodDefaults} from "../../utils/defaultZod";
 import {
-    DownloadProfilePodcastWithProfilesIn, DownloadProfilePodcastWithProfilesOut,
     DownloadProfilePodcastWithProfilesSchema,
+    DownloadProfileSeriesWithProfilesSchema, DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut,
+    MediaProfileCreateUnionSchema,
     MediaProfileUpsertIn,
     MediaProfileUpsertOut,
-    MediaProfileUpsertSchema
 } from "../../types/schemas/show_with_profiles";
 import {ShowTypeReg} from "../../types/show";
-import {
-    DownloadProfileSeriesCreateIn,
-    DownloadProfileSeriesCreateOut, DownloadProfileSeriesCreateSchema
-} from "../../types/schemas/download_profile_series";
 
 export type Props = {
     onCancel: () => void
@@ -26,6 +22,9 @@ export type Props = {
 
 // Wizard state persistence
 const STORAGE_KEY = 'addShowWizardV5'
+
+type WizardType = 'ERROR' | 'INFO'
+type WizardMessage = { text: string; type: WizardType }
 
 type WizardState = {
     step: 1 | 2 | 3
@@ -39,16 +38,16 @@ type WizardState = {
     },
     downloadProfile: {
         podcast: {
-            input: Partial<DownloadProfilePodcastWithProfilesIn>,
-            submit: DownloadProfilePodcastWithProfilesOut | undefined,
+            input: Partial<DownloadProfileUnifiedCreateIn>,
+            submit: DownloadProfileUnifiedCreateOut | undefined,
         },
         series: {
-            input: Partial<DownloadProfileSeriesCreateIn>,
-            submit: DownloadProfileSeriesCreateOut | undefined,
+            input: Partial<DownloadProfileUnifiedCreateIn>,
+            submit: DownloadProfileUnifiedCreateOut | undefined,
         }
     }
     dwSeasons?: { slug: string; name: string }[]
-    globalError?: string | null
+    globalMessage?: WizardMessage | null
 }
 
 function loadWizardState(): WizardState | null {
@@ -105,12 +104,17 @@ function clearWizardState() {
 }
 
 export default function AddShowPage({onCancel}: Props) {
-    // Reusable wizard error helpers
-    const [globalError, setGlobalError] = useState<string | null>(() => loadWizardState()?.globalError ?? null)
-    const setWizardError = (message: string) => {
-        setGlobalError(message)
+    // Reusable wizard message helpers
+    const [globalMessage, setGlobalMessage] = useState<WizardMessage | null>(() => {
+        const ws = loadWizardState() as any
+        if (ws?.globalMessage) return ws.globalMessage as WizardMessage
+        if (ws?.globalError) return { text: ws.globalError as string, type: 'ERROR' as WizardType }
+        return null
+    })
+    const setWizardMessage = (message: string, type: WizardType) => {
+        setGlobalMessage({ text: message, type })
     }
-    const clearWizardError = () => setGlobalError(null)
+    const clearWizardMessage = () => setGlobalMessage(null)
     // Wizard step: 1 = URL, 2 = Media Profile, 3 = Show
     const [step, setStep] = useState<1 | 2 | 3>(() => loadWizardState()?.step ?? 1)
 
@@ -119,16 +123,20 @@ export default function AddShowPage({onCancel}: Props) {
     const [showSubmit, setShowSubmit] = useState<ShowCreatePayloadOut | undefined>(() => loadWizardState()?.show.submit)
 
     const [mediaProfileInput, setMediaProfileInput] = useState<Partial<MediaProfileUpsertIn>>(
-        () => loadWizardState()?.mediaProfile.input ?? getZodDefaults(MediaProfileUpsertSchema))
+        () => loadWizardState()?.mediaProfile.input ?? getZodDefaults(MediaProfileCreateUnionSchema))
     const [mediaProfileSubmit, setMediaProfileSubmit] = useState<MediaProfileUpsertOut | undefined>(() => loadWizardState()?.mediaProfile.submit)
 
-    const [downloadProfilePodcastInput, setDownloadProfilePodcastInput] = useState<Partial<DownloadProfilePodcastWithProfilesIn>>(
+    const [downloadProfilePodcastInput, setDownloadProfilePodcastInput] = useState<Partial<DownloadProfileUnifiedCreateIn>>(
         () => loadWizardState()?.downloadProfile.podcast.input ?? getZodDefaults(DownloadProfilePodcastWithProfilesSchema))
-    const [downloadProfilePodcastSubmit, setDownloadProfilePodcastSubmit] = useState<DownloadProfilePodcastWithProfilesOut | undefined>(() => loadWizardState()?.downloadProfile.podcast.submit)
+    const [downloadProfilePodcastSubmit, setDownloadProfilePodcastSubmit] = useState<DownloadProfileUnifiedCreateOut | undefined>(() => loadWizardState()?.downloadProfile.podcast.submit)
 
-    const [downloadProfileSeriesInput, setDownloadProfileSeriesInput] = useState<Partial<DownloadProfileSeriesCreateIn>>(
-        () => loadWizardState()?.downloadProfile.series.input ?? getZodDefaults(DownloadProfileSeriesCreateSchema))
-    const [downloadProfileSeriesSubmit, setDownloadProfileSeriesSubmit] = useState<DownloadProfileSeriesCreateOut | undefined>(() => loadWizardState()?.downloadProfile.series.submit)
+    const [downloadProfileSeriesInput, setDownloadProfileSeriesInput] = useState<Partial<DownloadProfileUnifiedCreateIn>>(
+        () => loadWizardState()?.downloadProfile.series.input ?? getZodDefaults(DownloadProfileSeriesWithProfilesSchema))
+    const [downloadProfileSeriesSubmit, setDownloadProfileSeriesSubmit] = useState<DownloadProfileUnifiedCreateOut | undefined>(() => loadWizardState()?.downloadProfile.series.submit)
+
+    // Refs to avoid stale state during immediate Finish after submit
+    const downloadProfilePodcastSubmitRef = useRef(downloadProfilePodcastSubmit)
+    const downloadProfileSeriesSubmitRef = useRef(downloadProfileSeriesSubmit)
 
     const [dwSeasons, setDwSeasons] = useState<{ slug: string; name: string }[]>(
         () => loadWizardState()?.dwSeasons ?? []
@@ -157,9 +165,9 @@ export default function AddShowPage({onCancel}: Props) {
                 }
             },
             dwSeasons,
-            globalError,
+            globalMessage,
         })
-    }, [step, showInput, showSubmit, mediaProfileInput, mediaProfileSubmit, downloadProfilePodcastInput, downloadProfilePodcastSubmit, downloadProfileSeriesInput, downloadProfileSeriesSubmit, dwSeasons, globalError])
+    }, [step, showInput, showSubmit, mediaProfileInput, mediaProfileSubmit, downloadProfilePodcastInput, downloadProfilePodcastSubmit, downloadProfileSeriesInput, downloadProfileSeriesSubmit, dwSeasons, globalMessage])
 
     function handleCancel() {
         clearWizardState()
@@ -167,43 +175,60 @@ export default function AddShowPage({onCancel}: Props) {
     }
 
     async function handleFinish() {
-        // Build payload from wizard state and submit via validated RHF form
+        // Build payload from current in-memory state to avoid race with async persistence
         console.log('handleFinish')
 
-        const wizard = loadWizardState();
-        console.log('wizard', wizard)
-        console.log('podcast', downloadProfilePodcastSubmit)
-        if (!wizard) {
-            setWizardError('Unexpected error: Wizard state not found. Please restart the wizard.')
-            return;
+        const show = showSubmit
+        const mediaProfile = mediaProfileSubmit
+
+        if (!show) {
+            setWizardMessage('Please complete the "Choose show" step before finishing.', 'ERROR')
+            return
         }
-        if (!wizard.show.submit) {
-            setWizardError('Please complete the "Choose show" step before finishing.')
-            return;
-        }
-        if (!wizard.mediaProfile.submit) {
-            setWizardError('Please complete the Media Profile step before finishing.')
-            return;
-        }
-        if (!wizard.downloadProfile.podcast.submit && !wizard.downloadProfile.series.submit) {
-            setWizardError('Please complete the Download Profile step before finishing.')
-            return;
+        if (!mediaProfile) {
+            setWizardMessage('Please complete the Media Profile step before finishing.', 'ERROR')
+            return
         }
 
-        console.log('show root error')
-        setWizardError('Validating...')
+        let downloadProfile;
+        if(show.type === ShowTypeReg.Enum.podcast) {
+            downloadProfile = downloadProfilePodcastSubmitRef.current ?? downloadProfilePodcastSubmit
+        } else if(show.type === ShowTypeReg.Enum.series) {
+            downloadProfile = downloadProfileSeriesSubmitRef.current ?? downloadProfileSeriesSubmit
+        }
+        if (!downloadProfile) {
+            setWizardMessage('Please complete the Download Profile step before finishing.', 'ERROR')
+            return
+        }
+        setWizardMessage('Validating...', 'INFO')
 
-        // Clear any previous global error now that all validations passed
-        // clearWizardError()
+        console.log('handleFinish', show, mediaProfile, downloadProfile)
 
-        console.log('handleFinish', wizard)
+        console.log(JSON.stringify({
+                show,
+                mediaProfile,
+                downloadProfile
+            }))
 
-        const downloadProfile = wizard.downloadProfile.podcast.submit
-            ? ({...wizard.downloadProfile.podcast.submit, op: 'podcast'} as const)
-            : wizard.downloadProfile.series.submit
-                ? ({...wizard.downloadProfile.series.submit, op: 'series'} as const)
-                : undefined;
-        if (!downloadProfile) return;
+
+
+
+        const result = fetch(`${(window as any).appConfig.API_URL}/shows/with-profiles`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                show,
+                mediaProfile,
+                downloadProfile
+            }),
+        })
+
+        console.log('queryResult', result)
+
+
+        result.then(() => {
+            clearWizardMessage()
+        })
 
 
         // TODO finish and navigate to home
@@ -215,9 +240,14 @@ export default function AddShowPage({onCancel}: Props) {
 
     return (
         <div>
-            {globalError && (
-                <div className="form-error-card" role="alert" aria-live="polite" style={{marginBottom: 12}}>
-                    {globalError}
+            {globalMessage && (
+                <div
+                    className={globalMessage.type === 'ERROR' ? 'form-error-card' : 'form-info-card'}
+                    role="alert"
+                    aria-live="polite"
+                    style={{marginBottom: 12}}
+                >
+                    {globalMessage.text}
                 </div>
             )}
 
@@ -262,8 +292,14 @@ export default function AddShowPage({onCancel}: Props) {
                         series: setDownloadProfileSeriesInput,
                     }}
                     onSubmit={{
-                        podcast: setDownloadProfilePodcastSubmit,
-                        series: setDownloadProfileSeriesSubmit,
+                        podcast: (v) => {
+                            setDownloadProfilePodcastSubmit(v)
+                            downloadProfilePodcastSubmitRef.current = v
+                        },
+                        series: (v) => {
+                            setDownloadProfileSeriesSubmit(v)
+                            downloadProfileSeriesSubmitRef.current = v
+                        },
                     }}
                     onBack={() => setStep(2)}
                     onFinish={handleFinish}

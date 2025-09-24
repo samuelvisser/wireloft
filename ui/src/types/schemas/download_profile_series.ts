@@ -3,22 +3,29 @@ import {z} from 'zod';
 
 // ---------- Strict request (create/update) ----------
 const DownloadProfileSeriesBaseSchema = z.object({
-    mediaProfileId: z.number().optional(),
+    mediaProfileId: z.number(),
     enableProfile: z.boolean().default(true),
     downloadSeasonList: z.array(z.string()),
     includeUpcomingSeasons: z.boolean().default(true),
+}).superRefine((v, ctx) => {
+    if (!v.includeUpcomingSeasons && (!v.downloadSeasonList || v.downloadSeasonList.length === 0)) {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['downloadSeasonList'],
+            message: 'Choose at least one season or enable "Include upcoming seasons".',
+        })
+    }
 })
 
 
-export const DownloadProfileSeriesCreateSchema = DownloadProfileSeriesBaseSchema.extend({
+export const DownloadProfileSeriesCreateSchema = DownloadProfileSeriesBaseSchema.safeExtend({
     showId: z.number(),
 })
 export type DownloadProfileSeriesCreateIn = z.input<typeof DownloadProfileSeriesCreateSchema>
 export type DownloadProfileSeriesCreateOut = z.output<typeof DownloadProfileSeriesCreateSchema>
 
 
-export const DownloadProfileSeriesUpdateSchema = DownloadProfileSeriesBaseSchema.extend({
-})
+export const DownloadProfileSeriesUpdateSchema = DownloadProfileSeriesBaseSchema.safeExtend({})
 export type DownloadProfileSeriesUpdateIn = z.input<typeof DownloadProfileSeriesUpdateSchema>
 export type DownloadProfileSeriesUpdateOut = z.output<typeof DownloadProfileSeriesUpdateSchema>
 
