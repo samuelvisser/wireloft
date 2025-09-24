@@ -12,7 +12,7 @@ class MediaItem(Base):
     __tablename__ = "media_items"
     __mapper_args__ = {
         "polymorphic_on": "type",
-        "polymorphic_identity": MediaType.MEDIA,
+        "polymorphic_identity": MediaType.MEDIA.value,
     }
 
     # Columns
