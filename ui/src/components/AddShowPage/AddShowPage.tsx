@@ -1,5 +1,4 @@
 import {useEffect, useState} from 'react'
-import {useQueryClient} from '@tanstack/react-query'
 import {getCurrentAppVersion} from '../../utils/helpers'
 import ChooseShowStep from './ChooseShowStep'
 import MediaProfileStep from './MediaProfileStep'
@@ -107,10 +106,8 @@ function clearWizardState() {
 }
 
 export default function AddShowPage({onCancel}: Props) {
-    const qc = useQueryClient()
     // Wizard step: 1 = URL, 2 = Media Profile, 3 = Show
     const [step, setStep] = useState<1 | 2 | 3>(() => loadWizardState()?.step ?? 1)
-
 
     const [showInput, setShowInput] = useState<Partial<ShowCreatePayloadIn>>(
         () => loadWizardState()?.show.input ?? getZodDefaults(ShowCreatePayloadSchema))
@@ -184,10 +181,11 @@ export default function AddShowPage({onCancel}: Props) {
         if (!downloadProfile) return;
 
 
-        await qc.invalidateQueries({queryKey: ['mediaProfiles']})
-        await qc.invalidateQueries({queryKey: ['shows']})
-        clearWizardState()
-        onCancel()
+        // TODO finish and navigate to home
+        // await qc.invalidateQueries({queryKey: ['mediaProfiles']})
+        // await qc.invalidateQueries({queryKey: ['shows']})
+        // clearWizardState()
+        // onCancel()
     }
 
     return (

@@ -46,15 +46,9 @@ export default function DownloadProfilePodcastStep({
     }, [withCountdown, setValue])
 
 
-    const onSubmit = buildServerAwareSubmit(form, async (dataIn: DownloadProfilePodcastCreateIn) => {
-        console.log('submitting', dataIn)
-        const dataOut = DownloadProfilePodcastCreateSchema.parse(dataIn)
+    const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfilePodcastCreateOut) => {
         onSubmitParent(dataOut)
         onFinish()
-    }, {
-        fallbackField: 'enableProfile',
-        aliasToFallback: ['showId'],
-        rootClientValidationMessage: 'Please fix the highlighted fields.',
     })
 
     return (

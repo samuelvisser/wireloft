@@ -1,4 +1,4 @@
-import type {FieldValues, Path, UseFormSetError} from "react-hook-form";
+import type {FieldValues, Path, UseFormReturn} from "react-hook-form";
 import type {ServerErrorItem} from "./serverMessageMap";
 
 function locToPath(loc?: (string | number)[]): string | null {
@@ -12,15 +12,17 @@ type FieldOpts = {
     mapMessage?: (err: ServerErrorItem, fieldName: string) => string | undefined;
     defaultMessage?: string;
     fieldAlias?: Record<string, string>;
+    unknownToFallback?: boolean;
 };
 
 export function applyFieldErrors<TFieldValues extends FieldValues>(
     payload: any,
-    setError: UseFormSetError<TFieldValues>,
+    form: UseFormReturn<TFieldValues>,
     fallbackField?: Path<TFieldValues>,
     opts?: FieldOpts
 ): boolean {
     const errorItems: ServerErrorItem[] = (Array.isArray(payload?.detail) && payload.detail) || [];
+    const {setError, watch} = form;
 
     if (!errorItems.length) {
         if (typeof payload?.detail === "string") {
@@ -32,12 +34,18 @@ export function applyFieldErrors<TFieldValues extends FieldValues>(
 
     const prefix = "server:";
     for (const serverError of errorItems) {
+        const fallbackTo: Path<TFieldValues> = fallbackField ?? ("root" as Path<TFieldValues>);
+        const knownFields: string[] = Object.keys(watch());
+
         // 1) Determine the *source* field from loc/fallback
-        const fieldPath = (locToPath(serverError.loc) as Path<TFieldValues>) || fallbackField || ("root" as Path<TFieldValues>);
+        const fieldPath = (locToPath(serverError.loc) as Path<TFieldValues>) || fallbackTo;
         const fieldName = typeof fieldPath === "string" ? fieldPath : "root";
 
         // Field to display error on (resolve alias if needed)
-        const routedField = (opts?.fieldAlias?.[fieldName] ?? fieldName) as Path<TFieldValues>;
+        let routedField = (opts?.fieldAlias?.[fieldName] ?? fieldName) as Path<TFieldValues>;
+        if(opts?.unknownToFallback && !(String(routedField) in knownFields)) {
+            routedField = fallbackTo;
+        }
 
         // Resolve message using the **source field** (not the routed one)
         const override = opts?.mapMessage?.(serverError, fieldName as Path<TFieldValues>);
