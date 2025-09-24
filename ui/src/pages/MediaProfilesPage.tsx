@@ -6,6 +6,7 @@ import {useMediaProfiles} from '../lib/queries'
 import {useQueryClient} from '@tanstack/react-query'
 import {MediaProfileRead} from "../types/schemas/media_profile";
 import {PreferredFormatReg} from "../types/media_profile";
+import { toast } from 'react-hot-toast'
 
 export default function MediaProfilesPage() {
     const navigate = useNavigate()
@@ -22,9 +23,27 @@ export default function MediaProfilesPage() {
 
         const r = await fetch(`${(window as any).appConfig.API_URL}/media-profiles/${confirmProfile.slug}`, {method: 'DELETE'})
         if (!r.ok) {
-            const msg = `Failed to delete media profile (HTTP ${r.status})`
-            console.error(msg)
-            alert(msg)
+            // Try to parse server error in the documented format and show a toast error
+            let friendly = `Failed to delete media profile (HTTP ${r.status})`
+            try {
+                const data = await r.json().catch(() => null as any)
+                const details: any[] | undefined = data?.detail
+                if (Array.isArray(details)) {
+                    const allErr = details.find((d) => Array.isArray(d?.loc) && d.loc[0] === 'body' && d.loc[1] === '__all__')
+                    if (allErr) {
+                        if (allErr.type === 'integrity_error') {
+                            friendly = 'This media profile is in use, it cannot be deleted'
+                        } else if (typeof allErr.msg === 'string' && allErr.msg.trim()) {
+                            friendly = allErr.msg
+                        }
+                    }
+                }
+            } catch (e) {
+                // ignore JSON parse errors; keep friendly as generic
+            }
+            console.error(friendly)
+            toast.error(friendly)
+            setConfirmProfile(null)
             return
         }
         await qc.invalidateQueries({queryKey: ['mediaProfiles']})

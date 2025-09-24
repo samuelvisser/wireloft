@@ -4,7 +4,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
 import { useShow, useEpisodes } from '../../lib/queries'
-import type { Episode } from '../../types/show'
+import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'react-hot-toast'
 import {statusIcon, statusLabel} from '../../utils/showStatus'
 
 // Ensure icons from the kit are registered (idempotent)
@@ -14,12 +15,13 @@ library.add(fas)
 export default function ShowPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [page, setPage] = useState(1)
   const pageSize = 25
 
   const { data: show, isLoading, error } = useShow(id)
   const { data: episodesData } = useEpisodes(id)
-  const episodes: Episode[] = episodesData ?? []
+  const episodes: any[] = episodesData ?? []
   const [confirm, setConfirm] = useState(false)
 
   if (!id) {
@@ -68,9 +70,38 @@ export default function ShowPage() {
   }
 
   const closeConfirm = () => setConfirm(false)
-  const onConfirmDelete = () => {
-    alert(`Delete show:\n${show.title} (${show.id})`)
+  const onConfirmDelete = async () => {
+    if (!id) return
+    const url = `${(window as any).appConfig.API_URL}/shows/${id}`
+    const r = await fetch(url, { method: 'DELETE' })
+    if (!r.ok) {
+      let friendly = `Failed to delete show (HTTP ${r.status})`
+      try {
+        const data = await r.json().catch(() => null as any)
+        const details: any[] | undefined = data?.detail
+        if (Array.isArray(details)) {
+          const allErr = details.find((d) => Array.isArray(d?.loc) && d.loc[0] === 'body' && d.loc[1] === '__all__')
+          if (allErr) {
+            if (typeof allErr.msg === 'string' && allErr.msg.trim()) {
+              friendly = allErr.msg
+            }
+          }
+        }
+      } catch (_) {
+        // ignore JSON parse errors
+      }
+      console.error(friendly)
+      toast.error(friendly)
+      // Keep the confirm modal open so the user can retry or cancel
+      return
+    }
+    // Success: close modal, invalidate relevant queries, and navigate home
     setConfirm(false)
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['shows'] }),
+      qc.invalidateQueries({ queryKey: ['show', id] }),
+      qc.invalidateQueries({ queryKey: ['episodes', id] }),
+    ])
     navigate('/')
   }
 
@@ -97,7 +128,7 @@ export default function ShowPage() {
         </header>
 
         <div className="episodes-list" role="list" aria-label={`${show.title} episodes`}>
-          {pageItems.map((ep: Episode) => {
+          {pageItems.map((ep: any) => {
             const icon = statusIcon(ep.unified_status)
             const isProcessing = ep.unified_status === 'dw_processing' || ep.unified_status === 'local_processing'
             const label = statusLabel(ep.unified_status)
