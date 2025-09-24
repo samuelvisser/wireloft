@@ -4,6 +4,19 @@ import {DownloadProfileSeriesCreateSchema} from "./download_profile_series";
 import {MediaProfileCreateSchema, MediaProfileUpdateSchema} from "./media_profile";
 import {z} from "zod";
 
+
+
+export const DownloadProfilePodcastWithProfilesSchema = DownloadProfilePodcastCreateSchema.omit({
+    showId: true,
+    mediaProfileId: true,
+})
+export type DownloadProfilePodcastWithProfilesIn = z.input<typeof DownloadProfilePodcastWithProfilesSchema>
+export type DownloadProfilePodcastWithProfilesOut = z.output<typeof DownloadProfilePodcastWithProfilesSchema>
+
+
+
+
+
 export const MediaProfileCreateUnionSchema = MediaProfileCreateSchema.extend({
     op: z.literal('create_new'),
 })

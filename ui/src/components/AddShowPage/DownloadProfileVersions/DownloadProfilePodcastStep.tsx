@@ -1,17 +1,17 @@
 import {useEffect} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {
-    DownloadProfilePodcastCreateSchema,
-    type DownloadProfilePodcastCreateOut, DownloadProfilePodcastCreateIn
-} from '../../../types/schemas/download_profile_podcast'
 import DownloadProfilePodcastForm from '../../DownloadProfile/DownloadProfilePodcastForm'
 import {buildServerAwareSubmit} from '../../../utils/buildServerAwareSubmit'
+import {
+    DownloadProfilePodcastWithProfilesIn, DownloadProfilePodcastWithProfilesOut,
+    DownloadProfilePodcastWithProfilesSchema
+} from "../../../types/schemas/show_with_profiles";
 
 export type DownloadProfilePodcastProps = {
-    value: Partial<DownloadProfilePodcastCreateIn>
-    onChange: (v: Partial<DownloadProfilePodcastCreateIn>) => void;
-    onSubmit: (v: DownloadProfilePodcastCreateOut) => void;
+    value: Partial<DownloadProfilePodcastWithProfilesIn>
+    onChange: (v: Partial<DownloadProfilePodcastWithProfilesIn>) => void;
+    onSubmit: (v: DownloadProfilePodcastWithProfilesOut) => void;
     onBack: () => void
     onFinish: () => void
     onCancel: () => void
@@ -20,8 +20,8 @@ export type DownloadProfilePodcastProps = {
 export default function DownloadProfilePodcastStep({
                                                    value, onChange, onSubmit: onSubmitParent, onBack, onFinish, onCancel
                                                }: DownloadProfilePodcastProps) {
-    const form = useForm<DownloadProfilePodcastCreateIn>({
-        resolver: zodResolver(DownloadProfilePodcastCreateSchema),
+    const form = useForm<DownloadProfilePodcastWithProfilesIn>({
+        resolver: zodResolver(DownloadProfilePodcastWithProfilesSchema),
         mode: 'onBlur',
         shouldFocusError: true,
         defaultValues: value,
@@ -46,7 +46,7 @@ export default function DownloadProfilePodcastStep({
     }, [withCountdown, setValue])
 
 
-    const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfilePodcastCreateOut) => {
+    const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfilePodcastWithProfilesOut) => {
         onSubmitParent(dataOut)
         onFinish()
     })

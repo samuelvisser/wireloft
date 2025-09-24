@@ -8,15 +8,13 @@ import type {Versioned} from '../../types/data'
 import {ShowCreatePayloadOut, ShowCreatePayloadIn, ShowCreatePayloadSchema} from "../../types/schemas/show";
 import {getZodDefaults} from "../../utils/defaultZod";
 import {
+    DownloadProfilePodcastWithProfilesIn, DownloadProfilePodcastWithProfilesOut,
+    DownloadProfilePodcastWithProfilesSchema,
     MediaProfileUpsertIn,
     MediaProfileUpsertOut,
     MediaProfileUpsertSchema
 } from "../../types/schemas/show_with_profiles";
 import {ShowTypeReg} from "../../types/show";
-import {
-    DownloadProfilePodcastCreateIn,
-    DownloadProfilePodcastCreateOut, DownloadProfilePodcastCreateSchema
-} from "../../types/schemas/download_profile_podcast";
 import {
     DownloadProfileSeriesCreateIn,
     DownloadProfileSeriesCreateOut, DownloadProfileSeriesCreateSchema
@@ -41,8 +39,8 @@ type WizardState = {
     },
     downloadProfile: {
         podcast: {
-            input: Partial<DownloadProfilePodcastCreateIn>,
-            submit: DownloadProfilePodcastCreateOut | undefined,
+            input: Partial<DownloadProfilePodcastWithProfilesIn>,
+            submit: DownloadProfilePodcastWithProfilesOut | undefined,
         },
         series: {
             input: Partial<DownloadProfileSeriesCreateIn>,
@@ -50,6 +48,7 @@ type WizardState = {
         }
     }
     dwSeasons?: { slug: string; name: string }[]
+    globalError?: string | null
 }
 
 function loadWizardState(): WizardState | null {
@@ -106,6 +105,12 @@ function clearWizardState() {
 }
 
 export default function AddShowPage({onCancel}: Props) {
+    // Reusable wizard error helpers
+    const [globalError, setGlobalError] = useState<string | null>(() => loadWizardState()?.globalError ?? null)
+    const setWizardError = (message: string) => {
+        setGlobalError(message)
+    }
+    const clearWizardError = () => setGlobalError(null)
     // Wizard step: 1 = URL, 2 = Media Profile, 3 = Show
     const [step, setStep] = useState<1 | 2 | 3>(() => loadWizardState()?.step ?? 1)
 
@@ -117,9 +122,9 @@ export default function AddShowPage({onCancel}: Props) {
         () => loadWizardState()?.mediaProfile.input ?? getZodDefaults(MediaProfileUpsertSchema))
     const [mediaProfileSubmit, setMediaProfileSubmit] = useState<MediaProfileUpsertOut | undefined>(() => loadWizardState()?.mediaProfile.submit)
 
-    const [downloadProfilePodcastInput, setDownloadProfilePodcastInput] = useState<Partial<DownloadProfilePodcastCreateIn>>(
-        () => loadWizardState()?.downloadProfile.podcast.input ?? getZodDefaults(DownloadProfilePodcastCreateSchema))
-    const [downloadProfilePodcastSubmit, setDownloadProfilePodcastSubmit] = useState<DownloadProfilePodcastCreateOut | undefined>(() => loadWizardState()?.downloadProfile.podcast.submit)
+    const [downloadProfilePodcastInput, setDownloadProfilePodcastInput] = useState<Partial<DownloadProfilePodcastWithProfilesIn>>(
+        () => loadWizardState()?.downloadProfile.podcast.input ?? getZodDefaults(DownloadProfilePodcastWithProfilesSchema))
+    const [downloadProfilePodcastSubmit, setDownloadProfilePodcastSubmit] = useState<DownloadProfilePodcastWithProfilesOut | undefined>(() => loadWizardState()?.downloadProfile.podcast.submit)
 
     const [downloadProfileSeriesInput, setDownloadProfileSeriesInput] = useState<Partial<DownloadProfileSeriesCreateIn>>(
         () => loadWizardState()?.downloadProfile.series.input ?? getZodDefaults(DownloadProfileSeriesCreateSchema))
@@ -152,8 +157,9 @@ export default function AddShowPage({onCancel}: Props) {
                 }
             },
             dwSeasons,
+            globalError,
         })
-    }, [step, showInput, showSubmit, mediaProfileInput, mediaProfileSubmit, downloadProfilePodcastInput, downloadProfilePodcastSubmit, downloadProfileSeriesInput, downloadProfileSeriesSubmit, dwSeasons])
+    }, [step, showInput, showSubmit, mediaProfileInput, mediaProfileSubmit, downloadProfilePodcastInput, downloadProfilePodcastSubmit, downloadProfileSeriesInput, downloadProfileSeriesSubmit, dwSeasons, globalError])
 
     function handleCancel() {
         clearWizardState()
@@ -164,12 +170,31 @@ export default function AddShowPage({onCancel}: Props) {
         // Build payload from wizard state and submit via validated RHF form
         console.log('handleFinish')
 
-
         const wizard = loadWizardState();
-        if (!wizard) return;
-        if (!wizard.show.submit) return;
-        if (!wizard.mediaProfile.submit) return;
-        if (!wizard.downloadProfile.podcast.submit && !wizard.downloadProfile.series.submit) return;
+        console.log('wizard', wizard)
+        console.log('podcast', downloadProfilePodcastSubmit)
+        if (!wizard) {
+            setWizardError('Unexpected error: Wizard state not found. Please restart the wizard.')
+            return;
+        }
+        if (!wizard.show.submit) {
+            setWizardError('Please complete the "Choose show" step before finishing.')
+            return;
+        }
+        if (!wizard.mediaProfile.submit) {
+            setWizardError('Please complete the Media Profile step before finishing.')
+            return;
+        }
+        if (!wizard.downloadProfile.podcast.submit && !wizard.downloadProfile.series.submit) {
+            setWizardError('Please complete the Download Profile step before finishing.')
+            return;
+        }
+
+        console.log('show root error')
+        setWizardError('Validating...')
+
+        // Clear any previous global error now that all validations passed
+        // clearWizardError()
 
         console.log('handleFinish', wizard)
 
@@ -190,6 +215,12 @@ export default function AddShowPage({onCancel}: Props) {
 
     return (
         <div>
+            {globalError && (
+                <div className="form-error-card" role="alert" aria-live="polite" style={{marginBottom: 12}}>
+                    {globalError}
+                </div>
+            )}
+
             <div className="help" aria-live="polite" style={{marginBottom: 12}}>
                 Step {step} of 3: {step === 1 ? 'Choose show' : step === 2 ? 'Media Profile' :
                 (showSubmit?.type === ShowTypeReg.Enum.podcast ? 'Download Profile for Podcasts' :

@@ -3,7 +3,7 @@ import {z} from 'zod';
 
 // ---------- Strict request (create/update) ----------
 const DownloadProfilePodcastBaseSchema = z.object({
-    mediaProfileId: z.number().optional(),
+    mediaProfileId: z.number(),
     enableProfile: z.boolean().default(true),
     downloadWithCountdown: z.boolean().default(false),
     redownloadFinal: z.boolean().default(true),

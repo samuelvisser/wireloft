@@ -122,12 +122,12 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
         if (dailywireParsed.success) {
             // Merge DW-derived fields into parent input state, preserving current form values
             const current = form.getValues() as any;
-            onChange({ ...current, ...dailywireParsed.data });
+            onChange({...current, ...dailywireParsed.data});
         }
 
         // Forward seasons list (if available) for the Series step
         const seasonsArr: { slug: string; name: string }[] = (anyData?.seasons || [])
-            .map((s: any) => ({ slug: s?.slug ?? '', name: s?.name ?? s?.slug ?? 'Unknown' }))
+            .map((s: any) => ({slug: s?.slug ?? '', name: s?.name ?? s?.slug ?? 'Unknown'}))
             .filter((s: any) => !!s.slug);
         if (seasonsArr.length > 0 && typeof (onDailywireSeasons) === 'function') {
             onDailywireSeasons(seasonsArr);
@@ -165,6 +165,11 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
     // --- Render
     return (
         <form className="form" onSubmit={handleSubmit(onSubmit)} noValidate>
+            {errors.root && (
+                <div className="form-error-card" role="alert" aria-live="polite">
+                    {String(errors.root.message)}
+                </div>
+            )}
             <div className="form-row">
                 <label htmlFor="show-url">Daily Wire show URL</label>
                 <input
