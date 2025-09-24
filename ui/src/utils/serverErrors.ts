@@ -43,7 +43,7 @@ export function applyFieldErrors<TFieldValues extends FieldValues>(
 
         // Field to display error on (resolve alias if needed)
         let routedField = (opts?.fieldAlias?.[fieldName] ?? fieldName) as Path<TFieldValues>;
-        if(opts?.unknownToFallback && !(String(routedField) in knownFields)) {
+        if(opts?.unknownToFallback && !(String(routedField) in knownFields) && !opts?.fieldAlias?.[fieldName]) {
             routedField = fallbackTo;
         }
 

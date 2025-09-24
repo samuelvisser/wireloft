@@ -213,7 +213,7 @@ export function applyLocalAliases<TIn extends FieldValues, TSuccess = unknown>(f
     if (options.aliasToFallbackUnknown) {
         const knownFields: string[] = Object.keys(watch());
         for (const errorField of Object.keys(errors)) {
-            if (!(errorField in knownFields)) {
+            if (!(errorField in knownFields) && !(errorField in aliasMap)) {
                 aliasMap[errorField] = fallbackTo;
             }
         }
