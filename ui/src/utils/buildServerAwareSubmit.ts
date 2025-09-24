@@ -75,7 +75,14 @@ function getOptions<TIn extends FieldValues, TSuccess = unknown>(optionsProp?: P
         clearRootOnAnyChange: true,
     }
     if (!optionsProp) return defaults;
-    return {...defaults, ...optionsProp};
+
+    // Merge, but do not let explicit undefined override defaults
+    return {
+      ...defaults,
+      ...Object.fromEntries(
+        Object.entries(optionsProp).filter(([_, v]) => v !== undefined)
+      ),
+    }
 }
 
 /**
@@ -211,7 +218,7 @@ export function applyLocalAliases<TIn extends FieldValues, TSuccess = unknown>(f
 
     // Create aliases for unknown fields
     if (options.aliasToFallbackUnknown) {
-        const knownFields: string[] = Object.keys(watch());
+        const knownFields: TIn = watch();
         for (const errorField of Object.keys(errors)) {
             if (!(errorField in knownFields) && !(errorField in aliasMap)) {
                 aliasMap[errorField] = fallbackTo;
@@ -264,7 +271,7 @@ function setRootErrorIfEmpty<TIn extends FieldValues>(form: UseFormReturn<TIn>, 
  *                                                                           for success handling, error processing,
  *                                                                           and form interactions.
  *
- * @return {Function} A composed submit handler function that resolves the submission process,
+ * @return  A composed submit handler function that resolves the submission process,
  *                    handling both client-side validation failures and server-side responses.
  *                    This function is to be passed to the form onSubmit
  */
@@ -317,6 +324,7 @@ export function buildServerAwareSubmit<TIn extends FieldValues, TOut extends Fie
 
                 if (response) {
                     await handleServerError(form, response, options);
+                    return;
                 }
 
                 setRootErrorIfEmpty(form, {type: "server", message: "Network error, please try again."})
