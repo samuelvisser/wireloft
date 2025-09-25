@@ -5,10 +5,11 @@ import DownloadProfileSeriesForm from '../../DownloadProfile/DownloadProfileSeri
 import {buildServerAwareSubmit} from '../../../utils/buildServerAwareSubmit'
 import {
     DownloadProfileUnifiedCreateIn,
-    DownloadProfileUnifiedCreateOut, DownloadProfileUnifiedCreateSchema, SeasonCreateBundleOut
+    DownloadProfileUnifiedCreateOut, DownloadProfileUnifiedCreateSchema
 } from "../../../types/schemas/show_with_profiles";
+import {SeasonDetachedOut} from "../../../types/schemas/season";
 
-export type SeasonItem = SeasonCreateBundleOut
+export type SeasonItem = SeasonDetachedOut
 
 export type DownloadProfileSeriesProps = {
     value: Partial<DownloadProfileUnifiedCreateIn>
@@ -41,8 +42,7 @@ export default function DownloadProfileSeriesStep({
         return () => subscription.unsubscribe();
     }, [watch, onChange]);
 
-    const onSubmit = buildServerAwareSubmit(form, async (dataIn: DownloadProfileUnifiedCreateIn) => {
-        const dataOut = DownloadProfileUnifiedCreateSchema.parse(dataIn)
+    const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfileUnifiedCreateOut) => {
         onSubmitParent(dataOut)
         onFinish()
     })
