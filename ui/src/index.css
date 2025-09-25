@@ -801,3 +801,44 @@ a.show-header:focus-visible {
     box-shadow: none;
   }
 }
+
+
+/* React Select global styles (no per-component theme needed). These rules use CSS variables
+   and !important to override react-select inline styles, ensuring dark-mode compatibility. */
+/* Control */
+div[class$="-control"] {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+  border: 1px solid rgba(148, 163, 184, 0.4) !important;
+  box-shadow: none !important;
+  min-height: 38px !important;
+  border-radius: 6px !important;
+}
+div[class$="-control"]:hover { border-color: #60a5fa !important; }
+div[class$="-control"]:focus-within {
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25) !important;
+}
+/* Value/text */
+div[class$="-value-container"] { color: var(--text) !important; }
+div[class$="-singleValue"] { color: var(--text) !important; }
+div[class$="-placeholder"] { color: var(--muted) !important; }
+div[class$="-control"] input { color: var(--text) !important; }
+/* Indicators */
+div[class$="-indicatorSeparator"] { background-color: rgba(148, 163, 184, 0.4) !important; }
+div[class$="-indicators"] svg { color: var(--muted) !important; fill: currentColor !important; }
+div[class$="-dropdownIndicator"] { color: var(--muted) !important; }
+div[class$="-clearIndicator"] { color: var(--muted) !important; }
+/* Menu */
+div[class$="-menu"] { background: var(--bg) !important; color: var(--text) !important; border-radius: 6px !important; overflow: hidden; }
+div[class$="-menu-list"] { background: var(--bg) !important; }
+/* Option states */
+div[class$="-option"] { background: transparent !important; color: var(--text) !important; }
+div[class$="-option"][aria-selected="true"] { background: #0ea5e9 !important; color: #ffffff !important; }
+div[class$="-option"]:hover { background: rgba(14, 165, 233, 0.18) !important; }
+div[class$="-option"]:active { background: rgba(14, 165, 233, 0.26) !important; }
+/* Multi-value (tags) */
+div[class$="-multiValue"] { background: rgba(14, 165, 233, 0.15) !important; }
+div[class$="-multiValueLabel"] { color: var(--text) !important; }
+div[class$="-multiValueRemove"] { color: var(--text) !important; }
+div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !important; color: var(--text) !important; }

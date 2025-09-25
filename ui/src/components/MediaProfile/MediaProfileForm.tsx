@@ -1,7 +1,6 @@
 import Switch from 'react-switch'
 import {Controller, type FieldValues, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
-import {selectStyles, selectTheme} from '../../utils/reactSelectStyles'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {MediaProfileServerErrors} from '../../types/schemas/media_profile'
 import {PreferredFormatReg} from "../../types/media_profile";
@@ -95,8 +94,6 @@ export default function MediaProfileForm({form}: Props) {
                             aria-invalid={!!errors.preferredFormat}
                             aria-describedby={errors.preferredFormat ? 'mp-format-error' : undefined}
                             isClearable={false}
-                            styles={selectStyles}
-                            theme={selectTheme}
                         />
                     )}
                 />
