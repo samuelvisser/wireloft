@@ -3,7 +3,6 @@ import DailywireShowCard from "./DailywireShowCard";
 import {useDailywireShow} from "../../lib/queries";
 import ReadMore from "../../utils/ReadMore";
 import {Controller, SubmitHandler, useForm} from "react-hook-form";
-import {WithRoot} from "../../types/form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {
     ShowCreateFormSchema,
@@ -14,27 +13,23 @@ import {
 import {EpisodeIdentifierReg, EpisodeIdentifierValue, ShowTypeReg, ShowTypeValue} from "../../types/show";
 import Select from "react-select";
 import {UseQueryResult} from "@tanstack/react-query";
+import {SeasonCreateBundleOut, SeasonCreateBundleSchema} from "../../types/schemas/show_with_profiles";
 
 type Props = {
     value: Partial<ShowCreatePayloadIn>
     onChange: (v: Partial<ShowCreatePayloadIn>) => void;
     onSubmit: (v: ShowCreatePayloadOut) => void;
+    onSeasonsSubmit: (seasons: SeasonCreateBundleOut[]) => void;
     onContinue: () => void;
     onCancel: () => void;
-    onDailywireSeasons?: (seasons: { slug: string; name: string }[]) => void;
 };
 
-export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParent,  onContinue, onCancel, onDailywireSeasons}: Props) {
+export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParent, onSeasonsSubmit, onContinue, onCancel,}: Props) {
     // --- Form: only user-editable fields are in this schema
-    const form = useForm<WithRoot<ShowCreateFormIn>>({
+    const form = useForm<ShowCreateFormIn>({
         resolver: zodResolver(ShowCreateFormSchema),
         mode: "onBlur",
-        shouldFocusError: true,
-        defaultValues: {
-            url: value.url,
-            type: value.type,
-            episodeIdentifier: value.episodeIdentifier,
-        },
+        defaultValues: value,
     });
 
     const {
@@ -47,7 +42,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
         formState: {isSubmitting, errors},
     } = form;
 
-    // Subscribe to ALL changes
+    // --- Subscribe to ALL form changes
     useEffect(() => {
         const subscription = watch((values: ShowCreatePayloadIn) => {
             onChange(values); // push up on every change
@@ -58,29 +53,24 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
     // --- Watch the URL and extract the slug when valid
     const watchedUrl = watch("url");
     const urlParsed = useMemo(() => ShowCreateFormSchema.shape.url.safeParse(watchedUrl ?? ""), [watchedUrl]);
-    const urlValid = urlParsed.success;
-
-    const slugFromUrl = useMemo(() => {
-        if (!urlValid) return undefined;
+    const slugFromUrl: string | undefined = useMemo(() => {
+        if (!urlParsed.success) return undefined;
         try {
             const parsedUrl = new URL(urlParsed.data ?? "");
-            const path = parsedUrl.pathname;
+            const path: string = parsedUrl.pathname;
             if (!path.startsWith("/show/")) return undefined;
-            const s = path.slice("/show/".length).split("/")[0];
+            const s: string = path.slice("/show/".length).split("/")[0];
             return s || undefined;
         } catch {
             return undefined;
         }
-    }, [urlParsed, urlValid]);
+    }, [urlParsed]);
 
-    // Watch the type and set the episodeIdentifier to numbered when the type is series
+    // --- Watch the type and set the episodeIdentifier to numbered when the type is series
     const watchedType = watch("type");
     useEffect(() => {
         if (watchedType === ShowTypeReg.Enum.series) {
-            setValue("episodeIdentifier", EpisodeIdentifierReg.Enum.numbered, {
-                shouldValidate: true,
-                shouldDirty: true,
-            });
+            setValue("episodeIdentifier", EpisodeIdentifierReg.Enum.numbered, {shouldValidate: true, shouldDirty: true});
         }
     }, [watchedType, setValue]);
 
@@ -89,66 +79,44 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
     const dw: UseQueryResult<any> = useDailywireShow(slugFromUrl);
 
     // --- Prefill defaults for type & episodeIdentifier from the external API when available
-    // Only apply when the URL actually changed (avoid overwriting persisted values on reload)
     useEffect(() => {
         if (!dw.data) return;
         const currentUrl = watchedUrl ?? "";
-        if (currentUrl === (lastPrefilledUrlRef.current ?? "")) {
-            // URL hasn't changed since last prefill; do not override current values
-            return;
-        }
+        if (currentUrl === (lastPrefilledUrlRef.current ?? "")) return;
 
         const inferredType: ShowTypeValue | "" = ShowTypeReg.normalize(dw.data.probableShowType) ?? "";
-        const inferredEpisodeId: EpisodeIdentifierValue | null = EpisodeIdentifierReg.normalize(dw.data.probableEpisodeIdentification);
+        const inferredEpisodeId: EpisodeIdentifierValue | "" = EpisodeIdentifierReg.normalize(dw.data.probableEpisodeIdentification) ?? "";
 
-        setValue("type", inferredType, {shouldValidate: true});
-        setValue("episodeIdentifier", inferredEpisodeId ?? "", {shouldValidate: true});
+        setValue("type", inferredType, {shouldValidate: true, shouldDirty: true});
+        setValue("episodeIdentifier", inferredEpisodeId, {shouldValidate: true, shouldDirty: true});
 
         // Remember that we prefetched for this URL to prevent reapplying on mount/reload
         lastPrefilledUrlRef.current = currentUrl;
     }, [dw.data, watchedUrl, setValue]);
 
-    // --- Save DailyWire data (typed) + seasons up to parent whenever it changes
-    useEffect(() => {
-        if (!dw.data || !slugFromUrl) return;
-        const anyData = dw.data as any;
-
-        // Validate strictly using Zod schema; only update parent if valid
-        const dailywireParsed = ShowDailywireSchema.safeParse({
-            dwId: anyData?.id,
-            slug: slugFromUrl,
-            ...anyData,
-        });
-        if (dailywireParsed.success) {
-            // Merge DW-derived fields into parent input state, preserving current form values
-            const current = form.getValues() as any;
-            onChange({...current, ...dailywireParsed.data});
-        }
-
-        // Forward seasons list (if available) for the Series step
-        const seasonsArr: { slug: string; name: string }[] = (anyData?.seasons || [])
-            .map((s: any) => ({slug: s?.slug ?? '', name: s?.name ?? s?.slug ?? 'Unknown'}))
-            .filter((s: any) => !!s.slug);
-        if (seasonsArr.length > 0 && typeof (onDailywireSeasons) === 'function') {
-            onDailywireSeasons(seasonsArr);
-        }
-    }, [dw.data, slugFromUrl]);
-
     // --- Submit handler
-    const onSubmit: SubmitHandler<WithRoot<ShowCreateFormIn>> = (formOnly: WithRoot<ShowCreateFormIn>) => {
+    const onSubmit: SubmitHandler<ShowCreateFormIn> = (formOnly: ShowCreateFormIn) => {
         // Gather/normalize derived fields from the API response
         const anyData = dw.data as any;
 
-        // Validate derived strictly — if invalid, surface the error on the URL (cause)
+        // Validate dailywire data
         const dailywireParsed = ShowDailywireSchema.safeParse({
             dwId: anyData?.id,
             slug: slugFromUrl,
             ...anyData
         });
+
+        // Validate seasons
+        const seasonsRaw: any[] = Array.isArray(anyData?.seasons) ? anyData.seasons : [];
+        const seasonsParsed = SeasonCreateBundleSchema.array().safeParse(
+            seasonsRaw.map((s: any) => ({
+                dwId: s?.id ?? '',
+                ...s
+            }))
+        );
+
         if (!dailywireParsed.success) {
             const first = dailywireParsed.error.issues[0];
-
-            // Attach to URL (actionable) and rethrow to stop submit chain
             setError("url", {
                 type: "validate",
                 message: "Dailywire api returned invalid data: " + (first?.message ?? "Invalid data from dailywire")
@@ -156,8 +124,18 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
             throw dailywireParsed.error;
         }
 
+        if (!seasonsParsed.success) {
+            const first = seasonsParsed.error.issues[0];
+            setError("url", {
+                type: "validate",
+                message: "Dailywire seasons invalid: " + (first?.message ?? "Invalid seasons from DailyWire"),
+            });
+            throw seasonsParsed.error;
+        }
+
         // Validate final payload. We do not save anything yet (only in the final widget step)
         const payload = ShowCreatePayloadSchema.parse({...formOnly, ...dailywireParsed.data});
+        onSeasonsSubmit(seasonsParsed.data);
         onSubmitParent(payload);
         onContinue();
     }
@@ -193,7 +171,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
             </div>
 
             {/* Preview fetched DailyWire show info */}
-            {urlValid && (
+            {urlParsed.success && (
                 <>
                     <div className="form-row" aria-live="polite">
                         <DailywireShowCard showSlug={slugFromUrl}/>

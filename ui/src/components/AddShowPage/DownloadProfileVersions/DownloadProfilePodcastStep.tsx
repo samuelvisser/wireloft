@@ -17,9 +17,7 @@ export type DownloadProfilePodcastProps = {
     onCancel: () => void
 }
 
-export default function DownloadProfilePodcastStep({
-                                                   value, onChange, onSubmit: onSubmitParent, onBack, onFinish, onCancel
-                                               }: DownloadProfilePodcastProps) {
+export default function DownloadProfilePodcastStep({value, onChange, onSubmit: onSubmitParent, onBack, onFinish, onCancel}: DownloadProfilePodcastProps) {
     const form = useForm<DownloadProfileUnifiedCreateIn>({
         resolver: zodResolver(DownloadProfileUnifiedCreateSchema),
         mode: 'onBlur',
@@ -32,7 +30,7 @@ export default function DownloadProfilePodcastStep({
     // Subscribe to ALL changes
     useEffect(() => {
         const subscription = watch((values) => {
-            onChange(values); // push up on every change
+            onChange(values as any); // push up on every change
         });
         return () => subscription.unsubscribe();
     }, [watch, onChange]);
@@ -53,7 +51,7 @@ export default function DownloadProfilePodcastStep({
 
     return (
         <form className="form form-fluid" onSubmit={onSubmit} noValidate>
-            <DownloadProfilePodcastForm form={form} />
+            <DownloadProfilePodcastForm form={form}/>
 
             <div className="actions">
                 <button type="button" className="btn" onClick={onBack}>Back</button>

@@ -1,10 +1,9 @@
 import DailywireShowCard from './DailywireShowCard'
 import {ShowTypeReg, ShowTypeValue} from '../../types/show'
-import DownloadProfileSeriesStep, {SeasonItem} from './DownloadProfileVersions/DownloadProfileSeriesStep'
-import {useMemo} from "react";
+import DownloadProfileSeriesStep from './DownloadProfileVersions/DownloadProfileSeriesStep'
 import DownloadProfilePodcastStep from "./DownloadProfileVersions/DownloadProfilePodcastStep";
 import {
-    DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut
+    DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut, SeasonCreateBundleOut
 } from "../../types/schemas/show_with_profiles";
 
 
@@ -26,26 +25,15 @@ type Props = {
     onCancel: () => void
     showSlug?: string
     showType?: ShowTypeValue | ''
-    seasons?: SeasonItem[]
+    seasons: SeasonCreateBundleOut[]
 }
 
-export default function DownloadProfileStep({
-                                                value, onChange, onSubmit, onBack, onFinish, onCancel,
-                                                showSlug, showType, seasons: seasonsProp
-                                            }: Props) {
-    // Determine the show type from user selection (step 1)
-    const isPodcast = useMemo(() => {
-        if (showType === ShowTypeReg.Enum.podcast) return true
-        return showType !== ShowTypeReg.Enum.series;      // default to podcast if unknown
-    }, [showType])
-
-    // Prepare seasons
-    const seasons: SeasonItem[] = useMemo(() => seasonsProp ?? [], [seasonsProp])
-
+export default function DownloadProfileStep({value, onChange, onSubmit, onBack, onFinish, onCancel, showSlug, showType, seasons}: Props) {
+    // Return the appropriate step component based on the show type
     return (
         <div className="wizard-with-aside">
             <div className="wizard-main">
-                {isPodcast ? (
+                {showType === ShowTypeReg.Enum.podcast ? (
                     <DownloadProfilePodcastStep
                         value={value.podcast}
                         onChange={onChange.podcast}

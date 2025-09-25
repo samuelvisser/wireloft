@@ -8,11 +8,12 @@ import type {Versioned} from '../../types/data'
 import {ShowCreatePayloadOut, ShowCreatePayloadIn, ShowCreatePayloadSchema} from "../../types/schemas/show";
 import {getZodDefaults} from "../../utils/defaultZod";
 import {
-    DownloadProfilePodcastWithProfilesSchema,
-    DownloadProfileSeriesWithProfilesSchema, DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut,
+    DownloadProfilePodcastBundleSchema,
+    DownloadProfileSeriesBundleSchema, DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut,
     MediaProfileCreateUnionSchema,
     MediaProfileUpsertIn,
     MediaProfileUpsertOut,
+    SeasonCreateBundleOut,
 } from "../../types/schemas/show_with_profiles";
 import {ShowTypeReg} from "../../types/show";
 import {useQueryClient} from "@tanstack/react-query";
@@ -47,7 +48,7 @@ type WizardState = {
             submit: DownloadProfileUnifiedCreateOut | undefined,
         }
     }
-    dwSeasons?: { slug: string; name: string }[]
+    seasons: SeasonCreateBundleOut[] | undefined,
     globalMessage?: WizardMessage | null
 }
 
@@ -109,11 +110,11 @@ export default function AddShowPage({onCancel}: Props) {
     const [globalMessage, setGlobalMessage] = useState<WizardMessage | null>(() => {
         const ws = loadWizardState() as any
         if (ws?.globalMessage) return ws.globalMessage as WizardMessage
-        if (ws?.globalError) return { text: ws.globalError as string, type: 'ERROR' as WizardType }
+        if (ws?.globalError) return {text: ws.globalError as string, type: 'ERROR' as WizardType}
         return null
     })
     const setWizardMessage = (message: string, type: WizardType) => {
-        setGlobalMessage({ text: message, type })
+        setGlobalMessage({text: message, type})
     }
     const clearWizardMessage = () => setGlobalMessage(null)
     const qc = useQueryClient()
@@ -130,20 +131,19 @@ export default function AddShowPage({onCancel}: Props) {
     const [mediaProfileSubmit, setMediaProfileSubmit] = useState<MediaProfileUpsertOut | undefined>(() => loadWizardState()?.mediaProfile.submit)
 
     const [downloadProfilePodcastInput, setDownloadProfilePodcastInput] = useState<Partial<DownloadProfileUnifiedCreateIn>>(
-        () => loadWizardState()?.downloadProfile.podcast.input ?? getZodDefaults(DownloadProfilePodcastWithProfilesSchema))
+        () => loadWizardState()?.downloadProfile.podcast.input ?? getZodDefaults(DownloadProfilePodcastBundleSchema))
     const [downloadProfilePodcastSubmit, setDownloadProfilePodcastSubmit] = useState<DownloadProfileUnifiedCreateOut | undefined>(() => loadWizardState()?.downloadProfile.podcast.submit)
 
     const [downloadProfileSeriesInput, setDownloadProfileSeriesInput] = useState<Partial<DownloadProfileUnifiedCreateIn>>(
-        () => loadWizardState()?.downloadProfile.series.input ?? getZodDefaults(DownloadProfileSeriesWithProfilesSchema))
+        () => loadWizardState()?.downloadProfile.series.input ?? getZodDefaults(DownloadProfileSeriesBundleSchema))
     const [downloadProfileSeriesSubmit, setDownloadProfileSeriesSubmit] = useState<DownloadProfileUnifiedCreateOut | undefined>(() => loadWizardState()?.downloadProfile.series.submit)
+
+    const [seasonsSubmit, setSeasonsSubmit] = useState<SeasonCreateBundleOut[] | undefined>(
+        () => loadWizardState()?.seasons ?? [])
 
     // Refs to avoid stale state during immediate Finish after submit
     const downloadProfilePodcastSubmitRef = useRef(downloadProfilePodcastSubmit)
     const downloadProfileSeriesSubmitRef = useRef(downloadProfileSeriesSubmit)
-
-    const [dwSeasons, setDwSeasons] = useState<{ slug: string; name: string }[]>(
-        () => loadWizardState()?.dwSeasons ?? []
-    )
 
     // Persist wizard state on any change
     useEffect(() => {
@@ -167,10 +167,10 @@ export default function AddShowPage({onCancel}: Props) {
                     submit: downloadProfileSeriesSubmit
                 }
             },
-            dwSeasons,
+            seasons: seasonsSubmit,
             globalMessage,
         })
-    }, [step, showInput, showSubmit, mediaProfileInput, mediaProfileSubmit, downloadProfilePodcastInput, downloadProfilePodcastSubmit, downloadProfileSeriesInput, downloadProfileSeriesSubmit, dwSeasons, globalMessage])
+    }, [step, showInput, showSubmit, mediaProfileInput, mediaProfileSubmit, downloadProfilePodcastInput, downloadProfilePodcastSubmit, downloadProfileSeriesInput, downloadProfileSeriesSubmit, seasonsSubmit, globalMessage])
 
     function handleCancel() {
         clearWizardState()
@@ -180,10 +180,15 @@ export default function AddShowPage({onCancel}: Props) {
     async function handleFinish() {
         // Build payload from current in-memory state to avoid race with async persistence
         const show = showSubmit
+        const seasons = seasonsSubmit
         const mediaProfile = mediaProfileSubmit
 
         if (!show) {
             setWizardMessage('Please complete the "Choose show" step before finishing.', 'ERROR')
+            return
+        }
+        if (!seasons) {
+            setWizardMessage('Show seasons that should have been loaded in "Choose show" are not available.', 'ERROR')
             return
         }
         if (!mediaProfile) {
@@ -191,10 +196,11 @@ export default function AddShowPage({onCancel}: Props) {
             return
         }
 
+
         let downloadProfile;
-        if(show.type === ShowTypeReg.Enum.podcast) {
+        if (show.type === ShowTypeReg.Enum.podcast) {
             downloadProfile = downloadProfilePodcastSubmitRef.current ?? downloadProfilePodcastSubmit
-        } else if(show.type === ShowTypeReg.Enum.series) {
+        } else if (show.type === ShowTypeReg.Enum.series) {
             downloadProfile = downloadProfileSeriesSubmitRef.current ?? downloadProfileSeriesSubmit
         }
         if (!downloadProfile) {
@@ -203,23 +209,18 @@ export default function AddShowPage({onCancel}: Props) {
         }
         setWizardMessage('Validating...', 'INFO')
 
-        console.log('handleFinish', show, mediaProfile, downloadProfile)
-
-        console.log(JSON.stringify({
-                show,
-                mediaProfile,
-                downloadProfile
-            }))
+        const submitData = {
+            show,
+            seasons,
+            mediaProfile,
+            downloadProfile,
+        }
 
         try {
             const response = await fetch(`${(window as any).appConfig.API_URL}/shows/with-profiles`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    show,
-                    mediaProfile,
-                    downloadProfile
-                }),
+                body: JSON.stringify(submitData),
             })
 
             console.log('queryResult', response)
@@ -280,9 +281,9 @@ export default function AddShowPage({onCancel}: Props) {
                     value={showInput}
                     onChange={setShowInput}
                     onSubmit={setShowSubmit}
+                    onSeasonsSubmit={setSeasonsSubmit}
                     onContinue={() => setStep(2)}
                     onCancel={handleCancel}
-                    onDailywireSeasons={setDwSeasons}
                 />
             )}
 
@@ -323,7 +324,7 @@ export default function AddShowPage({onCancel}: Props) {
                     onCancel={handleCancel}
                     showSlug={showSubmit?.slug}
                     showType={showSubmit?.type}
-                    seasons={dwSeasons}
+                    seasons={seasonsSubmit as any}
                 />
             )}
         </div>

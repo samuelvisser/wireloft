@@ -5,10 +5,10 @@ import DownloadProfileSeriesForm from '../../DownloadProfile/DownloadProfileSeri
 import {buildServerAwareSubmit} from '../../../utils/buildServerAwareSubmit'
 import {
     DownloadProfileUnifiedCreateIn,
-    DownloadProfileUnifiedCreateOut, DownloadProfileUnifiedCreateSchema
+    DownloadProfileUnifiedCreateOut, DownloadProfileUnifiedCreateSchema, SeasonCreateBundleOut
 } from "../../../types/schemas/show_with_profiles";
 
-export type SeasonItem = { slug: string; name: string }
+export type SeasonItem = SeasonCreateBundleOut
 
 export type DownloadProfileSeriesProps = {
     value: Partial<DownloadProfileUnifiedCreateIn>
@@ -36,7 +36,7 @@ export default function DownloadProfileSeriesStep({
     // Subscribe to ALL changes
     useEffect(() => {
         const subscription = watch((values) => {
-            onChange(values); // push up on every change
+            onChange(values as any); // push up on every change
         });
         return () => subscription.unsubscribe();
     }, [watch, onChange]);
@@ -45,9 +45,6 @@ export default function DownloadProfileSeriesStep({
         const dataOut = DownloadProfileUnifiedCreateSchema.parse(dataIn)
         onSubmitParent(dataOut)
         onFinish()
-    }, {
-        fallbackField: 'enableProfile',
-        rootClientValidationMessage: 'Please fix the highlighted fields.',
     })
 
     return (
