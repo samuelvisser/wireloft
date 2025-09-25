@@ -49,7 +49,7 @@ def update_media_profile(s: Session, media_profile_slug: str, body: MediaProfile
     if media_profile is None:
         raise HTTPException(status_code=404, detail="Media profile not found")
 
-    # Apply updates and flush; commit in router
+    # Apply updates and flush
     update_database_fields(media_profile, body)
     s.flush()
     return MediaProfileAPIRead.model_validate(media_profile)

@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react'
-import {getCurrentAppVersion} from '../../utils/helpers'
+import {getCurrentAppVersion, getErrorMessageFromResponse} from '../../utils/helpers'
 import ChooseShowStep from './ChooseShowStep'
 import MediaProfileStep from './MediaProfileStep'
 import DownloadProfileStep from './DownloadProfileStep'
@@ -215,32 +215,21 @@ export default function AddShowPage({onCancel}: Props) {
             mediaProfile,
             downloadProfile,
         }
+        console.log('submitData', JSON.stringify(submitData))
 
         try {
-            const response = await fetch(`${(window as any).appConfig.API_URL}/shows/with-profiles`, {
+            const response = await fetch(`${(window as any).appConfig.API_URL}/shows/as-bundle`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(submitData),
             })
 
-            console.log('queryResult', response)
-
             if (response.status !== 201) {
-                // Attempt to read server-provided error message
-                let errorMessage: string | undefined = undefined
-                try {
-                    const data = await response.clone().json()
-                    if (data && (data.detail || data.message)) {
-                        errorMessage = String(data.detail || data.message)
-                    }
-                } catch {}
-                if (!errorMessage) {
-                    try {
-                        const text = await response.text()
-                        if (text) errorMessage = text
-                    } catch {}
+                let {error} = await getErrorMessageFromResponse(response)
+                if (response.status === 409) {
+                    error = "This show already exists"
                 }
-                setWizardMessage(errorMessage ?? `HTTP ${response.status}`, 'ERROR')
+                setWizardMessage(error ?? `HTTP ${response.status}`, 'ERROR')
                 return
             }
 
@@ -251,7 +240,9 @@ export default function AddShowPage({onCancel}: Props) {
         }
 
         await qc.invalidateQueries({queryKey: ['mediaProfiles']})
+        await qc.invalidateQueries({queryKey: ['downloadProfiles']})
         await qc.invalidateQueries({queryKey: ['shows']})
+        await qc.invalidateQueries({queryKey: ['seasons']})
         clearWizardState()
         onCancel()
     }

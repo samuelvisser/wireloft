@@ -1,15 +1,15 @@
 from fastapi import APIRouter, status
 
-from .with_profiles import show_with_profile_router
-from .views import show_view_router
+from .as_bundle import show_as_bundle_router
+from .as_view import show_view_router
 from .service import get_shows_list, create_show, get_show, update_show, delete_show
 from ...models.show import ShowAPIRead, ShowAPICreate, ShowAPIUpdate
 from backend.app import db_session
 
 router = APIRouter()
 
-router.include_router(show_view_router, prefix = "/views")
-router.include_router(show_with_profile_router, prefix = "/with-profiles")
+router.include_router(show_view_router, prefix = "/as-view")
+router.include_router(show_as_bundle_router, prefix = "/as-bundle")
 
 @router.get("", response_model=list[ShowAPIRead])
 def show_list():

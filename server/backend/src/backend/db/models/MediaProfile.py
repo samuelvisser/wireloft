@@ -4,7 +4,6 @@ from datetime import datetime
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
-from backend.types.media_profile_types import PreferredFormat
 
 
 class MediaProfile(Base):

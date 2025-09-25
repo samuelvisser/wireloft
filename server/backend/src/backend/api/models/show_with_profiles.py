@@ -15,6 +15,7 @@ class MediaProfileCreateNew(MediaProfileAPICreate):
 
 class MediaProfileUpdateBySlug(MediaProfileAPIUpdate):
     op: Literal["update_by_slug"] = "update_by_slug"
+    slug_selector: str = Field(validation_alias="slug")
 
 
 MediaProfileAPIUpsert = Union[
@@ -38,7 +39,14 @@ DownloadProfileCreateInBundle = Union[
 ]
 
 
+class SeasonAPICreateInBundle(RequestBase):
+    dw_id: str
+    slug: str
+    name: str
+
+
 class ShowAPICreateBundle(RequestBase):
     show: ShowAPICreate
     download_profile: DownloadProfileCreateInBundle = Field(discriminator="op")
     media_profile: MediaProfileAPIUpsert = Field(discriminator="op")
+    seasons: list[SeasonAPICreateInBundle]
