@@ -11,16 +11,40 @@ import {EpisodeRead} from "../types/schemas/episode";
 library.add(fas)
 export type Episode = EpisodeRead
 
+function toImageUrl(path?: string): string | undefined {
+    if (!path) return undefined
+    // If already an absolute URL, return as-is
+    if (/^https?:\/\//i.test(path)) return path
+    const base = (window as any).appConfig?.API_URL?.replace(/\/+$/, '')
+    if (!base) return path
+    // If path is already rooted, just prefix API base
+    if (path.startsWith('/')) return base + path
+    // Default: serve from generic assets path
+    return `${base}/assets/${path}`
+}
+
 function ShowSection({show}: { show: any }) {
     const {data: episodes, isLoading} = useEpisodes(show.slug)
     const eps: Episode[] = episodes ?? []
+
+    const author = show.author || show.authorName
+    const portraitPath: string | undefined = show.thumbnailPortraitPath || show.thumbnailLandscapePath || show.logoImagePath || show.authorHeadshotPath
+    const portrait = toImageUrl(portraitPath)
+
     return (
         <article className="show-section" key={show.id} aria-labelledby={`${show.slug}-title`}>
             <Link to={`/show/${show.slug}`} className="show-header" aria-labelledby={`${show.slug}-title`}>
-                <div className="show-author">{show.author}</div>
-                <h2 id={`${show.slug}-title`} className="show-title">{show.title}</h2>
-                <div className="show-meta">
-                    {isLoading && !episodes ? 'Loading episodes…' : `${eps.length} episodes${show.years ? ` • ${show.years}` : ''}`}
+                <div className="show-header-row">
+                    {portrait ? (
+                        <img className="show-portrait" src={portrait} alt={`${show.title} cover`} />
+                    ) : null}
+                    <div className="show-header-text">
+                        <div className="show-author">{author}</div>
+                        <h2 id={`${show.slug}-title`} className="show-title">{show.title}</h2>
+                        <div className="show-meta">
+                            {isLoading && !episodes ? 'Loading episodes…' : `${eps.length} episodes${show.years ? ` • ${show.years}` : ''}`}
+                        </div>
+                    </div>
                 </div>
             </Link>
             <div className="episodes-row" role="list" aria-label={`${show.title} episodes`}>

@@ -842,3 +842,27 @@ div[class$="-multiValue"] { background: rgba(14, 165, 233, 0.15) !important; }
 div[class$="-multiValueLabel"] { color: var(--text) !important; }
 div[class$="-multiValueRemove"] { color: var(--text) !important; }
 div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !important; color: var(--text) !important; }
+
+.show-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.show-portrait {
+  height: 64px;
+  width: auto;
+  max-width: 120px;
+  border-radius: 12px;
+  /* Preserve original aspect ratio; avoid cropping */
+  object-fit: contain;
+  flex: 0 0 auto;
+  background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.show-header-text { min-width: 0; }
+
+@media (min-width: 900px) {
+  .show-portrait { height: 72px; width: auto; max-width: 140px; border-radius: 14px; }
+}
