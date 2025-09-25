@@ -67,7 +67,7 @@ async def integrity_error_handler(request: Request, exc: Exception) -> JSONRespo
                 "detail": [
                     {
                         "loc": ["body", "__all__"],
-                        "msg": "Integrity constraint violated",
+                        "msg": err.orig,
                         "type": "integrity_error"
                     }
                 ]
@@ -80,7 +80,7 @@ async def integrity_error_handler(request: Request, exc: Exception) -> JSONRespo
             "detail": [
                 {
                     "loc": ["body", col],
-                    "msg": "Already in use",
+                    "msg": f"Already in use: {err.orig}",
                     "type": "unique_violation"
                 } for col in cols
             ]
