@@ -108,7 +108,7 @@ export type ShowUpdatePayloadOut = z.output<typeof ShowUpdatePayloadSchema>;
 /* 4) READ schema (lenient response)                                   */
 /* ------------------------------------------------------------------ */
 export const ShowReadSchema = z.looseObject({
-    id: z.number(),
+    id: z.int(),
     uuid: z.string(),
     dwId: z.string(),
     slug: z.string(),

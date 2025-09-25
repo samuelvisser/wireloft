@@ -3,14 +3,14 @@ import {z} from "zod";
 
 // ---------- Strict request (create/update) ----------
 const SeasonBaseSchema = z.object({
-    name: z.string(),
+    name: z.string().min(1, "Name is required")
 })
 
 
 export const SeasonCreateSchema = SeasonBaseSchema.extend({
-    dwId: z.string(),
-    showId: z.string(),
-    slug: z.string(),
+    dwId: z.string().min(1, "dwId missing"),
+    showId: z.int().min(1, "showId missing"),
+    slug: z.string().min(1, "slug missing"),
 })
 export type SeasonCreateIn = z.input<typeof SeasonCreateSchema>;
 export type SeasonCreateOut = z.output<typeof SeasonCreateSchema>;
@@ -24,7 +24,7 @@ export type SeasonUpdateOut = z.output<typeof SeasonUpdateSchema>;
 
 // ------------ Lenient response (read) ------------
 export const SeasonReadSchema = z.looseObject({
-    id: z.number(),
+    id: z.int(),
     name: z.string(),
     dwId: z.string(),
     showId: z.string(),

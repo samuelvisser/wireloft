@@ -20,7 +20,7 @@ export type SettingsUpdateOut = z.output<typeof SettingsUpdateSchema>;
 
 // ------------ Lenient response (read) ------------
 export const SettingsReadSchema = z.looseObject({
-    id: z.number(),
+    id: z.int(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })

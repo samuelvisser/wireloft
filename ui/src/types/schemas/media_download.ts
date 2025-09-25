@@ -23,7 +23,7 @@ export type MediaDownloadUpdateOut = z.output<typeof MediaDownloadUpdateSchema>;
 
 // ------------ Lenient response (read) ------------
 export const MediaDownloadReadSchema = z.looseObject({
-    id: z.number(),
+    id: z.int(),
     downloadStatus: z.union([z.enum(MediaDownloadStatus), z.string()]),
     filePath: z.string(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),

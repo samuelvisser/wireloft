@@ -3,31 +3,32 @@ import {DownloadProfilePodcastCreateSchema} from "./download_profile_podcast";
 import {DownloadProfileSeriesCreateSchema} from "./download_profile_series";
 import {MediaProfileCreateSchema, MediaProfileUpdateSchema} from "./media_profile";
 import {z} from "zod";
+import {SeasonCreateSchema} from "./season";
 
 
-export const DownloadProfilePodcastWithProfilesSchema = DownloadProfilePodcastCreateSchema.omit({
+export const DownloadProfilePodcastBundleSchema = DownloadProfilePodcastCreateSchema.omit({
     showId: true,
     mediaProfileId: true,
 }).extend({
     op: z.literal('podcast').default('podcast'),
 })
-export type DownloadProfilePodcastWithProfilesIn = z.input<typeof DownloadProfilePodcastWithProfilesSchema>
-export type DownloadProfilePodcastWithProfilesOut = z.output<typeof DownloadProfilePodcastWithProfilesSchema>
+export type DownloadProfilePodcastBundleIn = z.input<typeof DownloadProfilePodcastBundleSchema>
+export type DownloadProfilePodcastBundleOut = z.output<typeof DownloadProfilePodcastBundleSchema>
 
 
-export const DownloadProfileSeriesWithProfilesSchema = DownloadProfileSeriesCreateSchema.omit({
+export const DownloadProfileSeriesBundleSchema = DownloadProfileSeriesCreateSchema.omit({
     showId: true,
     mediaProfileId: true,
 }).safeExtend({
     op: z.literal('series').default('series'),
 })
-export type DownloadProfileSeriesWithProfilesIn = z.input<typeof DownloadProfileSeriesWithProfilesSchema>
-export type DownloadProfileSeriesWithProfilesOut = z.output<typeof DownloadProfileSeriesWithProfilesSchema>
+export type DownloadProfileSeriesBundleIn = z.input<typeof DownloadProfileSeriesBundleSchema>
+export type DownloadProfileSeriesBundleOut = z.output<typeof DownloadProfileSeriesBundleSchema>
 
 
 export const DownloadProfileUnifiedCreateSchema = z.discriminatedUnion('op', [
-    DownloadProfilePodcastWithProfilesSchema,
-    DownloadProfileSeriesWithProfilesSchema,
+    DownloadProfilePodcastBundleSchema,
+    DownloadProfileSeriesBundleSchema,
 ])
 export type DownloadProfileUnifiedCreateIn = z.input<typeof DownloadProfileUnifiedCreateSchema>
 export type DownloadProfileUnifiedCreateOut = z.output<typeof DownloadProfileUnifiedCreateSchema>
@@ -55,10 +56,18 @@ export type MediaProfileUpsertIn = z.input<typeof MediaProfileUpsertSchema>
 export type MediaProfileUpsertOut = z.output<typeof MediaProfileUpsertSchema>
 
 
-export const ShowCreateWithProfilesSchema = z.object({
+export const SeasonCreateBundleSchema = SeasonCreateSchema.omit({
+    showId: true,
+})
+export type SeasonCreateBundleIn = z.input<typeof SeasonCreateBundleSchema>
+export type SeasonCreateBundleOut = z.output<typeof SeasonCreateBundleSchema>
+
+
+export const ShowCreateBundleSchema = z.object({
     show: ShowCreatePayloadSchema,
     mediaProfile: MediaProfileUpsertSchema,
     downloadProfile: DownloadProfileUnifiedCreateSchema,
+    seasons: z.array(SeasonCreateBundleSchema),
 })
-export type ShowCreateWithProfilesIn = z.input<typeof ShowCreateWithProfilesSchema>
-export type ShowCreateWithProfilesOut = z.output<typeof ShowCreateWithProfilesSchema>
+export type ShowCreateBundleIn = z.input<typeof ShowCreateBundleSchema>
+export type ShowCreateBundleOut = z.output<typeof ShowCreateBundleSchema>

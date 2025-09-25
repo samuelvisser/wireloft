@@ -25,7 +25,7 @@ export type MovieUpdateOut = z.output<typeof MovieUpdateSchema>;
 
 // ------------ Lenient response (read) ------------
 export const MovieReadSchema = z.looseObject({
-    id: z.number(),
+    id: z.int(),
     uuid: z.string(),
     dwId: z.string().optional(),
     slug: z.string(),

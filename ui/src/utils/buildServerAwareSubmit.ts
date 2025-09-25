@@ -49,7 +49,7 @@ export type ServerAwareSubmitOptions<TIn extends FieldValues, TSuccess = unknown
     rootClientValidationMessage: string;            // default: "Please fix the highlighted fields."
 
     /** Clears the root banner when any field is changed */
-    clearRootOnAnyChange: boolean;                  // default true
+    clearRootOnAnyChange: boolean;                  // default: true
 };
 
 function getOptions<TIn extends FieldValues, TSuccess = unknown>(optionsProp?: Partial<ServerAwareSubmitOptions<TIn, TSuccess>>): ServerAwareSubmitOptions<TIn, TSuccess> {
@@ -141,7 +141,15 @@ function ensureAutoClearSubscription<TIn extends FieldValues>(form: UseFormRetur
     f[INIT_FLAG] = {unsubscribe: () => sub.unsubscribe()};
 }
 
+/**
+ * Sets the focus on the first error field in the form
+ *
+ * Only works if the form has errors and shouldFocusError is true
+ *
+ * @param form the form with errors to focus on
+ */
 function focusFirstError<TIn extends FieldValues>(form: UseFormReturn<TIn>) {
+    if(!(form.control?._options?.shouldFocusError ?? true)) return;
     try {
         const firstKey = Object.keys((form as any).formState.errors || {}).find(k => k !== "root");
         if (firstKey) form.setFocus(firstKey as Path<TIn>);

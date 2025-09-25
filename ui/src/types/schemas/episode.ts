@@ -15,7 +15,7 @@ const EpisodeBaseSchema = z.object({
 
 
 export const EpisodeCreateSchema = EpisodeBaseSchema.extend({
-    showId: z.number(),
+    showId: z.int(),
     index: z.number(),
     dwId: z.string().optional(),
     slug: z.string(),
@@ -33,8 +33,8 @@ export type EpisodeUpdateOut = z.output<typeof EpisodeUpdateSchema>
 
 // ------------ Lenient response (read) ------------
 export const EpisodeReadSchema = z.looseObject({
-    id: z.number(),
-    showId: z.number(),
+    id: z.int(),
+    showId: z.int(),
     index: z.number(),
     publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),
     wentLiveDate: z.iso.datetime().transform((s) => new Date(s)).optional(),

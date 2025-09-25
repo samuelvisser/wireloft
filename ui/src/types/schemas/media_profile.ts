@@ -30,7 +30,7 @@ export type MediaProfileCreateOut = z.output<typeof MediaProfileCreateSchema>;
 
 
 export const MediaProfileUpdateSchema = MediaProfileBaseSchema.extend({
-    id: z.number(),
+    id: z.int(),
     slug: z.string(),
 })
 export type MediaProfileUpdateIn = z.input<typeof MediaProfileUpdateSchema>;
@@ -39,7 +39,7 @@ export type MediaProfileUpdateOut = z.output<typeof MediaProfileUpdateSchema>;
 
 // ------------ Lenient response (read) ------------
 export const MediaProfileReadSchema = z.looseObject({
-    id: z.number(),
+    id: z.int(),
     slug: z.string(),
     name: z.string(),
     outputTemplate: z.string(),

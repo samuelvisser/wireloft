@@ -3,7 +3,7 @@ import {z} from 'zod';
 
 // ---------- Strict request (create/update) ----------
 const DownloadProfileSeriesBaseSchema = z.object({
-    mediaProfileId: z.number(),
+    mediaProfileId: z.int(),
     enableProfile: z.boolean().default(true),
     downloadSeasonList: z.array(z.string()),
     includeUpcomingSeasons: z.boolean().default(true),
@@ -19,7 +19,7 @@ const DownloadProfileSeriesBaseSchema = z.object({
 
 
 export const DownloadProfileSeriesCreateSchema = DownloadProfileSeriesBaseSchema.safeExtend({
-    showId: z.number(),
+    showId: z.int(),
 })
 export type DownloadProfileSeriesCreateIn = z.input<typeof DownloadProfileSeriesCreateSchema>
 export type DownloadProfileSeriesCreateOut = z.output<typeof DownloadProfileSeriesCreateSchema>
@@ -32,9 +32,9 @@ export type DownloadProfileSeriesUpdateOut = z.output<typeof DownloadProfileSeri
 
 // ------------ Lenient response (read) ------------
 export const DownloadProfileSeriesReadSchema = z.looseObject({
-    id: z.number(),
-    showId: z.number(),
-    mediaProfileId: z.number().optional(),
+    id: z.int(),
+    showId: z.int(),
+    mediaProfileId: z.int().optional(),
     enableProfile: z.boolean(),
     downloadSeasonList: z.array(z.string()),
     includeUpcomingSeasons: z.boolean(),
