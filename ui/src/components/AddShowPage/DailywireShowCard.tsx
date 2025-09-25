@@ -5,21 +5,6 @@ type Props = {
   membershipPlan?: string
 }
 
-export type DailywireShow = {
-    dwId: string
-    slug: string
-    authorSlug: string
-    title: string
-    description: string
-    authorName: string
-    authorHeadshotPath: string | null
-    backgroundImagePath: string | null
-    logoImagePath: string | null
-    thumbnailLandscapePath: string | null
-    thumbnailPortraitPath: string | null
-    thumbnailSquarePath: string | null
-}
-
 export default function DailywireShowCard({ showSlug, membershipPlan }: Props) {
   const q = useDailywireShow(showSlug, membershipPlan)
 
