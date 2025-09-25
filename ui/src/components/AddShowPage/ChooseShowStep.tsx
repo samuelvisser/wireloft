@@ -44,7 +44,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
 
     // --- Subscribe to ALL form changes
     useEffect(() => {
-        const subscription = watch((values: ShowCreatePayloadIn) => {
+        const subscription = watch((values: ShowCreateFormIn) => {
             onChange(values); // push up on every change
         });
         return () => subscription.unsubscribe();
@@ -103,6 +103,12 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
         const dailywireParsed = ShowDailywireSchema.safeParse({
             dwId: anyData?.id,
             slug: slugFromUrl,
+            authorHeadshotPath: anyData?.authorHeadshot,
+            backgroundImagePath: anyData?.backgroundImage,
+            logoImagePath: anyData?.logoImage,
+            thumbnailLandscapePath: anyData?.thumbnail?.landscape,
+            thumbnailPortraitPath: anyData?.thumbnail?.portrait,
+            thumbnailSquarePath: anyData?.thumbnail?.square,
             ...anyData
         });
 

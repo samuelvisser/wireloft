@@ -80,12 +80,12 @@ export const ShowDailywireSchema = z.object({
     authorName: z.string().min(1, "authorName missing").default(''),
 
     // Optional image paths:
-    authorHeadshotPath: z.string().optional(),
-    backgroundImagePath: z.string().optional(),
-    logoImagePath: z.string().optional(),
-    thumbnailLandscapePath: z.string().optional(),
-    thumbnailPortraitPath: z.string().optional(),
-    thumbnailSquarePath: z.string().optional(),
+    authorHeadshotPath: z.string().nullable(),
+    backgroundImagePath: z.string().nullable(),
+    logoImagePath: z.string().nullable(),
+    thumbnailLandscapePath: z.string().nullable(),
+    thumbnailPortraitPath: z.string().nullable(),
+    thumbnailSquarePath: z.string().nullable(),
 });
 export type ShowDailywireIn = z.input<typeof ShowDailywireSchema>;
 export type ShowDailywireOut = z.output<typeof ShowDailywireSchema>;
