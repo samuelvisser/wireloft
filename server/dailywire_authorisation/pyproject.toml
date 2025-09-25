@@ -1,0 +1,16 @@
+[project]
+name = "dailywire-authorisation"
+version = "0.1.0"
+description = "Generate OAuth 2.0 Device Authorization Grant login URLs for DailyWire (Auth0)."
+authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "requests>=2.32.3",
+]
+
+[project.scripts]
+dailywire-auth = "dailywire_authorisation.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"
