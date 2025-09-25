@@ -1,9 +1,8 @@
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
-import Switch from 'react-switch'
 import {useMemo} from 'react'
-import ReadMore from "../../utils/ReadMore";
 import {SeasonDetachedOut} from "../../types/schemas/season";
+import ReadMore from "../../utils/ReadMore";
 
 export type SeasonItem = SeasonDetachedOut
 
@@ -76,44 +75,6 @@ export default function DownloadProfileSeriesForm({form, seasons}: Props) {
 
     return (
         <>
-            {errors.root && (
-                <div className="form-error-card" role="alert" aria-live="polite">
-                    {String(errors.root.message)}
-                </div>
-            )}
-
-            <div className="form-row">
-                <label htmlFor="enable-profile">Enable automatic downloads</label>
-                <Controller
-                    control={control}
-                    name="enableProfile"
-                    render={({field}) => (
-                        <Switch
-                            id="enable-profile"
-                            checked={!!field.value}
-                            onChange={(checked) => field.onChange(checked)}
-                            onColor="#0ea5e9"
-                            offColor="#d1d5db"
-                            uncheckedIcon={false}
-                            checkedIcon={false}
-                            aria-invalid={!!errors.enableProfile}
-                            aria-describedby={errors.type ? 'profile-enable-validate' : 'profile-enable-help'}
-                        />
-                    )}
-                />
-                {errors.enableProfile && (
-                    <div id="profile-enable-validate" className="error" role="alert" aria-live="polite">
-                        {errors.enableProfile.message as string}
-                    </div>
-                )}
-                <div className="help" id="profile-enable-help">
-                    <ReadMore summary={<span>Whether to automatically download episodes</span>}>
-                        If you disable the download profile, the show will still be indexed and you can still manually
-                        download episodes in the show.
-                    </ReadMore>
-                </div>
-            </div>
-
             <div className="form-row">
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                     <label htmlFor="season-select">Seasons to download</label>
@@ -140,7 +101,7 @@ export default function DownloadProfileSeriesForm({form, seasons}: Props) {
                             getOptionValue={(o: UIOption) => o.value}
                             getOptionLabel={(o: UIOption) => o.label}
                             aria-invalid={!!errors.seasons}
-                            aria-describedby={errors.seasons ? 'profile-seasons-validate' : undefined}
+                            aria-describedby={errors.seasons ? 'profile-seasons-validate' : 'profile-seasons-help'}
                         />
                     )}
                 />
@@ -149,6 +110,12 @@ export default function DownloadProfileSeriesForm({form, seasons}: Props) {
                         {errors.seasons.message as string}
                     </div>
                 )}
+                <div className="help" id="profile-seasons-help">
+                    <ReadMore summary={<span>Which seasons to download</span>}>
+                        Select which seasons to download. If you select "Include upcoming seasons", episodes from upcoming seasons
+                        will be downloaded as they become available.
+                    </ReadMore>
+                </div>
             </div>
         </>
     )

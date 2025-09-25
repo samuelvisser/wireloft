@@ -1,7 +1,7 @@
 import {useEffect} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import DownloadProfileSeriesForm from '../../DownloadProfile/DownloadProfileSeriesForm'
+import DownloadProfileForm from '../../DownloadProfile/DownloadProfileForm'
 import {buildServerAwareSubmit} from '../../../utils/buildServerAwareSubmit'
 import {
     DownloadProfileUnifiedCreateIn,
@@ -23,9 +23,9 @@ export type DownloadProfileSeriesProps = {
 
 
 export default function DownloadProfileSeriesStep({
-                                                  value, onChange, onSubmit: onSubmitParent, seasons, onBack,
-                                                  onFinish, onCancel
-                                              }: DownloadProfileSeriesProps) {
+                                                      value, onChange, onSubmit: onSubmitParent, seasons, onBack,
+                                                      onFinish, onCancel
+                                                  }: DownloadProfileSeriesProps) {
     const form = useForm<DownloadProfileUnifiedCreateIn>({
         resolver: zodResolver(DownloadProfileUnifiedCreateSchema),
         mode: 'onBlur',
@@ -49,7 +49,7 @@ export default function DownloadProfileSeriesStep({
 
     return (
         <form className="form form-fluid" onSubmit={onSubmit} noValidate>
-            <DownloadProfileSeriesForm form={form} seasons={seasons} />
+            <DownloadProfileForm form={form} mode="series" seasons={seasons}/>
 
             <div className="actions">
                 <button type="button" className="btn" onClick={onBack}>Back</button>

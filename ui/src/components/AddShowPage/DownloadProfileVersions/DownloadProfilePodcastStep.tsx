@@ -1,7 +1,7 @@
 import {useEffect} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import DownloadProfilePodcastForm from '../../DownloadProfile/DownloadProfilePodcastForm'
+import DownloadProfileForm from '../../DownloadProfile/DownloadProfileForm'
 import {buildServerAwareSubmit} from '../../../utils/buildServerAwareSubmit'
 import {
     DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut,
@@ -51,7 +51,7 @@ export default function DownloadProfilePodcastStep({value, onChange, onSubmit: o
 
     return (
         <form className="form form-fluid" onSubmit={onSubmit} noValidate>
-            <DownloadProfilePodcastForm form={form}/>
+            <DownloadProfileForm form={form} mode="podcast"/>
 
             <div className="actions">
                 <button type="button" className="btn" onClick={onBack}>Back</button>
