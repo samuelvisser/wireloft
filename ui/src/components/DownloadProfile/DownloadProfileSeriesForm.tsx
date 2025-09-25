@@ -1,5 +1,6 @@
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
+import {selectStyles, selectTheme} from '../../utils/reactSelectStyles'
 import {useMemo} from 'react'
 import {SeasonDetachedOut} from "../../types/schemas/season";
 import ReadMore from "../../utils/ReadMore";
@@ -102,6 +103,8 @@ export default function DownloadProfileSeriesForm({form, seasons}: Props) {
                             getOptionLabel={(o: UIOption) => o.label}
                             aria-invalid={!!errors.seasons}
                             aria-describedby={errors.seasons ? 'profile-seasons-validate' : 'profile-seasons-help'}
+                            styles={selectStyles}
+                            theme={selectTheme}
                         />
                     )}
                 />

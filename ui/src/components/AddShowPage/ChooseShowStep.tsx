@@ -12,6 +12,7 @@ import {
 } from "../../types/schemas/show";
 import {EpisodeIdentifierReg, EpisodeIdentifierValue, ShowTypeReg, ShowTypeValue} from "../../types/show";
 import Select from "react-select";
+import {selectStyles, selectTheme} from "../../utils/reactSelectStyles";
 import {UseQueryResult} from "@tanstack/react-query";
 import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
 
@@ -195,6 +196,8 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                                             aria-invalid={!!errors.type}
                                             aria-describedby={errors.type ? 'show-type-errors' : 'show-type-help'}
                                             isClearable
+                                            styles={selectStyles}
+                                            theme={selectTheme}
                                         />
 
                                     )}
@@ -235,6 +238,8 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                                                 aria-invalid={!!errors.episodeIdentifier}
                                                 aria-describedby={errors.episodeIdentifier ? 'episode-identification-errors' : 'episode-identification-help'}
                                                 isClearable
+                                                styles={selectStyles}
+                                                theme={selectTheme}
                                             />
                                         )}
                                     />
