@@ -3,8 +3,9 @@ import {ShowTypeReg, ShowTypeValue} from '../../types/show'
 import DownloadProfileSeriesStep from './DownloadProfileVersions/DownloadProfileSeriesStep'
 import DownloadProfilePodcastStep from "./DownloadProfileVersions/DownloadProfilePodcastStep";
 import {
-    DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut, SeasonCreateBundleOut
+    DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut
 } from "../../types/schemas/show_with_profiles";
+import {SeasonDetachedOut} from "../../types/schemas/season";
 
 
 type Props = {
@@ -25,7 +26,7 @@ type Props = {
     onCancel: () => void
     showSlug?: string
     showType?: ShowTypeValue | ''
-    seasons: SeasonCreateBundleOut[]
+    seasons: SeasonDetachedOut[]
 }
 
 export default function DownloadProfileStep({value, onChange, onSubmit, onBack, onFinish, onCancel, showSlug, showType, seasons}: Props) {

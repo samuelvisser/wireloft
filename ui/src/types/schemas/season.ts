@@ -6,7 +6,6 @@ const SeasonBaseSchema = z.object({
     name: z.string().min(1, "Name is required")
 })
 
-
 export const SeasonCreateSchema = SeasonBaseSchema.extend({
     dwId: z.string().min(1, "dwId missing"),
     showId: z.int().min(1, "showId missing"),
@@ -14,6 +13,14 @@ export const SeasonCreateSchema = SeasonBaseSchema.extend({
 })
 export type SeasonCreateIn = z.input<typeof SeasonCreateSchema>;
 export type SeasonCreateOut = z.output<typeof SeasonCreateSchema>;
+
+
+// Schema for seasons without external relations, allowing for dynamic insertion
+export const SeasonDetachedSchema = SeasonCreateSchema.omit({
+    showId: true,
+})
+export type SeasonDetachedIn = z.input<typeof SeasonDetachedSchema>;
+export type SeasonDetachedOut = z.output<typeof SeasonDetachedSchema>;
 
 
 export const SeasonUpdateSchema = SeasonBaseSchema.extend({

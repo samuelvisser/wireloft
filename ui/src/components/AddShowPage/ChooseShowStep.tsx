@@ -13,13 +13,13 @@ import {
 import {EpisodeIdentifierReg, EpisodeIdentifierValue, ShowTypeReg, ShowTypeValue} from "../../types/show";
 import Select from "react-select";
 import {UseQueryResult} from "@tanstack/react-query";
-import {SeasonCreateBundleOut, SeasonCreateBundleSchema} from "../../types/schemas/show_with_profiles";
+import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
 
 type Props = {
     value: Partial<ShowCreatePayloadIn>
     onChange: (v: Partial<ShowCreatePayloadIn>) => void;
     onSubmit: (v: ShowCreatePayloadOut) => void;
-    onSeasonsSubmit: (seasons: SeasonCreateBundleOut[]) => void;
+    onSeasonsSubmit: (seasons: SeasonDetachedOut[]) => void;
     onContinue: () => void;
     onCancel: () => void;
 };
@@ -87,8 +87,8 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
         const inferredType: ShowTypeValue | "" = ShowTypeReg.normalize(dw.data.probableShowType) ?? "";
         const inferredEpisodeId: EpisodeIdentifierValue | "" = EpisodeIdentifierReg.normalize(dw.data.probableEpisodeIdentification) ?? "";
 
-        setValue("type", inferredType, {shouldValidate: true, shouldDirty: true});
-        setValue("episodeIdentifier", inferredEpisodeId, {shouldValidate: true, shouldDirty: true});
+        setValue("type", inferredType, {shouldDirty: true});
+        setValue("episodeIdentifier", inferredEpisodeId, {shouldDirty: true});
 
         // Remember that we prefetched for this URL to prevent reapplying on mount/reload
         lastPrefilledUrlRef.current = currentUrl;
@@ -108,7 +108,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
 
         // Validate seasons
         const seasonsRaw: any[] = Array.isArray(anyData?.seasons) ? anyData.seasons : [];
-        const seasonsParsed = SeasonCreateBundleSchema.array().safeParse(
+        const seasonsParsed = SeasonDetachedSchema.array().safeParse(
             seasonsRaw.map((s: any) => ({
                 dwId: s?.id ?? '',
                 ...s

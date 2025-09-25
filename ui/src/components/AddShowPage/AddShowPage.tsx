@@ -13,17 +13,17 @@ import {
     MediaProfileCreateUnionSchema,
     MediaProfileUpsertIn,
     MediaProfileUpsertOut,
-    SeasonCreateBundleOut,
 } from "../../types/schemas/show_with_profiles";
 import {ShowTypeReg} from "../../types/show";
 import {useQueryClient} from "@tanstack/react-query";
+import {SeasonDetachedOut} from "../../types/schemas/season";
 
 export type Props = {
     onCancel: () => void
 }
 
 // Wizard state persistence
-const STORAGE_KEY = 'addShowWizardV5'
+const STORAGE_KEY = 'addShowWizardV6'
 
 type WizardType = 'ERROR' | 'INFO'
 type WizardMessage = { text: string; type: WizardType }
@@ -48,7 +48,7 @@ type WizardState = {
             submit: DownloadProfileUnifiedCreateOut | undefined,
         }
     }
-    seasons: SeasonCreateBundleOut[] | undefined,
+    seasons: SeasonDetachedOut[] | undefined,
     globalMessage?: WizardMessage | null
 }
 
@@ -138,7 +138,7 @@ export default function AddShowPage({onCancel}: Props) {
         () => loadWizardState()?.downloadProfile.series.input ?? getZodDefaults(DownloadProfileSeriesBundleSchema))
     const [downloadProfileSeriesSubmit, setDownloadProfileSeriesSubmit] = useState<DownloadProfileUnifiedCreateOut | undefined>(() => loadWizardState()?.downloadProfile.series.submit)
 
-    const [seasonsSubmit, setSeasonsSubmit] = useState<SeasonCreateBundleOut[] | undefined>(
+    const [seasonsSubmit, setSeasonsSubmit] = useState<SeasonDetachedOut[] | undefined>(
         () => loadWizardState()?.seasons ?? [])
 
     // Refs to avoid stale state during immediate Finish after submit
@@ -215,7 +215,7 @@ export default function AddShowPage({onCancel}: Props) {
             mediaProfile,
             downloadProfile,
         }
-        console.log('submitData', JSON.stringify(submitData))
+        console.log(JSON.stringify(submitData))
 
         try {
             const response = await fetch(`${(window as any).appConfig.API_URL}/shows/as-bundle`, {

@@ -3,7 +3,7 @@ import {DownloadProfilePodcastCreateSchema} from "./download_profile_podcast";
 import {DownloadProfileSeriesCreateSchema} from "./download_profile_series";
 import {MediaProfileCreateSchema, MediaProfileUpdateSchema} from "./media_profile";
 import {z} from "zod";
-import {SeasonCreateSchema} from "./season";
+import {SeasonDetachedSchema} from "./season";
 
 
 export const DownloadProfilePodcastBundleSchema = DownloadProfilePodcastCreateSchema.omit({
@@ -56,18 +56,11 @@ export type MediaProfileUpsertIn = z.input<typeof MediaProfileUpsertSchema>
 export type MediaProfileUpsertOut = z.output<typeof MediaProfileUpsertSchema>
 
 
-export const SeasonCreateBundleSchema = SeasonCreateSchema.omit({
-    showId: true,
-})
-export type SeasonCreateBundleIn = z.input<typeof SeasonCreateBundleSchema>
-export type SeasonCreateBundleOut = z.output<typeof SeasonCreateBundleSchema>
-
-
 export const ShowCreateBundleSchema = z.object({
     show: ShowCreatePayloadSchema,
     mediaProfile: MediaProfileUpsertSchema,
     downloadProfile: DownloadProfileUnifiedCreateSchema,
-    seasons: z.array(SeasonCreateBundleSchema),
+    seasons: z.array(SeasonDetachedSchema),
 })
 export type ShowCreateBundleIn = z.input<typeof ShowCreateBundleSchema>
 export type ShowCreateBundleOut = z.output<typeof ShowCreateBundleSchema>

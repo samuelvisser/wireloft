@@ -1,17 +1,18 @@
 import {z} from 'zod';
+import {SeasonDetachedSchema} from "./season";
 
 
 // ---------- Strict request (create/update) ----------
 const DownloadProfileSeriesBaseSchema = z.object({
     mediaProfileId: z.int(),
     enableProfile: z.boolean().default(true),
-    downloadSeasonList: z.array(z.string()),
+    seasons: z.array(SeasonDetachedSchema).default([]),
     includeUpcomingSeasons: z.boolean().default(true),
 }).superRefine((v, ctx) => {
-    if (!v.includeUpcomingSeasons && (!v.downloadSeasonList || v.downloadSeasonList.length === 0)) {
+    if (!v.includeUpcomingSeasons && (!v.seasons || v.seasons.length === 0)) {
         ctx.addIssue({
             code: 'custom',
-            path: ['downloadSeasonList'],
+            path: ['seasons'],
             message: 'Choose at least one season or enable "Include upcoming seasons".',
         })
     }
@@ -36,7 +37,7 @@ export const DownloadProfileSeriesReadSchema = z.looseObject({
     showId: z.int(),
     mediaProfileId: z.int().optional(),
     enableProfile: z.boolean(),
-    downloadSeasonList: z.array(z.string()),
+    seasons: z.array(SeasonDetachedSchema),
     includeUpcomingSeasons: z.boolean(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
