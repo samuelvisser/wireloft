@@ -2,8 +2,10 @@ import {Controller, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
 import Switch from 'react-switch'
 import {useMemo} from 'react'
+import ReadMore from "../../utils/ReadMore";
+import {SeasonDetachedOut} from "../../types/schemas/season";
 
-export type SeasonItem = { slug: string; name: string }
+export type SeasonItem = SeasonDetachedOut
 
 type Props = {
     form: UseFormReturn<any>
@@ -23,7 +25,7 @@ export default function DownloadProfileSeriesForm({form, seasons}: Props) {
     ), [seasons])
 
     // Build the select value from form state (multi select + special include option)
-    const selectedSeasonSlugs = watch('downloadSeasonList') || []
+    const selectedSeasonSlugs = watch('seasons') || []
     const selectedInclude = watch('includeUpcomingSeasons') || false
     const selectValue = useMemo(() => {
         const vals = [...selectedSeasonSlugs.map((slug: string) => ({
@@ -39,13 +41,13 @@ export default function DownloadProfileSeriesForm({form, seasons}: Props) {
         const include = arr.some(o => o.value === INCLUDE_UPCOMING_VALUE)
         const slugs = arr.filter(o => o.value !== INCLUDE_UPCOMING_VALUE).map(o => o.value)
         setValue('includeUpcomingSeasons', include, {shouldDirty: true, shouldValidate: true})
-        setValue('downloadSeasonList', slugs, {shouldDirty: true, shouldValidate: true})
+        setValue('seasons', slugs, {shouldDirty: true, shouldValidate: true})
     }
 
     const handleSelectAll = () => {
         // Select all seasons and also include upcoming seasons
         setValue('includeUpcomingSeasons', true, {shouldDirty: true, shouldValidate: true})
-        setValue('downloadSeasonList', seasonOptions.map(o => o.value), {shouldDirty: true, shouldValidate: true})
+        setValue('seasons', seasonOptions.map(o => o.value), {shouldDirty: true, shouldValidate: true})
     }
 
     return (
@@ -71,9 +73,21 @@ export default function DownloadProfileSeriesForm({form, seasons}: Props) {
                             uncheckedIcon={false}
                             checkedIcon={false}
                             aria-invalid={!!errors.enableProfile}
+                            aria-describedby={errors.type ? 'profile-enable-validate' : 'profile-enable-help'}
                         />
                     )}
                 />
+                {errors.enableProfile && (
+                    <div id="profile-enable-validate" className="error" role="alert" aria-live="polite">
+                        {errors.enableProfile.message as string}
+                    </div>
+                )}
+                <div className="help" id="profile-enable-help">
+                    <ReadMore summary={<span>Whether to automatically download episodes</span>}>
+                        If you disable the download profile, the show will still be indexed and you can still manually
+                        download episodes in the show.
+                    </ReadMore>
+                </div>
             </div>
 
             <div className="form-row">
@@ -85,7 +99,7 @@ export default function DownloadProfileSeriesForm({form, seasons}: Props) {
                 </div>
                 <Controller
                     control={control}
-                    name="downloadSeasonList"
+                    name="seasons"
                     render={() => (
                         <Select
                             inputId="season-select"
@@ -100,9 +114,9 @@ export default function DownloadProfileSeriesForm({form, seasons}: Props) {
                         />
                     )}
                 />
-                {errors.downloadSeasonList && (
+                {errors.seasons && (
                     <div className="error" role="alert" aria-live="polite">
-                        {errors.downloadSeasonList.message as string}
+                        {errors.seasons.message as string}
                     </div>
                 )}
             </div>
