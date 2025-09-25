@@ -2,7 +2,7 @@ import {EpisodePublishStatus} from "../types/episode";
 import {MediaDownloadStatus} from "../types/media_download";
 
 
-export function statusIcon(status: EpisodePublishStatus | MediaDownloadStatus) {
+export function statusIcon(status: EpisodePublishStatus | MediaDownloadStatus | string) {
     switch (status) {
         case EpisodePublishStatus.scheduled:
             return ['fas', 'clock'] as const
@@ -23,10 +23,12 @@ export function statusIcon(status: EpisodePublishStatus | MediaDownloadStatus) {
             return ['fas', 'circle-down'] as const
         case MediaDownloadStatus.error:
             return ['fas', 'circle-exclamation'] as const
+        default:
+            return ['fas', 'circle-exclamation'] as const
     }
 }
 
-export function statusLabel(status: EpisodePublishStatus | MediaDownloadStatus) {
+export function statusLabel(status: EpisodePublishStatus | MediaDownloadStatus | string) {
     switch (status) {
         case EpisodePublishStatus.scheduled:
             return 'Scheduled'
@@ -48,5 +50,7 @@ export function statusLabel(status: EpisodePublishStatus | MediaDownloadStatus) 
             return 'Locally processing the episode'
         case MediaDownloadStatus.error:
             return 'Error'
+        default:
+            return 'Unknown error'
     }
 }

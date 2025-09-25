@@ -81,4 +81,4 @@ class ShowAPIReadView(ShowAPIRead):
     @computed_field(return_type=Optional[str])
     @property
     def years(self) -> Optional[str]:
-        return None
+        return "2025-2025"
