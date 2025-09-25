@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
@@ -61,7 +62,16 @@ def create_show_bundle(s: Session, payload: ShowAPICreateBundle) -> ShowAPIRead:
     if payload.download_profile.op == "podcast":
         download_profile = create_database_fields(DownloadProfilePodcast, payload.download_profile.model_dump(exclude_none=True, exclude_unset=True))
     elif payload.download_profile.op == "series":
-        download_profile = create_database_fields(DownloadProfileSeries, payload.download_profile.model_dump(exclude_none=True, exclude_unset=True))
+        download_profile = create_database_fields(DownloadProfileSeries, payload.download_profile.model_dump(exclude_none=True, exclude_unset=True, exclude={"seasons"}))
+
+        series_profile_seasons: set[Season] = set()
+        for season in seasons:
+            for season_in_profile in payload.download_profile.seasons:
+                if season.dw_id == season_in_profile.dw_id or season.slug == season_in_profile.slug:
+                    series_profile_seasons.add(season)
+                    break
+
+        download_profile.seasons = list(series_profile_seasons)
     else:
         raise ValueError("Unsupported download profile operation")
     s.add(download_profile)

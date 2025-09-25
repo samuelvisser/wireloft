@@ -26,7 +26,3 @@ class Season(Base):
     # Relationships
     show: Mapped["Show"] = relationship(back_populates="seasons")
     episodes: Mapped[list["Episode"]] = relationship(back_populates="season")
-    download_profile_series_associations: Mapped[list["DownloadProfileSeriesSeasonAssociation"]] = relationship(
-        back_populates="season",
-        cascade="all, delete-orphan"
-    )

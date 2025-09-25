@@ -6,6 +6,7 @@ from backend.api.models.base import RequestBase
 from backend.api.models.download_profile_series import DownloadProfileSeriesAPICreateBundle
 from backend.api.models.media_profile import MediaProfileAPICreate, MediaProfileAPIUpdate
 from backend.api.models.download_profile_podcast import DownloadProfilePodcastAPICreateBundle
+from backend.api.models.season import SeasonAPIDetached
 from backend.api.models.show import ShowAPICreate
 
 
@@ -39,14 +40,8 @@ DownloadProfileCreateInBundle = Union[
 ]
 
 
-class SeasonAPICreateInBundle(RequestBase):
-    dw_id: str
-    slug: str
-    name: str
-
-
 class ShowAPICreateBundle(RequestBase):
     show: ShowAPICreate
     download_profile: DownloadProfileCreateInBundle = Field(discriminator="op")
     media_profile: MediaProfileAPIUpsert = Field(discriminator="op")
-    seasons: list[SeasonAPICreateInBundle]
+    seasons: list[SeasonAPIDetached]

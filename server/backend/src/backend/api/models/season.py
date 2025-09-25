@@ -6,7 +6,15 @@ from backend.api.models.base import RequestBase, ResponseBase
 # ---------- Strict input (create/update) ----------
 class _SeasonAPIBaseIn(RequestBase):
     """Fields for requests: validate here if needed."""
+
     name: str
+
+
+class SeasonAPIDetached(_SeasonAPIBaseIn):
+    """Request body without external relations, allowing for dynamic insertion"""
+
+    dw_id: str
+    slug: str
 
 
 class SeasonAPICreate(_SeasonAPIBaseIn):
@@ -35,3 +43,7 @@ class SeasonAPIRead(_SeasonAPIBaseOut):
     """Response body for a season."""
     created_at: datetime
     updated_at: datetime
+
+
+
+

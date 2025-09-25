@@ -81,7 +81,6 @@ def create_tables() -> None:
     # Order matters due to inheritance: Base tables first, dependents after
     # Base tables
     importlib.import_module("backend.db.models.DownloadProfileBase")
-    importlib.import_module("backend.db.models.DownloadProfileSeriesSeasonAssociation")
     importlib.import_module("backend.db.models.Episode")
     importlib.import_module("backend.db.models.MediaDownload")
     importlib.import_module("backend.db.models.MediaItem")
