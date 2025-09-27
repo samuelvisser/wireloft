@@ -30,6 +30,7 @@ WireLoft is not meant to be used for consuming the content, it just downloads it
 - Downloads video thumbnails and sets them as cover art
 - Intelligently helps you avoid downloading the countdown timer shown in live versions of show episodes
 - Optionally automatically delete old content
+- Download multiple versions of the same episode, automatically. For example, download both a video and audio version of the episode
 
 ### Planned
 
