@@ -25,7 +25,7 @@ shows and movies from Daily Wire. We will implement an in-house downloader insid
 pull requests uses seems to be deprecated: official Daily Wire apps moved on to a new Middleware API. WireLoft already uses that
 Middleware API to get metadata: soon it will also use it to download episodes.
 
-## Features
+### Features
 
 - Fully-featured easy to use web UI for navigation and configuration
 - Downloads series and podcasts with configurable parameters for each
@@ -33,12 +33,12 @@ Middleware API to get metadata: soon it will also use it to download episodes.
 - Supports audio-only mode for a podcast-like experience
 - Downloads video thumbnails and sets them as cover art
 
-## Planned
+### Planned
 
 - Support for downloading movies and standalone episodes
 - Possible support for Bentkey: feasibility not yet known
 
-## Building your own Docker image
+### Building your own Docker image
 If you want to build the image yourself:
 
 ```bash
@@ -52,7 +52,7 @@ docker run -d \
 ```
 
 ## Development
-## UI (React 19, Vite + TypeScript)
+### UI (React 19, Vite + TypeScript)
 
 A web UI is included for navigation and demonstration purposes. It now uses a proper build step so you can write JSX and TypeScript.
 
@@ -71,7 +71,7 @@ cd <PROJECT_DIR>\wireloft\ui
 npm run build
 ```
 
-# Dev backend
+### Dev backend
 A simple backend is included and reads its data from the SQLite database.
 Run the backend (in repo root):
 
@@ -89,8 +89,8 @@ npm install
 npm run dev
 ```
 
-# Dailywire API
-## DailyWire API CLI
+### Dailywire API
+#### DailyWire API CLI
 
 You can list episodes for a DailyWire show using the dailywire-api helper.
 
@@ -105,12 +105,12 @@ Options:
 - --access-token <JWT>: optional bearer token for premium content
 - --membership-plan <PLAN>: optional membership plan (e.g., AllAccess)
 
-# Database (SQLite)
+### Database (SQLite)
 
 This project includes a required SQLite database for the backend.
 - Default DB path: data\wireloft.db
 
-### Create and seed the database 
+#### Create and seed the database 
 
 Bash (repo root):
 ```bash
