@@ -28,8 +28,8 @@ WireLoft is not meant to be used for consuming the content, it just downloads it
 - Downloads the premium version of episodes using your account credentials
 - Supports audio-only mode for a podcast-like experience
 - Downloads video thumbnails and sets them as cover art
--Intelligently helps you avoid downloading the countdown timer shown in live versions of show episodes
--Optionally automatically delete old content
+- Intelligently helps you avoid downloading the countdown timer shown in live versions of show episodes
+- Optionally automatically delete old content
 
 ### Planned
 
