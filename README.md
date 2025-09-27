@@ -1,29 +1,25 @@
+
+
+> This version of WireLoft is currently in active development. If you want to download Daily Wire shows, use the version in the master branch. You can see a sneak peak of what is to come in the next version of WireLoft here, though!
+
 # WireLoft
 
-WireLoft is a self-hosted app for downloading shows from The Daily Wire website.
-Its designed to be easy to use. You just add a Daily Wire show, and it'll make sure you always have the 
-latest episodes locally available. Additionally, it supports downloading the premium version of shows behind the paywall, 
-as long as you have a Daily Wire premium subscription.
-WireLoft is perfect for those who want to consume Daily Wire content through their media server (Plex, Jellyfin, Audiobookshelf)
-or who just want the content available locally.<br>
+### What it does
+WireLoft is a self-hosted app for downloading (premium) shows from The Daily Wire.
+WireLoft is easy to install and use. Just launch the docker container, open the Web-UI and add any Daily Wire show. WireLoft will download as many episodes as is your preference and will download new episodes as soon as they are available. Once setup, WireLoft will handle it all for you. Additionally, it supports downloading the premium version of shows behind the paywall, as long as you have a Daily Wire premium subscription. WireLoft is perfect for those who want to consume Daily Wire content through their media server (Plex, Jellyfin, Audiobookshelf) or who just want the content available locally.<br>
+
+WireLoft is also great if your goal is to listen to premium versions of the Daily Wire podcasts in your favorite Podcast app. We plan on supporting creating an RSS feed directly from WireLoft to consume in your podcast app. Currently, you will need a third party server like Audiobookshelf to generate an RSS feed from locally available files.<br>
 
 This project was inspired by [Pinchflat](https://github.com/kieraneglin/pinchflat).
 Pinchflat is an awesome project that allows you to automatically download videos from YouTube channels or playlists.
-WireLoft takes that concept to The Daily Wire. Additionally, WireLoft also allows downloading individual episodes and
-movies, making it truly a one-stop-shop for all things Daily Wire.<br>
-
-The project has also taken inspiration from [DailyWirePodcastProxy](https://github.com/fpnewton/DailyWirePodcastProxy).
-This is another great project that allows you to stream Daily Wire premium shows directly to your podcast client.
-With WireLoft, this same result can be achieved by downloading audio-only versions of a show to a media
-server like Audiobookshelf and making it generate an RSS feed for you. In some situations this leads to a more stable
-experience as the audio files are not being streamed from the Daily Wire directly, but from a local server.
-This is actually the main use-case WireLoft was originally designed for. Support for generating an RSS feed
-directly from WireLoft, like Pinchflat also does, is planned for a future release.
+WireLoft takes that concept to The Daily Wire. Additionally, WireLoft also allows downloading individual episodes and movies (coming soon!), making it truly a one-stop-shop for all things Daily Wire.<br>
 
 The project uses a specific [pull request](https://github.com/yt-dlp/yt-dlp/pull/9920) to yt-dlp that adds support for downloading 
 shows and movies from Daily Wire. We will implement an in-house downloader inside WireLoft in a future release, as the API this
 pull requests uses seems to be deprecated: official Daily Wire apps moved on to a new Middleware API. WireLoft already uses that
-Middleware API to get metadata: soon it will also use it to download episodes.
+Middleware API to get metadata: soon it will also use it to download episodes.<br>
+
+WireLoft is not meant to be used for consuming the content, it just downloads it. For consuming the downloaded content use a self-hosted media server like Plex or Jellyfin.
 
 ### Features
 
@@ -32,6 +28,8 @@ Middleware API to get metadata: soon it will also use it to download episodes.
 - Downloads the premium version of episodes using your account credentials
 - Supports audio-only mode for a podcast-like experience
 - Downloads video thumbnails and sets them as cover art
+-Intelligently helps you avoid downloading the countdown timer shown in live versions of show episodes
+-Optionally automatically delete old content
 
 ### Planned
 
@@ -50,6 +48,9 @@ docker run -d \
   --name dailywire-downloader \
   dailywire-downloader
 ```
+
+### Special thanks
+While WireLoft is fully build from the ground up with original code, the open source [DailyWirePodcastProxy](https://github.com/fpnewton/DailyWirePodcastProxy) project has helped tremendously in figuring out how the Daily Wire API works. DailyWirePodcastProxy enables you to download premium versions of the shows directly from The Daily Wire to your podcast app. Definitely check it out if you’re interested!
 
 ## Development
 ### UI (React 19, Vite + TypeScript)
