@@ -5,23 +5,17 @@ import json
 import sys
 from typing import Optional
 
-from .config import (
-    get_config,
-    DEFAULT_ISSUER,
-    DEFAULT_AUDIENCE,
-    DEFAULT_CLIENT_ID,
-    DEFAULT_SCOPE,
-)
+from .config import DeviceAuthConfig
 from .device_flow import generate_login_info, poll_for_tokens
 
 
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="dailywire-auth", description="Generate a DailyWire Auth0 Device Authorization login URL")
     parser.add_argument("--json",action="store_true", help="Output full JSON (url, user_code, device_code, interval, expires_in)",)
-    parser.add_argument("--issuer",default=DEFAULT_ISSUER,help=f"Auth0 issuer domain (default: {DEFAULT_ISSUER})", )
-    parser.add_argument( "--audience", default=DEFAULT_AUDIENCE,help=f"API audience identifier (default: {DEFAULT_AUDIENCE})",)
-    parser.add_argument( "--client-id", dest="client_id", default=DEFAULT_CLIENT_ID, help="Auth0 application client ID (default provided)",)
-    parser.add_argument(  "--scope",  default=DEFAULT_SCOPE, help=f"OAuth scope string (default: '{DEFAULT_SCOPE}')", )
+    parser.add_argument("--issuer",default=DeviceAuthConfig.issuer, help=f"Auth0 issuer domain (default: {DeviceAuthConfig.issuer})", )
+    parser.add_argument( "--audience", default=DeviceAuthConfig.audience, help=f"API audience identifier (default: {DeviceAuthConfig.audience})",)
+    parser.add_argument( "--client-id", dest="client_id", default=DeviceAuthConfig.client_id, help="Auth0 application client ID (default provided)",)
+    parser.add_argument(  "--scope",  default=DeviceAuthConfig.scope, help=f"OAuth scope string (default: '{DeviceAuthConfig.scope}')", )
     return parser.parse_args(argv)
 
 
@@ -30,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
 
     try:
-        cfg = get_config(issuer=args.issuer, audience=args.audience, client_id=args.client_id, scope=args.scope)
+        cfg = DeviceAuthConfig(issuer=args.issuer, audience=args.audience, client_id=args.client_id, scope=args.scope)
         info = generate_login_info(cfg)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

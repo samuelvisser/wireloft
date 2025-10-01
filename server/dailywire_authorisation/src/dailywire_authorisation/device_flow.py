@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from requests import JSONDecodeError
 
-from .config import DeviceAuthConfig, DEFAULT_ISSUER
+from .config import DeviceAuthConfig
 
 
 def start_device_flow(cfg: DeviceAuthConfig) -> Dict[str, Any]:
@@ -47,21 +47,12 @@ def start_device_flow(cfg: DeviceAuthConfig) -> Dict[str, Any]:
         payload.setdefault("_issuer_used", cfg.issuer.rstrip("/"))
         return payload
 
-    # If the default issuer returns 404, try known alternatives automatically.
-    if r.status_code == 404 and cfg.issuer.rstrip('/') == DEFAULT_ISSUER.rstrip('/'):
-        for alt in ("https://dailywire.us.auth0.com", "https://dailywireplus.us.auth0.com"):
-            r2 = _request(alt)
-            if r2.status_code == 200:
-                payload = r2.json()
-                payload.setdefault("_issuer_used", alt.rstrip("/"))
-                return payload
-
     # Otherwise raise the original error with a helpful hint
     try:
         r.raise_for_status()
     except requests.HTTPError as e:
         raise requests.HTTPError(
-            f"{e}. If this is a DailyWire tenant, try --issuer https://dailywire.us.auth0.com",
+            e,
             response=r,
             request=r.request,
         ) from None
