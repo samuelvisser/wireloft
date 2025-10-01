@@ -4,6 +4,8 @@ import time
 import requests
 from typing import Any, Dict
 
+from requests import JSONDecodeError
+
 from .config import DeviceAuthConfig, DEFAULT_ISSUER
 
 
@@ -106,7 +108,7 @@ def poll_for_tokens(
     device_code: str,
     issuer: str,
     interval: int = 5,
-) -> Dict[str, Any]:
+):
     """Poll the token endpoint until the user authorizes or an error occurs.
 
     Returns the token response JSON on success, e.g. contains access_token, token_type,
@@ -125,7 +127,7 @@ def poll_for_tokens(
             return r.json()
         try:
             err = r.json()
-        except Exception:
+        except JSONDecodeError:
             r.raise_for_status()
             continue
         code = (err or {}).get("error")

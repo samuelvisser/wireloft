@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from typing import Optional
 
 from .config import (
     get_config,
@@ -14,54 +15,25 @@ from .config import (
 from .device_flow import generate_login_info, poll_for_tokens
 
 
+def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="dailywire-auth", description="Generate a DailyWire Auth0 Device Authorization login URL")
+    parser.add_argument("--json",action="store_true", help="Output full JSON (url, user_code, device_code, interval, expires_in)",)
+    parser.add_argument("--issuer",default=DEFAULT_ISSUER,help=f"Auth0 issuer domain (default: {DEFAULT_ISSUER})", )
+    parser.add_argument( "--audience", default=DEFAULT_AUDIENCE,help=f"API audience identifier (default: {DEFAULT_AUDIENCE})",)
+    parser.add_argument( "--client-id", dest="client_id", default=DEFAULT_CLIENT_ID, help="Auth0 application client ID (default provided)",)
+    parser.add_argument(  "--scope",  default=DEFAULT_SCOPE, help=f"OAuth scope string (default: '{DEFAULT_SCOPE}')", )
+    return parser.parse_args(argv)
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="dailywire-auth",
-        description="Generate a DailyWire Auth0 Device Authorization login URL",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Output full JSON (url, user_code, device_code, interval, expires_in)",
-    )
-    parser.add_argument(
-        "--issuer",
-        default=DEFAULT_ISSUER,
-        help=f"Auth0 issuer domain (default: {DEFAULT_ISSUER})",
-    )
-    parser.add_argument(
-        "--audience",
-        default=DEFAULT_AUDIENCE,
-        help=f"API audience identifier (default: {DEFAULT_AUDIENCE})",
-    )
-    parser.add_argument(
-        "--client-id",
-        dest="client_id",
-        default=DEFAULT_CLIENT_ID,
-        help="Auth0 application client ID (default provided)",
-    )
-    parser.add_argument(
-        "--scope",
-        default=DEFAULT_SCOPE,
-        help=f"OAuth scope string (default: '{DEFAULT_SCOPE}')",
-    )
-    args = parser.parse_args(argv)
+
+    args = _parse_args(argv)
 
     try:
-        cfg = get_config(
-            issuer=args.issuer,
-            audience=args.audience,
-            client_id=args.client_id,
-            scope=args.scope,
-        )
+        cfg = get_config(issuer=args.issuer, audience=args.audience, client_id=args.client_id, scope=args.scope)
         info = generate_login_info(cfg)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
-        print(
-            "Tip: If you see a 404 Not Found, try specifying --issuer (default: https://authorize.dailywire.com). "
-            "For some tenants, an Auth0 domain like https://dailywire.us.auth0.com works.",
-            file=sys.stderr,
-        )
         return 1
 
     # Always show the login URL first
