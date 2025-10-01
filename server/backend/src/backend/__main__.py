@@ -9,8 +9,9 @@ import uvicorn
 
 from backend.db import configure_db, create_tables, get_db_path, seed_db, get_engine
 from sqlalchemy import text
-from .config import DEFAULT_DB_PATH, PACKAGE_ROOT
-from dailywire_api.config import PACKAGE_ROOT as DAILYWIRE_API_PACKAGE_ROOT
+
+from wireloft_config import get_settings
+from .config import PROJECT_ROOT
 
 
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -26,7 +27,7 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 def _get_db_path(args) -> Path:
     if args.db:
         return Path(args.db)
-    return Path(os.environ.get("WIRELOFT_DB_PATH", DEFAULT_DB_PATH))
+    return get_settings().database_path
 
 def _validate_db_health() -> None:
     # 1) Ensure the SQLite file exists to avoid silent auto-creation
@@ -83,7 +84,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         host=args.host,
         port=args.port,
         reload=debug,
-        reload_dirs=[PACKAGE_ROOT.as_posix(), DAILYWIRE_API_PACKAGE_ROOT.as_posix()],
+        reload_dirs=str(PROJECT_ROOT / "server"),
         log_level="debug" if debug else "info"
     )
 

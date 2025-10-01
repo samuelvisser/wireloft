@@ -1,5 +1,5 @@
 """
-Central configuration for the backend package.
+Central configuration for the config package.
 """
 from pathlib import Path
 
