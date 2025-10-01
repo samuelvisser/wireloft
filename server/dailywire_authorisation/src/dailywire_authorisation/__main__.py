@@ -35,15 +35,12 @@ def main(argv: list[str] | None = None) -> int:
     if info.get("user_code"):
         print("User code:", info["user_code"])  # display in case manual entry is needed
 
-    # Determine which issuer to use for polling (respect auto-fallbacks)
-    issuer_used = (info.get("_raw") or {}).get("_issuer_used") or cfg.issuer
-
     # Wait for the user to complete login in the browser, then retrieve tokens
     try:
         tokens = poll_for_tokens(
             cfg,
             device_code=info["device_code"],
-            issuer=issuer_used,
+            issuer=cfg.issuer,
             interval=int(info.get("interval", 5) or 5),
         )
     except KeyboardInterrupt:
