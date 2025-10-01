@@ -5,7 +5,8 @@ description = "Generate OAuth 2.0 Device Authorization Grant login URLs for Dail
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [
-  "requests>=2.32.3",
+  "requests>=2.32.5",
+  "PyYAML>=6.0",
 ]
 
 [project.scripts]

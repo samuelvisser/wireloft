@@ -11,7 +11,7 @@ from .config import (
     DEFAULT_CLIENT_ID,
     DEFAULT_SCOPE,
 )
-from .device_flow import generate_login_info
+from .device_flow import generate_login_info, poll_for_tokens
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -57,14 +57,48 @@ def main(argv: list[str] | None = None) -> int:
         info = generate_login_info(cfg)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
+        print(
+            "Tip: If you see a 404 Not Found, try specifying --issuer (default: https://authorize.dailywire.com). "
+            "For some tenants, an Auth0 domain like https://dailywire.us.auth0.com works.",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Always show the login URL first
+    print("Login URL:", info["url"])  # may already include user_code
+    if info.get("user_code"):
+        print("User code:", info["user_code"])  # display in case manual entry is needed
+
+    # Determine which issuer to use for polling (respect auto-fallbacks)
+    issuer_used = (info.get("_raw") or {}).get("_issuer_used") or cfg.issuer
+
+    # Wait for the user to complete login in the browser, then retrieve tokens
+    try:
+        tokens = poll_for_tokens(
+            cfg,
+            device_code=info["device_code"],
+            issuer=issuer_used,
+            interval=int(info.get("interval", 5) or 5),
+        )
+    except KeyboardInterrupt:
+        print("\nCancelled. You can re-run the command to start a new device flow.", file=sys.stderr)
+        return 130
+    except Exception as e:
+        print(f"Error while waiting for authorization: {e}", file=sys.stderr)
         return 1
 
     if args.json:
-        print(json.dumps(info, ensure_ascii=False))
+        output = dict(info)
+        output["tokens"] = tokens
+        print(json.dumps(output, ensure_ascii=False))
     else:
-        print("Login URL:", info["url"])  # may already include user_code
-        if info.get("user_code"):
-            print("User code:", info["user_code"])  # display in case manual entry is needed
+        print("Authorization complete.")
+        if tokens.get("access_token"):
+            print("Access token:", tokens["access_token"])  # Authorization bearer token
+        if tokens.get("refresh_token"):
+            print("Refresh token:", tokens["refresh_token"])  # Use to refresh access
+        if tokens.get("id_token"):
+            print("ID token:", tokens["id_token"])  # Optional depending on scopes
     return 0
 
 

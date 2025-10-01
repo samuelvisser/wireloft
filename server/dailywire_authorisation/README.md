@@ -20,7 +20,7 @@ uv run dailywire-auth --json
 export DAILYWIRE_OAUTH_ISSUER="https://<your-auth0-tenant>.auth0.com"
 export DAILYWIRE_OAUTH_AUDIENCE="<api-audience>"
 export DAILYWIRE_OAUTH_CLIENT_ID="<client-id>"
-export DAILYWIRE_OAUTH_SCOPE="openid profile email offline_access"
+export DAILYWIRE_OAUTH_SCOPE="openid profile offline_access"
 uv run dailywire-auth
 ```
 
@@ -61,13 +61,40 @@ print("User code:", info["user_code"])  # Show if not embedded in URL
 - DAILYWIRE_OAUTH_ISSUER or OAUTH_ISSUER: Auth0 issuer base URL (including https://)
 - DAILYWIRE_OAUTH_AUDIENCE or OAUTH_AUDIENCE: API audience identifier
 - DAILYWIRE_OAUTH_CLIENT_ID or OAUTH_CLIENT_ID: Auth0 app client ID
-- DAILYWIRE_OAUTH_SCOPE or OAUTH_SCOPE: OAuth scope string (default: "openid profile email offline_access")
+- DAILYWIRE_OAUTH_SCOPE or OAUTH_SCOPE: OAuth scope string (default: "openid profile offline_access")
+
+If environment variables are not set, the tool will read from a YAML config file using PyYAML, in the same way as the dailywire_downloader package:
+- Default path: $(pwd)/config/config.yml (or override with $WL_CONFIG_FILE)
+- Expected YAML structure:
+
+```yaml
+OAuth:
+  Issuer: "https://authorize.dailywire.com"
+  Audience: "https://api.dailywire.com/"
+  ClientId: "FCgw3nA6cxkcXLVseAQvCSVBrymwvfpE"
+  Scope: "openid profile offline_access"
+```
+
+Precedence: CLI flags > environment variables > config.yml > built-in defaults.
 
 ### Defaults
-These are used when you don't provide CLI flags or env vars:
-- issuer: https://dailywireplus.auth0.com
-- audience: https://api.dailywire.com
+These are used when you don't provide CLI flags, env vars, or values in config.yml:
+- issuer: https://authorize.dailywire.com
+- audience: https://api.dailywire.com/
 - client_id: FCgw3nA6cxkcXLVseAQvCSVBrymwvfpE
-- scope: openid profile email offline_access
+- scope: openid profile offline_access
 
 Note: These defaults are based on publicly observed configurations and may change. If login fails for your tenant, supply the correct values via flags or env vars.
+
+
+## Troubleshooting
+
+- 404 Not Found for https://authorize.dailywire.com/oauth/device/code
+  - Some DailyWire Auth0 tenants use a different issuer domain. If you see a 404 on the default issuer, try specifying an alternative issuer explicitly:
+    
+    ```bash
+    uv run dailywire-auth --issuer https://dailywire.us.auth0.com
+    ```
+  - Other known candidates you can try:
+    - https://dailywireplus.us.auth0.com
+  - The CLI will attempt a couple of known alternatives automatically when the default issuer returns 404, but passing --issuer ensures it uses the domain that works for your account.

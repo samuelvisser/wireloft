@@ -4,13 +4,11 @@ import os
 from dataclasses import dataclass
 
 
-# Reasonable defaults to allow out-of-the-box usage. These can be overridden
-# via CLI flags or environment variables.
-DEFAULT_ISSUER = "https://dailywireplus.auth0.com"
-DEFAULT_AUDIENCE = "https://api.dailywire.com"
-# Observed working client id in upstream .NET project
+# These can be overridden via CLI flags or environment variables.
+DEFAULT_ISSUER = "https://authorize.dailywire.com"
+DEFAULT_AUDIENCE = "https://api.dailywire.com/"
 DEFAULT_CLIENT_ID = "FCgw3nA6cxkcXLVseAQvCSVBrymwvfpE"
-DEFAULT_SCOPE = "openid profile email offline_access"
+DEFAULT_SCOPE = "openid profile offline_access"
 
 
 @dataclass(frozen=True)
