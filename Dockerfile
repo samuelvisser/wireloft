@@ -40,9 +40,9 @@ COPY server/dailywire_downloader/src/dailywire_downloader/__init__.py /app/serve
 COPY server/backend/src/backend/__init__.py /app/server/backend/src/backend/__init__.py
 COPY server/dailywire_api/src/dailywire_api/__init__.py /app/server/dailywire_api/src/dailywire_api/__init__.py
 RUN cd /app && uv venv && uv pip install -e server/dailywire_downloader -e server/dailywire_api -e server/backend
-ENV DW_CONFIG_FILE="/config/config.yml"
-ENV DW_COOKIES_FILE="/config/cookies.txt"
-ENV DW_DOWNLOAD_DIR="/downloads"
+ENV WL_CONFIG_FILE="/config/config.yml"
+ENV WL_COOKIES_FILE="/config/cookies.txt"
+ENV WL_DOWNLOAD_DIR="/downloads"
 
 # Copy remaining package files (we do this here to prevent re-installation for every change in the package)
 COPY ./server/ /app/server/

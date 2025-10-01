@@ -32,6 +32,7 @@ export default function AddMediaProfilePage() {
         return fetch(`${(window as any).appConfig.API_URL}/media-profiles`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
+            credentials: 'include',
             body: JSON.stringify(data),
         })
     };

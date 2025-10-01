@@ -21,7 +21,7 @@ export default function MediaProfilesPage() {
     const onConfirmDelete = async () => {
         if (!confirmProfile) return
 
-        const r = await fetch(`${(window as any).appConfig.API_URL}/media-profiles/${confirmProfile.slug}`, {method: 'DELETE'})
+        const r = await fetch(`${(window as any).appConfig.API_URL}/media-profiles/${confirmProfile.slug}`, { method: 'DELETE', credentials: 'include' })
         if (!r.ok) {
             // Try to parse server error in the documented format and show a toast error
             let friendly = `Failed to delete media profile (HTTP ${r.status})`

@@ -19,7 +19,7 @@ export default function EditMediaProfilePage() {
         enabled: !!slug,
         refetchOnMount: 'always',
         queryFn: async ({signal}) => {
-            const res = await fetch(`${(window as any).appConfig.API_URL}/media-profiles/${slug}`, {signal})
+            const res = await fetch(`${(window as any).appConfig.API_URL}/media-profiles/${slug}`, { signal, credentials: 'include' })
             if (!res.ok) throw new Error(`Failed to load profile (${res.status})`)
             return await res.json() as Promise<MediaProfileUpdateIn>
         },
@@ -71,6 +71,7 @@ export default function EditMediaProfilePage() {
         return fetch(`${(window as any).appConfig.API_URL}/media-profiles/${data.slug}`, {
             method: 'PATCH',
             headers: {'Content-Type': 'application/json'},
+            credentials: 'include',
             body: JSON.stringify(data),
         })
     }

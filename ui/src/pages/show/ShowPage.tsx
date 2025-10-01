@@ -73,7 +73,7 @@ export default function ShowPage() {
   const onConfirmDelete = async () => {
     if (!id) return
     const url = `${(window as any).appConfig.API_URL}/shows/${id}`
-    const r = await fetch(url, { method: 'DELETE' })
+    const r = await fetch(url, { method: 'DELETE', credentials: 'include' })
     if (!r.ok) {
       let friendly = `Failed to delete show (HTTP ${r.status})`
       try {

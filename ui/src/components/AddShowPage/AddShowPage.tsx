@@ -221,6 +221,7 @@ export default function AddShowPage({onCancel}: Props) {
             const response = await fetch(`${(window as any).appConfig.API_URL}/shows/as-bundle`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
+                credentials: 'include',
                 body: JSON.stringify(submitData),
             })
 

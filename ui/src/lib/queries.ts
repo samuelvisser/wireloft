@@ -4,7 +4,7 @@ import { saveProfilesToStorage, saveShowsToStorage } from './cache'
 import {MediaProfileRead} from "../types/schemas/media_profile";
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const r = await fetch(url, { signal })
+  const r = await fetch(url, { signal, credentials: 'include' })
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
   return r.json() as Promise<T>
 }
@@ -79,7 +79,7 @@ export function useDailywireShow(slug?: string, membershipPlan?: string) {
       const urlBase = (window as any).appConfig.API_URL
       const params = membershipPlan ? `?membership_plan=${encodeURIComponent(membershipPlan)}` : ''
       const url = `${urlBase}/dailywire/shows/${encodeURIComponent(slug!)}` + params
-      const r = await fetch(url, { signal })
+      const r = await fetch(url, { signal, credentials: 'include' })
       if (!r.ok) {
         // Try to surface server-provided error detail and attach status
         try {

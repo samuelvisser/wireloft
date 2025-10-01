@@ -44,7 +44,7 @@ export default function EditShowPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${(window as any).appConfig.API_URL}/media-profiles`, { signal: controller.signal })
+    fetch(`${(window as any).appConfig.API_URL}/media-profiles`, { signal: controller.signal, credentials: 'include' })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const data = await r.json()
@@ -86,6 +86,7 @@ export default function EditShowPage() {
     const r = await fetch(`${(window as any).appConfig.API_URL}/shows/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(payload),
     })
     if (!r.ok) {
