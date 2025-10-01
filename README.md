@@ -1,5 +1,3 @@
-
-
 > This version of WireLoft is currently in active development. If you want to download Daily Wire shows, use the version in the master branch. 
 > You can see a sneak peak of what is to come in the next version of WireLoft here, though!
 

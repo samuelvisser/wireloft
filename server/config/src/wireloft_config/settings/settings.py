@@ -1,10 +1,12 @@
 import os
+from pathlib import Path
 from typing import Optional, Union, Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import YamlConfigSettingsSource
 
-from wireloft_config.base import SubmodelBase, SettingsBase
+from wireloft_config.config import PROJECT_ROOT
+from wireloft_config.settings.base import SubmodelBase, SettingsBase
 from wireloft_config.security.passwords import hash_password_scrypt
 
 
@@ -38,7 +40,7 @@ class AppSettings(SettingsBase):
         min_slow_request_ms=3840000,        # 8 minutes
     )
 
-    database_url: str = "sqlite:///./default.db"
+    database_path: Path = PROJECT_ROOT / "data" / "wireloft.db"
     log_level: str = "INFO"
 
     admin_password_hash: Union[str, Literal[False]] = False

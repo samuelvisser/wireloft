@@ -1,4 +1,5 @@
 from .settings import AppSettings
-from .getter import get_settings, reload_settings
+from .registry import get_settings, reload_settings
+from .security import AdminAuth
 
-__all__ = ["AppSettings", "get_settings", "reload_settings"]
+__all__ = ["AppSettings", "AdminAuth", "get_settings", "reload_settings"]

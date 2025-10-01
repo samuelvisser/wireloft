@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from .getter import get_settings
+from .registry import get_settings
 
 
 def main(argv: list[str] | None = None) -> None:
