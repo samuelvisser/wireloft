@@ -1,7 +1,2 @@
 [tool.uv.workspace]
-members = [
-  "server/backend",
-  "server/dailywire_api",
-  "server/dailywire_downloader",
-  "server/config",
-]
+members = ["server/*"]

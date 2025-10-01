@@ -3,14 +3,14 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from wireloft_config import get_settings
 
 # Reasonable defaults to allow out-of-the-box usage. These can be overridden
 # via CLI flags or environment variables.
-DEFAULT_ISSUER = "https://dailywireplus.auth0.com"
-DEFAULT_AUDIENCE = "https://api.dailywire.com"
-# Observed working client id in upstream .NET project
-DEFAULT_CLIENT_ID = "FCgw3nA6cxkcXLVseAQvCSVBrymwvfpE"
-DEFAULT_SCOPE = "openid profile email offline_access"
+DEFAULT_ISSUER = get_settings().dw_oauth.issuer
+DEFAULT_AUDIENCE = get_settings().dw_oauth.audience
+DEFAULT_CLIENT_ID = get_settings().dw_oauth.client_id
+DEFAULT_SCOPE = get_settings().dw_oauth.scope
 
 
 @dataclass(frozen=True)
@@ -41,26 +41,18 @@ def get_config(
     """
     iss = (
         issuer
-        or os.getenv("DAILYWIRE_OAUTH_ISSUER")
-        or os.getenv("OAUTH_ISSUER")
         or DEFAULT_ISSUER
     )
     aud = (
         audience
-        or os.getenv("DAILYWIRE_OAUTH_AUDIENCE")
-        or os.getenv("OAUTH_AUDIENCE")
         or DEFAULT_AUDIENCE
     )
     cid = (
         client_id
-        or os.getenv("DAILYWIRE_OAUTH_CLIENT_ID")
-        or os.getenv("OAUTH_CLIENT_ID")
         or DEFAULT_CLIENT_ID
     )
     scp = (
         scope
-        or os.getenv("DAILYWIRE_OAUTH_SCOPE")
-        or os.getenv("OAUTH_SCOPE")
         or DEFAULT_SCOPE
     )
 
