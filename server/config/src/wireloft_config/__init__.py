@@ -1,3 +1,4 @@
-from.settings import AppConfig
+from .settings import AppSettings
+from .getter import get_settings, reload_settings
 
-__version__ = "0.1.0"
+__all__ = ["AppSettings", "get_settings", "reload_settings"]
