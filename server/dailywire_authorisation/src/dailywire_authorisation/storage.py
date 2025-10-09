@@ -23,7 +23,7 @@ class TokenStore:
     Fails fast if the system keyring is unusable.
     """
 
-    def __init__(self, service_name: str = "device-auth"):
+    def __init__(self, service_name: str = "wireloft-dailywire-auth"):
         self.service_name = service_name
         # Basic sanity check: some keyring backends return None silently.
         try:
