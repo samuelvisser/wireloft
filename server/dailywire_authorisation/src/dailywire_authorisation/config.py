@@ -13,8 +13,13 @@ class DeviceAuthConfig:
     scope: str = get_settings().dw_oauth.scope
     audience: str = get_settings().dw_oauth.audience
 
-    device_authorization_endpoint: str = f"{issuer}/oauth/device/code"
-    token_endpoint: str = f"{issuer}/oauth/token"
+    @property
+    def device_authorization_endpoint(self) -> str:
+        return f"{self.issuer}/oauth/device/code"
+
+    @property
+    def token_endpoint(self) -> str:
+        return f"{self.issuer}/oauth/token"
 
 
 @dataclass

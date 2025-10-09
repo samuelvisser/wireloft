@@ -1,2 +1,2 @@
-from .client import DeviceAuthClient
-from .config import DeviceAuthConfig, OAuthTokens
+
+__version__ = "0.1.0"

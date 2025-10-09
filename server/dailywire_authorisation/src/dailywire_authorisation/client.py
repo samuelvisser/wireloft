@@ -1,72 +1,30 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
 from typing import Optional, Dict, Any
 import requests
 
+from .config import DeviceAuthConfig, OAuthTokens
 from .storage import TokenStore, TokenRecord
 
-# NEW: settings import
 from wireloft_config import get_settings  # type: ignore
-
-
-@dataclass(frozen=True)
-class DeviceAuthConfig:
-    issuer: str  # e.g., "https://authorize.dailywire.com"
-    client_id: str
-    scope: str
-    device_authorization_endpoint: str
-    token_endpoint: str
-    audience: Optional[str] = None  # Some IdPs require audience
-
-    @staticmethod
-    def from_wireloft() -> "DeviceAuthConfig":
-        """
-        Build config from wireloft_config.get_settings().dw_oauth and
-        conventionally derive device & token endpoints.
-        """
-        s = get_settings()  # AppSettings
-        o = s.dw_oauth      # _OAuthSettings
-        issuer = o.issuer.rstrip("/")
-        return DeviceAuthConfig(
-            issuer=issuer,
-            client_id=o.client_id,
-            scope=o.scope,
-            audience=o.audience,
-            device_authorization_endpoint=f"{issuer}/oauth/device/code",
-            token_endpoint=f"{issuer}/oauth/token",
-        )
-
-
-@dataclass
-class OAuthTokens:
-    access_token: str
-    refresh_token: Optional[str]
-    token_type: str
-    expires_at: float
-    scope: Optional[str] = None
-
 
 class DeviceAuthClient:
     """
     RFC 8628-compliant device authorization grant.
     """
 
-    def __init__(self, config: Optional[DeviceAuthConfig] = None,
-                 store: Optional[TokenStore] = None,
-                 session: Optional[requests.Session] = None):
+    def __init__(self, config: DeviceAuthConfig, store: Optional[TokenStore] = None, session: Optional[requests.Session] = None):
         # Prefer explicit config; otherwise derive from wireloft settings
-        self.config = config or DeviceAuthConfig.from_wireloft()
+        self.config = config
         self.store = store or TokenStore()
         self.session = session or requests.Session()
-        self._store_key = self._make_store_key()
-
-    def _make_store_key(self) -> str:
-        a = self.config.audience or ""
-        return f"{self.config.issuer}|{self.config.client_id}|{a}|{self.config.scope}"
+        self._store_key = self.make_store_key()
 
     # ---------- Public API ----------
+
+    def make_store_key(self) -> str:
+        return f"{self.config.issuer}|{self.config.client_id}|{self.config.audience}|{self.config.scope}"
 
     def ensure_token(self) -> OAuthTokens:
         rec = self.store.load(self._store_key)
@@ -157,9 +115,11 @@ class DeviceAuthClient:
 
     def _device_authorize_interactive(self) -> TokenRecord:
         start = self._start_device_flow()
-        print("To authorize, visit:", start["verification_uri"])
         if start.get("verification_uri_complete"):
-            print("Or open:", start["verification_uri_complete"])
+            print("To authorize, visit:", start["verification_uri_complete"])
+        else:
+            print("To authorize, visit:", start["verification_uri"])
+
         print("Enter code:", start["user_code"])
         return self._poll_for_token(start["device_code"], start["interval"], start["expires_in"])
 
@@ -174,7 +134,8 @@ class DeviceAuthClient:
             return None
         return self._to_record(r.json(), existing_refresh=refresh_token)
 
-    def _to_record(self, j: Dict[str, Any], existing_refresh: Optional[str] = None) -> TokenRecord:
+    @staticmethod
+    def _to_record(j: Dict[str, Any], existing_refresh: Optional[str] = None) -> TokenRecord:
         import time as _t
         expires_in = int(j.get("expires_in", 3600))
         refresh_token = j.get("refresh_token") or existing_refresh
