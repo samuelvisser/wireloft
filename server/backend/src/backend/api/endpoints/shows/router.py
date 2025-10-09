@@ -8,17 +8,28 @@ from backend.app import db_session
 
 router = APIRouter(prefix="/shows", tags=["Shows"])
 
-router.include_router(show_view_router, prefix = "/as-view")
-router.include_router(show_as_bundle_router, prefix = "/as-bundle")
+router.include_router(show_view_router)
+router.include_router(show_as_bundle_router)
 
 @router.get("", response_model=list[ShowAPIRead])
 def show_list():
+    """
+    List all shows in the system.
+
+    Returns a collection of all show records with their basic metadata.
+    """
     with db_session() as s:
         return get_shows_list(s)
 
 
 @router.post("", response_model=ShowAPIRead, status_code=status.HTTP_201_CREATED)
 def show_create(body: ShowAPICreate):
+    """
+    Create a new show entry.
+
+    Adds a new show to the system with the provided metadata.
+    Returns the created show with a generated slug identifier.
+    """
     with db_session() as s:
         try:
             result = create_show(s, body)
@@ -30,7 +41,12 @@ def show_create(body: ShowAPICreate):
 
 
 @router.post("/bundle", response_model=ShowAPIRead)
-def show_create(body: ShowAPICreate):
+def show_create_bundle(body: ShowAPICreate):
+    """
+    Create a new show as a bundle (deprecated).
+
+    This endpoint is deprecated. Use /shows/as-bundle instead.
+    """
     with db_session() as s:
         try:
             result = create_show(s, body)
@@ -43,12 +59,23 @@ def show_create(body: ShowAPICreate):
 
 @router.get("/{show_slug}", response_model=ShowAPIRead)
 def show_detail(show_slug: str):
+    """
+    Retrieve detailed information for a specific show.
+
+    Returns complete show metadata including title, description, and configuration.
+    """
     with db_session() as s:
         return get_show(s, show_slug)
 
 
 @router.patch("/{show_slug}", response_model=ShowAPIRead)
 def show_update(show_slug: str, body: ShowAPIUpdate):
+    """
+    Update an existing show's metadata.
+
+    Partially updates show information with the provided fields.
+    Only specified fields will be modified; omitted fields remain unchanged.
+    """
     with db_session() as s:
         try:
             result = update_show(s, show_slug, body)
@@ -61,6 +88,12 @@ def show_update(show_slug: str, body: ShowAPIUpdate):
 
 @router.delete("/{show_slug}", response_model=ShowAPIRead)
 def show_delete(show_slug: str):
+    """
+    Delete a show from the system.
+
+    Permanently removes the specified show and its associated data.
+    Returns the deleted show's information for confirmation.
+    """
     with db_session() as s:
         try:
             result = delete_show(s, show_slug)

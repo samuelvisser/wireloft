@@ -9,7 +9,10 @@ router = APIRouter(prefix="/shows/{show_slug}/episodes", tags=["Episodes"])
 @router.get("", response_model=list[EpisodeAPIRead])
 def episode_list(show_slug: str):
     """
-    List all episodes for a show.
+    List all episodes for a specific show.
+
+    Returns a collection of all episodes associated with the specified show slug.
+    Episodes are returned in their database order.
     """
     with db_session() as s:
         return get_episodes_list(s, show_slug)
@@ -17,6 +20,12 @@ def episode_list(show_slug: str):
 
 @router.post("", response_model=EpisodeAPIRead, status_code=status.HTTP_201_CREATED)
 def episode_create(body: EpisodeAPICreate):
+    """
+    Create a new episode for a show.
+
+    Creates a new episode with the provided metadata and associates it with a show.
+    Returns the created episode with a generated slug identifier.
+    """
     with db_session() as s:
         try:
             result = create_episode(s, body)
@@ -29,12 +38,23 @@ def episode_create(body: EpisodeAPICreate):
 
 @router.get("/{episode_slug}", response_model=EpisodeAPIRead)
 def episode_detail(show_slug: str, episode_slug: str):
+    """
+    Retrieve detailed information for a specific episode.
+
+    Returns complete episode metadata including title, description, and associated media.
+    """
     with db_session() as s:
         return get_episode(s, show_slug, episode_slug)
 
 
 @router.patch("/{episode_slug}", response_model=EpisodeAPIRead)
 def episode_update(show_slug: str, episode_slug: str, body: EpisodeAPIUpdate):
+    """
+    Update an existing episode's metadata.
+
+    Partially updates episode information with the provided fields.
+    Only specified fields will be modified; omitted fields remain unchanged.
+    """
     with db_session() as s:
         try:
             result = update_episode(s, show_slug, episode_slug, body)
@@ -47,6 +67,12 @@ def episode_update(show_slug: str, episode_slug: str, body: EpisodeAPIUpdate):
 
 @router.delete("/{episode_slug}", response_model=EpisodeAPIRead)
 def episode_delete(show_slug: str, episode_slug: str):
+    """
+    Delete an episode from the system.
+
+    Permanently removes the specified episode and its associated data.
+    Returns the deleted episode's information for confirmation.
+    """
     with db_session() as s:
         try:
             result = delete_episode(s, show_slug, episode_slug)

@@ -14,6 +14,13 @@ def show_detail(
     membership_plan: str | None = Query(default=None, description="Optional membership plan (e.g., AllAccess)"),
     authorization: str | None = Header(default=None, description="Optional Bearer token for premium content"),
 ):
+    """
+    Retrieve show information from DailyWire API.
+
+    Fetches show metadata directly from the DailyWire upstream API.
+    Supports authentication via Bearer token for premium content access.
+    Returns 502 if upstream API is unavailable or returns an error.
+    """
     try:
         token = None
         if authorization and authorization.lower().startswith("bearer "):
