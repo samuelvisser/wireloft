@@ -6,8 +6,10 @@ Access tokens are NEVER exposed to the frontend - they are stored in backend onl
 The frontend can initiate and poll for authorization, but tokens remain server-side.
 """
 from fastapi import APIRouter, HTTPException, status
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import time
+import threading
+from starlette.concurrency import run_in_threadpool
 
 from backend.api.models.dailywire_auth import *
 from dailywire_authorisation import DeviceAuthClient
@@ -19,6 +21,9 @@ _client: Optional[DeviceAuthClient] = None
 
 # In-memory storage for active device flows (device_code -> flow_data)
 _active_flows: Dict[str, Dict[str, Any]] = {}
+
+# Cancellation events for in-progress polls (device_code -> threading.Event)
+_cancel_events: Dict[str, threading.Event] = {}
 
 
 def get_client() -> DeviceAuthClient:
@@ -50,7 +55,7 @@ async def initiate_device_flow():
     """
     try:
         client = get_client()
-        flow_data = client.start_device_flow()
+        flow_data = await run_in_threadpool(client.start_device_flow)
 
         # Track this flow temporarily (for cleanup and validation)
         _active_flows[flow_data["device_code"]] = {
@@ -105,18 +110,25 @@ async def poll_for_authorization(request: PollRequest):
 
         # Use the client's poll_until_authorized method
         # This will block until authorization completes (or fails)
+        # Create a cancellation event so other endpoints (e.g., logout) can stop polling
+        cancel_event = threading.Event()
+        _cancel_events[request.device_code] = cancel_event
+
         client = get_client()
 
         try:
-            # Poll until authorized - the client automatically saves tokens
-            client.poll_until_authorized(
+            # Poll until authorized - run in a threadpool to avoid blocking the event loop
+            await run_in_threadpool(
+                client.poll_until_authorized,
                 device_code=request.device_code,
                 interval=flow.get("interval", 5),
-                expires_in=int(flow["expires_at"] - time.time())
+                expires_in=max(1, int(flow["expires_at"] - time.time())),
+                stop_event=cancel_event,
             )
 
             # Clean up the flow tracking
             _active_flows.pop(request.device_code, None)
+            _cancel_events.pop(request.device_code, None)
 
             return PollResponse(
                 status="authorized",
@@ -127,6 +139,7 @@ async def poll_for_authorization(request: PollRequest):
             # Handle errors from poll_until_authorized
             error_msg = str(e).lower()
             _active_flows.pop(request.device_code, None)
+            _cancel_events.pop(request.device_code, None)
 
             if "expired" in error_msg:
                 return PollResponse(
@@ -140,11 +153,12 @@ async def poll_for_authorization(request: PollRequest):
                 )
 
         except PermissionError:
-            # User denied the request
+            # User denied the request or polling was canceled
             _active_flows.pop(request.device_code, None)
+            _cancel_events.pop(request.device_code, None)
             return PollResponse(
                 status="denied",
-                message="User denied authorization"
+                message="User denied authorization or operation was cancelled"
             )
 
     except HTTPException:
@@ -186,9 +200,18 @@ async def logout():
     """
     Logout the user by revoking and deleting stored tokens.
 
-    This removes OAuth tokens from backend storage.
+    Also forcefully terminates any in-progress device authorization polling.
     """
     try:
+        # Signal all in-progress polls to cancel and clear active flows
+        for ev in list(_cancel_events.values()):
+            try:
+                ev.set()
+            except Exception:
+                pass
+        _cancel_events.clear()
+        _active_flows.clear()
+
         client = get_client()
         client.revoke()
     except Exception as e:
