@@ -39,3 +39,10 @@ class OAuthTokens:
     token_type: str
     expires_at: float
     scope: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class DeviceAuthStatus:
+    authenticated: bool
+    contains_refresh_token: bool
+    expires_at: Optional[float] = None

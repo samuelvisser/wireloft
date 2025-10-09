@@ -51,10 +51,11 @@ def run_cli():
         client.revoke()
         print("Tokens deleted.")
     elif args.cmd == "status":
-        rec = store.load(client.make_store_key())
-        if not rec:
+        status = client.status()
+
+        if not status.authenticated:
             print("No tokens stored.")
         else:
             import time
-            ttl = int(rec.expires_at - time.time())
-            print(f"Token present. TTL ~ {ttl} seconds. Refresh token: {'yes' if rec.refresh_token else 'no'}")
+            ttl = int(status.expires_at - time.time())
+            print(f"Token present. TTL ~ {ttl} seconds. Refresh token: {'yes' if status.contains_refresh_token else 'no'}")
