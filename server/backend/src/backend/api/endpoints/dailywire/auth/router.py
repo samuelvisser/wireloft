@@ -169,11 +169,11 @@ async def get_auth_status():
         client_status = client.status()
 
         # Check if the token is still valid
-        is_valid = client_status.expires_at > time.time()
-        return StatusResponse(
-            **client_status.__dict__,
-            expires_at=client_status.expires_at if is_valid else None
-        )
+        if client_status.expires_at:
+            is_valid = client_status.expires_at > time.time()
+            client_status.expires_at = client_status.expires_at if is_valid else None
+
+        return StatusResponse(**client_status.__dict__)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

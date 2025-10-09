@@ -41,7 +41,7 @@ class OAuthTokens:
     scope: Optional[str] = None
 
 
-@dataclass(frozen=True)
+@dataclass
 class DeviceAuthStatus:
     authenticated: bool
     contains_refresh_token: bool
