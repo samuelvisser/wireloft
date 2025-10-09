@@ -9,6 +9,8 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.api.errors import integrity_error_handler
 from backend.db import get_session
+from wireloft_config import get_settings
+
 
 @contextmanager
 def db_session():
@@ -20,7 +22,11 @@ def db_session():
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="WireLoft API")
+    app = FastAPI(
+        title="WireLoft API",
+        summary="Internal API for WireLoft",
+        version=get_settings().app_version,
+    )
 
     # Allow the React dev server to call the API during development
     app.add_middleware(
