@@ -14,6 +14,21 @@ const items: Array<{ path: string; label: string; icon: IconProp; end?: boolean 
 ]
 
 export default function Sidebar() {
+    const handleLogout = async () => {
+        const base = (window as any).appConfig?.API_URL || '/api'
+        try {
+            await fetch(`${base}/auth/logout`, {
+                method: 'POST',
+                credentials: 'include',
+            })
+        } catch (e) {
+            // ignore
+        } finally {
+            // Reload to trigger auth re-check and show login screen
+            window.location.reload()
+        }
+    }
+
     return (
         <aside className="sidebar" aria-label="Sidebar">
             <header className="sidebar-header" style={{display: 'flex', justifyContent: 'center', paddingTop: 6}}>
@@ -52,6 +67,17 @@ export default function Sidebar() {
                         </span>
                         <span>Github</span>
                     </a>
+                    <button
+                        type="button"
+                        className="footer-link"
+                        onClick={handleLogout}
+                        style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
+                    >
+                        <span className="icon" aria-hidden>
+                          <FontAwesomeIcon icon={["fas", "right-from-bracket"]} />
+                        </span>
+                        <span>Logout</span>
+                    </button>
                 </div>
                 <div className="footer-meta" style={{textAlign: 'center'}}>
                     <span className="version" aria-label="App version" style={{color: 'gray'}}>

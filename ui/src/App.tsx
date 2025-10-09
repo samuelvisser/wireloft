@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import HomePage from './pages/HomePage'
@@ -10,12 +10,44 @@ import EditMediaProfilePage from './pages/media-profile/EditMediaProfilePage'
 import ShowPage from './pages/show/ShowPage'
 import EditShow from './pages/show/EditShowPage'
 import EpisodePage from './pages/episode/EpisodePage'
+import LoginPage from './pages/LoginPage'
 
 export default function App() {
   const navigate = useNavigate()
 
+  const [authState, setAuthState] = useState<'checking' | 'ok' | 'no'>('checking')
+
+  useEffect(() => {
+    let cancelled = false
+    const base = (window as any).appConfig?.API_URL || '/api'
+    fetch(`${base}/auth/status`, { credentials: 'include' })
+      .then((r) => {
+        if (cancelled) return
+        setAuthState(r.ok ? 'ok' : 'no')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setAuthState('no')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const goToAddShow = useCallback(() => navigate('/add-show'), [navigate])
   const cancelAddShow = useCallback(() => navigate('/'), [navigate])
+
+  if (authState === 'checking') {
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
+        <div>Loading…</div>
+      </div>
+    )
+  }
+
+  if (authState === 'no') {
+    return <LoginPage />
+  }
 
   return (
     <div className="app">
