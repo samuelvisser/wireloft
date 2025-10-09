@@ -1,25 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react'
+import { DeviceAuthResponse, DeviceAuthResponseSchema, PollResponse, PollResponseSchema, StatusResponse, StatusResponseSchema } from '../../types/schemas/dailywire_auth'
 
-// Types that mirror backend models
-type StatusResponse = {
-    authenticated: boolean
-    containsRefreshToken: boolean
-    expiresAt: number | null
-}
-
-type DeviceAuthResponse = {
-    deviceCode: string
-    userCode: string
-    verificationUri: string
-    verificationUriComplete?: string | null
-    expiresIn: number
-    interval: number
-}
-
-type PollResponse = {
-    status: 'authorized' | 'expired' | 'denied'
-    message: string
-}
 
 function apiBase() {
     const base = (window as any).appConfig?.API_URL?.replace(/\/+$/, '')
@@ -44,7 +25,7 @@ export default function DailywireAuthCard() {
         try {
             const r = await fetch(`${apiBase()}/status`, {credentials: 'include'})
             if (!r.ok) throw new Error(`Failed to load status (HTTP ${r.status})`)
-            const j: StatusResponse = await r.json()
+            const j = StatusResponseSchema.parse(await r.json())
             setStatus(j)
         } catch (e: any) {
             setError(e?.message || 'Failed to load status')
@@ -74,7 +55,7 @@ export default function DailywireAuthCard() {
                 credentials: 'include',
             })
             if (!r.ok) throw new Error(`Failed to start authorization (HTTP ${r.status})`)
-            const j: DeviceAuthResponse = await r.json()
+            const j = DeviceAuthResponseSchema.parse(await r.json())
 
             setFlow(j)
             // Kick off polling immediately
@@ -117,7 +98,7 @@ export default function DailywireAuthCard() {
                 }
                 throw new Error(detail)
             }
-            const pr: PollResponse = await r.json()
+            const pr = PollResponseSchema.parse(await r.json())
             setFlowStatus(pr)
             if (pr.status === 'authorized') {
                 await refreshStatus()
@@ -170,9 +151,9 @@ export default function DailywireAuthCard() {
                 <h2 style={{margin: 0, fontSize: 18}}>DailyWire Account</h2>
                 <div style={{marginLeft: 'auto'}}>
                     {status?.authenticated ? (
-                        <span className="badge" title="Connected">Connected</span>
+                        <span className="dw-status-badge" title="Connected">Connected</span>
                     ) : (
-                        <span className="badge" title="Not connected">Not connected</span>
+                        <span className="dw-status-badge" title="Not connected">Not connected</span>
                     )}
                 </div>
             </div>

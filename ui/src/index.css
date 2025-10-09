@@ -286,7 +286,7 @@ a.btn,
 }
 
 /* DailyWire auth card spacing to prevent overlap and improve readability */
-.dailywire-auth-card { padding: 18px; gap: 10px; }
+.dailywire-auth-card { position: relative; padding: 18px; gap: 10px; }
 .dailywire-auth-card .card-header { margin-bottom: 6px; }
 .dailywire-auth-card .card-body { padding-top: 2px; display: grid; gap: 12px; }
 .dailywire-auth-card .device-flow { display: grid; gap: 12px; }
@@ -301,6 +301,27 @@ a.btn,
 }
 @media (prefers-color-scheme: dark) {
   .dailywire-auth-card .device-flow code { background: rgba(255, 255, 255, 0.08); }
+}
+
+/* DailyWire auth card: status badge should only appear inside the card on hover */
+.dailywire-auth-card .dw-status-badge {
+  display: none; /* hidden by default */
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 1;
+  background: rgba(15, 23, 42, 0.9);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.dailywire-auth-card:hover .dw-status-badge {
+  display: inline-flex; /* show only when hovering the card */
+}
+@media (prefers-color-scheme: dark) {
+  .dailywire-auth-card .dw-status-badge { background: rgba(255, 255, 255, 0.92); color: #0f172a; }
 }
 
 /* Form styles */
