@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
+import {useCallback, useEffect, useRef, useState} from 'react'
 
 // Types that mirror backend models
 type StatusResponse = {
@@ -24,15 +24,6 @@ type PollResponse = {
 function apiBase() {
     const base = (window as any).appConfig?.API_URL?.replace(/\/+$/, '')
     return `${base}/dailywire/auth`
-}
-
-function formatExpiry(ts: number | null): string | null {
-    if (!ts) return null
-    const msLeft = Math.max(0, Math.floor(ts * 1000 - Date.now()))
-    const mins = Math.floor(msLeft / 60000)
-    const secs = Math.floor((msLeft % 60000) / 1000)
-    if (mins <= 0) return `${secs}s`
-    return `${mins}m ${secs}s`
 }
 
 export default function DailywireAuthCard() {
@@ -142,16 +133,26 @@ export default function DailywireAuthCard() {
 
     const disconnect = useCallback(async () => {
         setError(null)
+        // stop any active polling and clear local device-flow state immediately
+        if (abortRef.current) {
+            try {
+                abortRef.current.abort()
+            } catch {
+            }
+            abortRef.current = null
+        }
+        setIsPolling(false)
+        setFlow(null)
+        setFlowStatus(null)
         try {
             const r = await fetch(`${apiBase()}/logout`, {method: 'POST', credentials: 'include'})
-            if (!r.ok && r.status !== 204) throw new Error(`Failed to disconnect (HTTP ${r.status})`)
-            await refreshStatus()
+            if (!r.ok) throw new Error(`Failed to disconnect (HTTP ${r.status})`)
         } catch (e: any) {
             setError(e?.message || 'Failed to disconnect')
+        } finally {
+            await refreshStatus()
         }
     }, [refreshStatus])
-
-    const expiresIn = useMemo(() => formatExpiry(status?.expiresAt ?? null), [status?.expiresAt])
 
     const copyCode = useCallback(async () => {
         if (!flow?.userCode) return
@@ -187,8 +188,7 @@ export default function DailywireAuthCard() {
 
                         {status?.authenticated ? (
                             <>
-                                <p>You are connected to
-                                    DailyWire. {expiresIn ? `Token expires in ${expiresIn}.` : ''}</p>
+                                <p>You are connected to DailyWire.</p>
                                 <div style={{display: 'flex', gap: 8, flexWrap: 'wrap'}}>
                                     <button className="btn" onClick={refreshStatus}>Refresh status</button>
                                     <button className="btn btn-danger" onClick={disconnect}>Disconnect</button>
@@ -196,12 +196,10 @@ export default function DailywireAuthCard() {
                             </>
                         ) : (
                             <>
-                                <p>Connect your DailyWire account to enable downloads and access members-only
-                                    content.</p>
+                                <p>Connect your DailyWire account to download members-only content.</p>
                                 {!flow ? (
                                     <div style={{display: 'flex', gap: 8, flexWrap: 'wrap'}}>
-                                        <button className="btn btn-primary" onClick={startFlow}>Connect DailyWire
-                                        </button>
+                                        <button className="btn btn-primary" onClick={startFlow}>Connect DailyWire</button>
                                         <button className="btn" onClick={refreshStatus}>Refresh status</button>
                                     </div>
                                 ) : (
@@ -236,21 +234,17 @@ export default function DailywireAuthCard() {
                                                 <p>Waiting for authorization…</p>
                                             ) : flowStatus ? (
                                                 flowStatus.status === 'authorized' ? (
-                                                    <p style={{color: 'var(--green-700, #15803d)'}}>Connected
-                                                        successfully.</p>
+                                                    <p style={{color: 'var(--green-700, #15803d)'}}>Connected successfully.</p>
                                                 ) : flowStatus.status === 'expired' ? (
-                                                    <p style={{color: 'var(--red-700, #b91c1c)'}}>Code expired. Please
-                                                        try again.</p>
+                                                    <p style={{color: 'var(--red-700, #b91c1c)'}}>Code expired. Please try again.</p>
                                                 ) : (
-                                                    <p style={{color: 'var(--red-700, #b91c1c)'}}>Authorization denied.
-                                                        You can try again.</p>
+                                                    <p style={{color: 'var(--red-700, #b91c1c)'}}>Authorization denied. You can try again.</p>
                                                 )
                                             ) : null}
                                         </div>
                                         <div style={{display: 'flex', gap: 8, flexWrap: 'wrap'}}>
                                             {!isPolling && (
-                                                <button className="btn btn-primary" onClick={startFlow}>Try
-                                                    again</button>
+                                                <button className="btn btn-primary" onClick={startFlow}>Try again</button>
                                             )}
                                             {!isPolling && (
                                                 <button className="btn" onClick={() => setFlow(null)}>Cancel</button>

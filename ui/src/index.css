@@ -254,7 +254,19 @@ a.show-header:focus-visible {
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.2;
+  text-decoration: none; /* ensure buttons are never underlined */
 }
+/* Ensure links styled as buttons are never underlined in any state */
+a.btn,
+.btn:link,
+.btn:visited,
+.btn:hover,
+.btn:focus,
+.btn:active { text-decoration: none; }
 .btn:hover { filter: brightness(0.98); }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-primary {
@@ -265,6 +277,30 @@ a.show-header:focus-visible {
 .btn-primary:hover {
   background: #2563eb;
   border-color: #2563eb;
+}
+/* Secondary button variant (neutral) */
+.btn-secondary {
+  background: #e2e8f0;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+/* DailyWire auth card spacing to prevent overlap and improve readability */
+.dailywire-auth-card { padding: 18px; gap: 10px; }
+.dailywire-auth-card .card-header { margin-bottom: 6px; }
+.dailywire-auth-card .card-body { padding-top: 2px; display: grid; gap: 12px; }
+.dailywire-auth-card .device-flow { display: grid; gap: 12px; }
+.dailywire-auth-card .device-flow ol { padding-left: 22px; }
+.dailywire-auth-card .device-flow li { margin-bottom: 8px; }
+.dailywire-auth-card .device-flow code {
+  background: #f1f5f9;
+  padding: 6px 10px;
+  border-radius: 8px;
+  display: inline-block;
+  letter-spacing: 0.5px;
+}
+@media (prefers-color-scheme: dark) {
+  .dailywire-auth-card .device-flow code { background: rgba(255, 255, 255, 0.08); }
 }
 
 /* Form styles */
