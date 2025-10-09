@@ -53,7 +53,7 @@ class PollRequest(BaseModel):
 
 class PollResponse(BaseModel):
     """Response from polling for authorization."""
-    status: str  # "pending", "authorized", "expired", "denied", "slow_down"
+    status: str  # "authorized", "expired", "denied"
     message: str
 
 
@@ -80,10 +80,12 @@ async def initiate_device_flow():
         client = get_client()
         flow_data = client.start_device_flow()
 
-        # Track this flow temporarily (for cleanup of expired flows)
+        # Track this flow temporarily (for cleanup and validation)
         _active_flows[flow_data["device_code"]] = {
             "created_at": time.time(),
-            "expires_at": time.time() + flow_data["expires_in"]
+            "expires_at": time.time() + flow_data["expires_in"],
+            "interval": flow_data["interval"],
+            "expires_in": flow_data["expires_in"]
         }
 
         return DeviceAuthResponse(**flow_data)
@@ -97,56 +99,49 @@ async def initiate_device_flow():
 @router.post("/poll", response_model=PollResponse, status_code=status.HTTP_200_OK)
 async def poll_for_authorization(request: PollRequest):
     """
-    Poll for authorization status after user has been shown the device code.
+    Complete the device authorization flow by polling until authorized.
 
-    The client should poll this endpoint at the interval specified in the device flow response.
-    Returns the authorization status without exposing any tokens.
+    This endpoint blocks until the user authorizes (or denies/expires).
+    The client should call this ONCE after displaying the device code.
+    Tokens are stored server-side and NEVER exposed to the frontend.
 
     Possible status values:
-    - "pending": User has not yet authorized
     - "authorized": User successfully authorized (tokens stored server-side)
-    - "slow_down": Client is polling too quickly
-    - "expired": Device code has expired
+    - "expired": Device code expired before user authorized
     - "denied": User denied authorization
 
-    Follows RFC 8628 Section 3.4-3.5 but adapts to the BFF pattern.
+    Follows RFC 8628 Section 3.4-3.5 using the client's poll_until_authorized method.
     """
     try:
-        # Check if this device code is being tracked
+        # Get flow data if it exists
         flow = _active_flows.get(request.device_code)
-        if flow and flow["expires_at"] < time.time():
-            # Clean up expired flow
+
+        if not flow:
+            # Flow not found - may have been used already or never existed
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Device code not found. It may have expired or already been used."
+            )
+
+        # Check if flow has expired
+        if flow["expires_at"] < time.time():
             _active_flows.pop(request.device_code, None)
             return PollResponse(
                 status="expired",
                 message="Device code has expired"
             )
 
-        # Poll the OAuth provider
+        # Use the client's poll_until_authorized method
+        # This will block until authorization completes (or fails)
         client = get_client()
-        data = {
-            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-            "device_code": request.device_code,
-            "client_id": client.config.client_id,
-        }
 
-        r = client.session.post(client.config.token_endpoint, data=data, timeout=30)
-
-        if r.status_code == 200:
-            token_data = r.json()
-
-            from dailywire_authorisation.storage import TokenRecord
-            expires_in = int(token_data.get("expires_in", 3600))
-            expires_at = time.time() + expires_in - 30
-
-            rec = TokenRecord(
-                access_token=token_data["access_token"],
-                refresh_token=token_data.get("refresh_token"),
-                token_type=token_data.get("token_type", "Bearer"),
-                scope=token_data.get("scope"),
-                expires_at=expires_at,
+        try:
+            # Poll until authorized - the client automatically saves tokens
+            client.poll_until_authorized(
+                device_code=request.device_code,
+                interval=flow.get("interval", 5),
+                expires_in=int(flow["expires_at"] - time.time())
             )
-            client.store.save(client._store_key, rec)
 
             # Clean up the flow tracking
             _active_flows.pop(request.device_code, None)
@@ -155,46 +150,30 @@ async def poll_for_authorization(request: PollRequest):
                 status="authorized",
                 message="Authorization successful"
             )
-        else:
-            # Handle OAuth errors
-            try:
-                error_data = r.json()
-                error_code = error_data.get("error", "unknown_error")
-                error_desc = error_data.get("error_description", "")
 
-                if error_code == "authorization_pending":
-                    return PollResponse(
-                        status="pending",
-                        message="User has not yet authorized"
-                    )
-                elif error_code == "slow_down":
-                    return PollResponse(
-                        status="slow_down",
-                        message="Polling too quickly, please slow down"
-                    )
-                elif error_code == "expired_token":
-                    _active_flows.pop(request.device_code, None)
-                    return PollResponse(
-                        status="expired",
-                        message="Device code has expired"
-                    )
-                elif error_code == "access_denied":
-                    _active_flows.pop(request.device_code, None)
-                    return PollResponse(
-                        status="denied",
-                        message="User denied authorization"
-                    )
-                else:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"OAuth error: {error_code} - {error_desc}"
-                    )
-            except ValueError:
-                r.raise_for_status()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to parse OAuth response"
+        except RuntimeError as e:
+            # Handle errors from poll_until_authorized
+            error_msg = str(e).lower()
+            _active_flows.pop(request.device_code, None)
+
+            if "expired" in error_msg:
+                return PollResponse(
+                    status="expired",
+                    message="Device code expired before authorization"
                 )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(e)
+                )
+
+        except PermissionError:
+            # User denied the request
+            _active_flows.pop(request.device_code, None)
+            return PollResponse(
+                status="denied",
+                message="User denied authorization"
+            )
 
     except HTTPException:
         raise
