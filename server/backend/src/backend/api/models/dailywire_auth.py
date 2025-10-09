@@ -14,21 +14,19 @@ class DeviceAuthResponse(ResponseBase):
     interval: int
 
 
-class TokenRequest(RequestBase):
-    """Request to poll for access token."""
+class PollRequest(RequestBase):
+    """Request to poll for authorization status."""
     device_code: str
 
 
-class TokenResponse(ResponseBase):
-    """OAuth token response."""
-    access_token: str
-    token_type: str
-    expires_in: Optional[int] = None
-    refresh_token: Optional[str] = None
-    scope: Optional[str] = None
+class PollResponse(ResponseBase):
+    """Response from polling for authorization."""
+    status: str  # "authorized", "expired", "denied"
+    message: str
 
 
 class StatusResponse(ResponseBase):
     """Authentication status response."""
     authenticated: bool
+    contains_refresh_token: bool
     expires_at: Optional[float] = None

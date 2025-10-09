@@ -6,10 +6,10 @@ Access tokens are NEVER exposed to the frontend - they are stored in backend onl
 The frontend can initiate and poll for authorization, but tokens remain server-side.
 """
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 import time
 
+from backend.api.models.dailywire_auth import *
 from dailywire_authorisation import DeviceAuthClient
 
 router = APIRouter(prefix="/auth", tags=["DailyWire Auth"])
@@ -33,34 +33,6 @@ def get_client() -> DeviceAuthClient:
         config = DeviceAuthConfig(**config_dict)
         _client = DeviceAuthClient(config=config)
     return _client
-
-
-# Request/Response Models
-class DeviceAuthResponse(BaseModel):
-    """Response from initiating device authorization flow."""
-    device_code: str
-    user_code: str
-    verification_uri: str
-    verification_uri_complete: Optional[str] = None
-    expires_in: int
-    interval: int
-
-
-class PollRequest(BaseModel):
-    """Request to poll for authorization status."""
-    device_code: str
-
-
-class PollResponse(BaseModel):
-    """Response from polling for authorization."""
-    status: str  # "authorized", "expired", "denied"
-    message: str
-
-
-class StatusResponse(BaseModel):
-    """Authentication status response."""
-    authenticated: bool
-    expires_at: Optional[float] = None
 
 
 @router.post("/device", response_model=DeviceAuthResponse, status_code=status.HTTP_200_OK)
@@ -187,24 +159,20 @@ async def poll_for_authorization(request: PollRequest):
 @router.get("/status", response_model=StatusResponse, status_code=status.HTTP_200_OK)
 async def get_auth_status():
     """
-    Check current authentication status.
+    Check the current authentication status.
 
     Returns whether valid tokens exist in the backend storage and when they expire.
     Does NOT expose any tokens to the frontend.
     """
     try:
         client = get_client()
-        rec = client.store.load(client._store_key)
+        client_status = client.status()
 
-        if not rec:
-            return StatusResponse(authenticated=False)
-
-        # Check if token is still valid
-        is_valid = rec.expires_at > time.time()
-
+        # Check if the token is still valid
+        is_valid = client_status.expires_at > time.time()
         return StatusResponse(
-            authenticated=is_valid,
-            expires_at=rec.expires_at if is_valid else None
+            **client_status.__dict__,
+            expires_at=client_status.expires_at if is_valid else None
         )
     except Exception as e:
         raise HTTPException(
