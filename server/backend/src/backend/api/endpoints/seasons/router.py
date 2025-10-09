@@ -4,7 +4,7 @@ from .service import *
 from ...models.season import *
 from backend.app import db_session
 
-router = APIRouter()
+router = APIRouter(prefix="/seasons", tags=["Seasons"])
 
 @router.get("", response_model=list[SeasonAPIRead])
 def seasons_list():

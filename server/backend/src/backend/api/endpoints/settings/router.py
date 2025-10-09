@@ -4,7 +4,7 @@ from .service import *
 from ...models.settings import *
 from backend.app import db_session
 
-router = APIRouter()
+router = APIRouter(prefix="/settings", tags=["Settings"])
 
 
 @router.get("", response_model=SettingsAPIRead)

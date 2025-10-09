@@ -49,16 +49,16 @@ def create_app() -> FastAPI:
         meta_router
     )
 
-    app.include_router(dailywire_router, prefix="/api/dailywire")
-    app.include_router(download_profile_podcast_router, prefix="/api/podcast-download-profiles")
-    app.include_router(download_profile_series_router, prefix="/api/series-download-profiles")
-    app.include_router(episode_router, prefix="/api/shows/{show_slug}/episodes")
-    app.include_router(season_router, prefix="/api/seasons")
-    app.include_router(media_download_router, prefix="/api/media-downloads")
-    app.include_router(show_router, prefix="/api/shows")
-    app.include_router(movie_router, prefix="/api/movies")
-    app.include_router(setting_router, prefix="/api/settings")
-    app.include_router(media_profile_router, prefix="/api/media-profiles")
-    app.include_router(meta_router, prefix="/api/meta")
+    app.include_router(dailywire_router, prefix="/api")
+    app.include_router(download_profile_podcast_router, prefix="/api")
+    app.include_router(download_profile_series_router, prefix="/api")
+    app.include_router(episode_router, prefix="/api")
+    app.include_router(season_router, prefix="/api")
+    app.include_router(media_download_router, prefix="/api")
+    app.include_router(show_router, prefix="/api")
+    app.include_router(movie_router, prefix="/api")
+    app.include_router(setting_router, prefix="/api")
+    app.include_router(media_profile_router, prefix="/api")
+    app.include_router(meta_router, prefix="/api")
 
     return app

@@ -4,7 +4,7 @@ from .service import *
 from ...models.media_download import *
 from backend.app import db_session
 
-router = APIRouter()
+router = APIRouter(prefix="/media-downloads", tags=["Media Downloads"])
 
 @router.get("", response_model=list[MediaDownloadAPIRead])
 def media_downloads_list():

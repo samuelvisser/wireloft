@@ -4,7 +4,7 @@ from .service import *
 from ...models.download_profile_series import *
 from backend.app import db_session
 
-router = APIRouter()
+router = APIRouter(prefix="/series-download-profiles", tags=["Download Profiles (series)"])
 
 @router.get("", response_model=list[DownloadProfileSeriesAPIRead])
 def series_download_profiles_list():

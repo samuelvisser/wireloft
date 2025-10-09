@@ -4,7 +4,7 @@ from .service import *
 from ...models.movie import *
 from backend.app import db_session
 
-router = APIRouter()
+router = APIRouter(prefix="/movies", tags=["Movies"])
 
 @router.get("", response_model=list[MovieAPIRead])
 def movie_list():

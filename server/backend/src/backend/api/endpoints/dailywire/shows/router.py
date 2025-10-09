@@ -5,7 +5,7 @@ from fastapi import APIRouter, Header, Query, HTTPException
 from dailywire_api.records import ShowRecord
 from .service import get_show
 
-router = APIRouter()
+router = APIRouter(prefix="/shows", tags=["DailyWire Shows"])
 
 
 @router.get("/{show_slug}", response_model=ShowRecord)

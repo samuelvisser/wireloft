@@ -6,7 +6,7 @@ from .service import get_shows_list, create_show, get_show, update_show, delete_
 from ...models.show import ShowAPIRead, ShowAPICreate, ShowAPIUpdate
 from backend.app import db_session
 
-router = APIRouter()
+router = APIRouter(prefix="/shows", tags=["Shows"])
 
 router.include_router(show_view_router, prefix = "/as-view")
 router.include_router(show_as_bundle_router, prefix = "/as-bundle")

@@ -4,10 +4,13 @@ from .service import *
 from ...models.episode import *
 from backend.app import db_session
 
-router = APIRouter()
+router = APIRouter(prefix="/shows/{show_slug}/episodes", tags=["Episodes"])
 
 @router.get("", response_model=list[EpisodeAPIRead])
 def episode_list(show_slug: str):
+    """
+    List all episodes for a show.
+    """
     with db_session() as s:
         return get_episodes_list(s, show_slug)
 

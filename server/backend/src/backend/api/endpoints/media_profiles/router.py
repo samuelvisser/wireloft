@@ -4,7 +4,7 @@ from .service import *
 from ...models.media_profile import *
 from backend.app import db_session
 
-router = APIRouter()
+router = APIRouter(prefix="/media-profiles", tags=["Media Profiles"])
 
 @router.get("", response_model=list[MediaProfileAPIRead])
 def media_profiles_list():
