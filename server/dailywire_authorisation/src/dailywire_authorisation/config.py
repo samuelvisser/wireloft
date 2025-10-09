@@ -3,15 +3,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from wireloft_config import get_settings
+
+def get_default_config():
+    """Lazily load config from wireloft_config """
+    from wireloft_config import get_settings
+    settings = get_settings()
+    return {
+        "issuer": settings.dw_oauth.issuer,
+        "client_id": settings.dw_oauth.client_id,
+        "scope": settings.dw_oauth.scope,
+        "audience": settings.dw_oauth.audience,
+    }
 
 
 @dataclass(frozen=True)
 class DeviceAuthConfig:
-    issuer: str = get_settings().dw_oauth.issuer
-    client_id: str = get_settings().dw_oauth.client_id
-    scope: str = get_settings().dw_oauth.scope
-    audience: str = get_settings().dw_oauth.audience
+    issuer: str
+    client_id: str
+    scope: str
+    audience: str
 
     @property
     def device_authorization_endpoint(self) -> str:

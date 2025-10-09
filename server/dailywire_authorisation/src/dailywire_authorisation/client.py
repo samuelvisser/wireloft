@@ -4,7 +4,7 @@ import time
 from typing import Optional, Dict, Any
 import requests
 
-from .config import DeviceAuthConfig, OAuthTokens
+from .config import DeviceAuthConfig, OAuthTokens, get_default_config
 from .storage import TokenStore, TokenRecord
 
 from wireloft_config import get_settings  # type: ignore
@@ -14,9 +14,9 @@ class DeviceAuthClient:
     RFC 8628-compliant device authorization grant.
     """
 
-    def __init__(self, config: DeviceAuthConfig, store: Optional[TokenStore] = None, session: Optional[requests.Session] = None):
+    def __init__(self, config: Optional[DeviceAuthConfig] = None, store: Optional[TokenStore] = None, session: Optional[requests.Session] = None):
         # Prefer explicit config; otherwise derive from wireloft settings
-        self.config = config
+        self.config = config or get_default_config()
         self.store = store or TokenStore()
         self.session = session or requests.Session()
         self._store_key = self.make_store_key()

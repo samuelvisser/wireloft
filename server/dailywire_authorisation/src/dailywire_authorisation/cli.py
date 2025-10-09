@@ -4,15 +4,17 @@ import argparse
 from typing import Optional
 
 from .client import DeviceAuthClient
-from .config import DeviceAuthConfig
+from .config import DeviceAuthConfig, get_default_config
 from .storage import TokenStore
 
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    defaults = get_default_config() or {}
+
     p = argparse.ArgumentParser(prog="dailywire-auth", description="Generate a DailyWire Auth0 Device Authorization login URL")
-    p.add_argument("--issuer", default=DeviceAuthConfig.issuer, help=f"Auth0 issuer domain (default: {DeviceAuthConfig.issuer})", )
-    p.add_argument( "--client-id", default=DeviceAuthConfig.client_id, dest="client_id", help="Auth0 application client ID (default provided)",)
-    p.add_argument(  "--scope", default=DeviceAuthConfig.scope, help=f"OAuth scope string (default: '{DeviceAuthConfig.scope}')", )
-    p.add_argument( "--audience", default=DeviceAuthConfig.audience, help=f"API audience identifier (default: {DeviceAuthConfig.audience})",)
+    p.add_argument("--issuer", default=defaults.get("issuer"), help="Auth0 issuer domain")
+    p.add_argument("--client-id", dest="client_id", default=defaults.get("client_id"), help="Auth0 application client ID")
+    p.add_argument("--scope", default=defaults.get("scope"), help="OAuth scope string")
+    p.add_argument("--audience", default=defaults.get("audience"), help="API audience identifier")
 
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("login", help="Run device flow and save tokens")
