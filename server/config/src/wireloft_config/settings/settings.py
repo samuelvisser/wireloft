@@ -17,6 +17,7 @@ class AppSettings(SettingsBase):
     database_path: Path = PROJECT_ROOT / "data" / "wireloft.db"
     log_level: str = "INFO"
 
+    crypto: CryptoSettings = Field(default_factory=CryptoSettings)
     session: SessionSettings = Field(default_factory=SessionSettings)
     admin_auth: AdminAuthSettings = Field(default_factory=AdminAuthSettings)
     dw_oauth: OAuthSettings = Field(default_factory=OAuthSettings)

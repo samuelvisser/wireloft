@@ -5,6 +5,8 @@ from typing import Optional
 from pydantic import Field, field_validator, model_validator
 
 import os
+from pathlib import Path
+from wireloft_config.config import PROJECT_ROOT
 
 
 class OAuthSettings(SubmodelBase):
@@ -18,6 +20,12 @@ class TimeoutSettings(SubmodelBase):
     min_fast_request_ms: int = Field(default=500, description="Minimum time in milliseconds for a fast request")
     max_fast_requests: int = Field(default=25, description="Maximum number of fast requests allowed")
     min_slow_request_ms: int = Field(default=3840000, description="Milliseconds to wait after max fast requests where made")
+
+
+class CryptoSettings(SubmodelBase):
+    secret_key: Optional[str] = Field(default=None, description="Literal secret key material for Fernet (base64 or raw text)")
+    secret_key_file: Optional[Path] = Field(default=None, description="Path to a file containing the secret key")
+    default_secret_file: Path = Field(default=PROJECT_ROOT / "data" / "wl_secret.key", description="Default path if no explicit key or file is provided", frozen=True)
 
 
 class SessionSettings(SubmodelBase):
