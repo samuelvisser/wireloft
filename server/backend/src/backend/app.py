@@ -80,6 +80,7 @@ def create_app() -> FastAPI:
         media_profile_router,
         meta_router,
         config_router,
+        tasks_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
@@ -99,5 +100,17 @@ def create_app() -> FastAPI:
     app.include_router(media_profile_router, prefix="/api")
     app.include_router(meta_router, prefix="/api")
     app.include_router(config_router, prefix="/api")
+    app.include_router(tasks_router, prefix="/api")
+
+    # Start scheduler and sync task registry if enabled
+    try:
+        from wireloft_scheduler.scheduler import start_scheduler
+        from wireloft_scheduler.registry import sync_registry_to_db
+        if get_settings().scheduler.enabled:
+            sync_registry_to_db()
+            start_scheduler()
+    except Exception:
+        # Do not crash app if scheduler is not available
+        pass
 
     return app

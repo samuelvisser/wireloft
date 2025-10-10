@@ -94,6 +94,13 @@ def create_tables() -> None:
     importlib.import_module("backend.db.models.Movie")
     importlib.import_module("backend.db.models.Show")
 
+    # Scheduler tables
+    try:
+        importlib.import_module("wireloft_scheduler.models")
+    except Exception:
+        # If scheduler package not installed, ignore
+        pass
+
     Base.metadata.create_all(bind=get_engine())
 
 
