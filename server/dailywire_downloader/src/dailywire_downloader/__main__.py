@@ -34,20 +34,20 @@ def parse_args():
     parser.add_argument(
         "--config", 
         dest="config_file",
-        help="Path to the configuration file (default: $(pwd)/config/config.yml or $DW_CONFIG_FILE env var)",
-        default = os.environ.get("DW_CONFIG_FILE", default_config)
+        help="Path to the configuration file (default: $(pwd)/config/config.yml or $WL_CONFIG_FILE env var)",
+        default = os.environ.get("WL_CONFIG_FILE", default_config)
     )
     parser.add_argument(
         "--cookies", 
         dest="cookies_file",
-        help="Path to the cookies file (default: $(pwd)/config/cookies.txt or $DW_COOKIES_FILE env var)",
-        default = os.environ.get("DW_COOKIES_FILE", default_cookies)
+        help="Path to the cookies file (default: $(pwd)/config/cookies.txt or $WL_COOKIES_FILE env var)",
+        default = os.environ.get("WL_COOKIES_FILE", default_cookies)
     )
     parser.add_argument(
         "--download-dir",
         dest="download_dir",
-        help="Path to the download dir (default: $(pwd)/downloads or $DW_DOWNLOAD_DIR env var)",
-        default = os.environ.get("DW_DOWNLOAD_DIR", default_download_dir)
+        help="Path to the download dir (default: $(pwd)/downloads or $WL_DOWNLOAD_DIR env var)",
+        default = os.environ.get("WL_DOWNLOAD_DIR", default_download_dir)
     )
     return parser.parse_args()
 

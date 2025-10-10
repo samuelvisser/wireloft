@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from dailywire_api.records import EpisodeRecord
 
-router = APIRouter()
+router = APIRouter(prefix="/episodes", tags=["DailyWire Episodes"])
 
 @router.get("", response_model=list[EpisodeRecord])
 def episode_list(show_slug: str):

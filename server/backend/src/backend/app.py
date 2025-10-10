@@ -9,7 +9,8 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.api.errors import integrity_error_handler
 from backend.db import get_session
-from backend.security.auth import is_authenticated
+from wireloft_config import get_settings
+
 
 @contextmanager
 def db_session():
@@ -21,7 +22,11 @@ def db_session():
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="WireLoft API")
+    app = FastAPI(
+        title="WireLoft API",
+        summary="Internal API for WireLoft",
+        version=get_settings().app_version,
+    )
 
     # Allow the React dev server to call the API during development (with credentials)
     # Configure allowed origins via WL_CORS_ORIGINS (comma-separated). Defaults include common Vite dev hosts.
@@ -80,16 +85,16 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api")
 
     # Protected API endpoints (shielded by middleware above)
-    app.include_router(dailywire_router, prefix="/api/dailywire")
-    app.include_router(download_profile_podcast_router, prefix="/api/podcast-download-profiles")
-    app.include_router(download_profile_series_router, prefix="/api/series-download-profiles")
-    app.include_router(episode_router, prefix="/api/shows/{show_slug}/episodes")
-    app.include_router(season_router, prefix="/api/seasons")
-    app.include_router(media_download_router, prefix="/api/media-downloads")
-    app.include_router(show_router, prefix="/api/shows")
-    app.include_router(movie_router, prefix="/api/movies")
-    app.include_router(setting_router, prefix="/api/settings")
-    app.include_router(media_profile_router, prefix="/api/media-profiles")
-    app.include_router(meta_router, prefix="/api/meta")
+    app.include_router(dailywire_router, prefix="/api")
+    app.include_router(download_profile_podcast_router, prefix="/api")
+    app.include_router(download_profile_series_router, prefix="/api")
+    app.include_router(episode_router, prefix="/api")
+    app.include_router(season_router, prefix="/api")
+    app.include_router(media_download_router, prefix="/api")
+    app.include_router(show_router, prefix="/api")
+    app.include_router(movie_router, prefix="/api")
+    app.include_router(setting_router, prefix="/api")
+    app.include_router(media_profile_router, prefix="/api")
+    app.include_router(meta_router, prefix="/api")
 
     return app

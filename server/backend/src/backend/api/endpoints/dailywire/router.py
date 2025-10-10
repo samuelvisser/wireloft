@@ -1,10 +1,10 @@
 from fastapi import APIRouter
+from .auth import auth_router
 from .episodes import dw_episode_router
 from .shows import dw_show_router
-from .auth.router import router as dw_auth_router
 
-router = APIRouter()
+router = APIRouter(prefix="/dailywire")
 
-router.include_router(dw_episode_router, prefix="/episodes")
-router.include_router(dw_show_router, prefix="/shows")
-router.include_router(dw_auth_router, prefix="/auth")
+router.include_router(auth_router)
+router.include_router(dw_episode_router)
+router.include_router(dw_show_router)

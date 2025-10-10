@@ -1,38 +1,32 @@
-from __future__ import annotations
-
-from datetime import datetime
 from typing import Optional
 
-from backend.api.models.base import RequestBase, ResponseBase
+from backend.api.models.base import ResponseBase, RequestBase
 
 
-class DeviceStartResponse(ResponseBase):
-    url: str
-    user_code: Optional[str] = None
+# Request/Response Models
+class DeviceAuthResponse(ResponseBase):
+    """Response from initiating device authorization flow."""
     device_code: str
-    interval: int
-    expires_in: int
-    verification_uri: Optional[str] = None
+    user_code: str
+    verification_uri: str
     verification_uri_complete: Optional[str] = None
-    issuer: str
+    expires_in: int
+    interval: int
 
 
-class DevicePollRequest(RequestBase):
+class PollRequest(RequestBase):
+    """Request to poll for authorization status."""
     device_code: str
-    issuer: str
-    interval: Optional[int] = None
 
 
-class DevicePollResponse(ResponseBase):
+class PollResponse(ResponseBase):
+    """Response from polling for authorization."""
+    status: str  # "authorized", "expired", "denied"
+    message: str
+
+
+class StatusResponse(ResponseBase):
+    """Authentication status response."""
     authenticated: bool
-    status: str
-    expires_at: Optional[datetime] = None
-    has_refresh_token: bool = False
-
-
-class AuthStatusResponse(ResponseBase):
-    authenticated: bool
-    status: str
-    token_expires_at: Optional[datetime] = None
-    has_refresh_token: bool = False
-    last_auth_at: Optional[datetime] = None
+    contains_refresh_token: bool
+    expires_at: Optional[float] = None

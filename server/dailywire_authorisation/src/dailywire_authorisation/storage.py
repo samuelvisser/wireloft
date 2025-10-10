@@ -1,20 +1,13 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 from typing import Optional
 
 import keyring
 from keyring.errors import PasswordDeleteError
 
-
-@dataclass
-class TokenRecord:
-    access_token: str
-    refresh_token: Optional[str]
-    token_type: str
-    expires_at: float  # epoch seconds
-    scope: Optional[str] = None
+from dailywire_authorisation.config import OAuthTokens
 
 
 class TokenStore:
@@ -54,14 +47,14 @@ class TokenStore:
         except Exception as e:
             raise RuntimeError("Failed to delete from OS keyring.") from e
 
-    def load(self, key: str) -> Optional[TokenRecord]:
+    def load(self, key: str) -> Optional[OAuthTokens]:
         raw = self._get(key)
         if not raw:
             return None
         d = json.loads(raw)
-        return TokenRecord(**d)
+        return OAuthTokens(**d)
 
-    def save(self, key: str, record: TokenRecord) -> None:
+    def save(self, key: str, record: OAuthTokens) -> None:
         payload = json.dumps(asdict(record))
         self._set(key, payload)
 

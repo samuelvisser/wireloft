@@ -4,8 +4,8 @@ import time
 from typing import Optional, Dict, Any
 import requests
 
-from .config import DeviceAuthConfig, OAuthTokens, get_default_config
-from .storage import TokenStore, TokenRecord
+from .config import DeviceAuthConfig, OAuthTokens, get_default_config, DeviceAuthStatus
+from .storage import TokenStore
 
 from wireloft_config import get_settings  # type: ignore
 
@@ -47,10 +47,22 @@ class DeviceAuthClient:
     def start_device_flow(self) -> Dict[str, Any]:
         return self._start_device_flow()
 
-    def poll_until_authorized(self, device_code: str, interval: int, expires_in: int) -> OAuthTokens:
-        rec = self._poll_for_token(device_code, interval, expires_in)
+    def poll_until_authorized(self, device_code: str, interval: int, expires_in: int, stop_event: Optional[Any] = None) -> OAuthTokens:
+        rec = self._poll_for_token(device_code, interval, expires_in, stop_event=stop_event)
         self.store.save(self._store_key, rec)
         return OAuthTokens(**rec.__dict__)
+
+    def status(self) -> DeviceAuthStatus:
+        rec = self.store.load(self._store_key)
+
+        if not rec:
+            return DeviceAuthStatus(authenticated=False, contains_refresh_token=False)
+        else:
+            return DeviceAuthStatus(
+                authenticated=True,
+                contains_refresh_token=bool(rec.refresh_token),
+                expires_at=rec.expires_at,
+            )
 
     # ---------- Internals ----------
 
@@ -74,11 +86,24 @@ class DeviceAuthClient:
             "interval": int(j.get("interval", 5)),
         }
 
-    def _poll_for_token(self, device_code: str, interval: int, expires_in: int) -> TokenRecord | None:
+    def _poll_for_token(self, device_code: str, interval: int, expires_in: int, stop_event: Optional[Any] = None) -> OAuthTokens | None:
         import time as _t
         start = _t.time()
         current_interval = max(1, interval)
+
+        def _wait(seconds: float):
+            if stop_event is not None:
+                # Event.wait returns True if set during the wait; treat as cancellation
+                if getattr(stop_event, "wait", lambda t: False)(seconds):
+                    raise PermissionError("Authorization cancelled by logout.")
+            else:
+                _t.sleep(seconds)
+
         while True:
+            # Cancellation check at loop start
+            if stop_event is not None and getattr(stop_event, "is_set", lambda: False)():
+                raise PermissionError("Authorization cancelled by logout.")
+
             if _t.time() - start > expires_in:
                 raise RuntimeError("Device code expired before authorization.")
 
@@ -100,11 +125,11 @@ class DeviceAuthClient:
 
                 err = e.get("error")
                 if err == "authorization_pending":
-                    _t.sleep(current_interval)
+                    _wait(current_interval)
                     continue
                 elif err == "slow_down":
                     current_interval += 5
-                    _t.sleep(current_interval)
+                    _wait(current_interval)
                     continue
                 elif err == "access_denied":
                     raise PermissionError("User denied the request.")
@@ -113,7 +138,7 @@ class DeviceAuthClient:
                 else:
                     raise RuntimeError(f"Token polling failed: {e}")
 
-    def _device_authorize_interactive(self) -> TokenRecord:
+    def _device_authorize_interactive(self) -> OAuthTokens:
         start = self._start_device_flow()
         if start.get("verification_uri_complete"):
             print("To authorize, visit:", start["verification_uri_complete"])
@@ -123,7 +148,7 @@ class DeviceAuthClient:
         print("Enter code:", start["user_code"])
         return self._poll_for_token(start["device_code"], start["interval"], start["expires_in"])
 
-    def _refresh(self, refresh_token: str) -> Optional[TokenRecord]:
+    def _refresh(self, refresh_token: str) -> Optional[OAuthTokens]:
         data = {
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
@@ -135,11 +160,11 @@ class DeviceAuthClient:
         return self._to_record(r.json(), existing_refresh=refresh_token)
 
     @staticmethod
-    def _to_record(j: Dict[str, Any], existing_refresh: Optional[str] = None) -> TokenRecord:
+    def _to_record(j: Dict[str, Any], existing_refresh: Optional[str] = None) -> OAuthTokens:
         import time as _t
         expires_in = int(j.get("expires_in", 3600))
         refresh_token = j.get("refresh_token") or existing_refresh
-        return TokenRecord(
+        return OAuthTokens(
             access_token=j["access_token"],
             refresh_token=refresh_token,
             token_type=j.get("token_type", "Bearer"),
