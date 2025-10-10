@@ -63,7 +63,7 @@ def clear_session_cookie(resp: Response) -> None:
 
 def has_valid_local_session(request: Request) -> bool:
     # Fake valid session if admin auth is disabled
-    if not AdminAuth().is_enabled():
+    if not AdminAuth().is_enabled:
         return True
 
     # Check if the session cookie is set
