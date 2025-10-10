@@ -8,14 +8,15 @@ from backend.api.models.config_public import *
 def get_public_config() -> ConfigPublicRead:
     s = get_settings()
 
-    print(s.model_dump_json())
-
+    ## We assign values very explicitly to prevent ever exposing app secrets to the public API
     config = ConfigPublicRead(
         app_version=s.app_version,
-        session=PublicSessionConfig(**s.session.model_dump(exclude_none=True)),
-        admin_auth=PublicAdminAuth(**s.admin_auth.model_dump(exclude_none=True)),
+        session=PublicSessionConfig(
+            ttl_seconds=s.session.ttl_seconds
+        ),
+        admin_auth=PublicAdminAuth(
+            enabled=s.admin_auth.enabled
+        ),
     )
-
-    print(config.model_dump_json())
 
     return config
