@@ -1,5 +1,6 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faGithub } from '@fortawesome/free-brands-svg-icons'
+import {getCurrentAppVersion} from "../utils/helpers";
 
 interface FooterProps {
   wrapperClass: string
@@ -20,6 +21,8 @@ export default function Footer({ wrapperClass }: FooterProps) {
     }
   }
 
+  const adminAuthEnabled = Boolean((window as any).publicConfig?.adminAuth?.enabled)
+
   return (
     <footer className={wrapperClass} aria-label="Footer">
       <div className="footer-links">
@@ -34,21 +37,23 @@ export default function Footer({ wrapperClass }: FooterProps) {
           </span>
           <span>Github</span>
         </a>
-        <button
-          type="button"
-          className="footer-link"
-          onClick={handleLogout}
-          style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
-        >
-          <span className="icon" aria-hidden>
-            <FontAwesomeIcon icon={["fas", "right-from-bracket"]} />
-          </span>
-          <span>Logout</span>
-        </button>
+        {adminAuthEnabled && (
+          <button
+            type="button"
+            className="footer-link"
+            onClick={handleLogout}
+            style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
+          >
+            <span className="icon" aria-hidden>
+              <FontAwesomeIcon icon={["fas", "right-from-bracket"]} />
+            </span>
+            <span>Logout</span>
+          </button>
+        )}
       </div>
       <div className="footer-meta" style={{ textAlign: 'center' }}>
         <span className="version" aria-label="App version" style={{ color: 'gray' }}>
-          v{(window as any).appConfig?.APP_VERSION ?? 'Unknown app version'}
+          v{getCurrentAppVersion() ?? 'Unknown app version'}
         </span>
       </div>
     </footer>

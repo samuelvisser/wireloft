@@ -1,6 +1,6 @@
 export function getCurrentAppVersion(): string | undefined {
     try {
-        return (window as any).appConfig?.APP_VERSION
+        return (window as any).publicConfig?.appVersion
     } catch {
         return undefined
     }

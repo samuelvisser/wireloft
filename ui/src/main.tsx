@@ -9,10 +9,14 @@ import { queryClient } from './lib/queryClient'
 import { prefetchCoreData } from './lib/queries'
 import { loadShowsFromStorage, loadProfilesFromStorage } from './lib/cache'
 import { loadAppConfig } from './general_utils.js'
+import { loadPublicConfig } from './lib/publicConfig'
 
 async function bootstrap() {
   // Load app config before anything renders
   await loadAppConfig()
+
+  // Fetch public config (app settings) before rendering
+  await loadPublicConfig()
 
   // Restore cached data synchronously before initial render to prevent flashes
   const cachedShows = loadShowsFromStorage()
