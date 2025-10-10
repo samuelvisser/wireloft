@@ -636,9 +636,13 @@ a.btn,
   .table thead { display: none; }
   .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
   .table tr { border-bottom: 1px solid #e2e8f0; }
-  .table tbody td { display: grid; grid-template-columns: 140px 1fr; gap: 8px; }
+  /* Use a two-column grid with a flexible label column to avoid overlap */
+  .table tbody td { display: grid; grid-template-columns: minmax(120px, 44%) 1fr; gap: 8px; align-items: start; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
   .table tbody td::before { content: attr(data-label); font-weight: 600; color: var(--muted); }
-  .truncate { max-width: none; }
+  .truncate { max-width: none; white-space: normal; }
+  /* Ensure actions row aligns to the left on mobile */
+  .table tbody td[data-label="Actions"] { text-align: left !important; }
+  .table tbody td[data-label="Actions"] > div { justify-self: start; }
   @media (prefers-color-scheme: dark) {
     .table tr { border-bottom-color: rgba(255,255,255,0.12); }
   }
@@ -930,7 +934,9 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   display: none;
   padding: 12px 16px;
   border-top: 1px solid var(--divider);
-  background: var(--bg); /* ensure visible background in mobile */
+  /* Use the sidebar background so footer is visibly distinct on mobile */
+  background: var(--sidebar-bg);
+  color: #fff;
 }
 .page-footer .footer-links {
   display: flex;
@@ -940,11 +946,11 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   margin-bottom: 8px;
 }
 /* Override shared inline styles from Footer component for mobile layout */
-.page-footer .footer-link { color: var(--text); width: auto !important; text-align: center !important; }
-.page-footer .footer-link:hover { background: rgba(0,0,0,0.04); color: inherit; }
-@media (prefers-color-scheme: dark) {
-  .page-footer .footer-link:hover { background: rgba(255,255,255,0.08); }
-}
+.page-footer .footer-link { color: #fff; width: auto !important; text-align: center !important; }
+.page-footer .footer-link:hover { background: var(--sidebar-hover); color: #fff; }
+.page-footer .version { color: rgba(255,255,255,0.7) !important; }
 @media (max-width: 900px) {
   .page-footer { display: block; }
 }
+
+

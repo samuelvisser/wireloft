@@ -1,4 +1,4 @@
-import {useCallback, useState} from 'react'
+import {useCallback, useEffect, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
@@ -14,6 +14,15 @@ export default function MediaProfilesPage() {
     const onAdd = useCallback(() => navigate('/add-media-profile'), [navigate])
     const editIcon: IconProp = ['fas', 'pen-to-square']
     const deleteIcon: IconProp = ['fas', 'trash']
+
+    // Track if we are on a small screen to render real text buttons on mobile
+    const [isMobile, setIsMobile] = useState<boolean>(typeof window !== 'undefined' ? window.innerWidth <= 640 : false)
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        const onResize = () => setIsMobile(window.innerWidth <= 640)
+        window.addEventListener('resize', onResize)
+        return () => window.removeEventListener('resize', onResize)
+    }, [])
 
     const [confirmProfile, setConfirmProfile] = useState<MediaProfileRead | null>(null)
     const openConfirm = (p: MediaProfileRead) => setConfirmProfile(p)
@@ -111,31 +120,58 @@ export default function MediaProfilesPage() {
                                     <td data-label="Preferred Format">{PreferredFormatReg.getLabelLoose(p.preferredFormat)}</td>
                                     <td data-label="Series Images">{p.downloadSeriesImages ? '✓' : '✕'}</td>
                                     <td data-label="Actions" style={{textAlign: 'right'}}>
-                                        <div style={{display: 'inline-flex', gap: 6}}>
-                                            <button
-                                                type="button"
-                                                className="icon-btn"
-                                                aria-label={`Edit ${p.name}`}
-                                                title="Edit"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    navigate(`/edit-media-profile/${p.slug}`, {state: p})
-                                                }}
-                                            >
-                                                <FontAwesomeIcon icon={editIcon} />
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="icon-btn"
-                                                aria-label={`Delete ${p.name}`}
-                                                title="Delete"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    openConfirm(p)
-                                                }}
-                                            >
-                                                <FontAwesomeIcon icon={deleteIcon} />
-                                            </button>
+                                        <div style={{display: 'inline-flex', gap: 6, flexWrap: 'wrap'}}>
+                                            {isMobile ? (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        className="btn"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            navigate(`/edit-media-profile/${p.slug}`, {state: p})
+                                                        }}
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-danger"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            openConfirm(p)
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        className="icon-btn"
+                                                        aria-label={`Edit ${p.name}`}
+                                                        title="Edit"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            navigate(`/edit-media-profile/${p.slug}`, {state: p})
+                                                        }}
+                                                    >
+                                                        <FontAwesomeIcon icon={editIcon} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="icon-btn"
+                                                        aria-label={`Delete ${p.name}`}
+                                                        title="Delete"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            openConfirm(p)
+                                                        }}
+                                                    >
+                                                        <FontAwesomeIcon icon={deleteIcon} />
+                                                    </button>
+                                                </>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
