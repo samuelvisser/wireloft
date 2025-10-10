@@ -9,3 +9,4 @@ from .movies import movie_router
 from .settings.router import router as setting_router
 from .shows import show_router
 from .meta_router import router as meta_router
+from .config import config_router

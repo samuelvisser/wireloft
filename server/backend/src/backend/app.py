@@ -60,7 +60,8 @@ def create_app() -> FastAPI:
         # Protect all /api/* except public auth endpoints
         is_api = path.startswith("/api/")
         is_public_auth = path.startswith("/api/auth")
-        if is_api and not is_public_auth:
+        is_public_config = path == "/api/config/public"
+        if is_api and not (is_public_auth or is_public_config):
             if not is_authenticated(request):
                 return JSONResponse({"detail": "Not authenticated"}, status_code=401)
         return await call_next(request)
@@ -77,7 +78,8 @@ def create_app() -> FastAPI:
         season_router,
         setting_router,
         media_profile_router,
-        meta_router
+        meta_router,
+        config_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
@@ -96,5 +98,6 @@ def create_app() -> FastAPI:
     app.include_router(setting_router, prefix="/api")
     app.include_router(media_profile_router, prefix="/api")
     app.include_router(meta_router, prefix="/api")
+    app.include_router(config_router, prefix="/api")
 
     return app
