@@ -1,12 +1,11 @@
 [project]
-name = "wireloft-scheduler"
+name = "wireloft-controller"
 version = "0.1.0"
-description = "Internal APScheduler-based task scheduler for WireLoft"
+description = "Task controller and definitions for WireLoft"
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [
-  "APScheduler>=3.11.0,<4.0",
-  "SQLAlchemy>=2.0.43,<3.0",
+  "requests>=2.32.3,<3.0",
 ]
 
 [build-system]

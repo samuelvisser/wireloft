@@ -16,6 +16,8 @@ class TaskMeta:
     description: str = ""
     allowed_resource_types: tuple[str, ...] = ("show", "season", "episode", "movie")
     default_max_retries: Optional[int] = None
+    # Whether the task reports intermediate progress (purely metadata for UI/consumers)
+    tracks_progress: bool = True
 
 
 _REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[None]]]] = {}
@@ -27,6 +29,7 @@ def task(
     description: str = "",
     allowed_resource_types: Optional[tuple[str, ...]] = None,
     default_max_retries: Optional[int] = None,
+    tracks_progress: bool = True,
 ):
     """Decorator to register an async task callable.
 
@@ -41,6 +44,7 @@ def task(
             allowed_resource_types=allowed_resource_types
             or ("show", "season", "episode", "movie"),
             default_max_retries=default_max_retries,
+            tracks_progress=tracks_progress,
         )
         _REGISTRY[key] = (meta, fn)
         return fn

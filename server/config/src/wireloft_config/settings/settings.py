@@ -16,6 +16,7 @@ class AppSettings(SettingsBase):
     schedule: str = "*/15 * * * *"
     database_path: Path = PROJECT_ROOT / "data" / "wireloft.db"
     log_level: str = "INFO"
+    timezone: str = Field(default="UTC", description="Application timezone")
 
     crypto: CryptoSettings = Field(default_factory=CryptoSettings)
     session: SessionSettings = Field(default_factory=SessionSettings)

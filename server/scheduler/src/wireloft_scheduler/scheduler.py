@@ -16,9 +16,11 @@ _scheduler: Optional[AsyncIOScheduler] = None
 
 
 def _db_url_for_jobstore() -> str:
-    settings = get_settings().scheduler
-    if settings.jobstore_url:
-        return settings.jobstore_url
+    settings = get_settings()
+
+    if settings.database_path:
+        return settings.database_path.as_posix()
+
     # default to app DB (SQLite path in env)
     db_path = os.environ.get("WIRELOFT_DB_PATH")
     if not db_path:
@@ -46,14 +48,13 @@ def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
         return _scheduler
-    settings = get_settings().scheduler
-    if not settings.enabled:
+    if not get_settings().scheduler.enabled:
         # create but don't start to simplify call sites (no-ops)
         _scheduler = AsyncIOScheduler()
         return _scheduler
 
-    jobstores = {"default": SQLAlchemyJobStore(url=_db_url_for_jobstore())}
-    _scheduler = AsyncIOScheduler(jobstores=jobstores, timezone=settings.timezone)
+    job_stores = {"default": SQLAlchemyJobStore(url=get_settings().database_path.as_posix())}
+    _scheduler = AsyncIOScheduler(jobstores=job_stores, timezone=get_settings().timezone)
     _scheduler.start(paused=False)
     return _scheduler
 

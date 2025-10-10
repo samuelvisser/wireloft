@@ -104,6 +104,9 @@ def create_app() -> FastAPI:
 
     # Start scheduler and sync task registry if enabled
     try:
+        # Ensure controller tasks are imported so they are registered
+        import wireloft_controller  # noqa: F401
+
         from wireloft_scheduler.scheduler import start_scheduler
         from wireloft_scheduler.registry import sync_registry_to_db
         if get_settings().scheduler.enabled:

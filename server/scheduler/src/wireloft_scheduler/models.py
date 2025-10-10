@@ -25,6 +25,7 @@ class ResourceType(str, Enum):
     SEASON = "season"
     EPISODE = "episode"
     MOVIE = "movie"
+    DOWNLOAD_PROFILE_SERIES = "download_profile_series"
 
 
 class TaskDefinition(Base):
