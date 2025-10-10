@@ -22,6 +22,7 @@ class AppSettings(SettingsBase):
     admin_auth: AdminAuthSettings = Field(default_factory=AdminAuthSettings)
     dw_oauth: OAuthSettings = Field(default_factory=OAuthSettings)
     dw_timeout: TimeoutSettings = Field(default_factory=TimeoutSettings)
+    scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)
 
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):

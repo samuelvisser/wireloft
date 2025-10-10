@@ -80,3 +80,13 @@ class AdminAuthSettings(SubmodelBase):
         os.environ.pop("WL_ADMIN_AUTH__PASSWORD", None)
 
         return self
+
+
+class SchedulerSettings(SubmodelBase):
+    enabled: bool = Field(default=True, description="Enable the internal APScheduler-based scheduler")
+    timezone: str = Field(default="UTC", description="Scheduler timezone")
+    # Reuse same SQLite DB by default (using WIRELOFT_DB_PATH) since APS job store will be a table in the same DB.
+    jobstore_url: Optional[str] = Field(default=None, description="SQLAlchemy URL for APScheduler job store; defaults to app DB if None")
+    max_workers: int = Field(default=5, description="Max concurrent jobs in the thread pool executor")
+    default_max_retries: int = Field(default=3, description="Default maximum retries per task if not specified by task or schedule")
+    retry_backoff_seconds: float = Field(default=5.0, description="Base seconds for exponential backoff between retries")
