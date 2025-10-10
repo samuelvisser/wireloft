@@ -9,13 +9,11 @@ from typing import Optional
 from fastapi import Request, HTTPException, status
 from starlette.responses import Response
 
+from wireloft_config import get_settings
+from wireloft_config.security.admin_auth import AdminAuth
 from .crypto import encrypt_text, decrypt_text
 
 SESSION_COOKIE_NAME = "wl_session"
-# WL_ADMIN_PASSWORD = "WL_ADMIN_PASSWORD"
-# 30 days default session lifetime
-DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 30
-
 
 @dataclass
 class Session:
@@ -41,7 +39,7 @@ def _now() -> int:
     return int(time.time())
 
 
-def set_session_cookie(resp: Response, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> None:
+def set_session_cookie(resp: Response, ttl_seconds: int = get_settings().session.ttl_seconds) -> None:
     now = _now()
     sess = Session(exp=now + ttl_seconds, iat=now)
     token = sess.to_token().decode("utf-8")
@@ -64,6 +62,11 @@ def clear_session_cookie(resp: Response) -> None:
 
 
 def has_valid_local_session(request: Request) -> bool:
+    # Fake valid session if admin auth is disabled
+    if not AdminAuth().is_enabled():
+        return True
+
+    # Check if the session cookie is set
     token = request.cookies.get(SESSION_COOKIE_NAME)
     if not token:
         return False
@@ -73,43 +76,15 @@ def has_valid_local_session(request: Request) -> bool:
     return sess.exp > _now()
 
 
-# oauth2-proxy middleware-mode headers:
-# - X-Auth-Request-User, X-Auth-Request-Email, X-Forwarded-User
-# - Authorization: Bearer <id/jwt token>
-OAUTH_HEADER_CANDIDATES = (
-    "X-Auth-Request-User",
-    "X-Forwarded-User",
-    "X-Auth-Request-Email",
-    "Authorization",
-)
-
-
-def has_oauth2_proxy_headers(request: Request) -> bool:
-    headers = request.headers
-    for h in OAUTH_HEADER_CANDIDATES:
-        if headers.get(h):
-            return True
-    return False
-
-
 def is_authenticated(request: Request) -> bool:
-    # Prioritize oauth2-proxy headers if present (deployed with Nginx middleware-mode)
-    if has_oauth2_proxy_headers(request):
-        return True
-    # fallback to local password session
     return has_valid_local_session(request)
 
 
-def require_auth(request: Request):
+def require_auth(request: Request) -> None:
     if is_authenticated(request):
         return
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
 
-def verify_admin_password(password: str) -> bool:
-
-    expected = os.environ.get("WL_ADMIN_PASSWORD", False)
-    if isinstance(expected, bool) and not expected:
-        return True
-
-    return bool(expected) and (password == expected)
+def verify_admin_password_hash(password_hash: str) -> bool:
+    return AdminAuth().verify(password_hash)

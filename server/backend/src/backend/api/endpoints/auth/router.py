@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request, Response, status, HTTPException
 
+from backend.api.models.auth import *
 from backend.security.auth import (
-    verify_admin_password,
+    verify_admin_password_hash,
     set_session_cookie,
     clear_session_cookie,
     is_authenticated,
@@ -12,21 +12,16 @@ from backend.security.auth import (
 
 router = APIRouter(tags=["auth"], prefix="/auth")
 
-
-class LoginInput(BaseModel):
-    password: str = Field(min_length=7)
-
-
-@router.get("/status")
-async def auth_status(request: Request):
+@router.get("/status", response_model=AuthResponse)
+async def auth_status(request: Request) -> AuthResponse:
     if is_authenticated(request):
-        return {"authenticated": True}
+        return AuthResponse(authenticated=True)
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
 
 @router.post("/login", status_code=status.HTTP_204_NO_CONTENT)
-async def password_login(data: LoginInput, response: Response):
-    if not verify_admin_password(data.password):
+async def password_login(data: LoginInput, response: Response) -> None:
+    if not verify_admin_password_hash(data.passwordHash):
         # Provide a server error in FastAPI format with field-level mapping
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -39,8 +34,8 @@ async def password_login(data: LoginInput, response: Response):
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(response: Response):
+async def logout(response: Response) -> None:
     clear_session_cookie(response)
-    # Same here: let FastAPI send the provided 'response' that contains the
-    # cookie deletion header.
+    # Do not return a new Response object; returning here allows FastAPI to
+    # use the provided 'response' with the Set-Cookie header attached.
     return

@@ -4,11 +4,13 @@ from contextlib import contextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from sqlalchemy.exc import IntegrityError
 
 from backend.api.errors import integrity_error_handler
 from backend.db import get_session
+from backend.security.auth import is_authenticated
 from wireloft_config import get_settings
 
 
@@ -55,13 +57,11 @@ def create_app() -> FastAPI:
             return await call_next(request)
 
         path = request.url.path
-        # Protect all /api/* except public auth endpoints and Dailywire device auth endpoints
+        # Protect all /api/* except public auth endpoints
         is_api = path.startswith("/api/")
         is_public_auth = path.startswith("/api/auth")
-        is_dailywire_device_auth = path.startswith("/api/dailywire/auth")
-        if is_api and not (is_public_auth or is_dailywire_device_auth):
+        if is_api and not is_public_auth:
             if not is_authenticated(request):
-                from fastapi.responses import JSONResponse
                 return JSONResponse({"detail": "Not authenticated"}, status_code=401)
         return await call_next(request)
 

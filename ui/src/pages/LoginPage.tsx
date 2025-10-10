@@ -2,6 +2,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { buildServerAwareSubmit } from '../utils/buildServerAwareSubmit'
+import { hashPasswordForAdminAuth } from '../utils/security/adminAuth'
 
 const LoginSchema = z.object({
   password: z.string().min(7, 'Password must be at least 7 characters'),
@@ -19,11 +20,13 @@ export default function LoginPage() {
     form,
     async (data) => {
       const base = (window as any).appConfig?.API_URL || '/api'
+      const passwordHash = await hashPasswordForAdminAuth(data.password)
+      const payload = { passwordHash }
       return await fetch(`${base}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       })
     },
     {

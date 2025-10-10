@@ -23,11 +23,18 @@ class _TimeoutSettings(SubmodelBase):
     max_fast_requests: int
     min_slow_request_ms: int
 
+class _SessionSettings(SubmodelBase):
+    ttl_seconds: int
+
 class AppSettings(SettingsBase):
 
     app_version: str = Field(default="0.1.0", frozen=True)
 
     schedule: str = "*/15 * * * *"
+
+    session: _SessionSettings = _SessionSettings(
+        ttl_seconds = 60 * 60 * 24 * 30,    # 30 days default session lifetime
+    )
 
     dw_oauth: _OAuthSettings = _OAuthSettings(
         issuer="https://authorize.dailywire.com",
@@ -48,13 +55,13 @@ class AppSettings(SettingsBase):
     admin_password_hash: Union[str, Literal[False]] = False
 
     # Ephemeral input (never dumped, never repr) – only used to get WL_ADMIN_PASS
-    admin_pass: Optional[str] = Field(
+    admin_password: Optional[str] = Field(
         default=None,
         exclude=True,
         repr=False,
     )
 
-    @field_validator("admin_pass", mode="before")
+    @field_validator("admin_password", mode="before")
     @classmethod
     def _normalize_password(cls, v: Optional[str]):
         if v is None:
@@ -65,8 +72,8 @@ class AppSettings(SettingsBase):
 
     @model_validator(mode="after")
     def _finalize_password(self):
-        if self.admin_pass:
-            self.admin_password_hash = hash_password_scrypt(self.admin_pass)
+        if self.admin_password:
+            self.admin_password_hash = hash_password_scrypt(self.admin_password)
             os.environ["WL_ADMIN_PASS_HASH"] = str(self.admin_password_hash)
         elif self._normalize_password(os.environ.get("WL_ADMIN_PASS_HASH")):
             self.admin_password_hash = os.environ["WL_ADMIN_PASS_HASH"]
@@ -74,7 +81,7 @@ class AppSettings(SettingsBase):
             self.admin_password_hash = False
 
         # scrub plaintext + env
-        object.__setattr__(self, "admin_pass", None)
+        object.__setattr__(self, "admin_password", None)
         os.environ.pop("WL_ADMIN_PASS", None)
 
         return self
