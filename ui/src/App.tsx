@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
+import Footer from './components/Footer'
 import HomePage from './pages/HomePage'
 import MediaProfilesPage from './pages/MediaProfilesPage'
 import SettingsPage from './pages/SettingsPage'
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+      <Footer wrapperClass="page-footer" />
     </div>
   )
 }
