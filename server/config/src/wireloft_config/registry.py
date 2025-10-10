@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import threading
 from typing import Optional
 
-from wireloft_config import AppSettings
+from .settings import AppSettings
 
 # We avoid functools.lru_cache so we can explicitly control priming and reloading
 _settings_lock = threading.RLock()

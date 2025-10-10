@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from pathlib import Path
 from typing import Optional, Union, Literal
@@ -23,7 +25,7 @@ class _TimeoutSettings(SubmodelBase):
 
 class AppSettings(SettingsBase):
 
-    app_version: str = Field("0.1.0", frozen=True)
+    app_version: str = Field(default="0.1.0", frozen=True)
 
     schedule: str = "*/15 * * * *"
 
