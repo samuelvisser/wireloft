@@ -33,6 +33,13 @@ class DownloadProfileBase(Base):
     show: Mapped["Show"] = relationship(back_populates="download_profiles")
     local_media_profile: Mapped["LocalMediaProfile"] = relationship(back_populates="download_profiles")
 
+    download_stream_profiles: Mapped[list["DownloadStreamProfile"]] = relationship(
+        back_populates="download_profile", cascade="all, delete-orphan"
+    )
+    episode_downloads: Mapped[list["EpisodeMediaDownload"]] = relationship(
+        back_populates="download_profile"
+    )
+
 
     def __repr__(self) -> str:
         return f"<DownloadProfileBase(id={self.id}, show_id={self.show_id}, enable_profile={self.enable_profile}, created_at={self.created_at}, updated_at={self.updated_at})>"

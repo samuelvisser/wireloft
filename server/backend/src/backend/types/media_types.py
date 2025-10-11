@@ -6,4 +6,4 @@ class MediaType(Enum):
     MOVIE = "movie"
 
     # For instances of MediaItem class (parent class)
-    MEDIA = "media"
+    BASE = "media"

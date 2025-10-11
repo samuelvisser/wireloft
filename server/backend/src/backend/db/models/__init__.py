@@ -9,5 +9,5 @@ from .DownloadProfileBase import DownloadProfileBase
 from .PodcastDownloadProfile import PodcastDownloadProfile
 from .SeriesDownloadProfile import SeriesDownloadProfile
 from .Season import Season
-from .MediaDownload import MediaDownload
+from .MediaDownloadBase import MediaDownloadBase
 from .Movie import Movie

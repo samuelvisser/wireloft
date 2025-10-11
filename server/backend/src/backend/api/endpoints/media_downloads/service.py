@@ -5,13 +5,13 @@ from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.media_download import *
-from backend.db.models import MediaDownload
+from backend.db.models import MediaDownloadBase
 
 
 def get_media_downloads_list(s: Session) -> list[MediaDownloadAPIRead]:
     items = (
-        s.query(MediaDownload)
-        .order_by(MediaDownload.id)
+        s.query(MediaDownloadBase)
+        .order_by(MediaDownloadBase.id)
         .all()
     )
     return [MediaDownloadAPIRead.model_validate(it) for it in items]
@@ -19,7 +19,7 @@ def get_media_downloads_list(s: Session) -> list[MediaDownloadAPIRead]:
 
 def get_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRead:
     item = (
-        s.query(MediaDownload)
+        s.query(MediaDownloadBase)
         .filter_by(id=media_download_id)
         .one_or_none()
     )
@@ -31,7 +31,7 @@ def get_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRe
 
 def create_media_download(s: Session, body: MediaDownloadAPICreate) -> MediaDownloadAPIRead:
     data = body.model_dump(by_alias=True)
-    item = MediaDownload(**data)
+    item = MediaDownloadBase(**data)
     s.add(item)
     s.flush()
     return MediaDownloadAPIRead.model_validate(item)
@@ -39,7 +39,7 @@ def create_media_download(s: Session, body: MediaDownloadAPICreate) -> MediaDown
 
 def update_media_download(s: Session, media_download_id: int, body: MediaDownloadAPIUpdate) -> MediaDownloadAPIRead:
     item = (
-        s.query(MediaDownload)
+        s.query(MediaDownloadBase)
         .filter_by(id=media_download_id)
         .one_or_none()
     )
@@ -53,7 +53,7 @@ def update_media_download(s: Session, media_download_id: int, body: MediaDownloa
 
 def delete_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRead:
     item = (
-        s.query(MediaDownload)
+        s.query(MediaDownloadBase)
         .filter_by(id=media_download_id)
         .one_or_none()
     )

@@ -43,6 +43,9 @@ class Show(Base):
     download_profiles: Mapped[list["DownloadProfileBase"]] = relationship(
         back_populates="show", cascade="all, delete-orphan"
     )
+    show_stream_profiles: Mapped[list["ShowStreamProfile"]] = relationship(
+        back_populates="show", cascade="all, delete-orphan"
+    )
     seasons: Mapped[list["Season"]] = relationship(
         back_populates="show", cascade="all, delete-orphan"
     )

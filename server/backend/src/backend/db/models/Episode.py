@@ -3,9 +3,8 @@ from typing import Optional
 
 from backend.db.models.MediaItem import MediaItem
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, DateTime, func
+from sqlalchemy import ForeignKey
 
-from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 
 

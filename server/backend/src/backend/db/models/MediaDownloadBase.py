@@ -5,13 +5,18 @@ from sqlalchemy import DateTime, func
 from sqlalchemy.sql.schema import ForeignKey
 
 from backend.db import Base
-from backend.types.download_profile_types import MediaDownloadStatus
+from backend.types.media_types import MediaType
 
 
-class MediaDownload(Base):
+class MediaDownloadBase(Base):
     __tablename__ = "media_downloads"
+    __mapper_args__ = {
+        "polymorphic_on": "type",
+        "polymorphic_identity": MediaType.BASE.value,
+    }
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    type: Mapped[str]
     media_item_id: Mapped[int] = mapped_column(ForeignKey("media_items.id"))
     download_status: Mapped[str]
     file_path: Mapped[str]
