@@ -2,15 +2,15 @@ import Switch from 'react-switch'
 import {Controller, type FieldValues, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
-import {MediaProfileServerErrors} from '../../types/schemas/media_profile'
-import {PreferredFormatReg} from "../../types/media_profile";
+import {LocalMediaProfileServerErrors} from '../../types/schemas/local_media_profile'
+import {PreferredFormatReg} from "../../types/local_media_profile";
 
 type Props = {
     mode?: 'create' | 'update'
     form: UseFormReturn<any>
 }
 
-export function buildMediaProfileOnSubmit<TIn extends FieldValues, TOut extends FieldValues = TIn>(
+export function buildLocalMediaProfileOnSubmit<TIn extends FieldValues, TOut extends FieldValues = TIn>(
     form: UseFormReturn<TIn>,
     submitFn: (data: TOut) => Promise<Response>,
     opts?: { mode?: 'create' | 'update'; onSuccess?: (result: any, ctx: any) => void }
@@ -20,12 +20,12 @@ export function buildMediaProfileOnSubmit<TIn extends FieldValues, TOut extends 
         onSuccess: opts?.onSuccess,
         successStatuses: mode === 'create' ? [201] : undefined,
         fallbackField: 'name' as any,
-        mapMessage: MediaProfileServerErrors,
+        mapMessage: LocalMediaProfileServerErrors,
         fieldAlias: {slug: 'name'},
     })
 }
 
-export default function MediaProfileForm({form}: Props) {
+export default function LocalMediaProfileForm({form}: Props) {
 
     const {register, control, formState: {errors}} = form;
 

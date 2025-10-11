@@ -6,8 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 
 
-class MediaProfile(Base):
-    __tablename__ = "media_profiles"
+class LocalMediaProfile(Base):
+    __tablename__ = "local_media_profiles"
 
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -25,8 +25,8 @@ class MediaProfile(Base):
     )
 
     # Relationships
-    download_profiles: Mapped[list["DownloadProfileBase"]] = relationship(back_populates="media_profile")
+    download_profiles: Mapped[list["DownloadProfileBase"]] = relationship(back_populates="local_media_profile")
 
 
     def __repr__(self) -> str:
-        return f"<MediaProfile(id={self.id}, slug={self.slug}, name={self.name}, created_at={self.created_at}, updated_at={self.updated_at})>"
+        return f"<LocalMediaProfile(id={self.id}, slug={self.slug}, name={self.name}, created_at={self.created_at}, updated_at={self.updated_at})>"

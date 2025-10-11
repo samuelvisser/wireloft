@@ -7,7 +7,7 @@ type Props = {
     mode?: 'create' | 'update'
 }
 
-export default function DownloadProfilePodcastForm({form}: Props) {
+export default function PodcastDownloadProfileForm({form}: Props) {
     const {control, register, watch, formState: {errors}} = form
 
     // If countdown is disabled, redownload final becomes irrelevant and is hidden

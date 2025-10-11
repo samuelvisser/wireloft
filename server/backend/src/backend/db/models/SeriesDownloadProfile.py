@@ -12,7 +12,7 @@ association_table = Table(
     Column("season_id", ForeignKey("seasons.id")),
 )
 
-class DownloadProfileSeries(DownloadProfileBase):
+class SeriesDownloadProfile(DownloadProfileBase):
     __tablename__ = "series_download_profiles"
     __mapper_args__ = {"polymorphic_identity": DownloadProfileType.SERIES.value}
 
@@ -24,4 +24,4 @@ class DownloadProfileSeries(DownloadProfileBase):
     seasons: Mapped[list["Season"]] = relationship(secondary=association_table)
 
     def __repr__(self) -> str:
-        return f"<DownloadProfileSeries(id={self.id}, show_id={self.show_id}, enable_profile={self.enable_profile}, created_at={self.created_at}, updated_at={self.updated_at})>"
+        return f"<SeriesDownloadProfile(id={self.id}, show_id={self.show_id}, enable_profile={self.enable_profile}, created_at={self.created_at}, updated_at={self.updated_at})>"

@@ -7,7 +7,7 @@ type RouteParams = { id?: string }
 
 type FormState = ShowFormValue & {
   url: string
-  mediaProfileId: string
+  localMediaProfileId: string
 }
 
 function defaultShowData(id?: string): { url: string; name: string; author: string } | undefined {
@@ -31,20 +31,20 @@ export default function EditShowPage() {
     const base = defaultShowData(id)
     return {
       url: base?.url ?? '',
-      mediaProfileId: 'p1',
+      localMediaProfileId: 'p1',
       ...defaultShowFormValue,
       name: base?.name ?? defaultShowFormValue.name,
       author: base?.author ?? defaultShowFormValue.author,
     }
   })
 
-  type MediaProfileName = { id: string; name: string }
-  const [profiles, setProfiles] = useState<MediaProfileName[] | null>(null)
+  type LocalMediaProfileName = { id: string; name: string }
+  const [profiles, setProfiles] = useState<LocalMediaProfileName[] | null>(null)
   const [profilesError, setProfilesError] = useState<string | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${(window as any).appConfig.API_URL}/media-profiles`, { signal: controller.signal, credentials: 'include' })
+    fetch(`${(window as any).appConfig.API_URL}/local-media-profiles`, { signal: controller.signal, credentials: 'include' })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const data = await r.json()
@@ -52,8 +52,8 @@ export default function EditShowPage() {
         setProfiles(items)
         // Ensure selected value is valid
         setForm((prev) => {
-          if (!prev.mediaProfileId || !items.some((x) => x.id === prev.mediaProfileId)) {
-            return { ...prev, mediaProfileId: items[0]?.id ?? '' }
+          if (!prev.localMediaProfileId || !items.some((x) => x.id === prev.localMediaProfileId)) {
+            return { ...prev, localMediaProfileId: items[0]?.id ?? '' }
           }
           return prev
         })
@@ -73,7 +73,7 @@ export default function EditShowPage() {
     if (!id) return
     const payload = {
       url: form.url,
-      mediaProfileSlug: form.mediaProfileId,
+      localMediaProfileSlug: form.localMediaProfileId,
       name: form.name,
       author: form.author,
       downloadMedia: form.downloadMedia,
@@ -140,8 +140,8 @@ export default function EditShowPage() {
           <select
             id="media-profile"
             className="input"
-            value={form.mediaProfileId}
-            onChange={(e) => setForm({ ...form, mediaProfileId: e.target.value })}
+            value={form.localMediaProfileId}
+            onChange={(e) => setForm({ ...form, localMediaProfileId: e.target.value })}
             disabled={profiles === null || profiles.length === 0}
           >
             {profiles === null ? (

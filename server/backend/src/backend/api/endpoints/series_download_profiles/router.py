@@ -1,12 +1,12 @@
 from fastapi import APIRouter, status
 
 from .service import *
-from ...models.download_profile_series import *
+from ...models.series_download_profile import *
 from backend.app import db_session
 
 router = APIRouter(prefix="/series-download-profiles", tags=["Download Profiles (series)"])
 
-@router.get("", response_model=list[DownloadProfileSeriesAPIRead])
+@router.get("", response_model=list[SeriesDownloadProfileAPIRead])
 def series_download_profiles_list():
     """
     List all series download profiles in the system.
@@ -17,8 +17,8 @@ def series_download_profiles_list():
         return get_series_download_profiles_list(s)
 
 
-@router.post("", response_model=DownloadProfileSeriesAPIRead, status_code=status.HTTP_201_CREATED)
-def series_download_profiles_create(body: DownloadProfileSeriesAPICreate):
+@router.post("", response_model=SeriesDownloadProfileAPIRead, status_code=status.HTTP_201_CREATED)
+def series_download_profiles_create(body: SeriesDownloadProfileAPICreate):
     """
     Create a new series download profile.
 
@@ -35,7 +35,7 @@ def series_download_profiles_create(body: DownloadProfileSeriesAPICreate):
             raise
 
 
-@router.get("/{download_profile_series_id}", response_model=DownloadProfileSeriesAPIRead)
+@router.get("/{download_profile_series_id}", response_model=SeriesDownloadProfileAPIRead)
 def series_download_profiles_detail(download_profile_series_id: int):
     """
     Retrieve detailed information for a specific series download profile.
@@ -46,8 +46,8 @@ def series_download_profiles_detail(download_profile_series_id: int):
         return get_download_profile_series(s, download_profile_series_id)
 
 
-@router.patch("/{download_profile_series_id}", response_model=DownloadProfileSeriesAPIRead)
-def series_download_profiles_update(download_profile_series_id: int, body: DownloadProfileSeriesAPIUpdate):
+@router.patch("/{download_profile_series_id}", response_model=SeriesDownloadProfileAPIRead)
+def series_download_profiles_update(download_profile_series_id: int, body: SeriesDownloadProfileAPIUpdate):
     """
     Update an existing series download profile.
 
@@ -64,7 +64,7 @@ def series_download_profiles_update(download_profile_series_id: int, body: Downl
             raise
 
 
-@router.delete("/{download_profile_series_id}", response_model=DownloadProfileSeriesAPIRead)
+@router.delete("/{download_profile_series_id}", response_model=SeriesDownloadProfileAPIRead)
 def series_download_profiles_delete(download_profile_series_id: int):
     """
     Delete a series download profile from the system.

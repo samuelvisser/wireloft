@@ -8,7 +8,7 @@ from backend.api.models.base import RequestBase, ResponseBase
 
 
 # ---------- Strict input (create/update) ----------
-class _DownloadProfilePodcastAPIBaseIn(RequestBase):
+class _PodcastDownloadProfileAPIBaseIn(RequestBase):
     """Fields for requests: validate here (constraints allowed)."""
 
     enable_profile: bool
@@ -18,31 +18,31 @@ class _DownloadProfilePodcastAPIBaseIn(RequestBase):
     delete_older_episodes: bool
 
 
-class DownloadProfilePodcastAPICreateBundle(_DownloadProfilePodcastAPIBaseIn):
+class PodcastDownloadProfileAPICreateBundle(_PodcastDownloadProfileAPIBaseIn):
     """Request body for creating a download profile for podcasts while bundleing it with a show and media profile."""
     pass
 
 
-class DownloadProfilePodcastAPICreate(_DownloadProfilePodcastAPIBaseIn):
+class PodcastDownloadProfileAPICreate(_PodcastDownloadProfileAPIBaseIn):
     """Request body for creating a download profile for podcasts."""
 
     show_id: int
-    media_profile_id: int
+    local_media_profile_id: int
 
 
-class DownloadProfilePodcastAPIUpdate(_DownloadProfilePodcastAPIBaseIn):
+class PodcastDownloadProfileAPIUpdate(_PodcastDownloadProfileAPIBaseIn):
     """Request body for updating a download profile for podcasts."""
 
-    media_profile_id: int
+    local_media_profile_id: int
 
 
 # ---------- Lenient output (read) ----------
-class _DownloadProfilePodcastAPIBaseOut(ResponseBase):
+class _PodcastDownloadProfileAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, no constraints."""
 
     id: int
     show_id: int
-    media_profile_id: int
+    local_media_profile_id: int
     enable_profile: bool
     download_with_countdown: bool
     redownload_final: bool
@@ -50,7 +50,7 @@ class _DownloadProfilePodcastAPIBaseOut(ResponseBase):
     delete_older_episodes: bool
 
 
-class DownloadProfilePodcastAPIRead(_DownloadProfilePodcastAPIBaseOut):
+class PodcastDownloadProfileAPIRead(_PodcastDownloadProfileAPIBaseOut):
     """Response body for a download profile for podcasts."""
 
     created_at: datetime

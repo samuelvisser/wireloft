@@ -25,7 +25,7 @@ async function bootstrap() {
   }
   const cachedProfiles = loadProfilesFromStorage()
   if (cachedProfiles) {
-    queryClient.setQueryData(['mediaProfiles'], cachedProfiles)
+    queryClient.setQueryData(['localMediaProfiles'], cachedProfiles)
   }
 
   // Warm the cache on startup; this will background-refresh the restored data

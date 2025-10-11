@@ -4,35 +4,28 @@ import {zodResolver} from '@hookform/resolvers/zod'
 import DownloadProfileForm from '../../DownloadProfile/DownloadProfileForm'
 import {buildServerAwareSubmit} from '../../../utils/buildServerAwareSubmit'
 import {
-    DownloadProfileUnifiedCreateIn,
-    DownloadProfileUnifiedCreateOut, DownloadProfileUnifiedCreateSchema
+    DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut,
+    DownloadProfileUnifiedCreateSchema
 } from "../../../types/schemas/show_with_profiles";
-import {SeasonDetachedOut} from "../../../types/schemas/season";
 
-export type SeasonItem = SeasonDetachedOut
-
-export type DownloadProfileSeriesProps = {
+export type PodcastDownloadProfileProps = {
     value: Partial<DownloadProfileUnifiedCreateIn>
     onChange: (v: Partial<DownloadProfileUnifiedCreateIn>) => void;
     onSubmit: (v: DownloadProfileUnifiedCreateOut) => void;
-    seasons: SeasonItem[]
     onBack: () => void
     onFinish: () => void
     onCancel: () => void
 }
 
-
-export default function DownloadProfileSeriesStep({
-                                                      value, onChange, onSubmit: onSubmitParent, seasons, onBack,
-                                                      onFinish, onCancel
-                                                  }: DownloadProfileSeriesProps) {
+export default function PodcastDownloadProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onFinish, onCancel}: PodcastDownloadProfileProps) {
     const form = useForm<DownloadProfileUnifiedCreateIn>({
         resolver: zodResolver(DownloadProfileUnifiedCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
         defaultValues: value,
     })
-    const {watch, formState: {isSubmitting}} = form
+
+    const {watch, setValue, formState: {isSubmitting}} = form
 
     // Subscribe to ALL changes
     useEffect(() => {
@@ -42,6 +35,15 @@ export default function DownloadProfileSeriesStep({
         return () => subscription.unsubscribe();
     }, [watch, onChange]);
 
+    // If countdown is disabled, redownload final becomes irrelevant and is hidden
+    const withCountdown = watch('downloadWithCountdown')
+    useEffect(() => {
+        if (!withCountdown) {
+            setValue('redownloadFinal', true, {shouldDirty: true, shouldValidate: false})
+        }
+    }, [withCountdown, setValue])
+
+
     const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfileUnifiedCreateOut) => {
         onSubmitParent(dataOut)
         onFinish()
@@ -49,7 +51,7 @@ export default function DownloadProfileSeriesStep({
 
     return (
         <form className="form form-fluid" onSubmit={onSubmit} noValidate>
-            <DownloadProfileForm form={form} mode="series" seasons={seasons}/>
+            <DownloadProfileForm form={form} mode="podcast"/>
 
             <div className="actions">
                 <button type="button" className="btn" onClick={onBack}>Back</button>

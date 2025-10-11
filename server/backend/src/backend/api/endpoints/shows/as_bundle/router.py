@@ -2,7 +2,7 @@ from fastapi import APIRouter, status
 
 from .service import *
 from ....models.show import ShowAPIRead
-from ....models.show_with_profiles import ShowAPICreateBundle
+from ....models.show_as_bundle import ShowAPICreateBundle
 from backend.app import db_session
 
 router = APIRouter(prefix = "/as-bundle")

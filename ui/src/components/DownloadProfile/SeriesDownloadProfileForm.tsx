@@ -19,7 +19,7 @@ type SeasonOption = { value: string; label: string; season: SeasonItem }
 type IncludeOption = { value: typeof INCLUDE_UPCOMING_VALUE; label: string }
 type UIOption = SeasonOption | IncludeOption
 
-export default function DownloadProfileSeriesForm({form, seasons}: Props) {
+export default function SeriesDownloadProfileForm({form, seasons}: Props) {
     const {control, setValue, watch, formState: {errors}} = form
 
     // Prepare season options

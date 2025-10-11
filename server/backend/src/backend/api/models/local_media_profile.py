@@ -6,12 +6,12 @@ from typing import Union
 from pydantic import computed_field, Field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.types.media_profile_types import PreferredFormat
+from backend.types.local_media_profile_types import PreferredFormat
 from backend.utils.helpers import slugify
 
 
 # ---------- Strict input (create/update) ----------
-class _MediaProfileAPIBaseIn(RequestBase):
+class _LocalMediaProfileAPIBaseIn(RequestBase):
     """Fields for requests: validate hard here."""
 
     name: str = Field(min_length=1)
@@ -34,18 +34,18 @@ class _MediaProfileAPIBaseIn(RequestBase):
         return v
 
 
-class MediaProfileAPICreate(_MediaProfileAPIBaseIn):
+class LocalMediaProfileAPICreate(_LocalMediaProfileAPIBaseIn):
     """Request body for creating a media profile. Slug derived from name."""
     pass
 
 
-class MediaProfileAPIUpdate(_MediaProfileAPIBaseIn):
+class LocalMediaProfileAPIUpdate(_LocalMediaProfileAPIBaseIn):
     """Request body for updating a media profile."""
     pass
 
 
 # ---------- Lenient output (read) ----------
-class _MediaProfileAPIBaseOut(ResponseBase):
+class _LocalMediaProfileAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, no constraints."""
 
     id: int
@@ -56,7 +56,7 @@ class _MediaProfileAPIBaseOut(ResponseBase):
     download_series_images: bool
 
 
-class MediaProfileAPIRead(_MediaProfileAPIBaseOut):
+class LocalMediaProfileAPIRead(_LocalMediaProfileAPIBaseOut):
     """Response body for a media profile."""
 
     created_at: datetime

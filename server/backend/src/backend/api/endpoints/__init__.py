@@ -4,7 +4,7 @@ from .series_download_profiles import download_profile_series_router
 from .seasons import season_router
 from .episodes import episode_router
 from .media_downloads import media_download_router
-from .media_profiles import media_profile_router
+from .local_media_profiles import local_media_profile_router
 from .movies import movie_router
 from .settings.router import router as setting_router
 from .shows import show_router

@@ -1,41 +1,40 @@
 from __future__ import annotations
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from backend.api.helpers import create_database_fields, update_database_fields
-from backend.api.models.media_profile import MediaProfileAPIUpdate
+from backend.api.models.local_media_profile import LocalMediaProfileAPIUpdate
 from backend.api.models.show import ShowAPIRead
-from backend.api.models.show_with_profiles import ShowAPICreateBundle
-from backend.db.models import Show, MediaProfile, Season, DownloadProfileSeries, DownloadProfilePodcast
+from backend.api.models.show_as_bundle import ShowAPICreateBundle
+from backend.db.models import Show, LocalMediaProfile, Season, SeriesDownloadProfile, PodcastDownloadProfile
 
 
-def upsert_media_profile(s: Session, mp_input: dict) -> MediaProfile:
+def upsert_local_media_profile(s: Session, mp_input: dict) -> LocalMediaProfile:
 
     # Upsert media profile
     if mp_input['op'] == "create_new":
-        media_profile = create_database_fields(MediaProfile, mp_input)
-        s.add(media_profile)
-        return media_profile
+        local_media_profile = create_database_fields(LocalMediaProfile, mp_input)
+        s.add(local_media_profile)
+        return local_media_profile
     elif mp_input['op'] == "update_by_slug":
-        mp_api = MediaProfileAPIUpdate.model_validate(mp_input)
+        mp_api = LocalMediaProfileAPIUpdate.model_validate(mp_input)
         data = mp_api.model_dump(exclude_none=True, exclude_unset=True)
 
         slug = data.get("slug")
         if not slug:
             raise ValueError("update_by_slug requires a slug")
 
-        media_profile = (
-            s.query(MediaProfile)
+        local_media_profile = (
+            s.query(LocalMediaProfile)
             .filter_by(slug=slug)
             .one_or_none()
         )
-        if media_profile is None:
+        if local_media_profile is None:
             raise HTTPException(status_code=404, detail="Media profile not found")
 
-        update_database_fields(media_profile, mp_api)
-        return media_profile
+        update_database_fields(local_media_profile, mp_api)
+        return local_media_profile
     else:
         # Fallback, though discriminator should prevent this
         raise ValueError("Unsupported media profile operation")
@@ -56,13 +55,13 @@ def create_show_bundle(s: Session, payload: ShowAPICreateBundle) -> ShowAPIRead:
         seasons.append(season)
 
     # Upsert media profile
-    media_profile = upsert_media_profile(s, payload.media_profile.model_dump(exclude_none=True, exclude_unset=True))
+    local_media_profile = upsert_local_media_profile(s, payload.local_media_profile.model_dump(exclude_none=True, exclude_unset=True))
 
     # Create either podcast or series download profile
     if payload.download_profile.op == "podcast":
-        download_profile = create_database_fields(DownloadProfilePodcast, payload.download_profile.model_dump(exclude_none=True, exclude_unset=True))
+        download_profile = create_database_fields(PodcastDownloadProfile, payload.download_profile.model_dump(exclude_none=True, exclude_unset=True))
     elif payload.download_profile.op == "series":
-        download_profile = create_database_fields(DownloadProfileSeries, payload.download_profile.model_dump(exclude_none=True, exclude_unset=True, exclude={"seasons"}))
+        download_profile = create_database_fields(SeriesDownloadProfile, payload.download_profile.model_dump(exclude_none=True, exclude_unset=True, exclude={"seasons"}))
 
         series_profile_seasons: set[Season] = set()
         for season in seasons:
@@ -76,7 +75,7 @@ def create_show_bundle(s: Session, payload: ShowAPICreateBundle) -> ShowAPIRead:
         raise ValueError("Unsupported download profile operation")
     s.add(download_profile)
     download_profile.show = show
-    download_profile.media_profile = media_profile
+    download_profile.local_media_profile = local_media_profile
 
     s.flush()
     return ShowAPIRead.model_validate(show)

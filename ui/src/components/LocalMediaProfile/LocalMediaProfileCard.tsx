@@ -1,13 +1,13 @@
-import {MediaProfileRead} from '../../types/schemas/media_profile'
-import {PreferredFormatReg} from "../../types/media_profile";
+import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
+import {PreferredFormatReg} from "../../types/local_media_profile";
 
-export type MediaProfileCardProps = {
-  profile: MediaProfileRead
+export type LocalMediaProfileCardProps = {
+  profile: LocalMediaProfileRead
   selected?: boolean
   onClick?: () => void
 }
 
-export default function MediaProfileCard({ profile, selected = false, onClick }: MediaProfileCardProps) {
+export default function LocalMediaProfileCard({ profile, selected = false, onClick }: LocalMediaProfileCardProps) {
   return (
     <button
       type="button"

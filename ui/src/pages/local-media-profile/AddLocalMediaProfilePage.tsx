@@ -1,23 +1,23 @@
 import {useCallback} from 'react'
-import MediaProfileForm from '../../components/MediaProfile/MediaProfileForm'
+import LocalMediaProfileForm from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {
-    MediaProfileCreateIn, MediaProfileCreateOut,
-    MediaProfileCreateSchema,
-} from "../../types/schemas/media_profile";
+    LocalMediaProfileCreateIn, LocalMediaProfileCreateOut,
+    LocalMediaProfileCreateSchema,
+} from "../../types/schemas/local_media_profile";
 import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {WithRoot} from "../../types/form";
-import {buildMediaProfileOnSubmit} from '../../components/MediaProfile/MediaProfileForm'
-import {PreferredFormatReg} from "../../types/media_profile";
+import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
+import {PreferredFormatReg} from "../../types/local_media_profile";
 
-export default function AddMediaProfilePage() {
+export default function AddLocalMediaProfilePage() {
     const navigate = useNavigate()
     const qc = useQueryClient()
 
-    const form = useForm<WithRoot<MediaProfileCreateIn>>({
-        resolver: zodResolver(MediaProfileCreateSchema),
+    const form = useForm<WithRoot<LocalMediaProfileCreateIn>>({
+        resolver: zodResolver(LocalMediaProfileCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
         defaultValues: {
@@ -28,8 +28,8 @@ export default function AddMediaProfilePage() {
         },
     })
 
-    const submitFn = async (data: MediaProfileCreateOut) => {
-        return fetch(`${(window as any).appConfig.API_URL}/media-profiles`, {
+    const submitFn = async (data: LocalMediaProfileCreateOut) => {
+        return fetch(`${(window as any).appConfig.API_URL}/local-media-profiles`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',
@@ -37,14 +37,14 @@ export default function AddMediaProfilePage() {
         })
     };
 
-    const onSuccess = async (_result: any, {resetForm}: { resetForm: (v?: Partial<MediaProfileCreateOut>) => void }) => {
-        await qc.invalidateQueries({queryKey: ['mediaProfiles']})
+    const onSuccess = async (_result: any, {resetForm}: { resetForm: (v?: Partial<LocalMediaProfileCreateOut>) => void }) => {
+        await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
         resetForm();
-        navigate('/profiles')
+        navigate('/local-media-profiles')
     };
 
-    const onCancel = useCallback(() => navigate('/profiles'), [navigate])
-    const onCreate = buildMediaProfileOnSubmit(form, submitFn, {
+    const onCancel = useCallback(() => navigate('/local-media-profiles'), [navigate])
+    const onCreate = buildLocalMediaProfileOnSubmit(form, submitFn, {
         onSuccess,
         mode: 'create',
     });
@@ -54,11 +54,11 @@ export default function AddMediaProfilePage() {
     return (
         <section className="view" aria-labelledby="add-media-profile-title">
             <div className="view-header">
-                <h1 id="add-media-profile-title">Add media profile</h1>
+                <h1 id="add-media-profile-title">Add local media profile</h1>
             </div>
 
             <form className="form" onSubmit={onCreate} noValidate>
-                <MediaProfileForm form={form} />
+                <LocalMediaProfileForm form={form} />
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>

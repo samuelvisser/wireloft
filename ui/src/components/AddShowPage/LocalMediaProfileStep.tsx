@@ -2,34 +2,34 @@ import {useEffect, useRef} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import DailywireShowCard from './DailywireShowCard'
-import MediaProfileForm from '../MediaProfile/MediaProfileForm'
-import {useMediaProfiles} from '../../lib/queries'
-import {MediaProfileRead} from '../../types/schemas/media_profile'
+import LocalMediaProfileForm from '../LocalMediaProfile/LocalMediaProfileForm'
+import {useLocalMediaProfiles} from '../../lib/queries'
+import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {
-    MediaProfileCreateUnionIn, MediaProfileUpsertIn, MediaProfileUpsertOut, MediaProfileUpsertSchema
+    LocalMediaProfileCreateUnionIn, LocalMediaProfileUpsertIn, LocalMediaProfileUpsertOut, LocalMediaProfileUpsertSchema
 } from "../../types/schemas/show_with_profiles";
-import MediaProfileCard from '../MediaProfile/MediaProfileCard'
+import LocalMediaProfileCard from '../LocalMediaProfile/LocalMediaProfileCard'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 
 // Local upsert type and schema for the form
 type Props = {
-    value: Partial<MediaProfileUpsertIn>
-    onChange: (v: Partial<MediaProfileUpsertIn>) => void
-    onSubmit: (v: MediaProfileUpsertOut) => void;
+    value: Partial<LocalMediaProfileUpsertIn>
+    onChange: (v: Partial<LocalMediaProfileUpsertIn>) => void
+    onSubmit: (v: LocalMediaProfileUpsertOut) => void;
     onBack: () => void
     onContinue: () => void
     onCancel: () => void
     showSlug?: string
 }
 
-export default function MediaProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, showSlug}: Props) {
-    const profilesQuery = useMediaProfiles()
-    const profiles: MediaProfileRead[] | undefined = profilesQuery.data
+export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, showSlug}: Props) {
+    const profilesQuery = useLocalMediaProfiles()
+    const profiles: LocalMediaProfileRead[] | undefined = profilesQuery.data
     const profilesError = profilesQuery.isError ? ((profilesQuery.error)?.message ?? 'Failed to load media profiles') : null
 
     // React Hook Form setup
-    const form = useForm<MediaProfileUpsertIn>({
-        resolver: zodResolver(MediaProfileUpsertSchema),
+    const form = useForm<LocalMediaProfileUpsertIn>({
+        resolver: zodResolver(LocalMediaProfileUpsertSchema),
         mode: 'onBlur',
         shouldFocusError: true,
         defaultValues: { op: 'create_new', ...(value) },
@@ -45,13 +45,13 @@ export default function MediaProfileStep({value, onChange, onSubmit: onSubmitPar
     }, [watch, onChange]);
 
     // Snapshot previous values when switching to an existing profile, so we can restore on deselect
-    const snapshotRef = useRef<Pick<MediaProfileCreateUnionIn, 'name' | 'outputTemplate' | 'preferredFormat' | 'downloadSeriesImages'> | null>(null)
+    const snapshotRef = useRef<Pick<LocalMediaProfileCreateUnionIn, 'name' | 'outputTemplate' | 'preferredFormat' | 'downloadSeriesImages'> | null>(null)
 
     const watchedOp = watch('op')
     const watchedSlug = watch('slug')
 
     // Selection handler for profile cards
-    const handleSelect = (p: MediaProfileRead) => {
+    const handleSelect = (p: LocalMediaProfileRead) => {
         const selected = watchedOp === 'update_by_slug' && watchedSlug === p.slug
         if (selected) {
             // Deselect: switch back to create_new and restore snapshot if any
@@ -84,8 +84,8 @@ export default function MediaProfileStep({value, onChange, onSubmit: onSubmitPar
         }
     }
 
-    const onSubmit = buildServerAwareSubmit(form, async (dataIn: MediaProfileUpsertIn) => {
-        const dataOut = MediaProfileUpsertSchema.parse(dataIn)
+    const onSubmit = buildServerAwareSubmit(form, async (dataIn: LocalMediaProfileUpsertIn) => {
+        const dataOut = LocalMediaProfileUpsertSchema.parse(dataIn)
         onSubmitParent(dataOut)
         onContinue()
     }, {
@@ -109,7 +109,7 @@ export default function MediaProfileStep({value, onChange, onSubmit: onSubmitPar
                                 profiles.map((p) => {
                                     const selected = watchedOp === 'update_by_slug' && watchedSlug === p.slug
                                     return (
-                                        <MediaProfileCard
+                                        <LocalMediaProfileCard
                                             key={p.slug}
                                             profile={p}
                                             selected={selected}
@@ -127,7 +127,7 @@ export default function MediaProfileStep({value, onChange, onSubmit: onSubmitPar
                          aria-hidden="true">{watchedOp === 'update_by_slug' ? 'Update current profile' : 'Or create a new profile'}</div>
 
                     {/* New or update profile form (user-editable fields) */}
-                    <MediaProfileForm form={form}/>
+                    <LocalMediaProfileForm form={form}/>
 
                     <div className="actions">
                         <button type="button" className="btn" onClick={onBack}>

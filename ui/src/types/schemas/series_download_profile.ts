@@ -3,8 +3,8 @@ import {SeasonDetachedSchema} from "./season";
 
 
 // ---------- Strict request (create/update) ----------
-const DownloadProfileSeriesBaseSchema = z.object({
-    mediaProfileId: z.int(),
+const SeriesDownloadProfileBaseSchema = z.object({
+    localMediaProfileId: z.int(),
     enableProfile: z.boolean().default(true),
     seasons: z.array(SeasonDetachedSchema).default([]),
     includeUpcomingSeasons: z.boolean().default(true),
@@ -19,27 +19,27 @@ const DownloadProfileSeriesBaseSchema = z.object({
 })
 
 
-export const DownloadProfileSeriesCreateSchema = DownloadProfileSeriesBaseSchema.safeExtend({
+export const SeriesDownloadProfileCreateSchema = SeriesDownloadProfileBaseSchema.safeExtend({
     showId: z.int(),
 })
-export type DownloadProfileSeriesCreateIn = z.input<typeof DownloadProfileSeriesCreateSchema>
-export type DownloadProfileSeriesCreateOut = z.output<typeof DownloadProfileSeriesCreateSchema>
+export type SeriesDownloadProfileCreateIn = z.input<typeof SeriesDownloadProfileCreateSchema>
+export type SeriesDownloadProfileCreateOut = z.output<typeof SeriesDownloadProfileCreateSchema>
 
 
-export const DownloadProfileSeriesUpdateSchema = DownloadProfileSeriesBaseSchema.safeExtend({})
-export type DownloadProfileSeriesUpdateIn = z.input<typeof DownloadProfileSeriesUpdateSchema>
-export type DownloadProfileSeriesUpdateOut = z.output<typeof DownloadProfileSeriesUpdateSchema>
+export const SeriesDownloadProfileUpdateSchema = SeriesDownloadProfileBaseSchema.safeExtend({})
+export type SeriesDownloadProfileUpdateIn = z.input<typeof SeriesDownloadProfileUpdateSchema>
+export type SeriesDownloadProfileUpdateOut = z.output<typeof SeriesDownloadProfileUpdateSchema>
 
 
 // ------------ Lenient response (read) ------------
-export const DownloadProfileSeriesReadSchema = z.looseObject({
+export const SeriesDownloadProfileReadSchema = z.looseObject({
     id: z.int(),
     showId: z.int(),
-    mediaProfileId: z.int().optional(),
+    localMediaProfileId: z.int().optional(),
     enableProfile: z.boolean(),
     seasons: z.array(SeasonDetachedSchema),
     includeUpcomingSeasons: z.boolean(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })
-export type DownloadProfileSeriesRead = z.infer<typeof DownloadProfileSeriesReadSchema>
+export type SeriesDownloadProfileRead = z.infer<typeof SeriesDownloadProfileReadSchema>

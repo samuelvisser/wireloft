@@ -1,12 +1,12 @@
 from fastapi import APIRouter, status
 
 from .service import *
-from ...models.download_profile_podcast import *
+from ...models.podcast_download_profile import *
 from backend.app import db_session
 
 router = APIRouter(prefix="/podcast-download-profiles", tags=["Download Profiles (podcast)"])
 
-@router.get("", response_model=list[DownloadProfilePodcastAPIRead])
+@router.get("", response_model=list[PodcastDownloadProfileAPIRead])
 def podcast_download_profiles_list():
     """
     List all podcast download profiles in the system.
@@ -17,8 +17,8 @@ def podcast_download_profiles_list():
         return get_podcast_download_profiles_list(s)
 
 
-@router.post("", response_model=DownloadProfilePodcastAPIRead, status_code=status.HTTP_201_CREATED)
-def podcast_download_profiles_create(body: DownloadProfilePodcastAPICreate):
+@router.post("", response_model=PodcastDownloadProfileAPIRead, status_code=status.HTTP_201_CREATED)
+def podcast_download_profiles_create(body: PodcastDownloadProfileAPICreate):
     """
     Create a new podcast download profile.
 
@@ -35,7 +35,7 @@ def podcast_download_profiles_create(body: DownloadProfilePodcastAPICreate):
             raise
 
 
-@router.get("/{download_profile_podcast_id}", response_model=DownloadProfilePodcastAPIRead)
+@router.get("/{download_profile_podcast_id}", response_model=PodcastDownloadProfileAPIRead)
 def podcast_download_profiles_detail(download_profile_podcast_id: int):
     """
     Retrieve detailed information for a specific podcast download profile.
@@ -46,8 +46,8 @@ def podcast_download_profiles_detail(download_profile_podcast_id: int):
         return get_download_profile_podcast(s, download_profile_podcast_id)
 
 
-@router.patch("/{download_profile_podcast_id}", response_model=DownloadProfilePodcastAPIRead)
-def podcast_download_profiles_update(download_profile_podcast_id: int, body: DownloadProfilePodcastAPIUpdate):
+@router.patch("/{download_profile_podcast_id}", response_model=PodcastDownloadProfileAPIRead)
+def podcast_download_profiles_update(download_profile_podcast_id: int, body: PodcastDownloadProfileAPIUpdate):
     """
     Update an existing podcast download profile.
 
@@ -64,7 +64,7 @@ def podcast_download_profiles_update(download_profile_podcast_id: int, body: Dow
             raise
 
 
-@router.delete("/{download_profile_podcast_id}", response_model=DownloadProfilePodcastAPIRead)
+@router.delete("/{download_profile_podcast_id}", response_model=PodcastDownloadProfileAPIRead)
 def podcast_download_profiles_delete(download_profile_podcast_id: int):
     """
     Delete a podcast download profile from the system.

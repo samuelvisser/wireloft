@@ -1,8 +1,8 @@
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
-import DownloadProfilePodcastForm from './DownloadProfilePodcastForm'
-import DownloadProfileSeriesForm, {SeasonItem} from './DownloadProfileSeriesForm'
+import PodcastDownloadProfileForm from './PodcastDownloadProfileForm'
+import SeriesDownloadProfileForm, {SeasonItem} from './SeriesDownloadProfileForm'
 
 export type DownloadProfileMode = 'podcast' | 'series'
 
@@ -59,9 +59,9 @@ export default function DownloadProfileForm({form, mode, seasons}: Props) {
 
             {/* Variant-specific fields */}
             {mode === 'podcast' ? (
-                <DownloadProfilePodcastForm form={form}/>
+                <PodcastDownloadProfileForm form={form}/>
             ) : (
-                <DownloadProfileSeriesForm form={form} seasons={seasons ?? []}/>
+                <SeriesDownloadProfileForm form={form} seasons={seasons ?? []}/>
             )}
         </>
     )

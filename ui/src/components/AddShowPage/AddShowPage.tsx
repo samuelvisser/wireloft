@@ -1,18 +1,18 @@
 import {useEffect, useRef, useState} from 'react'
 import {getCurrentAppVersion, getErrorMessageFromResponse} from '../../utils/helpers'
 import ChooseShowStep from './ChooseShowStep'
-import MediaProfileStep from './MediaProfileStep'
+import LocalMediaProfileStep from './LocalMediaProfileStep'
 import DownloadProfileStep from './DownloadProfileStep'
 
 import type {Versioned} from '../../types/data'
 import {ShowCreatePayloadOut, ShowCreatePayloadIn, ShowCreatePayloadSchema} from "../../types/schemas/show";
 import {getZodDefaults} from "../../utils/defaultZod";
 import {
-    DownloadProfilePodcastBundleSchema,
-    DownloadProfileSeriesBundleSchema, DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut,
-    MediaProfileCreateUnionSchema,
-    MediaProfileUpsertIn,
-    MediaProfileUpsertOut,
+    PodcastDownloadProfileBundleSchema,
+    SeriesDownloadProfileBundleSchema, DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut,
+    LocalMediaProfileCreateUnionSchema,
+    LocalMediaProfileUpsertIn,
+    LocalMediaProfileUpsertOut,
 } from "../../types/schemas/show_with_profiles";
 import {ShowTypeReg} from "../../types/show";
 import {useQueryClient} from "@tanstack/react-query";
@@ -23,7 +23,7 @@ export type Props = {
 }
 
 // Wizard state persistence
-const STORAGE_KEY = 'addShowWizardV6'
+const STORAGE_KEY = 'addShowWizardV7'
 
 type WizardType = 'ERROR' | 'INFO'
 type WizardMessage = { text: string; type: WizardType }
@@ -34,9 +34,9 @@ type WizardState = {
         input: Partial<ShowCreatePayloadIn>,
         submit: ShowCreatePayloadOut | undefined,
     },
-    mediaProfile: {
-        input: Partial<MediaProfileUpsertIn>,
-        submit: MediaProfileUpsertOut | undefined,
+    localMediaProfile: {
+        input: Partial<LocalMediaProfileUpsertIn>,
+        submit: LocalMediaProfileUpsertOut | undefined,
     },
     downloadProfile: {
         podcast: {
@@ -126,17 +126,17 @@ export default function AddShowPage({onCancel}: Props) {
         () => loadWizardState()?.show.input ?? getZodDefaults(ShowCreatePayloadSchema))
     const [showSubmit, setShowSubmit] = useState<ShowCreatePayloadOut | undefined>(() => loadWizardState()?.show.submit)
 
-    const [mediaProfileInput, setMediaProfileInput] = useState<Partial<MediaProfileUpsertIn>>(
-        () => loadWizardState()?.mediaProfile.input ?? getZodDefaults(MediaProfileCreateUnionSchema))
-    const [mediaProfileSubmit, setMediaProfileSubmit] = useState<MediaProfileUpsertOut | undefined>(() => loadWizardState()?.mediaProfile.submit)
+    const [localMediaProfileInput, setLocalMediaProfileInput] = useState<Partial<LocalMediaProfileUpsertIn>>(
+        () => loadWizardState()?.localMediaProfile.input ?? getZodDefaults(LocalMediaProfileCreateUnionSchema))
+    const [localMediaProfileSubmit, setLocalMediaProfileSubmit] = useState<LocalMediaProfileUpsertOut | undefined>(() => loadWizardState()?.localMediaProfile.submit)
 
-    const [downloadProfilePodcastInput, setDownloadProfilePodcastInput] = useState<Partial<DownloadProfileUnifiedCreateIn>>(
-        () => loadWizardState()?.downloadProfile.podcast.input ?? getZodDefaults(DownloadProfilePodcastBundleSchema))
-    const [downloadProfilePodcastSubmit, setDownloadProfilePodcastSubmit] = useState<DownloadProfileUnifiedCreateOut | undefined>(() => loadWizardState()?.downloadProfile.podcast.submit)
+    const [downloadProfilePodcastInput, setPodcastDownloadProfileInput] = useState<Partial<DownloadProfileUnifiedCreateIn>>(
+        () => loadWizardState()?.downloadProfile.podcast.input ?? getZodDefaults(PodcastDownloadProfileBundleSchema))
+    const [downloadProfilePodcastSubmit, setPodcastDownloadProfileSubmit] = useState<DownloadProfileUnifiedCreateOut | undefined>(() => loadWizardState()?.downloadProfile.podcast.submit)
 
-    const [downloadProfileSeriesInput, setDownloadProfileSeriesInput] = useState<Partial<DownloadProfileUnifiedCreateIn>>(
-        () => loadWizardState()?.downloadProfile.series.input ?? getZodDefaults(DownloadProfileSeriesBundleSchema))
-    const [downloadProfileSeriesSubmit, setDownloadProfileSeriesSubmit] = useState<DownloadProfileUnifiedCreateOut | undefined>(() => loadWizardState()?.downloadProfile.series.submit)
+    const [downloadProfileSeriesInput, setSeriesDownloadProfileInput] = useState<Partial<DownloadProfileUnifiedCreateIn>>(
+        () => loadWizardState()?.downloadProfile.series.input ?? getZodDefaults(SeriesDownloadProfileBundleSchema))
+    const [downloadProfileSeriesSubmit, setSeriesDownloadProfileSubmit] = useState<DownloadProfileUnifiedCreateOut | undefined>(() => loadWizardState()?.downloadProfile.series.submit)
 
     const [seasonsSubmit, setSeasonsSubmit] = useState<SeasonDetachedOut[] | undefined>(
         () => loadWizardState()?.seasons ?? [])
@@ -153,9 +153,9 @@ export default function AddShowPage({onCancel}: Props) {
                 input: showInput,
                 submit: showSubmit
             },
-            mediaProfile: {
-                input: mediaProfileInput,
-                submit: mediaProfileSubmit,
+            localMediaProfile: {
+                input: localMediaProfileInput,
+                submit: localMediaProfileSubmit,
             },
             downloadProfile: {
                 podcast: {
@@ -170,7 +170,7 @@ export default function AddShowPage({onCancel}: Props) {
             seasons: seasonsSubmit,
             globalMessage,
         })
-    }, [step, showInput, showSubmit, mediaProfileInput, mediaProfileSubmit, downloadProfilePodcastInput, downloadProfilePodcastSubmit, downloadProfileSeriesInput, downloadProfileSeriesSubmit, seasonsSubmit, globalMessage])
+    }, [step, showInput, showSubmit, localMediaProfileInput, localMediaProfileSubmit, downloadProfilePodcastInput, downloadProfilePodcastSubmit, downloadProfileSeriesInput, downloadProfileSeriesSubmit, seasonsSubmit, globalMessage])
 
     function handleCancel() {
         clearWizardState()
@@ -181,7 +181,7 @@ export default function AddShowPage({onCancel}: Props) {
         // Build payload from current in-memory state to avoid race with async persistence
         const show = showSubmit
         const seasons = seasonsSubmit
-        const mediaProfile = mediaProfileSubmit
+        const localMediaProfile = localMediaProfileSubmit
 
         if (!show) {
             setWizardMessage('Please complete the "Choose show" step before finishing.', 'ERROR')
@@ -191,7 +191,7 @@ export default function AddShowPage({onCancel}: Props) {
             setWizardMessage('Show seasons that should have been loaded in "Choose show" are not available.', 'ERROR')
             return
         }
-        if (!mediaProfile) {
+        if (!localMediaProfile) {
             setWizardMessage('Please complete the Media Profile step before finishing.', 'ERROR')
             return
         }
@@ -212,7 +212,7 @@ export default function AddShowPage({onCancel}: Props) {
         const submitData = {
             show,
             seasons,
-            mediaProfile,
+            localMediaProfile,
             downloadProfile,
         }
         console.log(JSON.stringify(submitData))
@@ -240,7 +240,7 @@ export default function AddShowPage({onCancel}: Props) {
             return
         }
 
-        await qc.invalidateQueries({queryKey: ['mediaProfiles']})
+        await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
         await qc.invalidateQueries({queryKey: ['downloadProfiles']})
         await qc.invalidateQueries({queryKey: ['shows']})
         await qc.invalidateQueries({queryKey: ['seasons']})
@@ -280,10 +280,10 @@ export default function AddShowPage({onCancel}: Props) {
             )}
 
             {step === 2 && (
-                <MediaProfileStep
-                    value={mediaProfileInput}
-                    onChange={setMediaProfileInput}
-                    onSubmit={setMediaProfileSubmit}
+                <LocalMediaProfileStep
+                    value={localMediaProfileInput}
+                    onChange={setLocalMediaProfileInput}
+                    onSubmit={setLocalMediaProfileSubmit}
                     onBack={() => setStep(1)}
                     onContinue={() => setStep(3)}
                     onCancel={handleCancel}
@@ -298,16 +298,16 @@ export default function AddShowPage({onCancel}: Props) {
                         series: downloadProfileSeriesInput,
                     }}
                     onChange={{
-                        podcast: setDownloadProfilePodcastInput,
-                        series: setDownloadProfileSeriesInput,
+                        podcast: setPodcastDownloadProfileInput,
+                        series: setSeriesDownloadProfileInput,
                     }}
                     onSubmit={{
                         podcast: (v) => {
-                            setDownloadProfilePodcastSubmit(v)
+                            setPodcastDownloadProfileSubmit(v)
                             downloadProfilePodcastSubmitRef.current = v
                         },
                         series: (v) => {
-                            setDownloadProfileSeriesSubmit(v)
+                            setSeriesDownloadProfileSubmit(v)
                             downloadProfileSeriesSubmitRef.current = v
                         },
                     }}

@@ -2,16 +2,16 @@ import {useCallback, useEffect, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
-import {useMediaProfiles} from '../lib/queries'
+import {useLocalMediaProfiles} from '../lib/queries'
 import {useQueryClient} from '@tanstack/react-query'
-import {MediaProfileRead} from "../types/schemas/media_profile";
-import {PreferredFormatReg} from "../types/media_profile";
+import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
+import {PreferredFormatReg} from "../types/local_media_profile";
 import { toast } from 'react-hot-toast'
 
-export default function MediaProfilesPage() {
+export default function LocalMediaProfilesPage() {
     const navigate = useNavigate()
     const qc = useQueryClient()
-    const onAdd = useCallback(() => navigate('/add-media-profile'), [navigate])
+    const onAdd = useCallback(() => navigate('/add-local-media-profile'), [navigate])
     const editIcon: IconProp = ['fas', 'pen-to-square']
     const deleteIcon: IconProp = ['fas', 'trash']
 
@@ -24,13 +24,13 @@ export default function MediaProfilesPage() {
         return () => window.removeEventListener('resize', onResize)
     }, [])
 
-    const [confirmProfile, setConfirmProfile] = useState<MediaProfileRead | null>(null)
-    const openConfirm = (p: MediaProfileRead) => setConfirmProfile(p)
+    const [confirmProfile, setConfirmProfile] = useState<LocalMediaProfileRead | null>(null)
+    const openConfirm = (p: LocalMediaProfileRead) => setConfirmProfile(p)
     const closeConfirm = () => setConfirmProfile(null)
     const onConfirmDelete = async () => {
         if (!confirmProfile) return
 
-        const r = await fetch(`${(window as any).appConfig.API_URL}/media-profiles/${confirmProfile.slug}`, { method: 'DELETE', credentials: 'include' })
+        const r = await fetch(`${(window as any).appConfig.API_URL}/local-media-profiles/${confirmProfile.slug}`, { method: 'DELETE', credentials: 'include' })
         if (!r.ok) {
             // Try to parse server error in the documented format and show a toast error
             let friendly = `Failed to delete media profile (HTTP ${r.status})`
@@ -55,16 +55,16 @@ export default function MediaProfilesPage() {
             setConfirmProfile(null)
             return
         }
-        await qc.invalidateQueries({queryKey: ['mediaProfiles']})
+        await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
         setConfirmProfile(null)
     }
 
-    const {data: profiles, isLoading, error} = useMediaProfiles()
+    const {data: profiles, isLoading, error} = useLocalMediaProfiles()
 
     return (
         <section className="view" aria-labelledby="profiles-title">
             <div className="view-header">
-                <h1 id="profiles-title">Media Profiles</h1>
+                <h1 id="profiles-title">Local Media Profiles</h1>
                 <button className="btn btn-primary" onClick={onAdd}>Add media profile</button>
             </div>
 
@@ -90,13 +90,13 @@ export default function MediaProfilesPage() {
                                 <td colSpan={5}>{(error as any)?.message ?? 'No profiles found'}</td>
                             </tr>
                         ) : (
-                            profiles.map((p: MediaProfileRead) => (
+                            profiles.map((p: LocalMediaProfileRead) => (
                                 <tr
                                     key={p.id}
                                     aria-label={p.name}
                                     tabIndex={0}
                                     style={{cursor: 'pointer'}}
-                                    onClick={() => navigate(`/edit-media-profile/${p.slug}`, {
+                                    onClick={() => navigate(`/edit-local-media-profile/${p.slug}`, {
                                         state: {
                                             ...p,
                                             outputPathTemplate: p.outputTemplate
@@ -105,7 +105,7 @@ export default function MediaProfilesPage() {
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' || e.key === ' ') {
                                             e.preventDefault()
-                                            navigate(`/edit-media-profile/${p.slug}`, {
+                                            navigate(`/edit-local-media-profile/${p.slug}`, {
                                                 state: {
                                                     ...p,
                                                     outputPathTemplate: p.outputTemplate
@@ -128,7 +128,7 @@ export default function MediaProfilesPage() {
                                                         className="btn"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            navigate(`/edit-media-profile/${p.slug}`, {state: p})
+                                                            navigate(`/edit-local-media-profile/${p.slug}`, {state: p})
                                                         }}
                                                     >
                                                         Edit
@@ -153,7 +153,7 @@ export default function MediaProfilesPage() {
                                                         title="Edit"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            navigate(`/edit-media-profile/${p.slug}`, {state: p})
+                                                            navigate(`/edit-local-media-profile/${p.slug}`, {state: p})
                                                         }}
                                                     >
                                                         <FontAwesomeIcon icon={editIcon} />

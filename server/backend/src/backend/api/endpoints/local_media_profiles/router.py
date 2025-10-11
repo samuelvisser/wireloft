@@ -1,24 +1,24 @@
 from fastapi import APIRouter, status
 
 from .service import *
-from ...models.media_profile import *
+from ...models.local_media_profile import *
 from backend.app import db_session
 
-router = APIRouter(prefix="/media-profiles", tags=["Media Profiles"])
+router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles"])
 
-@router.get("", response_model=list[MediaProfileAPIRead])
-def media_profiles_list():
+@router.get("", response_model=list[LocalMediaProfileAPIRead])
+def local_media_profiles_list():
     """
     List all media profiles in the system.
 
     Returns a collection of all media profile configurations defining quality and format settings.
     """
     with db_session() as s:
-        return get_media_profiles_list(s)
+        return get_local_media_profiles_list(s)
 
 
-@router.post("", response_model=MediaProfileAPIRead, status_code=status.HTTP_201_CREATED)
-def media_profiles_create(body: MediaProfileAPICreate):
+@router.post("", response_model=LocalMediaProfileAPIRead, status_code=status.HTTP_201_CREATED)
+def local_media_profiles_create(body: LocalMediaProfileAPICreate):
     """
     Create a new media profile.
 
@@ -27,7 +27,7 @@ def media_profiles_create(body: MediaProfileAPICreate):
     """
     with db_session() as s:
         try:
-            result = create_media_profile(s, body)
+            result = create_local_media_profile(s, body)
             s.commit()
             return result
         except Exception:
@@ -35,19 +35,19 @@ def media_profiles_create(body: MediaProfileAPICreate):
             raise
 
 
-@router.get("/{media_profile_slug}", response_model=MediaProfileAPIRead)
-def media_profiles_detail(media_profile_slug: str):
+@router.get("/{local_media_profile_slug}", response_model=LocalMediaProfileAPIRead)
+def local_media_profiles_detail(local_media_profile_slug: str):
     """
     Retrieve detailed information for a specific media profile.
 
     Returns complete profile configuration including quality settings and format preferences.
     """
     with db_session() as s:
-        return get_media_profile(s, media_profile_slug)
+        return get_local_media_profile(s, local_media_profile_slug)
 
 
-@router.patch("/{media_profile_slug}", response_model=MediaProfileAPIRead)
-def media_profiles_update(media_profile_slug: str, body: MediaProfileAPIUpdate):
+@router.patch("/{local_media_profile_slug}", response_model=LocalMediaProfileAPIRead)
+def local_media_profiles_update(local_media_profile_slug: str, body: LocalMediaProfileAPIUpdate):
     """
     Update an existing media profile's configuration.
 
@@ -56,7 +56,7 @@ def media_profiles_update(media_profile_slug: str, body: MediaProfileAPIUpdate):
     """
     with db_session() as s:
         try:
-            result = update_media_profile(s, media_profile_slug, body)
+            result = update_local_media_profile(s, local_media_profile_slug, body)
             s.commit()
             return result
         except Exception:
@@ -64,8 +64,8 @@ def media_profiles_update(media_profile_slug: str, body: MediaProfileAPIUpdate):
             raise
 
 
-@router.delete("/{media_profile_slug}", response_model=MediaProfileAPIRead)
-def media_profiles_delete(media_profile_slug: str):
+@router.delete("/{local_media_profile_slug}", response_model=LocalMediaProfileAPIRead)
+def local_media_profiles_delete(local_media_profile_slug: str):
     """
     Delete a media profile from the system.
 
@@ -74,7 +74,7 @@ def media_profiles_delete(media_profile_slug: str):
     """
     with db_session() as s:
         try:
-            result = delete_media_profile(s, media_profile_slug)
+            result = delete_local_media_profile(s, local_media_profile_slug)
             s.commit()
             return result
         except Exception:

@@ -3,11 +3,11 @@ from .MediaItem import MediaItem
 from .Show import Show
 
 from .Episode import Episode
-from .MediaProfile import MediaProfile
+from .LocalMediaProfile import LocalMediaProfile
 from .Settings import Settings
 from .DownloadProfileBase import DownloadProfileBase
-from .DownloadProfilePodcast import DownloadProfilePodcast
-from .DownloadProfileSeries import DownloadProfileSeries
+from .PodcastDownloadProfile import PodcastDownloadProfile
+from .SeriesDownloadProfile import SeriesDownloadProfile
 from .Season import Season
 from .MediaDownload import MediaDownload
 from .Movie import Movie

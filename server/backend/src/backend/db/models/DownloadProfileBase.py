@@ -8,7 +8,7 @@ from backend.types.download_profile_types import DownloadProfileType
 class DownloadProfileBase(Base):
     __tablename__ = "download_profiles"
     __table_args__ = (
-        UniqueConstraint("show_id", "media_profile_id", name="uq_unique_media_profile_per_show"),
+        UniqueConstraint("show_id", "local_media_profile_id", name="uq_unique_media_profile_per_show"),
     )
     __mapper_args__ = {
         "polymorphic_on": "type",
@@ -18,7 +18,7 @@ class DownloadProfileBase(Base):
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"))
-    media_profile_id: Mapped[int] = mapped_column(ForeignKey("media_profiles.id"))
+    local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
     type: Mapped[str]
     enable_profile: Mapped[bool] = mapped_column(default=True)
 
@@ -31,7 +31,7 @@ class DownloadProfileBase(Base):
 
     # Relationships
     show: Mapped["Show"] = relationship(back_populates="download_profiles")
-    media_profile: Mapped["MediaProfile"] = relationship(back_populates="download_profiles")
+    local_media_profile: Mapped["LocalMediaProfile"] = relationship(back_populates="download_profiles")
 
 
     def __repr__(self) -> str:

@@ -1,12 +1,10 @@
-from datetime import datetime
-
-from sqlalchemy import ForeignKey, UniqueConstraint, DateTime, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column
 from backend.db.models.DownloadProfileBase import DownloadProfileBase
 from backend.types.download_profile_types import DownloadProfileType
 
 
-class DownloadProfilePodcast(DownloadProfileBase):
+class PodcastDownloadProfile(DownloadProfileBase):
     __tablename__ = "podcast_download_profiles"
     __mapper_args__ = {"polymorphic_identity": DownloadProfileType.PODCAST.value}
 
@@ -18,4 +16,4 @@ class DownloadProfilePodcast(DownloadProfileBase):
     delete_older_episodes: Mapped[bool] = mapped_column(default=True)
 
     def __repr__(self) -> str:
-        return f"<DownloadProfilePodcast(id={self.id}, show_id={self.show_id}, enable_profile={self.enable_profile}, download_days_in_past={self.download_days_in_past}, delete_older_episodes={self.delete_older_episodes}, created_at={self.created_at}, updated_at={self.updated_at})>"
+        return f"<PodcastDownloadProfile(id={self.id}, show_id={self.show_id}, enable_profile={self.enable_profile}, download_days_in_past={self.download_days_in_past}, delete_older_episodes={self.delete_older_episodes}, created_at={self.created_at}, updated_at={self.updated_at})>"

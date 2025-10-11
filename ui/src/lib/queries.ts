@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery, useQueryClient, QueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { saveProfilesToStorage, saveShowsToStorage } from './cache'
-import {MediaProfileRead} from "../types/schemas/media_profile";
+import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
   const r = await fetch(url, { signal, credentials: 'include' })
@@ -9,10 +9,10 @@ async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
   return r.json() as Promise<T>
 }
 
-export function useMediaProfiles() {
-  const result = useQuery<any[], Error, MediaProfileRead[], readonly ['mediaProfiles']>({
-    queryKey: ['mediaProfiles'] as const,
-    queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/media-profiles`, signal),
+export function useLocalMediaProfiles() {
+  const result = useQuery<any[], Error, LocalMediaProfileRead[], readonly ['localMediaProfiles']>({
+    queryKey: ['localMediaProfiles'] as const,
+    queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/local-media-profiles`, signal),
     placeholderData: keepPreviousData,
     refetchOnMount: 'always',
   })
@@ -114,11 +114,11 @@ export function prefetchCoreData(qc: QueryClient) {
     })
   void qc
     .prefetchQuery({
-      queryKey: ['mediaProfiles'],
-      queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/media-profiles`, signal),
+      queryKey: ['localMediaProfiles'],
+      queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/local-media-profiles`, signal),
     })
     .then(() => {
-      const profiles = qc.getQueryData<MediaProfileRead[]>(['mediaProfiles'])
+      const profiles = qc.getQueryData<LocalMediaProfileRead[]>(['localMediaProfiles'])
       if (profiles) saveProfilesToStorage(profiles)
     })
 }

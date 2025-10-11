@@ -84,13 +84,13 @@ def create_tables() -> None:
     importlib.import_module("backend.db.models.Episode")
     importlib.import_module("backend.db.models.MediaDownload")
     importlib.import_module("backend.db.models.MediaItem")
-    importlib.import_module("backend.db.models.MediaProfile")
+    importlib.import_module("backend.db.models.LocalMediaProfile")
     importlib.import_module("backend.db.models.Season")
     importlib.import_module("backend.db.models.Settings")
 
     # Dependent tables
-    importlib.import_module("backend.db.models.DownloadProfilePodcast")
-    importlib.import_module("backend.db.models.DownloadProfileSeries")
+    importlib.import_module("backend.db.models.PodcastDownloadProfile")
+    importlib.import_module("backend.db.models.SeriesDownloadProfile")
     importlib.import_module("backend.db.models.Movie")
     importlib.import_module("backend.db.models.Show")
 
@@ -108,11 +108,11 @@ def seed_db() -> None:
     create_tables()
 
     # Import here to avoid circular imports at module import time
-    from backend.db.models.MediaProfile import MediaProfile
+    from backend.db.models.LocalMediaProfile import LocalMediaProfile
     from backend.db.models.Show import Show
     from backend.db.models.Episode import Episode
     from backend.db.models.Settings import Settings
-    from backend.db.fake_data import media_profiles as seed_media_profiles
+    from backend.db.fake_data import local_media_profiles as seed_local_media_profiles
     from backend.db.fake_data import shows as seed_shows
     from backend.db.fake_data import episodes as seed_episodes
     from backend.db.fake_data import settings as seed_settings
@@ -120,13 +120,13 @@ def seed_db() -> None:
     session = get_session()
     try:
         # Media Profiles: upsert by id
-        for mp in seed_media_profiles:
+        for mp in seed_local_media_profiles:
             pk = mp.get("id")
             if pk is None:
                 continue
-            existing = session.get(MediaProfile, pk)
+            existing = session.get(LocalMediaProfile, pk)
             if existing is None:
-                session.add(MediaProfile(**mp))
+                session.add(LocalMediaProfile(**mp))
 
         # Shows: upsert by id
         for s in seed_shows:
