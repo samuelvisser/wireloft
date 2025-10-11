@@ -18,8 +18,8 @@ class OAuthSettings(SubmodelBase):
 
 class TimeoutSettings(SubmodelBase):
     min_fast_request_ms: int = Field(default=500, description="Minimum time in milliseconds for a fast request")
-    max_fast_requests: int = Field(default=25, description="Maximum number of fast requests allowed")
-    min_slow_request_ms: int = Field(default=3840000, description="Milliseconds to wait after max fast requests where made")
+    max_fast_requests: int = Field(default=350, description="Maximum number of fast requests allowed")             # Observed working: 346
+    min_slow_request_ms: int = Field(default=1.000 * 60 * 2, description="Milliseconds to wait after max fast requests where made") # default is 2 minutes
 
 
 class CryptoSettings(SubmodelBase):
@@ -29,7 +29,12 @@ class CryptoSettings(SubmodelBase):
 
 
 class SessionSettings(SubmodelBase):
-    ttl_seconds: int = Field(default=60 * 60 * 24 * 30, description="Time in seconds the session stays valid")    # 30 days default session lifetime
+    ttl_seconds: int = Field(default=60 * 60 * 24 * 30, description="Time in seconds the session stays valid")     # 30 days default session lifetime
+
+
+class DailyWireAPISettings(SubmodelBase):
+    middleware_api: str = Field(default="https://middleware-prod.dailywire.com/middleware", description="Middleware API base URL")
+    stream_api: str = Field(default="https://stream.media.dailywire.com", description="Stream API base URL")
 
 
 class AdminAuthSettings(SubmodelBase):

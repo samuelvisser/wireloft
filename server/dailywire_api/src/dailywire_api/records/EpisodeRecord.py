@@ -46,20 +46,12 @@ class EpisodeRecord(BaseRecord):
         # Unwrap the common wrapper shape: {"showEpisode": {...}}
         if "showEpisode" in data and isinstance(data["showEpisode"], dict):
             data = data["showEpisode"]
-        return data
 
+        # Lift the thumbnail from the images dict
+        if "thumbnail" not in data:
+            images = data.get("images") or {}
+            thumb = images.get("thumbnail")
+            if isinstance(thumb, dict):
+                data = {**data, "thumbnail": thumb}
 
-    @model_validator(mode="before")
-    @classmethod
-    def lift_thumbnail(cls, data: Any):
-        """
-        Accept raw API episode (with images.thumbnail.*) or already-slim dict.
-        Normalize images.thumbnail -> thumbnail.
-        """
-        if isinstance(data, dict):
-            if "thumbnail" not in data:
-                images = data.get("images") or {}
-                thumb = images.get("thumbnail")
-                if isinstance(thumb, dict):
-                    data = {**data, "thumbnail": thumb}
         return data
