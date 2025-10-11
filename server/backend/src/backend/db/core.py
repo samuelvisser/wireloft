@@ -4,11 +4,10 @@ from pathlib import Path
 from typing import Optional
 import importlib
 import os
-from datetime import datetime, timezone
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import declarative_base, sessionmaker, Session, DeclarativeBase
+from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 
 # include more patterns if you want; the key one is "uq"
 naming_convention = {
@@ -80,18 +79,25 @@ def create_tables() -> None:
     # Import models explicitly to ensure mappings are registered
     # Order matters due to inheritance: Base tables first, dependents after
     # Base tables
-    importlib.import_module("backend.db.models.DownloadProfileBase")
-    importlib.import_module("backend.db.models.Episode")
-    importlib.import_module("backend.db.models.MediaDownload")
-    importlib.import_module("backend.db.models.MediaItem")
+    importlib.import_module("backend.db.models.download_profile.DownloadProfileBase")
+    importlib.import_module("backend.db.models.media_download.MediaDownloadBase")
+    importlib.import_module("backend.db.models.media_item.MediaItemBase")
+    importlib.import_module("backend.db.models.stream_profile.StreamProfileBase")
+    importlib.import_module("backend.db.models.stream_worker.StreamWorkerBase")
+
+    # Dependent tables
+    importlib.import_module("backend.db.models.download_profile.PodcastDownloadProfile")
+    importlib.import_module("backend.db.models.download_profile.SeriesDownloadProfile")
+    importlib.import_module("backend.db.models.media_download.EpisodeMediaDownload")
+    importlib.import_module("backend.db.models.media_item.Episode")
+    importlib.import_module("backend.db.models.media_item.Movie")
+    importlib.import_module("backend.db.models.stream_profile.ShowStreamProfile")
+    importlib.import_module("backend.db.models.stream_profile.DownloadStreamProfile")
+    importlib.import_module("backend.db.models.stream_worker.RssStreamWorker")
+
     importlib.import_module("backend.db.models.LocalMediaProfile")
     importlib.import_module("backend.db.models.Season")
     importlib.import_module("backend.db.models.Settings")
-
-    # Dependent tables
-    importlib.import_module("backend.db.models.PodcastDownloadProfile")
-    importlib.import_module("backend.db.models.SeriesDownloadProfile")
-    importlib.import_module("backend.db.models.Movie")
     importlib.import_module("backend.db.models.Show")
 
     Base.metadata.create_all(bind=get_engine())
