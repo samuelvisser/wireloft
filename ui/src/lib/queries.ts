@@ -2,6 +2,9 @@ import { keepPreviousData, useQuery, useQueryClient, QueryClient } from '@tansta
 import { useEffect } from 'react'
 import { saveProfilesToStorage, saveShowsToStorage } from './cache'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
+import { PodcastDownloadProfileRead } from "../types/schemas/podcast_download_profile";
+import { SeriesDownloadProfileRead } from "../types/schemas/series_download_profile";
+import { DownloadProfileReadView } from "../types/schemas/download_profile_view";
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
   const r = await fetch(url, { signal, credentials: 'include' })
@@ -20,6 +23,33 @@ export function useLocalMediaProfiles() {
     if (result.data) saveProfilesToStorage(result.data)
   }, [result.data])
   return result
+}
+
+export function usePodcastDownloadProfiles() {
+  return useQuery<any[], Error, PodcastDownloadProfileRead[], readonly ['podcastDownloadProfiles']>({
+    queryKey: ['podcastDownloadProfiles'] as const,
+    queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/podcast-download-profiles`, signal),
+    placeholderData: keepPreviousData,
+    refetchOnMount: 'always',
+  })
+}
+
+export function useSeriesDownloadProfiles() {
+  return useQuery<any[], Error, SeriesDownloadProfileRead[], readonly ['seriesDownloadProfiles']>({
+    queryKey: ['seriesDownloadProfiles'] as const,
+    queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/series-download-profiles`, signal),
+    placeholderData: keepPreviousData,
+    refetchOnMount: 'always',
+  })
+}
+
+export function useDownloadProfilesView() {
+  return useQuery<any[], Error, DownloadProfileReadView[], readonly ['downloadProfilesView']>({
+    queryKey: ['downloadProfilesView'] as const,
+    queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/download-profiles/as-view`, signal),
+    placeholderData: keepPreviousData,
+    refetchOnMount: 'always',
+  })
 }
 
 export function useShows() {
@@ -121,4 +151,16 @@ export function prefetchCoreData(qc: QueryClient) {
       const profiles = qc.getQueryData<LocalMediaProfileRead[]>(['localMediaProfiles'])
       if (profiles) saveProfilesToStorage(profiles)
     })
+  void qc.prefetchQuery({
+    queryKey: ['podcastDownloadProfiles'],
+    queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/podcast-download-profiles`, signal),
+  })
+  void qc.prefetchQuery({
+    queryKey: ['seriesDownloadProfiles'],
+    queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/series-download-profiles`, signal),
+  })
+  void qc.prefetchQuery({
+    queryKey: ['downloadProfilesView'],
+    queryFn: ({ signal }) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/download-profiles/as-view`, signal),
+  })
 }
