@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Union
 
 from backend.api.models.base import ResponseBase
+from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPIRead
+from backend.api.models.series_download_profile import SeriesDownloadProfileAPIRead
 from backend.types.download_profile_types import DownloadProfileType
 
 
@@ -30,7 +33,9 @@ class DownloadProfileAPIReadView(DownloadProfileAPIRead):
     Extends DownloadProfileAPIRead with:
     - show_title: the title of the related show
     - local_media_profile_preferred_format: preferred format configured on the local media profile
+    - download_profile_impl: the concrete profile payload (podcast or series)
     """
 
     show_title: str
     local_media_profile_preferred_format: str
+    download_profile_impl: Union[PodcastDownloadProfileAPIRead, SeriesDownloadProfileAPIRead]
