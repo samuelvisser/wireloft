@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, with_polymorphic
 from fastapi import HTTPException
 
 from backend.api.models.download_profile import DownloadProfileAPIReadView, DownloadProfileAPIRead
 from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPIRead
 from backend.api.models.series_download_profile import SeriesDownloadProfileAPIRead
 from backend.types.download_profile_types import DownloadProfileType
-from backend.db.models import DownloadProfileBase, Show, LocalMediaProfile
+from backend.db.models import DownloadProfileBase, Show, LocalMediaProfile, PodcastDownloadProfile, SeriesDownloadProfile
 
 
 def _to_view(item: DownloadProfileBase) -> DownloadProfileAPIReadView:
@@ -24,11 +24,8 @@ def _to_view(item: DownloadProfileBase) -> DownloadProfileAPIReadView:
     elif t == DownloadProfileType.SERIES.value:
         impl = SeriesDownloadProfileAPIRead.model_validate(item)
     else:
-        # Fallback: try series first as it is the more constrained; if validation fails, try podcast
-        try:
-            impl = SeriesDownloadProfileAPIRead.model_validate(item)
-        except Exception:
-            impl = PodcastDownloadProfileAPIRead.model_validate(item)
+        # This will fail Pydantic validation, which is what we want; there always needs to ba an implementation
+        impl = None
 
     return DownloadProfileAPIReadView.model_validate({
         **base,
@@ -39,28 +36,30 @@ def _to_view(item: DownloadProfileBase) -> DownloadProfileAPIReadView:
 
 
 def get_download_profile_views_list(s: Session) -> list[DownloadProfileAPIReadView]:
+    DP = with_polymorphic(DownloadProfileBase, [PodcastDownloadProfile, SeriesDownloadProfile])
     items = (
-        s.query(DownloadProfileBase)
+        s.query(DP)
         .options(
-            joinedload(DownloadProfileBase.show),
-            joinedload(DownloadProfileBase.local_media_profile),
+            joinedload(DP.show),
+            joinedload(DP.local_media_profile),
         )
-        .join(Show, Show.id == DownloadProfileBase.show_id)
-        .join(LocalMediaProfile, LocalMediaProfile.id == DownloadProfileBase.local_media_profile_id)
-        .order_by(Show.title.asc(), DownloadProfileBase.id.asc())
+        .join(Show, Show.id == DP.show_id)
+        .join(LocalMediaProfile, LocalMediaProfile.id == DP.local_media_profile_id)
+        .order_by(Show.title.asc(), DP.id.asc())
         .all()
     )
     return [_to_view(it) for it in items]
 
 
 def get_download_profile_view(s: Session, download_profile_id: int) -> DownloadProfileAPIReadView:
+    DP = with_polymorphic(DownloadProfileBase, [PodcastDownloadProfile, SeriesDownloadProfile])
     item = (
-        s.query(DownloadProfileBase)
+        s.query(DP)
         .options(
-            joinedload(DownloadProfileBase.show),
-            joinedload(DownloadProfileBase.local_media_profile),
+            joinedload(DP.show),
+            joinedload(DP.local_media_profile),
         )
-        .filter(DownloadProfileBase.id == download_profile_id)
+        .filter(DP.id == download_profile_id)
         .one_or_none()
     )
 
