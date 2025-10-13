@@ -2,8 +2,7 @@ from enum import Enum
 
 
 class StreamProfileType(Enum):
-    SHOW = "show"
-    DOWNLOAD = "download"
+    RSS = "rss"
 
     # For instances of StreamProfileBase class (parent class)
     BASE = "base"

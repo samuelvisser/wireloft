@@ -1,11 +1,11 @@
-from backend.db.models.MediaItem import MediaItem
+from .MediaItemBase import MediaItemBase
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import ForeignKey
 
 from backend.types.media_types import MediaType
 
 
-class Movie(MediaItem):
+class Movie(MediaItemBase):
     __tablename__ = "movies"
     __mapper_args__ = {"polymorphic_identity": MediaType.MOVIE.value}
 

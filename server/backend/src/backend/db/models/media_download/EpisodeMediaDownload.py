@@ -1,14 +1,17 @@
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.db.models import MediaDownloadBase
+from .MediaDownloadBase import MediaDownloadBase
 from backend.types.media_types import MediaType
+
+if TYPE_CHECKING:
+    from backend.db.models import DownloadProfileBase
 
 
 class EpisodeMediaDownload(MediaDownloadBase):
-    __tablename__ = "episode_media_downloads"
+    __tablename__ = "media_downloads_episode"
     __mapper_args__ = {"polymorphic_identity": MediaType.EPISODE.value}
 
     # Columns
@@ -16,7 +19,7 @@ class EpisodeMediaDownload(MediaDownloadBase):
     download_profile_id: Mapped[Optional[int]] = mapped_column(ForeignKey("download_profiles.id"))
 
     # Relationships
-    download_profile: Mapped[Optional["DownloadProfile"]] = relationship(back_populates="episode_downloads")
+    download_profile: Mapped[Optional["DownloadProfileBase"]] = relationship(back_populates="episode_downloads")
 
 
     def __repr__(self) -> str:

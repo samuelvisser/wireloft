@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 import importlib
 import os
+import pkgutil
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.engine import Engine
@@ -74,31 +75,20 @@ def get_db_path() -> Path:
 
 def create_tables() -> None:
     """
-    Import model modules so they are registered with Base, then create tables.
+    Auto-discover and import all ORM model modules, then create tables.
     """
-    # Import models explicitly to ensure mappings are registered
-    # Order matters due to inheritance: Base tables first, dependents after
-    # Base tables
-    importlib.import_module("backend.db.models.download_profile.DownloadProfileBase")
-    importlib.import_module("backend.db.models.media_download.MediaDownloadBase")
-    importlib.import_module("backend.db.models.media_item.MediaItemBase")
-    importlib.import_module("backend.db.models.stream_profile.StreamProfileBase")
-    importlib.import_module("backend.db.models.stream_worker.StreamWorkerBase")
+    package_name = "backend.db.models"
+    package = importlib.import_module(package_name)
 
-    # Dependent tables
-    importlib.import_module("backend.db.models.download_profile.PodcastDownloadProfile")
-    importlib.import_module("backend.db.models.download_profile.SeriesDownloadProfile")
-    importlib.import_module("backend.db.models.media_download.EpisodeMediaDownload")
-    importlib.import_module("backend.db.models.media_item.Episode")
-    importlib.import_module("backend.db.models.media_item.Movie")
-    importlib.import_module("backend.db.models.stream_profile.ShowStreamProfile")
-    importlib.import_module("backend.db.models.stream_profile.DownloadStreamProfile")
-    importlib.import_module("backend.db.models.stream_worker.RssStreamWorker")
+    # Recursively import all submodules under backend.db.models so all
+    # Declarative mappings are registered with Base.metadata.
+    if hasattr(package, "__path__"):
+        for _, name, _ in pkgutil.walk_packages(package.__path__, package_name + "."):
+            importlib.import_module(name)
 
-    importlib.import_module("backend.db.models.LocalMediaProfile")
-    importlib.import_module("backend.db.models.Season")
-    importlib.import_module("backend.db.models.Settings")
-    importlib.import_module("backend.db.models.Show")
+    # Ensure mappers are configured before emitting DDL
+    from sqlalchemy.orm import configure_mappers
+    configure_mappers()
 
     Base.metadata.create_all(bind=get_engine())
 
@@ -113,11 +103,8 @@ def seed_db() -> None:
     # Ensure tables are present
     create_tables()
 
-    # Import here to avoid circular imports at module import time
-    from backend.db.models.LocalMediaProfile import LocalMediaProfile
-    from backend.db.models.Show import Show
-    from backend.db.models.Episode import Episode
-    from backend.db.models.Settings import Settings
+    # Import ORM classes from the aggregated models package (re-exported in backend.db.models)
+    from backend.db.models import LocalMediaProfile, Show, Episode, Settings
     from backend.db.fake_data import local_media_profiles as seed_local_media_profiles
     from backend.db.fake_data import shows as seed_shows
     from backend.db.fake_data import episodes as seed_episodes

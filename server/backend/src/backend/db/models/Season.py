@@ -1,9 +1,14 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, DateTime, func
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 
 from backend.db import Base
+
+if TYPE_CHECKING:
+    from backend.db.models import Show
+    from backend.db.models.media_item import Episode
 
 
 class Season(Base):

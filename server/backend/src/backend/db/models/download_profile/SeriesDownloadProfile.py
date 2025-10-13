@@ -1,19 +1,25 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, Table, Column
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
-from backend.db.models.DownloadProfileBase import DownloadProfileBase
+from .DownloadProfileBase import DownloadProfileBase
 from backend.types.download_profile_types import DownloadProfileType
 
+if TYPE_CHECKING:
+     from backend.db.models import Season
+
+
 association_table = Table(
-    "series_download_profile_seasons",
+    "download_profile_series_seasons",
     Base.metadata,
-    Column("series_download_profile_id", ForeignKey("series_download_profiles.id")),
+    Column("series_download_profile_id", ForeignKey("download_profiles_series.id")),
     Column("season_id", ForeignKey("seasons.id")),
 )
 
 class SeriesDownloadProfile(DownloadProfileBase):
-    __tablename__ = "series_download_profiles"
+    __tablename__ = "download_profiles_series"
     __mapper_args__ = {"polymorphic_identity": DownloadProfileType.SERIES.value}
 
     # Columns

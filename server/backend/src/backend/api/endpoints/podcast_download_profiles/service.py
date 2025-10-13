@@ -5,7 +5,7 @@ from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.podcast_download_profile import *
-from backend.db.models import PodcastDownloadProfile
+from backend.db.models.download_profile import PodcastDownloadProfile
 
 
 def get_podcast_download_profiles_list(s: Session) -> list[PodcastDownloadProfileAPIRead]:

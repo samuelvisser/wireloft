@@ -1,14 +1,17 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
-from backend.db.models.MediaItem import MediaItem
+from .MediaItemBase import MediaItemBase
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey
 
 from backend.types.media_types import MediaType
 
+if TYPE_CHECKING:
+    from backend.db.models import Show, Season
 
-class Episode(MediaItem):
+
+class Episode(MediaItemBase):
     __tablename__ = "episodes"
     __mapper_args__ = {"polymorphic_identity": MediaType.EPISODE.value}
 

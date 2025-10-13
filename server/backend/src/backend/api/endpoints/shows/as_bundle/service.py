@@ -7,7 +7,8 @@ from backend.api.helpers import create_database_fields, update_database_fields
 from backend.api.models.local_media_profile import LocalMediaProfileAPIUpdate
 from backend.api.models.show import ShowAPIRead
 from backend.api.models.show_as_bundle import ShowAPICreateBundle
-from backend.db.models import Show, LocalMediaProfile, Season, SeriesDownloadProfile, PodcastDownloadProfile
+from backend.db.models import Show, LocalMediaProfile, Season
+from backend.db.models.download_profile import PodcastDownloadProfile, SeriesDownloadProfile
 
 
 def upsert_local_media_profile(s: Session, mp_input: dict) -> LocalMediaProfile:

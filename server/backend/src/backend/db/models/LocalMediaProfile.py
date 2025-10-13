@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
+
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
+
+if TYPE_CHECKING:
+    from backend.db.models.download_profile import DownloadProfileBase
 
 
 class LocalMediaProfile(Base):

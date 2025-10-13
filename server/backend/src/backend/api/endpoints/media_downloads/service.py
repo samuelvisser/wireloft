@@ -5,7 +5,7 @@ from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.media_download import *
-from backend.db.models import MediaDownloadBase
+from backend.db.models.media_download import MediaDownloadBase
 
 
 def get_media_downloads_list(s: Session) -> list[MediaDownloadAPIRead]:

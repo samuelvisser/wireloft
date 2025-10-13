@@ -1,11 +1,11 @@
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
-from backend.db.models.DownloadProfileBase import DownloadProfileBase
+from .DownloadProfileBase import DownloadProfileBase
 from backend.types.download_profile_types import DownloadProfileType
 
 
 class PodcastDownloadProfile(DownloadProfileBase):
-    __tablename__ = "podcast_download_profiles"
+    __tablename__ = "download_profiles_podcast"
     __mapper_args__ = {"polymorphic_identity": DownloadProfileType.PODCAST.value}
 
     # Columns

@@ -3,7 +3,7 @@ from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.episode import *
-from backend.db.models import Episode
+from backend.db.models.media_item import Episode
 
 
 def get_episodes_list(s: Session, show_slug: str) -> list[EpisodeAPIRead]:

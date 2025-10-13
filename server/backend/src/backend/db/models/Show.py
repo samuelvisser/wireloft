@@ -1,10 +1,15 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
-from backend.types.show_types import ShowType, EpisodeIdentifier
+
+if TYPE_CHECKING:
+    from backend.db.models.media_item import Episode
+    from backend.db.models.download_profile import DownloadProfileBase
+    from backend.db.models.stream_profile import StreamProfileBase
+    from backend.db.models import Season
 
 
 class Show(Base):
@@ -40,13 +45,13 @@ class Show(Base):
     episodes: Mapped[list["Episode"]] = relationship(
         back_populates="show", cascade="all, delete-orphan"
     )
+    seasons: Mapped[list["Season"]] = relationship(
+        back_populates="show", cascade="all, delete-orphan"
+    )
     download_profiles: Mapped[list["DownloadProfileBase"]] = relationship(
         back_populates="show", cascade="all, delete-orphan"
     )
-    show_stream_profiles: Mapped[list["ShowStreamProfile"]] = relationship(
-        back_populates="show", cascade="all, delete-orphan"
-    )
-    seasons: Mapped[list["Season"]] = relationship(
+    stream_profiles: Mapped[list["StreamProfileBase"]] = relationship(
         back_populates="show", cascade="all, delete-orphan"
     )
 
