@@ -71,6 +71,7 @@ def create_app() -> FastAPI:
         dailywire_router,
         download_profile_podcast_router,
         download_profile_series_router,
+        download_profile_router,
         media_download_router,
         show_router,
         movie_router,
@@ -91,6 +92,7 @@ def create_app() -> FastAPI:
     app.include_router(dailywire_router, prefix="/api")
     app.include_router(download_profile_podcast_router, prefix="/api")
     app.include_router(download_profile_series_router, prefix="/api")
+    app.include_router(download_profile_router, prefix="/api")
     app.include_router(episode_router, prefix="/api")
     app.include_router(season_router, prefix="/api")
     app.include_router(media_download_router, prefix="/api")
