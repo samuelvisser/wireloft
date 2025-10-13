@@ -82,6 +82,7 @@ def create_app() -> FastAPI:
         meta_router,
         config_router,
         rss_stream_profile_router,
+        stream_profile_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
@@ -103,5 +104,6 @@ def create_app() -> FastAPI:
     app.include_router(meta_router, prefix="/api")
     app.include_router(config_router, prefix="/api")
     app.include_router(rss_stream_profile_router, prefix="/api")
+    app.include_router(stream_profile_router, prefix="/api")
 
     return app
