@@ -13,8 +13,10 @@ import EditShow from './pages/show/EditShowPage'
 import EpisodePage from './pages/episode/EpisodePage'
 import LoginPage from './pages/LoginPage'
 import DownloadProfilesPage from './pages/DownloadProfilesPage'
-import AddDownloadProfilePage from './pages/download-profile/AddDownloadProfilePage'
-import EditDownloadProfilePage from './pages/download-profile/EditDownloadProfilePage'
+import AddPodcastDownloadProfilePage from './pages/download-profile-podcast/AddPodcastDownloadProfilePage'
+import EditPodcastDownloadProfilePage from './pages/download-profile-podcast/EditPodcastDownloadProfilePage'
+import AddSeriesDownloadProfilePage from './pages/download-profile-series/AddSeriesDownloadProfilePage'
+import EditSeriesDownloadProfilePage from './pages/download-profile-series/EditSeriesDownloadProfilePage'
 
 export default function App() {
   const navigate = useNavigate()
@@ -65,8 +67,10 @@ export default function App() {
           <Route path="/add-local-media-profile" element={<AddLocalMediaProfilePage />} />
           <Route path="/edit-local-media-profile/:slug" element={<EditLocalMediaProfilePage />} />
           <Route path="/download-profiles" element={<DownloadProfilesPage />} />
-          <Route path="/add-download-profile" element={<AddDownloadProfilePage />} />
-          <Route path="/edit-download-profile/:type/:id" element={<EditDownloadProfilePage />} />
+          <Route path="/download-profile/podcast/add" element={<AddPodcastDownloadProfilePage />} />
+          <Route path="/download-profile/podcast/:id/edit" element={<EditPodcastDownloadProfilePage />} />
+          <Route path="/download-profile/series/add" element={<AddSeriesDownloadProfilePage />} />
+          <Route path="/download-profile/series/:id/edit" element={<EditSeriesDownloadProfilePage />} />
           <Route path="/show/:id" element={<ShowPage />} />
           <Route path="/show/:id/episode/:episodeId" element={<EpisodePage />} />
           <Route path="/edit-show/:id" element={<EditShow />} />

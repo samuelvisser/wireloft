@@ -13,7 +13,8 @@ import { PreferredFormatReg } from '../types/local_media_profile'
 export default function DownloadProfilesPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const onAdd = useCallback(() => navigate('/add-download-profile'), [navigate])
+  const onAddPodcast = useCallback(() => navigate('/download-profile/podcast/add'), [navigate])
+  const onAddSeries = useCallback(() => navigate('/download-profile/series/add'), [navigate])
   const editIcon: IconProp = ['fas', 'pen-to-square']
   const deleteIcon: IconProp = ['fas', 'trash']
 
@@ -79,7 +80,10 @@ export default function DownloadProfilesPage() {
     <section className="view" aria-labelledby="profiles-title">
       <div className="view-header">
         <h1 id="profiles-title">Download Profiles</h1>
-        <button className="btn btn-primary" onClick={onAdd}>Add download profile</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn" onClick={onAddPodcast}>Add podcast profile</button>
+          <button className="btn btn-primary" onClick={onAddSeries}>Add series profile</button>
+        </div>
       </div>
 
       <div className="form-row">
@@ -110,11 +114,11 @@ export default function DownloadProfilesPage() {
                     aria-label={`${p.type} ${p.showTitle}`}
                     tabIndex={0}
                     style={{ cursor: 'pointer' }}
-                    onClick={() => navigate(`/edit-download-profile/${p.type}/${p.id}`, { state: p })}
+                    onClick={() => navigate(p.type === 'podcast' ? `/download-profile/podcast/${p.id}/edit` : `/download-profile/series/${p.id}/edit`, { state: p })}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
-                        navigate(`/edit-download-profile/${p.type}/${p.id}`, { state: p })
+                        navigate(p.type === 'podcast' ? `/download-profile/podcast/${p.id}/edit` : `/download-profile/series/${p.id}/edit`, { state: p })
                       }
                     }}
                   >
@@ -131,7 +135,7 @@ export default function DownloadProfilesPage() {
                               className="btn"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/edit-download-profile/${p.type}/${p.id}`, { state: p })
+                                navigate(p.type === 'podcast' ? `/download-profile/podcast/${p.id}/edit` : `/download-profile/series/${p.id}/edit`, { state: p })
                               }}
                             >
                               Edit
@@ -156,7 +160,7 @@ export default function DownloadProfilesPage() {
                               title="Edit"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/edit-download-profile/${p.type}/${p.id}`, { state: p })
+                                navigate(p.type === 'podcast' ? `/download-profile/podcast/${p.id}/edit` : `/download-profile/series/${p.id}/edit`, { state: p })
                               }}
                             >
                               <FontAwesomeIcon icon={editIcon} />
