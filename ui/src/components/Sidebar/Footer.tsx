@@ -1,6 +1,6 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faGithub } from '@fortawesome/free-brands-svg-icons'
-import {getCurrentAppVersion} from "../utils/helpers";
+import {getCurrentAppVersion} from "../../utils/helpers";
 
 interface FooterProps {
   wrapperClass: string

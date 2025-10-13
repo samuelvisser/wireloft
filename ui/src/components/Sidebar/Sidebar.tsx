@@ -2,7 +2,7 @@ import {NavLink} from 'react-router-dom'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {library, IconProp} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
-import Footer from '../Footer'
+import Footer from './Footer'
 
 // Register the kit's solid icon pack so we can reference icons by [prefix, name]
 library.add(fas)

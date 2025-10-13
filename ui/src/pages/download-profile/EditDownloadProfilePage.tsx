@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useState} from 'react'
-import {useForm} from 'react-hook-form'
+import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
 import {useLocalMediaProfiles, usePodcastDownloadProfiles, useSeriesDownloadProfiles, useShows} from '../../lib/queries'
@@ -8,6 +8,8 @@ import {PodcastDownloadProfileRead, PodcastDownloadProfileUpdateIn, PodcastDownl
 import {SeriesDownloadProfileRead, SeriesDownloadProfileUpdateIn, SeriesDownloadProfileUpdateSchema} from '../../types/schemas/series_download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
+import Select from 'react-select'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 
 
 type RouteParams = { type?: DownloadProfileMode; id?: string }
@@ -25,6 +27,19 @@ export default function EditDownloadProfilePage() {
   const { data: mediaProfiles } = useLocalMediaProfiles()
   const { refetch: refetchPod } = usePodcastDownloadProfiles()
   const { refetch: refetchSer } = useSeriesDownloadProfiles()
+
+  // Build registry for local media profiles
+  const mediaProfileReg = useMemo(() => {
+    const spec: Record<string, { label: string }> = {}
+    if (Array.isArray(mediaProfiles)) {
+      for (const p of mediaProfiles as any[]) {
+        const id = (p as any).id
+        const name = (p as any).name ?? String(id)
+        if (typeof id === 'number') spec[String(id)] = { label: String(name) }
+      }
+    }
+    return createSelectRegistry('LocalMediaProfile', spec as any)
+  }, [mediaProfiles])
 
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
@@ -180,23 +195,22 @@ export default function EditDownloadProfilePage() {
 
           <div className="form-row">
             <label htmlFor="local-media-profile">Local Media Profile</label>
-            <select
-              id="local-media-profile"
-              className="input"
-              value={String((form.watch('localMediaProfileId') as any) ?? '')}
-              onChange={(e) => form.setValue('localMediaProfileId' as any, Number(e.target.value), { shouldDirty: true, shouldValidate: true })}
-              disabled={!mediaProfiles || mediaProfiles.length === 0}
-            >
-              {!mediaProfiles ? (
-                <option>Loading profiles...</option>
-              ) : mediaProfiles.length === 0 ? (
-                <option>No profiles found</option>
-              ) : (
-                mediaProfiles.map((p) => (
-                  <option key={(p as LocalMediaProfileRead).id} value={(p as LocalMediaProfileRead).id}>{(p as LocalMediaProfileRead).name}</option>
-                ))
+            <Controller
+              control={(form as any).control}
+              name={"localMediaProfileId" as any}
+              render={({ field }) => (
+                <Select
+                  inputId="local-media-profile"
+                  classNamePrefix="select"
+                  options={mediaProfileReg.options}
+                  value={mediaProfileReg.options.find(o => Number(o.value) === field.value) ?? null}
+                  onChange={(opt) => field.onChange((opt as any) ? Number((opt as any).value) : null)}
+                  onBlur={field.onBlur}
+                  isDisabled={mediaProfileReg.options.length === 0}
+                  placeholder={!mediaProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
+                />
               )}
-            </select>
+            />
           </div>
 
           <DownloadProfileForm form={form as any} mode={mode} seasons={[]} />

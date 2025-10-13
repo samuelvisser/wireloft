@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
-import Footer from './components/Footer'
+import Footer from './components/Sidebar/Footer'
 import HomePage from './pages/HomePage'
 import LocalMediaProfilesPage from './pages/LocalMediaProfilesPage'
 import SettingsPage from './pages/SettingsPage'
@@ -13,10 +13,8 @@ import EditShow from './pages/show/EditShowPage'
 import EpisodePage from './pages/episode/EpisodePage'
 import LoginPage from './pages/LoginPage'
 import DownloadProfilesPage from './pages/DownloadProfilesPage'
-import AddPodcastDownloadProfilePage from './pages/download-profile-podcast/AddPodcastDownloadProfilePage'
-import EditPodcastDownloadProfilePage from './pages/download-profile-podcast/EditPodcastDownloadProfilePage'
-import AddSeriesDownloadProfilePage from './pages/download-profile-series/AddSeriesDownloadProfilePage'
-import EditSeriesDownloadProfilePage from './pages/download-profile-series/EditSeriesDownloadProfilePage'
+import AddDownloadProfilePage from './pages/download-profile/AddDownloadProfilePage'
+import EditDownloadProfilePage from './pages/download-profile/EditDownloadProfilePage'
 
 export default function App() {
   const navigate = useNavigate()
@@ -67,10 +65,8 @@ export default function App() {
           <Route path="/add-local-media-profile" element={<AddLocalMediaProfilePage />} />
           <Route path="/edit-local-media-profile/:slug" element={<EditLocalMediaProfilePage />} />
           <Route path="/download-profiles" element={<DownloadProfilesPage />} />
-          <Route path="/download-profile/podcast/add" element={<AddPodcastDownloadProfilePage />} />
-          <Route path="/download-profile/podcast/:id/edit" element={<EditPodcastDownloadProfilePage />} />
-          <Route path="/download-profile/series/add" element={<AddSeriesDownloadProfilePage />} />
-          <Route path="/download-profile/series/:id/edit" element={<EditSeriesDownloadProfilePage />} />
+          <Route path="/add-download-profile" element={<AddDownloadProfilePage />} />
+          <Route path="/edit-download-profile/:type/:id" element={<EditDownloadProfilePage />} />
           <Route path="/show/:id" element={<ShowPage />} />
           <Route path="/show/:id/episode/:episodeId" element={<EpisodePage />} />
           <Route path="/edit-show/:id" element={<EditShow />} />
