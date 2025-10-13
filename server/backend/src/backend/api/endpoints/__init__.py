@@ -10,3 +10,4 @@ from .settings.router import router as setting_router
 from .shows import show_router
 from .meta_router import router as meta_router
 from .config import config_router
+from .rss_stream_profiles import rss_stream_profile_router
