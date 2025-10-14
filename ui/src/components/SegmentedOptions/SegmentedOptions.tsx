@@ -11,17 +11,19 @@ export type SegmentedOption<T extends SegmentedOptionValue = SegmentedOptionValu
 }
 
 export type SegmentedOptionsProps<T extends SegmentedOptionValue = SegmentedOptionValue> = {
-  /** Name for the underlying radios */
+  /** Name for the underlying radios/checkboxes */
   name: string
-  /** Controlled value */
-  value: T | null | undefined
-  /** Change handler returns the selected value */
-  onChange: (value: T) => void
+  /** Controlled value: single value for radio mode, array for multi-select mode */
+  value: T | T[] | null | undefined
+  /** Change handler returns the selected value(s) */
+  onChange: (value: T | T[]) => void
   /** Available options */
   options: SegmentedOption<T>[]
-  /** Optional aria-label for the radiogroup */
+  /** Enable multi-select. When true, at least one option must remain selected. */
+  multiple?: boolean
+  /** Optional aria-label for the group */
   ariaLabel?: string
-  /** Optional aria-labelledby id for the radiogroup */
+  /** Optional aria-labelledby id for the group */
   ariaLabelledBy?: string
   /** Disable the entire group */
   disabled?: boolean
@@ -32,20 +34,21 @@ export type SegmentedOptionsProps<T extends SegmentedOptionValue = SegmentedOpti
 }
 
 /**
- * SegmentedOptions — a modern, accessible radio-like segmented control.
- * - Renders equal-width horizontal segments with separators
- * - Smooth animated background slides to the selected option
+ * SegmentedOptions — a modern, accessible segmented control.
+ * - Single-select radio mode (default)
+ * - Multi-select checkbox mode (set multiple=true). Enforces at least one selected.
  * - Supports an optional description under each label (can include <ReadMore>)
  *
  * Accessibility:
- * - Uses native input type="radio" elements for correct semantics
- * - Group is wrapped with role="radiogroup"
+ * - Uses native input elements for correct semantics
+ * - Group uses role="radiogroup" for single-select, and role="group" for multi-select
  */
 export default function SegmentedOptions<T extends SegmentedOptionValue = SegmentedOptionValue>({
   name,
   value,
   onChange,
   options,
+  multiple,
   ariaLabel,
   ariaLabelledBy,
   disabled,
@@ -56,13 +59,16 @@ export default function SegmentedOptions<T extends SegmentedOptionValue = Segmen
   const groupId = `${name}-seg-${autoId}`
   const count = options.length
 
-  const selectedIndex = value == null ? -1 : options.findIndex(o => o.value === value)
+  const isMulti = !!multiple
+  const valuesArray: T[] = Array.isArray(value) ? (value as T[]) : (value == null ? [] : [value as T])
+
+  const selectedIndex = !isMulti && value != null ? options.findIndex(o => o.value === value) : -1
   const indicatorWidth = count > 0 ? `${100 / count}%` : '0%'
   const translateX = selectedIndex <= -1 ? -1 : selectedIndex
 
   return (
     <div
-      role="radiogroup"
+      role={isMulti ? 'group' : 'radiogroup'}
       aria-label={ariaLabel}
       aria-labelledby={ariaLabel ? undefined : ariaLabelledBy}
       aria-disabled={disabled || undefined}
@@ -70,9 +76,10 @@ export default function SegmentedOptions<T extends SegmentedOptionValue = Segmen
       style={style}
       data-disabled={disabled ? '' : undefined}
       data-count={count}
+      data-multi={isMulti ? '' : undefined}
     >
-      {/* Sliding selection background */}
-      {count > 0 && (
+      {/* Sliding selection background for single-select only */}
+      {!isMulti && count > 0 && (
         <div
           className="segmented-selection"
           style={{
@@ -86,7 +93,7 @@ export default function SegmentedOptions<T extends SegmentedOptionValue = Segmen
 
       {/* Grid items */}
       {options.map((opt, idx) => {
-        const checked = value === opt.value
+        const checked = isMulti ? valuesArray.includes(opt.value) : value === opt.value
         const optDisabled = disabled || opt.disabled
         const inputId = `${groupId}-${idx}`
         return (
@@ -97,12 +104,31 @@ export default function SegmentedOptions<T extends SegmentedOptionValue = Segmen
             data-disabled={optDisabled ? '' : undefined}
           >
             <input
-              type="radio"
+              type={isMulti ? 'checkbox' : 'radio'}
               name={name}
               id={inputId}
               value={String(opt.value)}
               checked={checked}
-              onChange={() => !optDisabled && onChange(opt.value)}
+              onChange={() => {
+                if (optDisabled) return
+                if (!isMulti) {
+                  onChange(opt.value)
+                  return
+                }
+                // Multi-select toggle logic with at least one selected
+                const isSelected = valuesArray.includes(opt.value)
+                if (isSelected) {
+                  if (valuesArray.length <= 1) {
+                    // Enforce at least one remains selected
+                    return
+                  }
+                  const next = valuesArray.filter(v => v !== opt.value)
+                  onChange(next as T[])
+                } else {
+                  const next = [...valuesArray, opt.value]
+                  onChange(next as T[])
+                }
+              }}
               disabled={optDisabled}
             />
             <div className="segmented-content">
