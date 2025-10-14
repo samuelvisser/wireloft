@@ -65,5 +65,3 @@ export function createSelectRegistry<const T extends string>(name: string, spec:
         describe,
     };
 }
-
-export type Registry<T extends string> = ReturnType<typeof createSelectRegistry<T>>;

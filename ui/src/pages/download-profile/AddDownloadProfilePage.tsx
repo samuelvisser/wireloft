@@ -2,7 +2,7 @@ import {useCallback, useMemo, useState} from 'react'
 import {Controller, useForm, UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate} from 'react-router-dom'
-import {useLocalMediaProfiles, useShows} from '../../lib/queries'
+import {useDownloadProfilesByShowSlug, useLocalMediaProfiles, useShowSeasons, useShows} from '../../lib/queries'
 import DownloadProfileForm, {DownloadProfileMode} from '../../components/DownloadProfile/DownloadProfileForm'
 import {
     PodcastDownloadProfileCreateIn, PodcastDownloadProfileCreateOut,
@@ -18,7 +18,6 @@ import {useLocalMediaProfileSelectRegistry} from "../../types/local_media_profil
 import {SelectRegistry} from "../../utils/selectRegistry";
 import {buildShowSelectRegistry} from "../../types/show";
 import {useQueryClient} from "@tanstack/react-query";
-import { SegmentedOptions } from '../../components/SegmentedOptions'
 import {getZodDefaults} from "../../utils/defaultZod";
 
 type AnyOut = PodcastDownloadProfileCreateOut | SeriesDownloadProfileCreateOut
@@ -27,22 +26,14 @@ type AnyForm = UseFormReturn<PodcastDownloadProfileCreateIn> | UseFormReturn<Ser
 export default function AddDownloadProfilePage() {
     const navigate = useNavigate()
 
-    const [mode, setMode] = useState<DownloadProfileMode>('podcast')
+    const [mode, setMode] = useState<DownloadProfileMode>('base')
 
     const {data: shows} = useShows()
     const {data: mediaProfiles} = useLocalMediaProfiles()
 
     const qc = useQueryClient()
 
-    // Filter shows by selected mode (podcast/series); if neither, show none
-    const filteredShows = useMemo(() => {
-        if (!Array.isArray(shows)) return []
-        if (mode === 'podcast') return shows.filter(s => s.type === 'podcast')
-        if (mode === 'series') return shows.filter(s => s.type === 'series')
-        return []
-    }, [shows, mode])
-
-    const showReg: SelectRegistry = useMemo(() => buildShowSelectRegistry(filteredShows), [filteredShows])
+    const showReg: SelectRegistry = useMemo(() => buildShowSelectRegistry(shows), [shows])
     const mediaProfileReg: SelectRegistry = useLocalMediaProfileSelectRegistry(mediaProfiles)
 
     const formPodcast = useForm<PodcastDownloadProfileCreateIn>({
@@ -58,12 +49,20 @@ export default function AddDownloadProfilePage() {
         shouldFocusError: true,
         defaultValues: getZodDefaults(SeriesDownloadProfileCreateSchema),
     })
-    const form: AnyForm = mode === 'podcast' ? formPodcast : formSeries
+    const form: AnyForm = mode === 'series' ? formSeries : formPodcast
+    const {formState: {errors}} = form
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
     const submitFn = async (data: AnyOut) => {
-        const endpoint = mode === 'podcast' ? 'podcast-download-profiles' : 'series-download-profiles'
+        let effectiveMode: DownloadProfileMode = mode
+        if (effectiveMode === 'base') {
+            const sid = (form as any).getValues ? Number((form as any).getValues('showId')) : null
+            const selectedShow = Array.isArray(shows) ? shows.find(s => s.id === sid) : undefined
+            if (selectedShow?.type === 'podcast') effectiveMode = 'podcast'
+            else if (selectedShow?.type === 'series') effectiveMode = 'series'
+        }
+        const endpoint = effectiveMode === 'podcast' ? 'podcast-download-profiles' : 'series-download-profiles'
         return fetch(`${(window as any).appConfig.API_URL}/${endpoint}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -83,7 +82,36 @@ export default function AddDownloadProfilePage() {
         onSuccess: onSuccess,
         successStatuses: [201],
     })
-    const {formState: {isSubmitting}} = form
+
+    const {watch, formState: {isSubmitting}} = form
+    const showId = watch("showId" as any)
+
+    // Resolve selected show and slug
+    const selectedShow = useMemo(() => {
+        if (!Array.isArray(shows)) return undefined
+        const sid = Number(showId)
+        return shows.find(s => s.id === sid)
+    }, [shows, showId])
+    const selectedShowSlug = selectedShow?.slug
+
+    // Fetch seasons and existing download profiles for the selected show
+    const {data: seasonsData} = useShowSeasons(selectedShowSlug)
+    const {data: showProfiles} = useDownloadProfilesByShowSlug(selectedShowSlug)
+
+    // Prepare seasons for the SeriesDownloadProfile form (detached: name, dwId, slug)
+    const seasonsForForm = useMemo(() => (seasonsData ?? []).map((s) => ({
+        name: s.name,
+        dwId: s.dwId,
+        slug: s.slug,
+    })), [seasonsData])
+
+    // Compute which local media profiles are already used by this show and must be disabled
+    const disabledLocalMediaProfileIds = useMemo(() => {
+        const ids = (showProfiles ?? [])
+            .map((p) => p.localMediaProfileId)
+            .filter((v): v is number => typeof v === 'number')
+        return new Set<number>(ids)
+    }, [showProfiles])
 
     return (
         <section className="view" aria-labelledby="add-download-profile-title">
@@ -92,42 +120,54 @@ export default function AddDownloadProfilePage() {
             </div>
 
             <form className="form" onSubmit={onSubmit} noValidate>
-                <div className="form-row">
-                    <SegmentedOptions
-                        name="dp-type"
-                        value={mode}
-                        onChange={(v: DownloadProfileMode) => setMode(v)}
-                        options={[
-                            {
-                                value: 'podcast',
-                                label: 'Podcast',
-                            },
-                            {
-                                value: 'series',
-                                label: 'Series',
-                            },
-                        ]}
-                    />
-                </div>
+
+                {errors.root && (
+                    <div className="form-error-card" role="alert" aria-live="polite">
+                        {String(errors.root.message)}
+                    </div>
+                )}
 
                 <div className="form-row">
                     <label htmlFor="show-id">Show</label>
                     <Controller
                         control={(form as any).control}
-                        name={"showId" as any}
+                        name={"showId"}
                         render={({field}) => (
                             <Select
                                 inputId="show-id"
                                 classNamePrefix="select"
                                 options={showReg.options}
                                 value={showReg.options.find(o => Number(o.value) === field.value) ?? null}
-                                onChange={(opt) => field.onChange((opt as any) ? Number((opt as any).value) : null)}
+                                onChange={(opt) => {
+                                    const val = (opt as any) ? Number((opt as any).value) : null
+                                        // keep both forms in sync for showId
+                                    ;(formPodcast as any).setValue('showId', val)
+                                    ;(formSeries as any).setValue('showId', val)
+                                    field.onChange(val)
+
+                                    if (val == null) {
+                                        setMode('base')
+                                    } else {
+                                        const selectedShow = Array.isArray(shows) ? shows.find(s => s.id === val) : undefined
+                                        if (selectedShow?.type === 'podcast') setMode('podcast')
+                                        else if (selectedShow?.type === 'series') setMode('series')
+                                        else setMode('base')
+                                    }
+                                }}
                                 onBlur={field.onBlur}
                                 isDisabled={showReg.options.length === 0}
                                 placeholder={showReg.options.length === 0 ? 'No shows found' : undefined}
+                                isClearable
+                                aria-invalid={!!errors.showId}
+                                aria-describedby={errors.showId ? 'show-errors' : undefined}
                             />
                         )}
                     />
+                    {errors.showId && (
+                        <div id="show-errors" className="error" role="alert" aria-live="polite">
+                            {errors.showId.message as string}
+                        </div>
+                    )}
                 </div>
 
                 <div className="form-row">
@@ -141,20 +181,35 @@ export default function AddDownloadProfilePage() {
                                 classNamePrefix="select"
                                 options={mediaProfileReg.options}
                                 value={mediaProfileReg.options.find(o => Number(o.value) === field.value) ?? null}
-                                onChange={(opt) => field.onChange((opt as any) ? Number((opt as any).value) : null)}
+                                onChange={(opt) => {
+                                    const val = (opt as any) ? Number((opt as any).value) : null
+                                        // keep both forms in sync for localMediaProfileId
+                                    ;(formPodcast as any).setValue('localMediaProfileId', val)
+                                    ;(formSeries as any).setValue('localMediaProfileId', val)
+                                    field.onChange(val)
+                                }}
                                 onBlur={field.onBlur}
                                 isDisabled={mediaProfileReg.options.length === 0}
+                                isOptionDisabled={(opt) => disabledLocalMediaProfileIds.has(Number((opt as any).value))}
                                 placeholder={!mediaProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
+                                isClearable
+                                aria-invalid={!!errors.localMediaProfileId}
+                                aria-describedby={errors.localMediaProfileId ? 'local-media-profile-errors' : undefined}
                             />
                         )}
                     />
+                    {errors.localMediaProfileId && (
+                        <div id="local-media-profile-errors" className="error" role="alert" aria-live="polite">
+                            {errors.localMediaProfileId.message as string}
+                        </div>
+                    )}
                 </div>
 
-                <DownloadProfileForm form={form as any} mode={mode} seasons={[]}/>
+                <DownloadProfileForm form={form as any} mode={mode} seasons={seasonsForForm} showRoot={false}/>
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>
-                    <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting}/>
+                    <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting || !showId}/>
                 </div>
             </form>
         </section>

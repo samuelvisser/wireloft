@@ -4,7 +4,7 @@ import ReadMore from '../../utils/ReadMore'
 import PodcastDownloadProfileForm from './PodcastDownloadProfileForm'
 import SeriesDownloadProfileForm, {SeasonItem} from './SeriesDownloadProfileForm'
 
-export type DownloadProfileMode = 'podcast' | 'series'
+export type DownloadProfileMode = 'podcast' | 'series' | 'base'
 
 type Props = {
     form: UseFormReturn<any>
@@ -62,9 +62,9 @@ export default function DownloadProfileForm({form, mode, seasons, showRoot}: Pro
             {/* Variant-specific fields */}
             {mode === 'podcast' ? (
                 <PodcastDownloadProfileForm form={form}/>
-            ) : (
+            ) : mode === 'series' ? (
                 <SeriesDownloadProfileForm form={form} seasons={seasons ?? []}/>
-            )}
+            ) : undefined }
         </>
     )
 }

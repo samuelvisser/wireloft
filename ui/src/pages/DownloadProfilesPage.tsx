@@ -1,7 +1,7 @@
 import {useCallback, useRef} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {useDownloadProfilesView} from '../lib/queries'
-import {DownloadProfileReadView} from '../types/schemas/download_profile_view'
+import {DownloadProfileReadView} from '../types/schemas/download_profile_base'
 import {PreferredFormatReg} from '../types/local_media_profile'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'

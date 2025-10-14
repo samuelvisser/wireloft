@@ -2,8 +2,8 @@ import { z } from 'zod'
 import { PodcastDownloadProfileReadSchema } from './podcast_download_profile'
 import { SeriesDownloadProfileReadSchema } from './series_download_profile'
 
-// Unified read view for a download profile coming from /download-profiles/as-view
-export const DownloadProfileReadViewSchema = z.looseObject({
+
+export const DownloadProfileReadSchema = z.looseObject({
   id: z.int(),
   showId: z.int(),
   localMediaProfileId: z.int(),
@@ -11,13 +11,17 @@ export const DownloadProfileReadViewSchema = z.looseObject({
   type: z.enum(['podcast', 'series']),
   createdAt: z.iso.datetime().transform((s) => new Date(s)),
   updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+})
+export type DownloadProfileRead = z.infer<typeof DownloadProfileReadSchema>
 
-  // Added view fields
+
+// Unified read view for a download profile coming from /download-profiles/as-view
+export const DownloadProfileReadViewSchema = DownloadProfileReadSchema.extend({
+  // External table fields
   showTitle: z.string(),
   localMediaProfilePreferredFormat: z.string(),
 
   // Concrete implementation payload (depends on `type`)
   downloadProfileImpl: z.union([PodcastDownloadProfileReadSchema, SeriesDownloadProfileReadSchema]),
 })
-
 export type DownloadProfileReadView = z.infer<typeof DownloadProfileReadViewSchema>
