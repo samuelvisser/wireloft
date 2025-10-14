@@ -20,6 +20,9 @@ import {buildShowSelectRegistry} from "../../types/show";
 import {useQueryClient} from "@tanstack/react-query";
 import {getZodDefaults} from "../../utils/defaultZod";
 import ReadMore from "../../utils/ReadMore";
+import {ShowRead} from "../../types/schemas/show";
+import {SeasonItem} from "../../components/DownloadProfile/SeriesDownloadProfileForm";
+import {SeasonRead} from "../../types/schemas/season";
 
 type AnyOut = PodcastDownloadProfileCreateOut | SeriesDownloadProfileCreateOut
 type AnyForm = UseFormReturn<PodcastDownloadProfileCreateIn> | UseFormReturn<SeriesDownloadProfileCreateIn>
@@ -93,14 +96,14 @@ export default function AddDownloadProfilePage() {
         const sid = Number(showId)
         return shows.find(s => s.id === sid)
     }, [shows, showId])
-    const selectedShowSlug = selectedShow?.slug
+    const selectedShowSlug: string | undefined = selectedShow?.slug
 
     // Fetch seasons and existing download profiles for the selected show
     const {data: seasonsData} = useShowSeasons(selectedShowSlug)
     const {data: showProfiles} = useDownloadProfilesByShowSlug(selectedShowSlug)
 
     // Prepare seasons for the SeriesDownloadProfile form (detached: name, dwId, slug)
-    const seasonsForForm = useMemo(() => (seasonsData ?? []).map((s) => ({
+    const seasonsForForm: SeasonItem[] = useMemo((): SeasonItem[] => (seasonsData ?? []).map((s: SeasonRead): SeasonItem => ({
         name: s.name,
         dwId: s.dwId,
         slug: s.slug,
@@ -149,20 +152,24 @@ export default function AddDownloadProfilePage() {
                                 options={showReg.options}
                                 value={showReg.options.find(o => Number(o.value) === field.value) ?? null}
                                 onChange={(opt) => {
-                                    const val = (opt as any) ? Number((opt as any).value) : null
-                                        // keep both forms in sync for showId
-                                    ;(formPodcast as any).setValue('showId', val)
-                                    ;(formSeries as any).setValue('showId', val)
+                                    const val = (opt as any) ? Number((opt as any).value) : undefined
+
+                                    // keep both forms in sync for showId
+                                    if (val) {
+                                        formPodcast.setValue('showId', val)
+                                        formSeries.setValue('showId', val)
+                                    }
                                     field.onChange(val)
 
-                                    if (val == null) {
+                                    if (!val) {
                                         setMode('base')
-                                    } else {
-                                        const selectedShow = Array.isArray(shows) ? shows.find(s => s.id === val) : undefined
-                                        if (selectedShow?.type === 'podcast') setMode('podcast')
-                                        else if (selectedShow?.type === 'series') setMode('series')
-                                        else setMode('base')
+                                        return
                                     }
+
+                                    const selectedShow: ShowRead | undefined = Array.isArray(shows) ? shows.find(s => s.id === val) : undefined
+                                    if (selectedShow?.type === 'podcast') setMode('podcast')
+                                    else if (selectedShow?.type === 'series') setMode('series')
+                                    else setMode('base')
                                 }}
                                 onBlur={field.onBlur}
                                 isDisabled={showReg.options.length === 0}
@@ -215,7 +222,7 @@ export default function AddDownloadProfilePage() {
                     )}
                     <div className="help" id="local-media-profile-help">
                         <ReadMore summary={<span>The Local Media Profile defines the type and output path of downloaded media.</span>}>
-                            Add a Local Media Profile to define the type of media to download and where to store it.<br /><br />
+                            Add a Local Media Profile to define the type of media to download and where to store it.<br/><br/>
                             Only one Download Profile can use any specific Local Media Profile per show. Media Profiles that
                             are already in use by another Download Profile in "{selectedShow?.title}" are disabled here.
                         </ReadMore>

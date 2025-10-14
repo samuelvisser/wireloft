@@ -35,6 +35,7 @@ export type SeriesDownloadProfileUpdateOut = z.output<typeof SeriesDownloadProfi
 export const SeriesDownloadProfileReadSchema = z.looseObject({
     id: z.int(),
     showId: z.int(),
+    type: z.literal('series'),
     localMediaProfileId: z.int().optional(),
     enableProfile: z.boolean(),
     seasons: z.array(SeasonDetachedSchema),

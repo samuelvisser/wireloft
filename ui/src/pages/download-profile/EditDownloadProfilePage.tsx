@@ -1,16 +1,14 @@
-import {useCallback, useEffect, useState} from 'react'
+import {useCallback} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
-import {useLocalMediaProfiles, usePodcastDownloadProfiles, useSeriesDownloadProfiles, useShows} from '../../lib/queries'
+import {useLocalMediaProfiles, useShowSeasons} from '../../lib/queries'
 import DownloadProfileForm, {DownloadProfileMode} from '../../components/DownloadProfile/DownloadProfileForm'
 import {
-    PodcastDownloadProfileRead,
     PodcastDownloadProfileUpdateIn,
     PodcastDownloadProfileUpdateSchema
 } from '../../types/schemas/podcast_download_profile'
 import {
-    SeriesDownloadProfileRead,
     SeriesDownloadProfileUpdateIn,
     SeriesDownloadProfileUpdateSchema
 } from '../../types/schemas/series_download_profile'
@@ -18,6 +16,8 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import Select from 'react-select'
 import {useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import {DownloadProfileReadView} from "../../types/schemas/download_profile_base";
+import {useQuery, useQueryClient} from "@tanstack/react-query";
 
 
 type RouteParams = { type?: DownloadProfileMode; id?: string }
@@ -25,22 +25,28 @@ type RouteParams = { type?: DownloadProfileMode; id?: string }
 type AnyUpdate = PodcastDownloadProfileUpdateIn | SeriesDownloadProfileUpdateIn
 
 export default function EditDownloadProfilePage() {
-    const {type, id} = useParams<RouteParams>()
     const navigate = useNavigate()
+    const {type, id} = useParams<RouteParams>()
+    const qc = useQueryClient()
 
     const mode: DownloadProfileMode | undefined = (type === 'podcast' || type === 'series') ? type : undefined
     const profileId = id ? Number(id) : undefined
 
-    const {data: shows} = useShows()
+    // Fetch the latest profile by id
+    const {data: downloadProfile, isLoading, error} = useQuery<DownloadProfileReadView | undefined>({
+        queryKey: ['downloadProfile', id],
+        enabled: !!id,
+        refetchOnMount: 'always',
+        queryFn: async ({signal}) => {
+            const res = await fetch(`${(window as any).appConfig.API_URL}/download-profiles/as-view/${profileId}`, { signal, credentials: 'include' })
+            if (!res.ok) throw new Error(`Failed to load profile (${res.status})`)
+            return await res.json() as Promise<DownloadProfileReadView>
+        },
+    })
+    const showTitle: string | undefined = downloadProfile?.showTitle
+
     const {data: mediaProfiles} = useLocalMediaProfiles()
-    const {refetch: refetchPod} = usePodcastDownloadProfiles()
-    const {refetch: refetchSer} = useSeriesDownloadProfiles()
-
-    const mediaProfileReg = useLocalMediaProfileSelectRegistry(mediaProfiles)
-
-    const [loading, setLoading] = useState<boolean>(true)
-    const [error, setError] = useState<string | null>(null)
-    const [showName, setShowName] = useState<string>('')
+    const {data: seasonsData} = useShowSeasons(downloadProfile?.showSlug)
 
     const formPodcast = useForm<PodcastDownloadProfileUpdateIn>({
         resolver: zodResolver(PodcastDownloadProfileUpdateSchema),
@@ -69,69 +75,9 @@ export default function EditDownloadProfilePage() {
     })
 
     const form = (mode === 'podcast' ? formPodcast : formSeries) as any
-    // const form = (mode === 'podcast' ? formPodcast : formSeries) as Union[UseFormReturn<PodcastDownloadProfileUpdateIn, TContext, TTransformedValues>, UseFormReturn<SeriesDownloadProfileUpdateIn, TContext, TTransformedValues>]
     const {formState: {errors}} = form
 
-    useEffect(() => {
-        let cancelled = false
-
-        async function load() {
-            if (!mode || !profileId) {
-                setError('Profile not found')
-                setLoading(false)
-                return
-            }
-            setLoading(true)
-            setError(null)
-            try {
-                const base = (window as any).appConfig.API_URL
-                const endpoint = mode === 'podcast' ? 'podcast-download-profiles' : 'series-download-profiles'
-                const r = await fetch(`${base}/${endpoint}/${profileId}`, {credentials: 'include'})
-                if (!r.ok) throw new Error(`HTTP ${r.status}`)
-                const data = await r.json()
-
-                if (mode === 'podcast') {
-                    const p = data as PodcastDownloadProfileRead
-                    if (!cancelled) {
-                        formPodcast.reset({
-                            localMediaProfileId: p.localMediaProfileId ?? 0,
-                            enableProfile: p.enableProfile,
-                            downloadWithCountdown: (p as any).downloadWithCountdown,
-                            redownloadFinal: (p as any).redownloadFinal,
-                            downloadDaysInPast: (p as any).downloadDaysInPast,
-                            deleteOlderEpisodes: (p as any).deleteOlderEpisodes,
-                        })
-                    }
-                    // Show name lookup by id
-                    const s = Array.isArray(shows) ? (shows as any[]).find((x) => (x as any).id === p.showId) : undefined
-                    if (s && typeof (s as any).name === 'string') setShowName((s as any).name)
-                    else setShowName(String(p.showId))
-                } else {
-                    const s = data as SeriesDownloadProfileRead
-                    if (!cancelled) {
-                        formSeries.reset({
-                            localMediaProfileId: s.localMediaProfileId ?? 0,
-                            enableProfile: s.enableProfile,
-                            seasons: s.seasons ?? [],
-                            includeUpcomingSeasons: s.includeUpcomingSeasons ?? true,
-                        })
-                    }
-                    const sh = Array.isArray(shows) ? (shows as any[]).find((x) => (x as any).id === s.showId) : undefined
-                    if (sh && typeof (sh as any).name === 'string') setShowName((sh as any).name)
-                    else setShowName(String(s.showId))
-                }
-            } catch (e: any) {
-                if (!cancelled) setError(e?.message || 'Failed to load profile')
-            } finally {
-                if (!cancelled) setLoading(false)
-            }
-        }
-
-        void load()
-        return () => {
-            cancelled = true
-        }
-    }, [mode, profileId, shows])
+    const mediaProfileReg = useLocalMediaProfileSelectRegistry(mediaProfiles)
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
@@ -148,7 +94,10 @@ export default function EditDownloadProfilePage() {
     }
 
     const onSuccess = async () => {
-        await Promise.all([refetchPod(), refetchSer()])
+        await qc.invalidateQueries({queryKey: ['podcastDownloadProfiles']})
+        await qc.invalidateQueries({queryKey: ['seriesDownloadProfiles']})
+        await qc.invalidateQueries({queryKey: ['downloadProfilesView']})
+
         navigate('/download-profiles')
     }
 
@@ -180,10 +129,10 @@ export default function EditDownloadProfilePage() {
                 <h1 id="edit-download-profile-title">Edit download profile</h1>
             </div>
 
-            {loading ? (
+            {isLoading ? (
                 <p>Loading…</p>
             ) : error ? (
-                <p>{error}</p>
+                <p>{error.message}</p>
             ) : (
                 <form className="form" onSubmit={onSubmit} noValidate>
                     <div className="form-row">
@@ -193,7 +142,7 @@ export default function EditDownloadProfilePage() {
 
                     <div className="form-row">
                         <label>Show</label>
-                        <div style={{padding: '6px 0'}}>{showName}</div>
+                        <div style={{padding: '6px 0'}}>{showTitle}</div>
                     </div>
 
 
@@ -230,7 +179,7 @@ export default function EditDownloadProfilePage() {
                         )}
                     </div>
 
-                    <DownloadProfileForm form={form as any} mode={mode} seasons={[]} showRoot={false} />
+                    <DownloadProfileForm form={form as any} mode={mode} seasons={seasonsData} showRoot={false}/>
 
                     <div className="actions">
                         <button type="button" className="btn" onClick={onCancel}>Cancel</button>

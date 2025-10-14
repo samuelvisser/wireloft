@@ -28,6 +28,7 @@ export type PodcastDownloadProfileUpdateOut = z.output<typeof PodcastDownloadPro
 export const PodcastDownloadProfileReadSchema = z.looseObject({
     id: z.int(),
     showId: z.int(),
+    type: z.literal('podcast'),
     localMediaProfileId: z.int().optional(),
     enableProfile: z.boolean(),
     downloadWithCountdown: z.boolean(),
