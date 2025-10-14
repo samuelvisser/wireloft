@@ -20,6 +20,14 @@ def stream_profiles_list():
         return get_stream_profiles_list(s)
 
 
+@router.get("/by-show-slug/{show_slug}", response_model=list[StreamProfileAPIRead])
+def stream_profiles_by_show_slug_list(show_slug: str):
+    """
+    List all download profiles in any show.
+    """
+    with db_session() as s:
+        return get_stream_profiles_list(s, show_slug)
+
 @router.get("/{stream_profile_id}", response_model=StreamProfileAPIRead)
 def stream_profile_detail(stream_profile_id: int):
     """
