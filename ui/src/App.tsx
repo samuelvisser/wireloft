@@ -15,6 +15,9 @@ import LoginPage from './pages/LoginPage'
 import DownloadProfilesPage from './pages/DownloadProfilesPage'
 import AddDownloadProfilePage from './pages/download-profile/AddDownloadProfilePage'
 import EditDownloadProfilePage from './pages/download-profile/EditDownloadProfilePage'
+import StreamProfilesPage from './pages/StreamProfilesPage'
+import AddStreamProfilePage from './pages/stream-profile/AddStreamProfilePage'
+import EditStreamProfilePage from './pages/stream-profile/EditStreamProfilePage'
 
 export default function App() {
   const navigate = useNavigate()
@@ -67,6 +70,9 @@ export default function App() {
           <Route path="/download-profiles" element={<DownloadProfilesPage />} />
           <Route path="/add-download-profile" element={<AddDownloadProfilePage />} />
           <Route path="/edit-download-profile/:type/:id" element={<EditDownloadProfilePage />} />
+          <Route path="/stream-profiles" element={<StreamProfilesPage />} />
+          <Route path="/add-stream-profile" element={<AddStreamProfilePage />} />
+          <Route path="/edit-stream-profile/:type/:id" element={<EditStreamProfilePage />} />
           <Route path="/show/:id" element={<ShowPage />} />
           <Route path="/show/:id/episode/:episodeId" element={<EpisodePage />} />
           <Route path="/edit-show/:id" element={<EditShow />} />

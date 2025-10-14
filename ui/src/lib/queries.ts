@@ -5,9 +5,11 @@ import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
 import {PodcastDownloadProfileRead} from "../types/schemas/podcast_download_profile";
 import {SeriesDownloadProfileRead} from "../types/schemas/series_download_profile";
 import {DownloadProfileRead, DownloadProfileReadView} from "../types/schemas/download_profile_base";
+import {StreamProfileReadView} from "../types/schemas/stream_profile_base";
 import {ShowRead} from "../types/schemas/show";
 import {EpisodeRead} from "../types/schemas/episode";
 import {SeasonRead} from "../types/schemas/season";
+import {RssStreamProfileRead} from "../types/schemas/rss_stream_profile";
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
     const r = await fetch(url, {signal, credentials: 'include'})
@@ -50,6 +52,24 @@ export function useDownloadProfilesView() {
     return useQuery<any[], Error, DownloadProfileReadView[], readonly ['downloadProfilesView']>({
         queryKey: ['downloadProfilesView'] as const,
         queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/download-profiles/as-view`, signal),
+        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
+    })
+}
+
+export function useRssStreamProfiles() {
+    return useQuery<any[], Error, RssStreamProfileRead[], readonly ['rssStreamProfiles']>({
+        queryKey: ['rssStreamProfiles'] as const,
+        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/rss-stream-profiles`, signal),
+        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
+    })
+}
+
+export function useStreamProfilesView() {
+    return useQuery<any[], Error, StreamProfileReadView[], readonly ['streamProfilesView']>({
+        queryKey: ['streamProfilesView'] as const,
+        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/stream-profiles/as-view`, signal),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
@@ -185,5 +205,13 @@ export function prefetchCoreData(qc: QueryClient) {
     void qc.prefetchQuery({
         queryKey: ['downloadProfilesView'],
         queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/download-profiles/as-view`, signal),
+    })
+    void qc.prefetchQuery({
+        queryKey: ['rssStreamProfiles'],
+        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/rss-stream-profiles`, signal),
+    })
+    void qc.prefetchQuery({
+        queryKey: ['streamProfilesView'],
+        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/stream-profiles/as-view`, signal),
     })
 }
