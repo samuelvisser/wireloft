@@ -1,23 +1,26 @@
-import {useCallback, useMemo, useState} from 'react'
-import {Controller, useForm} from 'react-hook-form'
+import {useCallback, useState} from 'react'
+import {Controller, useForm, UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate} from 'react-router-dom'
-import {useLocalMediaProfiles, usePodcastDownloadProfiles, useSeriesDownloadProfiles, useShows} from '../../lib/queries'
+import {useLocalMediaProfiles, useShows} from '../../lib/queries'
 import DownloadProfileForm, {DownloadProfileMode} from '../../components/DownloadProfile/DownloadProfileForm'
-import {PodcastDownloadProfileCreateIn, PodcastDownloadProfileCreateSchema} from '../../types/schemas/podcast_download_profile'
-import {SeriesDownloadProfileCreateIn, SeriesDownloadProfileCreateSchema} from '../../types/schemas/series_download_profile'
+import {
+    PodcastDownloadProfileCreateIn, PodcastDownloadProfileCreateOut,
+    PodcastDownloadProfileCreateSchema
+} from '../../types/schemas/podcast_download_profile'
+import {
+    SeriesDownloadProfileCreateIn, SeriesDownloadProfileCreateOut,
+    SeriesDownloadProfileCreateSchema
+} from '../../types/schemas/series_download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
-import {createSelectRegistry} from '../../utils/selectRegistry'
-import {ShowRead} from "../../types/schemas/show";
+import {useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import {SelectRegistry} from "../../utils/selectRegistry";
+import {useShowSelectRegistry} from "../../types/show";
+import {useQueryClient} from "@tanstack/react-query";
 
-
-type PodcastForm = PodcastDownloadProfileCreateIn
-
-type SeriesForm = SeriesDownloadProfileCreateIn
-
-type AnyForm = PodcastForm | SeriesForm
-
+type AnyOut = PodcastDownloadProfileCreateOut | SeriesDownloadProfileCreateOut
+type AnyForm = UseFormReturn<PodcastDownloadProfileCreateIn> | UseFormReturn<SeriesDownloadProfileCreateIn>
 
 export default function AddDownloadProfilePage() {
     const navigate = useNavigate()
@@ -27,74 +30,47 @@ export default function AddDownloadProfilePage() {
     const {data: shows} = useShows()
     const {data: mediaProfiles} = useLocalMediaProfiles()
 
-    // Build registries for shows and local media profiles using createSelectRegistry
-    const showReg = useMemo(() => {
-        const spec: Record<string, { label: string }> = {}
-        if (Array.isArray(shows)) {
-            for (const s of shows as ShowRead[]) {
-                const id = s.id
-                const name = s.title
-                spec[String(id)] = {label: String(name)}
-            }
-        }
-        return createSelectRegistry('Show', spec as any)
-    }, [shows])
+    const qc = useQueryClient()
 
-    const mediaProfileReg = useMemo(() => {
-        const spec: Record<string, { label: string }> = {}
-        if (Array.isArray(mediaProfiles)) {
-            for (const p of mediaProfiles as any[]) {
-                const id = (p as any).id
-                const name = (p as any).name ?? String(id)
-                if (typeof id === 'number') spec[String(id)] = {label: String(name)}
-            }
-        }
-        return createSelectRegistry('LocalMediaProfile', spec as any)
-    }, [mediaProfiles])
+    const showReg: SelectRegistry = useShowSelectRegistry(shows)
+    const mediaProfileReg: SelectRegistry = useLocalMediaProfileSelectRegistry(mediaProfiles)
 
-    const defaultValuesPodcast: PodcastForm = useMemo(() => ({
-        showId: Number((showReg.options?.[0]?.value ?? 0)),
-        localMediaProfileId: Number((mediaProfileReg.options?.[0]?.value ?? 0)),
+    const commonDefaults = {
+        showId: showReg.options?.[0]?.value ? Number(showReg.options[0].value) : undefined,
+        localMediaProfileId: mediaProfileReg.options?.[0]?.value ? Number(mediaProfileReg.options[0].value) : undefined,
         enableProfile: true,
-        downloadWithCountdown: false,
-        redownloadFinal: true,
-        downloadDaysInPast: 180,
-        deleteOlderEpisodes: true,
-    }), [showReg, mediaProfileReg])
+    }
 
-    const defaultValuesSeries: SeriesForm = useMemo(() => ({
-        showId: Number((showReg.options?.[0]?.value ?? 0)),
-        localMediaProfileId: Number((mediaProfileReg.options?.[0]?.value ?? 0)),
-        enableProfile: true,
-        seasons: [],
-        includeUpcomingSeasons: true,
-    }), [showReg, mediaProfileReg])
-
-    const formPodcast = useForm<PodcastForm>({
+    const formPodcast = useForm<PodcastDownloadProfileCreateIn>({
         resolver: zodResolver(PodcastDownloadProfileCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: defaultValuesPodcast,
+        defaultValues: {
+            ...commonDefaults,
+            downloadWithCountdown: false,
+            redownloadFinal: true,
+            downloadDaysInPast: 180,
+            deleteOlderEpisodes: true,
+        },
     })
 
-    const formSeries = useForm<SeriesForm>({
+    const formSeries = useForm<SeriesDownloadProfileCreateIn>({
         resolver: zodResolver(SeriesDownloadProfileCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: defaultValuesSeries,
+        defaultValues: {
+            ...commonDefaults,
+            seasons: [],
+            includeUpcomingSeasons: true,
+        },
     })
-
-    const form = mode === 'podcast' ? formPodcast : formSeries
+    const form: AnyForm = mode === 'podcast' ? formPodcast : formSeries
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
-    const {refetch: refetchPod} = usePodcastDownloadProfiles()
-    const {refetch: refetchSer} = useSeriesDownloadProfiles()
-
-    const submitFn = async (data: AnyForm) => {
-        const base = (window as any).appConfig.API_URL
+    const submitFn = async (data: AnyOut) => {
         const endpoint = mode === 'podcast' ? 'podcast-download-profiles' : 'series-download-profiles'
-        return fetch(`${base}/${endpoint}`, {
+        return fetch(`${(window as any).appConfig.API_URL}/${endpoint}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',
@@ -103,16 +79,16 @@ export default function AddDownloadProfilePage() {
     }
 
     const onSuccess = async () => {
-        await Promise.all([refetchPod(), refetchSer()])
+        await qc.invalidateQueries({queryKey: ['podcastDownloadProfiles']})
+        await qc.invalidateQueries({queryKey: ['seriesDownloadProfiles']})
+
         navigate('/download-profiles')
     }
 
-    const onSubmit = buildServerAwareSubmit(form as any, async (dataOut: AnyForm) => {
-        const res = await submitFn(dataOut)
-        if (res?.ok) await onSuccess()
-        return res
+    const onSubmit = buildServerAwareSubmit(form, submitFn, {
+        onSuccess: onSuccess,
+        successStatuses: [201],
     })
-
     const {formState: {isSubmitting}} = form
 
     return (

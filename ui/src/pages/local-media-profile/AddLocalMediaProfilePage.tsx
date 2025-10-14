@@ -37,7 +37,7 @@ export default function AddLocalMediaProfilePage() {
         })
     };
 
-    const onSuccess = async (_result: any, {resetForm}: { resetForm: (v?: Partial<LocalMediaProfileCreateOut>) => void }) => {
+    const onSuccess = async (_result: any, {resetForm}: { resetForm: (v?: Partial<LocalMediaProfileCreateIn>) => void }) => {
         await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
         resetForm();
         navigate('/local-media-profiles')

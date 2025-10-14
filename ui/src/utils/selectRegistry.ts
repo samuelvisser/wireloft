@@ -7,6 +7,8 @@ type OptionMeta = {
 
 type SelectRegistrySpec<T extends string> = Record<T, OptionMeta>;
 
+export type SelectRegistry = ReturnType<typeof createSelectRegistry>;
+
 export function createSelectRegistry<const T extends string>(name: string, spec: SelectRegistrySpec<T>) {
     // Values are the keys of the spec, in declaration order
     const values = Object.keys(spec) as T[];

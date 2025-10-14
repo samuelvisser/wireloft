@@ -11,14 +11,16 @@ type Props = {
     mode: DownloadProfileMode
     seasons?: SeasonItem[]
     profileMode?: 'create' | 'update'
+    showRoot?: boolean
 }
 
-export default function DownloadProfileForm({form, mode, seasons}: Props) {
+export default function DownloadProfileForm({form, mode, seasons, showRoot}: Props) {
     const {control, formState: {errors}} = form
+    showRoot ??= true
 
     return (
         <>
-            {errors.root && (
+            {showRoot && errors.root && (
                 <div className="form-error-card" role="alert" aria-live="polite">
                     {String(errors.root.message)}
                 </div>

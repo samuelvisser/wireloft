@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState} from 'react'
+import {useCallback, useEffect, useState} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
@@ -17,7 +17,7 @@ import {
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import Select from 'react-select'
-import {createSelectRegistry} from '../../utils/selectRegistry'
+import {useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 
 
 type RouteParams = { type?: DownloadProfileMode; id?: string }
@@ -36,18 +36,7 @@ export default function EditDownloadProfilePage() {
     const {refetch: refetchPod} = usePodcastDownloadProfiles()
     const {refetch: refetchSer} = useSeriesDownloadProfiles()
 
-    // Build registry for local media profiles
-    const mediaProfileReg = useMemo(() => {
-        const spec: Record<string, { label: string }> = {}
-        if (Array.isArray(mediaProfiles)) {
-            for (const p of mediaProfiles as any[]) {
-                const id = (p as any).id
-                const name = (p as any).name ?? String(id)
-                if (typeof id === 'number') spec[String(id)] = {label: String(name)}
-            }
-        }
-        return createSelectRegistry('LocalMediaProfile', spec as any)
-    }, [mediaProfiles])
+    const mediaProfileReg = useLocalMediaProfileSelectRegistry(mediaProfiles)
 
     const [loading, setLoading] = useState<boolean>(true)
     const [error, setError] = useState<string | null>(null)
@@ -80,6 +69,7 @@ export default function EditDownloadProfilePage() {
     })
 
     const form = (mode === 'podcast' ? formPodcast : formSeries) as any
+    // const form = (mode === 'podcast' ? formPodcast : formSeries) as Union[UseFormReturn<PodcastDownloadProfileUpdateIn, TContext, TTransformedValues>, UseFormReturn<SeriesDownloadProfileUpdateIn, TContext, TTransformedValues>]
     const {formState: {errors}} = form
 
     useEffect(() => {

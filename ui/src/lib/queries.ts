@@ -133,7 +133,7 @@ export function useDailywireShow(slug?: string, membershipPlan?: string) {
     })
 }
 
-// Optional: prefetch core data to warm the cache on app start
+// Prefetch core data to warm the cache on app start
 export function prefetchCoreData(qc: QueryClient) {
     void qc
         .prefetchQuery({
