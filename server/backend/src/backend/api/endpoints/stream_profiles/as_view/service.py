@@ -12,6 +12,7 @@ from backend.db.models import StreamProfileBase, Show, RssStreamProfile
 def _to_view(item: StreamProfileBase) -> StreamProfileAPIReadView:
     base = StreamProfileAPIRead.model_validate(item).model_dump()
     show_title = item.show.title if getattr(item, "show", None) is not None else None
+    show_slug = item.show.slug if getattr(item, "show", None) is not None else None
 
     # Map concrete implementation payload based on type discriminator
     t = str(getattr(item, "type", ""))
@@ -24,6 +25,7 @@ def _to_view(item: StreamProfileBase) -> StreamProfileAPIReadView:
     return StreamProfileAPIReadView.model_validate({
         **base,
         "show_title": show_title or "",
+        "show_slug": show_slug or "",
         "stream_profile_impl": impl,
     })
 

@@ -38,4 +38,5 @@ class StreamProfileAPIReadView(StreamProfileAPIRead):
     """
 
     show_title: str
+    show_slug: str
     stream_profile_impl: Union[RssStreamProfileAPIRead]
