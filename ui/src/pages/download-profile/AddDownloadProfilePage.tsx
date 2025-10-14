@@ -60,13 +60,11 @@ export default function AddDownloadProfilePage() {
 
     const submitFn = async (data: AnyOut) => {
         let effectiveMode: DownloadProfileMode = mode
-        if (effectiveMode === 'base') {
-            const sid = (form as any).getValues ? Number((form as any).getValues('showId')) : null
-            const selectedShow = Array.isArray(shows) ? shows.find(s => s.id === sid) : undefined
-            if (selectedShow?.type === 'podcast') effectiveMode = 'podcast'
-            else if (selectedShow?.type === 'series') effectiveMode = 'series'
-        }
         const endpoint = effectiveMode === 'podcast' ? 'podcast-download-profiles' : 'series-download-profiles'
+
+        // console.log(`${(window as any).appConfig.API_URL}/${endpoint}`)
+        // console.log(data)
+
         return fetch(`${(window as any).appConfig.API_URL}/${endpoint}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
