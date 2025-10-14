@@ -45,7 +45,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
     }, [watch, onChange]);
 
     // Snapshot previous values when switching to an existing profile, so we can restore on deselect
-    const snapshotRef = useRef<Pick<LocalMediaProfileCreateUnionIn, 'name' | 'outputTemplate' | 'preferredFormat' | 'downloadSeriesImages'> | null>(null)
+    const snapshotRef = useRef<Pick<LocalMediaProfileCreateUnionIn, 'name' | 'outputTemplate' | 'preferredFormat'> | null>(null)
 
     const watchedOp = watch('op')
     const watchedSlug = watch('slug')
@@ -61,7 +61,6 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
             setValue('name', snap?.name ?? '', {shouldValidate: true})
             setValue('outputTemplate', snap?.outputTemplate ?? '', {shouldValidate: true})
             setValue('preferredFormat', (snap?.preferredFormat ?? 'format_1080p') as any, {shouldValidate: true})
-            setValue('downloadSeriesImages', snap?.downloadSeriesImages ?? true, {shouldValidate: true})
             snapshotRef.current = null
         } else {
             // Selecting a profile
@@ -71,7 +70,6 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                     name: watch('name'),
                     outputTemplate: watch('outputTemplate'),
                     preferredFormat: watch('preferredFormat'),
-                    downloadSeriesImages: watch('downloadSeriesImages'),
                 }
             }
             setValue('op', 'update_by_slug', {shouldValidate: true, shouldDirty: true})
@@ -80,7 +78,6 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
             setValue('name', p.name, {shouldValidate: true})
             setValue('outputTemplate', p.outputTemplate, {shouldValidate: true})
             setValue('preferredFormat', p.preferredFormat as any, {shouldValidate: true})
-            setValue('downloadSeriesImages', p.downloadSeriesImages, {shouldValidate: true})
         }
     }
 

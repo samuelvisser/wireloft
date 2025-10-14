@@ -20,7 +20,6 @@ export default function LocalMediaProfileCard({ profile, selected = false, onCli
       <div className="card-sub">{profile.outputTemplate}</div>
       <div className="card-meta">
         <span>{PreferredFormatReg.getLabelLoose(profile.preferredFormat)}</span>
-        <span>• {profile.downloadSeriesImages ? 'Series images ✓' : 'Series images ✕'}</span>
       </div>
     </button>
   )

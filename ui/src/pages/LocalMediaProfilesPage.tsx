@@ -27,11 +27,7 @@ export default function LocalMediaProfilesPage() {
         {
             header: 'Preferred Format',
             accessor: (p) => PreferredFormatReg.getLabelLoose(p.preferredFormat),
-        },
-        {
-            header: 'Series Images',
-            accessor: (p) => (p.downloadSeriesImages ? '✓' : '✕'),
-        },
+        }
     ]
 
     const {data: profiles, isLoading, error} = useLocalMediaProfiles()

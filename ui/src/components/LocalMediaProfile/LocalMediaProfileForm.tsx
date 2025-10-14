@@ -1,4 +1,3 @@
-import Switch from 'react-switch'
 import {Controller, type FieldValues, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
@@ -100,30 +99,6 @@ export default function LocalMediaProfileForm({form}: Props) {
                 {errors.preferredFormat && (
                     <div id="mp-format-error" className="error" role="alert" aria-live="polite">
                         {String(errors.preferredFormat.message)}
-                    </div>
-                )}
-            </div>
-
-            <div className="form-row" style={{alignItems: 'center'}}>
-                <label htmlFor="mp-images">Download series images</label>
-                <Controller
-                    control={control}
-                    name="downloadSeriesImages"
-                    render={({field: {value: checked, onChange: setChecked}}) => (
-                        <Switch
-                            id="mp-images"
-                            checked={!!checked}
-                            onChange={setChecked}
-                            onColor="#0ea5e9"
-                            offColor="#d1d5db"
-                            uncheckedIcon={false}
-                            checkedIcon={false}
-                        />
-                    )}
-                />
-                {errors.downloadSeriesImages && (
-                    <div id="mp-download-images-error" className="error" role="alert" aria-live="polite">
-                        {String(errors.downloadSeriesImages.message)}
                     </div>
                 )}
             </div>

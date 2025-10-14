@@ -16,14 +16,12 @@ const LocalMediaProfileBaseSchema = z.object({
         .regex(/\.ext$/, "Output template must end with '.ext'")
         .min(16),
     preferredFormat: z.enum(PreferredFormatReg.values),
-    downloadSeriesImages: z.boolean(),
 })
 
 
 export const LocalMediaProfileCreateSchema = LocalMediaProfileBaseSchema.extend({
     outputTemplate: LocalMediaProfileBaseSchema.shape.outputTemplate.default('/downloads/'),
     preferredFormat: LocalMediaProfileBaseSchema.shape.preferredFormat.default('format_1080p'),
-    downloadSeriesImages: LocalMediaProfileBaseSchema.shape.downloadSeriesImages.default(true),
 })
 export type LocalMediaProfileCreateIn = z.input<typeof LocalMediaProfileCreateSchema>;
 export type LocalMediaProfileCreateOut = z.output<typeof LocalMediaProfileCreateSchema>;
@@ -44,7 +42,6 @@ export const LocalMediaProfileReadSchema = z.looseObject({
     name: z.string(),
     outputTemplate: z.string(),
     preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
-    downloadSeriesImages: z.boolean(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })

@@ -976,8 +976,23 @@ div[class$="-menu-list"] { background: var(--bg) !important; }
 /* Option states */
 div[class$="-option"] { background: transparent !important; color: var(--text) !important; }
 div[class$="-option"][aria-selected="true"] { background: #0ea5e9 !important; color: #ffffff !important; }
-div[class$="-option"]:hover { background: rgba(14, 165, 233, 0.18) !important; }
-div[class$="-option"]:active { background: rgba(14, 165, 233, 0.26) !important; }
+/* Disabled option: visually indicate and prevent hover/active highlight */
+div[class$="-option"][aria-disabled="true"],
+.select__option--is-disabled {
+  color: var(--muted) !important;
+  background: transparent !important;
+  cursor: not-allowed !important;
+  opacity: 0.7;
+}
+div[class$="-option"][aria-disabled="true"]:hover,
+.select__option--is-disabled:hover,
+div[class$="-option"][aria-disabled="true"]:active,
+.select__option--is-disabled:active {
+  background: transparent !important;
+}
+/* Normal hover/active for enabled options only */
+div[class$="-option"]:not([aria-disabled="true"]):hover { background: rgba(14, 165, 233, 0.18) !important; }
+div[class$="-option"]:not([aria-disabled="true"]):active { background: rgba(14, 165, 233, 0.26) !important; }
 /* Multi-value (tags) */
 div[class$="-multiValue"] { background: rgba(14, 165, 233, 0.15) !important; }
 div[class$="-multiValueLabel"] { color: var(--text) !important; }

@@ -17,7 +17,6 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
     name: str = Field(min_length=1)
     output_template: str = Field(min_length=16)
     preferred_format: PreferredFormat
-    download_series_images: bool
 
     @computed_field(return_type=str)
     @property
@@ -53,7 +52,6 @@ class _LocalMediaProfileAPIBaseOut(ResponseBase):
     name: str
     output_template: str
     preferred_format: Union[PreferredFormat, str]
-    download_series_images: bool
 
 
 class LocalMediaProfileAPIRead(_LocalMediaProfileAPIBaseOut):

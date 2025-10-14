@@ -24,7 +24,6 @@ export default function AddLocalMediaProfilePage() {
             name: "",
             outputTemplate: "/downloads/",
             preferredFormat: PreferredFormatReg.Enum.format_audio_only,
-            downloadSeriesImages: false,
         },
     })
 

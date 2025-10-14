@@ -20,7 +20,6 @@ class LocalMediaProfile(Base):
     name: Mapped[str] = mapped_column(unique=True)
     output_template: Mapped[str]
     preferred_format: Mapped[str]
-    download_series_images: Mapped[bool] = mapped_column(default=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

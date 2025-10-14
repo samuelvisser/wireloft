@@ -1,4 +1,4 @@
-import {useCallback, useMemo, useState} from 'react'
+import {useCallback, useEffect, useMemo, useState} from 'react'
 import {Controller, useForm, UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate} from 'react-router-dom'
@@ -19,6 +19,7 @@ import {SelectRegistry} from "../../utils/selectRegistry";
 import {buildShowSelectRegistry} from "../../types/show";
 import {useQueryClient} from "@tanstack/react-query";
 import {getZodDefaults} from "../../utils/defaultZod";
+import ReadMore from "../../utils/ReadMore";
 
 type AnyOut = PodcastDownloadProfileCreateOut | SeriesDownloadProfileCreateOut
 type AnyForm = UseFormReturn<PodcastDownloadProfileCreateIn> | UseFormReturn<SeriesDownloadProfileCreateIn>
@@ -113,6 +114,15 @@ export default function AddDownloadProfilePage() {
         return new Set<number>(ids)
     }, [showProfiles])
 
+    // If the currently selected Local Media Profile becomes disabled for the selected show, clear it
+    useEffect(() => {
+        const currentVal: any = (form as any)?.getValues ? (form as any).getValues('localMediaProfileId') : null
+        if (currentVal != null && disabledLocalMediaProfileIds.has(Number(currentVal))) {
+            ;(formPodcast as any).setValue('localMediaProfileId', null, {shouldDirty: true, shouldValidate: true})
+            ;(formSeries as any).setValue('localMediaProfileId', null, {shouldDirty: true, shouldValidate: true})
+        }
+    }, [disabledLocalMediaProfileIds, form, formPodcast, formSeries])
+
     return (
         <section className="view" aria-labelledby="add-download-profile-title">
             <div className="view-header">
@@ -194,7 +204,7 @@ export default function AddDownloadProfilePage() {
                                 placeholder={!mediaProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
                                 isClearable
                                 aria-invalid={!!errors.localMediaProfileId}
-                                aria-describedby={errors.localMediaProfileId ? 'local-media-profile-errors' : undefined}
+                                aria-describedby={errors.localMediaProfileId ? 'local-media-profile-errors' : 'local-media-profile-help'}
                             />
                         )}
                     />
@@ -203,6 +213,13 @@ export default function AddDownloadProfilePage() {
                             {errors.localMediaProfileId.message as string}
                         </div>
                     )}
+                    <div className="help" id="local-media-profile-help">
+                        <ReadMore summary={<span>The Local Media Profile defines the type and output path of downloaded media.</span>}>
+                            Add a Local Media Profile to define the type of media to download and where to store it.<br /><br />
+                            Only one Download Profile can use any specific Local Media Profile per show. Media Profiles that
+                            are already in use by another Download Profile in "{selectedShow?.title}" are disabled here.
+                        </ReadMore>
+                    </div>
                 </div>
 
                 <DownloadProfileForm form={form as any} mode={mode} seasons={seasonsForForm} showRoot={false}/>
