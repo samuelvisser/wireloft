@@ -1,13 +1,12 @@
 import {useCallback} from 'react'
-import {Controller, useForm} from 'react-hook-form'
+import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {StreamProfileReadView} from '../../types/schemas/stream_profile_base'
-import RssStreamProfileForm from '../../components/StreamProfile/RssStreamProfileForm'
+import StreamProfileForm from '../../components/StreamProfile/StreamProfileForm'
 import {RssStreamProfileUpdateIn, RssStreamProfileUpdateSchema} from '../../types/schemas/rss_stream_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
-import Switch from 'react-switch'
 
 
 type RouteParams = { type?: 'rss'; id?: string }
@@ -112,28 +111,8 @@ export default function EditStreamProfilePage() {
                         </div>
                     )}
 
-                    {/* Enable profile */}
-                    <div className="form-row">
-                        <label htmlFor="enable-profile">Enable streaming</label>
-                        <Controller
-                            control={form.control}
-                            name="enableProfile"
-                            render={({field}) => (
-                                <Switch
-                                    id="enable-profile"
-                                    checked={!!field.value}
-                                    onChange={(checked) => field.onChange(checked)}
-                                    onColor="#0ea5e9"
-                                    offColor="#d1d5db"
-                                    uncheckedIcon={false}
-                                    checkedIcon={false}
-                                    aria-invalid={!!errors.enableProfile}
-                                />
-                            )}
-                        />
-                    </div>
-
-                    <RssStreamProfileForm form={form as any} />
+                    {/* Stream Profile Form (common + variant-specific fields) */}
+                    <StreamProfileForm form={form as any} mode="rss" showRoot={false} />
 
                     <div className="actions">
                         <button type="button" className="btn" onClick={onCancel}>Cancel</button>
