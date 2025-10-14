@@ -1,4 +1,4 @@
-import {useCallback} from 'react'
+import {useCallback, useEffect} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
@@ -13,7 +13,6 @@ import {
     SeriesDownloadProfileUpdateSchema
 } from '../../types/schemas/series_download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
-import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import Select from 'react-select'
 import {useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_base";
@@ -38,7 +37,7 @@ export default function EditDownloadProfilePage() {
         enabled: !!id,
         refetchOnMount: 'always',
         queryFn: async ({signal}) => {
-            const res = await fetch(`${(window as any).appConfig.API_URL}/download-profiles/as-view/${profileId}`, { signal, credentials: 'include' })
+            const res = await fetch(`${(window as any).appConfig.API_URL}/download-profiles/as-view/${profileId}`, {signal, credentials: 'include'})
             if (!res.ok) throw new Error(`Failed to load profile (${res.status})`)
             return await res.json() as Promise<DownloadProfileReadView>
         },
@@ -52,30 +51,27 @@ export default function EditDownloadProfilePage() {
         resolver: zodResolver(PodcastDownloadProfileUpdateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: {
-            localMediaProfileId: (mediaProfiles?.[0] as LocalMediaProfileRead | undefined)?.id ?? 0,
-            enableProfile: true,
-            downloadWithCountdown: false,
-            redownloadFinal: true,
-            downloadDaysInPast: 180,
-            deleteOlderEpisodes: true,
-        },
     })
 
     const formSeries = useForm<SeriesDownloadProfileUpdateIn>({
         resolver: zodResolver(SeriesDownloadProfileUpdateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: {
-            localMediaProfileId: (mediaProfiles?.[0] as LocalMediaProfileRead | undefined)?.id ?? 0,
-            enableProfile: true,
-            seasons: [],
-            includeUpcomingSeasons: true,
-        },
     })
 
     const form = (mode === 'podcast' ? formPodcast : formSeries) as any
     const {formState: {errors}} = form
+
+    // Populate form with existing data once it’s loaded
+    useEffect(() => {
+        if (!downloadProfile) return
+        if (downloadProfile.downloadProfileImpl.type === 'podcast') {
+            form.reset(PodcastDownloadProfileUpdateSchema.parse(downloadProfile.downloadProfileImpl))
+        } else if (downloadProfile.downloadProfileImpl.type === 'series') {
+            form.reset(SeriesDownloadProfileUpdateSchema.parse(downloadProfile.downloadProfileImpl))
+        }
+    }, [downloadProfile, form])
+
 
     const mediaProfileReg = useLocalMediaProfileSelectRegistry(mediaProfiles)
 

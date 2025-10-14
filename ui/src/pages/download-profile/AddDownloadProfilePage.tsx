@@ -62,9 +62,6 @@ export default function AddDownloadProfilePage() {
         let effectiveMode: DownloadProfileMode = mode
         const endpoint = effectiveMode === 'podcast' ? 'podcast-download-profiles' : 'series-download-profiles'
 
-        // console.log(`${(window as any).appConfig.API_URL}/${endpoint}`)
-        // console.log(data)
-
         return fetch(`${(window as any).appConfig.API_URL}/${endpoint}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -222,9 +219,9 @@ export default function AddDownloadProfilePage() {
                     )}
                     <div className="help" id="local-media-profile-help">
                         <ReadMore summary={<span>The Local Media Profile defines the type and output path of downloaded media.</span>}>
-                            Add a Local Media Profile to define the type of media to download and where to store it.<br/><br/>
-                            Only one Download Profile can use any specific Local Media Profile per show. Media Profiles that
-                            are already in use by another Download Profile in "{selectedShow?.title}" are disabled here.
+                            <p>Add a Local Media Profile to define the type of media to download and where to store it.</p>
+                            <p>Only one Download Profile can use any specific Local Media Profile per show. Media Profiles that
+                            are already in use by another Download Profile in "{selectedShow?.title}" are disabled here.</p>
                         </ReadMore>
                     </div>
                 </div>
