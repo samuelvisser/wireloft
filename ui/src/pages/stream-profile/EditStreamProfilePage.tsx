@@ -1,4 +1,4 @@
-import {useCallback} from 'react'
+import {useCallback, useEffect} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
@@ -19,7 +19,7 @@ export default function EditStreamProfilePage() {
     const profileId = id ? Number(id) : undefined
 
     // Fetch the latest profile by id (as-view)
-    const {data: profile, isLoading, error} = useQuery<StreamProfileReadView | undefined>({
+    const {data: streamProfile, isLoading, error} = useQuery<StreamProfileReadView | undefined>({
         queryKey: ['streamProfile', id],
         enabled: !!id,
         refetchOnMount: 'always',
@@ -34,16 +34,14 @@ export default function EditStreamProfilePage() {
         resolver: zodResolver(RssStreamProfileUpdateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: {
-            enableProfile: true,
-            useDownloads: true,
-            useDwStream: true,
-            preferredFormat: 'mp4',
-            requireExactMatch: true,
-            feedUrl: '',
-        } as any,
     })
     const {formState: {errors, isSubmitting}} = form
+
+    // Populate form with existing data once it’s loaded
+    useEffect(() => {
+        if (!streamProfile) return
+        form.reset(RssStreamProfileUpdateSchema.parse(streamProfile.streamProfileImpl))
+    }, [streamProfile, form])
 
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
 
@@ -102,7 +100,7 @@ export default function EditStreamProfilePage() {
 
                     <div className="form-row">
                         <label>Show</label>
-                        <div style={{padding: '6px 0'}}>{profile?.showTitle}</div>
+                        <div style={{padding: '6px 0'}}>{streamProfile?.showTitle}</div>
                     </div>
 
                     {errors.root && (
