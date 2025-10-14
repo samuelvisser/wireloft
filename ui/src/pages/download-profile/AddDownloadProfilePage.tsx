@@ -1,4 +1,4 @@
-import {useCallback, useState} from 'react'
+import {useCallback, useMemo, useState} from 'react'
 import {Controller, useForm, UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate} from 'react-router-dom'
@@ -16,8 +16,10 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
 import {useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {SelectRegistry} from "../../utils/selectRegistry";
-import {useShowSelectRegistry} from "../../types/show";
+import {buildShowSelectRegistry} from "../../types/show";
 import {useQueryClient} from "@tanstack/react-query";
+import { SegmentedOptions } from '../../components/SegmentedOptions'
+import {getZodDefaults} from "../../utils/defaultZod";
 
 type AnyOut = PodcastDownloadProfileCreateOut | SeriesDownloadProfileCreateOut
 type AnyForm = UseFormReturn<PodcastDownloadProfileCreateIn> | UseFormReturn<SeriesDownloadProfileCreateIn>
@@ -32,37 +34,29 @@ export default function AddDownloadProfilePage() {
 
     const qc = useQueryClient()
 
-    const showReg: SelectRegistry = useShowSelectRegistry(shows)
-    const mediaProfileReg: SelectRegistry = useLocalMediaProfileSelectRegistry(mediaProfiles)
+    // Filter shows by selected mode (podcast/series); if neither, show none
+    const filteredShows = useMemo(() => {
+        if (!Array.isArray(shows)) return []
+        if (mode === 'podcast') return shows.filter(s => s.type === 'podcast')
+        if (mode === 'series') return shows.filter(s => s.type === 'series')
+        return []
+    }, [shows, mode])
 
-    const commonDefaults = {
-        showId: showReg.options?.[0]?.value ? Number(showReg.options[0].value) : undefined,
-        localMediaProfileId: mediaProfileReg.options?.[0]?.value ? Number(mediaProfileReg.options[0].value) : undefined,
-        enableProfile: true,
-    }
+    const showReg: SelectRegistry = useMemo(() => buildShowSelectRegistry(filteredShows), [filteredShows])
+    const mediaProfileReg: SelectRegistry = useLocalMediaProfileSelectRegistry(mediaProfiles)
 
     const formPodcast = useForm<PodcastDownloadProfileCreateIn>({
         resolver: zodResolver(PodcastDownloadProfileCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: {
-            ...commonDefaults,
-            downloadWithCountdown: false,
-            redownloadFinal: true,
-            downloadDaysInPast: 180,
-            deleteOlderEpisodes: true,
-        },
+        defaultValues: getZodDefaults(PodcastDownloadProfileCreateSchema)
     })
 
     const formSeries = useForm<SeriesDownloadProfileCreateIn>({
         resolver: zodResolver(SeriesDownloadProfileCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: {
-            ...commonDefaults,
-            seasons: [],
-            includeUpcomingSeasons: true,
-        },
+        defaultValues: getZodDefaults(SeriesDownloadProfileCreateSchema),
     })
     const form: AnyForm = mode === 'podcast' ? formPodcast : formSeries
 
@@ -99,11 +93,21 @@ export default function AddDownloadProfilePage() {
 
             <form className="form" onSubmit={onSubmit} noValidate>
                 <div className="form-row">
-                    <label>Profile type</label>
-                    <div style={{display: 'flex', gap: 12}}>
-                        <label><input type="radio" name="dp-type" checked={mode === 'podcast'} onChange={() => setMode('podcast')}/> Podcast</label>
-                        <label><input type="radio" name="dp-type" checked={mode === 'series'} onChange={() => setMode('series')}/> Series</label>
-                    </div>
+                    <SegmentedOptions
+                        name="dp-type"
+                        value={mode}
+                        onChange={(v: DownloadProfileMode) => setMode(v)}
+                        options={[
+                            {
+                                value: 'podcast',
+                                label: 'Podcast',
+                            },
+                            {
+                                value: 'series',
+                                label: 'Series',
+                            },
+                        ]}
+                    />
                 </div>
 
                 <div className="form-row">
