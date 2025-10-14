@@ -5,7 +5,7 @@ import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
 import {PodcastDownloadProfileRead} from "../types/schemas/podcast_download_profile";
 import {SeriesDownloadProfileRead} from "../types/schemas/series_download_profile";
 import {DownloadProfileRead, DownloadProfileReadView} from "../types/schemas/download_profile_base";
-import {StreamProfileReadView} from "../types/schemas/stream_profile_base";
+import {StreamProfileRead, StreamProfileReadView} from "../types/schemas/stream_profile_base";
 import {ShowRead} from "../types/schemas/show";
 import {EpisodeRead} from "../types/schemas/episode";
 import {SeasonRead} from "../types/schemas/season";
@@ -169,6 +169,16 @@ export function useDownloadProfilesByShowSlug(showSlug?: string) {
         queryKey: ['downloadProfilesByShowSlug', showSlug] as const,
         enabled: !!showSlug,
         queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/download-profiles/by-show-slug/${showSlug}`, signal),
+        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
+    })
+}
+
+export function useStreamProfilesByShowSlug(showSlug?: string) {
+    return useQuery<any[], Error, StreamProfileRead[], readonly ['streamProfilesByShowSlug', string | undefined]>({
+        queryKey: ['streamProfilesByShowSlug', showSlug] as const,
+        enabled: !!showSlug,
+        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/stream-profiles/by-show-slug/${showSlug}`, signal),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
