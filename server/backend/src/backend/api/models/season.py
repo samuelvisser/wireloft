@@ -32,10 +32,10 @@ class SeasonAPIUpdate(_SeasonAPIBaseIn):
 # ---------- Lenient output (read) ----------
 class _SeasonAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, no constraints."""
-    name: str
     id: int
+    show_id: int
     dw_id: str
-    show_id: str
+    name: str
     slug: str
 
 
