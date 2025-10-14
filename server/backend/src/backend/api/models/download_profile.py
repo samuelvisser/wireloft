@@ -37,5 +37,6 @@ class DownloadProfileAPIReadView(DownloadProfileAPIRead):
     """
 
     show_title: str
+    show_slug: str
     local_media_profile_preferred_format: str
     download_profile_impl: Union[PodcastDownloadProfileAPIRead, SeriesDownloadProfileAPIRead]

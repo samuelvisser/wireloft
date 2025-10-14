@@ -43,6 +43,7 @@ class _PodcastDownloadProfileAPIBaseOut(ResponseBase):
     id: int
     show_id: int
     local_media_profile_id: int
+    type: str
     enable_profile: bool
     download_with_countdown: bool
     redownload_final: bool

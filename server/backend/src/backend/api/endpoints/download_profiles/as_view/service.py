@@ -13,6 +13,7 @@ from backend.db.models import DownloadProfileBase, Show, LocalMediaProfile, Podc
 def _to_view(item: DownloadProfileBase) -> DownloadProfileAPIReadView:
     base = DownloadProfileAPIRead.model_validate(item).model_dump()
     show_title = item.show.title if getattr(item, "show", None) is not None else None
+    show_slug = item.show.slug if getattr(item, "show", None) is not None else None
     preferred_format = (
         item.local_media_profile.preferred_format if getattr(item, "local_media_profile", None) is not None else None
     )
@@ -30,6 +31,7 @@ def _to_view(item: DownloadProfileBase) -> DownloadProfileAPIReadView:
     return DownloadProfileAPIReadView.model_validate({
         **base,
         "show_title": show_title or "",
+        "show_slug": show_slug or "",
         "local_media_profile_preferred_format": preferred_format or "",
         "download_profile_impl": impl,
     })

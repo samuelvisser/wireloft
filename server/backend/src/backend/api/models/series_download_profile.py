@@ -37,12 +37,14 @@ class SeriesDownloadProfileAPIUpdate(_SeriesDownloadProfileAPIBaseIn):
 class _SeriesDownloadProfileAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, no constraints."""
 
+    id: int
+    show_id: int
     local_media_profile_id: int
+    type: str
     enable_profile: bool
     seasons: list[SeasonAPIDetached]
     include_upcoming_seasons: bool
-    id: int
-    show_id: int
+
 
 class SeriesDownloadProfileAPIRead(_SeriesDownloadProfileAPIBaseOut):
     """Response body for a download profile for series."""
