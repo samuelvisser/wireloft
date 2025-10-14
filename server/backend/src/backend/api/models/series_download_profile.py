@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.api.models.season import SeasonAPIDetached
+from backend.api.models.season import SeasonAPIRequestDetached, SeasonAPIRead
 
 
 # ---------- Strict input (create/update) ----------
@@ -11,7 +11,7 @@ class _SeriesDownloadProfileAPIBaseIn(RequestBase):
     """Fields for requests: validate here if needed."""
 
     enable_profile: bool
-    seasons: list[SeasonAPIDetached]
+    seasons: list[SeasonAPIRequestDetached]
     include_upcoming_seasons: bool
 
 
@@ -42,7 +42,7 @@ class _SeriesDownloadProfileAPIBaseOut(ResponseBase):
     local_media_profile_id: int
     type: str
     enable_profile: bool
-    seasons: list[SeasonAPIDetached]
+    seasons: list[SeasonAPIRead]
     include_upcoming_seasons: bool
 
 

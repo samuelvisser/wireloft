@@ -10,7 +10,7 @@ class _SeasonAPIBaseIn(RequestBase):
     name: str
 
 
-class SeasonAPIDetached(_SeasonAPIBaseIn):
+class SeasonAPIRequestDetached(_SeasonAPIBaseIn):
     """Request body without external relations, allowing for dynamic insertion"""
 
     dw_id: str

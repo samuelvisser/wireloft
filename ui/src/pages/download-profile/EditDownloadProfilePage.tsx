@@ -18,7 +18,6 @@ import {useLocalMediaProfileSelectRegistry} from "../../types/local_media_profil
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_base";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 
-
 type RouteParams = { type?: DownloadProfileMode; id?: string }
 
 type AnyUpdate = PodcastDownloadProfileUpdateIn | SeriesDownloadProfileUpdateIn
@@ -82,7 +81,7 @@ export default function EditDownloadProfilePage() {
         const base = (window as any).appConfig.API_URL
         const endpoint = mode === 'podcast' ? 'podcast-download-profiles' : 'series-download-profiles'
         return fetch(`${base}/${endpoint}/${profileId}`, {
-            method: 'PUT',
+            method: 'PATCH',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',
             body: JSON.stringify(data),
@@ -109,7 +108,7 @@ export default function EditDownloadProfilePage() {
         return (
             <section className="view" aria-labelledby="edit-download-profile-title">
                 <div className="view-header">
-                    <h1 id="edit-download-profile-title">Edit download profile</h1>
+                    <h1 id="edit-download-profile-title">Edit Download Profile</h1>
                 </div>
                 <p>Profile not found.</p>
                 <div className="actions" style={{marginTop: 12}}>
@@ -122,7 +121,7 @@ export default function EditDownloadProfilePage() {
     return (
         <section className="view" aria-labelledby="edit-download-profile-title">
             <div className="view-header">
-                <h1 id="edit-download-profile-title">Edit download profile</h1>
+                <h1 id="edit-download-profile-title">Edit Download Profile</h1>
             </div>
 
             {isLoading ? (
@@ -131,6 +130,13 @@ export default function EditDownloadProfilePage() {
                 <p>{error.message}</p>
             ) : (
                 <form className="form" onSubmit={onSubmit} noValidate>
+                    {errors.root && (
+                        <div className="form-error-card" role="alert" aria-live="polite">
+                            {String(errors.root.message)}
+                        </div>
+                    )}
+
+
                     <div className="form-row">
                         <label>Profile type</label>
                         <div style={{padding: '6px 0'}}>{mode === 'podcast' ? 'Podcast' : 'Series'}</div>
@@ -140,13 +146,6 @@ export default function EditDownloadProfilePage() {
                         <label>Show</label>
                         <div style={{padding: '6px 0'}}>{showTitle}</div>
                     </div>
-
-
-                    {errors.root && (
-                        <div className="form-error-card" role="alert" aria-live="polite">
-                            {String(errors.root.message)}
-                        </div>
-                    )}
 
                     <div className="form-row">
                         <label htmlFor="local-media-profile">Local Media Profile</label>

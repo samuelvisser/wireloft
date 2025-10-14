@@ -6,7 +6,7 @@ from backend.api.models.base import RequestBase
 from backend.api.models.series_download_profile import SeriesDownloadProfileAPICreateBundle
 from backend.api.models.local_media_profile import LocalMediaProfileAPICreate, LocalMediaProfileAPIUpdate
 from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPICreateBundle
-from backend.api.models.season import SeasonAPIDetached
+from backend.api.models.season import SeasonAPIRequestDetached
 from backend.api.models.show import ShowAPICreate
 
 
@@ -44,4 +44,4 @@ class ShowAPICreateBundle(RequestBase):
     show: ShowAPICreate
     download_profile: DownloadProfileCreateInBundle = Field(discriminator="op")
     local_media_profile: LocalMediaProfileAPIUpsert = Field(discriminator="op")
-    seasons: list[SeasonAPIDetached]
+    seasons: list[SeasonAPIRequestDetached]

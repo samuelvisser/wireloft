@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {SeasonDetachedSchema} from "./season";
+import {SeasonDetachedSchema, SeasonReadSchema} from "./season";
 
 
 // ---------- Strict request (create/update) ----------
@@ -38,7 +38,7 @@ export const SeriesDownloadProfileReadSchema = z.looseObject({
     type: z.literal('series'),
     localMediaProfileId: z.int().optional(),
     enableProfile: z.boolean(),
-    seasons: z.array(SeasonDetachedSchema),
+    seasons: z.array(SeasonReadSchema),
     includeUpcomingSeasons: z.boolean(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
