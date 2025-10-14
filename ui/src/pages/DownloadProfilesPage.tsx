@@ -73,7 +73,7 @@ export default function DownloadProfilesPage() {
                 subjectProp="showTitle"
                 deleteRequest={(p) => {
                     const path = `${p.type === 'podcast' ? 'podcast-download-profiles' : 'series-download-profiles'}/${p.id}`
-                    return fetch(`${(window as any).appConfig.API_URL}/${path}`, { method: 'DELETE', credentials: 'include' })
+                    return fetch(`${(window as any).appConfig.API_URL}/${path}`, {method: 'DELETE', credentials: 'include'})
                 }}
                 invalidateQueries={[["downloadProfilesView"], ["podcastDownloadProfiles"], ["seriesDownloadProfiles"]]}
                 inUseMessage="This download profile is in use, it cannot be deleted"
