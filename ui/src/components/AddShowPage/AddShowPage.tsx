@@ -13,7 +13,7 @@ import {
     LocalMediaProfileCreateUnionSchema,
     LocalMediaProfileUpsertIn,
     LocalMediaProfileUpsertOut,
-} from "../../types/schemas/show_with_profiles";
+} from "../../types/schemas/show_as_bundle";
 import {ShowTypeReg} from "../../types/show";
 import {useQueryClient} from "@tanstack/react-query";
 import {SeasonDetachedOut} from "../../types/schemas/season";

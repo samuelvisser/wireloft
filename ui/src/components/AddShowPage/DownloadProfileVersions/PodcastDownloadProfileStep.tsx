@@ -6,7 +6,7 @@ import {buildServerAwareSubmit} from '../../../utils/buildServerAwareSubmit'
 import {
     DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut,
     DownloadProfileUnifiedCreateSchema
-} from "../../../types/schemas/show_with_profiles";
+} from "../../../types/schemas/show_as_bundle";
 
 export type PodcastDownloadProfileProps = {
     value: Partial<DownloadProfileUnifiedCreateIn>

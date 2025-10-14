@@ -7,7 +7,7 @@ import {useLocalMediaProfiles} from '../../lib/queries'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {
     LocalMediaProfileCreateUnionIn, LocalMediaProfileUpsertIn, LocalMediaProfileUpsertOut, LocalMediaProfileUpsertSchema
-} from "../../types/schemas/show_with_profiles";
+} from "../../types/schemas/show_as_bundle";
 import LocalMediaProfileCard from '../LocalMediaProfile/LocalMediaProfileCard'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 

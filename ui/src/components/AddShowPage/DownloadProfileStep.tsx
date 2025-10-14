@@ -4,7 +4,7 @@ import SeriesDownloadProfileStep from './DownloadProfileVersions/SeriesDownloadP
 import PodcastDownloadProfileStep from "./DownloadProfileVersions/PodcastDownloadProfileStep";
 import {
     DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut
-} from "../../types/schemas/show_with_profiles";
+} from "../../types/schemas/show_as_bundle";
 import {SeasonDetachedOut} from "../../types/schemas/season";
 
 
