@@ -40,7 +40,11 @@ export function createSelectRegistry<const T extends string>(name: string, spec:
 
     // Convenience accessors
     const meta = (v: T) => spec[v];
+
+    // Returns the label for the given value, or throws if not found
     const getLabel = (v: T) => spec[v].label;
+
+    // Returns the label for the given value, or the value itself if not found
     const getLabelLoose = (x: T | string) => {
         const n = normalize(x);
         if (n !== null) return spec[n].label;

@@ -7,7 +7,7 @@ const RssStreamProfileBaseSchema = z.object({
     useDownloads: z.boolean().default(true),
     useDwStream: z.boolean().default(true),
     preferredFormat: z.enum(PreferredFormatReg.values),
-    requireExactMatch: z.boolean().default(true),
+    requireExactMatch: z.boolean().default(false),
     feedUrl: z.string().min(1),
 })
 

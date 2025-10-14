@@ -9,9 +9,10 @@ import Select from 'react-select'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import StreamProfileForm, {StreamProfileMode} from '../../components/StreamProfile/StreamProfileForm'
-import SegmentedOptions, {toSegmentedOptions} from '../../components/SegmentedOptions/SegmentedOptions'
+import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions'
 import {RssStreamProfileCreateIn, RssStreamProfileCreateOut, RssStreamProfileCreateSchema} from '../../types/schemas/rss_stream_profile'
 import {useQueryClient} from '@tanstack/react-query'
+import ReadMore from "../../utils/ReadMore";
 
 export default function AddStreamProfilePage() {
     const navigate = useNavigate()
@@ -65,17 +66,6 @@ export default function AddStreamProfilePage() {
                     </div>
                 )}
 
-                {/* Mode selection (only RSS for now) */}
-                <div className="form-row">
-                    <label>Profile type</label>
-                    <SegmentedOptions
-                        name="stream-profile-mode"
-                        value={mode}
-                        onChange={(v) => setMode(v as StreamProfileMode)}
-                        options={toSegmentedOptions([['rss', 'RSS']])}
-                    />
-                </div>
-
                 {/* Show select */}
                 <div className="form-row">
                     <label htmlFor="show-id">Show</label>
@@ -103,6 +93,30 @@ export default function AddStreamProfilePage() {
                             {String(errors.showId.message)}
                         </div>
                     )}
+                </div>
+
+                {/* Mode selection (only RSS for now) */}
+                <div className="form-row">
+                    <label>Profile type</label>
+                    <SegmentedOptions
+                        name="stream-profile-mode"
+                        value={mode}
+                        onChange={(v) => setMode(v as StreamProfileMode)}
+                        options={[
+                            {
+                                value: 'rss',
+                                label: 'RSS',
+                                description: (
+                                    <ReadMore summary={<span>Open RSS feed for the show.</span>}>
+                                        <p>RSS is the technology used to distribute podcast feeds.</p>
+                                        <p>With an RSS Stream Profile in WireLoft, you can effectively create your very own podcast from
+                                        Daily Wire content. This is great when you want to listen to premium versions of Daily Wire shows
+                                        using your favorite podcast app.</p>
+                                    </ReadMore>
+                                ),
+                            }
+                        ]}
+                    />
                 </div>
 
                 {/* Stream Profile Form (common + variant-specific fields) */}

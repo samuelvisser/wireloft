@@ -4,6 +4,7 @@ import {useStreamProfilesView} from '../lib/queries'
 import {StreamProfileReadView} from '../types/schemas/stream_profile_base'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
+import {PreferredFormatReg} from "../types/local_media_profile";
 
 export default function StreamProfilesPage() {
     const navigate = useNavigate()
@@ -20,15 +21,26 @@ export default function StreamProfilesPage() {
         },
         {
             header: 'Preferred Format',
-            accessor: (p) => p.preferredFormat,
+            accessor: (p) => PreferredFormatReg.getLabelLoose(p.preferredFormat),
         },
         {
             header: 'Type',
             accessor: (p) => p.type,
         },
         {
+            header: 'Stream Downloads',
+            accessor: (p) => (p.useDownloads ? '✓' : '✕'),
+            align: 'center',
+        },
+        {
+            header: 'Stream from DW',
+            accessor: (p) => (p.useDwStream ? '✓' : '✕'),
+            align: 'center',
+        },
+        {
             header: 'Enabled',
             accessor: (p) => (p.enableProfile ? '✓' : '✕'),
+            align: 'center',
         },
     ]
 

@@ -1060,3 +1060,13 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
     background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.08));
   }
 }
+
+
+/* ReadMore content paragraph spacing (CSS-only): half a line-height between paragraphs */
+.read-more-content p {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.read-more-content p + p {
+  margin-top: 0.5lh;
+}

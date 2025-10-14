@@ -138,6 +138,7 @@ export default function AddDownloadProfilePage() {
                     </div>
                 )}
 
+                {/* Show */}
                 <div className="form-row">
                     <label htmlFor="show-id">Show</label>
                     <Controller
@@ -185,6 +186,7 @@ export default function AddDownloadProfilePage() {
                     )}
                 </div>
 
+                {/* Local Media Profile */}
                 <div className="form-row">
                     <label htmlFor="local-media-profile">Local Media Profile</label>
                     <Controller

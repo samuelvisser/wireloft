@@ -30,6 +30,7 @@ export default function DownloadProfilesPage() {
         {
             header: 'Enabled',
             accessor: (p) => (p.enableProfile ? '✓' : '✕'),
+            align: 'center',
         },
     ]
 

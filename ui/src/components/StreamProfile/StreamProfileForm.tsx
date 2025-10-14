@@ -35,6 +35,49 @@ export default function StreamProfileForm({form, mode, showRoot}: Props) {
                 </div>
             )}
 
+            {/* Streaming sources */}
+            <div className="form-row">
+                <label id="stream-sources-label">Streaming sources</label>
+                <SegmentedOptions
+                    name="stream-sources"
+                    multiple
+                    ariaLabelledBy="stream-sources-label"
+                    options={[
+                        {
+                            value: 'downloads',
+                            label: 'Use Downloads',
+                            description: (
+                                <ReadMore summary={<span>Stream downloaded media when available.</span>}>
+                                    <p>When enabled, downloaded media within WireLoft will be used when streaming.</p>
+                                    <p>Streaming downloaded media usually improves the stability of the stream
+                                        and ensures a consistent experience.</p>
+                                </ReadMore>
+                            ),
+                        },
+                        {
+                            value: 'dw',
+                            label: 'Use DailyWire stream',
+                            description: (
+                                <ReadMore summary={<span>Stream directly from The Daily Wire.</span>}>
+                                    <p>If enabled, streamed media will come directly from The Daily Wire's own servers.</p>
+                                    <p>If Use Downloads is enabled too, WireLoft will prefer downloaded media,
+                                    but stream directly when no downloaded media exists.</p>
+                                </ReadMore>
+                            ),
+                        },
+                    ]}
+                    value={selectedSources}
+                    onChange={(vals) => {
+                        const arr = Array.isArray(vals) ? vals : [vals]
+                        const nextUseDownloads = arr.includes('downloads')
+                        const nextUseDwStream = arr.includes('dw')
+                        // Update both booleans; enforce at least one remains selected already handled by component
+                        setValue('useDownloads', nextUseDownloads, {shouldDirty: true, shouldValidate: true})
+                        setValue('useDwStream', nextUseDwStream, {shouldDirty: true, shouldValidate: true})
+                    }}
+                />
+            </div>
+
             {/* Enable streaming */}
             <div className="form-row">
                 <label htmlFor="enable-profile">Enable streaming</label>
@@ -61,55 +104,13 @@ export default function StreamProfileForm({form, mode, showRoot}: Props) {
                     </div>
                 )}
                 <div className="help" id="enable-profile-help">
-                    <ReadMore summary={<span>Whether to allow streaming for this show</span>}>
-                        If you disable the stream profile, the show will still be indexed and playable for downloaded media when available.
+                    <ReadMore summary={<span>Enable streaming the content from WireLoft.</span>}>
+                        <p>When enabled, this stream profile will do its job and open your chosen stream (for now, RSS).</p>
+                        <p>You can disable it if you want to retain all the stream profile settings but for whatever reason do not want
+                        the streaming enabled.</p>
                     </ReadMore>
                 </div>
             </div>
-
-            {/* Streaming sources */}
-
-            <div className="form-row">
-                <label id="stream-sources-label">Streaming sources</label>
-                <SegmentedOptions
-                    name="stream-sources"
-                    multiple
-                    ariaLabelledBy="stream-sources-label"
-                    options={[
-                        {
-                            value: 'downloads',
-                            label: 'Use Downloads',
-                            description: (
-                                <ReadMore summary={<span>Stream downloaded media when available</span>}>
-                                    When enabled, downloaded media within WireLoft will be used when streaming.
-
-                                </ReadMore>
-                            ),
-                        },
-                        {
-                            value: 'dw',
-                            label: 'Use DailyWire stream',
-                            description: (
-                                <ReadMore summary={<span>Stream directly from The Daily Wire</span>}>
-                                    If enabled, streamed media will come directly from The Daily Wire's own servers.<br/><br/>
-                                    If Use Downloads is enabled too, WireLoft will always prefer downloaded media,
-                                    but stream directly when no downloaded media exists.
-                                </ReadMore>
-                            ),
-                        },
-                    ]}
-                    value={selectedSources}
-                    onChange={(vals) => {
-                        const arr = Array.isArray(vals) ? vals : [vals]
-                        const nextUseDownloads = arr.includes('downloads')
-                        const nextUseDwStream = arr.includes('dw')
-                        // Update both booleans; enforce at least one remains selected already handled by component
-                        setValue('useDownloads', nextUseDownloads, {shouldDirty: true, shouldValidate: true})
-                        setValue('useDwStream', nextUseDwStream, {shouldDirty: true, shouldValidate: true})
-                    }}
-                />
-            </div>
-
 
             {/* Preferred format */}
             {watch("useDownloads") && (
@@ -127,7 +128,7 @@ export default function StreamProfileForm({form, mode, showRoot}: Props) {
                                 onChange={(opt) => field.onChange((opt as any)?.value ?? null)}
                                 onBlur={field.onBlur}
                                 aria-invalid={!!errors.preferredFormat}
-                                aria-describedby={errors.preferredFormat ? 'sp-pref-format-error' : undefined}
+                                aria-describedby={errors.preferredFormat ? 'sp-pref-format-error' : 'sp-pref-format-help'}
                                 isClearable
                             />
                         )}
@@ -137,6 +138,14 @@ export default function StreamProfileForm({form, mode, showRoot}: Props) {
                             {String(errors.preferredFormat.message)}
                         </div>
                     )}
+                    <div className="help" id="sp-pref-format-help">
+                        <ReadMore summary={<span>Content type to prefer while streaming.</span>}>
+                            <p>Streams the specified content type if available. If not, it will try to stream the next best option (WireLoft will never
+                            mix audio and video in the same stream).</p>
+
+                            <p>If you need audio-only content, you can set this to 'Audio Only' to stream audio only.</p>
+                        </ReadMore>
+                    </div>
                 </div>
             ) || (
                 <div className="form-row">
@@ -187,14 +196,22 @@ export default function StreamProfileForm({form, mode, showRoot}: Props) {
                         )}
                     />
                     <div className="help">
-                        <ReadMore summary={<span>Match episodes using strict rules</span>}>
-                            If this setting is enabled, if say, you have a 720p version downloaded but your preferred format is 1080p, it tries to
-                            instead stream from DW directly (in whatever format it happens to provide). If the setting is disabled, it tries to match
-                            your preferred format but will stream other video formats from your downloaded files
-                            if they are the only ones available.<br/><br/>
-
-                            No matter what this setting is set to, as long as your Preferred Format is any video type WireLoft will always ignore
-                            audio downloads.
+                        <ReadMore summary={<span>Match downloaded episodes using strict rules.</span>}>
+                            <p>
+                                When this setting is <strong>enabled</strong>, if say, you have a 720p version downloaded but your preferred format is 1080p, instead of
+                                using the 720p version, WireLoft will stream from DW directly (in whatever format it happens to provide).<br/>
+                                When the setting is <strong>disabled</strong>, it tries to match your preferred format but will stream other video formats from your
+                                downloaded files if they are the only ones available locally.
+                            </p>
+                            <p>
+                                No matter what this setting is set to, as long as your Preferred Format is any video type WireLoft will always ignore
+                                audio downloads for the stream.
+                            </p>
+                            <p>
+                                <strong>Note:</strong> WireLoft cannot control what DW provides. Enabling this setting therefore in no way guarantees
+                                the stream will be in the exact format you want. This setting is meant more for cases where you downloaded a lower
+                                quality version of the show but want to stream the higher quality version that DW provides.
+                            </p>
                         </ReadMore>
                     </div>
                 </div>
