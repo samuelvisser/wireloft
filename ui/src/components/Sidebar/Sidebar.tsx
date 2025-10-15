@@ -9,6 +9,7 @@ library.add(fas)
 
 const items: Array<{ path: string; label: string; icon: IconProp; end?: boolean }> = [
     {path: '/', label: 'Home', icon: ['fas', 'house'], end: true},
+    {path: '/shows', label: 'Shows', icon: ['fas', 'tv']},
     {path: '/local-media-profiles', label: 'Local Media Profiles', icon: ['fas', 'clapperboard']},
     {path: '/download-profiles', label: 'Download Profiles', icon: ['fas', 'download']},
     {path: '/stream-profiles', label: 'Stream Profiles', icon: ['fas', 'rss']},

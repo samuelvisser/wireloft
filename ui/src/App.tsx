@@ -18,6 +18,7 @@ import EditDownloadProfilePage from './pages/download-profile/EditDownloadProfil
 import StreamProfilesPage from './pages/StreamProfilesPage'
 import AddStreamProfilePage from './pages/stream-profile/AddStreamProfilePage'
 import EditStreamProfilePage from './pages/stream-profile/EditStreamProfilePage'
+import ShowsPage from './pages/ShowsPage'
 
 export default function App() {
   const navigate = useNavigate()
@@ -62,6 +63,7 @@ export default function App() {
       <main className="content" role="main">
         <Routes>
           <Route path="/" element={<HomePage onAddShow={goToAddShow} />} />
+          <Route path="/shows" element={<ShowsPage />} />
           <Route path="/local-media-profiles" element={<LocalMediaProfilesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/add-show" element={<AddShowPage onCancel={cancelAddShow} />} />
