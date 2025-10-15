@@ -18,5 +18,8 @@ def user_info():
     try:
         return get_user_info()
     except Exception as e:
+        if str(e).lower().__contains__("no valid access token"):
+            raise HTTPException(status_code=401, detail=str(e))
+
         # Map any unhandled error to a 502 Bad Gateway since we're proxying upstream
         raise HTTPException(status_code=502, detail=str(e))

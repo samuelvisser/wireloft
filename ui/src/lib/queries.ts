@@ -10,6 +10,7 @@ import {ShowRead} from "../types/schemas/show";
 import {EpisodeRead} from "../types/schemas/episode";
 import {SeasonRead} from "../types/schemas/season";
 import {RssStreamProfileRead} from "../types/schemas/rss_stream_profile";
+import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
     const r = await fetch(url, {signal, credentials: 'include'})
@@ -151,6 +152,29 @@ export function useDailywireShow(slug?: string, membershipPlan?: string) {
             return r.json()
         },
         retry: false,
+    })
+}
+
+export function useDailywireUserInfo() {
+    return useQuery<any, any & { status?: number }, DailywireUserInfoRead, readonly ['dwUserInfo']>({
+        queryKey: ['dwUserInfo'] as const,
+        queryFn: async ({signal}) => {
+            const base = (window as any).appConfig?.API_URL?.replace(/\/+$/, '')
+            const r = await fetch(`${base}/dailywire/user-info`, { signal, credentials: 'include' })
+            if (!r.ok) {
+                const err: any = new Error(`HTTP ${r.status}`)
+                err.status = r.status
+                try {
+                    const body = await r.json()
+                    if (typeof body?.detail === 'string') err.detail = body.detail
+                } catch {}
+                throw err
+            }
+            const j = await r.json()
+            return DailywireUserInfoReadSchema.parse(j)
+        },
+        retry: false,
+        refetchOnMount: 'always',
     })
 }
 

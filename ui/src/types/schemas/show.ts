@@ -1,5 +1,6 @@
 import {z} from "zod";
 import {EpisodeIdentifierReg, ShowTypeReg} from "../show";
+import {DwMembershipLevelReg} from "../dailywire_user_info";
 
 
 /** Ensure https:// if a scheme is missing */
@@ -57,12 +58,12 @@ const dailyWireUrl = z
 /* ------------------------------------------------------------------ */
 const ShowBaseFormSchema = z.object({
     url: dailyWireUrl,
+    membershipLevel: z.enum(DwMembershipLevelReg.Enum).default(DwMembershipLevelReg.Enum.WL_ANY),
     type: z.union([z.enum(ShowTypeReg.values), z.literal('')]).default('')
         .pipe(z.enum(ShowTypeReg.values)),
     episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.literal('')]).default('')
         .pipe(z.enum(EpisodeIdentifierReg.values)),
 });
-
 
 export const ShowCreateFormSchema = ShowBaseFormSchema.extend({})
 export type ShowCreateFormIn = z.input<typeof ShowCreateFormSchema>;

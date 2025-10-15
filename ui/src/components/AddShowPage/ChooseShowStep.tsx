@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useRef} from "react";
 import DailywireShowCard from "./DailywireShowCard";
-import {useDailywireShow} from "../../lib/queries";
+import {useDailywireShow, useDailywireUserInfo} from "../../lib/queries";
 import ReadMore from "../../utils/ReadMore";
 import {Controller, SubmitHandler, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
@@ -14,6 +14,7 @@ import {EpisodeIdentifierReg, EpisodeIdentifierValue, ShowTypeReg, ShowTypeValue
 import Select from "react-select";
 import {UseQueryResult} from "@tanstack/react-query";
 import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
+import {DwMembershipLevelReg} from "../../types/dailywire_user_info";
 
 type Props = {
     value: Partial<ShowCreatePayloadIn>
@@ -77,6 +78,34 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
     // --- Fetch DailyWire data using the slug
     const lastPrefilledUrlRef = useRef<string | undefined>(value.url);
     const dw: UseQueryResult<any> = useDailywireShow(slugFromUrl);
+
+    // --- Fetch current DailyWire membership level
+    const dwUserInfo = useDailywireUserInfo();
+    type DwAccessLevelDisplay = typeof DwMembershipLevelReg.values[number] | undefined;
+    const dwAccessLevel: DwAccessLevelDisplay = useMemo(() => {
+        if (dwUserInfo.isSuccess && dwUserInfo.data) {
+            return DwMembershipLevelReg.normalize(dwUserInfo.data.accessLevel) ?? DwMembershipLevelReg.Enum.FREE;
+        }
+        if (dwUserInfo.isError && dwUserInfo.error?.status === 401) {
+            return DwMembershipLevelReg.Enum.FREE;
+        }
+        if (dwUserInfo.isError) {
+            return undefined;
+        }
+        return DwMembershipLevelReg.Enum.FREE;
+    }, [dwUserInfo.isSuccess, dwUserInfo.data, dwUserInfo.isError, dwUserInfo.error]);
+
+    // --- Apply the current membership level to the form
+    useEffect(() => {
+        setValue('membershipLevel', dwAccessLevel ?? '' as any, {shouldDirty: true});
+
+        if (dwUserInfo.isError) {
+            const status = dwUserInfo.error?.status;
+            if (status !== 401) {
+                setError('membershipLevel', {type: 'server', message: `Failed to fetch current membership level: ${dwUserInfo.error?.detail ?? ''}`});
+            }
+        }
+    }, [dwUserInfo.isError, setValue, setError, dwAccessLevel]);
 
     // --- Prefill defaults for type & episodeIdentifier from the external API when available
     useEffect(() => {
@@ -183,9 +212,48 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                         <DailywireShowCard showSlug={slugFromUrl}/>
                     </div>
 
-                    {/* Show type selector under the card */}
+                    {/* Remaining fields dependent on data from DailyWire */}
                     {dw.isSuccess && !!dw.data && (
                         <>
+                            <div className="form-row">
+                                <label htmlFor="membership-level">Membership level</label>
+                                <Controller
+                                    control={control}
+                                    name="membershipLevel"
+                                    render={({field}) => (
+                                        <Select
+                                            inputId="membership-level"
+                                            options={DwMembershipLevelReg.options}
+                                            value={DwMembershipLevelReg.options.find(o => o.value === field.value) ?? null}
+                                            onChange={(opt) => field.onChange(opt?.value ?? "")}
+                                            onBlur={field.onBlur}
+                                            aria-invalid={!!errors.membershipLevel}
+                                            aria-describedby={errors.membershipLevel ? 'membership-level-errors' : 'membership-level-help'}
+                                            isClearable
+                                        />
+                                    )}
+                                />
+                                {errors.membershipLevel && (
+                                    <div id="membership-level-errors" className="error" role="alert" aria-live="polite">
+                                        {errors.membershipLevel.message as string}
+                                    </div>
+                                )}
+                                <div className="help" id="membership-level-help">
+                                    <ReadMore summary={
+                                        <span>Current Daily Wire membership level: {DwMembershipLevelReg.getLabelLoose(dwAccessLevel ?? 'Unknown')}</span>}>
+                                        <p>This sets the membership level used when indexing episodes for this show.</p>
+                                        <p>WireLoft will make sure to only index episodes with at least this membership level.
+                                            If your subscription expires, gives access to a lower level membership than configured here, or
+                                            WireLoft looses access to your DailyWire account alltogether, indexing will be paused.</p>
+                                        <p>If you choose <strong>Highest allowed</strong>, WireLoft will index episodes using the membership level
+                                            currently available on your connected DailyWire account. However, if this ever changes or
+                                            WireLoft looses access to your account, episodes of a different membership level will
+                                            be indexed. This might result in a confusing mix of episodes from different membership
+                                            levels combined.</p>
+                                    </ReadMore>
+                                </div>
+                            </div>
+
                             <div className="form-row">
                                 <label htmlFor="show-type">Show type</label>
                                 <Controller

@@ -1,5 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react'
 import { DeviceAuthResponse, DeviceAuthResponseSchema, PollResponse, PollResponseSchema, StatusResponse, StatusResponseSchema } from '../../types/schemas/dailywire_auth'
+import { DailywireUserInfoRead, DailywireUserInfoReadSchema } from '../../types/schemas/dailywire_user_info'
+import {DwMembershipLevelReg} from "../../types/dailywire_user_info";
 
 
 function apiBase() {
@@ -12,12 +14,34 @@ export default function DailywireAuthCard() {
     const [loading, setLoading] = useState<boolean>(true)
     const [error, setError] = useState<string | null>(null)
 
+    // User info state (fetched when authenticated)
+    const [userInfo, setUserInfo] = useState<DailywireUserInfoRead | null>(null)
+    const [userInfoLoading, setUserInfoLoading] = useState<boolean>(false)
+    const [userInfoError, setUserInfoError] = useState<string | null>(null)
+
     // Device flow state
     const [flow, setFlow] = useState<DeviceAuthResponse | null>(null)
     const [flowStatus, setFlowStatus] = useState<PollResponse | null>(null)
     const [isPolling, setIsPolling] = useState<boolean>(false)
 
     const abortRef = useRef<AbortController | null>(null)
+
+    const fetchUserInfo = useCallback(async () => {
+        setUserInfoLoading(true)
+        setUserInfoError(null)
+        try {
+            const base = (window as any).appConfig?.API_URL?.replace(/\/+$/, '')
+            const r = await fetch(`${base}/dailywire/user-info`, {credentials: 'include'})
+            if (!r.ok) throw new Error(`Failed to load user info (HTTP ${r.status})`)
+            const j = DailywireUserInfoReadSchema.parse(await r.json())
+            setUserInfo(j)
+        } catch (e: any) {
+            setUserInfo(null)
+            setUserInfoError(e?.message || 'Failed to load user info')
+        } finally {
+            setUserInfoLoading(false)
+        }
+    }, [])
 
     const refreshStatus = useCallback(async () => {
         setLoading(true)
@@ -27,6 +51,13 @@ export default function DailywireAuthCard() {
             if (!r.ok) throw new Error(`Failed to load status (HTTP ${r.status})`)
             const j = StatusResponseSchema.parse(await r.json())
             setStatus(j)
+            if (j.authenticated) {
+                await fetchUserInfo()
+            } else {
+                setUserInfo(null)
+                setUserInfoError(null)
+                setUserInfoLoading(false)
+            }
         } catch (e: any) {
             setError(e?.message || 'Failed to load status')
         } finally {
@@ -170,6 +201,13 @@ export default function DailywireAuthCard() {
                         {status?.authenticated ? (
                             <>
                                 <p>You are connected to DailyWire.</p>
+                                {userInfoLoading ? (
+                                    <p>Loading account info…</p>
+                                ) : userInfoError ? (
+                                    <p style={{color: 'var(--red-700, #b91c1c)'}}>Failed to load account info: {userInfoError}</p>
+                                ) : userInfo ? (
+                                    <p>Membership level: { DwMembershipLevelReg.getLabelLoose(userInfo.accessLevel) }</p>
+                                ) : null}
                                 <div style={{display: 'flex', gap: 8, flexWrap: 'wrap'}}>
                                     <button className="btn" onClick={refreshStatus}>Refresh status</button>
                                     <button className="btn btn-danger" onClick={disconnect}>Disconnect</button>
