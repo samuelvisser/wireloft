@@ -1,8 +1,8 @@
-import {useCallback, useEffect} from 'react'
+import {useCallback, useEffect, useMemo} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
-import {useLocalMediaProfiles, useShowSeasons} from '../../lib/queries'
+import {useDownloadProfilesByShowSlug, useLocalMediaProfiles, useShowSeasons} from '../../lib/queries'
 import DownloadProfileForm, {DownloadProfileMode} from '../../components/DownloadProfile/DownloadProfileForm'
 import {
     PodcastDownloadProfileUpdateIn,
@@ -17,6 +17,7 @@ import Select from 'react-select'
 import {useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_base";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
+import ReadMore from "../../utils/ReadMore";
 
 type RouteParams = { type?: DownloadProfileMode; id?: string }
 
@@ -45,6 +46,7 @@ export default function EditDownloadProfilePage() {
 
     const {data: mediaProfiles} = useLocalMediaProfiles()
     const {data: seasonsData} = useShowSeasons(downloadProfile?.showSlug)
+    const {data: showProfiles} = useDownloadProfilesByShowSlug(downloadProfile?.showSlug)
 
     const formPodcast = useForm<PodcastDownloadProfileUpdateIn>({
         resolver: zodResolver(PodcastDownloadProfileUpdateSchema),
@@ -73,6 +75,18 @@ export default function EditDownloadProfilePage() {
 
 
     const mediaProfileReg = useLocalMediaProfileSelectRegistry(mediaProfiles)
+
+    // Compute which local media profiles are already used by this show and must be disabled,
+    // but allow the current profile's own media profile to remain selectable.
+    const disabledLocalMediaProfileIds = useMemo(() => {
+        const ids = (showProfiles ?? [])
+            .map((p) => p.localMediaProfileId)
+            .filter((v): v is number => typeof v === 'number')
+        const set = new Set<number>(ids)
+        const currentId = downloadProfile?.localMediaProfileId
+        if (typeof currentId === 'number') set.delete(currentId)
+        return set
+    }, [showProfiles, downloadProfile?.localMediaProfileId])
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
@@ -161,9 +175,10 @@ export default function EditDownloadProfilePage() {
                                     onChange={(opt) => field.onChange((opt as any) ? Number((opt as any).value) : null)}
                                     onBlur={field.onBlur}
                                     isDisabled={mediaProfileReg.options.length === 0}
+                                    isOptionDisabled={(opt) => disabledLocalMediaProfileIds.has(Number((opt as any).value))}
                                     placeholder={!mediaProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
                                     aria-invalid={!!errors.localMediaProfileId}
-                                    aria-describedby={errors.localMediaProfileId ? 'local-media-profile-errors' : undefined}
+                                    aria-describedby={errors.localMediaProfileId ? 'local-media-profile-errors' : 'local-media-profile-help'}
                                 />
                             )}
                         />
@@ -172,6 +187,14 @@ export default function EditDownloadProfilePage() {
                                 {errors.localMediaProfileId.message as string}
                             </div>
                         )}
+                        <div className="help" id="local-media-profile-help">
+                            <ReadMore summary={<span>The Local Media Profile defines the type and output path of downloaded media.</span>}>
+                                <p>When changing the Local Media Profile for an existing Download Profile, new episodes will be downloaded to the new
+                                    location in the new format. Old episodes will be left in their original location.</p>
+                                <p><strong>NOTE:</strong> Only one Download Profile can use any specific Local Media Profile per show. Media Profiles
+                                    that are already in use by another Download Profile in this show are disabled here.</p>
+                            </ReadMore>
+                        </div>
                     </div>
 
                     <DownloadProfileForm form={form as any} mode={mode} seasons={seasonsData} showRoot={false}/>

@@ -106,11 +106,12 @@ export default function AddDownloadProfilePage() {
 
     // Compute which local media profiles are already used by this show and must be disabled
     const disabledLocalMediaProfileIds = useMemo(() => {
+        if (!selectedShowSlug) return new Set<number>()
         const ids = (showProfiles ?? [])
             .map((p) => p.localMediaProfileId)
             .filter((v): v is number => typeof v === 'number')
         return new Set<number>(ids)
-    }, [showProfiles])
+    }, [showProfiles, selectedShowSlug])
 
     // If the currently selected Local Media Profile becomes disabled for the selected show, clear it
     useEffect(() => {
@@ -220,8 +221,8 @@ export default function AddDownloadProfilePage() {
                     <div className="help" id="local-media-profile-help">
                         <ReadMore summary={<span>The Local Media Profile defines the type and output path of downloaded media.</span>}>
                             <p>Add a Local Media Profile to define the type of media to download and where to store it.</p>
-                            <p>Only one Download Profile can use any specific Local Media Profile per show. Media Profiles that
-                            are already in use by another Download Profile in "{selectedShow?.title}" are disabled here.</p>
+                            <p><strong>NOTE:</strong> Only one Download Profile can use any specific Local Media Profile per show. Media Profiles that
+                            are already in use by another Download Profile in this show are disabled here.</p>
                         </ReadMore>
                     </div>
                 </div>
