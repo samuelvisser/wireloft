@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import computed_field
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.show_types import ShowType, EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
 
@@ -17,6 +18,7 @@ class _ShowAPIBaseIn(RequestBase):
     title: str
     description: str
     url: str
+    membership_level: str
     author_name: str
     author_headshot_path: Optional[str] = None
     background_image_path: Optional[str] = None
@@ -31,6 +33,7 @@ class ShowAPICreate(_ShowAPIBaseIn):
 
     dw_id: str
     slug: str
+    membership_level: DwMembershipLevel
     type: ShowType
     episode_identifier: EpisodeIdentifier
     author_slug: str
@@ -54,6 +57,7 @@ class _ShowAPIBaseOut(ResponseBase):
     uuid: str
     dw_id: str
     slug: str
+    membership_level: Union[DwMembershipLevel, str]
     type: Union[ShowType, str]
     episode_identifier: Union[EpisodeIdentifier, str]
     author_slug: str

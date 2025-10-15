@@ -23,6 +23,7 @@ class Show(Base):
     title: Mapped[str]
     description: Mapped[Optional[str]]
     url: Mapped[str] = mapped_column(unique=True)
+    membership_level: Mapped[str]
     type: Mapped[str]
     episode_identifier: Mapped[str]
     author_name: Mapped[str]

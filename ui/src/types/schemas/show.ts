@@ -122,6 +122,7 @@ export const ShowReadSchema = z.looseObject({
     uuid: z.string(),
     dwId: z.string(),
     slug: z.string(),
+    membershipLevel: z.union([z.enum(DwMembershipLevelReg.values), z.string()]),
     type: z.union([z.enum(ShowTypeReg.values), z.string()]),
     episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.string()]),
     authorSlug: z.string(),
