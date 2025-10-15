@@ -23,6 +23,7 @@ class Episode(MediaItemBase):
     publish_status: Mapped[str]
     video_url: Mapped[Optional[str]]
     audio_url: Mapped[Optional[str]]
+    sharing_url: Mapped[Optional[str]]
     went_live_date: Mapped[Optional[datetime]]
     published_date: Mapped[Optional[datetime]]
     redownloaded_date: Mapped[Optional[datetime]]
