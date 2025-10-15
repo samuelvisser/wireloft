@@ -3,8 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason, ByNextPage
-from dailywire_api.records import EpisodeRecord, ShowRecord
-from dailywire_api.records.EpisodeDetailRecord import EpisodeDetailRecord
+from dailywire_api.records import EpisodeRecord
 
 
 def get_episodes_from_show_list(

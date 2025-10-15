@@ -237,9 +237,8 @@ class MiddlewareClient:
             try:
                 ep = EpisodeRecord.model_validate(it)
                 episodes.append(ep)
-            except ValidationError:
-                # Skip items that fail validation; continue best-effort
-                continue
+            except ValidationError as e:
+                raise MiddlewareAPIError("Could not validate episode record") from e
 
         next_url = payload.get('nextPageUrl') or payload.get('nextPageURL') or None
 
