@@ -4,16 +4,16 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-def get_default_config():
-    """Lazily load config from wireloft_config """
+def get_default_config() -> "DeviceAuthConfig":
+    """Lazily load config from wireloft_config and return a DeviceAuthConfig instance."""
     from wireloft_config import get_settings
     settings = get_settings()
-    return {
-        "issuer": settings.dw_oauth.issuer,
-        "client_id": settings.dw_oauth.client_id,
-        "scope": settings.dw_oauth.scope,
-        "audience": settings.dw_oauth.audience,
-    }
+    return DeviceAuthConfig(
+        issuer=settings.dw_oauth.issuer,
+        client_id=settings.dw_oauth.client_id,
+        scope=settings.dw_oauth.scope,
+        audience=settings.dw_oauth.audience,
+    )
 
 
 @dataclass(frozen=True)

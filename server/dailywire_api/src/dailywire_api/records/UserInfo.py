@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, AliasChoices
 
 from dailywire_api.records import BaseRecord
 
 class UserInfo(BaseRecord):
 
-    person_id: str
+    person_id: str = Field(validation_alias=AliasChoices('personId', 'personID'))
     recurly_account_code: str
     email: str
     first_name: str
@@ -16,4 +16,4 @@ class UserInfo(BaseRecord):
     access_level: str
     account_created_at: str
     plan_type: str
-    subscription_id: str = Field(validation_alias='subscriptionId')
+    subscription_id: str = Field(validation_alias=AliasChoices('subscriptionId', 'subscriptionID'))

@@ -30,12 +30,10 @@ def get_client() -> DeviceAuthClient:
     """Get or create the shared DeviceAuthClient instance."""
     global _client
     if _client is None:
-        from dailywire_authorisation import DeviceAuthConfig
         from dailywire_authorisation.config import get_default_config
 
-        # Get config dict and convert to DeviceAuthConfig instance
-        config_dict = get_default_config()
-        config = DeviceAuthConfig(**config_dict)
+        # Get default config (DeviceAuthConfig instance)
+        config = get_default_config()
         _client = DeviceAuthClient(config=config)
     return _client
 
