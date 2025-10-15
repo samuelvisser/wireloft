@@ -10,7 +10,7 @@ class _SeasonAPIBaseIn(RequestBase):
     name: str
 
 
-class SeasonAPIDetached(_SeasonAPIBaseIn):
+class SeasonAPIRequestDetached(_SeasonAPIBaseIn):
     """Request body without external relations, allowing for dynamic insertion"""
 
     dw_id: str
@@ -32,10 +32,10 @@ class SeasonAPIUpdate(_SeasonAPIBaseIn):
 # ---------- Lenient output (read) ----------
 class _SeasonAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, no constraints."""
-    name: str
     id: int
+    show_id: int
     dw_id: str
-    show_id: str
+    name: str
     slug: str
 
 

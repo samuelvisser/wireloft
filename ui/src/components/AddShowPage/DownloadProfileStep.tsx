@@ -1,10 +1,10 @@
 import DailywireShowCard from './DailywireShowCard'
 import {ShowTypeReg, ShowTypeValue} from '../../types/show'
-import DownloadProfileSeriesStep from './DownloadProfileVersions/DownloadProfileSeriesStep'
-import DownloadProfilePodcastStep from "./DownloadProfileVersions/DownloadProfilePodcastStep";
+import SeriesDownloadProfileStep from './DownloadProfileVersions/SeriesDownloadProfileStep'
+import PodcastDownloadProfileStep from "./DownloadProfileVersions/PodcastDownloadProfileStep";
 import {
     DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut
-} from "../../types/schemas/show_with_profiles";
+} from "../../types/schemas/show_as_bundle";
 import {SeasonDetachedOut} from "../../types/schemas/season";
 
 
@@ -35,7 +35,7 @@ export default function DownloadProfileStep({value, onChange, onSubmit, onBack, 
         <div className="wizard-with-aside">
             <div className="wizard-main">
                 {showType === ShowTypeReg.Enum.podcast ? (
-                    <DownloadProfilePodcastStep
+                    <PodcastDownloadProfileStep
                         value={value.podcast}
                         onChange={onChange.podcast}
                         onSubmit={onSubmit.podcast}
@@ -44,7 +44,7 @@ export default function DownloadProfileStep({value, onChange, onSubmit, onBack, 
                         onCancel={onCancel}
                     />
                 ) : (
-                    <DownloadProfileSeriesStep
+                    <SeriesDownloadProfileStep
                         value={value.series}
                         onChange={onChange.series}
                         onSubmit={onSubmit.series}

@@ -1,11 +1,11 @@
 // Simple localStorage persistence for React Query data we care about
-// Focuses on 'shows' and 'mediaProfiles' to prevent flicker on reload
+// Focuses on 'shows' and 'localMediaProfiles' to prevent flicker on reload
 
-import {MediaProfileRead} from "../types/schemas/media_profile";
+import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
 
 const STORAGE_PREFIX = 'wl_rq_v1:'
 const KEY_SHOWS = STORAGE_PREFIX + 'shows'
-const KEY_PROFILES = STORAGE_PREFIX + 'mediaProfiles'
+const KEY_PROFILES = STORAGE_PREFIX + 'localMediaProfiles'
 
 function safeParse<T>(raw: string | null): T | undefined {
   if (!raw) return undefined
@@ -36,7 +36,7 @@ export function loadProfilesFromStorage(): any[] | undefined {
   return safeParse<any[]>(localStorage.getItem(KEY_PROFILES))
 }
 
-export function saveProfilesToStorage(data: MediaProfileRead[] | undefined) {
+export function saveProfilesToStorage(data: LocalMediaProfileRead[] | undefined) {
   try {
     if (!data) {
       localStorage.removeItem(KEY_PROFILES)

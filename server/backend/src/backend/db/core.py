@@ -4,11 +4,11 @@ from pathlib import Path
 from typing import Optional
 import importlib
 import os
-from datetime import datetime, timezone
+import pkgutil
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import declarative_base, sessionmaker, Session, DeclarativeBase
+from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 
 # include more patterns if you want; the key one is "uq"
 naming_convention = {
@@ -75,24 +75,20 @@ def get_db_path() -> Path:
 
 def create_tables() -> None:
     """
-    Import model modules so they are registered with Base, then create tables.
+    Auto-discover and import all ORM model modules, then create tables.
     """
-    # Import models explicitly to ensure mappings are registered
-    # Order matters due to inheritance: Base tables first, dependents after
-    # Base tables
-    importlib.import_module("backend.db.models.DownloadProfileBase")
-    importlib.import_module("backend.db.models.Episode")
-    importlib.import_module("backend.db.models.MediaDownload")
-    importlib.import_module("backend.db.models.MediaItem")
-    importlib.import_module("backend.db.models.MediaProfile")
-    importlib.import_module("backend.db.models.Season")
-    importlib.import_module("backend.db.models.Settings")
+    package_name = "backend.db.models"
+    package = importlib.import_module(package_name)
 
-    # Dependent tables
-    importlib.import_module("backend.db.models.DownloadProfilePodcast")
-    importlib.import_module("backend.db.models.DownloadProfileSeries")
-    importlib.import_module("backend.db.models.Movie")
-    importlib.import_module("backend.db.models.Show")
+    # Recursively import all submodules under backend.db.models so all
+    # Declarative mappings are registered with Base.metadata.
+    if hasattr(package, "__path__"):
+        for _, name, _ in pkgutil.walk_packages(package.__path__, package_name + "."):
+            importlib.import_module(name)
+
+    # Ensure mappers are configured before emitting DDL
+    from sqlalchemy.orm import configure_mappers
+    configure_mappers()
 
     # Scheduler tables
     try:
@@ -114,12 +110,9 @@ def seed_db() -> None:
     # Ensure tables are present
     create_tables()
 
-    # Import here to avoid circular imports at module import time
-    from backend.db.models.MediaProfile import MediaProfile
-    from backend.db.models.Show import Show
-    from backend.db.models.Episode import Episode
-    from backend.db.models.Settings import Settings
-    from backend.db.fake_data import media_profiles as seed_media_profiles
+    # Import ORM classes from the aggregated models package (re-exported in backend.db.models)
+    from backend.db.models import LocalMediaProfile, Show, Episode, Settings
+    from backend.db.fake_data import local_media_profiles as seed_local_media_profiles
     from backend.db.fake_data import shows as seed_shows
     from backend.db.fake_data import episodes as seed_episodes
     from backend.db.fake_data import settings as seed_settings
@@ -127,13 +120,13 @@ def seed_db() -> None:
     session = get_session()
     try:
         # Media Profiles: upsert by id
-        for mp in seed_media_profiles:
+        for mp in seed_local_media_profiles:
             pk = mp.get("id")
             if pk is None:
                 continue
-            existing = session.get(MediaProfile, pk)
+            existing = session.get(LocalMediaProfile, pk)
             if existing is None:
-                session.add(MediaProfile(**mp))
+                session.add(LocalMediaProfile(**mp))
 
         # Shows: upsert by id
         for s in seed_shows:

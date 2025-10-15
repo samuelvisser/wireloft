@@ -29,14 +29,13 @@ def _status_for(start: int, index: int) -> str:
 
 
 # Hardcoded media profiles
-media_profiles: List[Dict[str, Any]] = [
+local_media_profiles: List[Dict[str, Any]] = [
     {
         "id": 1,
         "slug": "default-1080p",
         "name": "Default 1080p",
         "output_template": "D:/Media/Shows/{show}/{season}",
         "preferred_format": "1080p",
-        "download_series_images": True,
         "created_date": _now(),
         "modified_date": _now(),
     },
@@ -46,7 +45,6 @@ media_profiles: List[Dict[str, Any]] = [
         "name": "Mobile 720p backend",
         "output_template": "E:/Mobile/Shows/{show}",
         "preferred_format": "720p",
-        "download_series_images": False,
         "created_date": _now(),
         "modified_date": _now(),
     },
@@ -60,7 +58,7 @@ shows: List[Dict[str, Any]] = [
         "uuid": "uuid-1",
         "dw_id": "dw-1",
         "slug": "the-ben-shapiro-show",
-        "media_profile_id": 1,
+        "local_media_profile_id": 1,
         "title": "The Ben Shapiro Show",
         "description": None,
         "url": "https://www.dailywire.com/show/the-ben-shapiro-show",
@@ -88,7 +86,7 @@ shows: List[Dict[str, Any]] = [
         "uuid": "uuid-2",
         "dw_id": "dw-2",
         "slug": "the-matt-walsh-show",
-        "media_profile_id": 1,
+        "local_media_profile_id": 1,
         "title": "The Matt Walsh Show",
         "description": None,
         "url": "https://www.dailywire.com/show/the-matt-walsh-show",
@@ -116,7 +114,7 @@ shows: List[Dict[str, Any]] = [
         "uuid": "uuid-3",
         "dw_id": "dw-3",
         "slug": "ben-after-dark",
-        "media_profile_id": 2,
+        "local_media_profile_id": 2,
         "title": "Ben After Dark",
         "description": None,
         "url": "https://www.dailywire.com/show/ben-after-dark",

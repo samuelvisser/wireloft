@@ -7,6 +7,8 @@ type OptionMeta = {
 
 type SelectRegistrySpec<T extends string> = Record<T, OptionMeta>;
 
+export type SelectRegistry = ReturnType<typeof createSelectRegistry>;
+
 export function createSelectRegistry<const T extends string>(name: string, spec: SelectRegistrySpec<T>) {
     // Values are the keys of the spec, in declaration order
     const values = Object.keys(spec) as T[];
@@ -38,7 +40,11 @@ export function createSelectRegistry<const T extends string>(name: string, spec:
 
     // Convenience accessors
     const meta = (v: T) => spec[v];
+
+    // Returns the label for the given value, or throws if not found
     const getLabel = (v: T) => spec[v].label;
+
+    // Returns the label for the given value, or the value itself if not found
     const getLabelLoose = (x: T | string) => {
         const n = normalize(x);
         if (n !== null) return spec[n].label;
@@ -63,5 +69,3 @@ export function createSelectRegistry<const T extends string>(name: string, spec:
         describe,
     };
 }
-
-export type Registry<T extends string> = ReturnType<typeof createSelectRegistry<T>>;

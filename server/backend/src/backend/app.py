@@ -71,15 +71,18 @@ def create_app() -> FastAPI:
         dailywire_router,
         download_profile_podcast_router,
         download_profile_series_router,
+        download_profile_router,
         media_download_router,
         show_router,
         movie_router,
         episode_router,
         season_router,
         setting_router,
-        media_profile_router,
+        local_media_profile_router,
         meta_router,
         config_router,
+        rss_stream_profile_router,
+        stream_profile_router,
         tasks_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
@@ -91,15 +94,18 @@ def create_app() -> FastAPI:
     app.include_router(dailywire_router, prefix="/api")
     app.include_router(download_profile_podcast_router, prefix="/api")
     app.include_router(download_profile_series_router, prefix="/api")
+    app.include_router(download_profile_router, prefix="/api")
     app.include_router(episode_router, prefix="/api")
     app.include_router(season_router, prefix="/api")
     app.include_router(media_download_router, prefix="/api")
     app.include_router(show_router, prefix="/api")
     app.include_router(movie_router, prefix="/api")
     app.include_router(setting_router, prefix="/api")
-    app.include_router(media_profile_router, prefix="/api")
+    app.include_router(local_media_profile_router, prefix="/api")
     app.include_router(meta_router, prefix="/api")
     app.include_router(config_router, prefix="/api")
+    app.include_router(rss_stream_profile_router, prefix="/api")
+    app.include_router(stream_profile_router, prefix="/api")
     app.include_router(tasks_router, prefix="/api")
 
     # Start scheduler and sync task registry if enabled

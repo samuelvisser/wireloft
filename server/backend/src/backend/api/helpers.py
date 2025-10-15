@@ -11,9 +11,11 @@ def create_database_fields(model_cls, data: dict):
 
 
 # Makes sure to map only fields that exist in the database. Throws error if extra fields.
-def update_database_fields(db_model: DatabaseModel, data: APIModel) -> DatabaseModel:
+def update_database_fields(db_model: DatabaseModel, data: APIModel, exclude_fields: set[str] | None = None) -> DatabaseModel:
 
     updates = data.model_dump(by_alias=True)
+    if exclude_fields:
+        updates = {k: v for k, v in updates.items() if k not in exclude_fields}
     for field, value in updates.items():
         if not hasattr(db_model, field):
             raise HTTPException(status_code=422, detail=f"Field {field} does not exist in database")

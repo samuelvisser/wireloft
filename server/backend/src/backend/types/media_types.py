@@ -5,5 +5,5 @@ class MediaType(Enum):
     EPISODE = "episode"
     MOVIE = "movie"
 
-    # For instances of MediaItem class (parent class)
-    MEDIA = "media"
+    # For instances of parent class
+    BASE = "base"

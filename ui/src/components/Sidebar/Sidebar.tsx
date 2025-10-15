@@ -1,15 +1,25 @@
 import {NavLink} from 'react-router-dom'
-import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {library, IconProp} from '@fortawesome/fontawesome-svg-core'
+import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
-import Footer from '../Footer'
+import Footer from './Footer'
+import Navbar from './Navbar'
+import type { NavItem } from './navTypes'
 
 // Register the kit's solid icon pack so we can reference icons by [prefix, name]
 library.add(fas)
 
-const items: Array<{ path: string; label: string; icon: IconProp; end?: boolean }> = [
+const items: NavItem[] = [
     {path: '/', label: 'Home', icon: ['fas', 'house'], end: true},
-    {path: '/profiles', label: 'Media Profiles', icon: ['fas', 'clapperboard']},
+    {path: '/shows', label: 'Shows', icon: ['fas', 'tv']},
+    {
+        label: 'Profiles',
+        icon: ['fas', 'layer-group'],
+        children: [
+            { path: '/local-media-profiles', label: 'Local Media Profiles', icon: ['fas', 'clapperboard'] },
+            { path: '/download-profiles', label: 'Download Profiles', icon: ['fas', 'download'] },
+            { path: '/stream-profiles', label: 'Stream Profiles', icon: ['fas', 'rss'] },
+        ]
+    },
     {path: '/settings', label: 'Settings', icon: ['fas', 'gear']},
 ]
 
@@ -25,19 +35,7 @@ export default function Sidebar() {
 
             <div className="sidebar-inner">
                 <nav className="nav" aria-label="Primary">
-                    {items.map((item) => (
-                        <NavLink
-                            key={item.path}
-                            to={item.path}
-                            end={item.end}
-                            className={({isActive}) => 'nav-item' + (isActive ? ' active' : '')}
-                        >
-              <span className="icon" aria-hidden>
-                <FontAwesomeIcon icon={item.icon} />
-              </span>
-                            <span>{item.label}</span>
-                        </NavLink>
-                    ))}
+                    <Navbar items={items} />
                 </nav>
             </div>
             <Footer wrapperClass="sidebar-footer" />

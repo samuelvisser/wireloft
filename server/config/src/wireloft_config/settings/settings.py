@@ -21,6 +21,7 @@ class AppSettings(SettingsBase):
     crypto: CryptoSettings = Field(default_factory=CryptoSettings)
     session: SessionSettings = Field(default_factory=SessionSettings)
     admin_auth: AdminAuthSettings = Field(default_factory=AdminAuthSettings)
+    dw_api: DailyWireAPISettings = Field(default_factory=DailyWireAPISettings)
     dw_oauth: OAuthSettings = Field(default_factory=OAuthSettings)
     dw_timeout: TimeoutSettings = Field(default_factory=TimeoutSettings)
     scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)

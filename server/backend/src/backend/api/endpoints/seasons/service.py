@@ -8,19 +8,25 @@ from backend.api.models.season import *
 from backend.db.models import Season
 
 
-def get_seasons_list(s: Session) -> list[SeasonAPIRead]:
+def get_seasons_list(s: Session, show_slug: str) -> list[SeasonAPIRead]:
     seasons = (
         s.query(Season)
+        .filter(
+            Season.show.has(slug=show_slug)
+        )
         .order_by(Season.id)
         .all()
     )
     return [SeasonAPIRead.model_validate(season) for season in seasons]
 
 
-def get_season(s: Session, season_slug: str) -> SeasonAPIRead:
+def get_season(s: Session, show_slug: str, season_slug: str) -> SeasonAPIRead:
     season = (
         s.query(Season)
-        .filter_by(slug=season_slug)
+        .filter(
+            Season.slug == season_slug,
+            Season.show.has(slug=show_slug)
+        )
         .one_or_none()
     )
     if season is None:
@@ -39,10 +45,13 @@ def create_season(s: Session, body: SeasonAPICreate) -> SeasonAPIRead:
     return SeasonAPIRead.model_validate(season)
 
 
-def update_season(s: Session, season_slug: str, body: SeasonAPIUpdate) -> SeasonAPIRead:
+def update_season(s: Session, show_slug: str, season_slug: str, body: SeasonAPIUpdate) -> SeasonAPIRead:
     season = (
         s.query(Season)
-        .filter_by(slug=season_slug)
+        .filter(
+            Season.slug == season_slug,
+            Season.show.has(slug=show_slug)
+        )
         .one_or_none()
     )
     if season is None:
@@ -54,10 +63,13 @@ def update_season(s: Session, season_slug: str, body: SeasonAPIUpdate) -> Season
     return SeasonAPIRead.model_validate(season)
 
 
-def delete_season(s: Session, season_slug: str) -> SeasonAPIRead:
+def delete_season(s: Session, show_slug: str, season_slug: str) -> SeasonAPIRead:
     season = (
         s.query(Season)
-        .filter_by(slug=season_slug)
+        .filter(
+            Season.slug == season_slug,
+            Season.show.has(slug=show_slug)
+        )
         .one_or_none()
     )
     if season is None:

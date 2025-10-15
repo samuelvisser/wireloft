@@ -5,7 +5,7 @@ from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.movie import *
-from backend.db.models import Movie
+from backend.db.models.media_item import Movie
 
 
 def get_movies_list(s: Session) -> list[MovieAPIRead]:

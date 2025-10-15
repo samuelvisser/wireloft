@@ -16,6 +16,15 @@ const dailyWireUrl = z
     .nonempty({message: "URL is required"})
     .default('')
     .transform(ensureProtocol)
+    .transform((s) => {
+        try {
+            const u = new URL(s);
+            return `${u.origin}${u.pathname}`;
+        } catch {
+            // let the later refinements surface the error
+            return s;
+        }
+    })
     .refine((s) => {
         try {
             const u = new URL(s);

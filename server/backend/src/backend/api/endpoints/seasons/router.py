@@ -4,21 +4,21 @@ from .service import *
 from ...models.season import *
 from backend.app import db_session
 
-router = APIRouter(prefix="/seasons", tags=["Seasons"])
+router = APIRouter(prefix="/shows/{show_slug}/seasons", tags=["Seasons"])
 
 @router.get("", response_model=list[SeasonAPIRead])
-def seasons_list():
+def season_list(show_slug: str):
     """
-    List all seasons in the system.
+    List all seasons for a specific show.
 
-    Returns a collection of all season records across all shows.
+    Returns a collection of all seasons associated with the specified show slug.
     """
     with db_session() as s:
-        return get_seasons_list(s)
+        return get_seasons_list(s, show_slug)
 
 
 @router.post("", response_model=SeasonAPIRead, status_code=status.HTTP_201_CREATED)
-def seasons_create(body: SeasonAPICreate):
+def season_create(body: SeasonAPICreate):
     """
     Create a new season for a show.
 
@@ -36,18 +36,18 @@ def seasons_create(body: SeasonAPICreate):
 
 
 @router.get("/{season_slug}", response_model=SeasonAPIRead)
-def seasons_detail(season_slug: str):
+def season_detail(show_slug: str, season_slug: str):
     """
     Retrieve detailed information for a specific season.
 
     Returns complete season metadata including title, number, and associated episodes.
     """
     with db_session() as s:
-        return get_season(s, season_slug)
+        return get_season(s, show_slug, season_slug)
 
 
 @router.patch("/{season_slug}", response_model=SeasonAPIRead)
-def seasons_update(season_slug: str, body: SeasonAPIUpdate):
+def season_update(show_slug: str, season_slug: str, body: SeasonAPIUpdate):
     """
     Update an existing season's metadata.
 
@@ -56,7 +56,7 @@ def seasons_update(season_slug: str, body: SeasonAPIUpdate):
     """
     with db_session() as s:
         try:
-            result = update_season(s, season_slug, body)
+            result = update_season(s, show_slug, season_slug, body)
             s.commit()
             return result
         except Exception:
@@ -65,7 +65,7 @@ def seasons_update(season_slug: str, body: SeasonAPIUpdate):
 
 
 @router.delete("/{season_slug}", response_model=SeasonAPIRead)
-def seasons_delete(season_slug: str):
+def season_delete(show_slug: str, season_slug: str):
     """
     Delete a season from the system.
 
@@ -74,7 +74,7 @@ def seasons_delete(season_slug: str):
     """
     with db_session() as s:
         try:
-            result = delete_season(s, season_slug)
+            result = delete_season(s, show_slug, season_slug)
             s.commit()
             return result
         except Exception:
