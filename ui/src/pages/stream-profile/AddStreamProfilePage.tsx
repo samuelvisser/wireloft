@@ -1,8 +1,8 @@
-import {useCallback, useEffect, useMemo, useState} from 'react'
+import {useCallback, useState} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate} from 'react-router-dom'
-import {useShows, useStreamProfilesByShowSlug} from '../../lib/queries'
+import {useShows} from '../../lib/queries'
 import {buildShowSelectRegistry} from '../../types/show'
 import {SelectRegistry} from '../../utils/selectRegistry'
 import Select from 'react-select'
@@ -29,7 +29,7 @@ export default function AddStreamProfilePage() {
         shouldFocusError: true,
         defaultValues: getZodDefaults(RssStreamProfileCreateSchema),
     })
-    const {watch, getValues, formState: {errors, isSubmitting}} = form
+    const {watch, formState: {errors, isSubmitting}} = form
 
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
 
@@ -52,39 +52,6 @@ export default function AddStreamProfilePage() {
         onSuccess,
         successStatuses: [201],
     })
-
-    // Track selected show id
-    const showId = watch('showId')
-
-    // Resolve selected show and slug
-    const selectedShow = useMemo(() => {
-        if (!Array.isArray(shows)) return undefined
-        const sid = Number(showId)
-        return shows.find((s: any) => s.id === sid)
-    }, [shows, showId])
-    const selectedShowSlug: string | undefined = selectedShow?.slug
-
-    // Fetch existing stream profiles for the selected show
-    const {data: showProfiles} = useStreamProfilesByShowSlug(selectedShowSlug)
-
-    // Compute disabled preferred formats for RSS profiles in this show
-    const disabledFormats = useMemo(() => {
-        const vals = (showProfiles ?? [])
-            .filter((p: any) => p?.type === 'rss')
-            .map((p: any) => p?.preferredFormat)
-            .filter((v: any) => typeof v === 'string')
-        return new Set<string>(vals)
-    }, [showProfiles])
-
-    // If currently selected preferred format becomes disabled for the selected show, clear it
-    useEffect(() => {
-        const current = getValues?.('preferredFormat')
-        if (current && disabledFormats.has(String(current))) {
-            form.setValue('preferredFormat', undefined as any, {shouldDirty: true})
-        }
-    }, [disabledFormats, getValues])
-
-    const isPreferredFormatDisabled = useCallback((value: string) => disabledFormats.has(String(value)), [disabledFormats])
 
     return (
         <section className="view" aria-labelledby="add-stream-profile-title">
@@ -153,11 +120,11 @@ export default function AddStreamProfilePage() {
                 </div>
 
                 {/* Stream Profile Form (common + variant-specific fields) */}
-                <StreamProfileForm form={form as any} mode={mode} showRoot={false} isPreferredFormatDisabled={isPreferredFormatDisabled}/>
+                <StreamProfileForm form={form as any} mode={mode} showRoot={false} />
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>
-                    <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting || !showId}/>
+                    <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting || !watch('showId')}/>
                 </div>
             </form>
         </section>

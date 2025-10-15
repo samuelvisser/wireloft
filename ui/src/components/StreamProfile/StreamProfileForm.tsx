@@ -13,10 +13,9 @@ type Props = {
     form: UseFormReturn<any>
     mode: StreamProfileMode
     showRoot?: boolean
-    isPreferredFormatDisabled?: (value: string) => boolean
 }
 
-export default function StreamProfileForm({form, mode, showRoot, isPreferredFormatDisabled}: Props) {
+export default function StreamProfileForm({form, mode, showRoot}: Props) {
     const {control, formState: {errors}, setValue, watch} = form
     showRoot ??= true
 
@@ -131,7 +130,6 @@ export default function StreamProfileForm({form, mode, showRoot, isPreferredForm
                                 aria-invalid={!!errors.preferredFormat}
                                 aria-describedby={errors.preferredFormat ? 'sp-pref-format-error' : 'sp-pref-format-help'}
                                 isClearable
-                                isOptionDisabled={(opt) => !!isPreferredFormatDisabled?.(((opt as any)?.value) as string)}
                             />
                         )}
                     />
@@ -144,12 +142,7 @@ export default function StreamProfileForm({form, mode, showRoot, isPreferredForm
                         <ReadMore summary={<span>Content type to prefer while streaming.</span>}>
                             <p>Streams the specified content type if available. If not, it will try to stream the next best option (WireLoft will
                                 never mix audio and video in the same stream).</p>
-
                             <p>If you need audio-only content, you can set this to 'Audio Only' to stream audio only.</p>
-
-                            <p><strong>NOTE:</strong> Only one Stream Profile can use the same profile type and preferred format combination
-                                per show. Formats that are already in use by another Stream Profile of the same type in this show
-                                are disabled here.</p>
                         </ReadMore>
                     </div>
                 </div>
@@ -170,7 +163,6 @@ export default function StreamProfileForm({form, mode, showRoot, isPreferredForm
                                 aria-invalid={!!errors.preferredFormat}
                                 aria-describedby={errors.preferredFormat ? 'sp-pref-format-error' : 'sp-pref-format-help'}
                                 isClearable
-                                isOptionDisabled={(opt) => !!isPreferredFormatDisabled?.(((opt as any)?.value) as string)}
                             />
                         )}
                     />
@@ -183,13 +175,8 @@ export default function StreamProfileForm({form, mode, showRoot, isPreferredForm
                         <ReadMore summary={<span>Whether to stream video or audio from DW.</span>}>
                             <p>WireLoft cannot control what format the video or audio that DW provides will be in. Therefore, when Use Downloads
                             is disabled in streaming sources, you cannot select the exact video format you prefer.</p>
-
                             <p>Setting this to video will set the resolution to 1080p in the background. That wont matter much as again, WireLoft
                                 will just stream whatever video DW gives it.</p>
-
-                            <p><strong>NOTE:</strong> Only one Stream Profile can use the same profile type and media type combination
-                                per show. Media types that are already in use by another Stream Profile of the same type in this show
-                                are disabled here.</p>
                         </ReadMore>
                     </div>
                 </div>

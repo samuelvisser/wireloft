@@ -12,9 +12,6 @@ if TYPE_CHECKING:
 
 class StreamProfileBase(Base):
     __tablename__ = "stream_profiles"
-    __table_args__ = (
-        UniqueConstraint("show_id", "type", "preferred_format", name="uq_unique_stream_profile_type_and_format_per_show"),
-    )
     __mapper_args__ = {
         "polymorphic_on": "type",
         "polymorphic_identity": StreamProfileType.BASE.value,
