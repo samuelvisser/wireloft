@@ -7,7 +7,7 @@ from typing import Optional
 import requests
 
 from backend.db.core import get_session
-from backend.db.models import DownloadProfileSeries
+from backend.db.models import SeriesDownloadProfile
 from ..registry import task
 
 
@@ -44,7 +44,7 @@ async def download_series_thumbnail(*, resource_id: int, progress):  # progress 
     """
     s = get_session()
     try:
-        dps = s.get(DownloadProfileSeries, resource_id)
+        dps = s.get(SeriesDownloadProfile, resource_id)
         if dps is None:
             raise ValueError(f"DownloadProfileSeries id={resource_id} not found")
         # Resolve target directory from media profile template

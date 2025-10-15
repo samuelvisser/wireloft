@@ -21,6 +21,8 @@ class Episode(MediaItemBase):
     season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
     index: Mapped[int] = mapped_column(index=True)
     publish_status: Mapped[str]
+    video_url: Mapped[Optional[str]]
+    audio_url: Mapped[Optional[str]]
     went_live_date: Mapped[Optional[datetime]]
     published_date: Mapped[Optional[datetime]]
     redownloaded_date: Mapped[Optional[datetime]]
