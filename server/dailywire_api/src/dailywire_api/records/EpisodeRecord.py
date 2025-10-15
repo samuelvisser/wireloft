@@ -14,21 +14,16 @@ from dailywire_api.records.ThumbnailRecord import ThumbnailRecord
 
 
 class EpisodeRecord(BaseRecord):
-    model_config = ConfigDict(
-        extra="ignore",
-        frozen=True,
-    )
 
     id: str
     slug: str
     title: str
     description: str | None = None
-    duration: float | int | None = None
+    duration: float | None = None
 
     media_type: str | None = None
     background_image: str | None = None
     sharing_url: str | None = None
-    parent_title: str | None = None
     status: str | None = None
     is_downloadable: bool | None = None
 

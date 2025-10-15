@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
 
+from dailywire_api.records.EpisodeDetailRecord import EpisodeDetailRecord
 from dailywire_api.records.ShowRecord import ShowRecord
 from dailywire_api.records.EpisodeRecord import EpisodeRecord
 from dailywire_api.records.UserInfo import UserInfo
@@ -108,7 +109,7 @@ class ByPodcastSeason(_BySeason):
     param_key: ClassVar[str] = "podcastSeasonId"
 
 class EpisodesPaginatedResult(NamedTuple):
-    items: list[Dict[str, Any]]
+    items: list[EpisodeRecord]
     next_page_url: Optional[str]
     has_next: bool
 
@@ -137,17 +138,15 @@ class MiddlewareClient:
         self._headers = headers
 
     # --------------- public methods ---------------
-    def get_show_page(self, slug: str, membership_plan: Optional[str] = None) -> Dict[str, Any]:
+    def get_show_page(self, slug: str, membership_plan: Optional[str] = None) -> ShowRecord:
         params: Dict[str, Any] = {'slug': slug}
         if membership_plan:
             params['membershipPlan'] = membership_plan
 
         payload = self._get('v4/getShowPage', params)
-        record = ShowRecord.model_validate(payload)
+        return ShowRecord.model_validate(payload)
 
-        return record.model_dump(by_alias=True, mode="json")
-
-    def get_user_info(self) -> Dict[str, Any]:
+    def get_user_info(self) -> UserInfo:
         """
         Fetch the current user's info using DailyWire Middleware API.
         Access token is obtained from dailywire_authorisation package.
@@ -170,7 +169,7 @@ class MiddlewareClient:
         except ValidationError as e:
             raise MiddlewareAPIError("Invalid user info response") from e
 
-        return record.model_dump(by_alias=True, mode='json')
+        return record
 
     def get_episodes_paginated(self, slug: str, selector: ByNextPage | ByShowSeason | ByPodcastSeason) -> EpisodesPaginatedResult:
         """
@@ -233,10 +232,10 @@ class MiddlewareClient:
         items_raw = payload.get('componentItems')
 
         # Normalize to EpisodeRecord dicts
-        episodes: list[dict] = []
+        episodes: list[EpisodeRecord] = []
         for it in items_raw or []:
             try:
-                ep = EpisodeRecord.model_validate(it).model_dump(by_alias=True, mode='json')
+                ep = EpisodeRecord.model_validate(it)
                 episodes.append(ep)
             except ValidationError:
                 # Skip items that fail validation; continue best-effort
@@ -249,6 +248,29 @@ class MiddlewareClient:
             next_page_url=next_url,
             has_next=bool(next_url)
         )
+
+    def get_episode_details(self, episode_slug: str) -> EpisodeDetailRecord:
+        endpoint = 'v4/getEpisode'
+        params: Dict[str, Any] = {
+            'slug': episode_slug,
+            'nocache': 1,
+        }
+
+        tokens = DeviceAuthClient().get_token()
+        if not tokens:
+            raise MiddlewareAPIError("No valid access token in token store")
+        access_token = tokens.access_token
+
+        self._headers['Authorization'] = f'Bearer {access_token}'
+        payload = self._get(endpoint, params)
+
+        try:
+            record = EpisodeDetailRecord.model_validate(payload)
+        except ValidationError as e:
+            raise MiddlewareAPIError("Invalid episode detail response") from e
+
+        return record
+
 
     # --------------- internals ---------------
     def _get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

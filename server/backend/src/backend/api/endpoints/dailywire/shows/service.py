@@ -23,7 +23,6 @@ def get_show(
     access_token = tokens.access_token if tokens else None
 
     client = MiddlewareClient(access_token=access_token)
-    payload = client.get_show_page(slug=show_slug, membership_plan=membership_plan)
 
     # Map the normalized ShowRecord payload into our response model
-    return ShowRecord.model_validate(payload)
+    return client.get_show_page(slug=show_slug, membership_plan=membership_plan)

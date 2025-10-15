@@ -10,5 +10,4 @@ def get_user_info() -> UserInfo:
     and normalize it into the UserInfo model.
     """
     client = MiddlewareClient()
-    payload = client.get_user_info()
-    return UserInfo.model_validate(payload)
+    return client.get_user_info()
