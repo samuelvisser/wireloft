@@ -28,18 +28,50 @@ export default function Submenu({label, icon, items}: SubmenuProps) {
   const isAnyActive = useMemo(() => allPaths.some(p => location.pathname.startsWith(p)), [allPaths, location.pathname])
   const [open, setOpen] = useState<boolean>(isAnyActive)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const toggleRef = useRef<HTMLButtonElement | null>(null)
+
+  // Track whether we are in the header (mobile) layout
+  const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' ? window.matchMedia('(max-width: 900px)').matches : false)
+  const [fixedTop, setFixedTop] = useState<number>(0)
 
   useEffect(() => {
     if (isAnyActive) setOpen(true)
   }, [isAnyActive])
 
-  // Close on outside click for mobile dropdown
+  // Keep isMobile in sync with viewport
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(max-width: 900px)')
+    const onChange = () => setIsMobile(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  // Recompute the fixed dropdown position when opened/resized/scrolled in mobile
+  useEffect(() => {
+    function updatePosition() {
+      if (!isMobile || !open || !toggleRef.current) return
+      const rect = toggleRef.current.getBoundingClientRect()
+      setFixedTop(Math.round(rect.bottom + 6))
+    }
+    updatePosition()
+    if (!isMobile || !open) return
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [isMobile, open])
+
+  // Close on outside click for mobile dropdown (use 'click' so navigation/toggles run first)
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!panelRef.current) return
       if (!panelRef.current.contains(e.target as Node)) {
         // do not close if clicking on toggle button (handled separately)
-        const toggle = panelRef.current.previousElementSibling as HTMLElement | null
+        const toggle = toggleRef.current
         if (toggle && toggle.contains(e.target as Node)) return
         setOpen(false)
       }
@@ -50,9 +82,15 @@ export default function Submenu({label, icon, items}: SubmenuProps) {
     return () => document.removeEventListener('click', onDocClick)
   }, [open])
 
+  // Inline style for mobile to pop out below header
+  const mobileStyle: React.CSSProperties | undefined = isMobile && open
+    ? { position: 'fixed', left: 8, right: 8, top: fixedTop, zIndex: 100, maxHeight: `calc(100vh - ${fixedTop + 12}px)`, overflowY: 'auto', paddingLeft: 8 }
+    : undefined
+
   return (
     <div className={'submenu' + (open ? ' open' : '')}>
       <button
+        ref={toggleRef}
         className={'nav-item submenu-toggle' + (isAnyActive ? ' active' : '')}
         aria-expanded={open}
         aria-haspopup="menu"
@@ -68,7 +106,7 @@ export default function Submenu({label, icon, items}: SubmenuProps) {
         </span>
       </button>
 
-      <div ref={panelRef} className="submenu-items" role="menu" aria-label={label + ' submenu'}>
+      <div ref={panelRef} className="submenu-items" role="menu" aria-label={label + ' submenu'} style={mobileStyle}>
         {items.map((item) => {
           if ('children' in item && item.children) {
             return (
