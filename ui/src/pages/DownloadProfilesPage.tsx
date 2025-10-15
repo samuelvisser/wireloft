@@ -5,6 +5,7 @@ import {DownloadProfileReadView} from '../types/schemas/download_profile_base'
 import {PreferredFormatReg} from '../types/local_media_profile'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
+import PageSubtitle from "../components/common/PageSubtitle";
 
 export default function DownloadProfilesPage() {
     const navigate = useNavigate()
@@ -38,6 +39,11 @@ export default function DownloadProfilesPage() {
         <section className="view" aria-labelledby="profiles-title">
             <div className="view-header">
                 <h1 id="profiles-title">Download Profiles</h1>
+                <PageSubtitle summary={<>Create rules for how each show is downloaded and organized on disk.</>}>
+                    <p>A Download Profile tells WireLoft what to download and where to put it, including quality, file
+                        naming, and grouping. Each show can contain multiple download profiles, allowing you to
+                        download both audio and video versions of episodes for example.</p>
+                </PageSubtitle>
                 <button className="btn btn-primary" onClick={onAdd}>Add download profile</button>
             </div>
 

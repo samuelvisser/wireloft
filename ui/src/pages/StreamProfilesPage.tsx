@@ -5,6 +5,7 @@ import {StreamProfileReadView} from '../types/schemas/stream_profile_base'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import {PreferredFormatReg} from "../types/local_media_profile";
+import PageSubtitle from "../components/common/PageSubtitle";
 
 export default function StreamProfilesPage() {
     const navigate = useNavigate()
@@ -48,6 +49,13 @@ export default function StreamProfilesPage() {
         <section className="view" aria-labelledby="stream-profiles-title">
             <div className="view-header">
                 <h1 id="stream-profiles-title">Stream Profiles</h1>
+                <PageSubtitle summary={<>Control how WireLoft streams each show.</>}>
+                    <p>Stream Profiles allow you to control how each show is streamed. You can stream episodes straight from the files
+                        you downloaded, or directly from DW. </p>
+                    <p>For now, a stream within WireLoft just means opening an RSS feed for it. More streaming options might come later.</p>
+                    <p>Use multiple profiles per show to fit different listening or
+                        viewing needs.</p>
+                </PageSubtitle>
                 <button className="btn btn-primary" onClick={onAdd}>Add stream profile</button>
             </div>
 

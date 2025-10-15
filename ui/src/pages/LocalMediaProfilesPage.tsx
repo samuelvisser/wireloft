@@ -6,6 +6,7 @@ import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
 import {PreferredFormatReg} from "../types/local_media_profile";
 import DataTable, { Column } from '../components/DataTable/DataTable';
 import ConfirmDeleteDialog, { ConfirmDeleteDialogRef } from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
+import PageSubtitle from "../components/common/PageSubtitle";
 
 export default function LocalMediaProfilesPage() {
     const navigate = useNavigate()
@@ -36,6 +37,11 @@ export default function LocalMediaProfilesPage() {
         <section className="view" aria-labelledby="profiles-title">
             <div className="view-header">
                 <h1 id="profiles-title">Local Media Profiles</h1>
+                <PageSubtitle summary={<>Define how downloaded files are stored and in what format.</>}>
+                    <p>A Local Media Profile controls the output path and the preferred file format for your downloads
+                        across shows and movies. You can create multiple profiles (e.g., “Podcasts to ABS”, “Videos to NAS”) and
+                        reuse them.</p>
+                </PageSubtitle>
                 <button className="btn btn-primary" onClick={onAdd}>Add media profile</button>
             </div>
 

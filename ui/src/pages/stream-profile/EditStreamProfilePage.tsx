@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo} from 'react'
+import {useCallback, useEffect} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
@@ -7,7 +7,6 @@ import {StreamProfileReadView} from '../../types/schemas/stream_profile_base'
 import StreamProfileForm from '../../components/StreamProfile/StreamProfileForm'
 import {RssStreamProfileUpdateIn, RssStreamProfileUpdateSchema} from '../../types/schemas/rss_stream_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
-import {useStreamProfilesByShowSlug} from '../../lib/queries'
 
 
 type RouteParams = { type?: 'rss'; id?: string }
@@ -43,28 +42,6 @@ export default function EditStreamProfilePage() {
         if (!streamProfile) return
         form.reset(RssStreamProfileUpdateSchema.parse(streamProfile.streamProfileImpl))
     }, [streamProfile, form])
-
-    // Fetch existing stream profiles for the same show to enforce uniqueness
-    const {data: showProfiles} = useStreamProfilesByShowSlug(streamProfile?.showSlug)
-
-    // Compute disabled preferred formats for RSS profiles in this show, excluding the current profile id
-    const disabledFormats = useMemo(() => {
-        const vals = (showProfiles ?? [])
-            .filter((p: any) => p?.type === 'rss' && p?.id !== profileId)
-            .map((p: any) => p?.preferredFormat)
-            .filter((v: any) => typeof v === 'string')
-        return new Set<string>(vals)
-    }, [showProfiles, profileId])
-
-    // If currently selected preferred format becomes disabled, clear it
-    useEffect(() => {
-        const current: any = (form as any)?.getValues?.('preferredFormat')
-        if (current && disabledFormats.has(String(current))) {
-            ;(form as any)?.setValue?.('preferredFormat', null, {shouldDirty: true, shouldValidate: true})
-        }
-    }, [disabledFormats, form])
-
-    const isPreferredFormatDisabled = (value: string) => disabledFormats.has(String(value))
 
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
 
@@ -133,7 +110,7 @@ export default function EditStreamProfilePage() {
                     )}
 
                     {/* Stream Profile Form (common + variant-specific fields) */}
-                    <StreamProfileForm form={form as any} mode="rss" showRoot={false} isPreferredFormatDisabled={isPreferredFormatDisabled} />
+                    <StreamProfileForm form={form as any} mode="rss" showRoot={false} />
 
                     <div className="actions">
                         <button type="button" className="btn" onClick={onCancel}>Cancel</button>
