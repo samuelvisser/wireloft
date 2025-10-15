@@ -11,6 +11,8 @@ from pydantic import ValidationError
 
 from dailywire_api.records.ShowRecord import ShowRecord
 from dailywire_api.records.EpisodeRecord import EpisodeRecord
+from dailywire_api.records.UserInfo import UserInfo
+from dailywire_authorisation import DeviceAuthClient
 from wireloft_config import get_settings
 
 
@@ -83,6 +85,31 @@ class MiddlewareClient:
         record = ShowRecord.model_validate(payload)
 
         return record.model_dump(by_alias=True, mode="json")
+
+    def get_user_info(self) -> Dict[str, Any]:
+        """
+        Fetch the current user's info using DailyWire Middleware API.
+        Access token is obtained from dailywire_authorisation package.
+        """
+        tokens = DeviceAuthClient().get_token()
+        if not tokens:
+            raise MiddlewareAPIError("No valid access token in token store")
+        access_token = tokens.access_token
+
+        # Temporarily set Authorization header, preserving any existing value
+        headers_backup = self._headers.copy()
+        try:
+            self._headers['Authorization'] = f'Bearer {access_token}'
+            payload = self._get('v3/getUserInfo', {'nocache': 1})
+        finally:
+            self._headers = headers_backup
+
+        try:
+            record = UserInfo.model_validate(payload)
+        except ValidationError as e:
+            raise MiddlewareAPIError("Invalid user info response") from e
+
+        return record.model_dump(by_alias=True, mode='json')
 
     def get_episodes_paginated(self, slug: str, selector: ByNextPage | ByShowSeason | ByPodcastSeason) -> EpisodesPaginatedResult:
         """

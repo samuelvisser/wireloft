@@ -27,6 +27,15 @@ class DeviceAuthClient:
         return f"{self.config.issuer}|{self.config.client_id}|{self.config.audience}|{self.config.scope}"
 
     def ensure_token(self) -> OAuthTokens:
+        token = self.get_token()
+        if token:
+            return token
+
+        rec = self._device_authorize_interactive()
+        self.store.save(self._store_key, rec)
+        return OAuthTokens(**rec.__dict__)
+
+    def get_token(self) -> Optional[OAuthTokens]:
         rec = self.store.load(self._store_key)
         if rec and rec.expires_at - time.time() > 60:
             return OAuthTokens(**rec.__dict__)
@@ -37,9 +46,7 @@ class DeviceAuthClient:
                 self.store.save(self._store_key, refreshed)
                 return OAuthTokens(**refreshed.__dict__)
 
-        rec = self._device_authorize_interactive()
-        self.store.save(self._store_key, rec)
-        return OAuthTokens(**rec.__dict__)
+        return None
 
     def revoke(self) -> None:
         self.store.delete(self._store_key)

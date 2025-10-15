@@ -11,8 +11,7 @@ router = APIRouter(prefix="/shows", tags=["DailyWire Shows"])
 @router.get("/{show_slug}", response_model=ShowRecord)
 def show_detail(
     show_slug: str,
-    membership_plan: str | None = Query(default=None, description="Optional membership plan (e.g., AllAccess)"),
-    authorization: str | None = Header(default=None, description="Optional Bearer token for premium content"),
+    membership_plan: str | None = Query(default=None, description="Optional membership plan (e.g., ALL_ACCESS)"),
 ):
     """
     Retrieve show information from DailyWire API.
@@ -22,10 +21,7 @@ def show_detail(
     Returns 502 if upstream API is unavailable or returns an error.
     """
     try:
-        token = None
-        if authorization and authorization.lower().startswith("bearer "):
-            token = authorization.split(" ", 1)[1].strip()
-        return get_show(show_slug, access_token=token, membership_plan=membership_plan)
+        return get_show(show_slug, membership_plan=membership_plan)
     except Exception as e:
         # Map any unhandled error to a 502 Bad Gateway since we're proxying upstream
         raise HTTPException(status_code=502, detail=str(e))
