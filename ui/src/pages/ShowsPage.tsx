@@ -4,6 +4,7 @@ import {useShows} from '../lib/queries'
 import {ShowRead} from '../types/schemas/show'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
+import {EpisodeIdentifierReg, ShowTypeReg} from "../types/show";
 
 export default function ShowsPage() {
     const navigate = useNavigate()
@@ -24,12 +25,12 @@ export default function ShowsPage() {
         },
         {
             header: 'Type',
-            accessor: (s) => String(s.type),
+            accessor: (s) => ShowTypeReg.getLabelLoose(s.type),
             align: 'center',
         },
         {
             header: 'Episode ID',
-            accessor: (s) => String(s.episodeIdentifier),
+            accessor: (s) => EpisodeIdentifierReg.getLabelLoose(s.episodeIdentifier),
             align: 'center',
         },
     ]

@@ -1113,6 +1113,12 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   border-radius: 10px;
   padding: 10px 12px;
 }
+@media (prefers-color-scheme: dark) {
+  .page-subtitle-details {
+    background: rgba(20, 24, 28, 1);
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+}
 .page-subtitle-details p { margin: 6px 0; color: var(--muted); }
 
 /* Expanded subtitle should overlay below the header without affecting header layout */

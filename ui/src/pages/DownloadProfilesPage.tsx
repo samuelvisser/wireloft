@@ -6,6 +6,7 @@ import {PreferredFormatReg} from '../types/local_media_profile'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import PageSubtitle from "../components/common/PageSubtitle";
+import {ShowTypeReg} from "../types/show";
 
 export default function DownloadProfilesPage() {
     const navigate = useNavigate()
@@ -26,7 +27,7 @@ export default function DownloadProfilesPage() {
         },
         {
             header: 'Type',
-            accessor: (p) => p.type,
+            accessor: (p) => ShowTypeReg.getLabelLoose(p.type),
         },
         {
             header: 'Enabled',
