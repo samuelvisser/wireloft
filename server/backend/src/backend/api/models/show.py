@@ -83,4 +83,4 @@ class ShowAPIReadView(ShowAPIRead):
     """Response body for a show view."""
 
     episode_count: int = Field(default=0)
-    years: str
+    years: str = Field(default="")
