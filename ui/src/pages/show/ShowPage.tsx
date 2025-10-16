@@ -113,7 +113,7 @@ export default function ShowPage() {
 
       <article className="show-details" aria-label="Show details">
         <header className="show-header">
-          <div className="show-author">{show.author}</div>
+          <div className="show-author">{show.authorName}</div>
           <div className="show-meta">
             {total} episodes{show.years ? ` • ${show.years}` : ''}
           </div>
@@ -132,6 +132,9 @@ export default function ShowPage() {
             const icon = statusIcon(ep.unified_status)
             const isProcessing = ep.unified_status === 'dw_processing' || ep.unified_status === 'local_processing'
             const label = statusLabel(ep.unified_status)
+            const thumb = (ep?.thumbnailPortraitPath && String(ep.thumbnailPortraitPath).trim())
+              ? ep.thumbnailPortraitPath
+              : `https://placehold.co/640x360/png?text=Episode+%23${ep.index}`
             return (
               <div
                 key={ep.id}
@@ -147,7 +150,7 @@ export default function ShowPage() {
                   }
                 }}
               >
-                <div className="episode-thumb" aria-hidden>
+                <div className="episode-thumb" aria-hidden style={{ backgroundImage: `url('${thumb}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
                   <div className="thumb-inner">
                     <span className={`status status-${ep.unified_status}`} aria-label={label} title={label}>
                       <FontAwesomeIcon icon={icon as any} spin={isProcessing} />
