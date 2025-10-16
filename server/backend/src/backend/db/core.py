@@ -10,6 +10,8 @@ from sqlalchemy import create_engine, MetaData
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 
+from wireloft_config import get_settings
+
 # include more patterns if you want; the key one is "uq"
 naming_convention = {
     "ix": "ix_%(table_name)s_%(column_0_name)s",
@@ -35,10 +37,7 @@ def configure_db() -> None:
     """
     global _engine, _SessionLocal, _db_path
 
-    if os.environ.get("WIRELOFT_DB_PATH", "").strip() == "":
-        raise ValueError("WIRELOFT_DB_PATH environment variable is not set.")
-
-    path = Path(os.environ.get("WIRELOFT_DB_PATH"))
+    path = get_settings().database_path
     if _db_path is not None and path.resolve() == _db_path.resolve():
         # Already configured to this path, nothing to do
         return

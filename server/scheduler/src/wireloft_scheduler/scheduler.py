@@ -22,9 +22,9 @@ def _db_url_for_jobstore() -> str:
         return settings.database_path.as_posix()
 
     # default to app DB (SQLite path in env)
-    db_path = os.environ.get("WIRELOFT_DB_PATH")
+    db_path = get_settings().database_path
     if not db_path:
-        # Fallback to a scheduler.db in data directory if not set
+        # Fallback to a scheduler.db in the data directory if not set
         from wireloft_config.config import PROJECT_ROOT
         db_path = (PROJECT_ROOT / "data" / "wireloft.db").as_posix()
     return f"sqlite:///{db_path}"
