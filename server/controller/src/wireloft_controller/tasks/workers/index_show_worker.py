@@ -4,7 +4,7 @@ from typing import Iterable, Optional, Sequence
 
 from sqlalchemy import select, insert, case, or_
 
-from backend.api.helpers import update_database_fields
+from backend.api.helpers import update_database_fields, create_database_fields
 from backend.db.core import get_session
 from backend.db.models import Show, Season
 from backend.db.models.media_item import Episode
@@ -80,10 +80,10 @@ def upsert_episode(
     )
 
     if episode is None:
-        # Create new
-        episode = Episode(**{
-            **ep.model_dump(mode="python", by_alias=False),
-            **{
+        # Create new (only pass fields that exist on the SQLAlchemy model)
+        episode = create_database_fields(Episode, ** {
+            ** ep.model_dump(mode="python", by_alias=False),
+            ** {
                 "uuid": generate_uuid(),
                 "type": MediaType.EPISODE.value,
                 "show_id": show.id,
@@ -95,7 +95,6 @@ def upsert_episode(
                 "published_date": ep.published_at,
             }
         })
-        s.add(episode)
     else:
         # Update existing in place and reindex
         update_database_fields(episode, ep, ignore_extra_fields=True)
