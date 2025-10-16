@@ -10,12 +10,15 @@ from backend.api.models.episode import *
 from backend.db.models.media_item import Episode
 
 
-def get_episodes_by_show_list(s: Session, show_slug: str) -> list[EpisodeAPIRead]:
-    episodes: Sequence[Episode] = s.scalars(
+def get_episodes_by_show_list(s: Session, show_slug: str, limit: int | None = None) -> list[EpisodeAPIRead]:
+    stmt = (
         select(Episode)
         .filter(Episode.show.has(slug=show_slug))
         .order_by(Episode.index.desc())
-    ).all()
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    episodes: Sequence[Episode] = s.scalars(stmt).all()
 
     return [EpisodeAPIRead.model_validate(mp) for mp in episodes]
 

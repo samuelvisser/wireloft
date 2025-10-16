@@ -7,15 +7,15 @@ from backend.app import db_session
 router = APIRouter(prefix="/episodes", tags=["Episodes"])
 
 @router.get("/by-show-slug/{show_slug}", response_model=list[EpisodeAPIRead])
-def episodes_by_show_list(show_slug: str):
+def episodes_by_show_list(show_slug: str, limit: int | None = None):
     """
-    List all episodes for a specific show.
+    List episodes for a specific show.
 
-    Returns a collection of all episodes associated with the specified show slug.
-    Episodes are returned in their database order.
+    Optional query parameter:
+    - limit: maximum number of latest episodes to return (ordered by index desc).
     """
     with db_session() as s:
-        return get_episodes_by_show_list(s, show_slug)
+        return get_episodes_by_show_list(s, show_slug, limit)
 
 
 @router.post("", response_model=EpisodeAPIRead, status_code=status.HTTP_201_CREATED)
