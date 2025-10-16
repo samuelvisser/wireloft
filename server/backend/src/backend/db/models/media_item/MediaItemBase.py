@@ -32,7 +32,7 @@ class MediaItemBase(Base):
     description: Mapped[Optional[str]]
     downloaded_date: Mapped[Optional[datetime]]
 
-    duration: Mapped[int]
+    duration: Mapped[float]
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

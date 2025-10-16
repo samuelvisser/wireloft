@@ -17,6 +17,14 @@
 - This package is part of the workspace (server/*). No separate install is required in dev.
 - The backend app imports wireloft_controller on startup so that task definitions are registered before syncing to the DB.
 
+### CLI
+- A small CLI is available to list and run controller workers directly.
+- After installing/in workspace, use:
+  - List tasks: `controller list` (add `--verbose` for details)
+  - Run a task by key: `controller run --key <definition_key> [--resource-id <id>] [--show-slug <slug>] [--arg name=value --arg other=123]`
+- Example:
+  - `controller run --key index_show_worker --show-slug the-ben-shapiro-show`
+
 ### Defining a new task
 - Create a new module under wireloft_controller/tasks and decorate a function:
 
