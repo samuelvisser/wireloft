@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 
 from ...models.tasks import TaskDefinitionRead, TaskScheduleCreate, TaskScheduleRead, TaskRunRead
 from .service import list_definitions, list_schedules, create_schedule, delete_schedule, list_runs, trigger_now

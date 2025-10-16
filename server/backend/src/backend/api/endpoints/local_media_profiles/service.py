@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
@@ -41,7 +43,7 @@ def create_local_media_profile(s: Session, body: LocalMediaProfileAPICreate) -> 
 
 
 def update_local_media_profile(s: Session, local_media_profile_slug: str, body: LocalMediaProfileAPIUpdate) -> LocalMediaProfileAPIRead:
-    local_media_profile = (
+    local_media_profile: Optional[LocalMediaProfile] = (
         s.query(LocalMediaProfile)
         .filter_by(slug=local_media_profile_slug)
         .one_or_none()

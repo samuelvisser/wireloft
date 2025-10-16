@@ -83,7 +83,7 @@ def create_app() -> FastAPI:
         config_router,
         rss_stream_profile_router,
         stream_profile_router,
-        tasks_router,
+        task_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
@@ -106,7 +106,7 @@ def create_app() -> FastAPI:
     app.include_router(config_router, prefix="/api")
     app.include_router(rss_stream_profile_router, prefix="/api")
     app.include_router(stream_profile_router, prefix="/api")
-    app.include_router(tasks_router, prefix="/api")
+    app.include_router(task_router, prefix="/api")
 
     # Start scheduler and sync task registry if enabled
     try:

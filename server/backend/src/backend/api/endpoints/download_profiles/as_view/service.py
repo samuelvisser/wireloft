@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from sqlalchemy.orm import Session, joinedload, with_polymorphic
+
 from fastapi import HTTPException
+from sqlalchemy.orm.util import AliasedClass
 
 from backend.api.models.download_profile import DownloadProfileAPIReadView, DownloadProfileAPIRead
 from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPIRead
@@ -10,7 +12,7 @@ from backend.types.download_profile_types import DownloadProfileType
 from backend.db.models import DownloadProfileBase, Show, LocalMediaProfile, PodcastDownloadProfile, SeriesDownloadProfile
 
 
-def _to_view(item: DownloadProfileBase) -> DownloadProfileAPIReadView:
+def _to_view(item: AliasedClass[DownloadProfileBase]) -> DownloadProfileAPIReadView:
     base = DownloadProfileAPIRead.model_validate(item).model_dump()
     show_title = item.show.title if getattr(item, "show", None) is not None else None
     show_slug = item.show.slug if getattr(item, "show", None) is not None else None
@@ -50,6 +52,7 @@ def get_download_profile_views_list(s: Session) -> list[DownloadProfileAPIReadVi
         .order_by(Show.title.asc(), DP.id.asc())
         .all()
     )
+
     return [_to_view(it) for it in items]
 
 
@@ -61,10 +64,9 @@ def get_download_profile_view(s: Session, download_profile_id: int) -> DownloadP
             joinedload(DP.show),
             joinedload(DP.local_media_profile),
         )
-        .filter(DP.id == download_profile_id)
+        .filter_by(id=download_profile_id)
         .one_or_none()
     )
-
     if item is None:
         raise HTTPException(status_code=404, detail="Download profile not found")
 

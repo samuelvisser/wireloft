@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
@@ -38,7 +40,7 @@ def create_media_download(s: Session, body: MediaDownloadAPICreate) -> MediaDown
 
 
 def update_media_download(s: Session, media_download_id: int, body: MediaDownloadAPIUpdate) -> MediaDownloadAPIRead:
-    item = (
+    item: Optional[MediaDownloadBase] = (
         s.query(MediaDownloadBase)
         .filter_by(id=media_download_id)
         .one_or_none()

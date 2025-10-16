@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import select, and_
+from sqlalchemy import select
 
 from backend.db.core import get_session
 from wireloft_scheduler.models import TaskDefinition, TaskSchedule, TaskRun

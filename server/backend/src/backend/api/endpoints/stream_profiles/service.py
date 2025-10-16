@@ -33,9 +33,9 @@ def get_stream_profiles_list(s: Session, show_slug: Optional[str] = None) -> lis
 
 def get_stream_profile(s: Session, stream_profile_id: int) -> StreamProfileAPIRead:
     SP = with_polymorphic(StreamProfileBase, [RssStreamProfile])
-    item = (
+    item: Optional[SP] = (
         s.query(SP)
-        .filter(SP.id == stream_profile_id)
+        .filter_by(id=stream_profile_id)
         .one_or_none()
     )
 

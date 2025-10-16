@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy.orm import Session, joinedload, with_polymorphic
+from sqlalchemy.orm.util import AliasedClass
+
 from fastapi import HTTPException
 
 from backend.api.models.stream_profile import StreamProfileAPIReadView, StreamProfileAPIRead
@@ -9,7 +13,7 @@ from backend.types.stream_profile_types import StreamProfileType
 from backend.db.models import StreamProfileBase, Show, RssStreamProfile
 
 
-def _to_view(item: StreamProfileBase) -> StreamProfileAPIReadView:
+def _to_view(item: AliasedClass[StreamProfileBase]) -> StreamProfileAPIReadView:
     base = StreamProfileAPIRead.model_validate(item).model_dump()
     show_title = item.show.title if getattr(item, "show", None) is not None else None
     show_slug = item.show.slug if getattr(item, "show", None) is not None else None
@@ -46,12 +50,12 @@ def get_stream_profile_views_list(s: Session) -> list[StreamProfileAPIReadView]:
 
 def get_stream_profile_view(s: Session, stream_profile_id: int) -> StreamProfileAPIReadView:
     SP = with_polymorphic(StreamProfileBase, [RssStreamProfile])
-    item = (
+    item: Optional[SP] = (
         s.query(SP)
         .options(
             joinedload(SP.show),
         )
-        .filter(SP.id == stream_profile_id)
+        .filter_by(id=stream_profile_id)
         .one_or_none()
     )
 

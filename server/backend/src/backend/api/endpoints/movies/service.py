@@ -38,7 +38,7 @@ def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
 
 
 def update_movie(s: Session, movie_slug: str, body: MovieAPIUpdate) -> MovieAPIRead:
-    item = (
+    item: Optional[Movie] = (
         s.query(Movie)
         .filter(Movie.slug == movie_slug)
         .one_or_none()

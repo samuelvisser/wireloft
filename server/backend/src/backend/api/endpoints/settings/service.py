@@ -1,3 +1,5 @@
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
@@ -31,7 +33,7 @@ def create_settings_record(s: Session, body: SettingsAPICreate) -> SettingsAPIRe
 
 
 def update_settings(s: Session, body: SettingsAPIUpdate) -> SettingsAPIRead:
-    settings = (
+    settings: Optional[Settings] = (
         s.query(Settings)
         .one_or_none()
     )

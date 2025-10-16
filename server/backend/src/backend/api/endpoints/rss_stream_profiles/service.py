@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
@@ -38,7 +40,7 @@ def create_stream_profile_rss(s: Session, body: RssStreamProfileAPICreate) -> Rs
 
 
 def update_stream_profile_rss(s: Session, stream_profile_id: int, body: RssStreamProfileAPIUpdate) -> RssStreamProfileAPIRead:
-    item = (
+    item: Optional[RssStreamProfile] = (
         s.query(RssStreamProfile)
         .filter_by(id=stream_profile_id)
         .one_or_none()

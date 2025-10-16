@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from sqlalchemy import or_
@@ -99,7 +101,7 @@ def create_download_profile_series(s: Session, body: SeriesDownloadProfileAPICre
 
 
 def update_download_profile_series(s: Session, download_profile_series_id: int, body: SeriesDownloadProfileAPIUpdate) -> SeriesDownloadProfileAPIRead:
-    item = (
+    item: Optional[SeriesDownloadProfile] = (
         s.query(SeriesDownloadProfile)
         .filter_by(id=download_profile_series_id)
         .one_or_none()

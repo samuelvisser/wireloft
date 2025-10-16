@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
@@ -46,7 +48,7 @@ def create_season(s: Session, body: SeasonAPICreate) -> SeasonAPIRead:
 
 
 def update_season(s: Session, show_slug: str, season_slug: str, body: SeasonAPIUpdate) -> SeasonAPIRead:
-    season = (
+    season: Optional[Season] = (
         s.query(Season)
         .filter(
             Season.slug == season_slug,

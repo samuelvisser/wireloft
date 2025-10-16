@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
@@ -26,7 +28,7 @@ def upsert_local_media_profile(s: Session, mp_input: dict) -> LocalMediaProfile:
         if not slug:
             raise ValueError("update_by_slug requires a slug")
 
-        local_media_profile = (
+        local_media_profile: Optional[LocalMediaProfile] = (
             s.query(LocalMediaProfile)
             .filter_by(slug=slug)
             .one_or_none()

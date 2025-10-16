@@ -1,4 +1,8 @@
+from typing import Sequence
+
 from sqlalchemy.orm import Session
+from sqlalchemy import select
+
 from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
@@ -6,26 +10,20 @@ from backend.api.models.episode import *
 from backend.db.models.media_item import Episode
 
 
-def get_episodes_list(s: Session, show_slug: str) -> list[EpisodeAPIRead]:
-    episodes = (
-        s.query(Episode)
-        .filter(
-            Episode.show.has(slug=show_slug)
-        )
+def get_episodes_by_show_list(s: Session, show_slug: str) -> list[EpisodeAPIRead]:
+    episodes: Sequence[Episode] = s.scalars(
+        select(Episode)
+        .filter(Episode.show.has(slug=show_slug))
         .order_by(Episode.index.desc())
-        .all()
-    )
+    ).all()
 
     return [EpisodeAPIRead.model_validate(mp) for mp in episodes]
 
 
-def get_episode(s: Session, show_slug: str, episode_slug: str) -> EpisodeAPIRead:
+def get_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
     episode = (
         s.query(Episode)
-        .filter(
-            Episode.slug == episode_slug,
-            Episode.show.has(slug=show_slug)
-        )
+        .filter_by(slug=episode_slug)
         .one_or_none()
     )
 
@@ -45,13 +43,10 @@ def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:
     return EpisodeAPIRead.model_validate(episode)
 
 
-def update_episode(s: Session, show_slug: str, episode_slug: str, body: EpisodeAPIUpdate) -> EpisodeAPIRead:
-    episode = (
+def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> EpisodeAPIRead:
+    episode: Optional[Episode] = (
         s.query(Episode)
-        .filter(
-            Episode.slug == episode_slug,
-            Episode.show.has(slug=show_slug)
-        )
+        .filter_by(slug=episode_slug)
         .one_or_none()
     )
     if episode is None:
@@ -63,13 +58,10 @@ def update_episode(s: Session, show_slug: str, episode_slug: str, body: EpisodeA
     return EpisodeAPIRead.model_validate(episode)
 
 
-def delete_episode(s: Session, show_slug: str, episode_slug: str) -> EpisodeAPIRead:
+def delete_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
     episode = (
         s.query(Episode)
-        .filter(
-            Episode.slug == episode_slug,
-            Episode.show.has(slug=show_slug)
-        )
+        .filter_by(slug=episode_slug)
         .one_or_none()
     )
     if episode is None:

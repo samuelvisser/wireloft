@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
@@ -38,7 +40,7 @@ def create_download_profile_podcast(s: Session, body: PodcastDownloadProfileAPIC
 
 
 def update_download_profile_podcast(s: Session, download_profile_id: int, body: PodcastDownloadProfileAPIUpdate) -> PodcastDownloadProfileAPIRead:
-    item = (
+    item: Optional[PodcastDownloadProfile] = (
         s.query(PodcastDownloadProfile)
         .filter_by(id=download_profile_id)
         .one_or_none()

@@ -42,7 +42,7 @@ def create_show(s: Session, body: ShowAPICreate) -> ShowAPIRead:
 
 
 def update_show(s: Session, show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
-    show = (
+    show: Optional[Show] = (
         s.query(Show)
         .filter_by(slug=show_slug)
         .one_or_none()
@@ -50,7 +50,7 @@ def update_show(s: Session, show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
-    # Apply changes and flush; commit will be done by router
+    # Apply changes and flush
     update_database_fields(show, body)
     s.flush()
     return ShowAPIRead.model_validate(show)
