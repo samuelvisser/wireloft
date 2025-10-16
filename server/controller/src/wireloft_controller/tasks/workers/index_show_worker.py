@@ -44,11 +44,11 @@ def get_seasons_sorted_desc(show_slug: str) -> Sequence[Season]:
 
 
 def iter_paginated_episodes_for_season(
-    client: MiddlewareClient,
-    *,
-    show_slug: str,
-    season_dw_id: str,
-    page_size: int = 10,
+        client: MiddlewareClient,
+        *,
+        show_slug: str,
+        season_dw_id: str,
+        page_size: int = 10,
 ) -> Iterable[list[EpisodeRecord]]:
     """
     Yield lists of up to `page_size` EpisodeRecord items for a season, newest to oldest.
@@ -68,7 +68,7 @@ def iter_paginated_episodes_for_season(
 
 
 def upsert_episode(
-    s, *, show: Show, season: Season, ep: EpisodeRecord, index_value: int
+        s, *, show: Show, season: Season, ep: EpisodeRecord, index_value: int
 ) -> Episode:
     """Create or update a single Episode row for the given EpisodeRecord."""
 
@@ -81,9 +81,9 @@ def upsert_episode(
 
     if episode is None:
         # Create new (only pass fields that exist on the SQLAlchemy model)
-        episode = create_database_fields(Episode, data = {
-            ** ep.model_dump(mode="python", by_alias=False),
-            ** {
+        episode = create_database_fields(Episode, data={
+            **ep.model_dump(mode="python", by_alias=False),
+            **{
                 "uuid": generate_uuid(),
                 "type": MediaType.EPISODE.value,
                 "show_id": show.id,
@@ -93,11 +93,16 @@ def upsert_episode(
                 "publish_status": ep.status,
                 "duration": int(ep.duration or 0),
                 "published_date": ep.published_at,
+                "background_image_path": ep.background_image,
+                "thumbnail_landscape_path": ep.thumbnail.landscape if ep.thumbnail else None,
+                "thumbnail_portrait_path": ep.thumbnail.portrait if ep.thumbnail else None,
+                "thumbnail_square_path": ep.thumbnail.square if ep.thumbnail else None,
             }
-        })
+        }, exclude_fields={'id'})
+        s.add(episode)
     else:
         # Update existing in place and reindex
-        update_database_fields(episode, ep, ignore_extra_fields=True)
+        update_database_fields(episode, ep, ignore_extra_fields=True, exclude_fields={'id'})
         episode.season_id = season.id
         episode.index = index_value
         episode.dw_id = ep.id
@@ -110,12 +115,12 @@ def upsert_episode(
 
 
 def index_one_season(
-    *,
-    s,
-    show: Show,
-    season: Season,
-    start_index: int,
-    page_size: int = 10,
+        *,
+        s,
+        show: Show,
+        season: Season,
+        start_index: int,
+        page_size: int = 10,
 ) -> int:
     """
     Index a single season within its own transaction scope. On error, roll back
@@ -175,6 +180,7 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
 
         # Step 1: count total episodes
         total = count_total_episodes(show_slug)
+        # total = 2733 # TODO remove this overwrite when API is working
         if progress:
             progress.set(5, f"Found {total} episodes in '{show_slug}'")
 

@@ -31,8 +31,11 @@ class MediaItemBase(Base):
     title: Mapped[str]
     description: Mapped[Optional[str]]
     downloaded_date: Mapped[Optional[datetime]]
-
     duration: Mapped[float]
+    background_image_path: Mapped[Optional[str]]
+    thumbnail_landscape_path: Mapped[Optional[str]]
+    thumbnail_portrait_path: Mapped[Optional[str]]
+    thumbnail_square_path: Mapped[Optional[str]]
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

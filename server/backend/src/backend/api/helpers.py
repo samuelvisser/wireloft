@@ -8,7 +8,11 @@ from backend.db import Base as DatabaseModel
 T = TypeVar("T", bound=DatabaseModel)
 
 # Makes sure to map only fields that exist in the database. Silently ignores extra fields.
-def create_database_fields(model_cls: Type[T], data: dict) -> T:
+def create_database_fields(model_cls: Type[T], data: dict, *,
+                           exclude_fields: set[str] | None = None
+                           ) -> T:
+    if exclude_fields:
+        data = {k: v for k, v in data.items() if k not in exclude_fields}
     valid_keys = model_cls.__mapper__.attrs.keys()
     filtered = {k: v for k, v in data.items() if k in valid_keys}
     return model_cls(**filtered)
