@@ -1,4 +1,4 @@
-import {keepPreviousData, useQuery, useQueryClient, QueryClient} from '@tanstack/react-query'
+import {keepPreviousData, QueryClient, useQuery, useQueryClient} from '@tanstack/react-query'
 import {useEffect} from 'react'
 import {saveProfilesToStorage, saveShowsToStorage} from './cache'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
@@ -6,7 +6,7 @@ import {PodcastDownloadProfileRead} from "../types/schemas/podcast_download_prof
 import {SeriesDownloadProfileRead} from "../types/schemas/series_download_profile";
 import {DownloadProfileRead, DownloadProfileReadView} from "../types/schemas/download_profile_base";
 import {StreamProfileRead, StreamProfileReadView} from "../types/schemas/stream_profile_base";
-import {ShowRead} from "../types/schemas/show";
+import {ShowRead, ShowReadView} from "../types/schemas/show";
 import {EpisodeRead} from "../types/schemas/episode";
 import {SeasonRead} from "../types/schemas/season";
 import {RssStreamProfileRead} from "../types/schemas/rss_stream_profile";
@@ -89,6 +89,15 @@ export function useShows() {
     return result
 }
 
+export function useShowsView() {
+    return useQuery<any[], Error, ShowReadView[], readonly ['showsView']>({
+        queryKey: ['showsView'] as const,
+        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/shows/as-view`, signal),
+        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
+    })
+}
+
 export function useShow(id?: string) {
     const qc = useQueryClient()
     return useQuery<any, Error, ShowRead, readonly ['show', string | undefined]>({
@@ -105,11 +114,15 @@ export function useShow(id?: string) {
     })
 }
 
-export function useEpisodes(showSlug?: string) {
-    return useQuery<any[], Error, EpisodeRead[], readonly ['episodes', string | undefined]>({
-        queryKey: ['episodes', showSlug] as const,
+export function useEpisodes(showSlug?: string, opts?: { limit?: number }) {
+    return useQuery<any[], Error, EpisodeRead[], readonly ['episodes', string | undefined, number | undefined]>({
+        queryKey: ['episodes', showSlug, opts?.limit] as const,
         enabled: !!showSlug,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/episodes/by-show-slug/${showSlug}`, signal),
+        queryFn: ({signal}) => {
+            const base = (window as any).appConfig.API_URL
+            const params = opts?.limit ? `?limit=${opts.limit}` : ''
+            return fetchJSON<any[]>(`${base}/episodes/by-show-slug/${showSlug}${params}`, signal)
+        },
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })

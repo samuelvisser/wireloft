@@ -140,3 +140,10 @@ export const ShowReadSchema = z.looseObject({
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })
 export type ShowRead = z.infer<typeof ShowReadSchema>;
+
+
+export const ShowReadViewSchema = ShowReadSchema.extend({
+    years: z.string(),
+    episodeCount: z.int(),
+});
+export type ShowReadView = z.infer<typeof ShowReadViewSchema>;

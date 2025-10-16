@@ -3,7 +3,7 @@ import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {Link, useNavigate} from 'react-router-dom'
 import React from 'react'
-import {useShows, useEpisodes} from '../lib/queries'
+import {useEpisodes, useShowsView} from '../lib/queries'
 import {statusIcon, statusLabel} from '../utils/showStatus'
 import {EpisodeRead} from "../types/schemas/episode";
 
@@ -24,7 +24,7 @@ function toImageUrl(path?: string): string | undefined {
 }
 
 function ShowSection({show}: { show: any }) {
-    const {data: episodes, isLoading} = useEpisodes(show.slug)
+    const {data: episodes, isLoading} = useEpisodes(show.slug, { limit: 20 })
     const eps: Episode[] = episodes ?? []
 
     const author = show.author || show.authorName
@@ -42,7 +42,9 @@ function ShowSection({show}: { show: any }) {
                         <div className="show-author">{author}</div>
                         <h2 id={`${show.slug}-title`} className="show-title">{show.title}</h2>
                         <div className="show-meta">
-                            {isLoading && !episodes ? 'Loading episodes…' : `${eps.length} episodes${show.years ? ` • ${show.years}` : ''}`}
+                            {isLoading && !episodes
+                                ? 'Loading episodes…'
+                                : `${show.episodeCount} episodes${show.years ? ` • ${show.years}` : ''}`}
                         </div>
                     </div>
                 </div>
@@ -63,7 +65,12 @@ function EpisodeCard({ep, showSlug}: { ep: Episode; showSlug: string }) {
         .join('')
         .slice(0, 3)
         .toUpperCase()
-    const style = ep.cover ? {backgroundImage: `url(${ep.cover})`} : undefined
+
+    // Prefer episode thumbnailPortraitPath; if missing/empty, use a placeholder with the episode index.
+    const portraitPath = (ep.thumbnailPortraitPath && ep.thumbnailPortraitPath.trim() !== '') ? ep.thumbnailPortraitPath : undefined
+    const imageUrl = portraitPath ? toImageUrl(portraitPath) : `https://placehold.co/640x360/png?text=Episode+%23${ep.index}`
+    const style = imageUrl ? { backgroundImage: `url(${imageUrl})` } : undefined
+
     const icon = statusIcon(ep.publishStatus)
     const label = statusLabel(ep.publishStatus)
     const isProcessing = ep.publishStatus === 'dw_processing' || ep.publishStatus === 'local_processing'
@@ -84,7 +91,8 @@ function EpisodeCard({ep, showSlug}: { ep: Episode; showSlug: string }) {
                 <span className={`status status-${ep.unified_status}`} aria-label={label} title={label}>
           <FontAwesomeIcon icon={icon as any} spin={isProcessing}/>
         </span>
-                {!ep.cover && (
+                {/* Show initials only if we are using the placeholder (i.e., no real thumbnail) */}
+                {!portraitPath && (
                     <span className="cover-text" aria-hidden>
             {initials}
           </span>
@@ -97,7 +105,7 @@ function EpisodeCard({ep, showSlug}: { ep: Episode; showSlug: string }) {
 }
 
 export default function HomePage({onAddShow}: { onAddShow: () => void }) {
-    const {data: shows, isLoading, error} = useShows()
+    const {data: shows, isLoading, error} = useShowsView()
 
     return (
         <section className="view shows-view" aria-labelledby="home-title">

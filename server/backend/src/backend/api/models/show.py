@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional, Union
 from datetime import datetime
 
-from pydantic import computed_field
+from pydantic import computed_field, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -82,7 +82,5 @@ class ShowAPIRead(_ShowAPIBaseOut):
 class ShowAPIReadView(ShowAPIRead):
     """Response body for a show view."""
 
-    @computed_field(return_type=Optional[str])
-    @property
-    def years(self) -> Optional[str]:
-        return "2025-2025"
+    episode_count: int = Field(default=0)
+    years: str
