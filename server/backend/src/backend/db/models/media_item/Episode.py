@@ -3,7 +3,7 @@ from typing import Optional, TYPE_CHECKING
 
 from .MediaItemBase import MediaItemBase
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, UniqueConstraint
 
 from backend.types.media_types import MediaType
 
@@ -14,12 +14,15 @@ if TYPE_CHECKING:
 class Episode(MediaItemBase):
     __tablename__ = "episodes"
     __mapper_args__ = {"polymorphic_identity": MediaType.EPISODE.value}
+    __table_args__ = (
+        UniqueConstraint("show_id", "index", name="uq_episode_show_index"),
+    )
 
     # Fields
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
     show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"), primary_key=True)
     season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
-    index: Mapped[int] = mapped_column(index=True)
+    index: Mapped[int]
     publish_status: Mapped[str]
     video_url: Mapped[Optional[str]]
     audio_url: Mapped[Optional[str]]

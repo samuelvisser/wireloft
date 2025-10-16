@@ -26,7 +26,7 @@ def get_episodes_from_show_list(
 
 def get_episodes_from_season_list(
         show_slug: str,
-        season_id: str,
+        season_dw_id: str,
         *,
         client: Optional[MiddlewareClient] = None,
         access_token: Optional[str] = None,
@@ -40,7 +40,7 @@ def get_episodes_from_season_list(
     episode_list: list[EpisodeRecord] = []
 
     items, next_page_url, has_next = client.get_episodes_paginated(show_slug, ByShowSeason(
-        season_id=season_id,
+        season_id=season_dw_id,
         membership_plan=membership_plan,
         page_size=page_size,
     ))

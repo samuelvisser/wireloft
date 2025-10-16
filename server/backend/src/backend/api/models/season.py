@@ -19,14 +19,17 @@ class SeasonAPIRequestDetached(_SeasonAPIBaseIn):
 
 class SeasonAPICreate(_SeasonAPIBaseIn):
     """Request body for creating a season."""
+
     dw_id: str
     show_id: str
+    index: int
     slug: str
 
 
 class SeasonAPIUpdate(_SeasonAPIBaseIn):
     """Request body for updating a season."""
-    pass
+
+    index: int
 
 
 # ---------- Lenient output (read) ----------
@@ -35,6 +38,7 @@ class _SeasonAPIBaseOut(ResponseBase):
     id: int
     show_id: int
     dw_id: str
+    index: int
     name: str
     slug: str
 
