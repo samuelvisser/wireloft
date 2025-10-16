@@ -81,7 +81,7 @@ def upsert_episode(
 
     if episode is None:
         # Create new (only pass fields that exist on the SQLAlchemy model)
-        episode = create_database_fields(Episode, ** {
+        episode = create_database_fields(Episode, data = {
             ** ep.model_dump(mode="python", by_alias=False),
             ** {
                 "uuid": generate_uuid(),
@@ -201,7 +201,7 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
             processed = total - current_index
             pct = int((processed / total) * 100) if total > 0 else 100
             if progress:
-                progress.set(min(99, max(10, pct)), f"Indexed {processed}/{total} episodes (season {season.index})")
+                progress.set(min(99, max(10, pct)), f"Indexed {processed}/{total} episodes (season {season.index}: {season.name})")
 
         if progress:
             progress.set(100, f"Indexed {processed}/{total} episodes for '{show_slug}'")
