@@ -63,7 +63,6 @@ class _EpisodeAPIBaseOut(ResponseBase):
     published_date: Optional[datetime]
     redownloaded_date: Optional[datetime]
 
-
     # Fields in the media_items table
     title: str
     description: str
@@ -71,6 +70,10 @@ class _EpisodeAPIBaseOut(ResponseBase):
     uuid: str
     dw_id: Optional[str]
     slug: str
+    background_image_path: Optional[str]
+    thumbnail_landscape_path: Optional[str]
+    thumbnail_portrait_path: Optional[str]
+    thumbnail_square_path: Optional[str]
 
 
 class EpisodeAPIRead(_EpisodeAPIBaseOut):
