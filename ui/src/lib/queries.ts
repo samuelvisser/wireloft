@@ -105,21 +105,21 @@ export function useShow(id?: string) {
     })
 }
 
-export function useEpisodes(showId?: string) {
+export function useEpisodes(showSlug?: string) {
     return useQuery<any[], Error, EpisodeRead[], readonly ['episodes', string | undefined]>({
-        queryKey: ['episodes', showId] as const,
-        enabled: !!showId,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/shows/${showId}/episodes`, signal),
+        queryKey: ['episodes', showSlug] as const,
+        enabled: !!showSlug,
+        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/episodes/by-show-slug/${showSlug}`, signal),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
 
-export function useEpisode(showId?: string, episodeId?: string) {
-    return useQuery<any, Error, EpisodeRead, readonly ['episode', string | undefined, string | undefined]>({
-        queryKey: ['episode', showId, episodeId] as const,
-        enabled: !!showId && !!episodeId,
-        queryFn: ({signal}) => fetchJSON<any>(`${(window as any).appConfig.API_URL}/shows/${showId}/episodes/${episodeId}`, signal),
+export function useEpisode(episodeId?: string) {
+    return useQuery<any, Error, EpisodeRead, readonly ['episode', string | undefined]>({
+        queryKey: ['episode', episodeId] as const,
+        enabled: !!episodeId,
+        queryFn: ({signal}) => fetchJSON<any>(`${(window as any).appConfig.API_URL}/episodes/${episodeId}`, signal),
         placeholderData: keepPreviousData,
     })
 }

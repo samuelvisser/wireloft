@@ -27,7 +27,7 @@ export default function EpisodePage() {
   const { id: showId, episodeId } = useParams()
 
   const { data: show, isLoading, error } = useShow(showId)
-  const { data: episode, isLoading: isLoadingEpisode } = useEpisode(showId, episodeId)
+  const { data: episode, isLoading: isLoadingEpisode } = useEpisode(episodeId)
 
   if (!showId) {
     return (
@@ -101,7 +101,7 @@ export default function EpisodePage() {
       : 'Error'
 
   // Placeholder cover image
-  const coverUrl = episode.cover || `https://placehold.co/640x360/png?text=Episode+%23${episode.index}`
+  const coverUrl: string = episode.thumbnailPortraitPath || `https://placehold.co/640x360/png?text=Episode+%23${episode.index}`
 
   return (
     <section className="view episode-view" aria-labelledby="episode-title">
