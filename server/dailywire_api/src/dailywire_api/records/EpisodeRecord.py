@@ -1,52 +1,43 @@
 from __future__ import annotations
 
-from typing import Any
-import re
+from typing import Any, Optional
 from pydantic import (
-    ConfigDict,
     model_validator,
-    AliasChoices,
-    AwareDatetime,
+    AwareDatetime, Field, AliasPath,
 )
 
 from dailywire_api.records.BaseRecord import BaseRecord
-from dailywire_api.records.ThumbnailRecord import ThumbnailRecord
+from dailywire_api.utils.validators import ValOrNone
 
 
 class EpisodeRecord(BaseRecord):
 
-    id: str
+    dw_id: str = Field(validation_alias="id")
     slug: str
     title: str
-    description: str | None = None
-    duration: float | None = None
+    description: ValOrNone[str] = None
+    duration: ValOrNone[float] = None
 
-    media_type: str | None = None
-    background_image: str | None = None
-    sharing_url: str | None = None
-    status: str | None = None
-    is_downloadable: bool | None = None
+    media_type: ValOrNone[str] = None
+    background_image: ValOrNone[str] = None
+    sharing_url: ValOrNone[str] = None
+    status: ValOrNone[str] = None
+    is_downloadable: ValOrNone[bool] = None
 
-    published_at: AwareDatetime | None = None
-    scheduled_at: AwareDatetime | None = None
+    published_at: ValOrNone[AwareDatetime] = None
+    scheduled_at: ValOrNone[AwareDatetime] = None
 
-    thumbnail: ThumbnailRecord | None = None
+    thumbnail_landscape_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "land"), default=None)
+    thumbnail_portrait_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "port"), default=None)
+    thumbnail_square_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "square"), default=None)
 
     @model_validator(mode="before")
     @classmethod
-    def _unwrap_and_lift(cls, data: Any):
+    def normalize_data(cls, data: Any):
         if not isinstance(data, dict):
             return data
 
-        # Unwrap the common wrapper shape: {"showEpisode": {...}}
         if "showEpisode" in data and isinstance(data["showEpisode"], dict):
             data = data["showEpisode"]
-
-        # Lift the thumbnail from the images dict
-        if "thumbnail" not in data:
-            images = data.get("images") or {}
-            thumb = images.get("thumbnail")
-            if isinstance(thumb, dict):
-                data = {**data, "thumbnail": thumb}
 
         return data

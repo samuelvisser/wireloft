@@ -138,7 +138,7 @@ class MiddlewareClient:
         self._headers = headers
 
     # --------------- public methods ---------------
-    def get_show_page(self, slug: str, membership_plan: Optional[str] = None) -> ShowRecord:
+    def get_show_page(self, slug: str, *, membership_plan: Optional[str] = None) -> ShowRecord:
         params: Dict[str, Any] = {'slug': slug}
         if membership_plan:
             params['membershipPlan'] = membership_plan

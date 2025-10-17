@@ -14,9 +14,9 @@ class EpisodeDetailRecord(EpisodeRecord):
     progress: float
     delivery_mode: str
     continue_watching_entity_type: Optional[str]
-    continue_watching_entity_id: Optional[str] = Field(validation_alias=AliasChoices('continueWatchingEntityID', 'continueWatchingEntityId'))
+    continue_watching_entity_id: Optional[str]
     playback_policy: Optional[str]
-    mux_playback_id: Optional[str] = Field(validation_alias=AliasChoices('muxPlaybackID', 'muxPlaybackId'))
+    mux_playback_id: Optional[str]
     mux_playback_token: Optional[str]
     mux_drm_token: Optional[str]
     next_episode_url: str
