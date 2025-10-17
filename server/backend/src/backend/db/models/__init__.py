@@ -14,4 +14,5 @@ from .download_profile import SeriesDownloadProfile
 from .media_download import EpisodeMediaDownload
 from .media_item import Episode
 from .media_item import Movie
+from .media_item import EpisodeVersion
 from .stream_profile import RssStreamProfile
