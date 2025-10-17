@@ -98,11 +98,11 @@ def upsert_episode(
                 "index": index_value,
                 "duration": float(ep.duration or 0),
             }
-        }, exclude_fields={'id'})
+        })
         s.add(episode)
     else:
         # Update existing in place and reindex
-        update_database_fields(episode, ep, ignore_extra_fields=True, exclude_fields={'id'})
+        update_database_fields(episode, ep, ignore_extra_fields=True)
         episode.season_id = season.id
         episode.index = index_value
         episode.duration = float(ep.duration or 0)

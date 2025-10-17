@@ -13,9 +13,9 @@ export const DailywireEpisodeReadSchema = z.object({
     publishStatus: z.string(),
     isDownloadable: z.boolean(),
 
-    thumbnailLandscapePath: z.string(),
-    thumbnailPortraitPath: z.string(),
-    thumbnailSquarePath: z.string(),
+    thumbnailLandscapePath: z.string().nullable(),
+    thumbnailPortraitPath: z.string().nullable(),
+    thumbnailSquarePath: z.string().nullable(),
 
     publishedDate: z.string(),
     scheduledDate: z.string(),
