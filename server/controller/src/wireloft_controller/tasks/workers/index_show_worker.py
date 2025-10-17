@@ -8,7 +8,7 @@ from backend.api.helpers import update_database_fields, create_database_fields
 from backend.db.core import get_session
 from backend.db.models import Show, Season
 from backend.db.models.media_item import Episode
-from backend.types.dailywire_user_info import DwMembershipLevel
+from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.utils.helpers import generate_uuid
 from backend.types.media_types import MediaType
 
@@ -194,12 +194,12 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
         # Get the desired membership level and access token
         membership_level: str = show.membership_level
         access_token: Optional[str] = None
-        if membership_level is not DwMembershipLevel.FREE.value:
+        if membership_level is not WlDwMembershipLevel.FREE.value:
             tokens = DeviceAuthClient().get_token()
             if not tokens:
-                if membership_level is not DwMembershipLevel.WL_ANY.value:
+                if membership_level is not WlDwMembershipLevel.WL_ANY.value:
                     raise ValueError("No valid access token in token store")
-                membership_level = DwMembershipLevel.FREE.value
+                membership_level = WlDwMembershipLevel.FREE.value
             else:
                 access_token = tokens.access_token
 

@@ -32,15 +32,13 @@ class ShowRecord(BaseRecord):
     slug: str
     title: str
     description: ValOrNone[str] = Field(default=None)
-    media_type: ValOrNone[str] = Field(default=None)
+    background_image_path: ValOrNone[str] = Field(validation_alias="backgroundImage", default=None)
+    logo_image_path: ValOrNone[str] = Field(validation_alias="logoImage", default=None)
+    sharing_url: str
 
     author_name: ValOrNone[str] = Field(validation_alias=AliasPath("author", "name"), default=None)
     author_slug: ValOrNone[str] = Field(validation_alias=AliasPath("author", "slug"), default=None)
-    author_headshot: ValOrNone[str] = Field(validation_alias=AliasPath("author", "headshot"), default=None)
-
-    background_image: ValOrNone[str] = Field(default=None)
-    logo_image: ValOrNone[str] = Field(default=None)
-    sharing_url: ValOrNone[str] = Field(default=None)
+    author_headshot_path: ValOrNone[str] = Field(validation_alias=AliasPath("author", "headshot"), default=None)
 
     thumbnail_landscape_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "land"), default=None)
     thumbnail_portrait_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "port"), default=None)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 from pydantic import (
     model_validator,
     AwareDatetime, Field, AliasPath,
@@ -15,21 +15,20 @@ class EpisodeRecord(BaseRecord):
     dw_id: str = Field(validation_alias="id")
     slug: str
     title: str
-    description: ValOrNone[str] = None
-    duration: ValOrNone[float] = None
+    description: str
+    duration: float
 
-    media_type: ValOrNone[str] = None
-    background_image: ValOrNone[str] = None
-    sharing_url: ValOrNone[str] = None
-    status: ValOrNone[str] = None
-    is_downloadable: ValOrNone[bool] = None
-
-    published_at: ValOrNone[AwareDatetime] = None
-    scheduled_at: ValOrNone[AwareDatetime] = None
+    background_image_path: ValOrNone[str] = Field(validation_alias="backgroundImage", default=None)
+    sharing_url: str
+    publish_status: str = Field(validation_alias="status")
+    is_downloadable: bool
 
     thumbnail_landscape_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "land"), default=None)
     thumbnail_portrait_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "port"), default=None)
     thumbnail_square_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "square"), default=None)
+
+    published_date: AwareDatetime = Field(validation_alias="publishedAt")
+    scheduled_date: AwareDatetime = Field(validation_alias="scheduledAt")
 
     @model_validator(mode="before")
     @classmethod

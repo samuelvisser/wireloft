@@ -59,63 +59,54 @@ const dailyWireUrl = z
 const ShowBaseFormSchema = z.object({
     url: dailyWireUrl,
     membershipLevel: z.enum(DwMembershipLevelReg.Enum).default(DwMembershipLevelReg.Enum.WL_ANY),
-    type: z.union([z.enum(ShowTypeReg.values), z.literal('')]).default('')
-        .pipe(z.enum(ShowTypeReg.values)),
-    episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.literal('')]).default('')
-        .pipe(z.enum(EpisodeIdentifierReg.values)),
+    type: z.union([z.enum(ShowTypeReg.values), z.literal('')]).default('').pipe(z.enum(ShowTypeReg.values)),
+    episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.literal('')]).default('').pipe(z.enum(EpisodeIdentifierReg.values)),
 });
 
-export const ShowCreateFormSchema = ShowBaseFormSchema.extend({})
+export const ShowCreateFormSchema = ShowBaseFormSchema
 export type ShowCreateFormIn = z.input<typeof ShowCreateFormSchema>;
 export type ShowCreateFormOut = z.output<typeof ShowCreateFormSchema>;
 
 
-export const ShowUpdateFormSchema = ShowBaseFormSchema.extend({})
+export const ShowUpdateFormSchema = ShowBaseFormSchema
 export type ShowUpdateFormIn = z.input<typeof ShowUpdateFormSchema>;
 export type ShowUpdateFormOut = z.output<typeof ShowUpdateFormSchema>;
 
 
 /* ------------------------------------------------------------------ */
-/* 2) DAILYWIRE schema (what the Dailywire API returns)               */
-/*    These are NOT user-editable; we compute them from the URL.      */
+/* PAYLOAD schema (what we POST to the backend)                    */
 /* ------------------------------------------------------------------ */
-export const ShowDailywireSchema = z.object({
+const ShowBasePayloadSchema = ShowBaseFormSchema.extend({
     dwId: z.string().min(1, "dwId missing").default(''),
     slug: z.string().min(1, "slug missing").default(''),
-    authorSlug: z.string().min(1, "authorSlug missing").default(''),
-
-    // Content metadata from external API:
     title: z.string().min(1, "title missing").default(''),
-    description: z.string().min(1, "description missing").default(''),
-    authorName: z.string().min(1, "authorName missing").default(''),
-
-    // Optional image paths:
-    authorHeadshotPath: z.string().nullable(),
+    description: z.string().nullable(),
     backgroundImagePath: z.string().nullable(),
     logoImagePath: z.string().nullable(),
+    sharingUrl: z.string(),
+
+    authorName: z.string().min(1, "authorName missing").default(''),
+    authorSlug: z.string().min(1, "authorSlug missing").default(''),
+    authorHeadshotPath: z.string().nullable(),
+
     thumbnailLandscapePath: z.string().nullable(),
     thumbnailPortraitPath: z.string().nullable(),
     thumbnailSquarePath: z.string().nullable(),
-});
-export type ShowDailywireIn = z.input<typeof ShowDailywireSchema>;
-export type ShowDailywireOut = z.output<typeof ShowDailywireSchema>;
+})
 
 
-/* ------------------------------------------------------------------ */
-/* 3) PAYLOAD schema (what we POST to the backend)                    */
-/* ------------------------------------------------------------------ */
-export const ShowCreatePayloadSchema = ShowCreateFormSchema.extend(ShowDailywireSchema.shape);
+export const ShowCreatePayloadSchema = ShowBasePayloadSchema
 export type ShowCreatePayloadIn = z.input<typeof ShowCreatePayloadSchema>;
 export type ShowCreatePayloadOut = z.output<typeof ShowCreatePayloadSchema>;
 
 
-export const ShowUpdatePayloadSchema = ShowUpdateFormSchema.extend(ShowDailywireSchema.shape);
+export const ShowUpdatePayloadSchema = ShowBasePayloadSchema
 export type ShowUpdatePayloadIn = z.input<typeof ShowUpdatePayloadSchema>;
 export type ShowUpdatePayloadOut = z.output<typeof ShowUpdatePayloadSchema>;
 
 
 /* ------------------------------------------------------------------ */
-/* 4) READ schema (lenient response)                                   */
+/* READ schema (lenient response)                                   */
 /* ------------------------------------------------------------------ */
 export const ShowReadSchema = z.looseObject({
     id: z.int(),
@@ -128,14 +119,17 @@ export const ShowReadSchema = z.looseObject({
     authorSlug: z.string(),
     title: z.string(),
     description: z.string(),
-    url: z.string(),
-    authorName: z.string(),
-    authorHeadshotPath: z.string().optional(),
+    sharing_url: z.string(),
     backgroundImagePath: z.string().optional(),
     logoImagePath: z.string().optional(),
+
+    authorName: z.string(),
+    authorHeadshotPath: z.string().optional(),
+
     thumbnailLandscapePath: z.string().optional(),
     thumbnailPortraitPath: z.string().optional(),
     thumbnailSquarePath: z.string().optional(),
+
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })

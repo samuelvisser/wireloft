@@ -22,7 +22,7 @@ class Show(Base):
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     title: Mapped[str]
     description: Mapped[Optional[str]]
-    url: Mapped[str] = mapped_column(unique=True)
+    sharing_url: Mapped[str] = mapped_column(unique=True)
     membership_level: Mapped[str]
     type: Mapped[str]
     episode_identifier: Mapped[str]

@@ -29,6 +29,7 @@ class Episode(MediaItemBase):
     sharing_url: Mapped[Optional[str]]
     went_live_date: Mapped[Optional[datetime]]
     published_date: Mapped[Optional[datetime]]
+    scheduled_date: Mapped[Optional[datetime]]
     redownloaded_date: Mapped[Optional[datetime]]
 
     # Relationships
