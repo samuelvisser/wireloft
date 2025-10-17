@@ -7,7 +7,7 @@ from pydantic import (
 )
 
 from dailywire_api.records.BaseRecord import BaseRecord
-from dailywire_api.utils.validators import ValOrNone
+from dailywire_api.utils.validators import ValOrNone, ValOrZero
 
 
 class EpisodeRecord(BaseRecord):
@@ -16,7 +16,7 @@ class EpisodeRecord(BaseRecord):
     slug: str
     title: str
     description: str
-    duration: float
+    duration: ValOrZero[float]
 
     background_image_path: ValOrNone[str] = Field(validation_alias="backgroundImage", default=None)
     sharing_url: str

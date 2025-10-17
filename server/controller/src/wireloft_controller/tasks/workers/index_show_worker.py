@@ -96,7 +96,6 @@ def upsert_episode(
                 "show_id": show.id,
                 "season_id": season.id,
                 "index": index_value,
-                "duration": float(ep.duration or 0),
             }
         })
         s.add(episode)
@@ -105,7 +104,6 @@ def upsert_episode(
         update_database_fields(episode, ep, ignore_extra_fields=True)
         episode.season_id = season.id
         episode.index = index_value
-        episode.duration = float(ep.duration or 0)
 
     s.flush()
     return episode
