@@ -96,14 +96,7 @@ def upsert_episode(
                 "show_id": show.id,
                 "season_id": season.id,
                 "index": index_value,
-                "dw_id": ep.id,
-                "publish_status": ep.status,
-                "duration": int(ep.duration or 0),
-                "published_date": ep.published_at,
-                "background_image_path": ep.background_image,
-                "thumbnail_landscape_path": ep.thumbnail.landscape if ep.thumbnail else None,
-                "thumbnail_portrait_path": ep.thumbnail.portrait if ep.thumbnail else None,
-                "thumbnail_square_path": ep.thumbnail.square if ep.thumbnail else None,
+                "duration": float(ep.duration or 0),
             }
         }, exclude_fields={'id'})
         s.add(episode)
@@ -112,10 +105,7 @@ def upsert_episode(
         update_database_fields(episode, ep, ignore_extra_fields=True, exclude_fields={'id'})
         episode.season_id = season.id
         episode.index = index_value
-        episode.dw_id = ep.id
-        episode.duration = int(ep.duration or 0)
-        episode.publish_status = ep.status
-        episode.published_date = ep.published_at
+        episode.duration = float(ep.duration or 0)
 
     s.flush()
     return episode

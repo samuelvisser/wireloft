@@ -11,6 +11,7 @@ import {EpisodeRead} from "../types/schemas/episode";
 import {SeasonRead} from "../types/schemas/season";
 import {RssStreamProfileRead} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
+import {DailywireShowRead} from "../types/schemas/dailywire_show";
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
     const r = await fetch(url, {signal, credentials: 'include'})
@@ -139,7 +140,7 @@ export function useEpisode(episodeId?: string) {
 
 // Fetch DailyWire show preview by slug for Add Show URL step
 export function useDailywireShow(slug?: string, membershipPlan?: string) {
-    return useQuery<any, Error, any, readonly ['dwShow', string | undefined, string | undefined]>({
+    return useQuery<any, Error, DailywireShowRead, readonly ['dwShow', string | undefined, string | undefined]>({
         queryKey: ['dwShow', slug, membershipPlan] as const,
         enabled: !!slug,
         queryFn: async ({signal}) => {

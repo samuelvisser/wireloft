@@ -4,10 +4,10 @@ import {useDailywireShow, useDailywireUserInfo} from "../../lib/queries";
 import ReadMore from "../../utils/ReadMore";
 import {Controller, SubmitHandler, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
+import {ZodSafeParseResult} from "zod";
 import {
     ShowCreateFormSchema,
     ShowCreatePayloadSchema,
-    ShowDailywireSchema,
     type ShowCreateFormIn, ShowCreatePayloadOut, ShowCreatePayloadIn,
 } from "../../types/schemas/show";
 import {EpisodeIdentifierReg, EpisodeIdentifierValue, ShowTypeReg, ShowTypeValue} from "../../types/show";
@@ -15,6 +15,8 @@ import Select from "react-select";
 import {UseQueryResult} from "@tanstack/react-query";
 import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
 import {DwMembershipLevelReg} from "../../types/dailywire_user_info";
+import {DailywireShowRead, DailywireShowReadSchema} from "../../types/schemas/dailywire_show";
+import {DailywireSeasonRead} from "../../types/schemas/dailywire_season";
 
 type Props = {
     value: Partial<ShowCreatePayloadIn>
@@ -126,29 +128,14 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
     // --- Submit handler
     const onSubmit: SubmitHandler<ShowCreateFormIn> = (formOnly: ShowCreateFormIn) => {
         // Gather/normalize derived fields from the API response
-        const anyData = dw.data as any;
+        const dwShowData = dw.data as DailywireShowRead;
 
         // Validate dailywire data
-        const dailywireParsed = ShowDailywireSchema.safeParse({
-            dwId: anyData?.id,
-            slug: slugFromUrl,
-            authorHeadshotPath: anyData?.authorHeadshot,
-            backgroundImagePath: anyData?.backgroundImage,
-            logoImagePath: anyData?.logoImage,
-            thumbnailLandscapePath: anyData?.thumbnail?.landscape,
-            thumbnailPortraitPath: anyData?.thumbnail?.portrait,
-            thumbnailSquarePath: anyData?.thumbnail?.square,
-            ...anyData
-        });
+        const dailywireParsed: ZodSafeParseResult<DailywireShowRead> = DailywireShowReadSchema.safeParse(dwShowData);
 
         // Validate seasons
-        const seasonsRaw: any[] = Array.isArray(anyData?.seasons) ? anyData.seasons : [];
-        const seasonsParsed = SeasonDetachedSchema.array().safeParse(
-            seasonsRaw.map((s: any) => ({
-                dwId: s?.id ?? '',
-                ...s
-            }))
-        );
+        const seasonsRaw: DailywireSeasonRead[] = dwShowData.seasons;
+        const seasonsParsed: ZodSafeParseResult<SeasonDetachedOut[]> = SeasonDetachedSchema.array().safeParse(seasonsRaw);
 
         if (!dailywireParsed.success) {
             const first = dailywireParsed.error.issues[0];
@@ -169,7 +156,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
         }
 
         // Validate final payload. We do not save anything yet (only in the final widget step)
-        const payload = ShowCreatePayloadSchema.parse({...formOnly, ...dailywireParsed.data});
+        const payload: ShowCreatePayloadOut = ShowCreatePayloadSchema.parse({...formOnly, ...dailywireParsed.data});
         onSeasonsSubmit(seasonsParsed.data);
         onSubmitParent(payload);
         onContinue();
