@@ -1,7 +1,7 @@
-import { Link, useParams } from 'react-router-dom'
-import { library } from '@fortawesome/fontawesome-svg-core'
-import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
-import { useShow, useEpisode } from '../../lib/queries'
+import {Link, useParams} from 'react-router-dom'
+import {library} from '@fortawesome/fontawesome-svg-core'
+import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
+import {useShow, useEpisode} from '../../lib/queries'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -9,142 +9,139 @@ library.add(fas)
 // Types centralized in domain module
 
 function formatDate(d: Date | null | undefined) {
-  if (!d) return '—'
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(d)
-  } catch {
-    return d?.toString() ?? ''
-  }
+    if (!d) return '—'
+    try {
+        const year = d.getFullYear()
+        const month = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        const hours = String(d.getHours()).padStart(2, '0')
+        const minutes = String(d.getMinutes()).padStart(2, '0')
+        return `${year}-${month}-${day} ${hours}:${minutes}`
+    } catch {
+        return d?.toString() ?? ''
+    }
 }
 
 export default function EpisodePage() {
-  const { id: showId, episodeId } = useParams()
+    const {id: showId, episodeId} = useParams()
 
-  const { data: show, isLoading, error } = useShow(showId)
-  const { data: episode, isLoading: isLoadingEpisode } = useEpisode(episodeId)
+    const {data: show, isLoading, error} = useShow(showId)
+    const {data: episode, isLoading: isLoadingEpisode} = useEpisode(episodeId)
 
-  if (!showId) {
+    if (!showId) {
+        return (
+            <section className="view episode-view">
+                <div className="view-header">
+                    <h1>Episode</h1>
+                </div>
+                <p>Show not found.</p>
+                <p><Link to="/">Go home</Link></p>
+            </section>
+        )
+    }
+
+    if (isLoading && !show) {
+        return (
+            <section className="view episode-view">
+                <div className="view-header">
+                    <h1>Episode</h1>
+                </div>
+                <p>Loading episode...</p>
+            </section>
+        )
+    }
+
+    if (!show) {
+        return (
+            <section className="view episode-view">
+                <div className="view-header">
+                    <h1>Episode</h1>
+                </div>
+                <p>{(error as any)?.message ?? 'Show not found.'}</p>
+                <p><Link to="/">Go home</Link></p>
+            </section>
+        )
+    }
+
+    if (isLoadingEpisode && !episode) {
+        return (
+            <section className="view episode-view">
+                <div className="view-header">
+                    <h1>Episode</h1>
+                </div>
+                <p>Loading episode...</p>
+            </section>
+        )
+    }
+
+    if (!episode) {
+        return (
+            <section className="view episode-view">
+                <div className="view-header">
+                    <h1>Episode</h1>
+                </div>
+                <p>Episode not found.</p>
+                <p><Link to={`/show/${showId}`}>Back to show</Link></p>
+            </section>
+        )
+    }
+
+    const statusLabel =
+        episode.publishStatus === 'downloaded'
+            ? 'Downloaded'
+            : episode.publishStatus === 'downloading'
+                ? 'Downloading'
+                : episode.publishStatus === 'processing'
+                    ? 'Waiting for processing'
+                    : 'Error'
+
+    // Placeholder cover image
+    const coverUrl: string = episode.thumbnailPortraitPath || `https://placehold.co/640x360/png?text=Episode+%23${episode.index}`
+
+    console.log(episode.publishedDate)
+
     return (
-      <section className="view episode-view">
-        <div className="view-header">
-          <h1>Episode</h1>
-        </div>
-        <p>Show not found.</p>
-        <p><Link to="/">Go home</Link></p>
-      </section>
-    )
-  }
+        <section className="view episode-view" aria-labelledby="episode-title">
+            <div className="view-header">
+                <h1 id="episode-title">Episode</h1>
+            </div>
 
-  if (isLoading && !show) {
-    return (
-      <section className="view episode-view">
-        <div className="view-header">
-          <h1>Episode</h1>
-        </div>
-        <p>Loading episode...</p>
-      </section>
-    )
-  }
+            <article className="episode-details" aria-label="Episode details">
+                <header className="episode-header">
+                    <div className="episode-show"><Link to={`/show/${showId}`}>{show.title}</Link></div>
+                    <div className="episode-title-text">{episode.title}</div>
+                </header>
 
-  if (!show) {
-    return (
-      <section className="view episode-view">
-        <div className="view-header">
-          <h1>Episode</h1>
-        </div>
-        <p>{(error as any)?.message ?? 'Show not found.'}</p>
-        <p><Link to="/">Go home</Link></p>
-      </section>
-    )
-  }
+                <div className="episode-content">
+                    <div className="episode-cover">
+                        <img src={coverUrl} alt="Episode cover"/>
+                    </div>
+                    <div className="episode-meta">
+                        <table className="meta-table">
+                            <tbody>
+                            <tr>
+                                <th scope="row">Title</th>
+                                <td>{episode.title}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">Status</th>
+                                <td>{statusLabel}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">Release date</th>
+                                <td>{formatDate(episode.publishedDate)}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">Download date</th>
+                                <td>{formatDate(episode.downloadedDate)}</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </article>
 
-  if (isLoadingEpisode && !episode) {
-    return (
-      <section className="view episode-view">
-        <div className="view-header">
-          <h1>Episode</h1>
-        </div>
-        <p>Loading episode...</p>
-      </section>
-    )
-  }
-
-  if (!episode) {
-    return (
-      <section className="view episode-view">
-        <div className="view-header">
-          <h1>Episode</h1>
-        </div>
-        <p>Episode not found.</p>
-        <p><Link to={`/show/${showId}`}>Back to show</Link></p>
-      </section>
-    )
-  }
-
-  // Mock dates based on index (UI only)
-  const releaseDate = new Date(Date.now() - episode.index * 24 * 60 * 60 * 1000)
-  const downloadDate = episode.status === 'downloaded' ? new Date(releaseDate.getTime() + 6 * 60 * 60 * 1000) : null
-
-  const statusLabel =
-    episode.status === 'downloaded'
-      ? 'Downloaded'
-      : episode.status === 'downloading'
-      ? 'Downloading'
-      : episode.status === 'processing'
-      ? 'Waiting for processing'
-      : 'Error'
-
-  // Placeholder cover image
-  const coverUrl: string = episode.thumbnailPortraitPath || `https://placehold.co/640x360/png?text=Episode+%23${episode.index}`
-
-  return (
-    <section className="view episode-view" aria-labelledby="episode-title">
-      <div className="view-header">
-        <h1 id="episode-title">Episode</h1>
-      </div>
-
-      <article className="episode-details" aria-label="Episode details">
-        <header className="episode-header">
-          <div className="episode-show"><Link to={`/show/${showId}`}>{show.title}</Link></div>
-          <div className="episode-title-text">{episode.title}</div>
-        </header>
-
-        <div className="episode-content">
-          <div className="episode-cover">
-            <img src={coverUrl} alt="Episode cover" />
-          </div>
-          <div className="episode-meta">
-            <table className="meta-table">
-              <tbody>
-                <tr>
-                  <th scope="row">Title</th>
-                  <td>{episode.title}</td>
-                </tr>
-                <tr>
-                  <th scope="row">Status</th>
-                  <td>{statusLabel}</td>
-                </tr>
-                <tr>
-                  <th scope="row">Release date</th>
-                  <td>{formatDate(releaseDate)}</td>
-                </tr>
-                <tr>
-                  <th scope="row">Download date</th>
-                  <td>{formatDate(downloadDate)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </article>
-
-      <style>{`
+            <style>{`
         .episode-header { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
         .episode-title-text { font-size: 1.1rem; font-weight: 600; }
         .episode-content { display: grid; grid-template-columns: minmax(280px, 480px) 1fr; gap: 16px; align-items: start; }
@@ -156,6 +153,6 @@ export default function EpisodePage() {
           .episode-content { grid-template-columns: 1fr; }
         }
       `}</style>
-    </section>
-  )
+        </section>
+    )
 }
