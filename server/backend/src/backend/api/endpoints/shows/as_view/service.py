@@ -56,12 +56,7 @@ def get_show_views_list(s: Session) -> list[ShowAPIReadView]:
         .order_by(Show.title.asc())
     ).all()
 
-    if shows.__len__() > 0:
-        view_fields = _query_view_fields(s, shows[0])
-    else:
-        view_fields = ViewFields()
-
-    return [_to_view(show, view_fields) for show in shows]
+    return [_to_view(show, _query_view_fields(s, show)) for show in shows]
 
 def get_show_view(s: Session, show_slug: str) -> ShowAPIReadView:
     show: Optional[Show] = (

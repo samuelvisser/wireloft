@@ -27,7 +27,7 @@ function ShowSection({show}: { show: any }) {
     const {data: episodes, isLoading} = useEpisodes(show.slug, { limit: 20 })
     const eps: Episode[] = episodes ?? []
 
-    const author = show.author || show.authorName
+    const author = show.authorName
     const portraitPath: string | undefined = show.thumbnailPortraitPath || show.thumbnailLandscapePath || show.logoImagePath || show.authorHeadshotPath
     const portrait = toImageUrl(portraitPath)
 
