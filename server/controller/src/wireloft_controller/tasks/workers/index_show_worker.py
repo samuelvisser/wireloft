@@ -28,7 +28,7 @@ def count_total_episodes(show_slug: str, *,
                          access_token: Optional[str],
                          ) -> int:
     """
-    Count total episodes for a show by fetching all episodes once.
+    Count total episodes for a show by fetching all episodes at once.
     Note: We only keep the length as required.
     """
     all_eps = get_episodes_from_show_list(show_slug, membership_plan=membership_level, access_token=access_token)
@@ -82,7 +82,7 @@ def upsert_episode(
     # Check if the episode already exists in DB
     episode: Optional[Episode] = (
         s.query(Episode)
-        .filter(Episode.show_id == show.id, Episode.dw_id == ep.id)
+        .filter(Episode.show_id == show.id, Episode.dw_id == ep.dw_id)
         .one_or_none()
     )
 
@@ -194,10 +194,8 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
         # Step 1: count total episodes
         total = count_total_episodes(show_slug,
                                      membership_level=membership_level,
-                                     access_token=access_token,
-
-                                     )
-        # total = 2733 # TODO remove this overwrite when API is working
+                                     access_token=access_token)
+        # total = 2735 # TODO remove this overwrite when API is working
         if progress:
             progress.set(5, f"Found {total} episodes in '{show_slug}'")
 

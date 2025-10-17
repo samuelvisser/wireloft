@@ -10,7 +10,7 @@ def get_episodes_from_show_list(show_slug: str, *,
                                 membership_plan: Optional[str] = None,
                                 access_token: Optional[str] = None,
                                 ) -> list[EpisodeRecord]:
-    """Fetch every single episode for a show from the Daily Wire API."""
+    """Fetch every single episode of a show from the Daily Wire API."""
     client = MiddlewareClient(access_token=access_token)
 
     show_record = client.get_show_page(slug=show_slug, membership_plan=membership_plan)
@@ -18,7 +18,7 @@ def get_episodes_from_show_list(show_slug: str, *,
     # Get all episodes for all seasons, reverse to make sure the newest episodes are first in the list
     episode_list: list[EpisodeRecord] = []
     for season in reversed(show_record.seasons):
-        episode_list.extend(get_episodes_from_season_list(show_slug, season.id, client=client, membership_plan=membership_plan))
+        episode_list.extend(get_episodes_from_season_list(show_slug, season.dw_id, client=client, membership_plan=membership_plan))
 
     return episode_list
 
