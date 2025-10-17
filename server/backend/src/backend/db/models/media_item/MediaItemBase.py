@@ -17,21 +17,19 @@ class MediaItemBase(Base):
         "polymorphic_on": "type",
         "polymorphic_identity": MediaType.BASE.value,
     }
-    __table_args__ = (
-        UniqueConstraint("type", "slug", name="uq_unique_slug_per_media_type"),
-        UniqueConstraint("type", "dw_id", name="uq_unique_dw_id_per_media_type"),
-    )
 
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     uuid: Mapped[str] = mapped_column(index=True, unique=True)
-    dw_id: Mapped[Optional[str]] = mapped_column(index=True)
     type: Mapped[str]
     title: Mapped[str]
     description: Mapped[Optional[str]]
     downloaded_date: Mapped[Optional[datetime]]
     duration: Mapped[float]
     background_image_path: Mapped[Optional[str]]
+    thumbnail_landscape_path: Mapped[Optional[str]]
+    thumbnail_portrait_path: Mapped[Optional[str]]
+    thumbnail_square_path: Mapped[Optional[str]]
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

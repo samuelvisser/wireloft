@@ -13,11 +13,8 @@ class Movie(MediaItemBase):
 
     # Fields
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
+    dw_id: Mapped[Optional[str]] = mapped_column(index=True)
     slug: Mapped[str]
-
-    thumbnail_landscape_path: Mapped[Optional[str]]
-    thumbnail_portrait_path: Mapped[Optional[str]]
-    thumbnail_square_path: Mapped[Optional[str]]
 
     def __repr__(self) -> str:
         return f"<Movie(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"
