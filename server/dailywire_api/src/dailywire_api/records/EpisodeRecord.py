@@ -7,7 +7,8 @@ from pydantic import (
 )
 
 from dailywire_api.records.BaseRecord import BaseRecord
-from dailywire_api.utils.validators import ValOrNone, ValOrZero
+from dailywire_api.types.user_info import DwMembershipLevel
+from dailywire_api.utils.validators import ValOrNone, ValOrZero, AvailableForList
 
 
 class EpisodeRecord(BaseRecord):
@@ -23,12 +24,19 @@ class EpisodeRecord(BaseRecord):
     publish_status: str = Field(validation_alias="status")
     is_downloadable: bool
 
+    available_for: AvailableForList
+
     thumbnail_landscape_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "land"), default=None)
     thumbnail_portrait_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "port"), default=None)
     thumbnail_square_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "square"), default=None)
 
     published_date: AwareDatetime = Field(validation_alias="publishedAt")
     scheduled_date: AwareDatetime = Field(validation_alias="scheduledAt")
+
+    @property
+    def is_member_exclusive(self) -> bool:
+        paid = {DwMembershipLevel.INSIDER, DwMembershipLevel.INSIDER_PLUS, DwMembershipLevel.ALL_ACCESS}
+        return not DwMembershipLevel.FREE in self.available_for and any(t in paid for t in self.available_for)
 
     @model_validator(mode="before")
     @classmethod

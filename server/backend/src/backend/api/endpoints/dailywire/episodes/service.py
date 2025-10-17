@@ -23,10 +23,7 @@ def get_episodes_from_show_list(show_slug: str, *,
     return episode_list
 
 
-def get_episodes_from_season_list(
-        show_slug: str,
-        season_dw_id: str,
-        *,
+def get_episodes_from_season_list(show_slug: str, season_dw_id: str, *,
         client: Optional[MiddlewareClient] = None,
         access_token: Optional[str] = None,
         membership_plan: Optional[str] = None,
