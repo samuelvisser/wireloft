@@ -8,6 +8,7 @@ from backend.api.helpers import update_database_fields, create_database_fields
 from backend.db.core import get_session
 from backend.db.models import Show, Season
 from backend.db.models.media_item import Episode
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.utils.helpers import generate_uuid
 from backend.types.media_types import MediaType
 
@@ -15,18 +16,22 @@ from backend.api.endpoints.dailywire.episodes.service import get_episodes_from_s
 
 from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason, ByNextPage
 from dailywire_api.records import EpisodeRecord
+from dailywire_authorisation import DeviceAuthClient
 
 from ...registry import task
 
 
 # ---------------- helpers ----------------
 
-def count_total_episodes(show_slug: str) -> int:
+def count_total_episodes(show_slug: str, *,
+                         membership_level: str,
+                         access_token: Optional[str],
+                         ) -> int:
     """
     Count total episodes for a show by fetching all episodes once.
     Note: We only keep the length as required.
     """
-    all_eps = get_episodes_from_show_list(show_slug)
+    all_eps = get_episodes_from_show_list(show_slug, membership_plan=membership_level, access_token=access_token)
     return len(all_eps)
 
 
@@ -48,6 +53,7 @@ def iter_paginated_episodes_for_season(
         *,
         show_slug: str,
         season_dw_id: str,
+        membership_level: str,
         page_size: int = 10,
 ) -> Iterable[list[EpisodeRecord]]:
     """
@@ -55,7 +61,8 @@ def iter_paginated_episodes_for_season(
     """
     items, next_page_url, has_next = client.get_episodes_paginated(show_slug, ByShowSeason(
         season_id=season_dw_id,
-        page_size=page_size
+        page_size=page_size,
+        membership_plan=membership_level
     ))
     if items:
         yield items
@@ -120,6 +127,8 @@ def index_one_season(
         show: Show,
         season: Season,
         start_index: int,
+        membership_level: str,
+        access_token: Optional[str],
         page_size: int = 10,
 ) -> int:
     """
@@ -128,12 +137,16 @@ def index_one_season(
 
     Returns the next index to use for subsequent (older) episodes.
     """
-    client = MiddlewareClient()
+    client = MiddlewareClient(access_token=access_token)
     current_index = start_index
 
     try:
         # Process in pages newest->oldest
-        for batch in iter_paginated_episodes_for_season(client, show_slug=show.slug, season_dw_id=season.dw_id, page_size=page_size):
+        for batch in iter_paginated_episodes_for_season(client,
+                                                        show_slug=show.slug,
+                                                        season_dw_id=season.dw_id,
+                                                        membership_level=membership_level,
+                                                        page_size=page_size):
             for ep in batch:
                 upsert_episode(s, show=show, season=season, ep=ep, index_value=current_index)
                 current_index -= 1
@@ -178,8 +191,24 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
         # Ensure we have slug for API
         show_slug = show.slug
 
+        # Get the desired membership level and access token
+        membership_level: str = show.membership_level
+        access_token: Optional[str] = None
+        if membership_level is not DwMembershipLevel.FREE.value:
+            tokens = DeviceAuthClient().get_token()
+            if not tokens:
+                if membership_level is not DwMembershipLevel.WL_ANY.value:
+                    raise ValueError("No valid access token in token store")
+                membership_level = DwMembershipLevel.FREE.value
+            else:
+                access_token = tokens.access_token
+
         # Step 1: count total episodes
-        total = count_total_episodes(show_slug)
+        total = count_total_episodes(show_slug,
+                                     membership_level=membership_level,
+                                     access_token=access_token,
+
+                                     )
         # total = 2733 # TODO remove this overwrite when API is working
         if progress:
             progress.set(5, f"Found {total} episodes in '{show_slug}'")
@@ -197,7 +226,15 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
         for i, season in enumerate(seasons):
             # index this season in its own transaction scope
             try:
-                current_index = index_one_season(s=s, show=show, season=season, start_index=current_index, page_size=10)
+                current_index = index_one_season(
+                    s=s,
+                    show=show,
+                    season=season,
+                    start_index=current_index,
+                    membership_level=membership_level,
+                    access_token=access_token,
+                    page_size=10
+                )
             except Exception as e:
                 # rollback of the season has already occurred inside index_one_season
                 # Re-raise to allow scheduler to retry; caller expects retry to be scheduled

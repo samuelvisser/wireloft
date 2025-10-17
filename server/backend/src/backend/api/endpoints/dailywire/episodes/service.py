@@ -6,13 +6,12 @@ from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason, ByNextPa
 from dailywire_api.records import EpisodeRecord
 
 
-def get_episodes_from_show_list(
-    show_slug: str,
-    *,
-    membership_plan: Optional[str] = None,
-) -> list[EpisodeRecord]:
+def get_episodes_from_show_list(show_slug: str, *,
+                                membership_plan: Optional[str] = None,
+                                access_token: Optional[str] = None,
+                                ) -> list[EpisodeRecord]:
     """Fetch every single episode for a show from the Daily Wire API."""
-    client = MiddlewareClient()
+    client = MiddlewareClient(access_token=access_token)
 
     show_record = client.get_show_page(slug=show_slug, membership_plan=membership_plan)
 
@@ -51,6 +50,7 @@ def get_episodes_from_season_list(
         items, next_page_url, has_next = client.get_episodes_paginated(show_slug, ByNextPage(next_page_url=next_page_url))
 
     return episode_list
+
 
 def get_episode_details(episode_slug: str):
     client = MiddlewareClient()
