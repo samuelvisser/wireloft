@@ -4,7 +4,7 @@ import {DailywireEpisodeReadSchema} from "./dailywire_episode";
 
 
 // ---------- Lenient response (read) ----------
-export const DailywireShowReadSchema = z.object({
+export const DailywireShowReadSchema = z.looseObject({
     dwId: z.string().min(1, "dwId missing").default(''),
     slug: z.string().min(1, "slug missing").default(''),
     title: z.string().min(1, "title missing").default(''),
@@ -21,14 +21,14 @@ export const DailywireShowReadSchema = z.object({
     thumbnailPortraitPath: z.string().nullable(),
     thumbnailSquarePath: z.string().nullable(),
 
-    latestSeason: z.object(DailywireSeasonReadSchema),
+    latestSeason: DailywireSeasonReadSchema,
     seasons: z.array(DailywireSeasonReadSchema),
 
-    latestEpisode: z.object(DailywireEpisodeReadSchema),
+    latestEpisode: DailywireEpisodeReadSchema,
     latestEpisodes: z.array(DailywireEpisodeReadSchema),
 
     probableShowType: z.string(),
-    probablyEpisodeIdentification: z.string(),
+    probableEpisodeIdentification: z.string(),
 });
 export type DailywireShowRead = z.infer<typeof DailywireShowReadSchema>;
 
