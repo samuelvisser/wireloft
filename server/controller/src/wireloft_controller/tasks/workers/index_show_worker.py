@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, Optional, Sequence
+from typing import Optional, Sequence, Dict
 
 from sqlalchemy import select, insert, case, or_
 
@@ -12,10 +12,11 @@ from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.utils.helpers import generate_uuid
 from backend.types.media_types import MediaType
 
-from backend.api.endpoints.dailywire.episodes.service import get_episodes_from_show_list
+from backend.api.endpoints.dailywire.episodes.service import get_episodes_from_season_list
 
 from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason, ByNextPage
 from dailywire_api.records import EpisodeRecord
+from dailywire_api.records.EpisodeDetailRecord import EpisodeDetailRecord
 from dailywire_authorisation import DeviceAuthClient
 
 from ...registry import task
@@ -23,16 +24,32 @@ from ...registry import task
 
 # ---------------- helpers ----------------
 
-def count_total_episodes(show_slug: str, *,
-                         membership_level: str,
-                         access_token: Optional[str],
-                         ) -> int:
+def map_all_episodes(show_slug: str, seasons: Sequence[Season], *,
+                     membership_level: str,
+                     access_token: Optional[str],
+                     ) -> Dict[int, list[EpisodeRecord]]:
     """
-    Count total episodes for a show by fetching all episodes at once.
-    Note: We only keep the length as required.
+    Map all episodes for a show by their season id
     """
-    all_eps = get_episodes_from_show_list(show_slug, membership_plan=membership_level, access_token=access_token)
-    return len(all_eps)
+    ep_map: Dict[int, list[EpisodeRecord]] = {}
+    for season in seasons:
+        ep_map[season.id] = get_episodes_from_season_list(show_slug, season.dw_id,
+                                                          membership_plan=membership_level,
+                                                          access_token=access_token,
+                                                          client=None)
+
+    return ep_map
+
+
+def count_total_episodes(episodes_map: Dict[int, list[EpisodeRecord]]) -> int:
+    """
+    Count all episodes by counting the items in the map.
+    """
+    count = 0
+    for _, eps in episodes_map.items():
+        count += len(eps)
+
+    return count
 
 
 def get_seasons_sorted_desc(show_slug: str) -> Sequence[Season]:
@@ -48,34 +65,8 @@ def get_seasons_sorted_desc(show_slug: str) -> Sequence[Season]:
         s.close()
 
 
-def iter_paginated_episodes_for_season(
-        client: MiddlewareClient,
-        *,
-        show_slug: str,
-        season_dw_id: str,
-        membership_level: str,
-        page_size: int = 10,
-) -> Iterable[list[EpisodeRecord]]:
-    """
-    Yield lists of up to `page_size` EpisodeRecord items for a season, newest to oldest.
-    """
-    items, next_page_url, has_next = client.get_episodes_paginated(show_slug, ByShowSeason(
-        season_id=season_dw_id,
-        page_size=page_size,
-        membership_plan=membership_level
-    ))
-    if items:
-        yield items
-    while has_next and next_page_url:
-        items, next_page_url, has_next = client.get_episodes_paginated(show_slug, ByNextPage(
-            next_page_url=next_page_url
-        ))
-        if items:
-            yield items
-
-
 def upsert_episode(
-        s, *, show: Show, season: Season, ep: EpisodeRecord, index_value: int
+        s, *, show: Show, season: Season, ep: EpisodeDetailRecord, index_value: int
 ) -> Episode:
     """Create or update a single Episode row for the given EpisodeRecord."""
 
@@ -109,35 +100,26 @@ def upsert_episode(
     return episode
 
 
-def index_one_season(
-        *,
-        s,
-        show: Show,
-        season: Season,
-        start_index: int,
-        membership_level: str,
-        access_token: Optional[str],
-        page_size: int = 10,
-) -> int:
+def index_one_season(s, *,
+                     show: Show,
+                     season: Season,
+                     episodes: list[EpisodeRecord],
+                     start_index: int,
+                     ) -> int:
     """
     Index a single season within its own transaction scope. On error, roll back
     all changes for the season and re-raise.
 
     Returns the next index to use for subsequent (older) episodes.
     """
-    client = MiddlewareClient(access_token=access_token)
+    client = MiddlewareClient()
     current_index = start_index
 
     try:
-        # Process in pages newest->oldest
-        for batch in iter_paginated_episodes_for_season(client,
-                                                        show_slug=show.slug,
-                                                        season_dw_id=season.dw_id,
-                                                        membership_level=membership_level,
-                                                        page_size=page_size):
-            for ep in batch:
-                upsert_episode(s, show=show, season=season, ep=ep, index_value=current_index)
-                current_index -= 1
+        for ep in episodes:
+            epDetails = client.get_episode_details(ep.slug, require_member_exclusive=ep.is_member_exclusive)
+            upsert_episode(s, show=show, season=season, ep=epDetails, index_value=current_index)
+            current_index -= 1
         # Commit this season
         s.commit()
         return current_index
@@ -166,6 +148,8 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
       4) If any step fails within a season, rollback that season and re-raise to
          let the scheduler handle retries.
     """
+    # TODO: currently this task blocks any database writes as long as it runs. This is not ideal.
+
     s = get_session()
     try:
         # Resolve the Show record by slug or id
@@ -191,20 +175,18 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
             else:
                 access_token = tokens.access_token
 
-        # Step 1: count total episodes
-        total = count_total_episodes(show_slug,
-                                     membership_level=membership_level,
-                                     access_token=access_token)
-        # total = 2735 # TODO remove this overwrite when API is working
-        if progress:
-            progress.set(5, f"Found {total} episodes in '{show_slug}'")
-
-        # Step 2: seasons sorted desc
+        # Get seasons sorted desc
         seasons = get_seasons_sorted_desc(show_slug)
         if not seasons:
             if progress:
                 progress.set(100, "No seasons in database")
             return
+
+        # Get a map of all episodes
+        all_eps = map_all_episodes(show_slug, seasons, membership_level=membership_level, access_token=access_token)
+        total = count_total_episodes(all_eps)
+        if progress:
+            progress.set(5, f"Found {total} episodes in '{show_slug}'")
 
         # Step 3: iterate seasons and index episodes
         current_index = total
@@ -212,15 +194,11 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
         for i, season in enumerate(seasons):
             # index this season in its own transaction scope
             try:
-                current_index = index_one_season(
-                    s=s,
-                    show=show,
-                    season=season,
-                    start_index=current_index,
-                    membership_level=membership_level,
-                    access_token=access_token,
-                    page_size=10
-                )
+                current_index = index_one_season(s,
+                                                 show=show,
+                                                 season=season,
+                                                 episodes=all_eps[season.id],
+                                                 start_index=current_index)
             except Exception as e:
                 # rollback of the season has already occurred inside index_one_season
                 # Re-raise to allow scheduler to retry; caller expects retry to be scheduled
