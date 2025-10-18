@@ -4,6 +4,7 @@ from typing import Optional, TYPE_CHECKING
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
+from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
     from backend.db.models import Season
 
 
-class Show(Base):
+class Show(Base, HasMetadataMixin):
     __tablename__ = "shows"
 
     # Columns

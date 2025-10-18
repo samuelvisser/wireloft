@@ -1,0 +1,30 @@
+from datetime import datetime
+
+from sqlalchemy import DateTime, func, Index, UniqueConstraint
+from sqlalchemy.orm import mapped_column, Mapped
+
+from backend.db import Base
+
+
+class Metadata(Base):
+    __tablename__ = "metadata"
+    __table_args__ = (
+        Index("ix_metadata_parent", "parent_table", "parent_id"),
+        UniqueConstraint("parent_table", "parent_id", "key", name="uq_metadata_parent_key"),
+    )
+
+    # Columns
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    parent_table: Mapped[str]
+    parent_id: Mapped[int] = mapped_column(index=True)
+    key: Mapped[str]
+    value: Mapped[str]
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+

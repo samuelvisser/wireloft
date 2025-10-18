@@ -1,48 +1,31 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence, Dict
+from typing import Optional, Sequence, Dict, Tuple, Any
 
 from sqlalchemy import select, insert, case, or_
 
 from backend.api.helpers import update_database_fields, create_database_fields
 from backend.db.core import get_session
-from backend.db.models import Show, Season
+from backend.db.models import Show, Season, Metadata
 from backend.db.models.media_item import Episode
 from backend.types.dailywire_user_info import WlDwMembershipLevel
+from backend.types.show_types import EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
 from backend.types.media_types import MediaType
 
-from backend.api.endpoints.dailywire.episodes.service import get_episodes_from_season_list
-
-from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason, ByNextPage
+from dailywire_api.dw_api.client import MiddlewareClient
 from dailywire_api.records import EpisodeRecord
 from dailywire_api.records.EpisodeDetailRecord import EpisodeDetailRecord
 from dailywire_authorisation import DeviceAuthClient
 
 from ...registry import task
-from ...util.episodes import is_published_final
+from ...util.episodes import is_published_final, EpisodeMapList, map_all_episodes, EpisodeMapTuple, \
+    get_episode_identifier_map_numbered, get_episode_identifier_map_date_based
 
 
 # ---------------- helpers ----------------
 
-def map_all_episodes(show_slug: str, seasons: Sequence[Season], *,
-                     membership_level: str,
-                     access_token: Optional[str],
-                     ) -> Dict[int, list[EpisodeRecord]]:
-    """
-    Map all episodes for a show by their season id
-    """
-    ep_map: Dict[int, list[EpisodeRecord]] = {}
-    for season in seasons:
-        ep_map[season.id] = get_episodes_from_season_list(show_slug, season.dw_id,
-                                                          membership_plan=membership_level,
-                                                          access_token=access_token,
-                                                          client=None)
-
-    return ep_map
-
-
-def count_total_episodes(episodes_map: Dict[int, list[EpisodeRecord]]) -> int:
+def count_total_episodes(episodes_map: Dict[int, list[Any]]) -> int:
     """
     Count all episodes by counting the items in the map.
     """
@@ -67,7 +50,7 @@ def get_seasons_sorted_desc(show_slug: str) -> Sequence[Season]:
 
 
 def upsert_episode(
-        s, *, show: Show, season: Season, ep: EpisodeDetailRecord, index_value: int
+        s, *, show: Show, season: Season, ep: EpisodeDetailRecord, index_value: int, ep_id: str
 ) -> Episode:
     """Create or update a single Episode row for the given EpisodeRecord."""
 
@@ -88,6 +71,7 @@ def upsert_episode(
                 "show_id": show.id,
                 "season_id": season.id,
                 "index": index_value,
+                "episode_identifier": ep_id,
             }
         })
         s.add(episode)
@@ -96,6 +80,7 @@ def upsert_episode(
         update_database_fields(episode, ep, ignore_extra_fields=True)
         episode.season_id = season.id
         episode.index = index_value
+        episode.episode_identifier = ep_id
 
     s.flush()
     return episode
@@ -104,7 +89,7 @@ def upsert_episode(
 def index_one_season(s, *,
                      show: Show,
                      season: Season,
-                     episodes: list[EpisodeRecord],
+                     episodes: list[Tuple[str, EpisodeRecord]],
                      start_index: int,
                      ) -> int:
     """
@@ -117,13 +102,13 @@ def index_one_season(s, *,
     current_index = start_index
 
     try:
-        for ep in episodes:
+        for ep_id, ep in episodes:
             if not is_published_final(ep):
                 current_index -= 1
                 continue
             
             epDetails = client.get_episode_details(ep.slug, require_member_exclusive=ep.is_member_exclusive)
-            upsert_episode(s, show=show, season=season, ep=epDetails, index_value=current_index)
+            upsert_episode(s, show=show, season=season, ep=epDetails, index_value=current_index, ep_id=ep_id)
             current_index -= 1
 
         # Commit this season
@@ -188,13 +173,23 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
                 progress.set(100, "No seasons in database")
             return
 
-        # Get a map of all episodes
-        all_eps = map_all_episodes(show_slug, seasons, membership_level=membership_level, access_token=access_token)
-        total = count_total_episodes(all_eps)
+        # Get a map of all episodes and add their identifiers
+        ep_map: EpisodeMapList = map_all_episodes(show.slug, seasons, membership_level=membership_level, access_token=access_token)
+        ep_id_map: EpisodeMapTuple
+        if show.episode_identifier == EpisodeIdentifier.DATE_BASED.value:
+            ep_id_map = get_episode_identifier_map_date_based(ep_map, throw_if_truncated=True)
+        else:
+            latest_ep_num, latest_aux_num, ep_id_map = get_episode_identifier_map_numbered(ep_map, throw_if_truncated=True)
+
+            show.meta_items.append(Metadata(key="latest_ep_num", value=str(latest_ep_num)))
+            show.meta_items.append(Metadata(key="latest_aux_num", value=str(latest_aux_num)))
+            s.flush()
+
+        total = count_total_episodes(ep_map)
         if progress:
             progress.set(5, f"Found {total} episodes in '{show_slug}'")
 
-        # Step 3: iterate seasons and index episodes
+        # Iterate seasons and index episodes
         current_index = total
         processed = 0
         for i, season in enumerate(seasons):
@@ -203,7 +198,7 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
                 current_index = index_one_season(s,
                                                  show=show,
                                                  season=season,
-                                                 episodes=all_eps[season.id],
+                                                 episodes=ep_id_map[season.id],
                                                  start_index=current_index)
             except Exception as e:
                 # rollback of the season has already occurred inside index_one_season

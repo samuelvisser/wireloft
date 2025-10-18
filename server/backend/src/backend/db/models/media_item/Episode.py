@@ -6,16 +6,18 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey, UniqueConstraint
 
 from backend.types.media_types import MediaType
+from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 
 if TYPE_CHECKING:
     from backend.db.models import Show, Season
 
 
-class Episode(MediaItemBase):
+class Episode(MediaItemBase, HasMetadataMixin):
     __tablename__ = "episodes"
     __mapper_args__ = {"polymorphic_identity": MediaType.EPISODE.value}
     __table_args__ = (
         UniqueConstraint("show_id", "index", name="uq_episode_show_index"),
+        UniqueConstraint("show_id", "episode_identifier", name="uq_unique_episode_identifier_per_show"),
     )
 
     # Fields
@@ -24,6 +26,7 @@ class Episode(MediaItemBase):
     season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
     dw_id: Mapped[Optional[str]] = mapped_column(index=True, unique=True)
     index: Mapped[int]
+    episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the show")
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     publish_status: Mapped[str]
     video_url: Mapped[str]
