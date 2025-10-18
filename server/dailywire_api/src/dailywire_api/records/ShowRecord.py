@@ -134,3 +134,9 @@ class ShowRecord(BaseRecord):
                         normalized_data["latest_episodes"] = [item] + normalized_data.get("latest_episodes", [])
 
         return normalized_data
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, ShowRecord) and self.slug == other.slug
+
+    def __hash__(self) -> int:
+        return hash(self.slug)

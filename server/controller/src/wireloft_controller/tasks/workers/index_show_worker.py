@@ -20,6 +20,7 @@ from dailywire_api.records.EpisodeDetailRecord import EpisodeDetailRecord
 from dailywire_authorisation import DeviceAuthClient
 
 from ...registry import task
+from ...util.episodes import is_published_final
 
 
 # ---------------- helpers ----------------
@@ -117,9 +118,14 @@ def index_one_season(s, *,
 
     try:
         for ep in episodes:
+            if not is_published_final(ep):
+                current_index -= 1
+                continue
+            
             epDetails = client.get_episode_details(ep.slug, require_member_exclusive=ep.is_member_exclusive)
             upsert_episode(s, show=show, season=season, ep=epDetails, index_value=current_index)
             current_index -= 1
+
         # Commit this season
         s.commit()
         return current_index

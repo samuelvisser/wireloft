@@ -48,3 +48,9 @@ class EpisodeRecord(BaseRecord):
             data = data["showEpisode"]
 
         return data
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, EpisodeRecord) and self.slug == other.slug
+
+    def __hash__(self) -> int:
+        return hash(self.slug)

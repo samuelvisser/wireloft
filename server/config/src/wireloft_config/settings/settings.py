@@ -17,6 +17,7 @@ class AppSettings(SettingsBase):
     database_path: Path = PROJECT_ROOT / "data" / "wireloft.db"
     log_level: str = "INFO"
     timezone: str = Field(default="UTC", description="Application timezone")
+    final_ep_published_delay_minutes: int = Field(default=3 * 60, description="Delay in minutes before we can safely assume the episode's published status is final")
 
     crypto: CryptoSettings = Field(default_factory=CryptoSettings)
     session: SessionSettings = Field(default_factory=SessionSettings)

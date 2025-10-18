@@ -15,6 +15,7 @@ from dailywire_api.records.EpisodeDetailRecord import EpisodeDetailRecord
 from dailywire_api.records.ShowRecord import ShowRecord
 from dailywire_api.records.EpisodeRecord import EpisodeRecord
 from dailywire_api.records.UserInfo import UserInfo
+from dailywire_api.utils.episodes import check_duplicate_episodes
 from dailywire_authorisation import DeviceAuthClient
 from wireloft_config import get_settings
 
@@ -175,6 +176,9 @@ class MiddlewareClient:
         """
         Fetch a single page of episodes for a show.
 
+        WARNING: unfortunately, when using the "next page" selector, the DW API might return episodes it already did previously.
+        You will need to de-duplicate the results yourself.
+
         You can either:
           - continue from a previous response by providing next_page_url, OR
           - start a new query by providing the standard params (slug, membership_plan, etc.)
@@ -240,8 +244,10 @@ class MiddlewareClient:
             except ValidationError as e:
                 raise MiddlewareAPIError("Could not validate episode record") from e
 
+        # Prepare next page URL
         next_url = payload.get('nextPageUrl') or payload.get('nextPageURL') or None
 
+        # Return
         return EpisodesPaginatedResult(
             items=episodes,
             next_page_url=next_url,
