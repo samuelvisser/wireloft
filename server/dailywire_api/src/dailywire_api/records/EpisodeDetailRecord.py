@@ -19,4 +19,4 @@ class EpisodeDetailRecord(EpisodeRecord):
     mux_playback_id: Optional[str]
     mux_playback_token: Optional[str]
     mux_drm_token: Optional[str]
-    next_episode_url: str
+    next_episode_url: Optional[str]

@@ -248,19 +248,20 @@ class MiddlewareClient:
             has_next=bool(next_url)
         )
 
-    def get_episode_details(self, episode_slug: str) -> EpisodeDetailRecord:
+    def get_episode_details(self, episode_slug: str, *, require_member_exclusive: bool = False) -> EpisodeDetailRecord:
         endpoint = 'v4/getEpisode'
         params: Dict[str, Any] = {
             'slug': episode_slug,
             'nocache': 1,
         }
 
-        tokens = DeviceAuthClient().get_token()
-        if not tokens:
-            raise MiddlewareAPIError("No valid access token in token store")
-        access_token = tokens.access_token
+        if require_member_exclusive:
+            tokens = DeviceAuthClient().get_token()
+            if not tokens:
+                raise MiddlewareAPIError("No valid access token in token store")
+            access_token = tokens.access_token
+            self._headers['Authorization'] = f'Bearer {access_token}'
 
-        self._headers['Authorization'] = f'Bearer {access_token}'
         payload = self._get(endpoint, params)
 
         try:

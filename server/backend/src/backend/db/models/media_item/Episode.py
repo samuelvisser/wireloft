@@ -26,9 +26,9 @@ class Episode(MediaItemBase):
     index: Mapped[int]
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     publish_status: Mapped[str]
-    video_url: Mapped[Optional[str]]
-    audio_url: Mapped[Optional[str]]
-    sharing_url: Mapped[Optional[str]]
+    video_url: Mapped[str]
+    audio_url: Mapped[str]
+    sharing_url: Mapped[str]
     went_live_date: Mapped[Optional[datetime]]
     published_date: Mapped[Optional[datetime]]
     scheduled_date: Mapped[Optional[datetime]]

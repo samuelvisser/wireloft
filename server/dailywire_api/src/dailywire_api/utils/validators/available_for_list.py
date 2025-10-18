@@ -25,4 +25,3 @@ def parse_tiers(v: Any) -> list[Tier]:
     return out
 
 type AvailableForList = Annotated[list[Tier], BeforeValidator(parse_tiers)]
-AvailableForList.__doc__ = "List of DwMembershipLevel or 'UNKNOWN' values, parsed from input data"
