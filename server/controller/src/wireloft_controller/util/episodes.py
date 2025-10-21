@@ -49,7 +49,7 @@ def get_episode_identifier_map_date_based(episode_map: EpisodeMapList, *,
             identifier: str = date_to_yyyyddmm(ep.published_date)
 
             if identifier in identifiers:
-                identifier = ep.published_date.strftime("%Y%m%d %H%M")
+                identifier = "ep." + ep.published_date.strftime("%Y%m%d %H%M")
 
             identifiers.add(identifier)
             out.append((identifier, ep))
@@ -71,6 +71,7 @@ def get_episode_identifier_map_numbered(episode_map: EpisodeMapList, *,
     map_ep_id: EpisodeMapTuple = {sid: [] for sid in season_ids}
 
     identifiers: set[str] = set()
+    ep_extra_num: Dict[int, int] = {}
     last_ep_num: int = 0
     last_aux_num: int = 0
 
@@ -87,6 +88,12 @@ def get_episode_identifier_map_numbered(episode_map: EpisodeMapList, *,
                 candidate = f"ep.{ep_num}"
                 if candidate not in identifiers:
                     last_ep_num = ep_num
+                    identifier = candidate
+            elif ep_num and last_ep_num == ep_num:
+                last_extra_num = ep_extra_num.get(ep_num, 0)
+                candidate = f"ep.{ep_num}.extra.{last_extra_num + 1}"
+                if candidate not in identifiers:
+                    ep_extra_num[ep_num] = last_extra_num + 1
                     identifier = candidate
 
             if identifier is None:
