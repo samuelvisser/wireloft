@@ -50,7 +50,7 @@ def get_seasons_sorted_desc(show_slug: str) -> Sequence[Season]:
 
 
 def upsert_episode(
-        s, *, show: Show, season: Season, ep: EpisodeDetailRecord, index_value: int, ep_id: str
+        s, *, show: Show, season: Season, ep: EpisodeRecord, index_value: int, ep_id: str
 ) -> Episode:
     """Create or update a single Episode row for the given EpisodeRecord."""
 
@@ -107,8 +107,8 @@ def index_one_season(s, *,
                 current_index -= 1
                 continue
             
-            epDetails = client.get_episode_details(ep.slug, require_member_exclusive=ep.is_member_exclusive)
-            upsert_episode(s, show=show, season=season, ep=epDetails, index_value=current_index, ep_id=ep_id)
+            # epDetails = client.get_episode_details(ep.slug, require_member_exclusive=ep.is_member_exclusive)
+            upsert_episode(s, show=show, season=season, ep=ep, index_value=current_index, ep_id=ep_id)
             current_index -= 1
 
         # Commit this season
@@ -181,8 +181,8 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
         else:
             latest_ep_num, latest_aux_num, ep_id_map = get_episode_identifier_map_numbered(ep_map, throw_if_truncated=True)
 
-            show.meta_items.append(Metadata(key="latest_ep_num", value=str(latest_ep_num)))
-            show.meta_items.append(Metadata(key="latest_aux_num", value=str(latest_aux_num)))
+            show.set_meta(key="latest_ep_num", value=str(latest_ep_num))
+            show.set_meta(key="latest_aux_num", value=str(latest_aux_num))
             s.flush()
 
         total = count_total_episodes(ep_map)
