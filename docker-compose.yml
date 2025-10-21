@@ -1,7 +1,7 @@
 services:
-  dailywire:
+  wireloft:
     build: .
-    container_name: dailywire-downloader
+    container_name: wireloft
     restart: no
     volumes:
       - ./config:/config
