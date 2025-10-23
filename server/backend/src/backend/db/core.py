@@ -42,11 +42,10 @@ def configure_db() -> None:
         # Already configured to this path, nothing to do
         return
 
-    # Ensure folder exists when we intend to create/connect later
+    # Ensure the folder exists when we intend to create/connect later
     os.makedirs(path.parent, exist_ok=True)
 
-    url = f"sqlite:///{path.as_posix()}"
-    engine = create_engine(url, connect_args={"check_same_thread": False})
+    engine = create_engine(get_settings().database_url, connect_args={"check_same_thread": False})
 
     _engine = engine
     _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
