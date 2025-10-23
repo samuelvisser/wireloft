@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy import select
 
 from backend.db.core import get_session
-from wireloft_scheduler.models import TaskDefinition, TaskSchedule, TaskRun
+from wireloft_scheduler.db import TaskDefinition, TaskSchedule, TaskRun
 from wireloft_scheduler.scheduler import schedule_job, remove_job
 from wireloft_scheduler.executor import trigger_now as exec_trigger_now
 

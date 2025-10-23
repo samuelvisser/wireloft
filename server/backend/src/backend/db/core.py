@@ -45,7 +45,6 @@ def configure_db() -> None:
     # Ensure folder exists when we intend to create/connect later
     os.makedirs(path.parent, exist_ok=True)
 
-    # SQLite connect_args recommended for multithreaded apps (e.g., Flask)
     url = f"sqlite:///{path.as_posix()}"
     engine = create_engine(url, connect_args={"check_same_thread": False})
 

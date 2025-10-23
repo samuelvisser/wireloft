@@ -8,3 +8,4 @@ wireloft_scheduler.registry.sync_registry_to_db() can discover them.
 
 # Import tasks so their @task decorators run at import time
 from . import tasks  # noqa: F401
+from . import app

@@ -1,0 +1,1 @@
+from .entrypoint import download_series_thumbnail
