@@ -51,7 +51,7 @@ async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None
             access_token = tokens.access_token
 
     # Get seasons sorted desc
-    seasons = get_seasons_sorted_desc(show_slug)
+    seasons = get_seasons_sorted_desc(s, show_slug)
     if not seasons:
         if progress:
             progress.set(100, "No seasons in database")

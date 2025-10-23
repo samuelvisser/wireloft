@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import Optional, Sequence, Dict, Tuple, Any
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from backend.api.helpers import update_database_fields, create_database_fields
-from backend.db.core import get_session
 from backend.db.models import Show, Season
 from backend.db.models.media_item import Episode
 from backend.utils.helpers import generate_uuid
@@ -28,17 +28,13 @@ def count_total_episodes(episodes_map: Dict[int, list[Any]]) -> int:
     return count
 
 
-def get_seasons_sorted_desc(show_slug: str) -> Sequence[Season]:
+def get_seasons_sorted_desc(s: Session, show_slug: str) -> Sequence[Season]:
     """Get seasons for a show from the DB sorted by Season.index descending."""
-    s = get_session()
-    try:
-        return s.scalars(
-            select(Season)
-            .filter(Season.show.has(slug=show_slug))
-            .order_by(Season.index.desc())
-        ).all()
-    finally:
-        s.close()
+    return s.scalars(
+        select(Season)
+        .filter(Season.show.has(slug=show_slug))
+        .order_by(Season.index.desc())
+    ).all()
 
 
 def upsert_episode(

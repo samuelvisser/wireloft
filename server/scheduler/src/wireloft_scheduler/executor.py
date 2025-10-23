@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from backend.db.core import get_session
 from .db import *
@@ -28,7 +29,14 @@ class ProgressUpdater:
             self.run.message = message
         if meta is not None:
             self.run.meta = meta
-        self.session.flush()
+
+        # Commit quickly
+        self.session.begin_nested()
+        try:
+            self.session.commit()
+        except OperationalError as e:
+            # Best-effort progress: if DB is locked, skip this update
+            self.session.rollback()
 
 
 def _resolve_max_retries(session, def_key: str, schedule_id: Optional[int], override: Optional[int]) -> int:
@@ -101,7 +109,7 @@ def execute_task(*, def_key: str, resource_type: str, resource_id: int, schedule
         run.attempt_count = int(run.attempt_count or 0) + 1
         run.status = TaskStatus.RUNNING
         run.started_at = datetime.now(timezone.utc)
-        session.flush()
+        session.commit()
 
         # Execute task callable (supports sync or async)
         updater = ProgressUpdater(run, session)

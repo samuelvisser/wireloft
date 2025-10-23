@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import asyncio
 import threading
 from datetime import datetime
@@ -15,10 +14,6 @@ from apscheduler.triggers.date import DateTrigger
 from wireloft_config import get_settings
 
 _scheduler: Optional[AsyncIOScheduler] = None
-
-
-def _db_url_for_jobstore() -> str:
-    return f"sqlite:///{get_settings().database_path.as_posix()}"
 
 
 def get_trigger(name: str, args: dict):
@@ -45,7 +40,7 @@ def start_scheduler() -> AsyncIOScheduler:
         _scheduler = AsyncIOScheduler(timezone=get_settings().timezone)
         return _scheduler
 
-    job_stores = {"default": SQLAlchemyJobStore(url=_db_url_for_jobstore())}
+    job_stores = {"default": SQLAlchemyJobStore(url=get_settings().database_url)}
     loop = _get_or_start_event_loop()
     _scheduler = AsyncIOScheduler(event_loop=loop, jobstores=job_stores)
     _scheduler.start(paused=False)

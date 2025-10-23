@@ -91,15 +91,3 @@ class SchedulerSettings(SubmodelBase):
     max_workers: int = Field(..., description="Max concurrent jobs in the thread pool executor")
     default_max_retries: int = Field(..., description="Default maximum retries per task if not specified by task or schedule")
     retry_backoff_seconds: float = Field(..., description="Base seconds for exponential backoff between retries")
-
-    @property
-    def jobs_db_path(self) -> Path:
-        """
-        Derived path for scheduler jobs storage: same as AppSettings.database_path
-        but with "-jobs" appended to the base name.
-        Example: wireloft.db -> wireloft-jobs.db
-        """
-        # Local import to avoid circular imports at module import time
-        from wireloft_config import get_settings
-        db_path = get_settings().database_path
-        return db_path.with_name(f"{db_path.stem}-jobs{db_path.suffix}")
