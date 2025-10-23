@@ -9,7 +9,8 @@ from typing import Optional
 from sqlalchemy import select
 
 from backend.db.core import get_session
-from .models import TaskRun, TaskStatus, TaskDefinition, TaskSchedule, ResourceType
+from .db import *
+from .types import ResourceType, TaskStatus
 from .registry import get_task
 from wireloft_config import get_settings
 from . import scheduler as sched

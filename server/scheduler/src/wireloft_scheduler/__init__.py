@@ -17,4 +17,4 @@ Public entrypoints:
 Note: This package expects the main app to have configured the database via backend.db.configure_db().
 """
 
-from . import models as _models  # noqa: F401 ensure models are importable
+from . import db as _models  # noqa: F401 ensure models are importable

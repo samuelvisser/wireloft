@@ -48,12 +48,13 @@ def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
         return _scheduler
+
     if not get_settings().scheduler.enabled:
         # create but don't start to simplify call sites (no-ops)
         _scheduler = AsyncIOScheduler()
         return _scheduler
 
-    job_stores = {"default": SQLAlchemyJobStore(url=get_settings().database_path.as_posix())}
+    job_stores = {"default": SQLAlchemyJobStore(url="sqlite:///" + get_settings().database_path.as_posix())}
     _scheduler = AsyncIOScheduler(jobstores=job_stores, timezone=get_settings().timezone)
     _scheduler.start(paused=False)
     return _scheduler
@@ -96,6 +97,7 @@ def schedule_retry(*, def_key: str, resource_type: str, resource_id: int, run_id
 def trigger_now(*, def_key: str, resource_type: str, resource_id: int, max_retries: Optional[int] = None) -> str:
     from .executor import execute_task
     sch = start_scheduler()
+
     job = sch.add_job(
         execute_task,
         trigger=DateTrigger(run_date=datetime.utcnow()),
