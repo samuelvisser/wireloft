@@ -87,6 +87,7 @@ async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None
         except Exception as e:
             # rollback of the season has already occurred inside index_one_season
             # Re-raise to allow scheduler to retry; caller expects retry to be scheduled
+            print(f"Exception: {e}")
             raise e
 
         # Update progress roughly based on completed seasons

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import asyncio
+import threading
 from datetime import datetime
 from typing import Optional
 
@@ -16,18 +18,7 @@ _scheduler: Optional[AsyncIOScheduler] = None
 
 
 def _db_url_for_jobstore() -> str:
-    settings = get_settings()
-
-    if settings.database_path:
-        return settings.database_path.as_posix()
-
-    # default to app DB (SQLite path in env)
-    db_path = get_settings().database_path
-    if not db_path:
-        # Fallback to a scheduler.db in the data directory if not set
-        from wireloft_config.config import PROJECT_ROOT
-        db_path = (PROJECT_ROOT / "data" / "wireloft.db").as_posix()
-    return f"sqlite:///{db_path}"
+    return f"sqlite:///{get_settings().database_path.as_posix()}"
 
 
 def get_trigger(name: str, args: dict):
@@ -51,11 +42,12 @@ def start_scheduler() -> AsyncIOScheduler:
 
     if not get_settings().scheduler.enabled:
         # create but don't start to simplify call sites (no-ops)
-        _scheduler = AsyncIOScheduler()
+        _scheduler = AsyncIOScheduler(timezone=get_settings().timezone)
         return _scheduler
 
-    job_stores = {"default": SQLAlchemyJobStore(url="sqlite:///" + get_settings().database_path.as_posix())}
-    _scheduler = AsyncIOScheduler(jobstores=job_stores, timezone=get_settings().timezone)
+    job_stores = {"default": SQLAlchemyJobStore(url=_db_url_for_jobstore())}
+    loop = _get_or_start_event_loop()
+    _scheduler = AsyncIOScheduler(event_loop=loop, jobstores=job_stores)
     _scheduler.start(paused=False)
     return _scheduler
 
@@ -96,12 +88,46 @@ def schedule_retry(*, def_key: str, resource_type: str, resource_id: int, run_id
 
 def trigger_now(*, def_key: str, resource_type: str, resource_id: int, max_retries: Optional[int] = None) -> str:
     from .executor import execute_task
+
     sch = start_scheduler()
 
     job = sch.add_job(
         execute_task,
-        trigger=DateTrigger(run_date=datetime.utcnow()),
+        trigger=DateTrigger(run_date=datetime.now(tz=sch.timezone)),
         kwargs=dict(def_key=def_key, resource_type=resource_type, resource_id=resource_id, schedule_id=None, max_retries=max_retries),
         replace_existing=False,
     )
     return job.id
+
+
+# --- AsyncIO event loop management for AsyncIOScheduler ---
+_loop: Optional[asyncio.AbstractEventLoop] = None
+_loop_thread: Optional[threading.Thread] = None
+
+
+def _ensure_event_loop_running() -> asyncio.AbstractEventLoop:
+    global _loop, _loop_thread
+    # If we already have a running loop, reuse it
+    if _loop is not None and _loop.is_running():
+        return _loop
+
+    # Create and start a dedicated asyncio event loop in a background daemon thread
+    loop = asyncio.new_event_loop()
+    _loop = loop
+
+    def _run_loop(l: asyncio.AbstractEventLoop):
+        asyncio.set_event_loop(l)
+        l.run_forever()
+
+    t = threading.Thread(target=_run_loop, args=(loop,), name="wireloft-asyncio-loop", daemon=True)
+    _loop_thread = t
+    t.start()
+    return loop
+
+
+def _get_or_start_event_loop() -> asyncio.AbstractEventLoop:
+    # Use an already running loop in this thread if present, otherwise start our own
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return _ensure_event_loop_running()

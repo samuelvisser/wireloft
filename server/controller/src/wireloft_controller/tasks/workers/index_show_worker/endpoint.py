@@ -16,7 +16,7 @@ from .service import run_index_show_worker
     default_max_retries=5,
     tracks_progress=True,
 )
-async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
+async def index_show_worker(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None) -> None:
     """
     Controller task that implements the multi-step indexing flow:
       1) Count total episodes via API.
@@ -27,4 +27,4 @@ async def index_show_worker(*, resource_id: Optional[int] = None, show_slug: Opt
          let the scheduler handle retries.
     """
     with db_session() as s:
-        await run_index_show_worker(s, resource_id=resource_id, show_slug=show_slug, progress=progress)
+        await run_index_show_worker(s, resource_id=resource_id, show_slug=slug, progress=progress)
