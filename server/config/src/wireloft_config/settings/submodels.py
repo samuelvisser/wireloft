@@ -6,35 +6,34 @@ from pydantic import Field, field_validator, model_validator
 
 import os
 from pathlib import Path
-from wireloft_config.config import PROJECT_ROOT
 
 
 class OAuthSettings(SubmodelBase):
-    issuer: str = Field(default="https://authorize.dailywire.com", description="Issuer URL for OAuth authentication")
-    audience: str = Field(default="https://api.dailywire.com/", description="Audience URL for OAuth authentication")
-    client_id: str = Field(default="FCgw3nA6cxkcXLVseAQvCSVBrymwvfpE", description="Client ID for OAuth authentication")
-    scope: str = Field(default="openid profile offline_access", description="Scope for OAuth authentication")
+    issuer: str = Field(..., description="Issuer URL for OAuth authentication")
+    audience: str = Field(..., description="Audience URL for OAuth authentication")
+    client_id: str = Field(..., description="Client ID for OAuth authentication")
+    scope: str = Field(..., description="Scope for OAuth authentication")
 
 
 class TimeoutSettings(SubmodelBase):
-    min_fast_request_ms: int = Field(default=500, description="Minimum time in milliseconds for a fast request")
-    max_fast_requests: int = Field(default=350, description="Maximum number of fast requests allowed")             # Observed working: 346
-    min_slow_request_ms: int = Field(default=1.000 * 60 * 2, description="Milliseconds to wait after max fast requests where made") # default is 2 minutes
+    min_fast_request_ms: int = Field(..., description="Minimum time in milliseconds for a fast request")
+    max_fast_requests: int = Field(..., description="Maximum number of fast requests allowed")
+    min_slow_request_ms: int = Field(..., description="Milliseconds to wait after max fast requests where made")
 
 
 class CryptoSettings(SubmodelBase):
     secret_key: Optional[str] = Field(default=None, description="Literal secret key material for Fernet (base64 or raw text)")
     secret_key_file: Optional[Path] = Field(default=None, description="Path to a file containing the secret key")
-    default_secret_file: Path = Field(default=PROJECT_ROOT / "data" / "wl_secret.key", description="Default path if no explicit key or file is provided", frozen=True)
+    default_secret_file: Path = Field(..., description="Default path if no explicit key or file is provided", frozen=True)
 
 
 class SessionSettings(SubmodelBase):
-    ttl_seconds: int = Field(default=60 * 60 * 24 * 30, description="Time in seconds the session stays valid")     # 30 days default session lifetime
+    ttl_seconds: int = Field(..., description="Time in seconds the session stays valid")     # 30 days default session lifetime
 
 
 class DailyWireAPISettings(SubmodelBase):
-    middleware_api: str = Field(default="https://middleware-prod.dailywire.com/middleware", description="Middleware API base URL")
-    stream_api: str = Field(default="https://stream.media.dailywire.com", description="Stream API base URL")
+    middleware_api: str = Field(..., description="Middleware API base URL")
+    stream_api: str = Field(..., description="Stream API base URL")
 
 
 class AdminAuthSettings(SubmodelBase):
@@ -88,7 +87,19 @@ class AdminAuthSettings(SubmodelBase):
 
 
 class SchedulerSettings(SubmodelBase):
-    enabled: bool = Field(default=True, description="Enable the internal APScheduler-based scheduler")
-    max_workers: int = Field(default=5, description="Max concurrent jobs in the thread pool executor")
-    default_max_retries: int = Field(default=3, description="Default maximum retries per task if not specified by task or schedule")
-    retry_backoff_seconds: float = Field(default=5.0, description="Base seconds for exponential backoff between retries")
+    enabled: bool = Field(..., description="Enable the internal APScheduler-based scheduler")
+    max_workers: int = Field(..., description="Max concurrent jobs in the thread pool executor")
+    default_max_retries: int = Field(..., description="Default maximum retries per task if not specified by task or schedule")
+    retry_backoff_seconds: float = Field(..., description="Base seconds for exponential backoff between retries")
+
+    @property
+    def jobs_db_path(self) -> Path:
+        """
+        Derived path for scheduler jobs storage: same as AppSettings.database_path
+        but with "-jobs" appended to the base name.
+        Example: wireloft.db -> wireloft-jobs.db
+        """
+        # Local import to avoid circular imports at module import time
+        from wireloft_config import get_settings
+        db_path = get_settings().database_path
+        return db_path.with_name(f"{db_path.stem}-jobs{db_path.suffix}")
