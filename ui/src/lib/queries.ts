@@ -12,6 +12,7 @@ import {SeasonRead} from "../types/schemas/season";
 import {RssStreamProfileRead} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
+import {TaskRunRead, TaskRunReadSchema} from "../types/schemas/task";
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
     const r = await fetch(url, {signal, credentials: 'include'})
@@ -223,6 +224,30 @@ export function useStreamProfilesByShowSlug(showSlug?: string) {
 }
 
 // Prefetch core data to warm the cache on app start
+export function useShowIndexingRun(showId?: number) {
+    return useQuery<any, Error, TaskRunRead | null, readonly ['showIndexingRun', number | undefined]>({
+        queryKey: ['showIndexingRun', showId] as const,
+        enabled: !!showId,
+        queryFn: async ({signal}) => {
+            const base: string = (window as any).appConfig.API_URL
+            const url = `${base}/tasks/runs?resource_type=show&resource_id=${showId}&definition_key=index_show_worker&status=RUNNING`
+            const data: any[] = await fetchJSON<any[]>(url, signal)
+
+            if(Array.isArray(data) && data.length > 0) {
+                return TaskRunReadSchema.parse(data[0])
+            }
+            return null
+        },
+        // Poll periodically while enabled (when an active run exists)
+        refetchInterval: (q) => {
+            const r = q.state.data as TaskRunRead[] | null
+            return r ? 1500 : false
+        },
+        placeholderData: null,
+        refetchOnMount: 'always',
+    })
+}
+
 export function prefetchCoreData(qc: QueryClient) {
     void qc
         .prefetchQuery({

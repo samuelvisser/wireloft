@@ -35,5 +35,5 @@ def trigger(definition_key: str, resource_type: str, resource_id: int, max_retri
 
 
 @router.get("/runs", response_model=list[TaskRunRead])
-def runs(resource_type: str | None = None, resource_id: int | None = None, status: str | None = None):
-    return list_runs(resource_type, resource_id, status)
+def runs(resource_type: str | None = None, resource_id: int | None = None, status: str | None = None, definition_key: str | None = None):
+    return list_runs(resource_type, resource_id, status, definition_key)
