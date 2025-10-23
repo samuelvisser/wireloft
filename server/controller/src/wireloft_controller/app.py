@@ -9,3 +9,6 @@ def db_session():
         yield s
     finally:
         s.close()
+
+def app():
+    ...

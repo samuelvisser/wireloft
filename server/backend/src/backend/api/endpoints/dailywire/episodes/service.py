@@ -36,7 +36,7 @@ def get_episodes_from_season_list(show_slug: str, season_dw_id: str, *,
     episode_list: list[EpisodeRecord] = []
 
     items, next_page_url, has_next = client.get_episodes_paginated(show_slug, ByShowSeason(
-        season_id=season_dw_id,
+        season_dw_id=season_dw_id,
         membership_plan=membership_plan,
         page_size=page_size,
     ))

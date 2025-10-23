@@ -90,24 +90,28 @@ class _ByParameters:
     page_size: int = 20
     page_number: int = 1
     order_by: str = "CreatedAt_DESC"
-    show_offset: Optional[int] = None
-    podcast_offset: Optional[int] = None
+    show_offset: int = 0
+    podcast_offset: int = 0
+    last_episode_dw_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class _BySeason(_ByParameters):
-    season_id: str
-    param_key: ClassVar[Literal["showSeasonId", "podcastSeasonId"]]
+    season_dw_id: str
+    season_id_key: ClassVar[Literal["showSeasonId", "podcastSeasonId"]]
+    episode_id_key: ClassVar[Literal["lastShowEpisodeId", "lastPodcastEpisodeId"]]
 
 
 @dataclass(frozen=True)
 class ByShowSeason(_BySeason):
-    param_key: ClassVar[str] = "showSeasonId"
+    season_id_key: ClassVar[str] = "showSeasonId"
+    episode_id_key: ClassVar[str] = "lastShowEpisodeId"
 
 
 @dataclass(frozen=True)
 class ByPodcastSeason(_BySeason):
-    param_key: ClassVar[str] = "podcastSeasonId"
+    season_id_key: ClassVar[str] = "podcastSeasonId"
+    episode_id_key: ClassVar[str] = "lastPodcastEpisodeId"
 
 class EpisodesPaginatedResult(NamedTuple):
     items: list[EpisodeRecord]
@@ -213,18 +217,20 @@ class MiddlewareClient:
                         params[k] = v[0] if len(v) == 1 else v
 
 
-            case _BySeason(season_id=sid) as sel:
+            case _BySeason(season_dw_id=sid) as sel:
                 params = {
                     "slug": slug,
                     "orderBy": sel.order_by,
                     "pageNumber": sel.page_number,
                     "pageSize": sel.page_size,
-                    "showOffset": 0 if sel.show_offset is None else sel.show_offset,
-                    "podcastOffset": 0 if sel.podcast_offset is None else sel.podcast_offset,
-                    type(sel).param_key: sid,    # use the subclass’ key
+                    "showOffset": sel.show_offset,
+                    "podcastOffset": sel.podcast_offset,
+                    type(sel).season_id_key: sid,    # use the subclass’ key
                 }
                 if sel.membership_plan:
                     params["membershipPlan"] = sel.membership_plan
+                if sel.last_episode_dw_id:
+                    params[type(sel).episode_id_key] = sel.last_episode_dw_id
 
         try:
             payload = self._get(endpoint, params)

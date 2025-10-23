@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
-
+from pydantic import computed_field
 from pydantic_settings import YamlConfigSettingsSource
 
 from wireloft_config.config import PROJECT_ROOT
@@ -13,13 +12,13 @@ class AppSettings(SettingsBase):
 
     app_version: str = Field(default="0.1.0", frozen=True)
 
-    schedule: str = "*/15 * * * *"
     database_path: Path = PROJECT_ROOT / "data" / "wireloft.db"
+    @computed_field
     @property
     def database_url(self) -> str:
         return f"sqlite:///{self.database_path.as_posix()}"
     log_level: str = "INFO"
-    timezone: str = Field(default="UTC", description="Application timezone")
+    timezone: str = Field(default=os.environ.get("TZ", "UTC"), description="Application timezone")
     final_ep_published_delay_minutes: int = Field(default=3 * 60, description="Delay in minutes before we can safely assume the episode's published status is final")
 
     crypto: CryptoSettings = Field(default_factory=lambda: CryptoSettings(
@@ -49,6 +48,9 @@ class AppSettings(SettingsBase):
         max_workers=5,
         default_max_retries=3,
         retry_backoff_seconds=5.0,
+    ))
+    new_episode_schedule: RepeatingTaskSettings = Field(default_factory=lambda: RepeatingTaskSettings(
+        cron_schedule="*/30 * * * *"
     ))
 
     @classmethod

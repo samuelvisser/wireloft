@@ -91,3 +91,7 @@ class SchedulerSettings(SubmodelBase):
     max_workers: int = Field(..., description="Max concurrent jobs in the thread pool executor")
     default_max_retries: int = Field(..., description="Default maximum retries per task if not specified by task or schedule")
     retry_backoff_seconds: float = Field(..., description="Base seconds for exponential backoff between retries")
+
+
+class RepeatingTaskSettings(SubmodelBase):
+    cron_schedule: str = Field(..., description="Cron schedule string for repeating tasks")

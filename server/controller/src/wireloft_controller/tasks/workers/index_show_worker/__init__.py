@@ -1,1 +1,1 @@
-from .endpoint import index_show_worker
+from .entrypoint import index_show_worker
