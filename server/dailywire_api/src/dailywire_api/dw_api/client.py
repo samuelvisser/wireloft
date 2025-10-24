@@ -11,11 +11,7 @@ from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
 
-from dailywire_api.records.EpisodeDetailRecord import EpisodeDetailRecord
-from dailywire_api.records.ShowRecord import ShowRecord
-from dailywire_api.records.EpisodeRecord import EpisodeRecord
-from dailywire_api.records.UserInfo import UserInfo
-from dailywire_api.utils.episodes import check_duplicate_episodes
+from dailywire_api.records import DwEpisodeDetailRecord, DwShowRecord, DwEpisodeRecord, DwUserInfo
 from dailywire_authorisation import DeviceAuthClient
 from wireloft_config import get_settings
 
@@ -114,7 +110,7 @@ class ByPodcastSeason(_BySeason):
     episode_id_key: ClassVar[str] = "lastPodcastEpisodeId"
 
 class EpisodesPaginatedResult(NamedTuple):
-    items: list[EpisodeRecord]
+    items: list[DwEpisodeRecord]
     next_page_url: Optional[str]
     has_next: bool
 
@@ -143,15 +139,15 @@ class MiddlewareClient:
         self._headers = headers
 
     # --------------- public methods ---------------
-    def get_show_page(self, slug: str, *, membership_plan: Optional[str] = None) -> ShowRecord:
+    def get_show_page(self, slug: str, *, membership_plan: Optional[str] = None) -> DwShowRecord:
         params: Dict[str, Any] = {'slug': slug}
         if membership_plan:
             params['membershipPlan'] = membership_plan
 
         payload = self._get('v4/getShowPage', params)
-        return ShowRecord.model_validate(payload)
+        return DwShowRecord.model_validate(payload)
 
-    def get_user_info(self) -> UserInfo:
+    def get_user_info(self) -> DwUserInfo:
         """
         Fetch the current user's info using DailyWire Middleware API.
         Access token is obtained from dailywire_authorisation package.
@@ -170,7 +166,7 @@ class MiddlewareClient:
             self._headers = headers_backup
 
         try:
-            record = UserInfo.model_validate(payload)
+            record = DwUserInfo.model_validate(payload)
         except ValidationError as e:
             raise MiddlewareAPIError("Invalid user info response") from e
 
@@ -242,10 +238,10 @@ class MiddlewareClient:
         items_raw = payload.get('componentItems')
 
         # Normalize to EpisodeRecord dicts
-        episodes: list[EpisodeRecord] = []
+        episodes: list[DwEpisodeRecord] = []
         for it in items_raw or []:
             try:
-                ep = EpisodeRecord.model_validate(it)
+                ep = DwEpisodeRecord.model_validate(it)
                 episodes.append(ep)
             except ValidationError as e:
                 raise MiddlewareAPIError("Could not validate episode record") from e
@@ -260,7 +256,7 @@ class MiddlewareClient:
             has_next=bool(next_url)
         )
 
-    def get_episode_details(self, episode_slug: str, *, require_member_exclusive: bool = False) -> EpisodeDetailRecord:
+    def get_episode_details(self, episode_slug: str, *, require_member_exclusive: bool = False) -> DwEpisodeDetailRecord:
         endpoint = 'v4/getEpisode'
         params: Dict[str, Any] = {
             'slug': episode_slug,
@@ -277,7 +273,7 @@ class MiddlewareClient:
         payload = self._get(endpoint, params)
 
         try:
-            record = EpisodeDetailRecord.model_validate(payload)
+            record = DwEpisodeDetailRecord.model_validate(payload)
         except ValidationError as e:
             raise MiddlewareAPIError("Invalid episode detail response") from e
 

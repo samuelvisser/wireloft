@@ -8,10 +8,11 @@ from sqlalchemy.orm import Session
 from backend.api.helpers import update_database_fields, create_database_fields
 from backend.db.models import Show, Season
 from backend.db.models.media_item import Episode
+from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.helpers import generate_uuid
 from backend.types.media_types import MediaType
 
-from dailywire_api.records import EpisodeRecord
+from dailywire_api.records import DwEpisodeRecord
 
 from wireloft_controller.tasks.helpers.episodes import is_published_final
 
@@ -38,7 +39,7 @@ def get_seasons_sorted_desc(s: Session, show_slug: str) -> Sequence[Season]:
 
 
 def upsert_episode(
-        s, *, show: Show, season: Season, ep: EpisodeRecord, index_value: int, ep_id: str
+        s, *, show: Show, season: Season, ep: DwEpisodeRecord, index_value: int, ep_id: str
 ) -> Episode:
     """Create or update a single Episode row for the given EpisodeRecord."""
 
@@ -60,6 +61,7 @@ def upsert_episode(
                 "season_id": season.id,
                 "index": index_value,
                 "episode_identifier": ep_id,
+                "publish_status": EpisodePublishStatus.PUBLISHED_FINAL.value,
             }
         })
         s.add(episode)
@@ -69,6 +71,7 @@ def upsert_episode(
         episode.season_id = season.id
         episode.index = index_value
         episode.episode_identifier = ep_id
+        episode.publish_status = EpisodePublishStatus.PUBLISHED_FINAL.value
 
     s.flush()
     return episode
@@ -77,7 +80,7 @@ def upsert_episode(
 def index_one_season(s, *,
                      show: Show,
                      season: Season,
-                     episodes: list[Tuple[str, EpisodeRecord]],
+                     episodes: list[Tuple[str, DwEpisodeRecord]],
                      start_index: int,
                      ) -> int:
     """

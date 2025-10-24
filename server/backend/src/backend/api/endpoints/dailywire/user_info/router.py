@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from dailywire_api.records.UserInfo import UserInfo
+from dailywire_api.records import DwUserInfo
 from .service import get_user_info
+
 
 router = APIRouter(prefix="/user-info", tags=["DailyWire User"])
 
 
-@router.get("", response_model=UserInfo)
+@router.get("", response_model=DwUserInfo)
 def user_info():
     """
     Return the current user's DailyWire account info.

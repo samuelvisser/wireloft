@@ -20,13 +20,9 @@ from ...helpers.progress import update_progress
 
 async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
     """
-    Controller task that implements the multi-step indexing flow:
-      1) Count total episodes via API.
-      2) Load seasons from DB and sort by index desc.
-      3) For each season, fetch episodes in pages of 10 (newest->oldest) and upsert
-         into DB with a global descending index across the entire show.
-      4) If any step fails within a season, rollback that season and re-raise to
-         let the scheduler handle retries.
+    Task to index every published episode currently available for a show.
+
+    Typically, run only right after a new show is added to WireLoft
     """
     print("Starting index_show_worker")
 
@@ -70,7 +66,7 @@ async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None
     estimated_counts: list[int] = [40] * season_count  # initial guess for first season; will be overwritten as we discover
 
     for i, season in enumerate(seasons):
-        # Ensure our estimate for remaining seasons reflects the last known actual (or initial 40 for the very first)
+        # Ensure our estimate for remaining episodes reflects the last known actual (or initial 40 for the very first)
         prev_est = actual_counts[i - 1] if i > 0 else 40
         for j in range(i, season_count):
             if j >= len(actual_counts):
@@ -79,8 +75,7 @@ async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None
         # Fetch episodes for this season
         eps = get_episodes_from_season_list(show.slug, season.dw_id,
                                             membership_plan=membership_level,
-                                            access_token=access_token,
-                                            client=None)
+                                            access_token=access_token)
         ep_map[season.id] = eps
         count = len(eps)
         # Record actual and update future estimates
@@ -98,7 +93,6 @@ async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None
         pct_scan = max(1, min(95, pct_scan))
 
         update_progress(progress, pct_scan, f"Scanning seasons: mapped {done} episodes (season {season.index}: {season.name})")
-        # sleep(60)
 
     # Add identifiers
     ep_id_map: EpisodeMapTuple
@@ -115,7 +109,6 @@ async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None
 
     # Iterate seasons and index episodes
     current_index = total
-    processed = 0
     for i, season in enumerate(seasons):
         # index this season in its own transaction scope
         try:

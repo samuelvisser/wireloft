@@ -6,28 +6,11 @@ from pydantic import AwareDatetime
 
 from backend.api.endpoints.dailywire.episodes.service import get_episodes_from_season_list
 from backend.db.models import Episode as DbEpisode, Season
-from dailywire_api.records import EpisodeRecord as DwEpisode, EpisodeRecord
+from dailywire_api.records import DwEpisodeRecord as DwEpisode, DwEpisodeRecord
 from wireloft_config import get_settings
 
-type EpisodeMapList = Dict[int, List[EpisodeRecord]]
-type EpisodeMapTuple = Dict[int, List[Tuple[str, EpisodeRecord]]]
-
-
-def map_all_episodes(show_slug: str, seasons: Sequence[Season], *,
-                     membership_level: str,
-                     access_token: Optional[str],
-                     ) -> EpisodeMapList:
-    """
-    Map all episodes for a show by their season id
-    """
-    ep_map: EpisodeMapList = {}
-    for season in seasons:
-        ep_map[season.id] = get_episodes_from_season_list(show_slug, season.dw_id,
-                                                          membership_plan=membership_level,
-                                                          access_token=access_token,
-                                                          client=None)
-
-    return ep_map
+type EpisodeMapList = Dict[int, List[DwEpisodeRecord]]
+type EpisodeMapTuple = Dict[int, List[Tuple[str, DwEpisodeRecord]]]
 
 
 def _get_ep_num_from_title(title: str) -> Optional[int]:
@@ -37,14 +20,13 @@ def _get_ep_num_from_title(title: str) -> Optional[int]:
     return None
 
 
-
 def get_episode_identifier_map_date_based(episode_map: EpisodeMapList, *,
                                         throw_if_truncated: bool = False) -> EpisodeMapTuple:
     map_ep_id: EpisodeMapTuple = {}
     identifiers: set[str] = set()
 
     for season_id, eps in episode_map.items():
-        out: List[Tuple[str, EpisodeRecord]] = []
+        out: List[Tuple[str, DwEpisodeRecord]] = []
         for ep in eps:
             identifier: str = date_to_yyyyddmm(ep.published_date)
 
@@ -77,7 +59,7 @@ def get_episode_identifier_map_numbered(episode_map: EpisodeMapList, *,
 
     # Process seasons oldest -> newest
     for season_id, eps in reversed(episode_map.items()):
-        out: List[Tuple[str, EpisodeRecord]] = []
+        out: List[Tuple[str, DwEpisodeRecord]] = []
 
         # Process episodes oldest -> newest
         for ep in reversed(eps):
@@ -117,7 +99,8 @@ def is_published_final(episode: DwEpisode | DbEpisode):
     if not episode.publish_status == "PUBLISHED":
         return False
 
-    return date_is_min_ago(episode.published_date, get_settings().final_ep_published_delay_minutes)
+    ep_dur_min = int(episode.duration / 60)
+    return date_is_min_ago(episode.published_date, get_settings().final_ep_published_delay_minutes + ep_dur_min)
 
 
 def date_is_min_ago(date, minutes: int) -> bool:

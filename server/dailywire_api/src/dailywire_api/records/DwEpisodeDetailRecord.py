@@ -2,10 +2,10 @@ from typing import Optional
 
 from pydantic import Field, AliasChoices
 
-from dailywire_api.records import EpisodeRecord
+from dailywire_api.records import DwEpisodeRecord
 
 
-class EpisodeDetailRecord(EpisodeRecord):
+class DwEpisodeDetailRecord(DwEpisodeRecord):
 
     segment_audio_url: Optional[str]
     audio_url: str
