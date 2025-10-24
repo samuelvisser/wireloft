@@ -5,9 +5,13 @@ from sqlalchemy import select
 
 from backend.db.models import Show, Episode
 from backend.types.dailywire_user_info import WlDwMembershipLevel
-from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason
+from backend.types.episode_types import EpisodePublishStatus
+from dailywire_api.dw_api.client import MiddlewareClient
+from dailywire_api.records import DwEpisodeRecord
 from dailywire_authorisation import DeviceAuthClient
-from ._helpers import get_shows
+from ._helpers import get_shows, get_dw_episodes_since_last
+from ...helpers.seasons import create_season_by_dw_season
+from ...helpers.shows import get_latest_dw_season
 
 
 async def run_new_episode_finder(s: Session, *, resource_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
@@ -28,23 +32,25 @@ async def run_new_episode_finder(s: Session, *, resource_id: Optional[int] = Non
             logger.warning(f"No valid access token in token store for show {show.slug}: required for membership level {show.membership_level}")
             continue
 
-        latest_final_episode: Optional[Episode] = s.execute(
+        # Get last episode that is fully published
+        stmt = (
             select(Episode)
             .where(Episode.show_id == show.id)
-            .where(Episode.dw_id.isnot(None))
+            .where(Episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value)
             .order_by(Episode.index.desc())
             .limit(1)
-        ).scalar_one_or_none()
-
+        )
+        latest_final_episode: Optional[Episode] = s.execute(stmt).scalar_one_or_none()
         if latest_final_episode is None:
-            logger.warning(f"No episodes found for show {show.slug}")
+            logger.warning(f"No published episodes found for show {show.slug}")
             continue
 
-        # TODO handle DailyWire having new season
-        season_dw_id = latest_final_episode.season.dw_id
-        client.get_episodes_paginated(show.slug, ByShowSeason(
-            season_dw_id,
-            membership_plan=show.membership_level,
-            last_episode_dw_id=latest_final_episode.dw_id,
-            page_size=5
-        ))
+        latest_season = get_latest_dw_season(client, show)
+
+        # If the season is unknown, add it to the db
+        if len(show.seasons) == 0 or latest_season.dw_id != show.seasons[0].dw_id:
+            create_season_by_dw_season(s, show=show, dw_season=latest_season)
+            s.commit()
+
+        # Find new episodes
+        new_episodes: list[DwEpisodeRecord] = get_dw_episodes_since_last(client, show, latest_final_episode, latest_season)

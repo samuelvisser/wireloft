@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, TypeAlias
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -8,9 +8,8 @@ from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
-    from backend.db.models.download_profile import DownloadProfileBase
     from backend.db.models.stream_profile import StreamProfileBase
-    from backend.db.models import Season
+    from backend.db.models import Season, PodcastDownloadProfile, SeriesDownloadProfile
 
 
 class Show(Base, HasMetadataMixin):
@@ -50,7 +49,8 @@ class Show(Base, HasMetadataMixin):
     seasons: Mapped[list["Season"]] = relationship(
         back_populates="show", cascade="all, delete-orphan", order_by="desc(Season.index)"
     )
-    download_profiles: Mapped[list["DownloadProfileBase"]] = relationship(
+    download_profiles: Mapped[list["SeriesDownloadProfile | PodcastDownloadProfile"]] = relationship(
+        "DownloadProfileBase",
         back_populates="show", cascade="all, delete-orphan"
     )
     stream_profiles: Mapped[list["StreamProfileBase"]] = relationship(
