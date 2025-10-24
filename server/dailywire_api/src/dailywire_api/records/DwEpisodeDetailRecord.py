@@ -1,8 +1,6 @@
 from typing import Optional
 
-from pydantic import Field, AliasChoices
-
-from dailywire_api.records import DwEpisodeRecord
+from dailywire_api.records.DwEpisodeRecord import DwEpisodeRecord
 
 
 class DwEpisodeDetailRecord(DwEpisodeRecord):

@@ -3,7 +3,9 @@ from enum import Enum
 
 from pydantic import Field, model_validator, computed_field, AliasPath
 
-from dailywire_api.records import DwEpisodeRecord, DwSeasonRecord, BaseRecord
+from dailywire_api.records.BaseRecord import BaseRecord
+from dailywire_api.records.DwEpisodeRecord import DwEpisodeRecord
+from dailywire_api.records.DwSeasonRecord import DwSeasonRecord
 from dailywire_api.utils.validators import ValOrNone
 
 

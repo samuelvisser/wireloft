@@ -45,10 +45,10 @@ class Show(Base, HasMetadataMixin):
 
     # Relationships
     episodes: Mapped[list["Episode"]] = relationship(
-        back_populates="show", cascade="all, delete-orphan"
+        back_populates="show", cascade="all, delete-orphan", order_by="desc(Episode.index)"
     )
     seasons: Mapped[list["Season"]] = relationship(
-        back_populates="show", cascade="all, delete-orphan"
+        back_populates="show", cascade="all, delete-orphan", order_by="desc(Season.index)"
     )
     download_profiles: Mapped[list["DownloadProfileBase"]] = relationship(
         back_populates="show", cascade="all, delete-orphan"
