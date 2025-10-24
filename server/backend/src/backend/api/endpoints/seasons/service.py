@@ -53,6 +53,7 @@ def create_season(s: Session, body: SeasonAPICreate, *, update_show_profiles=Fal
                 profile_seasons: list[Season] = profile.seasons
                 profile_seasons.append(season)
                 profile.seasons = profile_seasons
+                s.flush()
 
     return SeasonAPIRead.model_validate(season)
 
