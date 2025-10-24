@@ -6,28 +6,47 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import OperationalError
 
 from backend.db.core import get_session
-from .models import TaskRun, TaskStatus, TaskDefinition, TaskSchedule, ResourceType
+from .db import *
+from .types import ResourceType, TaskStatus
 from .registry import get_task
 from wireloft_config import get_settings
 from . import scheduler as sched
 
 
 class ProgressUpdater:
-    def __init__(self, run: TaskRun, session):
+    def __init__(self, run: TaskRun):
         self.run = run
-        self.session = session
 
     def set(self, percent: int, message: Optional[str] = None, meta: Optional[dict] = None):
         p = max(0, min(100, int(percent)))
-        self.run.progress = p
+        values = {"progress": p}
         if message is not None:
-            self.run.message = message
+            values["message"] = message
         if meta is not None:
-            self.run.meta = meta
-        self.session.flush()
+            values["meta"] = meta
+
+
+        # Use a throwaway Session so failures can't poison the main one
+        s = get_session()
+        try:
+            for i in range(3):
+                try:
+                    s.execute(
+                        update(TaskRun)
+                        .where(TaskRun.id == self.run.id)
+                        .values(**values)
+                    )
+                    s.commit()
+                    return
+                except OperationalError:
+                    s.rollback()
+                    time.sleep(0.1 * (2 ** i))
+        finally:
+            s.close()
 
 
 def _resolve_max_retries(session, def_key: str, schedule_id: Optional[int], override: Optional[int]) -> int:
@@ -100,10 +119,10 @@ def execute_task(*, def_key: str, resource_type: str, resource_id: int, schedule
         run.attempt_count = int(run.attempt_count or 0) + 1
         run.status = TaskStatus.RUNNING
         run.started_at = datetime.now(timezone.utc)
-        session.flush()
+        session.commit()
 
         # Execute task callable (supports sync or async)
-        updater = ProgressUpdater(run, session)
+        updater = ProgressUpdater(run)
         started_perf = time.perf_counter()
         try:
             if inspect.iscoroutinefunction(fn):

@@ -6,6 +6,8 @@ from sqlalchemy.orm import mapped_column, Mapped
 from backend.db import Base
 
 
+# Metadata table adds metadata to any record in the database
+# If you want to add metadata to a specific table, use the HasMetadataMixin mixin to automatically generate the correct relationship
 class Metadata(Base):
     __tablename__ = "metadata"
     __table_args__ = (

@@ -51,7 +51,7 @@ def create_show_bundle(s: Session, payload: ShowAPICreateBundle) -> ShowAPIRead:
 
     # Create seasons
     seasons: list[Season] = []
-    index = 0
+    index = 1
     for season_in in payload.seasons:
         season = create_database_fields(Season, season_in.model_dump(exclude_none=True))
         season.index = index

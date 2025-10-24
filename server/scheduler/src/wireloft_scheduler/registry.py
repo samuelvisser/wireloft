@@ -6,7 +6,7 @@ from typing import Callable, Awaitable, Optional, Dict, Tuple
 from backend.db.core import get_session
 from sqlalchemy import select
 
-from .models import TaskDefinition
+from wireloft_scheduler.db import TaskDefinition
 
 
 @dataclass
@@ -16,7 +16,6 @@ class TaskMeta:
     description: str = ""
     allowed_resource_types: tuple[str, ...] = ("show", "season", "episode", "movie")
     default_max_retries: Optional[int] = None
-    # Whether the task reports intermediate progress (purely metadata for UI/consumers)
     tracks_progress: bool = True
 
 

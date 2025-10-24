@@ -61,10 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     # run
     p_run = sub.add_parser("run", help="Run a worker by its definition key")
-    p_run.add_argument("--key", required=True, help="Task definition key (e.g., index_show_worker)")
+    p_run.add_argument("key", help="Task definition key (e.g., index_show_worker)")
+
     # Common convenience arguments used by many workers
-    p_run.add_argument("--resource-id", type=int, help="Resource id for the task (if required)")
-    p_run.add_argument("--show-slug", help="Show slug (if supported by the worker)")
+    p_run.add_argument("--resource-id", "--id", type=int, help="Resource id for the task (if required)")
+    p_run.add_argument("--slug", help="Resource slug for the task (if supported by the worker)")
+
     # Generic passthrough kwargs: name=value; may be repeated
     p_run.add_argument(
         "--arg",
@@ -80,8 +82,8 @@ def _merge_kwargs(ns: argparse.Namespace) -> Dict[str, Any]:
     kwargs: Dict[str, Any] = {}
     if getattr(ns, "resource_id", None) is not None:
         kwargs["resource_id"] = ns.resource_id
-    if getattr(ns, "show_slug", None) is not None:
-        kwargs["show_slug"] = ns.show_slug
+    if getattr(ns, "slug", None) is not None:
+        kwargs["slug"] = ns.slug
     if getattr(ns, "arg", None):
         kwargs.update(_parse_kv_list(ns.arg))
     return kwargs

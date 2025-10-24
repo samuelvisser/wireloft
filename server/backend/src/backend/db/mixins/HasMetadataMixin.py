@@ -22,6 +22,15 @@ class HasMetadataMixin:
             overlaps="meta_items"
         )
 
+    def set_meta(self, key: str, value: str | None):
+        for m in self.meta_items:
+            if m.key == key:
+                m.value = value
+                return m
+        m = Metadata(key=key, value=value)
+        self.meta_items.append(m)
+        return m
+
 def _on_append(parent, meta, initiator):
     meta.parent_table = parent.__class__.__tablename__
 

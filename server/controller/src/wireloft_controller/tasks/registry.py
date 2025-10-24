@@ -23,7 +23,7 @@ async def example(resource_id: int, progress):
 from dataclasses import dataclass
 from typing import Optional, Callable, Awaitable
 
-from wireloft_scheduler.registry import task as scheduler_task, TaskMeta as _SchedulerTaskMeta
+from wireloft_scheduler.registry import task as scheduler_task
 
 
 @dataclass

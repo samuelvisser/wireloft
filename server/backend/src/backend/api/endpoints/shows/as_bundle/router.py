@@ -4,12 +4,13 @@ from .service import *
 from ....models.show import ShowAPIRead
 from ....models.show_as_bundle import ShowAPICreateBundle
 from backend.app import db_session
+from backend.api.endpoints.tasks.service import trigger_now as trigger_task_now
 
 router = APIRouter(prefix = "/as-bundle")
 
 
 @router.post("", response_model=ShowAPIRead, status_code=status.HTTP_201_CREATED)
-def show_create_with_profiles(body: ShowAPICreateBundle):
+def show_create_as_bundle(body: ShowAPICreateBundle):
     """
     Create a new show with media- and download profiles in a single operation.
 
@@ -21,6 +22,12 @@ def show_create_with_profiles(body: ShowAPICreateBundle):
         try:
             result = create_show_bundle(s, body)
             s.commit()
+
+            # After committing the new Show, trigger indexing of episodes
+            try:
+                trigger_task_now(definition_key="index_show_worker", resource_type="show", resource_id=result.id)
+            except Exception:
+                pass
             return result
         except Exception:
             s.rollback()

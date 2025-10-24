@@ -29,8 +29,8 @@ class Episode(MediaItemBase, HasMetadataMixin):
     episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the show")
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     publish_status: Mapped[str]
-    video_url: Mapped[str]
-    audio_url: Mapped[str]
+    video_url: Mapped[Optional[str]]
+    audio_url: Mapped[Optional[str]]
     sharing_url: Mapped[str]
     went_live_date: Mapped[Optional[datetime]]
     published_date: Mapped[Optional[datetime]]

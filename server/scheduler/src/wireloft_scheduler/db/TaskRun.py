@@ -1,0 +1,37 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, JSON, func
+from sqlalchemy.orm import Mapped, mapped_column
+
+from backend.db import Base
+from wireloft_scheduler.types import ResourceType, TaskStatus
+
+
+class TaskRun(Base):
+    __tablename__ = "task_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    schedule_id: Mapped[Optional[int]] = mapped_column(ForeignKey("task_schedules.id", ondelete="SET NULL"), index=True)
+    definition_id: Mapped[int] = mapped_column(ForeignKey("task_definitions.id", ondelete="CASCADE"), index=True)
+
+    resource_type: Mapped[ResourceType] = mapped_column(SAEnum(ResourceType), index=True)
+    resource_id: Mapped[int] = mapped_column(index=True)
+
+    status: Mapped[TaskStatus] = mapped_column(SAEnum(TaskStatus), index=True)
+    progress: Mapped[Optional[int]] = mapped_column(Integer)
+    message: Mapped[Optional[str]]
+    meta: Mapped[Optional[dict]] = mapped_column(JSON)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[Optional[str]]
+    next_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    runtime_ms: Mapped[Optional[int]] = mapped_column(Integer)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

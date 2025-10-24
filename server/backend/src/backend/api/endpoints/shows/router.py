@@ -3,6 +3,7 @@ from fastapi import APIRouter, status
 from .as_bundle import show_as_bundle_router
 from .as_view import show_view_router
 from .service import get_shows_list, create_show, get_show, update_show, delete_show
+from ..tasks.service import trigger_now as trigger_task_now
 from ...models.show import ShowAPIRead, ShowAPICreate, ShowAPIUpdate
 from backend.app import db_session
 
@@ -34,23 +35,13 @@ def show_create(body: ShowAPICreate):
         try:
             result = create_show(s, body)
             s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
 
-
-@router.post("/bundle", response_model=ShowAPIRead)
-def show_create_bundle(body: ShowAPICreate):
-    """
-    Create a new show as a bundle (deprecated).
-
-    This endpoint is deprecated. Use /shows/as-bundle instead.
-    """
-    with db_session() as s:
-        try:
-            result = create_show(s, body)
-            s.commit()
+            # After committing the new Show, trigger indexing of episodes
+            try:
+                trigger_task_now(definition_key="index_show_worker", resource_type="show", resource_id=result.id)
+            except Exception:
+                # Do not fail the request if task triggering fails; ignore for now
+                pass
             return result
         except Exception:
             s.rollback()

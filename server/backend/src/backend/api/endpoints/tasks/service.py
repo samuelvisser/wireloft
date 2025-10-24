@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy import select
 
 from backend.db.core import get_session
-from wireloft_scheduler.models import TaskDefinition, TaskSchedule, TaskRun
+from wireloft_scheduler.db import TaskDefinition, TaskSchedule, TaskRun
 from wireloft_scheduler.scheduler import schedule_job, remove_job
 from wireloft_scheduler.executor import trigger_now as exec_trigger_now
 
@@ -102,17 +102,25 @@ def _schedule_to_dict(sch: TaskSchedule, def_key: str) -> dict:
     }
 
 
-def list_runs(resource_type: Optional[str] = None, resource_id: Optional[int] = None, status: Optional[str] = None) -> list[dict]:
+def list_runs(
+        resource_type: Optional[str] = None,
+        resource_id: Optional[int] = None,
+        status: Optional[str] = None,
+        definition_key: str | None = None) -> list[dict]:
     s = get_session()
     try:
-        stmt = select(TaskRun, TaskDefinition.key).join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
+        stmt = select(TaskRun, TaskDefinition.key).join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id).order_by(TaskRun.started_at.desc())
         if resource_type is not None:
             stmt = stmt.where(TaskRun.resource_type == resource_type)
         if resource_id is not None:
             stmt = stmt.where(TaskRun.resource_id == resource_id)
         if status is not None:
             stmt = stmt.where(TaskRun.status == status)
+        if definition_key is not None:
+            stmt = stmt.where(TaskDefinition.key == definition_key)
+
         rows = s.execute(stmt).all()
+
         return [
             {
                 "id": r.id,
