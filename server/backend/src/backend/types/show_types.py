@@ -8,3 +8,4 @@ class ShowType(Enum):
 class EpisodeIdentifier(Enum):
     DATE_BASED = "date_based"
     NUMBERED = "numbered"
+    SEASONAL = "seasonal"

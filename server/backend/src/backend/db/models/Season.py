@@ -21,7 +21,7 @@ class Season(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     dw_id: Mapped[str] = mapped_column(index=True, unique=True)
     show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"))
-    index: Mapped[int] = mapped_column()
+    index: Mapped[int]
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     name: Mapped[str]
 
@@ -35,3 +35,6 @@ class Season(Base):
     # Relationships
     show: Mapped["Show"] = relationship(back_populates="seasons")
     episodes: Mapped[list["Episode"]] = relationship(back_populates="season")
+
+    def __repr__(self):
+        return f"<Season(id={self.id}, show_id={self.show_id}, index={self.index}, slug={self.slug}, created_at={self.created_at}, updated_at={self.updated_at})>"

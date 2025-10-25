@@ -83,31 +83,27 @@ class ByNextPage:
 @dataclass(frozen=True, kw_only=True)
 class _ByParameters:
     membership_plan: Optional[str] = None
-    page_size: int = 20
-    page_number: int = 1
     order_by: str = "CreatedAt_DESC"
-    show_offset: int = 0
-    podcast_offset: int = 0
-    last_episode_dw_id: Optional[str] = None
+    page_number: int = 1
+    page_size: int = 20
+    show_offset: int = 1
+    podcast_offset: int = 1
 
 
 @dataclass(frozen=True)
 class _BySeason(_ByParameters):
     season_dw_id: str
     season_id_key: ClassVar[Literal["showSeasonId", "podcastSeasonId"]]
-    episode_id_key: ClassVar[Literal["lastShowEpisodeId", "lastPodcastEpisodeId"]]
 
 
 @dataclass(frozen=True)
 class ByShowSeason(_BySeason):
     season_id_key: ClassVar[str] = "showSeasonId"
-    episode_id_key: ClassVar[str] = "lastShowEpisodeId"
 
 
 @dataclass(frozen=True)
 class ByPodcastSeason(_BySeason):
     season_id_key: ClassVar[str] = "podcastSeasonId"
-    episode_id_key: ClassVar[str] = "lastPodcastEpisodeId"
 
 class EpisodesPaginatedResult(NamedTuple):
     items: list[DwEpisodeRecord]
@@ -126,8 +122,8 @@ class MiddlewareClient:
     Pass an access token if you have one; premium content typically requires it.
     """
 
-    def __init__(self, access_token: Optional[str] = None, timeout: float = 30.0, base_url: str = get_settings().dw_api.middleware_api) -> None:
-        self._timeout = timeout
+    def __init__(self, access_token: Optional[str] = None, request_timeout: float = 30.0, base_url: str = get_settings().dw_api.middleware_api) -> None:
+        self._req_timeout = request_timeout
         self._base_url = base_url.rstrip('/')
         headers = {
             # These are generally not required for Middleware, but harmless if present
@@ -225,8 +221,6 @@ class MiddlewareClient:
                 }
                 if sel.membership_plan:
                     params["membershipPlan"] = sel.membership_plan
-                if sel.last_episode_dw_id:
-                    params[type(sel).episode_id_key] = sel.last_episode_dw_id
 
         try:
             payload = self._get(endpoint, params)
@@ -291,7 +285,7 @@ class MiddlewareClient:
             url = f"{url}?{qs}"
         req = Request(url, headers=self._headers, method='GET')
         try:
-            with urlopen(req, timeout=self._timeout) as resp:
+            with urlopen(req, timeout=self._req_timeout) as resp:
                 data = resp.read()
         except HTTPError as e:
             try:

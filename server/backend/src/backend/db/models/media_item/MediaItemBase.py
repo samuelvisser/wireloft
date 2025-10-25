@@ -44,4 +44,4 @@ class MediaItemBase(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<MediaItem(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"
+        return f"<MediaItem(id={self.id}, type={self.type}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

@@ -8,7 +8,7 @@ router = APIRouter(prefix="/episodes", tags=["DailyWire Episodes"])
 
 @router.get("/by-show-slug/{show_slug}", response_model=list[DwEpisodeRecord])
 def episodes_by_show_list(show_slug: str):
-    return get_episodes_from_show_list(show_slug)
+    return get_episodes_list_by_show(show_slug)
 
 
 @router.get("/{episode_slug}", response_model=DwEpisodeDetailRecord)

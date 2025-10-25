@@ -45,4 +45,4 @@ class DownloadProfileBase(Base):
 
 
     def __repr__(self) -> str:
-        return f"<DownloadProfileBase(id={self.id}, show_id={self.show_id}, enable_profile={self.enable_profile}, created_at={self.created_at}, updated_at={self.updated_at})>"
+        return f"<DownloadProfileBase(id={self.id}, type={self.type}, show_id={self.show_id}, enable_profile={self.enable_profile}, created_at={self.created_at}, updated_at={self.updated_at})>"

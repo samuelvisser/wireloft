@@ -6,10 +6,10 @@ from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason, ByNextPa
 from dailywire_api.records import DwEpisodeRecord
 
 
-def get_episodes_from_show_list(show_slug: str, *,
-                                membership_plan: Optional[str] = None,
-                                access_token: Optional[str] = None,
-                                ) -> list[DwEpisodeRecord]:
+def get_episodes_list_by_show(show_slug: str, *,
+                              membership_plan: Optional[str] = None,
+                              access_token: Optional[str] = None,
+                              ) -> list[DwEpisodeRecord]:
     """Fetch every single episode of a show from the Daily Wire API."""
     client = MiddlewareClient(access_token=access_token)
 
@@ -18,17 +18,17 @@ def get_episodes_from_show_list(show_slug: str, *,
     # Get all episodes for all seasons, reverse to make sure the newest episodes are first in the list
     episode_list: list[DwEpisodeRecord] = []
     for season in reversed(show_record.seasons):
-        episode_list.extend(get_episodes_from_season_list(show_slug, season.dw_id, client=client, membership_plan=membership_plan))
+        episode_list.extend(get_episodes_list_by_season(show_slug, season.dw_id, client=client, membership_plan=membership_plan))
 
     return episode_list
 
 
-def get_episodes_from_season_list(show_slug: str, season_dw_id: str, *,
-        client: Optional[MiddlewareClient] = None,
-        access_token: Optional[str] = None,
-        membership_plan: Optional[str] = None,
-        page_size: int = 50,
-) -> list[DwEpisodeRecord]:
+def get_episodes_list_by_season(show_slug: str, season_dw_id: str, *,
+                                client: Optional[MiddlewareClient] = None,
+                                access_token: Optional[str] = None,
+                                membership_plan: Optional[str] = None,
+                                page_size: int = 50,
+                                ) -> list[DwEpisodeRecord]:
     """Fetch every episode for a season from the Daily Wire API."""
     if client is None:
         client = MiddlewareClient(access_token=access_token)

@@ -29,4 +29,6 @@ class Metadata(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    def __repr__(self):
+        return f"<Metadata(id={self.id}, parent_table={self.parent_table}, parent_id={self.parent_id}, key={self.key}, value={self.value}, created_at={self.created_at}, updated_at={self.updated_at})>"
 
