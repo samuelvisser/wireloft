@@ -14,11 +14,11 @@ from backend.types.media_types import MediaType
 
 from dailywire_api.records import DwEpisodeRecord
 
-from wireloft_controller.tasks.helpers.episodes import is_published_final
+from wireloft_controller.tasks.helpers.episodes.mapper import EpisodeWithIdentifier, EpisodeMapTuple
+from wireloft_controller.tasks.helpers.episodes.status import is_published_final
 
 
-
-def count_total_episodes(episodes_map: Dict[int, list[Any]]) -> int:
+def count_total_episodes(episodes_map: EpisodeMapTuple) -> int:
     """
     Count all episodes by counting the items in the map.
     """
@@ -80,7 +80,7 @@ def upsert_episode(
 def index_one_season(s, *,
                      show: Show,
                      season: Season,
-                     episodes: list[Tuple[str, DwEpisodeRecord]],
+                     episodes: list[EpisodeWithIdentifier],
                      start_index: int,
                      ) -> int:
     """

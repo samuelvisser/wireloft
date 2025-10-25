@@ -2,9 +2,7 @@ from typing import Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Show, Episode
-from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason
-from dailywire_api.records import DwEpisodeRecord, DwSeasonRecord
+from backend.db.models import Show
 
 
 def get_shows(s: Session, *, resource_id: Optional[int], show_slug: Optional[str]) -> Sequence[Show]:
@@ -23,14 +21,18 @@ def get_shows(s: Session, *, resource_id: Optional[int], show_slug: Optional[str
     return shows
 
 
-def get_dw_episodes_since_last(client: MiddlewareClient, show: Show, latest_final_episode: Episode, latest_dw_season: DwSeasonRecord) -> list[DwEpisodeRecord]:
-
-
-
-    season_dw_id = latest_final_episode.season.dw_id
-    client.get_episodes_paginated(show.slug, ByShowSeason(
-        season_dw_id,
-        membership_plan=show.membership_level,
-        last_episode_dw_id=latest_final_episode.dw_id,
-        page_size=5
-    ))
+# def get_dw_episodes_since_last(client: MiddlewareClient, show: Show, latest_final_episode: Episode, latest_dw_season: DwSeasonRecord) -> list[DwEpisodeRecord]:
+#
+#     episodes: list[DwEpisodeRecord] = []
+#
+#
+#
+#
+#
+#     season_dw_id = latest_final_episode.season.dw_id
+#     client.get_episodes_paginated(show.slug, ByShowSeason(
+#         season_dw_id,
+#         membership_plan=show.membership_level,
+#         last_episode_dw_id=latest_final_episode.dw_id,
+#         page_size=5
+#     ))

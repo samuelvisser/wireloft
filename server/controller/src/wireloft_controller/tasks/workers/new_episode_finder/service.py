@@ -9,7 +9,7 @@ from backend.types.episode_types import EpisodePublishStatus
 from dailywire_api.dw_api.client import MiddlewareClient
 from dailywire_api.records import DwEpisodeRecord
 from dailywire_authorisation import DeviceAuthClient
-from ._helpers import get_shows, get_dw_episodes_since_last
+from ._helpers import get_shows
 from ...helpers.seasons import create_season_by_dw_season
 from ...helpers.shows import get_latest_dw_season
 
@@ -53,4 +53,4 @@ async def run_new_episode_finder(s: Session, *, resource_id: Optional[int] = Non
             s.commit()
 
         # Find new episodes
-        new_episodes: list[DwEpisodeRecord] = get_dw_episodes_since_last(client, show, latest_final_episode, latest_season)
+        # new_episodes: list[DwEpisodeRecord] = get_dw_episodes_since_last(client, show, latest_final_episode, latest_season)

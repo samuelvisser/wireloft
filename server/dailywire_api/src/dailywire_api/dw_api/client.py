@@ -86,8 +86,8 @@ class _ByParameters:
     order_by: str = "CreatedAt_DESC"
     page_number: int = 1
     page_size: int = 20
-    show_offset: int = 1
-    podcast_offset: int = 1
+    show_offset: int = 0
+    podcast_offset: int = 0
 
 
 @dataclass(frozen=True)
