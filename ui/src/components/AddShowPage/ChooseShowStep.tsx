@@ -69,11 +69,11 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
         }
     }, [urlParsed]);
 
-    // --- Watch the type and set the episodeIdentifier to numbered when the type is series
+    // --- Watch the type and set the episodeIdentifier to seasonal when the type is series
     const watchedType = watch("type");
     useEffect(() => {
         if (watchedType === ShowTypeReg.Enum.series) {
-            setValue("episodeIdentifier", EpisodeIdentifierReg.Enum.numbered, {shouldValidate: true, shouldDirty: true});
+            setValue("episodeIdentifier", EpisodeIdentifierReg.Enum.seasonal, {shouldValidate: true, shouldDirty: true});
         }
     }, [watchedType, setValue]);
 
@@ -267,12 +267,12 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                                 )}
                                 <div className="help" id="show-type-help">
                                     <ReadMore summary={<span>Why do I need to choose this?</span>}>
-                                        Selecting the correct show type helps WireLoft apply sensible defaults for how
-                                        episodes are
-                                        grouped and presented.<br/><br/>
-                                        Though WireLoft tries to guess the show type automatically based on various
-                                        factors, Dailywire unfortunately does not provide a reliable way to determine
-                                        this. If you're unsure, select "Podcast".
+                                        <p>The show type defines how download- and stream profiles deal with the show.</p>
+                                        <p><b>Podcast</b> shows download and stream episodes from <i>newest</i> to <i>oldest</i>.</p>
+                                        <p><b>Series</b> shows download and stream episodes from <i>oldest</i> to <i>newest</i>.</p>
+                                        <p>Further, the show type also defines what filters are available in the download- and stream profiles.</p>
+                                        <p>Though WireLoft tries to guess the show type automatically based on various factors, Daily&nbsp;Wire
+                                            unfortunately does not provide a reliable way to determine this. If you're unsure, select "Podcast".</p>
                                     </ReadMore>
                                 </div>
                             </div>
@@ -307,19 +307,16 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                                     )}
                                     <div className="help" id="episode-identification-help">
                                         <ReadMore summary={<span>How are episodes in this show identified?</span>}>
-                                            Some shows identify their episodes by a number. In this case, WireLoft
-                                            expects to see a string
-                                            "Ep. " in the title. The number that follows it is taken as the episode
-                                            number. Episodes without
-                                            this format will be regarded as auxiliary content.
-                                            <br/>
-                                            <br/>
-                                            Sometimes however, shows use a date-based format. In this case, the episodes
-                                            are identified simply
-                                            by their release date.
-                                            <br/>
-                                            <br/>
-                                            If you're unsure, select "Date-based".
+                                            <p>Determines how show episodes are grouped in the UI, and how they are indexed.</p>
+                                            <p><b>Date-based</b> episodes are identified simply by their publish date.</p>
+                                            <p><b>Numbered</b> episodes are identified by a number in the title. For numbered episodes, WireLoft
+                                                expects to see "Ep. " followed by a number in the title. Episodes without it will be considered
+                                                auxiliary content.</p>
+                                            <p><b>Seasonal</b> episodes are identified by a season number and an episode number. WireLoft will count
+                                                episodes by season and identify them like "S01E01". Auxiliary content like trailers will be identified
+                                                separately. Episodes in a show of type series are automatically assigned this seasonal identification.
+                                                Generally, we do not recommend it for Podcasts.</p>
+                                            <p>If you're unsure, select "Date-based".</p>
                                         </ReadMore>
                                     </div>
                                 </div>
