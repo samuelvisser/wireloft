@@ -93,7 +93,7 @@ def _scan_seasons(client: MiddlewareClient, *,
 
         # Remove episodes before since episode
         if since_episode_tuple is not None:
-            index = next((i for i, (_id, rec) in enumerate(eps) if rec.dw_id == since_episode_tuple[1].dw_id), None)
+            index = next((i for i, rec in enumerate(eps) if rec.dw_id == since_episode_tuple[1].dw_id), None)
             if index is not None:
                 eps: list[DwEpisodeRecord] = eps[: index]
 
