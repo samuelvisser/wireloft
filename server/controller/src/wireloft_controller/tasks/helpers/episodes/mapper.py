@@ -2,15 +2,14 @@ from __future__ import annotations
 
 type EpisodeWithIdentifier = Tuple[str, DwEpisodeRecord]
 type EpisodeMapTuple = OrderedDict[int, List[EpisodeWithIdentifier]]
-type SeasonLike = Union[Season, DwSeasonRecord]
+type SinceEpisodeTuple = Tuple[IdentifierMaxValues, Episode]
 
-from itertools import dropwhile
-from typing import Tuple, Optional, Sequence, List, Any, Union, OrderedDict
+from typing import Tuple, Optional, Sequence, List, Any, OrderedDict
 
 from backend.db.models import Show, Episode, Season
 from backend.types.show_types import EpisodeIdentifier
 from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason, ByNextPage
-from dailywire_api.records import DwEpisodeRecord, DwSeasonRecord
+from dailywire_api.records import DwEpisodeRecord
 from wireloft_controller.tasks.helpers.episodes.identifier import IdentifierMaxValues, identify_episodes_in_season
 from wireloft_controller.tasks.helpers.progress import update_progress, ProgressBounds, CollectionListProgressTracker
 
@@ -18,7 +17,7 @@ from wireloft_controller.tasks.helpers.progress import update_progress, Progress
 def get_dw_episodes_by_seasons(client: MiddlewareClient, *,
                                show: Show,
                                membership_plan: str,
-                               seasons: Sequence[SeasonLike],
+                               seasons: Sequence[Season],
                                progress: Optional[Any] = None,
                                progress_bounds: ProgressBounds = ProgressBounds(1, 95),
                                ) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
@@ -27,15 +26,20 @@ def get_dw_episodes_by_seasons(client: MiddlewareClient, *,
 
     Returns a mapping in descending order
     """
-    seasons_to_scan = sorted(seasons, key=lambda s: s.index)
-    return _scan_seasons(client, show=show, membership_plan=membership_plan, seasons_asc=seasons_to_scan, bounds=progress_bounds, progress=progress)
+    return _scan_seasons(client,
+                         show=show,
+                         membership_plan=membership_plan,
+                         seasons=seasons,
+                         bounds=progress_bounds,
+                         progress=progress)
 
 
 def get_dw_episodes_since_ep(client: MiddlewareClient, *,
                              show: Show,
                              membership_plan: str,
+                             seasons: Sequence[Season],
                              since_episode: Episode,
-                             access_token: Optional[str] = None,
+                             prev_max_values: IdentifierMaxValues,
                              progress: Optional[Any] = None,
                              progress_bounds: ProgressBounds = ProgressBounds(1, 50),
                              ) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
@@ -44,36 +48,33 @@ def get_dw_episodes_since_ep(client: MiddlewareClient, *,
 
     Returns a mapping in descending order
     """
-    # Allow reuse of an existing client; otherwise create one (keeps a single code path inside the scanner)
-    client = client or MiddlewareClient(access_token=access_token)
+    index = next((i for i, s in enumerate(seasons) if s.dw_id == since_episode.season.dw_id), -1) + 1
+    seasons_to_scan = seasons[: index]
 
-    dw_show = client.get_show_page(show.slug, membership_plan=membership_plan)
-    all_remote_seasons: List[SeasonLike] = dw_show.seasons
-
-    since_dw_id = since_episode.dw_id
-    seasons_to_scan = list(dropwhile(lambda s: s.dw_id != since_dw_id, all_remote_seasons))
-
-    ep_map_desc, identifier_max_values = _scan_seasons(client, show=show, membership_plan=membership_plan, seasons_asc=seasons_to_scan, bounds=progress_bounds,
-                                progress=progress)
-
-    # TODO Remove all episodes in the oldest returned season that came before our latest final episode
-
-    return ep_map_desc, identifier_max_values
+    return _scan_seasons(client,
+                         show=show,
+                         membership_plan=membership_plan,
+                         seasons=seasons_to_scan,
+                         since_episode_tuple=(prev_max_values, since_episode),
+                         bounds=progress_bounds,
+                         progress=progress)
 
 
 def _scan_seasons(client: MiddlewareClient, *,
                   show: Show,
                   membership_plan: str,
-                  seasons_asc: Sequence[SeasonLike],
+                  seasons: Sequence[Season],
+                  since_episode_tuple: Optional[SinceEpisodeTuple] = None,
                   bounds: ProgressBounds,
                   progress: Optional[Any]) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
     """
     Core scanner.
     """
     ep_map: EpisodeMapTuple = OrderedDict()
-    current_values: IdentifierMaxValues = {}
+    current_values: IdentifierMaxValues = since_episode_tuple[0] if since_episode_tuple is not None else {}
     identifiers: set[str] = set()
 
+    seasons_asc = sorted(seasons, key=lambda s: s.index)
     season_count = len(seasons_asc)
 
     update_progress(progress, bounds.min_pct, f"Scanning episodes for '{show.slug}'...")
@@ -81,6 +82,7 @@ def _scan_seasons(client: MiddlewareClient, *,
     tracker = CollectionListProgressTracker(progress_sink=progress, bounds=bounds, collection_count=season_count)
 
     for idx, season in enumerate(seasons_asc):
+        # Fetch all episodes for this season
         eps = __fetch_all_episodes_paginated(client, show.slug, ByShowSeason(
             season_dw_id=season.dw_id,
             membership_plan=membership_plan,
@@ -88,6 +90,12 @@ def _scan_seasons(client: MiddlewareClient, *,
             order_by="CreatedAt_ASC"
         ))
         eps = list(dict.fromkeys(eps))  # remove duplicates
+
+        # Remove episodes before since episode
+        if since_episode_tuple is not None:
+            index = next((i for i, (_id, rec) in enumerate(eps) if rec.dw_id == since_episode_tuple[1].dw_id), None)
+            if index is not None:
+                eps: list[DwEpisodeRecord] = eps[: index]
 
         identifier: EpisodeIdentifier = EpisodeIdentifier(show.episode_identifier)
         eps_with_id, current_values, identifiers = identify_episodes_in_season(identifier, eps, current_values, identifiers)
