@@ -37,4 +37,4 @@ class Season(Base):
     episodes: Mapped[list["Episode"]] = relationship(back_populates="season")
 
     def __repr__(self):
-        return f"<Season(id={self.id}, show_id={self.show_id}, index={self.index}, slug={self.slug}, created_at={self.created_at}, updated_at={self.updated_at})>"
+        return f"<Season(id={self.id}, slug={self.slug}, show_id={self.show_id}, index={self.index}, created_at={self.created_at}, updated_at={self.updated_at})>"
