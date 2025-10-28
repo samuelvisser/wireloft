@@ -41,8 +41,8 @@ def _get_episode_identifier_map_date_based(season_eps: List[DwEpisodeRecord],
                                            previous_identifiers: set[str]) -> Tuple[List[EpisodeWithIdentifier], IdentifierMaxValues, set[str]]:
     ep_id_list: List[EpisodeWithIdentifier] = []
     identifiers: set[str] = previous_identifiers
-    last_trailer_num: int = current_values.get("latest_trailer_num", 0)
-    last_aux_num: int = current_values.get("latest_aux_num", 0)
+    last_trailer_num: int = current_values.get("ep_id.latest_trailer_num", 0)
+    last_aux_num: int = current_values.get("ep_id.latest_aux_num", 0)
 
     for ep in season_eps:
         identifier = None
@@ -68,8 +68,8 @@ def _get_episode_identifier_map_date_based(season_eps: List[DwEpisodeRecord],
         ep_id_list.append((identifier, ep))
 
     current_values = {
-        "latest_trailer_num": last_trailer_num,
-        "latest_aux_num": last_aux_num,
+        "ep_id.latest_trailer_num": last_trailer_num,
+        "ep_id.latest_aux_num": last_aux_num,
     }
     return ep_id_list, current_values, identifiers
 
@@ -81,9 +81,9 @@ def _get_episode_identifier_map_numbered(season_eps: List[DwEpisodeRecord],
     ep_id_list: List[EpisodeWithIdentifier] = []
     identifiers: set[str] = previous_identifiers
     ep_extra_num: Dict[int, int] = {}
-    last_ep_num: int = current_values.get("latest_ep_num", 0)
-    last_trailer_num: int = current_values.get("latest_trailer_num", 0)
-    last_aux_num: int = current_values.get("latest_aux_num", 0)
+    last_ep_num: int = current_values.get("ep_id.latest_ep_num", 0)
+    last_trailer_num: int = current_values.get("ep_id.latest_trailer_num", 0)
+    last_aux_num: int = current_values.get("ep_id.latest_aux_num", 0)
 
     # Process episodes oldest -> newest
     for ep in season_eps:
@@ -120,9 +120,9 @@ def _get_episode_identifier_map_numbered(season_eps: List[DwEpisodeRecord],
         ep_id_list.append((identifier, ep))
 
     current_values = {
-        "latest_ep_num": last_ep_num,
-        "latest_trailer_num": last_trailer_num,
-        "latest_aux_num": last_aux_num,
+        "ep_id.latest_ep_num": last_ep_num,
+        "ep_id.latest_trailer_num": last_trailer_num,
+        "ep_id.latest_aux_num": last_aux_num,
     }
     return ep_id_list, current_values, identifiers
 
@@ -143,9 +143,9 @@ def _get_episode_identifier_map_seasonal(season_eps: List[DwEpisodeRecord],
     # Prepare variables
     ep_id_list: List[EpisodeWithIdentifier] = []
     identifiers: set[str] = previous_identifiers
-    season_num: int = current_values.get("latest_season_num", 0) + 1
-    last_trailer_num: int = current_values.get("latest_trailer_num", 0)
-    last_aux_num: int = current_values.get("latest_aux_num", 0)
+    season_num: int = current_values.get("ep_id.latest_season_num", 0) + 1
+    last_trailer_num: int = current_values.get("ep_id.latest_trailer_num", 0)
+    last_aux_num: int = current_values.get("ep_id.latest_aux_num", 0)
 
     # Process episodes oldest -> newest
     last_ep_num: int = 0
@@ -175,8 +175,8 @@ def _get_episode_identifier_map_seasonal(season_eps: List[DwEpisodeRecord],
         ep_id_list.append((identifier, ep))
 
     current_values = {
-        "latest_season_num": season_num,
-        "latest_trailer_num": last_trailer_num,
-        "latest_aux_num": last_aux_num,
+        "ep_id.latest_season_num": season_num,
+        "ep_id.latest_trailer_num": last_trailer_num,
+        "ep_id.latest_aux_num": last_aux_num,
     }
     return ep_id_list, current_values, identifiers
