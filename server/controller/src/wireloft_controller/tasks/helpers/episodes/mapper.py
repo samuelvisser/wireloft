@@ -95,7 +95,7 @@ def _scan_seasons(client: MiddlewareClient, *,
         if since_episode_tuple is not None:
             index = next((i for i, rec in enumerate(eps) if rec.dw_id == since_episode_tuple[1].dw_id), None)
             if index is not None:
-                eps: list[DwEpisodeRecord] = eps[: index]
+                eps: list[DwEpisodeRecord] = eps[index + 1:]
 
         identifier: EpisodeIdentifier = EpisodeIdentifier(show.episode_identifier)
         eps_with_id, current_values, identifiers = identify_episodes_in_season(identifier, eps, current_values, identifiers)
