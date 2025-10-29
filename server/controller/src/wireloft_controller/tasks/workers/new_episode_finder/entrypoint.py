@@ -19,7 +19,7 @@ async def new_episode_finder(*, resource_id: Optional[int] = None, slug: Optiona
     """
     Finds new episodes in all shows.
 
-    This function searches for new episodes across all shows. It retrieves
+    This worker searches for new episodes across all shows. It retrieves
     new episodes using the provided parameters and updates the database.
 
     Parameters:
@@ -35,4 +35,4 @@ async def new_episode_finder(*, resource_id: Optional[int] = None, slug: Optiona
         or async tasks.
     """
     with db_session() as s:
-        await run_new_episode_finder(s, resource_id=resource_id, show_slug=slug, progress=progress)
+        await run_new_episode_finder(s, show_id=resource_id, show_slug=slug, progress=progress)

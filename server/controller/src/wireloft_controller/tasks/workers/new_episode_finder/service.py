@@ -18,10 +18,10 @@ from ...helpers.episodes.save import save_dw_episodes_per_season_asc
 from ...types.general import RecordOrder
 
 
-async def run_new_episode_finder(s: Session, *, resource_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
+async def run_new_episode_finder(s: Session, *, show_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
     print("Starting new_episode_finder")
 
-    shows: Sequence[Show] = get_shows(s, resource_id=resource_id, show_slug=show_slug)
+    shows: Sequence[Show] = get_shows(s, show_id=show_id, show_slug=show_slug)
 
     # Get the desired membership level and access token
     access_token: Optional[str] = None

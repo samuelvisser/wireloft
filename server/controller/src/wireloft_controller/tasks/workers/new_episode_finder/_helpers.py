@@ -7,13 +7,13 @@ from wireloft_controller.tasks.helpers.episodes.mapper import EpisodeMapTuple
 from wireloft_controller.tasks.helpers.episodes.status import is_published_final
 
 
-def get_shows(s: Session, *, resource_id: Optional[int], show_slug: Optional[str]) -> Sequence[Show]:
+def get_shows(s: Session, *, show_id: Optional[int], show_slug: Optional[str]) -> Sequence[Show]:
     # In case we're only interested in one show, get it from the database
     show: Optional[Show] = None
     if show_slug:
         show = s.execute(select(Show).where(Show.slug == show_slug)).scalar_one_or_none()
-    elif resource_id is not None:
-        show = s.get(Show, resource_id)
+    elif show_id is not None:
+        show = s.get(Show, show_id)
 
     shows: Sequence[Show] = []
     if show is not None:
