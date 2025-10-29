@@ -95,3 +95,13 @@ class SchedulerSettings(SubmodelBase):
 
 class RepeatingTaskSettings(SubmodelBase):
     cron_schedule: str = Field(..., description="Cron schedule string for repeating tasks")
+
+
+class TrackNewEpisodeSchedule(SubmodelBase):
+    find_episodes_cron: str = Field(..., description="Cron schedule string for finding new episodes")
+    monitor_episode_cron: str = Field(..., description="Cron schedule string for monitoring an episode that exists but is not yet fully published")
+
+
+class EpisodeStatusTiming(SubmodelBase):
+    published_countdown_after_minutes: int = Field(..., description="Delay in minutes after dw reports the episode as published we can assume it actually is")
+    published_final_after_minutes: int = Field(..., description="Delay in minutes after dw reports the episode as published we can safely assume it no longer contains the countdown")

@@ -4,23 +4,24 @@ from typing import Optional, Sequence
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
-from backend.db.models import Show, Episode
+from backend.db.models import Show, Episode, Season
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from dailywire_api.dw_api.client import MiddlewareClient
 from dailywire_api.records import DwSeasonRecord
 from dailywire_authorisation import DeviceAuthClient
-from ._helpers import get_shows
+from ._helpers import get_shows, get_season_from_list_by_id, contains_non_final_episode, get_latest_ep_index
 from ...helpers.episodes.identifier import IdentifierMaxValues
 from ...helpers.episodes.mapper import get_dw_episodes_since_ep
 from ...helpers.seasons import create_season_by_dw_season
+from ...helpers.episodes.save import save_dw_episodes_per_season_asc
+from ...types.general import RecordOrder
 
 
 async def run_new_episode_finder(s: Session, *, resource_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
     print("Starting new_episode_finder")
 
     shows: Sequence[Show] = get_shows(s, resource_id=resource_id, show_slug=show_slug)
-
 
     # Get the desired membership level and access token
     access_token: Optional[str] = None
@@ -68,14 +69,47 @@ async def run_new_episode_finder(s: Session, *, resource_id: Optional[int] = Non
         s.commit()
 
         # Get prev max values
-        metadata = show.meta_items
         prev_max_values: IdentifierMaxValues = {
             m.key: int(m.value)
             for m in show.meta_items if m.key.startswith("ep_id")
         }
 
-        print(prev_max_values)
-
-
         # Find new episodes
-        # new_episodes: list[DwEpisodeRecord] = get_dw_episodes_since_last(client, show, latest_final_episode, latest_season)
+        ep_map_asc, identifier_max_values = get_dw_episodes_since_ep(client,
+                                                                                       show=show,
+                                                                                       membership_plan=membership_plan,
+                                                                                       seasons=show.seasons,
+                                                                                       since_episode=latest_final_episode,
+                                                                                       prev_max_values=prev_max_values,
+                                                                                       progress=progress,
+                                                                                       order=RecordOrder.ASC)
+
+        # Save identifier max values
+        for k, v in identifier_max_values.items():
+            show.set_meta(key=k, value=str(v))
+            s.flush()
+
+        # Save new episodes to db
+        latest_episode_index = get_latest_ep_index(s, show=show)
+        current_index = latest_episode_index + 1
+        for season_id, ep_list in ep_map_asc.items():
+            season: Optional[Season] = get_season_from_list_by_id(show.seasons, season_id)
+            if season is None:
+                logger.warning(f"No season found for show {show.slug} with id {season_id}")
+                continue
+
+            try:
+                current_index = save_dw_episodes_per_season_asc(s,
+                                                 show=show,
+                                                 season=season,
+                                                 episodes=ep_map_asc[season_id],
+                                                 start_index=current_index)
+            except Exception as e:
+                # rollback of the season has already occurred inside save_dw_episodes_per_season
+                # Re raise to allow scheduler to retry; caller expects retry to be scheduled
+                print(f"Exception: {e}")
+                raise e
+
+        # Start tracking a currently live episode if it exists
+        if contains_non_final_episode(ep_map_asc):
+            ...

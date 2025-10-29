@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from wireloft_controller.tasks.types.general import RecordOrder
+
 type EpisodeWithIdentifier = Tuple[str, DwEpisodeRecord]
 type EpisodeMapTuple = OrderedDict[int, List[EpisodeWithIdentifier]]
 type SinceEpisodeTuple = Tuple[IdentifierMaxValues, Episode]
@@ -14,13 +16,24 @@ from wireloft_controller.tasks.helpers.episodes.identifier import IdentifierMaxV
 from wireloft_controller.tasks.helpers.progress import update_progress, ProgressBounds, CollectionListProgressTracker
 
 
+def count_total_episodes(episodes_map: EpisodeMapTuple) -> int:
+    """
+    Count all episodes by counting the items in the map.
+    """
+    count = 0
+    for _, eps in episodes_map.items():
+        count += len(eps)
+
+    return count
+
+
 def get_dw_episodes_by_seasons(client: MiddlewareClient, *,
                                show: Show,
                                membership_plan: str,
                                seasons: Sequence[Season],
                                progress: Optional[Any] = None,
                                progress_bounds: ProgressBounds = ProgressBounds(1, 95),
-                               ) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
+                               order: RecordOrder) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
     """
     Fetch all episodes for the given *local* seasons.
 
@@ -31,7 +44,8 @@ def get_dw_episodes_by_seasons(client: MiddlewareClient, *,
                          membership_plan=membership_plan,
                          seasons=seasons,
                          bounds=progress_bounds,
-                         progress=progress)
+                         progress=progress,
+                         order=order)
 
 
 def get_dw_episodes_since_ep(client: MiddlewareClient, *,
@@ -42,7 +56,7 @@ def get_dw_episodes_since_ep(client: MiddlewareClient, *,
                              prev_max_values: IdentifierMaxValues,
                              progress: Optional[Any] = None,
                              progress_bounds: ProgressBounds = ProgressBounds(1, 50),
-                             ) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
+                             order: RecordOrder) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
     """
     Fetch episodes strictly *after* the given final episode, across *all* remote seasons that follow it.
 
@@ -57,7 +71,8 @@ def get_dw_episodes_since_ep(client: MiddlewareClient, *,
                          seasons=seasons_to_scan,
                          since_episode_tuple=(prev_max_values, since_episode),
                          bounds=progress_bounds,
-                         progress=progress)
+                         progress=progress,
+                         order=order)
 
 
 def _scan_seasons(client: MiddlewareClient, *,
@@ -66,7 +81,8 @@ def _scan_seasons(client: MiddlewareClient, *,
                   seasons: Sequence[Season],
                   since_episode_tuple: Optional[SinceEpisodeTuple] = None,
                   bounds: ProgressBounds,
-                  progress: Optional[Any]) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
+                  progress: Optional[Any],
+                  order: RecordOrder) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
     """
     Core scanner.
     """
@@ -103,19 +119,23 @@ def _scan_seasons(client: MiddlewareClient, *,
         if len(eps_with_id) != len(eps):
             raise ValueError(f"Encountered non-unique episode numbered identifiers in season \"{season.name}\", aborting")
 
-        eps_with_id.reverse()
+        if order == RecordOrder.DESC:
+            eps_with_id.reverse()
         ep_map[season.id] = eps_with_id
 
         # progress accounting and user-facing message
         tracker.record_collection_actual(idx, len(eps))
         tracker.update(f"Mapped {sum(tracker.actual)} episodes so far (season {season.index}: {season.name})")
 
-    ep_map_desc = OrderedDict(reversed(list(ep_map.items())))
+    if order == RecordOrder.DESC:
+        ep_map_final = OrderedDict(reversed(list(ep_map.items())))
+    else:
+        ep_map_final = ep_map
 
     # Ensure we land at the top bound if any work was done.
     update_progress(progress, bounds.max_pct, f"Finished scanning {season_count} season(s) for '{show.slug}'.")
 
-    return ep_map_desc, current_values
+    return ep_map_final, current_values
 
 
 def __fetch_all_episodes_paginated(

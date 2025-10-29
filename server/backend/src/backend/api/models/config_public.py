@@ -15,5 +15,5 @@ class PublicAdminAuth(ResponseBase):
 
 class ConfigPublicRead(ResponseBase):
     app_version: str
-    session: PublicSessionConfig
+    login_session: PublicSessionConfig
     admin_auth: PublicAdminAuth

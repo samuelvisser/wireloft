@@ -19,12 +19,11 @@ class AppSettings(SettingsBase):
         return f"sqlite:///{self.database_path.as_posix()}"
     log_level: str = "INFO"
     timezone: str = Field(default=os.environ.get("TZ", "UTC"), description="Application timezone")
-    final_ep_published_delay_minutes: int = Field(default=3 * 60, description="Delay in minutes before we can safely assume the episode's published status is final")
 
     crypto: CryptoSettings = Field(default_factory=lambda: CryptoSettings(
         default_secret_file=PROJECT_ROOT / "data" / "wl_secret.key"
     ))
-    session: SessionSettings = Field(default_factory=lambda: SessionSettings(
+    login_session: SessionSettings = Field(default_factory=lambda: SessionSettings(
         ttl_seconds=60 * 60 * 24 * 30                   # 30 days
     ))
     admin_auth: AdminAuthSettings = Field(default_factory=AdminAuthSettings)
@@ -49,9 +48,15 @@ class AppSettings(SettingsBase):
         default_max_retries=3,
         retry_backoff_seconds=5.0,
     ))
-    new_episode_schedule: RepeatingTaskSettings = Field(default_factory=lambda: RepeatingTaskSettings(
-        cron_schedule="*/30 * * * *"
+    new_episode_schedule: TrackNewEpisodeSchedule = Field(default_factory=lambda: TrackNewEpisodeSchedule(
+        find_episodes_cron="*/30 * * * *",
+        monitor_episode_cron="*/1 * * * *"
     ))
+    episode_status_timing: EpisodeStatusTiming = Field(default_factory=lambda: EpisodeStatusTiming(
+        published_countdown_after_minutes=20,
+        published_final_after_minutes=3 * 60
+    ))
+
 
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):

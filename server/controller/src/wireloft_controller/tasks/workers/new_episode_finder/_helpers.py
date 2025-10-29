@@ -2,7 +2,9 @@ from typing import Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Show
+from backend.db.models import Show, Season, Episode
+from wireloft_controller.tasks.helpers.episodes.mapper import EpisodeMapTuple
+from wireloft_controller.tasks.helpers.episodes.status import is_published_final
 
 
 def get_shows(s: Session, *, resource_id: Optional[int], show_slug: Optional[str]) -> Sequence[Show]:
@@ -21,18 +23,20 @@ def get_shows(s: Session, *, resource_id: Optional[int], show_slug: Optional[str
     return shows
 
 
-# def get_dw_episodes_since_last(client: MiddlewareClient, show: Show, latest_final_episode: Episode, latest_dw_season: DwSeasonRecord) -> list[DwEpisodeRecord]:
-#
-#     episodes: list[DwEpisodeRecord] = []
-#
-#
-#
-#
-#
-#     season_dw_id = latest_final_episode.season.dw_id
-#     client.get_episodes_paginated(show.slug, ByShowSeason(
-#         season_dw_id,
-#         membership_plan=show.membership_level,
-#         last_episode_dw_id=latest_final_episode.dw_id,
-#         page_size=5
-#     ))
+def get_season_from_list_by_id(season_list: list[Season], season_id: int) -> Optional[Season]:
+    for season in season_list:
+        if season.id == season_id:
+            return season
+    return None
+
+
+def contains_non_final_episode(ep_map: EpisodeMapTuple) -> bool:
+    for _, eps in ep_map.items():
+        for ep_tuple in eps:
+            if not is_published_final(ep_tuple[1]):
+                return True
+    return False
+
+
+def get_latest_ep_index(s: Session, *, show: Show) -> int:
+    return s.execute(select(Episode.index).where(Episode.show_id == show.id).order_by(Episode.index.desc()).limit(1)).scalar()

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence, Dict, Tuple, Any
+from typing import Optional
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.api.helpers import update_database_fields, create_database_fields
@@ -13,29 +12,8 @@ from backend.utils.helpers import generate_uuid
 from backend.types.media_types import MediaType
 
 from dailywire_api.records import DwEpisodeRecord
-
-from wireloft_controller.tasks.helpers.episodes.mapper import EpisodeWithIdentifier, EpisodeMapTuple
-from wireloft_controller.tasks.helpers.episodes.status import is_published_final
-
-
-def count_total_episodes(episodes_map: EpisodeMapTuple) -> int:
-    """
-    Count all episodes by counting the items in the map.
-    """
-    count = 0
-    for _, eps in episodes_map.items():
-        count += len(eps)
-
-    return count
-
-
-def get_seasons_sorted_desc(s: Session, show_slug: str) -> Sequence[Season]:
-    """Get seasons for a show from the DB sorted by Season.index descending."""
-    return s.scalars(
-        select(Season)
-        .filter(Season.show.has(slug=show_slug))
-        .order_by(Season.index.desc())
-    ).all()
+from .mapper import EpisodeWithIdentifier
+from .status import is_published_final
 
 
 def upsert_episode(
@@ -61,7 +39,6 @@ def upsert_episode(
                 "season_id": season.id,
                 "index": index_value,
                 "episode_identifier": ep_id,
-                "publish_status": EpisodePublishStatus.PUBLISHED_FINAL.value,
             }
         })
         s.add(episode)
@@ -71,18 +48,16 @@ def upsert_episode(
         episode.season_id = season.id
         episode.index = index_value
         episode.episode_identifier = ep_id
-        episode.publish_status = EpisodePublishStatus.PUBLISHED_FINAL.value
 
     s.flush()
     return episode
 
 
-def index_one_season(s, *,
-                     show: Show,
-                     season: Season,
-                     episodes: list[EpisodeWithIdentifier],
-                     start_index: int,
-                     ) -> int:
+def save_dw_episodes_per_season_desc(s: Session, *,
+                                     show: Show,
+                                     season: Season,
+                                     episodes: list[EpisodeWithIdentifier],
+                                     start_index: int) -> int:
     """
     Index a single season within its own transaction scope. On error, roll back
     all changes for the season and re-raise.
@@ -96,9 +71,41 @@ def index_one_season(s, *,
             if not is_published_final(ep):
                 current_index -= 1
                 continue
+            ep.publish_status = EpisodePublishStatus.PUBLISHED_FINAL.value
 
             upsert_episode(s, show=show, season=season, ep=ep, index_value=current_index, ep_id=ep_id)
             current_index -= 1
+
+        # Commit this season
+        s.commit()
+        return current_index
+    except Exception:
+        s.rollback()
+        raise
+
+
+def save_dw_episodes_per_season_asc(s: Session, *,
+                                    show: Show,
+                                    season: Season,
+                                    episodes: list[EpisodeWithIdentifier],
+                                    start_index: int) -> int:
+    """
+    Index a single season within its own transaction scope. On error, roll back
+    all changes for the season and re-raise.
+
+    Returns the next index to use for subsequent (older) episodes.
+    """
+    current_index = start_index
+
+    try:
+        for ep_id, ep in episodes:
+            if not is_published_final(ep):
+                current_index += 1
+                continue
+            ep.publish_status = EpisodePublishStatus.PUBLISHED_FINAL.value
+
+            upsert_episode(s, show=show, season=season, ep=ep, index_value=current_index, ep_id=ep_id)
+            current_index += 1
 
         # Commit this season
         s.commit()

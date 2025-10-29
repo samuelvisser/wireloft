@@ -10,9 +10,10 @@ from backend.types.dailywire_user_info import WlDwMembershipLevel
 from dailywire_api.dw_api.client import MiddlewareClient
 from dailywire_authorisation import DeviceAuthClient
 
-from ._helpers import count_total_episodes, index_one_season
-from ...helpers.episodes.mapper import get_dw_episodes_by_seasons
+from ...helpers.episodes.mapper import get_dw_episodes_by_seasons, count_total_episodes
+from ...helpers.episodes.save import save_dw_episodes_per_season_desc
 from ...helpers.progress import update_progress, ProgressBounds
+from ...types.general import RecordOrder
 
 
 async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
@@ -59,7 +60,8 @@ async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None
 
     # Map all episodes
     client = MiddlewareClient(access_token=access_token)
-    ep_map, identifier_max_values = get_dw_episodes_by_seasons(client, show=show, membership_plan=membership_plan, seasons=seasons, progress=progress, progress_bounds=progress_bounds)
+    ep_map_desc, identifier_max_values = get_dw_episodes_by_seasons(client, show=show, membership_plan=membership_plan, seasons=seasons, progress=progress,
+                                                               progress_bounds=progress_bounds, order=RecordOrder.DESC)
 
     # Save identifier max values
     for k, v in identifier_max_values.items():
@@ -67,7 +69,7 @@ async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None
         s.flush()
 
     # Count total episodes
-    total = count_total_episodes(ep_map)
+    total = count_total_episodes(ep_map_desc)
     if total == 0:
         update_progress(progress, 100, "No episodes found from dw")
         return
@@ -78,20 +80,20 @@ async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None
     for i, season in enumerate(seasons):
         # index this season in its own transaction scope
         try:
-            current_index = index_one_season(s,
-                                             show=show,
-                                             season=season,
-                                             episodes=ep_map[season.id],
-                                             start_index=current_index)
+            current_index = save_dw_episodes_per_season_desc(s,
+                                                             show=show,
+                                                             season=season,
+                                                             episodes=ep_map_desc[season.id],
+                                                             start_index=current_index)
         except Exception as e:
-            # rollback of the season has already occurred inside index_one_season
+            # rollback of the season has already occurred inside save_dw_episodes_per_season
             # Re-raise to allow scheduler to retry; caller expects retry to be scheduled
             print(f"Exception: {e}")
             raise e
 
         # Update progress roughly based on completed seasons
         processed = total - current_index
-        frac = max(0.0, min(1.0, processed / total))  if total > 0 else 1.0
+        frac = max(0.0, min(1.0, processed / total)) if total > 0 else 1.0
         scaled_pct = upper + min(99 - upper, int(frac * (99 - upper)))
         update_progress(progress, scaled_pct, f"Indexed {processed}/{total} episodes (season {season.index}: {season.name})")
 

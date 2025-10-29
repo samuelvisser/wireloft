@@ -11,8 +11,8 @@ def get_public_config() -> ConfigPublicRead:
     ## We assign values very explicitly to prevent ever exposing app secrets to the public API
     config = ConfigPublicRead(
         app_version=s.app_version,
-        session=PublicSessionConfig(
-            ttl_seconds=s.session.ttl_seconds
+        login_session=PublicSessionConfig(
+            ttl_seconds=s.login_session.ttl_seconds
         ),
         admin_auth=PublicAdminAuth(
             enabled=s.admin_auth.enabled
