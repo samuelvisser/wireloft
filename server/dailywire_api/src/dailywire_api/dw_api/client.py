@@ -168,7 +168,7 @@ class MiddlewareClient:
 
         return record
 
-    def get_episodes_paginated(self, slug: str, selector: ByNextPage | ByShowSeason | ByPodcastSeason) -> EpisodesPaginatedResult:
+    def get_episodes_paginated(self, show_slug: str, selector: ByNextPage | ByShowSeason | ByPodcastSeason) -> EpisodesPaginatedResult:
         """
         Fetch a single page of episodes for a show.
 
@@ -211,7 +211,7 @@ class MiddlewareClient:
 
             case _BySeason(season_dw_id=sid) as sel:
                 params = {
-                    "slug": slug,
+                    "slug": show_slug,
                     "orderBy": sel.order_by,
                     "pageNumber": sel.page_number,
                     "pageSize": sel.page_size,
@@ -249,6 +249,7 @@ class MiddlewareClient:
             next_page_url=next_url,
             has_next=bool(next_url)
         )
+
 
     def get_episode_details(self, episode_slug: str, *, require_member_exclusive: bool = False) -> DwEpisodeDetailRecord:
         endpoint = 'v4/getEpisode'

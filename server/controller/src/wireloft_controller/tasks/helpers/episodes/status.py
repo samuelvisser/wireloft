@@ -22,8 +22,6 @@ def is_published_final(episode: DwEpisode | DbEpisode):
 
 
 def get_publish_status_from_dw(dw_ep: DwEpisode, db_ep: Optional[DbEpisode]) -> EpisodePublishStatus:
-    if is_published_final(dw_ep):
-        return EpisodePublishStatus.PUBLISHED_FINAL
     if dw_ep.publish_status == "SCHEDULED":
         return EpisodePublishStatus.SCHEDULED
     if dw_ep.publish_status == "LIVE":
