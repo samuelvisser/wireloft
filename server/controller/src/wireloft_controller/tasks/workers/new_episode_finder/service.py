@@ -4,6 +4,7 @@ from typing import Optional, Sequence
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
+from backend.api.endpoints.tasks.service import trigger_now
 from backend.db.models import Show, Episode, Season
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
@@ -112,4 +113,5 @@ async def run_new_episode_finder(s: Session, *, show_id: Optional[int] = None, s
 
         # Start tracking a currently live episode if it exists
         if contains_non_final_episode(ep_map_asc):
+            # trigger_now(definition_key="monitor_episode_worker", resource_type="episode", resource_id=None, show_slug=show.slug)
             ...

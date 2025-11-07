@@ -98,7 +98,7 @@ def _get_episode_identifier_map_numbered(season_eps: List[DwEpisodeRecord],
                 identifier = candidate
         elif ep_num and last_ep_num == ep_num:
             last_extra_num = ep_extra_num.get(ep_num, 0)
-            candidate = f"ep.{ep_num}.extra.{last_extra_num + 1}"
+            candidate = f"ep-extra.{ep_num}.{last_extra_num + 1}"
             if candidate not in identifiers:
                 ep_extra_num[ep_num] = last_extra_num + 1
                 identifier = candidate
