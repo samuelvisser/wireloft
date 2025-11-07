@@ -13,7 +13,7 @@ from backend.types.media_types import MediaType
 
 from dailywire_api.records import DwEpisodeRecord
 from .mapper import EpisodeWithIdentifier
-from .status import is_published_final, get_publish_status_from_dw
+from .status import is_published_final, get_publish_status_from_dw_detail
 
 
 def upsert_episode(
@@ -71,9 +71,12 @@ def save_dw_episodes_per_season_desc(s: Session, *,
             if not is_published_final(ep):
                 current_index -= 1
                 continue
-            ep.publish_status = EpisodePublishStatus.PUBLISHED_FINAL.value
 
-            upsert_episode(s, show=show, season=season, ep=ep, index_value=current_index, ep_id=ep_id)
+            ep_new = ep.model_copy(update={
+                "publish_status": EpisodePublishStatus.PUBLISHED_FINAL.value
+            }, deep=True)
+
+            upsert_episode(s, show=show, season=season, ep=ep_new, index_value=current_index, ep_id=ep_id)
             current_index -= 1
 
         # Commit this season

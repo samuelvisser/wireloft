@@ -7,8 +7,8 @@ from asyncio.log import logger
 from sqlalchemy.orm import Session
 
 from backend.types.episode_types import EpisodePublishStatus
-from dailywire_api.records import DwEpisodeRecord
-from wireloft_controller.tasks.helpers.episodes.status import get_publish_status_from_dw
+from dailywire_api.records import DwEpisodeDetailRecord
+from wireloft_controller.tasks.helpers.episodes.status import get_publish_status_from_dw_detail
 
 
 def get_show_from_params(s: Session, *,
@@ -27,20 +27,20 @@ def get_show_from_params(s: Session, *,
     return None
 
 
-def get_first_ep_with_status(eps: list[DwEpisodeRecord], status: EpisodePublishStatus) -> Optional[DwEpisodeRecord]:
-    return next((ep for ep in eps if get_publish_status_from_dw(ep, None) == status), None)
+def get_first_ep_with_status(eps: list[DwEpisodeDetailRecord], status: EpisodePublishStatus) -> Optional[DwEpisodeDetailRecord]:
+    return next((ep for ep in eps if get_publish_status_from_dw_detail(ep) == status), None)
 
 
-def get_progress_updater_ep(latest_eps: list[DwEpisodeRecord]) -> DwEpisodeRecord:
+def get_progress_updater_ep(latest_eps: list[DwEpisodeDetailRecord]) -> DwEpisodeDetailRecord:
     if len(latest_eps) == 0:
         raise ValueError("No episodes found")
 
     # If the latest is final, we can finish our tracking and use it
-    if get_publish_status_from_dw(latest_eps[0], None) == EpisodePublishStatus.PUBLISHED_FINAL:
+    if get_publish_status_from_dw_detail(latest_eps[0]) == EpisodePublishStatus.PUBLISHED_FINAL:
         return latest_eps[0]
 
     # At least the latest is not final, filter list, stopping with the first final
-    index = next((i for i, rec in enumerate(latest_eps) if get_publish_status_from_dw(rec, None) == EpisodePublishStatus.PUBLISHED_FINAL), None)
+    index = next((i for i, rec in enumerate(latest_eps) if get_publish_status_from_dw_detail(rec) == EpisodePublishStatus.PUBLISHED_FINAL), None)
     if index is not None:
         latest_eps = latest_eps[: index]
 

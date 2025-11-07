@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 from backend.db.models import Show, Episode
 from backend.types.episode_types import EpisodePublishStatus
 from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason
+from dailywire_api.records import DwEpisodeDetailRecord
 from dailywire_api.types.user_info import DwMembershipLevel
 from ._helpers import get_show_from_params, get_progress_updater_ep, get_first_ep_with_status, save_status_metadata
-from ...helpers.episodes.status import get_publish_status_from_dw
+from ...helpers.episodes.status import get_publish_status_from_dw_detail
 
 
 async def run_monitor_episode_worker(s: Session, *,
@@ -36,12 +37,17 @@ async def run_monitor_episode_worker(s: Session, *,
         order_by="CreatedAt_DESC"
     ))
 
+    # Get details for all retrieved latest episodes
+    latest_detail_episodes: list[DwEpisodeDetailRecord] = list()
+    for ep in latest_episodes:
+        dw_ep_detail = client.get_episode_details(ep.slug, require_member_exclusive=show.membership_level != DwMembershipLevel.FREE.value)
+        latest_detail_episodes.append(dw_ep_detail)
+
     # Find the most relevant dw episode to use as a status updater (dw sometimes returns duplicate records for the same in-progress episode)
-    dw_ep = get_progress_updater_ep(latest_episodes)
-    dw_ep_detail = client.get_episode_details(dw_ep.slug, require_member_exclusive=show.membership_level != DwMembershipLevel.FREE.value)
+    dw_ep = get_progress_updater_ep(latest_detail_episodes)
 
     # First find the newest final episode
-    latest_final_episode = get_first_ep_with_status(latest_episodes, EpisodePublishStatus.PUBLISHED_FINAL)
+    latest_final_episode = get_first_ep_with_status(latest_detail_episodes, EpisodePublishStatus.PUBLISHED_FINAL)
 
     # Find db record for the episode
     db_ep: Episode | None = (
@@ -56,9 +62,10 @@ async def run_monitor_episode_worker(s: Session, *,
         return
 
     # Attach the new status to db record
-    new_status = get_publish_status_from_dw(dw_ep, dw_ep_detail)
+    new_status = get_publish_status_from_dw_detail(dw_ep)
     db_ep.publish_status = new_status.value
     s.flush()
 
     # Save status-specific metadata
     save_status_metadata(s, episode=db_ep, status=new_status)
+    s.commit()
