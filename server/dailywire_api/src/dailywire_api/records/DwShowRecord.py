@@ -1,11 +1,11 @@
-from typing import Any, Optional
+from typing import Any
 from enum import Enum
 
-from pydantic import Field, model_validator, computed_field, AliasPath, field_validator, validator
+from pydantic import Field, model_validator, computed_field, AliasPath
 
-from dailywire_api.records.EpisodeRecord import EpisodeRecord
-from dailywire_api.records.SeasonRecord import SeasonRecord
 from dailywire_api.records.BaseRecord import BaseRecord
+from dailywire_api.records.DwEpisodeRecord import DwEpisodeRecord
+from dailywire_api.records.DwSeasonRecord import DwSeasonRecord
 from dailywire_api.utils.validators import ValOrNone
 
 
@@ -20,7 +20,7 @@ class ProbableEpisodeIdentification(str, Enum):
     numbered = "numbered"
 
 
-class ShowRecord(BaseRecord):
+class DwShowRecord(BaseRecord):
     """
     Minimal, app-friendly 'Show' record.
     We accept either:
@@ -44,11 +44,11 @@ class ShowRecord(BaseRecord):
     thumbnail_portrait_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "port"), default=None)
     thumbnail_square_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "square"), default=None)
 
-    latest_season: SeasonRecord
-    seasons: list[SeasonRecord] = Field(default_factory=list)
+    latest_season: DwSeasonRecord
+    seasons: list[DwSeasonRecord] = Field(default_factory=list)
 
-    latest_episode: EpisodeRecord
-    latest_episodes: list[EpisodeRecord] = Field(default_factory=list)
+    latest_episode: DwEpisodeRecord
+    latest_episodes: list[DwEpisodeRecord] = Field(default_factory=list)
 
 
     @computed_field(return_type=ProbableShowType)
@@ -58,7 +58,7 @@ class ShowRecord(BaseRecord):
         Determine probable show type based on latest_episodes.
         """
         # Podcast if all seasons are year-labeled between 2015 and 2115
-        seasons_list = [s for s in (self.seasons or []) if isinstance(s, SeasonRecord)]
+        seasons_list = [s for s in (self.seasons or []) if isinstance(s, DwSeasonRecord)]
         if seasons_list and all(isinstance(s.name, str) and len(s.name) == 4 and s.name.isdigit() and 2015 <= int(s.name) <= 2115 for s in seasons_list):
             return ProbableShowType.podcast
 
@@ -72,7 +72,7 @@ class ShowRecord(BaseRecord):
             return ProbableShowType.unknown
 
         # Podcast if >= 40% of episode titles contain the exact substring "Ep. "
-        podcast_like = sum(1 for ep in self.latest_episodes if isinstance(ep, EpisodeRecord) and "Ep. " in (ep.title or ""))
+        podcast_like = sum(1 for ep in self.latest_episodes if isinstance(ep, DwEpisodeRecord) and "Ep. " in (ep.title or ""))
         ratio = podcast_like / total if total else 0
         if ratio >= 0.4:
             return ProbableShowType.podcast
@@ -96,7 +96,7 @@ class ShowRecord(BaseRecord):
             return ProbableEpisodeIdentification.unknown
 
         # Numbered if >= 40% of episode titles contain the exact substring "Ep. "
-        podcast_like = sum(1 for ep in self.latest_episodes if isinstance(ep, EpisodeRecord) and "Ep. " in (ep.title or ""))
+        podcast_like = sum(1 for ep in self.latest_episodes if isinstance(ep, DwEpisodeRecord) and "Ep. " in (ep.title or ""))
         ratio = podcast_like / total if total else 0
         if ratio >= 0.4:
             return ProbableEpisodeIdentification.numbered
@@ -136,7 +136,7 @@ class ShowRecord(BaseRecord):
         return normalized_data
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, ShowRecord) and self.slug == other.slug
+        return isinstance(other, DwShowRecord) and self.slug == other.slug
 
     def __hash__(self) -> int:
         return hash(self.slug)

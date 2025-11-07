@@ -11,7 +11,7 @@ from dailywire_api.types.user_info import DwMembershipLevel
 from dailywire_api.utils.validators import ValOrNone, ValOrZero, AvailableForList
 
 
-class EpisodeRecord(BaseRecord):
+class DwEpisodeRecord(BaseRecord):
 
     dw_id: str = Field(validation_alias="id")
     slug: str
@@ -50,7 +50,7 @@ class EpisodeRecord(BaseRecord):
         return data
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, EpisodeRecord) and self.slug == other.slug
+        return isinstance(other, DwEpisodeRecord) and self.slug == other.slug
 
     def __hash__(self) -> int:
         return hash(self.slug)

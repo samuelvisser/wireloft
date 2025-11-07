@@ -1,9 +1,9 @@
 from typing import Dict, Any
 
-from dailywire_api.records import EpisodeRecord
+from dailywire_api.records import DwEpisodeRecord
 
 
-def check_duplicate_episodes(episodes: list[EpisodeRecord], params: Dict[str, Any]) -> bool:
+def check_duplicate_episodes(episodes: list[DwEpisodeRecord], params: Dict[str, Any]) -> bool:
     """
     Check if any episodes are duplicates based on the last episode ID from params.
     """

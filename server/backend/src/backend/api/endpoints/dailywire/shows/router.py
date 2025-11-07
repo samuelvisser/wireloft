@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Header, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException
 
-from dailywire_api.records import ShowRecord
+from dailywire_api.records import DwShowRecord
 from .service import get_show
 
 router = APIRouter(prefix="/shows", tags=["DailyWire Shows"])
 
 
-@router.get("/{show_slug}", response_model=ShowRecord)
+@router.get("/{show_slug}", response_model=DwShowRecord)
 def show_detail(
     show_slug: str,
     membership_plan: str | None = Query(default=None, description="Optional membership plan (e.g., ALL_ACCESS)"),

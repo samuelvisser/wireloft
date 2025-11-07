@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dailywire_api.dw_api.client import MiddlewareClient
-from dailywire_api.records.UserInfo import UserInfo
+from dailywire_api.records import DwUserInfo
 
 
-def get_user_info() -> UserInfo:
+def get_user_info() -> DwUserInfo:
     """
     Fetch the current user's information from the DailyWire middleware API
     and normalize it into the UserInfo model.

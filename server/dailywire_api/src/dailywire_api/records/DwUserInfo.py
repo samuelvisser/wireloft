@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Union
 
-from dailywire_api.records import BaseRecord
+from dailywire_api.records.BaseRecord import BaseRecord
 from dailywire_api.types.user_info import DwMembershipLevel
 
 
-class UserInfo(BaseRecord):
+class DwUserInfo(BaseRecord):
 
     person_id: str
     subscription_id: str

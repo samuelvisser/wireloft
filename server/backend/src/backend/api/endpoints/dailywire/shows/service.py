@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from dailywire_api.dw_api.client import MiddlewareClient, MiddlewareAPIError
-from dailywire_api.records import ShowRecord
+from dailywire_api.dw_api.client import MiddlewareClient
+from dailywire_api.records import DwShowRecord
 from dailywire_authorisation import DeviceAuthClient
 
 
@@ -11,7 +11,7 @@ def get_show(
     show_slug: str,
     *,
     membership_plan: Optional[str] = None,
-) -> ShowRecord:
+) -> DwShowRecord:
     """Fetch a DailyWire show by slug from the middleware API and normalize it.
 
     Parameters

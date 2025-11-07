@@ -117,7 +117,16 @@ def create_app() -> FastAPI:
         from wireloft_scheduler.registry import sync_registry_to_db
         if get_settings().scheduler.enabled:
             sync_registry_to_db()
-            start_scheduler()
+            # Start the APScheduler instance
+            sch = start_scheduler()
+
+            # Let the controller package plan startup schedules dynamically
+            try:
+                from wireloft_controller.app import setup_startup_schedules
+                setup_startup_schedules(scheduler=sch)
+            except Exception:
+                # Do not crash app if auto-scheduling fails
+                pass
     except Exception:
         # Do not crash app if scheduler is not available
         pass

@@ -39,7 +39,7 @@ def _now() -> int:
     return int(time.time())
 
 
-def set_session_cookie(resp: Response, ttl_seconds: int = get_settings().session.ttl_seconds) -> None:
+def set_session_cookie(resp: Response, ttl_seconds: int = get_settings().login_session.ttl_seconds) -> None:
     now = _now()
     sess = Session(exp=now + ttl_seconds, iat=now)
     token = sess.to_token().decode("utf-8")

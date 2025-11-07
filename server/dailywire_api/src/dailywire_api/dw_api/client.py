@@ -11,11 +11,7 @@ from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
 
-from dailywire_api.records.EpisodeDetailRecord import EpisodeDetailRecord
-from dailywire_api.records.ShowRecord import ShowRecord
-from dailywire_api.records.EpisodeRecord import EpisodeRecord
-from dailywire_api.records.UserInfo import UserInfo
-from dailywire_api.utils.episodes import check_duplicate_episodes
+from dailywire_api.records import DwEpisodeDetailRecord, DwShowRecord, DwEpisodeRecord, DwUserInfo
 from dailywire_authorisation import DeviceAuthClient
 from wireloft_config import get_settings
 
@@ -87,34 +83,30 @@ class ByNextPage:
 @dataclass(frozen=True, kw_only=True)
 class _ByParameters:
     membership_plan: Optional[str] = None
-    page_size: int = 20
-    page_number: int = 1
     order_by: str = "CreatedAt_DESC"
+    page_number: int = 1
+    page_size: int = 20
     show_offset: int = 0
     podcast_offset: int = 0
-    last_episode_dw_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class _BySeason(_ByParameters):
     season_dw_id: str
     season_id_key: ClassVar[Literal["showSeasonId", "podcastSeasonId"]]
-    episode_id_key: ClassVar[Literal["lastShowEpisodeId", "lastPodcastEpisodeId"]]
 
 
 @dataclass(frozen=True)
 class ByShowSeason(_BySeason):
     season_id_key: ClassVar[str] = "showSeasonId"
-    episode_id_key: ClassVar[str] = "lastShowEpisodeId"
 
 
 @dataclass(frozen=True)
 class ByPodcastSeason(_BySeason):
     season_id_key: ClassVar[str] = "podcastSeasonId"
-    episode_id_key: ClassVar[str] = "lastPodcastEpisodeId"
 
 class EpisodesPaginatedResult(NamedTuple):
-    items: list[EpisodeRecord]
+    items: list[DwEpisodeRecord]
     next_page_url: Optional[str]
     has_next: bool
 
@@ -130,8 +122,8 @@ class MiddlewareClient:
     Pass an access token if you have one; premium content typically requires it.
     """
 
-    def __init__(self, access_token: Optional[str] = None, timeout: float = 30.0, base_url: str = get_settings().dw_api.middleware_api) -> None:
-        self._timeout = timeout
+    def __init__(self, access_token: Optional[str] = None, request_timeout: float = 30.0, base_url: str = get_settings().dw_api.middleware_api) -> None:
+        self._req_timeout = request_timeout
         self._base_url = base_url.rstrip('/')
         headers = {
             # These are generally not required for Middleware, but harmless if present
@@ -143,15 +135,15 @@ class MiddlewareClient:
         self._headers = headers
 
     # --------------- public methods ---------------
-    def get_show_page(self, slug: str, *, membership_plan: Optional[str] = None) -> ShowRecord:
+    def get_show_page(self, slug: str, *, membership_plan: Optional[str] = None) -> DwShowRecord:
         params: Dict[str, Any] = {'slug': slug}
         if membership_plan:
             params['membershipPlan'] = membership_plan
 
         payload = self._get('v4/getShowPage', params)
-        return ShowRecord.model_validate(payload)
+        return DwShowRecord.model_validate(payload)
 
-    def get_user_info(self) -> UserInfo:
+    def get_user_info(self) -> DwUserInfo:
         """
         Fetch the current user's info using DailyWire Middleware API.
         Access token is obtained from dailywire_authorisation package.
@@ -170,13 +162,13 @@ class MiddlewareClient:
             self._headers = headers_backup
 
         try:
-            record = UserInfo.model_validate(payload)
+            record = DwUserInfo.model_validate(payload)
         except ValidationError as e:
             raise MiddlewareAPIError("Invalid user info response") from e
 
         return record
 
-    def get_episodes_paginated(self, slug: str, selector: ByNextPage | ByShowSeason | ByPodcastSeason) -> EpisodesPaginatedResult:
+    def get_episodes_paginated(self, show_slug: str, selector: ByNextPage | ByShowSeason | ByPodcastSeason) -> EpisodesPaginatedResult:
         """
         Fetch a single page of episodes for a show.
 
@@ -219,7 +211,7 @@ class MiddlewareClient:
 
             case _BySeason(season_dw_id=sid) as sel:
                 params = {
-                    "slug": slug,
+                    "slug": show_slug,
                     "orderBy": sel.order_by,
                     "pageNumber": sel.page_number,
                     "pageSize": sel.page_size,
@@ -229,8 +221,6 @@ class MiddlewareClient:
                 }
                 if sel.membership_plan:
                     params["membershipPlan"] = sel.membership_plan
-                if sel.last_episode_dw_id:
-                    params[type(sel).episode_id_key] = sel.last_episode_dw_id
 
         try:
             payload = self._get(endpoint, params)
@@ -242,10 +232,10 @@ class MiddlewareClient:
         items_raw = payload.get('componentItems')
 
         # Normalize to EpisodeRecord dicts
-        episodes: list[EpisodeRecord] = []
+        episodes: list[DwEpisodeRecord] = []
         for it in items_raw or []:
             try:
-                ep = EpisodeRecord.model_validate(it)
+                ep = DwEpisodeRecord.model_validate(it)
                 episodes.append(ep)
             except ValidationError as e:
                 raise MiddlewareAPIError("Could not validate episode record") from e
@@ -260,7 +250,8 @@ class MiddlewareClient:
             has_next=bool(next_url)
         )
 
-    def get_episode_details(self, episode_slug: str, *, require_member_exclusive: bool = False) -> EpisodeDetailRecord:
+
+    def get_episode_details(self, episode_slug: str, *, require_member_exclusive: bool = False) -> DwEpisodeDetailRecord:
         endpoint = 'v4/getEpisode'
         params: Dict[str, Any] = {
             'slug': episode_slug,
@@ -277,7 +268,7 @@ class MiddlewareClient:
         payload = self._get(endpoint, params)
 
         try:
-            record = EpisodeDetailRecord.model_validate(payload)
+            record = DwEpisodeDetailRecord.model_validate(payload)
         except ValidationError as e:
             raise MiddlewareAPIError("Invalid episode detail response") from e
 
@@ -295,7 +286,7 @@ class MiddlewareClient:
             url = f"{url}?{qs}"
         req = Request(url, headers=self._headers, method='GET')
         try:
-            with urlopen(req, timeout=self._timeout) as resp:
+            with urlopen(req, timeout=self._req_timeout) as resp:
                 data = resp.read()
         except HTTPError as e:
             try:

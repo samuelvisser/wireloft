@@ -1,5 +1,7 @@
 # This file makes this directory a package
 from .BaseRecord import BaseRecord
-from .EpisodeRecord import EpisodeRecord
-from .SeasonRecord import SeasonRecord
-from .ShowRecord import ShowRecord
+from .DwEpisodeDetailRecord import DwEpisodeDetailRecord
+from .DwEpisodeRecord import DwEpisodeRecord
+from .DwSeasonRecord import DwSeasonRecord
+from .DwShowRecord import DwShowRecord
+from .DwUserInfo import DwUserInfo

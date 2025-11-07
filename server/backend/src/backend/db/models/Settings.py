@@ -15,3 +15,6 @@ class Settings(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    def __repr__(self):
+        return f"<Settings(id={self.id}, created_at={self.created_at}, updated_at={self.updated_at})>"

@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from backend.api.helpers import update_database_fields
 from backend.api.models.season import *
 from backend.db.models import Season
+from backend.types.show_types import ShowType
 
 
 def get_seasons_list(s: Session, show_slug: str) -> list[SeasonAPIRead]:
@@ -37,13 +38,23 @@ def get_season(s: Session, show_slug: str, season_slug: str) -> SeasonAPIRead:
     return SeasonAPIRead.model_validate(season)
 
 
-def create_season(s: Session, body: SeasonAPICreate) -> SeasonAPIRead:
+def create_season(s: Session, body: SeasonAPICreate, *, update_show_profiles=False) -> SeasonAPIRead:
     # Build model from validated Pydantic data
     data = body.model_dump(by_alias=True)
 
     season = Season(**data)
     s.add(season)
     s.flush()
+
+    # Update series download profiles if they include upcoming seasons
+    if update_show_profiles and season.show.type == ShowType.SERIES.value:
+        for profile in season.show.download_profiles:
+            if profile.include_upcoming_seasons:
+                profile_seasons: list[Season] = profile.seasons
+                profile_seasons.append(season)
+                profile.seasons = profile_seasons
+                s.flush()
+
     return SeasonAPIRead.model_validate(season)
 
 

@@ -21,7 +21,7 @@ class SeasonAPICreate(_SeasonAPIBaseIn):
     """Request body for creating a season."""
 
     dw_id: str
-    show_id: str
+    show_id: int
     index: int
     slug: str
 

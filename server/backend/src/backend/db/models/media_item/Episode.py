@@ -42,4 +42,4 @@ class Episode(MediaItemBase, HasMetadataMixin):
     season: Mapped["Season"] = relationship(back_populates="episodes")
 
     def __repr__(self) -> str:
-        return f"<Episode(id={self.id}, show_id={self.show_id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"
+        return f"<Episode(id={self.id}, slug={self.slug}, show_id={self.show_id}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

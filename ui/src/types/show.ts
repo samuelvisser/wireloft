@@ -4,16 +4,17 @@ import {useMemo} from "react";
 
 // ShowType
 export const ShowTypeReg = createSelectRegistry("ShowType", {
-  podcast: { label: "Podcast", help: "Episodes identified by date or number" },
-  series:  { label: "Series",  help: "Episodic series without podcast semantics" },
+    podcast: {label: "Podcast", help: "Episodes identified by date or number"},
+    series: {label: "Series", help: "Episodic series without podcast semantics"},
 });
 export type ShowTypeValue = (typeof ShowTypeReg)["values"][number];
 
 
 // EpisodeIdentifier (only for podcasts)
 export const EpisodeIdentifierReg = createSelectRegistry("EpisodeIdentifier", {
-  date_based: { label: "Date-based", help: "Use release date as identity" },
-  numbered:   { label: "Numbered",   help: "Parse 'Ep. N' from the title" },
+    date_based: {label: "Date-based", help: "Use release date as identity"},
+    numbered: {label: "Numbered", help: "Parse 'Ep. N' from the title"},
+    seasonal: {label: "Seasonal", help: "Parse 'S01E01' from the order of episodes within the season"},
 });
 export type EpisodeIdentifierValue = (typeof EpisodeIdentifierReg)["values"][number];
 
