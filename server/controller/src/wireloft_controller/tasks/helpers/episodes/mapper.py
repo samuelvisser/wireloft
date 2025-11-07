@@ -32,7 +32,7 @@ def get_dw_episodes_by_seasons(client: MiddlewareClient, *,
                                membership_plan: str,
                                seasons: Sequence[Season],
                                progress: Optional[Any] = None,
-                               progress_bounds: ProgressBounds = ProgressBounds(1, 95),
+                               progress_bounds: ProgressBounds = ProgressBounds(1, 100),
                                order: RecordOrder) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
     """
     Fetch all episodes for the given *local* seasons.
@@ -55,7 +55,7 @@ def get_dw_episodes_since_ep(client: MiddlewareClient, *,
                              since_episode: Episode,
                              prev_max_values: IdentifierMaxValues,
                              progress: Optional[Any] = None,
-                             progress_bounds: ProgressBounds = ProgressBounds(1, 50),
+                             progress_bounds: ProgressBounds = ProgressBounds(1, 100),
                              order: RecordOrder) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
     """
     Fetch episodes strictly *after* the given final episode, across *all* remote seasons that follow it.

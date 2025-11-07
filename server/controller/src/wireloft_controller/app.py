@@ -3,6 +3,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Optional, Iterable, Dict, Any
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 from backend.db import get_session
 from wireloft_config import get_settings
 
@@ -58,7 +60,7 @@ def _planned_startup_schedules() -> Iterable[Dict[str, Any]]:
     }
 
 
-def setup_startup_schedules(scheduler: Optional["AsyncIOScheduler"] = None) -> None:
+def setup_startup_schedules(scheduler: Optional[AsyncIOScheduler] = None) -> None:
     """Create or replace controller-owned recurring jobs on startup.
 
     If scheduler is not provided, it will be obtained via start_scheduler().

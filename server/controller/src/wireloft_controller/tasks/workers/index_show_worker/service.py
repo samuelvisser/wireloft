@@ -56,12 +56,16 @@ async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None
     # Progress bounds
     x = max(1, min(int(len(seasons)), 5))
     upper = int(65 + (x - 1) * (95 - 65) / (5 - 1))
-    progress_bounds = ProgressBounds(1, upper)
 
     # Map all episodes
     client = MiddlewareClient(access_token=access_token)
-    ep_map_desc, identifier_max_values = get_dw_episodes_by_seasons(client, show=show, membership_plan=membership_plan, seasons=seasons, progress=progress,
-                                                               progress_bounds=progress_bounds, order=RecordOrder.DESC)
+    ep_map_desc, identifier_max_values = get_dw_episodes_by_seasons(client,
+                                                                    show=show,
+                                                                    membership_plan=membership_plan,
+                                                                    seasons=seasons,
+                                                                    progress=progress,
+                                                                    progress_bounds=ProgressBounds(1, upper),
+                                                                    order=RecordOrder.DESC)
 
     # Save identifier max values
     for k, v in identifier_max_values.items():

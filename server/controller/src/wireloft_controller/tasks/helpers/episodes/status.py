@@ -10,7 +10,7 @@ from wireloft_controller.tasks.helpers.general import date_is_min_ago
 
 
 def is_published_final(episode: DwEpisode | DbEpisode):
-    if not episode.publish_status == "PUBLISHED":
+    if not episode.publish_status.upper().__contains__("PUBLISHED"):
         return False
 
     ep_dur_min = int(episode.duration / 60)
