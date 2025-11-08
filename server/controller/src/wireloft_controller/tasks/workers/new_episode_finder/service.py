@@ -112,6 +112,7 @@ async def run_new_episode_finder(s: Session, *, show_id: Optional[int] = None, s
                 raise e
 
         # Start tracking a currently live episode if it exists
+        print(contains_non_final_episode(ep_map_asc))
+        print(show.slug)
         if contains_non_final_episode(ep_map_asc):
-            # trigger_now(definition_key="monitor_episode_worker", resource_type="episode", resource_id=None, show_slug=show.slug)
-            ...
+            trigger_now(definition_key="monitor_episode_worker", resource_type="episode", resource_id=None, show_slug=show.slug)

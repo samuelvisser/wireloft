@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session, joinedload, with_polymorphic
 from fastapi import HTTPException
 from sqlalchemy.orm.util import AliasedClass
 
-from backend.api.models.download_profile import DownloadProfileAPIReadView, DownloadProfileAPIRead
+from backend.api.models.download_profile import DownloadProfileAPIRead
+from backend.api.models.download_profile_view import DownloadProfileAPIReadView
 from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPIRead
 from backend.api.models.series_download_profile import SeriesDownloadProfileAPIRead
 from backend.types.download_profile_types import DownloadProfileType

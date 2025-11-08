@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from backend.types.download_profile_types import EpIdType
+
 type IdentifierMaxValues = Dict[str, int]
 
 import re
@@ -50,19 +52,19 @@ def _get_episode_identifier_map_date_based(season_eps: List[DwEpisodeRecord],
         # Check for known types
         if __is_trailer(ep.title):
             trailer_num = last_trailer_num + 1
-            candidate = f"trailer.{trailer_num}"
+            candidate = f"{EpIdType.TRAILER}.{trailer_num}"
             if candidate not in identifiers:
                 last_trailer_num = trailer_num
                 identifier = candidate
         else:
-            candidate = "ep." + datetime_to_string(ep.published_date)
+            candidate = f"{EpIdType.EP}." + datetime_to_string(ep.published_date)
             if candidate not in identifiers:
                 identifier = candidate
 
         # In case an episode with the same date was published, we assign an aux type
         if identifier is None:
             last_aux_num += 1
-            identifier = f"aux.{last_aux_num}"
+            identifier = f"{EpIdType.AUX}.{last_aux_num}"
 
         identifiers.add(identifier)
         ep_id_list.append((identifier, ep))
@@ -92,13 +94,13 @@ def _get_episode_identifier_map_numbered(season_eps: List[DwEpisodeRecord],
 
         # Check for episodes or episode extras
         if ep_num and last_ep_num < ep_num:
-            candidate = f"ep.{ep_num}"
+            candidate = f"{EpIdType.EP}.{ep_num}"
             if candidate not in identifiers:
                 last_ep_num = ep_num
                 identifier = candidate
         elif ep_num and last_ep_num == ep_num:
             last_extra_num = ep_extra_num.get(ep_num, 0)
-            candidate = f"ep-extra.{ep_num}.{last_extra_num + 1}"
+            candidate = f"{EpIdType.EP_EXTRA}.{ep_num}.{last_extra_num + 1}"
             if candidate not in identifiers:
                 ep_extra_num[ep_num] = last_extra_num + 1
                 identifier = candidate
@@ -106,7 +108,7 @@ def _get_episode_identifier_map_numbered(season_eps: List[DwEpisodeRecord],
         # Check for trailers
         if identifier is None and __is_trailer(ep.title):
             trailer_num = last_trailer_num + 1
-            candidate = f"trailer.{trailer_num}"
+            candidate = f"{EpIdType.TRAILER}.{trailer_num}"
             if candidate not in identifiers:
                 last_trailer_num = trailer_num
                 identifier = candidate
@@ -114,7 +116,7 @@ def _get_episode_identifier_map_numbered(season_eps: List[DwEpisodeRecord],
         # Assign aux type if no identifier was found
         if identifier is None:
             last_aux_num += 1
-            identifier = f"aux.{last_aux_num}"
+            identifier = f"{EpIdType.AUX}.{last_aux_num}"
 
         identifiers.add(identifier)
         ep_id_list.append((identifier, ep))
@@ -155,13 +157,13 @@ def _get_episode_identifier_map_seasonal(season_eps: List[DwEpisodeRecord],
         # Check for known types
         if last_ep_num == 0 and __is_trailer(ep.title):
             trailer_num = last_trailer_num + 1
-            candidate = f"trailer.{trailer_num}"
+            candidate = f"{EpIdType.TRAILER}.{trailer_num}"
             if candidate not in identifiers:
                 last_trailer_num = trailer_num
                 identifier = candidate
         else:
             ep_num = last_ep_num + 1
-            candidate = f"ep.S{season_num:02d}E{ep_num:02d}"
+            candidate = f"{EpIdType.EP}.S{season_num:02d}E{ep_num:02d}"
             if candidate not in identifiers:
                 last_ep_num = ep_num
                 identifier = candidate
@@ -169,7 +171,7 @@ def _get_episode_identifier_map_seasonal(season_eps: List[DwEpisodeRecord],
         # Assign aux type if no identifier was found
         if identifier is None:
             last_aux_num += 1
-            identifier = f"aux.{last_aux_num}"
+            identifier = f"{EpIdType.AUX}.{last_aux_num}"
 
         identifiers.add(identifier)
         ep_id_list.append((identifier, ep))

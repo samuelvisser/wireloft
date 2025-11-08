@@ -4,7 +4,8 @@ import {saveProfilesToStorage, saveShowsToStorage} from './cache'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
 import {PodcastDownloadProfileRead} from "../types/schemas/podcast_download_profile";
 import {SeriesDownloadProfileRead} from "../types/schemas/series_download_profile";
-import {DownloadProfileRead, DownloadProfileReadView} from "../types/schemas/download_profile_base";
+import {DownloadProfileRead} from "../types/schemas/download_profile_base";
+import {DownloadProfileReadView} from "../types/schemas/download_profile_view";
 import {StreamProfileRead, StreamProfileReadView} from "../types/schemas/stream_profile_base";
 import {ShowRead, ShowReadView} from "../types/schemas/show";
 import {EpisodeRead} from "../types/schemas/episode";

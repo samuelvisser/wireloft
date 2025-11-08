@@ -1,29 +1,36 @@
 import {z} from 'zod'
-import {PodcastDownloadProfileReadSchema} from './podcast_download_profile'
-import {SeriesDownloadProfileReadSchema} from './series_download_profile'
+import {EpisodeTypeReg} from "../episode";
 
-export const DownloadProfileReadSchema = z.looseObject({
+
+// ---------- Strict request (create/update) ----------
+export const DownloadProfileSchemaRequest = z.object({
+    enableProfile: z.boolean().default(true),
+    epIdTypeList: z.array(z.enum(EpisodeTypeReg.values)).default([]),
+})
+
+export const DownloadProfileCreateSchema = DownloadProfileSchemaRequest.extend({
+    showId: z.int(),
+    localMediaProfileId: z.int(),
+})
+
+export const DownloadProfileUpdateSchema = DownloadProfileSchemaRequest.extend({
+    localMediaProfileId: z.int(),
+})
+
+
+// ------------ Lenient response (read) ------------
+export const DownloadProfileSchemaResponse = z.looseObject({
     id: z.int(),
     showId: z.int(),
     localMediaProfileId: z.int(),
     enableProfile: z.boolean(),
-    type: z.enum(['podcast', 'series']),
+    epIdTypeList: z.array(z.union([z.enum(EpisodeTypeReg.values), z.string()])),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })
-export type DownloadProfileRead = z.infer<typeof DownloadProfileReadSchema>
 
-// Unified read view for a download profile coming from /download-profiles/as-view
-export const DownloadProfileReadViewSchema = DownloadProfileReadSchema.extend({
-    // External table fields
-    showTitle: z.string(),
-    showSlug: z.string(),
-    localMediaProfilePreferredFormat: z.string(),
 
-    // Concrete implementation payload (depends on `type`)
-    downloadProfileImpl: z.discriminatedUnion('type', [
-        PodcastDownloadProfileReadSchema,
-        SeriesDownloadProfileReadSchema,
-    ]),
+export const DownloadProfileReadSchema = DownloadProfileSchemaResponse.safeExtend({
+    type: z.enum(['podcast', 'series']),
 })
-export type DownloadProfileReadView = z.infer<typeof DownloadProfileReadViewSchema>
+export type DownloadProfileRead = z.infer<typeof DownloadProfileReadSchema>

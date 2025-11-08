@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from .service import *
-from ....models.download_profile import DownloadProfileAPIReadView
+from ....models.download_profile_view import DownloadProfileAPIReadView
 from backend.app import db_session
 
 router = APIRouter(prefix="/as-view")

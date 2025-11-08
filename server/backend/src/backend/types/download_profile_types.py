@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, StrEnum
 
 
 class DownloadProfileType(Enum):
@@ -14,3 +14,10 @@ class MediaDownloadStatus(Enum):
     REDOWNLOADED = "redownloaded"
     LOCAL_PROCESSING = "local_processing"
     ERROR = "error"
+
+# Types for the episode identification field
+class EpIdType(StrEnum):
+    EP = "ep"
+    EP_EXTRA = "ep-extra"
+    TRAILER = "trailer"
+    AUX = "aux"
