@@ -81,7 +81,7 @@ def schedule_retry(*, def_key: str, resource_type: str, resource_id: int, run_id
     return job.id
 
 
-def trigger_now(*, def_key: str, resource_type: str, resource_id: int, max_retries: Optional[int] = None) -> str:
+def trigger_now(*, def_key: str, resource_type: str, resource_id: Optional[int] = None, max_retries: Optional[int] = None, **kwargs) -> str:
     from .executor import execute_task
 
     sch = start_scheduler()
@@ -89,7 +89,7 @@ def trigger_now(*, def_key: str, resource_type: str, resource_id: int, max_retri
     job = sch.add_job(
         execute_task,
         trigger=DateTrigger(run_date=datetime.now(tz=sch.timezone)),
-        kwargs=dict(def_key=def_key, resource_type=resource_type, resource_id=resource_id, schedule_id=None, max_retries=max_retries),
+        kwargs=dict(def_key=def_key, resource_type=resource_type, resource_id=resource_id, schedule_id=None, max_retries=max_retries, **kwargs),
         replace_existing=False,
     )
     return job.id

@@ -32,3 +32,7 @@ class TaskSchedule(Base):
 
     # Relationships
     definition: Mapped[TaskDefinition] = relationship()
+
+
+    def __repr__(self) -> str:
+        return f"<TaskSchedule id={self.id} resource_type={self.resource_type} resource_id={self.resource_id} active={self.active} created_at={self.created_at} updated_at={self.updated_at}>"

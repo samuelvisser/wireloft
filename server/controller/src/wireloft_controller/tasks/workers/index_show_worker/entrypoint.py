@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from wireloft_controller.app import db_session
-from wireloft_controller.tasks.registry import task
+from wireloft_scheduler.registry import task
 
 from .service import run_index_show_worker
 

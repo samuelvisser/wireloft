@@ -17,3 +17,7 @@ class TaskDefinition(Base):
     description: Mapped[Optional[str]]
     allowed_resource_types: Mapped[Optional[list[str]]] = mapped_column(JSON)
     default_max_retries: Mapped[Optional[int]] = mapped_column(comment="default max retries if not provided by schedule or trigger_now")
+
+
+    def __repr__(self) -> str:
+        return f"<TaskDefinition id={self.id} key={self.key} title={self.title} description={self.description}>"

@@ -21,7 +21,6 @@ class TaskMeta:
 
 _REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[None]]]] = {}
 
-
 def task(
     key: str,
     title: str,

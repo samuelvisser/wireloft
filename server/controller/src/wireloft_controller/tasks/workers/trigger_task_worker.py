@@ -1,7 +1,7 @@
-from typing import Optional
+from __future__ import annotations
 
-from wireloft_controller.tasks.registry import task
 from wireloft_scheduler.executor import trigger_now as exec_trigger_now
+from wireloft_scheduler.registry import task
 
 
 @task(

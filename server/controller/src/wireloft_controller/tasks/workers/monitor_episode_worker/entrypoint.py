@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from wireloft_controller.app import db_session
-from wireloft_controller.tasks.registry import task
+from wireloft_scheduler.registry import task
 from .service import run_monitor_episode_worker
 
 
@@ -15,7 +15,7 @@ from .service import run_monitor_episode_worker
     default_max_retries=5,
     tracks_progress=False,
 )
-async def monitor_episode_worker(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None, show_slug: Optional[str], show_id: Optional[int]) -> None:
+async def monitor_episode_worker(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None, show_slug: Optional[str] = None, show_id: Optional[int] = None) -> None:
     """
     Monitor and update the status of a currently live or not fully processed episode
 

@@ -27,8 +27,9 @@ def get_show_from_params(s: Session, *,
     return None
 
 
-def get_first_ep_with_status(eps: list[DwEpisodeDetailRecord], status: EpisodePublishStatus) -> Optional[DwEpisodeDetailRecord]:
-    return next((ep for ep in eps if get_publish_status_from_dw_detail(ep) == status), None)
+def get_first_ep_with_status(eps: list[DwEpisodeDetailRecord], status: EpisodePublishStatus, *,
+                             skip_ep: Optional[DwEpisodeDetailRecord] = None) -> Optional[DwEpisodeDetailRecord]:
+    return next((ep for ep in eps if ep != skip_ep and get_publish_status_from_dw_detail(ep) == status), None)
 
 
 def get_progress_updater_ep(latest_eps: list[DwEpisodeDetailRecord]) -> DwEpisodeDetailRecord:

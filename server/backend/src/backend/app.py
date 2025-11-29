@@ -23,7 +23,7 @@ def db_session():
         s.close()
 
 
-def create_app() -> FastAPI:
+def run_backend() -> None:
     app = FastAPI(
         title="WireLoft API",
         summary="Internal API for WireLoft",
@@ -108,27 +108,6 @@ def create_app() -> FastAPI:
     app.include_router(stream_profile_router, prefix="/api")
     app.include_router(task_router, prefix="/api")
 
-    # Start scheduler and sync task registry if enabled
-    try:
-        # Ensure controller tasks are imported so they are registered
-        import wireloft_controller  # noqa: F401
-
-        from wireloft_scheduler.scheduler import start_scheduler
-        from wireloft_scheduler.registry import sync_registry_to_db
-        if get_settings().scheduler.enabled:
-            sync_registry_to_db()
-            # Start the APScheduler instance
-            sch = start_scheduler()
-
-            # Let the controller package plan startup schedules dynamically
-            try:
-                from wireloft_controller.app import setup_startup_schedules
-                setup_startup_schedules(scheduler=sch)
-            except Exception:
-                # Do not crash app if auto-scheduling fails
-                pass
-    except Exception:
-        # Do not crash app if scheduler is not available
-        pass
-
-    return app
+    # Run the scheduler
+    import wireloft_controller
+    wireloft_controller.app()

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from wireloft_controller.app import db_session
 from wireloft_controller.m3u8 import get_vod_info
 from wireloft_controller.m3u8.get_vod_info import _fmt_hhmmss
-from wireloft_controller.tasks.registry import task
-from .service import run_download_series_thumbnail
+from wireloft_scheduler.registry import task
 
 
 @task(
