@@ -25,7 +25,7 @@ def show_create_as_bundle(body: ShowAPICreateBundle):
 
             # After committing the new Show, trigger indexing of episodes
             try:
-                trigger_task_now(definition_key="index_show_worker", resource_type="show", resource_id=result.id)
+                trigger_task_now(definition_key="fetch_new_episodes", resource_type="show", resource_id=result.id)
             except Exception:
                 pass
             return result

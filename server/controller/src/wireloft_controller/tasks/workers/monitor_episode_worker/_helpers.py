@@ -11,22 +11,6 @@ from dailywire_api.records import DwEpisodeDetailRecord
 from wireloft_controller.tasks.helpers.episodes.status import get_publish_status_from_dw_detail
 
 
-def get_show_from_params(s: Session, *,
-                         episode_id: Optional[int] = None,
-                         episode_slug: Optional[str] = None,
-                         show_id: Optional[int] = None,
-                         show_slug: Optional[str] = None) -> Optional[Show]:
-    if show_id is not None:
-        return s.get(Show, show_id)
-    if show_slug is not None:
-        return s.query(Show).filter(Show.slug == show_slug).first()
-    if episode_id is not None:
-        return s.get(Episode, episode_id).show
-    if episode_slug is not None:
-        return s.query(Episode).filter(Episode.slug == episode_slug).first().show
-    return None
-
-
 def get_first_ep_with_status(eps: list[DwEpisodeDetailRecord], status: EpisodePublishStatus, *,
                              skip_ep: Optional[DwEpisodeDetailRecord] = None) -> Optional[DwEpisodeDetailRecord]:
     return next((ep for ep in eps if ep != skip_ep and get_publish_status_from_dw_detail(ep) == status), None)

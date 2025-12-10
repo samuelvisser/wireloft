@@ -38,7 +38,7 @@ def show_create(body: ShowAPICreate):
 
             # After committing the new Show, trigger indexing of episodes
             try:
-                trigger_task_now(definition_key="index_show_worker", resource_type="show", resource_id=result.id)
+                trigger_task_now(definition_key="fetch_new_episodes", resource_type="show", resource_id=result.id)
             except Exception:
                 # Do not fail the request if task triggering fails; ignore for now
                 pass

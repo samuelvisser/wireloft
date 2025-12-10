@@ -13,13 +13,14 @@ from dailywire_api.records import DwSeasonRecord
 from dailywire_authorisation import DeviceAuthClient
 from ._helpers import get_shows, get_season_from_list_by_id, contains_non_final_episode, get_latest_ep_index
 from ...helpers.episodes.identifier import IdentifierMaxValues
-from ...helpers.episodes.mapper import get_dw_episodes_since_ep
+from ...helpers.episodes.mapper import get_dw_episodes_since_ep, count_total_episodes
+from ...helpers.progress import ProgressBounds, update_progress
 from ...helpers.seasons import create_season_by_dw_season
 from ...helpers.episodes.save import save_dw_episodes_per_season_asc
 from ...types.general import RecordOrder
 
 
-async def run_new_episode_finder(s: Session, *, show_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
+async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
     print("Starting new_episode_finder")
 
     shows: Sequence[Show] = get_shows(s, show_id=show_id, show_slug=show_slug)
@@ -51,15 +52,17 @@ async def run_new_episode_finder(s: Session, *, show_id: Optional[int] = None, s
             .limit(1)
         )
         latest_final_episode: Optional[Episode] = s.execute(stmt).scalar_one_or_none()
-        if latest_final_episode is None:
-            logger.warning(f"No published episodes found for show {show.slug}")
-            continue
 
         # Fetch remote seasons
+        last_known_season: Optional[Season] = latest_final_episode.season if latest_final_episode is not None else None
         dw_show = client.get_show_page(show.slug, membership_plan=membership_plan)
         all_dw_seasons: list[DwSeasonRecord] = dw_show.seasons
-        relevant_dw_seasons = list(dropwhile(lambda season: season.dw_id != latest_final_episode.season.dw_id, all_dw_seasons))
-        new_dw_seasons: list[DwSeasonRecord] = list(islice(relevant_dw_seasons, 1, None))
+
+        if last_known_season is not None:
+            relevant_dw_seasons = list(dropwhile(lambda season: season.dw_id != latest_final_episode.season.dw_id, all_dw_seasons))
+            new_dw_seasons: list[DwSeasonRecord] = list(islice(relevant_dw_seasons, 1, None))
+        else:
+            new_dw_seasons = all_dw_seasons
 
         # Add any new seasons to the db
         for new_dw_season in new_dw_seasons:
@@ -75,6 +78,11 @@ async def run_new_episode_finder(s: Session, *, show_id: Optional[int] = None, s
             for m in show.meta_items if m.key.startswith("ep_id")
         }
 
+        # Progress bounds
+        seasons = show.seasons
+        x = max(1, min(int(len(seasons)), 5))
+        upper = int(65 + (x - 1) * (95 - 65) / (5 - 1))
+
         # Find new episodes
         ep_map_asc, identifier_max_values = get_dw_episodes_since_ep(client,
                                                                      show=show,
@@ -83,6 +91,7 @@ async def run_new_episode_finder(s: Session, *, show_id: Optional[int] = None, s
                                                                      since_episode=latest_final_episode,
                                                                      prev_max_values=prev_max_values,
                                                                      progress=progress,
+                                                                     progress_bounds=ProgressBounds(1, upper),
                                                                      order=RecordOrder.ASC)
 
         # Save identifier max values
@@ -90,8 +99,20 @@ async def run_new_episode_finder(s: Session, *, show_id: Optional[int] = None, s
             show.set_meta(key=k, value=str(v))
             s.flush()
 
+        # Count total episodes
+        total = count_total_episodes(ep_map_asc)
+        upper = upper + 1
+        if total == 0:
+            update_progress(progress, 100, "No episodes found from dw")
+            continue
+        update_progress(progress, upper, f"Found {total} episodes in '{show.slug}'")
+
+
         # Save new episodes to db
         latest_episode_index = get_latest_ep_index(s, show=show)
+        if latest_episode_index is None:
+            latest_episode_index = 0
+
         current_index = latest_episode_index + 1
         for season_id, ep_list in ep_map_asc.items():
             season: Optional[Season] = get_season_from_list_by_id(show.seasons, season_id)
@@ -111,8 +132,17 @@ async def run_new_episode_finder(s: Session, *, show_id: Optional[int] = None, s
                 print(f"Exception: {e}")
                 raise e
 
+            # Update progress roughly based on completed seasons
+            processed = current_index - 1
+            frac = max(0.0, min(1.0, processed / total)) if total > 0 else 1.0
+            scaled_pct = upper + min(99 - upper + 1, int(frac * (99 - upper)))
+            update_progress(progress, scaled_pct,f"Indexed {processed}/{total} episodes (season {season.index}: {season.name})")
+
+        update_progress(progress, 100, f"Indexed all episodes")
+
         # Start tracking a currently live episode if it exists
-        print(contains_non_final_episode(ep_map_asc))
-        print(show.slug)
         if contains_non_final_episode(ep_map_asc):
+            update_progress(progress, 100, f"Non-final episode found, triggering monitor worker")
             trigger_now(definition_key="monitor_episode_worker", resource_type="episode", resource_id=None, show_slug=show.slug)
+        else:
+            update_progress(progress, 100, f"No non-final episodes found, done")

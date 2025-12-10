@@ -61,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # run
     p_run = sub.add_parser("run", help="Run a worker by its definition key")
-    p_run.add_argument("key", help="Task definition key (e.g., index_show_worker)")
+    p_run.add_argument("key", help="Task definition key")
 
     # Common convenience arguments used by many workers
     p_run.add_argument("--resource-id", "--id", type=int, help="Resource id for the task (if required)")

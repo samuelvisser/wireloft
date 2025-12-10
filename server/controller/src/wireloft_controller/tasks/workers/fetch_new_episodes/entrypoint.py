@@ -4,18 +4,18 @@ from typing import Optional
 
 from wireloft_controller.app import db_session
 from wireloft_scheduler.registry import task
-from .service import run_new_episode_finder
+from .service import run_fetch_new_episodes
 
 
 @task(
-    key="new_episode_finder",
+    key="fetch_new_episodes",
     title="Find new episodes in all shows",
     description="Finds new episodes in all shows.",
     allowed_resource_types=("show",),
     default_max_retries=5,
     tracks_progress=False,
 )
-async def new_episode_finder(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None) -> None:
+async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None) -> None:
     """
     Finds new episodes in all shows.
 
@@ -35,4 +35,4 @@ async def new_episode_finder(*, resource_id: Optional[int] = None, slug: Optiona
         or async tasks.
     """
     with db_session() as s:
-        await run_new_episode_finder(s, show_id=resource_id, show_slug=slug, progress=progress)
+        await run_fetch_new_episodes(s, show_id=resource_id, show_slug=slug, progress=progress)

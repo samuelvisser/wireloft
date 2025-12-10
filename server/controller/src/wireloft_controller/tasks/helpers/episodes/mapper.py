@@ -52,7 +52,7 @@ def get_dw_episodes_since_ep(client: MiddlewareClient, *,
                              show: Show,
                              membership_plan: str,
                              seasons: Sequence[Season],
-                             since_episode: Episode,
+                             since_episode: Optional[Episode],
                              prev_max_values: IdentifierMaxValues,
                              progress: Optional[Any] = None,
                              progress_bounds: ProgressBounds = ProgressBounds(1, 100),
@@ -62,14 +62,19 @@ def get_dw_episodes_since_ep(client: MiddlewareClient, *,
 
     Returns a mapping in descending order
     """
-    index = next((i for i, s in enumerate(seasons) if s.dw_id == since_episode.season.dw_id), -1) + 1
-    seasons_to_scan = seasons[: index]
+    if since_episode is not None:
+        index = next((i for i, s in enumerate(seasons) if s.dw_id == since_episode.season.dw_id), -1) + 1
+        seasons_to_scan = seasons[: index]
+        since_episode_tuple = (prev_max_values, since_episode)
+    else:
+        seasons_to_scan = seasons
+        since_episode_tuple = None
 
     return _scan_seasons(client,
                          show=show,
                          membership_plan=membership_plan,
                          seasons=seasons_to_scan,
-                         since_episode_tuple=(prev_max_values, since_episode),
+                         since_episode_tuple=since_episode_tuple,
                          bounds=progress_bounds,
                          progress=progress,
                          order=order)

@@ -14,4 +14,4 @@ from wireloft_scheduler.registry import task
 )
 async def trigger_task_worker(*, progress=None) -> None:
 
-    exec_trigger_now(def_key="index_show_worker", resource_type="show", resource_id=2)
+    exec_trigger_now(def_key="fetch_new_episodes", resource_type="show", resource_id=2)

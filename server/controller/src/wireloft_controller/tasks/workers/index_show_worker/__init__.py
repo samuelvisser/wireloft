@@ -1,1 +1,0 @@
-from .entrypoint import index_show_worker

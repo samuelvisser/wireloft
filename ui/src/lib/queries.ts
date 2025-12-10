@@ -231,7 +231,7 @@ export function useShowIndexingRun(showId?: number) {
         enabled: !!showId,
         queryFn: async ({signal}) => {
             const base: string = (window as any).appConfig.API_URL
-            const url = `${base}/tasks/runs?resource_type=show&resource_id=${showId}&definition_key=index_show_worker&status=RUNNING`
+            const url = `${base}/tasks/runs?resource_type=show&resource_id=${showId}&definition_key=fetch_new_episodes&status=RUNNING`
             const data: any[] = await fetchJSON<any[]>(url, signal)
 
             if(Array.isArray(data) && data.length > 0) {
