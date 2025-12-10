@@ -79,7 +79,7 @@ def main(argv: Optional[list[str]] = None) -> None:
     _validate_db_health()
     debug = args.debug
     uvicorn.run(
-        "backend.app:run_backend",
+        "backend.app:create_app",
         factory=True,
         host=args.host,
         port=args.port,

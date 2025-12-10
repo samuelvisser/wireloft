@@ -18,3 +18,4 @@ class DwEpisodeDetailRecord(DwEpisodeRecord):
     mux_playback_token: Optional[str]
     mux_drm_token: Optional[str]
     next_episode_url: Optional[str]
+    chatAvailableFor: Optional[list[str]]

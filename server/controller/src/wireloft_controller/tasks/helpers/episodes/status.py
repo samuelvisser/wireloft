@@ -12,21 +12,24 @@ def _get_publish_status_static(ep: DwEpisode) -> EpisodePublishStatus | None:
         return EpisodePublishStatus.SCHEDULED
     if ep.publish_status.upper().__contains__("LIVE"):
         return EpisodePublishStatus.LIVE
-    if ep.slug.__contains__("delayed-start"):
+    if ep.slug.lower().__contains__("delayed-start"):
         return EpisodePublishStatus.DELAYED
     return None
 
 
-def is_published_final(episode: DwEpisode | DbEpisode):
-    if _get_publish_status_static(episode) is not None:
-        return False
-
+def _can_assume_no_countdown(episode: DwEpisode | DbEpisode) -> bool:
     ep_dur_min = int(episode.duration / 60)
 
     # DW tends to return a very short ep duration when the episode is not yet processed
     if ep_dur_min < 1:
         ep_dur_min = 120
     return date_is_min_ago(episode.published_date, get_settings().episode_status_timing.published_final_after_minutes + ep_dur_min)
+
+
+def is_published_final(episode: DwEpisode | DbEpisode):
+    if _get_publish_status_static(episode) is not None:
+        return False
+    return _can_assume_no_countdown(episode)
 
 
 def get_publish_status_from_dw_detail(dw_ep: DwEpisodeDetailRecord) -> EpisodePublishStatus:
@@ -46,7 +49,8 @@ def get_publish_status_from_dw_detail(dw_ep: DwEpisodeDetailRecord) -> EpisodePu
     if dw_ep.publish_status == "PUBLISHED" and dw_ep.duration < 12 < vod_info.seconds:
         return EpisodePublishStatus.DW_PROCESSING
 
-    # If published but mp3u8 vod duration is longer than ep duration suggests it should be (with some margin), it still contains the countdown
-    if vod_info.seconds - 10 > dw_ep.duration:
+    # As long as the episode is not marked downloadable, it still contains the countdown
+    if not dw_ep.is_downloadable and not _can_assume_no_countdown(dw_ep):
         return EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
+
     return EpisodePublishStatus.PUBLISHED_FINAL

@@ -1,0 +1,1 @@
+from .entrypoint import debug_ep_details

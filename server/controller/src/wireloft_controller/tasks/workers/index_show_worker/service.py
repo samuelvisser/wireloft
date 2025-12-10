@@ -32,6 +32,7 @@ async def run_index_show_worker(s: Session, *, resource_id: Optional[int] = None
         show = s.get(Show, resource_id)
     if show is None:
         raise ValueError("Show not found; provide a valid show_slug or resource_id")
+
     # Ensure we have slug for API
     show_slug = show.slug
 

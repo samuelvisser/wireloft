@@ -15,11 +15,10 @@ def get_shows(s: Session, *, show_id: Optional[int], show_slug: Optional[str]) -
     elif show_id is not None:
         show = s.get(Show, show_id)
 
-    shows: Sequence[Show] = []
     if show is not None:
-        shows = [show]
+        shows: Sequence[Show] = [show]
     else:
-        shows = s.execute(select(Show)).scalars().all()
+        shows: Sequence[Show] = s.execute(select(Show)).scalars().all()
     return shows
 
 

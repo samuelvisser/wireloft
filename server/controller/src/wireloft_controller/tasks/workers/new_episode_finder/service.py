@@ -77,13 +77,13 @@ async def run_new_episode_finder(s: Session, *, show_id: Optional[int] = None, s
 
         # Find new episodes
         ep_map_asc, identifier_max_values = get_dw_episodes_since_ep(client,
-                                                                                       show=show,
-                                                                                       membership_plan=membership_plan,
-                                                                                       seasons=show.seasons,
-                                                                                       since_episode=latest_final_episode,
-                                                                                       prev_max_values=prev_max_values,
-                                                                                       progress=progress,
-                                                                                       order=RecordOrder.ASC)
+                                                                     show=show,
+                                                                     membership_plan=membership_plan,
+                                                                     seasons=show.seasons,
+                                                                     since_episode=latest_final_episode,
+                                                                     prev_max_values=prev_max_values,
+                                                                     progress=progress,
+                                                                     order=RecordOrder.ASC)
 
         # Save identifier max values
         for k, v in identifier_max_values.items():
@@ -101,10 +101,10 @@ async def run_new_episode_finder(s: Session, *, show_id: Optional[int] = None, s
 
             try:
                 current_index = save_dw_episodes_per_season_asc(s,
-                                                 show=show,
-                                                 season=season,
-                                                 episodes=ep_map_asc[season_id],
-                                                 start_index=current_index)
+                                                                show=show,
+                                                                season=season,
+                                                                episodes=ep_map_asc[season_id],
+                                                                start_index=current_index)
             except Exception as e:
                 # rollback of the season has already occurred inside save_dw_episodes_per_season
                 # Re raise to allow scheduler to retry; caller expects retry to be scheduled

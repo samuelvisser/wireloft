@@ -23,7 +23,7 @@ def db_session():
         s.close()
 
 
-def run_backend() -> None:
+def create_app() -> FastAPI:
     app = FastAPI(
         title="WireLoft API",
         summary="Internal API for WireLoft",
@@ -108,6 +108,8 @@ def run_backend() -> None:
     app.include_router(stream_profile_router, prefix="/api")
     app.include_router(task_router, prefix="/api")
 
-    # Run the scheduler
-    import wireloft_controller
-    wireloft_controller.app()
+    # # Run the scheduler
+    # import wireloft_controller
+    # wireloft_controller.app()
+
+    return app

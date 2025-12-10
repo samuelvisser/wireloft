@@ -1,0 +1,164 @@
+### Get currently running tasks
+GET http://localhost:5001/api/tasks/runs
+
+<> 2025-10-23T004041.200.json
+
+
+
+### Get relevant task
+GET http://localhost:5001/api/tasks/runs?resource_type=show&resource_id=2
+
+<> 2025-10-23T173248.200.json
+<> 2025-10-23T165834.200.json
+
+
+
+
+
+### Get shows list as view
+GET http://localhost:5001/api/shows/as-view/
+
+### DW episode details
+GET http://localhost:5001/api/dailywire/episodes/ep-2307-how-the-radical-left-created-the-horseshoe-theory-right
+
+
+
+<> 2025-10-30T173007.200.json
+<> 2025-10-18T020221.200.json
+
+### Get all download profiles views
+GET http://localhost:5001/api/download-profiles/as-view
+
+### Get list of episodes from DailyWire show
+GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-isabel-brown-show
+
+### Get list of episodes from DailyWire show
+GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-ben-shapiro-show
+
+### Get show from The Daily WIre
+GET http://localhost:5001/api/dailywire/shows/the-ben-shapiro-show
+
+<> 2025-10-17T152238.200.json
+
+### Get app config
+GET http://localhost:5001/api/config/public
+
+### Get auth status
+GET http://localhost:5001/api/dailywire/auth/status
+
+###
+GET http://localhost:5001/api/dailywire/shows/fireside-chat-with-dennis-prager
+
+
+### Get media profiles
+GET http://localhost:5001/api/media-profiles
+
+
+
+
+### Update media profile
+
+
+PATCH http://localhost:5001/api/media-profiles/1080p
+
+{"name":"1080p","outputTemplate":"/downloads/test.ext","preferredFormat":"format_1080p","downloadSeriesImages":true,"id":2,"slug":"1080p"}
+
+### Options
+OPTIONS http://localhost:5001/api/shows/as_bundle
+
+
+### Add Ben Shapiro Show through the wizard (for empty database)
+POST http://localhost:5001/api/shows/as-bundle
+
+{
+  "show": {
+    "url": "https://www.dailywire.com/show/the-ben-shapiro-show",
+    "membershipLevel": "ALL_ACCESS",
+    "type": "podcast",
+    "episodeIdentifier": "numbered",
+    "dwId": "ck0gx918z008007947vwinup8",
+    "slug": "the-ben-shapiro-show",
+    "title": "The Ben Shapiro Show",
+    "description": "FACTS DON'T CARE ABOUT YOUR FEELINGS. Tune in to the fastest growing, hardest hitting, most insightful, and savagely irreverent conservative podcast on the web. Monday-Friday at 10AM CT.",
+    "backgroundImagePath": "https://daily-wire-production.imgix.net/shows/ck0gx918z008007947vwinup8-backgroundImage-1693183192477.png?auto=compress&cs=origin",
+    "logoImagePath": "https://daily-wire-production.imgix.net/shows/ck0gx918z008007947vwinup8-logoImage-1714968498176.png?auto=compress&cs=origin",
+    "sharingUrl": "https://www.dailywire.com/show/the-ben-shapiro-show",
+    "authorName": "Ben Shapiro",
+    "authorSlug": "ben-shapiro",
+    "authorHeadshotPath": "https://dailywireplus-v2.imgix.net/images/hosts/77961a8d-17af-4b8f-a04e-7fdebb7de8ab.png",
+    "thumbnailLandscapePath": "https://daily-wire-production.imgix.net/shows/ck0gx918z008007947vwinup8-portraitImage-1693183187825.png?auto=compress&cs=origin",
+    "thumbnailPortraitPath": "https://daily-wire-production.imgix.net/shows/ck0gx918z008007947vwinup8-portraitImage-1693183187825.png?auto=compress&cs=origin",
+    "thumbnailSquarePath": null
+  },
+  "seasons": [
+    {
+      "name": "2015",
+      "dwId": "ckisrt5ft0kbn07821h8bgfs4",
+      "slug": "2015"
+    },
+    {
+      "name": "2016",
+      "dwId": "ckisrt7300k2407548aj7o23t",
+      "slug": "2016"
+    },
+    {
+      "name": "2017",
+      "dwId": "ckisrt8ts0kum0754ocme6fq7",
+      "slug": "2017"
+    },
+    {
+      "name": "2018",
+      "dwId": "ckisrtaod0mu90866tnghh9ji",
+      "slug": "2018"
+    },
+    {
+      "name": "2019",
+      "dwId": "ckisrtde30ls70754ya5uwzcf",
+      "slug": "2019"
+    },
+    {
+      "name": "2020",
+      "dwId": "ckisrtf5t0iub07940dbjr5pq",
+      "slug": "the-ben-shapiro-show-2020-season"
+    },
+    {
+      "name": "2021",
+      "dwId": "ckjk5t562e23d0782qxj4t02m",
+      "slug": "the-ben-shapiro-show-2021-season"
+    },
+    {
+      "name": "2022",
+      "dwId": "ckxyxs8k22s5d0b54zszz84j0",
+      "slug": "the-ben-shapiro-show-2022-season"
+    },
+    {
+      "name": "2023",
+      "dwId": "clcp1aft80jeh08343je8hxe1",
+      "slug": "the-ben-shapiro-show-2023-season"
+    },
+    {
+      "name": "2024",
+      "dwId": "clqwfhdq3vpoo08345zkev0c0",
+      "slug": "the-ben-shapiro-show-2024-season"
+    },
+    {
+      "name": "2025",
+      "dwId": "cm5fobybv7zsu08144t60uf3y",
+      "slug": "the-ben-shapiro-show-2025-season"
+    }
+  ],
+  "localMediaProfile": {
+    "name": "ABS Audio",
+    "outputTemplate": "/downloads/audio/{show}/{episode}.ext",
+    "preferredFormat": "format_audio_only",
+    "op": "create_new"
+  },
+  "downloadProfile": {
+    "enableProfile": true,
+    "downloadWithCountdown": false,
+    "redownloadFinal": true,
+    "downloadDaysInPast": 180,
+    "deleteOlderEpisodes": true,
+    "op": "podcast"
+  }
+}
