@@ -1,5 +1,6 @@
 from fastapi import APIRouter, status
 
+from wireloft_motherboard import events
 from .as_bundle import show_as_bundle_router
 from .as_view import show_view_router
 from .service import get_shows_list, create_show, get_show, update_show, delete_show
@@ -24,7 +25,7 @@ def show_list():
 
 
 @router.post("", response_model=ShowAPIRead, status_code=status.HTTP_201_CREATED)
-def show_create(body: ShowAPICreate):
+def show_create(body: ShowAPICreate) -> ShowAPIRead:
     """
     Create a new show entry.
 
@@ -36,12 +37,6 @@ def show_create(body: ShowAPICreate):
             result = create_show(s, body)
             s.commit()
 
-            # After committing the new Show, trigger indexing of episodes
-            try:
-                trigger_task_now(definition_key="fetch_new_episodes", resource_type="show", resource_id=result.id)
-            except Exception:
-                # Do not fail the request if task triggering fails; ignore for now
-                pass
             return result
         except Exception:
             s.rollback()

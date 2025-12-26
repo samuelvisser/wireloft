@@ -7,6 +7,7 @@ from backend.api.models.show import *
 from fastapi import HTTPException
 
 from backend.db.models import Show
+from wireloft_motherboard import events
 
 
 def get_shows_list(s: Session) -> list[ShowAPIRead]:
@@ -38,6 +39,10 @@ def create_show(s: Session, body: ShowAPICreate) -> ShowAPIRead:
     show = Show(**data)
     s.add(show)
     s.flush()
+
+    event_emitter = events.get_wireloft_event_emitter()
+    event_emitter.emit("show_created", show.id)
+
     return ShowAPIRead.model_validate(show)
 
 
@@ -53,6 +58,10 @@ def update_show(s: Session, show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
     # Apply changes and flush
     update_database_fields(show, body)
     s.flush()
+
+    event_emitter = events.get_wireloft_event_emitter()
+    event_emitter.emit("show_updated", show.id)
+
     return ShowAPIRead.model_validate(show)
 
 
@@ -68,4 +77,8 @@ def delete_show(s: Session, show_slug: str) -> ShowAPIRead:
     payload = ShowAPIRead.model_validate(show)
     s.delete(show)
     s.flush()
+
+    event_emitter = events.get_wireloft_event_emitter()
+    event_emitter.emit("show_deleted", show.id)
+
     return payload
