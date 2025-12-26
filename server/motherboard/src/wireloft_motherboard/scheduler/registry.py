@@ -19,7 +19,6 @@ class TaskMeta:
     tracks_progress: bool = True
 
 
-_REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[None]]]] = {}
 
 def task(
     key: str,

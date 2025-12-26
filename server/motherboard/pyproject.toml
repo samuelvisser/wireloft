@@ -1,7 +1,7 @@
 [project]
-name = "wireloft-scheduler"
+name = "wireloft-motherboard"
 version = "0.1.0"
-description = "Internal APScheduler-based task scheduler for WireLoft"
+description = "Binds together WireLoft packages and processees by integrating a global scheduling- and event triggering system."
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [

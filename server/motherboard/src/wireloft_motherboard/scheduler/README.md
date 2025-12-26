@@ -5,7 +5,7 @@ A lightweight, APScheduler-powered task scheduler integrated into the WireLoft b
 - Schedule tasks via cron/interval/date triggers
 - Trigger ad-hoc runs immediately
 - Track task runs, progress, status, retries, and errors via the API
-
+    
 This package is designed to feel native with the existing FastAPI + SQLAlchemy stack and is configured via wireloft_config.get_settings().
 
 

@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = "==3.13.*"
 
 [manifest]
@@ -10,7 +10,8 @@ members = [
     "dailywire-downloader",
     "wireloft-config",
     "wireloft-controller",
-    "wireloft-scheduler",
+    "wireloft-motherboard",
+]
 ]
 
 [[package]]
@@ -631,17 +632,19 @@ requires-dist = [
 ]
 
 [[package]]
-name = "wireloft-scheduler"
+name = "wireloft-motherboard"
 version = "0.1.0"
-source = { editable = "server/scheduler" }
+source = { editable = "server/motherboard" }
 dependencies = [
     { name = "apscheduler" },
+    { name = "pyventus" },
     { name = "sqlalchemy" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "apscheduler", specifier = ">=3.11.0,<4.0" },
+    { name = "pyventus", specifier = ">=0.7.2" },
     { name = "sqlalchemy", specifier = ">=2.0.43,<3.0" },
 ]
 
