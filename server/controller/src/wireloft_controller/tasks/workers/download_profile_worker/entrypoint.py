@@ -3,16 +3,9 @@ from __future__ import annotations
 from typing import Optional
 
 from backend.app import db_session
-from wireloft_scheduler.scheduler.registry import task
+from wireloft_motherboard.scheduler.registry import task, on_cron, on_event
 from .service import run_download_profile_worker
 
-
-## TODO, triggers:
-## TODO 1. ep became status PUBLISHED_WITH_COUNTDOWN (pass ep id)
-## TODO 2. ep became status PUBLISHED (pass ep id)
-## TODO 3. show was added (download all episodes) (pass show id)
-## TODO 4. after fetch_new_episodes was run after application startup (catch up on missed episodes) (global run)
-## TODO 5. global run on interval to catch any edge cases
 
 @task(
     key="download_profile_worker",
@@ -21,6 +14,25 @@ from .service import run_download_profile_worker
     allowed_resource_types=("download_profile",),
     default_max_retries=5,
     tracks_progress=True,
+)
+@on_cron(
+    cron="settings:download_settings.verify_downloads_interval_min",  # Interval in minutes from settings
+    resource_type="download_profile",
+    resource_id=0,  # 0 = all download profiles
+    coalesce=True,
+    run_on_startup=True,
+)
+@on_event(
+    event_name="episode.published_countdown",
+    resource_type="episode",
+)
+@on_event(
+    event_name="episode.published",
+    resource_type="episode",
+)
+@on_event(
+    event_name="show.added",
+    resource_type="show",
 )
 async def download_profile_worker(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None) -> None:
     """

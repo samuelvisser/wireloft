@@ -4,7 +4,7 @@ from typing import Optional
 
 from backend.app import db_session
 from wireloft_controller.tasks.workers.debug_ep_details.service import run_debug_ep_details
-from wireloft_scheduler.scheduler.registry import task
+from wireloft_motherboard.scheduler.registry import task
 
 
 @task(

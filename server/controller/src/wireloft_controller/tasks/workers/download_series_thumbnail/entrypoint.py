@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from backend.app import db_session
 from wireloft_controller.tasks.workers.download_series_thumbnail.service import run_download_series_thumbnail
-from wireloft_scheduler.scheduler.registry import task
+from wireloft_motherboard.scheduler.registry import task
 
 ## TODO, triggers:
 ## TODO 1. after show was added

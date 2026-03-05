@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 import requests
 
 from backend.db.models import SeriesDownloadProfile
-from wireloft_scheduler.scheduler.registry import task
+from wireloft_motherboard.scheduler.registry import task
 from ._helpers import ensure_dir_from_template, pick_thumbnail_url
 
 

@@ -7,8 +7,8 @@ from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
-from wireloft_scheduler import TaskDefinition
-from wireloft_scheduler.scheduler.types import ResourceType
+from wireloft_motherboard.scheduler.db import TaskDefinition
+from wireloft_motherboard.scheduler.types import ResourceType
 
 
 class TaskSchedule(Base):

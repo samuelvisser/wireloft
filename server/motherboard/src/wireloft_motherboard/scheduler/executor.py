@@ -10,11 +10,11 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import OperationalError
 
 from backend.db.core import get_session
-from wireloft_scheduler.scheduler.db import *
+from wireloft_motherboard.scheduler.db import *
 from .types import ResourceType, TaskStatus
 from .registry import get_task
 from wireloft_config import get_settings
-from wireloft_scheduler import scheduler
+from wireloft_motherboard import scheduler
 
 
 class ProgressUpdater:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from wireloft_scheduler.scheduler.executor import trigger_now as exec_trigger_now
-from wireloft_scheduler.scheduler.registry import task
+from wireloft_motherboard.scheduler.executor import trigger_now as exec_trigger_now
+from wireloft_motherboard.scheduler.registry import task
 
 
 @task(

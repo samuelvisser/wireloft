@@ -3,31 +3,28 @@ from __future__ import annotations
 from typing import Optional
 
 from wireloft_controller.app import db_session
+from wireloft_motherboard.scheduler.registry import task, on_cron, on_event
 from .service import run_fetch_new_episodes
 
 
-@trigger(
-    trigger_type="worker",
-    cron="0 0 * * *",
-)
-async def test():
-    ...
-
-
-
-
-
-@trigger(
-    trigger_type="startup",
-    cron="0 0 * * *",
-)
-@job(
+@task(
     key="fetch_new_episodes",
     title="Find new episodes in all shows",
     description="Finds new episodes in all shows.",
     allowed_resource_types=("show",),
     default_max_retries=5,
     tracks_progress=False,
+)
+@on_cron(
+    cron="settings:new_episode_schedule.find_episodes_cron",  # Special marker to get from settings
+    resource_type="show",
+    resource_id=0,  # 0 = all shows
+    coalesce=True,  # Don't run multiple times if delayed
+    run_on_startup=True,  # Also run on startup to catch up
+)
+@on_event(
+    event_name="show.added",
+    resource_type="show",
 )
 async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None) -> None:
     """

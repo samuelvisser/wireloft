@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Optional, Iterable, Dict, Any
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from backend.db import get_session
 from wireloft_config import get_settings
-from wireloft_scheduler.scheduler.helpers import is_interval_like_cron
 
 _controller_initiated = False
 
@@ -21,66 +17,102 @@ def db_session():
         s.close()
 
 
-# --- Startup scheduling helpers (controller-owned) ---
-def _planned_startup_schedules() -> Iterable[Dict[str, Any]]:
-    """Yield schedule specs for tasks that should be auto-planned on startup.
+def _resolve_cron_from_settings(cron_spec: str) -> str:
+    """Resolve a cron spec from settings if it starts with 'settings:'"""
+    if not cron_spec.startswith("settings:"):
+        return cron_spec
 
-    Each spec contains:
-      - job_id: stable scheduler job id
-      - task_key: task definition key (from registry)
-      - resource_type: scheduler resource type str
-      - resource_id: int
-      - cron: crontab string
-    """
-    s = get_settings()
-    yield {
-        "job_id": "auto-new-episode-finder",
-        "task_key": "new_episode_finder",
-        "resource_type": "show",
-        "resource_id": 0,
-        "coalesce": True,
-        "cron": s.new_episode_schedule.find_episodes_cron,
-    }
+    # Extract the settings path
+    path = cron_spec[9:]  # Remove "settings:" prefix
+    parts = path.split(".")
+
+    # Navigate through settings
+    value = get_settings()
+    for part in parts:
+        value = getattr(value, part)
+
+    # If it's an interval in minutes, convert to cron expression
+    if isinstance(value, int):
+        # Assume it's minutes, convert to cron: */N * * * *
+        return f"*/{value} * * * *"
+
+    return str(value)
 
 
-def setup_startup_schedules(scheduler: Optional[AsyncIOScheduler] = None) -> None:
-    """Create or replace controller-owned recurring jobs on startup.
-
-    If scheduler is not provided, it will be obtained via start_scheduler().
-    Does nothing if the global scheduler setting is disabled.
-    """
+def setup_triggers_from_registry() -> None:
+    """Set up all cron and event triggers from the task registry."""
     from apscheduler.triggers.cron import CronTrigger
-    from wireloft_scheduler.scheduler.executor import execute_task, trigger_now as scheduler_trigger_now
-    from wireloft_scheduler.scheduler.scheduler import start_scheduler
+    from wireloft_motherboard.scheduler.executor import execute_task, trigger_now as scheduler_trigger_now
+    from wireloft_motherboard.scheduler.scheduler import start_scheduler
+    from wireloft_motherboard.scheduler.registry import all_triggers
+    from wireloft_motherboard.events.registry import get_wireloft_event_emitter
 
     if not get_settings().scheduler.enabled:
         return
 
-    sch = scheduler or start_scheduler()
+    sch = start_scheduler()
+    event_emitter = get_wireloft_event_emitter()
 
-    for spec in _planned_startup_schedules():
-        cron_expr = str(spec["cron"]).strip()
-        trigger = CronTrigger.from_crontab(cron_expr, timezone=get_settings().timezone)
-        sch.add_job(
-            execute_task,
-            trigger=trigger,
-            kwargs=dict(
-                def_key=spec["task_key"],
-                resource_type=spec["resource_type"],
-                resource_id=spec["resource_id"],
-                schedule_id=None,
-            ),
-            id=spec["job_id"],
-            replace_existing=True,
-            coalesce=spec["coalesce"] if "coalesce" in spec else True,
-        )
-        if is_interval_like_cron(cron_expr):
-            # Fire once immediately so users don't wait for the first boundary
-            scheduler_trigger_now(
-                def_key=spec["task_key"],
-                resource_type=spec["resource_type"],
-                resource_id=spec["resource_id"],
-            )
+    # Get all triggers from the registry
+    all_task_triggers = all_triggers()
+
+    for task_key, triggers in all_task_triggers.items():
+        for idx, trigger in enumerate(triggers):
+            if trigger.trigger_type == "cron":
+                # Resolve cron from settings if needed
+                cron_expr = _resolve_cron_from_settings(trigger.cron)
+
+                # Create APScheduler job
+                cron_trigger = CronTrigger.from_crontab(cron_expr, timezone=get_settings().timezone)
+                job_id = f"auto-{task_key}-{trigger.resource_type}-{trigger.resource_id}-{idx}"
+
+                sch.add_job(
+                    execute_task,
+                    trigger=cron_trigger,
+                    kwargs=dict(
+                        def_key=task_key,
+                        resource_type=trigger.resource_type or "show",
+                        resource_id=trigger.resource_id if trigger.resource_id is not None else 0,
+                        schedule_id=None,
+                    ),
+                    id=job_id,
+                    replace_existing=True,
+                    coalesce=trigger.coalesce,
+                )
+
+                # If run_on_startup is True, trigger immediately
+                if trigger.run_on_startup:
+                    scheduler_trigger_now(
+                        def_key=task_key,
+                        resource_type=trigger.resource_type or "show",
+                        resource_id=trigger.resource_id if trigger.resource_id is not None else 0,
+                    )
+
+            elif trigger.trigger_type == "event":
+                # Register event listener
+                event_name = trigger.event_name
+
+                # Create handler that triggers the task
+                def create_event_handler(task_key_captured, resource_type_captured):
+                    async def handler(event_data=None, **kwargs):
+                        # Extract resource_id from event data if available
+                        resource_id = None
+                        if isinstance(event_data, dict):
+                            resource_id = event_data.get("resource_id") or event_data.get("id")
+                        elif hasattr(event_data, "id"):
+                            resource_id = event_data.id
+
+                        # Trigger the task
+                        scheduler_trigger_now(
+                            def_key=task_key_captured,
+                            resource_type=resource_type_captured or "show",
+                            resource_id=resource_id,
+                        )
+                    return handler
+
+                # Register the handler
+                handler = create_event_handler(task_key, trigger.resource_type)
+                event_emitter.on(event_name, handler)
 
 
 def app():
@@ -92,21 +124,26 @@ def app():
     # Start scheduler and sync task registry if enabled
     try:
         # Ensure controller tasks are imported so they are registered
-        from wireloft_scheduler.scheduler.scheduler import start_scheduler
-        from wireloft_scheduler.scheduler.registry import sync_registry_to_db
-        if get_settings().scheduler.enabled:
-            sync_registry_to_db()
-            # Start the APScheduler instance
-            sch = start_scheduler()
+        from wireloft_motherboard.scheduler.scheduler import start_scheduler
+        from wireloft_motherboard.scheduler.registry import sync_registry_to_db
 
-            # Let the controller package plan startup schedules dynamically
+        if get_settings().scheduler.enabled:
+            # Sync task definitions to database
+            sync_registry_to_db()
+
+            # Start the APScheduler instance
+            start_scheduler()
+
+            # Set up all cron and event triggers from the registry
             try:
-                setup_startup_schedules(scheduler=sch)
-            except (ValueError, KeyError, ImportError) as e:
-                # Do not crash app if auto-scheduling fails
-                pass
+                setup_triggers_from_registry()
+            except (ValueError, KeyError, ImportError, AttributeError) as e:
+                # Log but don't crash if auto-scheduling fails
+                import sys
+                print(f"Warning: Failed to setup some triggers: {e}", file=sys.stderr)
     except (AttributeError, RuntimeError, ImportError) as e:
         # Do not crash app if scheduler initialization or registry sync fails
-        pass
+        import sys
+        print(f"Warning: Failed to initialize scheduler: {e}", file=sys.stderr)
 
     _controller_initiated = True

@@ -89,7 +89,7 @@ def create_tables() -> None:
 
     # Scheduler tables
     try:
-        importlib.import_module("wireloft_scheduler.models")
+        importlib.import_module("wireloft_motherboard.scheduler.db")
     except Exception:
         # If scheduler package not installed, ignore
         pass
