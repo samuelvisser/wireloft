@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional, Literal
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, JSON, func
+from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
-from wireloft_scheduler.db.TaskDefinition import TaskDefinition
-from wireloft_scheduler.types import ResourceType
+from wireloft_scheduler import TaskDefinition
+from wireloft_scheduler.scheduler.types import ResourceType
 
 
 class TaskSchedule(Base):

@@ -3,9 +3,16 @@ from __future__ import annotations
 from typing import Optional
 
 from backend.app import db_session
-from wireloft_scheduler.registry import task
+from wireloft_scheduler.scheduler.registry import task
 from .service import run_download_profile_worker
 
+
+## TODO, triggers:
+## TODO 1. ep became status PUBLISHED_WITH_COUNTDOWN (pass ep id)
+## TODO 2. ep became status PUBLISHED (pass ep id)
+## TODO 3. show was added (download all episodes) (pass show id)
+## TODO 4. after fetch_new_episodes was run after application startup (catch up on missed episodes) (global run)
+## TODO 5. global run on interval to catch any edge cases
 
 @task(
     key="download_profile_worker",

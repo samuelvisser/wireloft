@@ -56,8 +56,12 @@ class AppSettings(SettingsBase):
         published_countdown_after_minutes=20,
         published_final_after_minutes=3 * 60
     ))
-
-
+    download_settings: DownloadSettings = Field(default_factory=lambda: DownloadSettings(
+        max_concurrent_downloads=5,
+        max_download_attempts=3,
+        download_timeout_seconds=600,
+        verify_downloads_interval_min=120
+    ))
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):
         # kwargs > env > .env > YAML > file secrets > defaults

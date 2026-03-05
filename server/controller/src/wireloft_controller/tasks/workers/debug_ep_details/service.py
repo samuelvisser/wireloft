@@ -7,7 +7,7 @@ from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason
 from dailywire_api.types.user_info import DwMembershipLevel
 from wireloft_controller.m3u8 import get_vod_info
 from wireloft_controller.m3u8.get_vod_info import _fmt_hhmmss
-from wireloft_scheduler.registry import task
+from wireloft_scheduler.scheduler.registry import task
 from ...helpers.episodes.status import get_publish_status_from_dw_detail, is_published_final
 from ...helpers.shows.get import get_show_from_params
 

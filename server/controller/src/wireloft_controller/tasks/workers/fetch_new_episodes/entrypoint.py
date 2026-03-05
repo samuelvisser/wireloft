@@ -3,11 +3,25 @@ from __future__ import annotations
 from typing import Optional
 
 from wireloft_controller.app import db_session
-from wireloft_scheduler.registry import task
 from .service import run_fetch_new_episodes
 
 
-@task(
+@trigger(
+    trigger_type="worker",
+    cron="0 0 * * *",
+)
+async def test():
+    ...
+
+
+
+
+
+@trigger(
+    trigger_type="startup",
+    cron="0 0 * * *",
+)
+@job(
     key="fetch_new_episodes",
     title="Find new episodes in all shows",
     description="Finds new episodes in all shows.",

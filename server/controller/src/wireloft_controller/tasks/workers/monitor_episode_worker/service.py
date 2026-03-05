@@ -56,15 +56,6 @@ async def run_monitor_episode_worker(s: Session, *,
         logging.error(f"No final episode found for show '{show.slug}'. This should never happen.")
         return
 
-    print(f"Found monitoring episode {dw_ep.slug}")
-    print(f"Found latest final episode {latest_dw_final_ep.slug}")
-
-
-    status_test = get_publish_status_from_dw_detail(dw_ep)
-    print(f"Found status: {status_test}")
-
-
-
     # Find db record for the episode
     latest_db_ep: Episode | None = (
         s.query(Episode)
@@ -97,15 +88,27 @@ async def run_monitor_episode_worker(s: Session, *,
             duration=dw_ep.duration,
         )
 
-
     # Attach the new status to db record
     new_status = get_publish_status_from_dw_detail(dw_ep)
     db_ep.publish_status = new_status.value
-
-    print(new_status)
-
+    save_status_metadata(s, episode=db_ep, status=new_status)
     s.flush()
 
-    # Save status-specific metadata
-    save_status_metadata(s, episode=db_ep, status=new_status)
-    # s.commit()
+    # Update primary data for ongoing changes
+    if db_ep.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
+        db_ep.dw_id = dw_ep.dw_id
+    db_ep.title = dw_ep.title
+    db_ep.duration = dw_ep.duration
+    db_ep.slug = dw_ep.slug
+
+
+    s.commit()
+
+    # # Keep running as long as the episode is still in not published final
+    # if db_ep.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
+    #
+    #
+
+
+
+

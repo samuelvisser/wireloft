@@ -5,8 +5,12 @@ from typing import Callable, Awaitable, Optional, Dict, Tuple
 
 from backend.db.core import get_session
 from sqlalchemy import select
+from functools import wraps
 
-from wireloft_scheduler.db import TaskDefinition
+from wireloft_scheduler.scheduler.db import TaskDefinition
+
+_REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[None]]]] = {}
+_TRIGGERS: Dict[str, Callable[..., Awaitable[None]]] = {}
 
 
 @dataclass
@@ -47,6 +51,12 @@ def task(
         return fn
 
     return decorator
+
+def trigger(type: str, cron: str) -> str:
+    def decorator(fn: TriggerFn):
+        @wraps(fn)
+        def wrapper(data: TriggerData) -> None:
+            return fn(data)
 
 
 def get_task(key: str) -> Tuple[TaskMeta, Callable[..., Awaitable[None]]]:

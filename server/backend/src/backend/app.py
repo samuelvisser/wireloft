@@ -108,8 +108,8 @@ def create_app() -> FastAPI:
     app.include_router(stream_profile_router, prefix="/api")
     app.include_router(task_router, prefix="/api")
 
-    # # Run the scheduler
-    # import wireloft_controller
-    # wireloft_controller.app()
+    # Run the scheduler
+    import wireloft_controller
+    wireloft_controller.app()
 
     return app

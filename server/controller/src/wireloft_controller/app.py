@@ -7,7 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from backend.db import get_session
 from wireloft_config import get_settings
-from wireloft_scheduler.helpers import is_interval_like_cron
+from wireloft_scheduler.scheduler.helpers import is_interval_like_cron
 
 _controller_initiated = False
 
@@ -38,6 +38,7 @@ def _planned_startup_schedules() -> Iterable[Dict[str, Any]]:
         "task_key": "new_episode_finder",
         "resource_type": "show",
         "resource_id": 0,
+        "coalesce": True,
         "cron": s.new_episode_schedule.find_episodes_cron,
     }
 
@@ -49,8 +50,8 @@ def setup_startup_schedules(scheduler: Optional[AsyncIOScheduler] = None) -> Non
     Does nothing if the global scheduler setting is disabled.
     """
     from apscheduler.triggers.cron import CronTrigger
-    from wireloft_scheduler.executor import execute_task, trigger_now as scheduler_trigger_now
-    from wireloft_scheduler.scheduler import start_scheduler
+    from wireloft_scheduler.scheduler.executor import execute_task, trigger_now as scheduler_trigger_now
+    from wireloft_scheduler.scheduler.scheduler import start_scheduler
 
     if not get_settings().scheduler.enabled:
         return
@@ -71,6 +72,7 @@ def setup_startup_schedules(scheduler: Optional[AsyncIOScheduler] = None) -> Non
             ),
             id=spec["job_id"],
             replace_existing=True,
+            coalesce=spec["coalesce"] if "coalesce" in spec else True,
         )
         if is_interval_like_cron(cron_expr):
             # Fire once immediately so users don't wait for the first boundary
@@ -90,8 +92,8 @@ def app():
     # Start scheduler and sync task registry if enabled
     try:
         # Ensure controller tasks are imported so they are registered
-        from wireloft_scheduler.scheduler import start_scheduler
-        from wireloft_scheduler.registry import sync_registry_to_db
+        from wireloft_scheduler.scheduler.scheduler import start_scheduler
+        from wireloft_scheduler.scheduler.registry import sync_registry_to_db
         if get_settings().scheduler.enabled:
             sync_registry_to_db()
             # Start the APScheduler instance
