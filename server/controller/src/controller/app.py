@@ -20,16 +20,15 @@ def db_session():
 def setup_triggers_from_registry() -> None:
     """Set up all cron and event triggers from the task registry."""
     from apscheduler.triggers.cron import CronTrigger
+    from pyventus.events import EventLinker
     from task_manager.scheduler.executor import execute_task, trigger_now as scheduler_trigger_now
     from task_manager.scheduler.scheduler import start_scheduler
     from task_manager.scheduler.registry import all_triggers
-    from task_manager.events.registry import get_wireloft_event_emitter
 
     if not get_settings().scheduler.enabled:
         return
 
     sch = start_scheduler()
-    event_emitter = get_wireloft_event_emitter()
 
     # Get all triggers from the registry
     all_task_triggers = all_triggers()
@@ -64,13 +63,9 @@ def setup_triggers_from_registry() -> None:
 
                 # Create handler that triggers the task
                 def create_event_handler(task_key_captured, resource_type_captured):
-                    async def handler(event_data=None, **kwargs):
-                        # Extract resource_id from event data if available
-                        resource_id = None
-                        if isinstance(event_data, dict):
-                            resource_id = event_data.get("resource_id") or event_data.get("id")
-                        elif hasattr(event_data, "id"):
-                            resource_id = event_data.id
+                    async def handler(**kwargs):
+                        # Extract resource_id from kwargs if available
+                        resource_id = kwargs.get("resource_id") or kwargs.get("id")
 
                         # Trigger the task
                         scheduler_trigger_now(
@@ -80,9 +75,9 @@ def setup_triggers_from_registry() -> None:
                         )
                     return handler
 
-                # Register the handler
+                # Register the handler using EventLinker decorator
                 handler = create_event_handler(task_key, trigger.resource_type)
-                event_emitter.on(event_name, handler)
+                EventLinker.on(event_name)(handler)
 
 
 def emit_startup_event():
