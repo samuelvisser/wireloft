@@ -13,7 +13,7 @@ from pydantic import ValidationError
 
 from dailywire_api.records import DwEpisodeDetailRecord, DwShowRecord, DwEpisodeRecord, DwUserInfo
 from dailywire_authorisation import DeviceAuthClient
-from wireloft_config import get_settings
+from config import get_settings
 
 # ---------------- request pacing (global across dailywire_api) ----------------
 # We intentionally keep this module-level so that all clients share the same pacing state.
