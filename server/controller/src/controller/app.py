@@ -86,6 +86,44 @@ def emit_startup_event():
     emit_event("app.startup", {})
 
 
+def reload_user_schedules():
+    """
+    Reload active user-created schedules from TaskSchedule table into APScheduler.
+    These are one-off tasks like downloading a specific movie or extra episode.
+    Code-defined jobs (@on_cron, @on_event) are set up separately via setup_triggers_from_registry().
+    """
+    import sys
+    from sqlalchemy import select
+    from task_manager.scheduler.db import TaskSchedule, TaskDefinition
+    from task_manager.scheduler.scheduler import schedule_job
+    from controller.db_utils import db_session
+
+    with db_session() as s:
+        stmt = (
+            select(TaskSchedule, TaskDefinition)
+            .join(TaskDefinition, TaskDefinition.id == TaskSchedule.definition_id)
+            .where(TaskSchedule.active == True)
+        )
+
+        count = 0
+        for schedule, definition in s.execute(stmt):
+            try:
+                schedule_job(
+                    schedule_id=schedule.id,
+                    def_key=definition.key,
+                    resource_type=schedule.resource_type,
+                    resource_id=schedule.resource_id,
+                    trigger=schedule.trigger,
+                    trigger_args=schedule.trigger_args,
+                )
+                count += 1
+            except Exception as e:
+                print(f"Warning: Failed to reload schedule {schedule.id}: {e}", file=sys.stderr)
+
+        if count > 0:
+            print(f"Reloaded {count} user-created schedule(s) from database")
+
+
 def app():
     global _controller_initiated
 
@@ -103,8 +141,15 @@ def app():
             # Sync task definitions to database
             sync_registry_to_db()
 
-            # Start the APScheduler instance
+            # Start the APScheduler instance (in-memory mode)
             start_scheduler()
+
+            # Reload user-created schedules from database
+            try:
+                reload_user_schedules()
+            except Exception as e:
+                import sys
+                print(f"Warning: Failed to reload user schedules: {e}", file=sys.stderr)
 
             # Set up all cron and event triggers from the registry
             try:

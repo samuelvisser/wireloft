@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
@@ -40,9 +39,10 @@ def start_scheduler() -> AsyncIOScheduler:
         _scheduler = AsyncIOScheduler(timezone=get_settings().timezone)
         return _scheduler
 
-    job_stores = {"default": SQLAlchemyJobStore(url=get_settings().database_url)}
+    # Use in-memory job store (default MemoryJobStore)
+    # User-created schedules are reloaded from TaskSchedule table on startup
     loop = _get_or_start_event_loop()
-    _scheduler = AsyncIOScheduler(event_loop=loop, jobstores=job_stores)
+    _scheduler = AsyncIOScheduler(event_loop=loop, timezone=get_settings().timezone)
     _scheduler.start(paused=False)
     return _scheduler
 
