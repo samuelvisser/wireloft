@@ -57,10 +57,10 @@ class AppSettings(SettingsBase):
         published_final_after_minutes=3 * 60
     ))
     download_settings: DownloadSettings = Field(default_factory=lambda: DownloadSettings(
+        verify_downloads_cron="0 */2 * * *",
         max_concurrent_downloads=5,
         max_download_attempts=3,
-        download_timeout_seconds=600,
-        verify_downloads_interval_min=120
+        download_timeout_seconds=600
     ))
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):

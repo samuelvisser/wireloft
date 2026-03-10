@@ -25,7 +25,7 @@ from .service import run_download_profile_worker
     resource_type="download_profile",
 )
 @on_cron(
-    cron=f"*/{get_settings().download_settings.verify_downloads_interval_min} * * * *",
+    cron=get_settings().download_settings.verify_downloads_cron,
     resource_type="download_profile",
     resource_id=0,
     coalesce=True,

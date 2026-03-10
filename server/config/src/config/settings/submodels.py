@@ -108,7 +108,7 @@ class EpisodeStatusTiming(SubmodelBase):
 
 
 class DownloadSettings(SubmodelBase):
+    verify_downloads_cron: str = Field(..., description="Cron schedule for verifying downloads")
     max_concurrent_downloads: int = Field(..., description="Maximum number of concurrent downloads")
     max_download_attempts: int = Field(..., description="Maximum number of download attempts")
     download_timeout_seconds: int = Field(..., description="Timeout in seconds for each download")
-    verify_downloads_interval_min: int = Field(..., description="Interval in minutes to verify downloads")
