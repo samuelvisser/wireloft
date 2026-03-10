@@ -89,10 +89,10 @@ Run the backend (in repo root):
 
 ```bash
 uv sync
-backend-api --debug
+backend-api run --debug
 ```
 
-This starts Flask at http://127.0.0.1:5001
+This starts the backend API at http://127.0.0.1:5001
 
 Run the React UI (in ui/):
 
@@ -120,25 +120,41 @@ Options:
 ### Database (SQLite)
 
 This project includes a required SQLite database for the backend.
-- Default DB path: data\wireloft.db
+- Default DB path: data/wireloft.db
 
-#### Create and seed the database 
+#### Create and seed the database
 
 Bash (repo root):
 ```bash
 # Create database and tables
-backend-api --init-db
+backend-api db init
 
-# Seed database with the same demo data currently hardcoded in the backend
-backend-api --seed-db
+# Seed database with demo data
+backend-api db seed
 
 # Use a custom database path
-backend-api --init-db --db <DATA_DIR>\data\wireloft.db
-backend-api --seed-db --db <DATA_DIR>\data\wireloft.db
+backend-api db init --db <DATA_DIR>/data/wireloft.db
+backend-api db seed --db <DATA_DIR>/data/wireloft.db
+```
+
+#### Backend API commands
+
+```bash
+# Start backend server (development mode with auto-reload)
+backend-api run --debug
+
+# Start backend server (production mode)
+backend-api run
+
+# Start on custom host/port
+backend-api run --host 0.0.0.0 --port 8000
+
+# Stop all running backend processes
+backend-api stop
 ```
 
 Notes:
-- Seeding is idempotent: running it multiple times won’t duplicate rows.
+- Database seeding is idempotent: running it multiple times won't duplicate rows.
 
 
 ## Authentication and session persistence
