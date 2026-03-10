@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from backend.app import db_session
-from wireloft_motherboard.scheduler.registry import task, on_cron, on_event
+from config import get_settings
+from controller.db_utils import db_session
+from task_manager.scheduler.registry import task, on_cron, on_event
 from .service import run_download_profile_worker
 
 
@@ -16,18 +17,21 @@ from .service import run_download_profile_worker
     tracks_progress=True,
 )
 @on_cron(
-    cron="settings:download_settings.verify_downloads_interval_min",  # Interval in minutes from settings
+    cron=f"*/{get_settings().download_settings.verify_downloads_interval_min} * * * *",
     resource_type="download_profile",
-    resource_id=0,  # 0 = all download profiles
+    resource_id=0,
     coalesce=True,
-    run_on_startup=True,
 )
 @on_event(
-    event_name="episode.published_countdown",
+    event_name="app.startup",
+    resource_type="download_profile",
+)
+@on_event(
+    event_name="episode.published_with_countdown",
     resource_type="episode",
 )
 @on_event(
-    event_name="episode.published",
+    event_name="episode.published_final",
     resource_type="episode",
 )
 @on_event(

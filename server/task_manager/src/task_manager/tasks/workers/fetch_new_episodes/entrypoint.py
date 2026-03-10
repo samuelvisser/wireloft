@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from wireloft_controller.app import db_session
-from wireloft_motherboard.scheduler.registry import task, on_cron, on_event
+from config import get_settings
+from controller.db_utils import db_session
+from task_manager.scheduler.registry import task, on_cron, on_event
 from .service import run_fetch_new_episodes
 
 
@@ -16,11 +17,14 @@ from .service import run_fetch_new_episodes
     tracks_progress=False,
 )
 @on_cron(
-    cron="settings:new_episode_schedule.find_episodes_cron",  # Special marker to get from settings
+    cron=get_settings().new_episode_schedule.find_episodes_cron,
     resource_type="show",
-    resource_id=0,  # 0 = all shows
-    coalesce=True,  # Don't run multiple times if delayed
-    run_on_startup=True,  # Also run on startup to catch up
+    resource_id=0,
+    coalesce=True,
+)
+@on_event(
+    event_name="app.startup",
+    resource_type="show",
 )
 @on_event(
     event_name="show.added",

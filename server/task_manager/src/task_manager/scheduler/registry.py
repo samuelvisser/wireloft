@@ -6,7 +6,7 @@ from typing import Callable, Awaitable, Optional, Dict, Tuple, List
 from backend.db.core import get_session
 from sqlalchemy import select
 
-from wireloft_motherboard.scheduler.db import TaskDefinition
+from task_manager.scheduler.db import TaskDefinition
 
 _REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[None]]]] = {}
 
@@ -14,13 +14,12 @@ _REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[None]]]] = {}
 @dataclass
 class TriggerMeta:
     """Metadata for a task trigger."""
-    trigger_type: str  # 'cron', 'event', 'startup'
-    cron: Optional[str] = None  # For cron triggers
+    trigger_type: str  # 'cron', 'event'
+    cron: Optional[str] = None  # For cron triggers (actual cron expression)
     event_name: Optional[str] = None  # For event triggers
     resource_type: Optional[str] = None  # Resource type for the trigger
     resource_id: Optional[int] = None  # Resource ID (0 = global, None = passed via event)
     coalesce: bool = True  # Whether to coalesce multiple pending jobs
-    run_on_startup: bool = False  # Whether to run immediately on startup (for interval-like crons)
 
 
 @dataclass
@@ -66,15 +65,14 @@ def task(
     return decorator
 
 
-def on_cron(cron: str, resource_type: str = "show", resource_id: int = 0, coalesce: bool = True, run_on_startup: bool = False):
+def on_cron(cron: str, resource_type: str = "show", resource_id: int = 0, coalesce: bool = True):
     """Decorator to add a cron-based trigger to a task.
 
     Args:
-        cron: Cron expression (e.g., "*/30 * * * *")
+        cron: Cron expression (e.g., "*/30 * * * *") - must be actual value, not a settings reference
         resource_type: Resource type to run on
         resource_id: Resource ID to run on (0 for global)
         coalesce: Whether to coalesce multiple pending jobs
-        run_on_startup: Whether to also trigger immediately on startup
     """
     def decorator(fn: Callable[..., Awaitable[None]]):
         if not hasattr(fn, '_task_meta'):
@@ -86,7 +84,6 @@ def on_cron(cron: str, resource_type: str = "show", resource_id: int = 0, coales
             resource_type=resource_type,
             resource_id=resource_id,
             coalesce=coalesce,
-            run_on_startup=run_on_startup,
         )
         fn._task_meta.triggers.append(trigger)
         return fn
@@ -98,7 +95,7 @@ def on_event(event_name: str, resource_type: Optional[str] = None):
     """Decorator to add an event-based trigger to a task.
 
     Args:
-        event_name: Name of the event to listen for (e.g., "show.added", "episode.published")
+        event_name: Name of the event to listen for (e.g., "show.added", "episode.published_final")
         resource_type: Optional resource type filter
     """
     def decorator(fn: Callable[..., Awaitable[None]]):
@@ -116,26 +113,6 @@ def on_event(event_name: str, resource_type: Optional[str] = None):
     return decorator
 
 
-def on_startup(resource_type: str = "show", resource_id: int = 0):
-    """Decorator to trigger a task once on application startup.
-
-    Args:
-        resource_type: Resource type to run on
-        resource_id: Resource ID to run on (0 for global)
-    """
-    def decorator(fn: Callable[..., Awaitable[None]]):
-        if not hasattr(fn, '_task_meta'):
-            raise ValueError(f"@on_startup must be used after @task decorator")
-
-        trigger = TriggerMeta(
-            trigger_type='startup',
-            resource_type=resource_type,
-            resource_id=resource_id,
-        )
-        fn._task_meta.triggers.append(trigger)
-        return fn
-
-    return decorator
 
 
 def get_task(key: str) -> Tuple[TaskMeta, Callable[..., Awaitable[None]]]:
