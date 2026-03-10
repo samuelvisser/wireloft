@@ -1,5 +1,5 @@
-from pyventus.events import AsyncIOEventEmitter, EventEmitter, EventLinker
+from pyventus.events import EventEmitter, EventLinker
 
 
-class WireloftEventEmitter(AsyncIOEventEmitter):
-    ...
+class WireloftEventEmitter(EventEmitter):
+    pass

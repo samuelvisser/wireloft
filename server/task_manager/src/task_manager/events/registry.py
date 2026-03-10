@@ -1,8 +1,7 @@
-from task_manager.events.WireloftEventEmitter import WireloftEventEmitter
-from pyventus.events import EventEmitter
+from pyventus.events import EventEmitter, AsyncIOEventEmitter
 
 
-WIRELOFT_EVENT_EMITTER = WireloftEventEmitter()
+WIRELOFT_EVENT_EMITTER = AsyncIOEventEmitter()
 
 def get_wireloft_event_emitter() -> EventEmitter:
     global WIRELOFT_EVENT_EMITTER

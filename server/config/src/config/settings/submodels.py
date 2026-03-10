@@ -105,3 +105,10 @@ class TrackNewEpisodeSchedule(SubmodelBase):
 class EpisodeStatusTiming(SubmodelBase):
     published_countdown_after_minutes: int = Field(..., description="Delay in minutes after dw reports the episode as published we can assume it actually is")
     published_final_after_minutes: int = Field(..., description="Delay in minutes after dw reports the episode as published we can safely assume it no longer contains the countdown")
+
+
+class DownloadSettings(SubmodelBase):
+    max_concurrent_downloads: int = Field(..., description="Maximum number of concurrent downloads")
+    max_download_attempts: int = Field(..., description="Maximum number of download attempts")
+    download_timeout_seconds: int = Field(..., description="Timeout in seconds for each download")
+    verify_downloads_interval_min: int = Field(..., description="Interval in minutes to verify downloads")

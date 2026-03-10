@@ -8,20 +8,6 @@ from task_manager.scheduler.registry import task, on_cron, on_event
 from .service import run_fetch_new_episodes
 
 
-@task(
-    key="fetch_new_episodes",
-    title="Find new episodes in all shows",
-    description="Finds new episodes in all shows.",
-    allowed_resource_types=("show",),
-    default_max_retries=5,
-    tracks_progress=False,
-)
-@on_cron(
-    cron=get_settings().new_episode_schedule.find_episodes_cron,
-    resource_type="show",
-    resource_id=0,
-    coalesce=True,
-)
 @on_event(
     event_name="app.startup",
     resource_type="show",
@@ -29,6 +15,20 @@ from .service import run_fetch_new_episodes
 @on_event(
     event_name="show.added",
     resource_type="show",
+)
+@on_cron(
+    cron=get_settings().new_episode_schedule.find_episodes_cron,
+    resource_type="show",
+    resource_id=0,
+    coalesce=True,
+)
+@task(
+    key="fetch_new_episodes",
+    title="Find new episodes in all shows",
+    description="Finds new episodes in all shows.",
+    allowed_resource_types=("show",),
+    default_max_retries=5,
+    tracks_progress=False,
 )
 async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None) -> None:
     """
