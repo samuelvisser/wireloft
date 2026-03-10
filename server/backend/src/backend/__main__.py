@@ -10,7 +10,7 @@ import uvicorn
 from backend.db import configure_db, create_tables, get_db_path, seed_db, get_engine
 from sqlalchemy import text
 
-from wireloft_config.registry import get_settings
+from config.registry import get_settings
 from .config import PROJECT_ROOT
 
 

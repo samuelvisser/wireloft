@@ -10,6 +10,7 @@ from backend.api.helpers import create_database_fields, update_database_fields
 from backend.api.models.series_download_profile import *
 from backend.db.models.download_profile import SeriesDownloadProfile
 from backend.db.models import Season
+from task_manager.events.emitters import emit_event
 
 
 def get_series_download_profiles_list(s: Session) -> list[SeriesDownloadProfileAPIRead]:
@@ -97,6 +98,13 @@ def create_download_profile_series(s: Session, body: SeriesDownloadProfileAPICre
     item.seasons = seasons
 
     s.flush()
+
+    emit_event("download_profile.added", {
+        "resource_id": item.id,
+        "id": item.id,
+        "name": item.name
+    })
+
     return SeriesDownloadProfileAPIRead.model_validate(item)
 
 
@@ -130,6 +138,12 @@ def delete_download_profile_series(s: Session, download_profile_series_id: int) 
         raise HTTPException(status_code=404, detail="Download profile for series not found")
 
     payload = SeriesDownloadProfileAPIRead.model_validate(item)
+
+    emit_event("download_profile.deleted", {
+        "resource_id": item.id,
+        "id": item.id
+    })
+
     s.delete(item)
     s.flush()
     return payload

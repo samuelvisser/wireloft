@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.api.errors import integrity_error_handler
 from backend.db import get_session
 from backend.security.auth import is_authenticated
-from wireloft_config import get_settings
+from config import get_settings
 
 
 @contextmanager
@@ -109,7 +109,7 @@ def create_app() -> FastAPI:
     app.include_router(task_router, prefix="/api")
 
     # Run the scheduler
-    import wireloft_controller
-    wireloft_controller.app()
+    import controller
+    controller.app()
 
     return app

@@ -9,8 +9,8 @@ from typing import Optional
 from fastapi import Request, HTTPException, status
 from starlette.responses import Response
 
-from wireloft_config import get_settings
-from wireloft_config.security.admin_auth import AdminAuth
+from config import get_settings
+from config.security.admin_auth import AdminAuth
 from .crypto import encrypt_text, decrypt_text
 
 SESSION_COOKIE_NAME = "wl_session"

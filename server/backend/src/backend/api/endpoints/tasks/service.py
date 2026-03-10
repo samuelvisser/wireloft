@@ -5,9 +5,9 @@ from typing import Optional
 from sqlalchemy import select
 
 from backend.db.core import get_session
-from wireloft_motherboard.scheduler.db import TaskDefinition, TaskSchedule, TaskRun
-from wireloft_motherboard.scheduler.scheduler import schedule_job, remove_job
-from wireloft_motherboard.scheduler.executor import trigger_now as exec_trigger_now
+from task_manager.scheduler.db import TaskDefinition, TaskSchedule, TaskRun
+from task_manager.scheduler.scheduler import schedule_job, remove_job
+from task_manager.scheduler.executor import trigger_now as exec_trigger_now
 
 
 def list_definitions() -> list[dict]:

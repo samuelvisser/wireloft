@@ -1,6 +1,6 @@
 from fastapi import APIRouter, status
 
-from wireloft_motherboard import events
+from task_manager import events
 from .as_bundle import show_as_bundle_router
 from .as_view import show_view_router
 from .service import get_shows_list, create_show, get_show, update_show, delete_show

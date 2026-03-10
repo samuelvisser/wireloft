@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from backend.api.helpers import update_database_fields
 from backend.api.models.podcast_download_profile import *
 from backend.db.models.download_profile import PodcastDownloadProfile
+from task_manager.events.emitters import emit_event
 
 
 def get_podcast_download_profiles_list(s: Session) -> list[PodcastDownloadProfileAPIRead]:
@@ -36,6 +37,13 @@ def create_download_profile_podcast(s: Session, body: PodcastDownloadProfileAPIC
     item = PodcastDownloadProfile(**data)
     s.add(item)
     s.flush()
+
+    emit_event("download_profile.added", {
+        "resource_id": item.id,
+        "id": item.id,
+        "name": item.name
+    })
+
     return PodcastDownloadProfileAPIRead.model_validate(item)
 
 
@@ -63,6 +71,12 @@ def delete_download_profile_podcast(s: Session, download_profile_id: int) -> Pod
         raise HTTPException(status_code=404, detail="Download profile not found")
 
     payload = PodcastDownloadProfileAPIRead.model_validate(item)
+
+    emit_event("download_profile.deleted", {
+        "resource_id": item.id,
+        "id": item.id
+    })
+
     s.delete(item)
     s.flush()
     return payload

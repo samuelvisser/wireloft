@@ -27,7 +27,7 @@ def podcast_download_profiles_create(body: PodcastDownloadProfileAPICreate):
     """
     with db_session() as s:
         try:
-            result = create_download_profile_podcast(s, body)
+            result = await create_download_profile_podcast(s, body)
             s.commit()
             return result
         except Exception:
@@ -74,7 +74,7 @@ def podcast_download_profiles_delete(download_profile_podcast_id: int):
     """
     with db_session() as s:
         try:
-            result = delete_download_profile_podcast(s, download_profile_podcast_id)
+            result = await delete_download_profile_podcast(s, download_profile_podcast_id)
             s.commit()
             return result
         except Exception:

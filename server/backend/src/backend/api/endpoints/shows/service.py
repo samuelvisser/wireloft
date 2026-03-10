@@ -7,7 +7,7 @@ from backend.api.models.show import *
 from fastapi import HTTPException
 
 from backend.db.models import Show
-from wireloft_motherboard import events
+from task_manager.events.emitters import emit_event
 
 
 def get_shows_list(s: Session) -> list[ShowAPIRead]:
@@ -40,8 +40,7 @@ def create_show(s: Session, body: ShowAPICreate) -> ShowAPIRead:
     s.add(show)
     s.flush()
 
-    event_emitter = events.get_wireloft_event_emitter()
-    event_emitter.emit("show_created", show.id)
+    emit_event("show.added", {"resource_id": show.id, "id": show.id, "slug": show.slug, "title": show.title})
 
     return ShowAPIRead.model_validate(show)
 
@@ -59,8 +58,7 @@ def update_show(s: Session, show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
     update_database_fields(show, body)
     s.flush()
 
-    event_emitter = events.get_wireloft_event_emitter()
-    event_emitter.emit("show_updated", show.id)
+    emit_event("show.updated", {"resource_id": show.id, "id": show.id, "slug": show.slug})
 
     return ShowAPIRead.model_validate(show)
 
@@ -75,10 +73,10 @@ def delete_show(s: Session, show_slug: str) -> ShowAPIRead:
         raise HTTPException(status_code=404, detail="Show not found")
 
     payload = ShowAPIRead.model_validate(show)
+
+    emit_event("show.deleted", {"resource_id": show.id, "id": show.id, "slug": show.slug})
+
     s.delete(show)
     s.flush()
-
-    event_emitter = events.get_wireloft_event_emitter()
-    event_emitter.emit("show_deleted", show.id)
 
     return payload

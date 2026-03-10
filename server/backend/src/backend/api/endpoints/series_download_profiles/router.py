@@ -74,7 +74,7 @@ def series_download_profiles_delete(download_profile_series_id: int):
     """
     with db_session() as s:
         try:
-            result = delete_download_profile_series(s, download_profile_series_id)
+            result = await delete_download_profile_series(s, download_profile_series_id)
             s.commit()
             return result
         except Exception:
