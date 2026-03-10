@@ -6,10 +6,9 @@ import inspect
 import sys
 from typing import Any, Dict, Optional
 
-# Importing tasks ensures that all worker modules are loaded and registered
-# via the wireloft_controller.registry -> wireloft_motherboard.registry integration.
-import wireloft_controller.tasks  # noqa: F401
-from wireloft_motherboard.scheduler.registry import all_definitions, get_task
+# Import motherboard tasks to ensure they are registered
+import task_manager.tasks  # noqa: F401
+from task_manager.scheduler.registry import all_definitions, get_task
 
 
 class CLIProgress:

@@ -1,5 +1,5 @@
 [project]
-name = "wireloft-controller"
+name = "controller"
 version = "0.1.0"
 description = "Task controller and definitions for WireLoft"
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
