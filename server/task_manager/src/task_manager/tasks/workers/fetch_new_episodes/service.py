@@ -21,7 +21,7 @@ from ...types.general import RecordOrder
 
 
 async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
-    print("Starting new_episode_finder")
+    print("Starting fetch_new_episodes")
 
     shows: Sequence[Show] = get_shows(s, show_id=show_id, show_slug=show_slug)
 
@@ -141,8 +141,10 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
         update_progress(progress, 100, f"Indexed all episodes")
 
         # Start tracking a currently live episode if it exists
-        if contains_non_final_episode(ep_map_asc):
-            update_progress(progress, 100, f"Non-final episode found, triggering monitor worker")
-            trigger_now(definition_key="monitor_episode_worker", resource_type="episode", resource_id=None, show_slug=show.slug)
-        else:
-            update_progress(progress, 100, f"No non-final episodes found, done")
+        # if contains_non_final_episode(ep_map_asc):
+        #     update_progress(progress, 100, f"Non-final episode found, triggering monitor worker")
+        #     trigger_now(definition_key="monitor_episode_worker", resource_type="episode", resource_id=None, show_slug=show.slug)
+        # else:
+        #     update_progress(progress, 100, f"No non-final episodes found, done")
+
+    print("fetch_new_episodes finished")

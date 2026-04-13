@@ -72,4 +72,5 @@ async def run_debug_ep_details(s: Session, *, show_slug: str, progress):  # prog
 
     print("-----------------------------")
     print(f"Full dw_ep_detail: {dw_ep_detail.__dict__}")
+    print("debug_ep_details completed")
 

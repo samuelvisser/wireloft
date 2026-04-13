@@ -109,6 +109,6 @@ async def run_monitor_episode_worker(s: Session, *,
     #
     #
 
-
+    print("monitor_episode_worker completed")
 
 
