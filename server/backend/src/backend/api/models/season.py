@@ -13,14 +13,12 @@ class _SeasonAPIBaseIn(RequestBase):
 class SeasonAPIRequestDetached(_SeasonAPIBaseIn):
     """Request body without external relations, allowing for dynamic insertion"""
 
-    dw_id: str
     slug: str
 
 
 class SeasonAPICreate(_SeasonAPIBaseIn):
     """Request body for creating a season."""
 
-    dw_id: str
     show_id: int
     index: int
     slug: str
@@ -37,7 +35,6 @@ class _SeasonAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, no constraints."""
     id: int
     show_id: int
-    dw_id: str
     index: int
     name: str
     slug: str

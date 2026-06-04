@@ -37,8 +37,9 @@ async def run_debug_ep_details(s: Session, *, show_slug: str, progress):  # prog
 
     # Get latest episode from DW
     client = MiddlewareClient()
+    season_dw_id = client.get_season_id_by_slugs(show.slug, latest_db_season.slug)
     latest_dw_episode, _, _ = client.get_episodes_paginated(show.slug, ByShowSeason(
-        season_dw_id=latest_db_season.dw_id,
+        season_dw_id=season_dw_id,
         membership_plan=show.membership_level,
         page_size=1,
         order_by="CreatedAt_DESC"

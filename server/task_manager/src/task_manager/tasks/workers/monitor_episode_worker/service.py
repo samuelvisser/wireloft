@@ -34,8 +34,15 @@ async def run_monitor_episode_worker(s: Session, *,
 
     # Get latest 5 episodes from DW
     client = MiddlewareClient()
+
+    dw_show = client.get_show_page(show.slug, membership_plan=show.membership_level)
+    dw_season = next((s for s in dw_show.seasons if s.slug == latest_db_season.slug), None)
+    if dw_season is None:
+        logging.error(f"Season '{latest_db_season.slug}' not found in DW API for show '{show.slug}'")
+        return
+
     latest_dw_episodes, _, _ = client.get_episodes_paginated(show.slug, ByShowSeason(
-        season_dw_id=latest_db_season.dw_id,
+        season_dw_id=dw_season.dw_id,
         membership_plan=show.membership_level,
         page_size=5,
         order_by="CreatedAt_DESC"
@@ -81,7 +88,6 @@ async def run_monitor_episode_worker(s: Session, *,
     if db_ep.slug != dw_ep.slug:
         db_ep = Episode(
             show_id=show.id,
-            dw_id=dw_ep.dw_id,
             index=dw_ep.index,
             title=dw_ep.title,
             slug=dw_ep.slug,
@@ -95,8 +101,6 @@ async def run_monitor_episode_worker(s: Session, *,
     s.flush()
 
     # Update primary data for ongoing changes
-    if db_ep.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
-        db_ep.dw_id = dw_ep.dw_id
     db_ep.title = dw_ep.title
     db_ep.duration = dw_ep.duration
     db_ep.slug = dw_ep.slug

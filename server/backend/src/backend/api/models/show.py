@@ -31,7 +31,6 @@ class _ShowAPIBaseIn(RequestBase):
 class ShowAPICreate(_ShowAPIBaseIn):
     """Request body for creating a show."""
 
-    dw_id: str
     slug: str
     membership_level: WlDwMembershipLevel
     type: ShowType
@@ -55,7 +54,6 @@ class _ShowAPIBaseOut(ResponseBase):
 
     id: int
     uuid: str
-    dw_id: str
     slug: str
     membership_level: Union[WlDwMembershipLevel, str]
     type: Union[ShowType, str]

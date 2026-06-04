@@ -34,7 +34,6 @@ class EpisodeAPICreate(_EpisodeAPIBaseIn):
     index: int
 
     # Fields in the media_items table
-    dw_id: Optional[str]
     slug: str
 
     @computed_field(return_type=str)
@@ -45,10 +44,7 @@ class EpisodeAPICreate(_EpisodeAPIBaseIn):
 
 class EpisodeAPIUpdate(_EpisodeAPIBaseIn):
     """Request body for updating an episode."""
-
-    # Fields in the media_items table
-    dw_id: Optional[str]
-
+    pass
 
 # ---------- Lenient output (read) ----------
 class _EpisodeAPIBaseOut(ResponseBase):
@@ -68,7 +64,6 @@ class _EpisodeAPIBaseOut(ResponseBase):
     description: str
     downloaded_date: Optional[datetime]
     uuid: str
-    dw_id: Optional[str]
     slug: str
     background_image_path: Optional[str]
     thumbnail_landscape_path: Optional[str]

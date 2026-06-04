@@ -4,8 +4,6 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
-from sqlalchemy import or_
-
 from backend.api.helpers import create_database_fields, update_database_fields
 from backend.api.models.series_download_profile import *
 from backend.db.models.download_profile import SeriesDownloadProfile
@@ -39,40 +37,32 @@ def _resolve_or_create_seasons_for_show(s: Session, show_id: int, seasons_req: l
     if not seasons_req:
         return []
 
-    # Collect identifiers from request
-    dw_ids = {se.dw_id for se in seasons_req if getattr(se, 'dw_id', None)}
+    # Collect slugs from request
     slugs = {se.slug for se in seasons_req if getattr(se, 'slug', None)}
 
     existing: list[Season] = []
-    if dw_ids or slugs:
-        filters = []
-        if dw_ids:
-            filters.append(Season.dw_id.in_(dw_ids))
-        if slugs:
-            filters.append(Season.slug.in_(slugs))
+    if slugs:
         existing = (
             s.query(Season)
             .filter(Season.show_id == show_id)
-            .filter(or_(*filters))
+            .filter(Season.slug.in_(slugs))
             .all()
         )
 
-    by_dw_id = {se.dw_id: se for se in existing}
     by_slug = {se.slug: se for se in existing}
 
     result: list[Season] = []
     seen_ids: set[int] = set()
 
     for season_in in seasons_req:
-        match = by_dw_id.get(season_in.dw_id) or by_slug.get(season_in.slug)
+        match = by_slug.get(season_in.slug)
         if match is None:
             # Create new Season for this show
             data = season_in.model_dump(exclude_none=True, exclude_unset=True)
             data["show_id"] = show_id
             match = create_database_fields(Season, data)
             s.add(match)
-            # Also register into maps so next duplicates reuse
-            by_dw_id.setdefault(match.dw_id, match)
+            # Also register into map so next duplicates reuse
             by_slug.setdefault(match.slug, match)
         if match.id is not None:
             if match.id not in seen_ids:

@@ -72,7 +72,7 @@ def create_show_bundle(s: Session, payload: ShowAPICreateBundle) -> ShowAPIRead:
         series_profile_seasons: set[Season] = set()
         for season in seasons:
             for season_in_profile in payload.download_profile.seasons:
-                if season.dw_id == season_in_profile.dw_id or season.slug == season_in_profile.slug:
+                if season.slug == season_in_profile.slug:
                     series_profile_seasons.add(season)
                     break
 

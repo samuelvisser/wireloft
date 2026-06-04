@@ -31,6 +31,7 @@ def get_dw_episodes_by_seasons(client: MiddlewareClient, *,
                                show: Show,
                                membership_plan: str,
                                seasons: Sequence[Season],
+                               dw_id_by_slug: dict[str, str],
                                progress: Optional[Any] = None,
                                progress_bounds: ProgressBounds = ProgressBounds(1, 100),
                                order: RecordOrder) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
@@ -43,6 +44,7 @@ def get_dw_episodes_by_seasons(client: MiddlewareClient, *,
                          show=show,
                          membership_plan=membership_plan,
                          seasons=seasons,
+                         dw_id_by_slug=dw_id_by_slug,
                          bounds=progress_bounds,
                          progress=progress,
                          order=order)
@@ -52,6 +54,7 @@ def get_dw_episodes_since_ep(client: MiddlewareClient, *,
                              show: Show,
                              membership_plan: str,
                              seasons: Sequence[Season],
+                             dw_id_by_slug: dict[str, str],
                              since_episode: Optional[Episode],
                              prev_max_values: IdentifierMaxValues,
                              progress: Optional[Any] = None,
@@ -63,7 +66,7 @@ def get_dw_episodes_since_ep(client: MiddlewareClient, *,
     Returns a mapping in descending order
     """
     if since_episode is not None:
-        index = next((i for i, s in enumerate(seasons) if s.dw_id == since_episode.season.dw_id), -1) + 1
+        index = next((i for i, s in enumerate(seasons) if s.slug == since_episode.season.slug), -1) + 1
         seasons_to_scan = seasons[: index]
         since_episode_tuple = (prev_max_values, since_episode)
     else:
@@ -74,6 +77,7 @@ def get_dw_episodes_since_ep(client: MiddlewareClient, *,
                          show=show,
                          membership_plan=membership_plan,
                          seasons=seasons_to_scan,
+                         dw_id_by_slug=dw_id_by_slug,
                          since_episode_tuple=since_episode_tuple,
                          bounds=progress_bounds,
                          progress=progress,
@@ -84,6 +88,7 @@ def _scan_seasons(client: MiddlewareClient, *,
                   show: Show,
                   membership_plan: str,
                   seasons: Sequence[Season],
+                  dw_id_by_slug: dict[str, str],
                   since_episode_tuple: Optional[SinceEpisodeTuple] = None,
                   bounds: ProgressBounds,
                   progress: Optional[Any],
@@ -105,7 +110,7 @@ def _scan_seasons(client: MiddlewareClient, *,
     for idx, season in enumerate(seasons_asc):
         # Fetch all episodes for this season
         eps = __fetch_all_episodes_paginated(client, show.slug, ByShowSeason(
-            season_dw_id=season.dw_id,
+            season_dw_id=dw_id_by_slug[season.slug],
             membership_plan=membership_plan,
             page_size=50,
             order_by="CreatedAt_ASC"
@@ -114,7 +119,7 @@ def _scan_seasons(client: MiddlewareClient, *,
 
         # Remove episodes before since episode
         if since_episode_tuple is not None:
-            index = next((i for i, rec in enumerate(eps) if rec.dw_id == since_episode_tuple[1].dw_id), None)
+            index = next((i for i, rec in enumerate(eps) if rec.slug == since_episode_tuple[1].slug), None)
             if index is not None:
                 eps: list[DwEpisodeRecord] = eps[index + 1:]
 

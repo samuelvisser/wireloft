@@ -24,7 +24,7 @@ def upsert_episode(
     # Check if the episode already exists in DB
     episode: Optional[Episode] = (
         s.query(Episode)
-        .filter(Episode.show_id == show.id, Episode.dw_id == ep.dw_id)
+        .filter(Episode.show_id == show.id, Episode.slug == ep.slug)
         .one_or_none()
     )
 

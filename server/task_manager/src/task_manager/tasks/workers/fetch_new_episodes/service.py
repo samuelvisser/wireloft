@@ -59,14 +59,14 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
         all_dw_seasons: list[DwSeasonRecord] = dw_show.seasons
 
         if last_known_season is not None:
-            relevant_dw_seasons = list(dropwhile(lambda season: season.dw_id != latest_final_episode.season.dw_id, all_dw_seasons))
+            relevant_dw_seasons = list(dropwhile(lambda season: season.slug != latest_final_episode.season.slug, all_dw_seasons))
             new_dw_seasons: list[DwSeasonRecord] = list(islice(relevant_dw_seasons, 1, None))
         else:
             new_dw_seasons = all_dw_seasons
 
         # Add any new seasons to the db
         for new_dw_season in new_dw_seasons:
-            if not any(s.dw_id == new_dw_season.dw_id for s in show.seasons):
+            if not any(s.slug == new_dw_season.slug for s in show.seasons):
                 create_season_by_dw_season(s, show=show, dw_season=new_dw_season)
                 s.flush()
                 s.refresh(show, attribute_names=['seasons'])
@@ -83,11 +83,15 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
         x = max(1, min(int(len(seasons)), 5))
         upper = int(65 + (x - 1) * (95 - 65) / (5 - 1))
 
+        # Build slug→dw_id mapping from fresh API data
+        dw_id_by_slug = {s.slug: s.dw_id for s in all_dw_seasons}
+
         # Find new episodes
         ep_map_asc, identifier_max_values = get_dw_episodes_since_ep(client,
                                                                      show=show,
                                                                      membership_plan=membership_plan,
                                                                      seasons=show.seasons,
+                                                                     dw_id_by_slug=dw_id_by_slug,
                                                                      since_episode=latest_final_episode,
                                                                      prev_max_values=prev_max_values,
                                                                      progress=progress,
