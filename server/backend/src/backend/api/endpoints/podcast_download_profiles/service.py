@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from backend.api.helpers import update_database_fields
 from backend.api.models.podcast_download_profile import *
 from backend.db.models.download_profile import PodcastDownloadProfile
-from task_manager.events.emitters import emit_event
+from task_manager.events.transactional import queue_event
 
 
 def get_podcast_download_profiles_list(s: Session) -> list[PodcastDownloadProfileAPIRead]:
@@ -38,10 +38,11 @@ def create_download_profile_podcast(s: Session, body: PodcastDownloadProfileAPIC
     s.add(item)
     s.flush()
 
-    emit_event("download_profile.added", {
+    queue_event(s, "download_profile.added", {
         "resource_id": item.id,
         "id": item.id,
-        "name": item.name
+        "show_id": item.show_id,
+        "profile_type": item.type,
     })
 
     return PodcastDownloadProfileAPIRead.model_validate(item)
@@ -72,9 +73,11 @@ def delete_download_profile_podcast(s: Session, download_profile_id: int) -> Pod
 
     payload = PodcastDownloadProfileAPIRead.model_validate(item)
 
-    emit_event("download_profile.deleted", {
+    queue_event(s, "download_profile.deleted", {
         "resource_id": item.id,
-        "id": item.id
+        "id": item.id,
+        "show_id": item.show_id,
+        "profile_type": item.type,
     })
 
     s.delete(item)

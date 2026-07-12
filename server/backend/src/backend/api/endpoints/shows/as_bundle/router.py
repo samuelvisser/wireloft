@@ -4,7 +4,6 @@ from .service import *
 from ....models.show import ShowAPIRead
 from ....models.show_as_bundle import ShowAPICreateBundle
 from backend.app import db_session
-from backend.api.endpoints.tasks.service import trigger_now as trigger_task_now
 
 router = APIRouter(prefix = "/as-bundle")
 
@@ -22,12 +21,6 @@ def show_create_as_bundle(body: ShowAPICreateBundle):
         try:
             result = create_show_bundle(s, body)
             s.commit()
-
-            # After committing the new Show, trigger indexing of episodes
-            try:
-                trigger_task_now(definition_key="fetch_new_episodes", resource_type="show", resource_id=result.id)
-            except Exception:
-                pass
             return result
         except Exception:
             s.rollback()

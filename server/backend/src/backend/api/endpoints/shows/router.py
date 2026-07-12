@@ -1,10 +1,8 @@
 from fastapi import APIRouter, status
 
-from task_manager import events
 from .as_bundle import show_as_bundle_router
 from .as_view import show_view_router
 from .service import get_shows_list, create_show, get_show, update_show, delete_show
-from ..tasks.service import trigger_now as trigger_task_now
 from ...models.show import ShowAPIRead, ShowAPICreate, ShowAPIUpdate
 from backend.app import db_session
 

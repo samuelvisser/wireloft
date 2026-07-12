@@ -7,7 +7,7 @@ from backend.api.models.show import *
 from fastapi import HTTPException
 
 from backend.db.models import Show
-from task_manager.events.emitters import emit_event
+from task_manager.events.transactional import queue_event
 
 
 def get_shows_list(s: Session) -> list[ShowAPIRead]:
@@ -40,7 +40,12 @@ def create_show(s: Session, body: ShowAPICreate) -> ShowAPIRead:
     s.add(show)
     s.flush()
 
-    emit_event("show.added", {"resource_id": show.id, "id": show.id, "slug": show.slug, "title": show.title})
+    queue_event(s, "show.added", {
+        "resource_id": show.id,
+        "id": show.id,
+        "slug": show.slug,
+        "title": show.title,
+    })
 
     return ShowAPIRead.model_validate(show)
 
@@ -58,7 +63,11 @@ def update_show(s: Session, show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
     update_database_fields(show, body)
     s.flush()
 
-    emit_event("show.updated", {"resource_id": show.id, "id": show.id, "slug": show.slug})
+    queue_event(s, "show.updated", {
+        "resource_id": show.id,
+        "id": show.id,
+        "slug": show.slug,
+    })
 
     return ShowAPIRead.model_validate(show)
 
@@ -74,7 +83,11 @@ def delete_show(s: Session, show_slug: str) -> ShowAPIRead:
 
     payload = ShowAPIRead.model_validate(show)
 
-    emit_event("show.deleted", {"resource_id": show.id, "id": show.id, "slug": show.slug})
+    queue_event(s, "show.deleted", {
+        "resource_id": show.id,
+        "id": show.id,
+        "slug": show.slug,
+    })
 
     s.delete(show)
     s.flush()

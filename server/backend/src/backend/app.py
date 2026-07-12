@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,11 +23,27 @@ def db_session():
         s.close()
 
 
+@asynccontextmanager
+async def application_lifespan(app: FastAPI):
+    """Own the background controller for exactly one ASGI app lifespan."""
+    import controller
+
+    started = False
+    try:
+        controller.start_controller()
+        started = True
+        yield
+    finally:
+        if started:
+            controller.stop_controller()
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="WireLoft API",
         summary="Internal API for WireLoft",
         version=get_settings().app_version,
+        lifespan=application_lifespan,
     )
 
     # Allow the React dev server to call the API during development (with credentials)
@@ -107,9 +123,5 @@ def create_app() -> FastAPI:
     app.include_router(rss_stream_profile_router, prefix="/api")
     app.include_router(stream_profile_router, prefix="/api")
     app.include_router(task_router, prefix="/api")
-
-    # Run the scheduler
-    import controller
-    controller.app()
 
     return app

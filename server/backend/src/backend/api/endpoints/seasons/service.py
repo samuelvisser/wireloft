@@ -9,7 +9,7 @@ from backend.api.helpers import update_database_fields
 from backend.api.models.season import *
 from backend.db.models import Season
 from backend.types.show_types import ShowType
-from task_manager.events.emitters import emit_event
+from task_manager.events.transactional import queue_event
 
 
 def get_seasons_list(s: Session, show_slug: str) -> list[SeasonAPIRead]:
@@ -56,9 +56,10 @@ def create_season(s: Session, body: SeasonAPICreate, *, update_show_profiles=Fal
                 profile.seasons = profile_seasons
                 s.flush()
 
-    emit_event("season.added", {
+    queue_event(s, "season.added", {
         "resource_id": season.id,
         "id": season.id,
+        "slug": season.slug,
         "show_id": season.show_id
     })
 
@@ -97,9 +98,10 @@ def delete_season(s: Session, show_slug: str, season_slug: str) -> SeasonAPIRead
 
     payload = SeasonAPIRead.model_validate(season)
 
-    emit_event("season.deleted", {
+    queue_event(s, "season.deleted", {
         "resource_id": season.id,
         "id": season.id,
+        "slug": season.slug,
         "show_id": season.show_id
     })
 
