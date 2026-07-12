@@ -4,6 +4,7 @@
 config/config.yml
 config/cookies.txt
 data/
+tests/rest/http-client.private.env.json
 
 # Byte-compiled / optimized / DLL files
 *.zip

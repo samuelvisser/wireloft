@@ -101,6 +101,21 @@ npm install
 npm run dev
 ```
 
+### Automated tests
+
+The default backend suite is isolated from both the live Daily Wire API and
+`data/wireloft.db`. Install the development dependency group and run it from
+the repository root:
+
+```bash
+uv sync --group dev
+uv run pytest
+```
+
+Network sockets are disabled during this suite. Requests in `tests/rest` are
+manual integration aids and require an access token supplied through a private
+JetBrains HTTP Client environment file.
+
 ### Dailywire API
 #### DailyWire API CLI
 

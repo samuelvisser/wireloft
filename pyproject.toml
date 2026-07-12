@@ -1,2 +1,12 @@
 [tool.uv.workspace]
 members = ["server/*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4,<9",
+    "pytest-socket>=0.7,<1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+addopts = ["--strict-markers", "--disable-socket", "--allow-unix-socket"]
