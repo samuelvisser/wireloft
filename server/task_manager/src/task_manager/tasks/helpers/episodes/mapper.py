@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from task_manager.tasks.types.general import RecordOrder
 
-type EpisodeWithIdentifier = Tuple[str, DwEpisodeRecord]
 type EpisodeMapTuple = OrderedDict[int, List[EpisodeWithIdentifier]]
 type SinceEpisodeTuple = Tuple[IdentifierMaxValues, Episode]
 
@@ -12,7 +11,7 @@ from backend.db.models import Show, Episode, Season
 from backend.types.show_types import EpisodeIdentifier
 from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason, ByNextPage
 from dailywire_api.records import DwEpisodeRecord
-from task_manager.tasks.helpers.episodes.identifier import IdentifierMaxValues, identify_episodes_in_season
+from task_manager.tasks.helpers.episodes.identifier import EpisodeWithIdentifier, IdentifierMaxValues, identify_episodes_in_season
 from task_manager.tasks.helpers.progress import update_progress, ProgressBounds, CollectionListProgressTracker
 
 

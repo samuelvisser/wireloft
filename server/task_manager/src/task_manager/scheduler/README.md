@@ -55,9 +55,13 @@ print(get_settings().scheduler.default_max_retries)
 
 ## Database and initialization
 - The scheduler’s tables are created alongside the backend tables. backend.db.core.create_tables() imports wireloft_scheduler.models and then runs Base.metadata.create_all(...).
-- On backend startup (backend.app.create_app), if the scheduler is enabled:
-  1) wireloft_scheduler.registry.sync_registry_to_db() syncs any registered tasks into TaskDefinition
-  2) wireloft_scheduler.scheduler.start_scheduler() initializes the APScheduler instance
+- During the FastAPI application lifespan, if the scheduler is enabled:
+  1) `task_manager.scheduler.registry.sync_registry_to_db()` synchronizes registered tasks into `TaskDefinition`.
+  2) `task_manager.scheduler.scheduler.start_scheduler()` starts APScheduler on the ASGI event loop.
+  3) Application shutdown drains domain events, removes subscriptions, and shuts down APScheduler.
+
+Constructing the FastAPI application does not start background work. This keeps
+CLI inspection and tests free of scheduler side effects.
 
 Important: Your task modules must be importable before sync_registry_to_db() runs so that the @task decorator has executed and definitions exist to be synced.
 

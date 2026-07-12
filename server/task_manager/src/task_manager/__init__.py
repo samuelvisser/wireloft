@@ -21,7 +21,6 @@ Public entrypoints:
 Note: This package expects the main app to have configured the database via backend.db.configure_db().
 """
 
-from .scheduler import scheduler as scheduler
-from .scheduler import db as _models
-from . import events
-from . import tasks  # Import to register all tasks
+# Subpackages are intentionally not imported here. Importing task_manager must be
+# side-effect free; the controller imports task_manager.tasks during app startup
+# when task registration is actually required.

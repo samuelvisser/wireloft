@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.schedulers.base import BaseScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
@@ -45,6 +46,46 @@ def start_scheduler() -> AsyncIOScheduler:
     _scheduler = AsyncIOScheduler(event_loop=loop, timezone=get_settings().timezone)
     _scheduler.start(paused=False)
     return _scheduler
+
+
+def shutdown_scheduler(wait: bool = True) -> None:
+    """Shut down and reset scheduler state for a clean application lifecycle."""
+    global _scheduler, _loop, _loop_thread
+
+    scheduler = _scheduler
+    scheduler_loop = scheduler._eventloop if scheduler is not None else None
+    _scheduler = None
+
+    if scheduler is not None and scheduler.running:
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        if scheduler_loop is not None and scheduler_loop is current_loop:
+            # AsyncIOScheduler.shutdown() normally queues this work onto its loop.
+            # During ASGI lifespan shutdown we are already on that loop and need
+            # teardown to finish before the loop itself is allowed to close.
+            BaseScheduler.shutdown(scheduler, wait=wait)
+            scheduler._stop_timer()
+            scheduler._eventloop = None
+        else:
+            scheduler.shutdown(wait=wait)
+
+        # When the scheduler owns our fallback thread, queue a barrier behind
+        # its shutdown callback before stopping that loop.
+        if scheduler_loop is not None and scheduler_loop is _loop and scheduler_loop.is_running():
+            shutdown_complete = threading.Event()
+            scheduler_loop.call_soon_threadsafe(shutdown_complete.set)
+            shutdown_complete.wait(timeout=5)
+
+    if _loop is not None and _loop.is_running():
+        _loop.call_soon_threadsafe(_loop.stop)
+    if _loop_thread is not None and _loop_thread.is_alive():
+        _loop_thread.join(timeout=5)
+
+    _loop = None
+    _loop_thread = None
 
 
 def schedule_job(*, schedule_id: int, def_key: str, resource_type: str, resource_id: int, trigger: str, trigger_args: dict) -> str:

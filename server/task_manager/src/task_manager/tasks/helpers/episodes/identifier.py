@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from backend.types.download_profile_types import EpIdType
-
-type IdentifierMaxValues = Dict[str, int]
-
 import re
-
 from typing import Dict, Tuple, Optional, List, assert_never
 
+from backend.types.download_profile_types import EpIdType
 from backend.types.show_types import EpisodeIdentifier
 from dailywire_api.records import DwEpisodeRecord
-from .mapper import EpisodeWithIdentifier
 from ..general import datetime_to_string
+
+
+type IdentifierMaxValues = Dict[str, int]
+type EpisodeWithIdentifier = Tuple[str, DwEpisodeRecord]
 
 
 def identify_episodes_in_season(episode_identifier: EpisodeIdentifier,

@@ -4,14 +4,13 @@ from typing import Optional, Sequence
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
-from backend.api.endpoints.tasks.service import trigger_now
 from backend.db.models import Show, Episode, Season
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from dailywire_api.dw_api.client import MiddlewareClient
 from dailywire_api.records import DwSeasonRecord
 from dailywire_authorisation import DeviceAuthClient
-from ._helpers import get_shows, get_season_from_list_by_id, contains_non_final_episode, get_latest_ep_index
+from ._helpers import get_shows, get_season_from_list_by_id, get_latest_ep_index
 from ...helpers.episodes.identifier import IdentifierMaxValues
 from ...helpers.episodes.mapper import get_dw_episodes_since_ep, count_total_episodes
 from ...helpers.progress import ProgressBounds, update_progress
@@ -143,12 +142,5 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
             update_progress(progress, scaled_pct,f"Indexed {processed}/{total} episodes (season {season.index}: {season.name})")
 
         update_progress(progress, 100, f"Indexed all episodes")
-
-        # Start tracking a currently live episode if it exists
-        # if contains_non_final_episode(ep_map_asc):
-        #     update_progress(progress, 100, f"Non-final episode found, triggering monitor worker")
-        #     trigger_now(definition_key="monitor_episode_worker", resource_type="episode", resource_id=None, show_slug=show.slug)
-        # else:
-        #     update_progress(progress, 100, f"No non-final episodes found, done")
 
     print("fetch_new_episodes finished")

@@ -129,23 +129,30 @@ def all_triggers() -> Dict[str, List[TriggerMeta]]:
 
 
 def sync_registry_to_db() -> None:
-    """Ensure TaskDefinition rows exist for all registry tasks."""
+    """Insert new task definitions and refresh metadata for existing ones."""
     session = get_session()
     try:
         existing = {
-            row[0]: row[1]
-            for row in session.execute(select(TaskDefinition.key, TaskDefinition.id)).all()
+            definition.key: definition
+            for definition in session.execute(select(TaskDefinition)).scalars()
         }
         for meta, _ in _REGISTRY.values():
-            if meta.key not in existing:
-                td = TaskDefinition(
+            definition = existing.get(meta.key)
+            if definition is None:
+                definition = TaskDefinition(
                     key=meta.key,
                     title=meta.title,
                     description=meta.description,
                     allowed_resource_types=list(meta.allowed_resource_types),
                     default_max_retries=meta.default_max_retries,
                 )
-                session.add(td)
+                session.add(definition)
+                continue
+
+            definition.title = meta.title
+            definition.description = meta.description
+            definition.allowed_resource_types = list(meta.allowed_resource_types)
+            definition.default_max_retries = meta.default_max_retries
         session.commit()
     finally:
         session.close()

@@ -12,7 +12,7 @@ from backend.utils.helpers import generate_uuid
 from backend.types.media_types import MediaType
 
 from dailywire_api.records import DwEpisodeRecord
-from .mapper import EpisodeWithIdentifier
+from .identifier import EpisodeWithIdentifier
 from .status import is_published_final, get_publish_status_from_dw_detail
 
 

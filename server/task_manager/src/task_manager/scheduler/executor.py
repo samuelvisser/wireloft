@@ -14,7 +14,7 @@ from task_manager.scheduler.db import *
 from .types import ResourceType, TaskStatus
 from .registry import get_task
 from config import get_settings
-from task_manager import scheduler
+from task_manager.scheduler import scheduler
 
 
 class ProgressUpdater:
@@ -143,13 +143,16 @@ def execute_task(
             session.add(run)
             session.flush()
 
-        # Determine max retries policy once and store on run
-        mr = _resolve_max_retries(session, def_key, schedule_id, max_retries or meta.default_max_retries)
+        # Determine max retries policy once and store on run. An explicit zero
+        # means "do not retry" and must not fall through to task defaults.
+        mr = _resolve_max_retries(session, def_key, schedule_id, max_retries)
         run.max_retries = mr
         # Increase attempt and start timing
         run.attempt_count = int(run.attempt_count or 0) + 1
         run.status = TaskStatus.RUNNING
         run.started_at = datetime.now(timezone.utc)
+        run.finished_at = None
+        run.next_retry_at = None
         session.commit()
 
         # Execute task callable (supports sync or async)
@@ -171,6 +174,8 @@ def execute_task(
             run.status = TaskStatus.SUCCEEDED
             run.progress = 100
             run.message = "OK"
+            run.last_error = None
+            run.next_retry_at = None
         except Exception as e:
             # failure
             run.last_error = str(e)
@@ -190,8 +195,11 @@ def execute_task(
                 run.message = f"Failed after {run.attempt_count} attempts: {run.last_error}"
                 raise
         finally:
-            run.finished_at = datetime.now(timezone.utc)
             run.runtime_ms = int((time.perf_counter() - started_perf) * 1000)
+            if run.status in (TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELED):
+                run.finished_at = datetime.now(timezone.utc)
+            else:
+                run.finished_at = None
             session.commit()
     finally:
         session.close()
