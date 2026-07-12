@@ -1,112 +1,139 @@
 from __future__ import annotations
 
+import inspect
+import logging
 from contextlib import contextmanager
+from threading import Lock
+from typing import Any
 
 from backend.db import get_session
 from config import get_settings
 
-_controller_initiated = False
+
+logger = logging.getLogger(__name__)
+_controller_started = False
+_controller_lock = Lock()
 
 
 @contextmanager
 def db_session():
-    s = get_session()
+    session = get_session()
     try:
-        yield s
+        yield session
     finally:
-        s.close()
+        session.close()
+
+
+def _task_event_kwargs(task_key: str, event_data: dict[str, Any]) -> dict[str, Any]:
+    """Keep event fields explicitly supported by the target worker."""
+    from task_manager.scheduler.registry import get_task
+
+    _, task_callable = get_task(task_key)
+    signature = inspect.signature(task_callable)
+    parameters = signature.parameters.values()
+    if any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters):
+        return event_data
+
+    accepted = {
+        parameter.name
+        for parameter in parameters
+        if parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+    accepted.difference_update({"resource_id", "progress"})
+    return {key: value for key, value in event_data.items() if key in accepted}
 
 
 def setup_triggers_from_registry() -> None:
-    """Set up all cron and event triggers from the task registry."""
+    """Install code-defined cron jobs and event-to-task subscriptions."""
     from apscheduler.triggers.cron import CronTrigger
-    from pyventus.events import EventLinker
+    from task_manager.events.registry import WireloftEventLinker
     from task_manager.scheduler.executor import execute_task, trigger_now as scheduler_trigger_now
-    from task_manager.scheduler.scheduler import start_scheduler
     from task_manager.scheduler.registry import all_triggers
+    from task_manager.scheduler.scheduler import start_scheduler
 
     if not get_settings().scheduler.enabled:
         return
 
-    sch = start_scheduler()
+    scheduler = start_scheduler()
 
-    # Get all triggers from the registry
-    all_task_triggers = all_triggers()
+    # Rebuilding subscriptions must be safe in reloads and repeated test lifecycles.
+    WireloftEventLinker.remove_all()
 
-    for task_key, triggers in all_task_triggers.items():
-        for idx, trigger in enumerate(triggers):
+    for task_key, triggers in all_triggers().items():
+        for index, trigger in enumerate(triggers):
             if trigger.trigger_type == "cron":
-                # Use cron expression directly (no more settings resolution)
-                cron_expr = trigger.cron
-
-                # Create APScheduler job
-                cron_trigger = CronTrigger.from_crontab(cron_expr, timezone=get_settings().timezone)
-                job_id = f"auto-{task_key}-{trigger.resource_type}-{trigger.resource_id}-{idx}"
-
-                sch.add_job(
+                cron_trigger = CronTrigger.from_crontab(
+                    trigger.cron,
+                    timezone=get_settings().timezone,
+                )
+                job_id = f"auto-{task_key}-{trigger.resource_type}-{trigger.resource_id}-{index}"
+                scheduler.add_job(
                     execute_task,
                     trigger=cron_trigger,
-                    kwargs=dict(
-                        def_key=task_key,
-                        resource_type=trigger.resource_type or "show",
-                        resource_id=trigger.resource_id if trigger.resource_id is not None else 0,
-                        schedule_id=None,
-                    ),
+                    kwargs={
+                        "def_key": task_key,
+                        "resource_type": trigger.resource_type or "show",
+                        "resource_id": trigger.resource_id if trigger.resource_id is not None else 0,
+                        "schedule_id": None,
+                    },
                     id=job_id,
                     replace_existing=True,
                     coalesce=trigger.coalesce,
                 )
+                continue
 
-            elif trigger.trigger_type == "event":
-                # Register event listener
-                event_name = trigger.event_name
+            if trigger.trigger_type != "event":
+                logger.warning("Ignoring unsupported trigger type %s for %s", trigger.trigger_type, task_key)
+                continue
 
-                # Create handler that triggers the task
-                def create_event_handler(task_key_captured, resource_type_captured):
-                    async def handler(**kwargs):
-                        # Extract resource_id from kwargs if available
-                        resource_id = kwargs.get("resource_id") or kwargs.get("id")
+            def create_event_handler(task_key_captured: str, resource_type_captured: str | None):
+                def handler(**event_data: Any) -> None:
+                    # resource_id=0 is meaningful, so do not use truthiness here.
+                    resource_id = event_data.get("resource_id")
+                    if resource_id is None:
+                        resource_id = event_data.get("id")
 
-                        # Trigger the task
-                        scheduler_trigger_now(
-                            def_key=task_key_captured,
-                            resource_type=resource_type_captured or "show",
-                            resource_id=resource_id,
-                        )
-                    return handler
+                    forwarded_data = {
+                        key: value
+                        for key, value in event_data.items()
+                        if key not in {"resource_id", "id"}
+                    }
+                    scheduler_trigger_now(
+                        def_key=task_key_captured,
+                        resource_type=resource_type_captured or "show",
+                        resource_id=resource_id,
+                        **_task_event_kwargs(task_key_captured, forwarded_data),
+                    )
 
-                # Register the handler using EventLinker decorator
-                handler = create_event_handler(task_key, trigger.resource_type)
-                EventLinker.on(event_name)(handler)
+                return handler
+
+            WireloftEventLinker.subscribe(
+                trigger.event_name,
+                event_callback=create_event_handler(task_key, trigger.resource_type),
+            )
 
 
-def emit_startup_event():
-    """Emit the app.startup event to trigger startup tasks."""
+def emit_startup_event() -> None:
     from task_manager.events.emitters import emit_event
+
     emit_event("app.startup", {})
 
 
-def reload_user_schedules():
-    """
-    Reload active user-created schedules from TaskSchedule table into APScheduler.
-    These are one-off tasks like downloading a specific movie or extra episode.
-    Code-defined jobs (@on_cron, @on_event) are set up separately via setup_triggers_from_registry().
-    """
-    import sys
+def reload_user_schedules() -> None:
+    """Reload active user-created schedules from SQLite into APScheduler."""
     from sqlalchemy import select
-    from task_manager.scheduler.db import TaskSchedule, TaskDefinition
+    from task_manager.scheduler.db import TaskDefinition, TaskSchedule
     from task_manager.scheduler.scheduler import schedule_job
-    from controller.db_utils import db_session
 
-    with db_session() as s:
-        stmt = (
+    with db_session() as session:
+        statement = (
             select(TaskSchedule, TaskDefinition)
             .join(TaskDefinition, TaskDefinition.id == TaskSchedule.definition_id)
-            .where(TaskSchedule.active == True)
+            .where(TaskSchedule.active.is_(True))
         )
 
         count = 0
-        for schedule, definition in s.execute(stmt):
+        for schedule, definition in session.execute(statement):
             try:
                 schedule_job(
                     schedule_id=schedule.id,
@@ -117,58 +144,69 @@ def reload_user_schedules():
                     trigger_args=schedule.trigger_args,
                 )
                 count += 1
-            except Exception as e:
-                print(f"Warning: Failed to reload schedule {schedule.id}: {e}", file=sys.stderr)
+            except Exception:
+                logger.exception("Failed to reload schedule %s", schedule.id)
 
-        if count > 0:
-            print(f"Reloaded {count} user-created schedule(s) from database")
+        if count:
+            logger.info("Reloaded %s user-created schedule(s)", count)
 
 
-def app():
-    global _controller_initiated
+def start_controller() -> None:
+    """Start task registration, scheduler jobs, and event subscriptions once."""
+    global _controller_started
 
-    if _controller_initiated:
-        return
+    with _controller_lock:
+        if _controller_started:
+            return
 
-    # Start scheduler and sync task registry if enabled
-    try:
-        # Ensure motherboard tasks are imported so they are registered
-        import task_manager.tasks  # noqa: F401
-        from task_manager.scheduler.scheduler import start_scheduler
-        from task_manager.scheduler.registry import sync_registry_to_db
+        try:
+            # Import workers so their decorators populate the registry.
+            import task_manager.tasks  # noqa: F401
+            from task_manager.scheduler.registry import sync_registry_to_db
+            from task_manager.scheduler.scheduler import start_scheduler
 
-        if get_settings().scheduler.enabled:
-            # Sync task definitions to database
-            sync_registry_to_db()
-
-            # Start the APScheduler instance (in-memory mode)
-            start_scheduler()
-
-            # Reload user-created schedules from database
-            try:
+            if get_settings().scheduler.enabled:
+                sync_registry_to_db()
+                start_scheduler()
                 reload_user_schedules()
-            except Exception as e:
-                import sys
-                print(f"Warning: Failed to reload user schedules: {e}", file=sys.stderr)
-
-            # Set up all cron and event triggers from the registry
-            try:
                 setup_triggers_from_registry()
-            except (ValueError, KeyError, ImportError, AttributeError) as e:
-                # Log but don't crash if auto-scheduling fails
-                import sys
-                print(f"Warning: Failed to setup some triggers: {e}", file=sys.stderr)
-
-            # Emit startup event to trigger startup tasks
-            try:
                 emit_startup_event()
-            except Exception as e:
-                import sys
-                print(f"Warning: Failed to emit startup event: {e}", file=sys.stderr)
 
-    except (AttributeError, RuntimeError, ImportError) as e:
-        # Do not crash app if scheduler initialization or registry sync fails
-        import sys
-        print(f"Warning: Failed to initialize scheduler: {e}", file=sys.stderr)
+            _controller_started = True
+        except Exception:
+            # Startup is atomic from the application's perspective. Clean up any
+            # scheduler/event state created before the failure, then fail fast.
+            from task_manager.events.registry import WireloftEventLinker, shutdown_event_emitter
+            from task_manager.scheduler.scheduler import shutdown_scheduler
 
-    _controller_initiated = True
+            WireloftEventLinker.remove_all()
+            shutdown_scheduler(wait=False)
+            shutdown_event_emitter()
+            _controller_started = False
+            raise
+
+
+def stop_controller() -> None:
+    """Drain domain events, stop scheduling, and reset all lifecycle state."""
+    global _controller_started
+
+    with _controller_lock:
+        if not _controller_started:
+            return
+
+        from task_manager.events.registry import (
+            WireloftEventLinker,
+            shutdown_event_emitter,
+            wait_for_events,
+        )
+        from task_manager.scheduler.scheduler import shutdown_scheduler
+
+        WireloftEventLinker.remove_all()
+        wait_for_events()
+        shutdown_scheduler(wait=True)
+        shutdown_event_emitter()
+        _controller_started = False
+
+
+# Backwards-compatible entrypoint used by older imports.
+app = start_controller
