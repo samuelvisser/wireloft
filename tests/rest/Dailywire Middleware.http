@@ -7,6 +7,7 @@
 # }
 
 ### Get episode details
+@access_token = variable value
 GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=ep-2324-the-trump-administration-cracks-down-on-third-world-migration
 Authorization: Bearer {{access_token}}
 

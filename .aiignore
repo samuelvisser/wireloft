@@ -2,3 +2,4 @@
 !config/config.yml
 !.venv
 !data/
+!tests/rest/http-client.private.env.json

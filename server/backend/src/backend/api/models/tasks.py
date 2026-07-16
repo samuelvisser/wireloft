@@ -39,7 +39,7 @@ class TaskRunRead(ResponseBase):
     id: int
     definition_key: str
     resource_type: str
-    resource_id: int
+    resource_id: Optional[int]
     status: str
     progress: Optional[int]
     message: Optional[str]
