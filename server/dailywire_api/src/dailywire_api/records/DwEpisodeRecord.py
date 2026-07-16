@@ -16,7 +16,7 @@ class DwEpisodeRecord(BaseRecord):
     dw_id: str = Field(validation_alias="id")
     slug: str
     title: str
-    description: str
+    description: ValOrNone[str] = None
     duration: ValOrZero[float]
 
     # Episode numbering, straight from Daily Wire's API. `episode_number` is a string
@@ -32,14 +32,17 @@ class DwEpisodeRecord(BaseRecord):
     publish_status: str = Field(validation_alias="status")
     is_downloadable: bool
 
-    available_for: AvailableForList
+    has_free_and_paid_video: bool = False
+    is_paid_video: bool = False
+
+    available_for: AvailableForList = Field(default_factory=list)
 
     thumbnail_landscape_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "land"), default=None)
     thumbnail_portrait_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "port"), default=None)
     thumbnail_square_path: ValOrNone[str] = Field(validation_alias=AliasPath("images", "thumbnail", "square"), default=None)
 
     published_date: AwareDatetime = Field(validation_alias="publishedAt")
-    scheduled_date: AwareDatetime = Field(validation_alias="scheduledAt")
+    scheduled_date: Optional[AwareDatetime] = Field(validation_alias="scheduledAt", default=None)
 
     @property
     def ep_number(self) -> Optional[int]:
