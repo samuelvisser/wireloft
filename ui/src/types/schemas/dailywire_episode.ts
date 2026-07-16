@@ -13,6 +13,12 @@ export const DailywireEpisodeReadSchema = z.object({
     publishStatus: z.string(),
     isDownloadable: z.boolean(),
 
+    // Daily Wire's episode numbering. `episodeNumber` is a string like "2460.10"
+    // (whole part = episode number, fractional part = segment/variant).
+    // `displayEpisodeNumber` is Daily Wire's presentation string (e.g. "Ep. 2324" or "").
+    episodeNumber: z.string(),
+    displayEpisodeNumber: z.string(),
+
     thumbnailLandscapePath: z.string().nullable(),
     thumbnailPortraitPath: z.string().nullable(),
     thumbnailSquarePath: z.string().nullable(),
