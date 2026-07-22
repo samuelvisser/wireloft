@@ -116,9 +116,12 @@ export default function DownloadProfileForm({form, mode, seasons, showRoot}: Pro
                     </div>
                 )}
                 <div className="help" id="ep-id-type-help">
-                    <ReadMore summary={<span>Whether to automatically download episodes</span>}>
-                        If you disable the download profile, the show will still be indexed and you can still manually
-                        download episodes in the show.
+                    <ReadMore summary={<span>What episode types to download</span>}>
+                        <p>Select all episode types you want to download.</p>
+                        <p><b>Episode</b> is normal episode in the show.</p>
+                        <p><b>Ep. Extra</b> is auxiliary content for a specific episode.</p>
+                        <p><b>Trailer</b> is trailer for show or auxiliary content.</p>
+                        <p><b>Auxiliary</b> is auxiliary content for the show.</p>
                     </ReadMore>
                 </div>
             </div>

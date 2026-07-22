@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import inspect
 import logging
+import os
+import tempfile
 from contextlib import contextmanager
+from pathlib import Path
 from threading import Lock
 from typing import Any
 
@@ -113,6 +116,31 @@ def setup_triggers_from_registry() -> None:
             )
 
 
+def _should_emit_startup_event() -> bool:
+    """Whether this worker should fire ``app.startup`` (and its subscribed tasks).
+
+    Normal runs always emit. Under ``--debug`` the reloader supervisor exports
+    ``WIRELOFT_RELOAD_SUPERVISOR_PID`` to every worker subprocess it spawns; on
+    each file change it kills the worker and spawns a fresh one, which would
+    re-emit startup and re-trigger tasks. We guard with a marker file keyed to
+    the supervisor pid: the first worker atomically creates it and emits; reload
+    workers find it already present and skip. The supervisor removes the marker
+    on exit (see ``backend.__main__``).
+    """
+    supervisor_pid = os.environ.get("WIRELOFT_RELOAD_SUPERVISOR_PID")
+    if not supervisor_pid:
+        return True
+
+    marker = Path(tempfile.gettempdir()) / f"wireloft-reload-startup-{supervisor_pid}.lock"
+    try:
+        # O_CREAT | O_EXCL is atomic, so this is race-free across workers.
+        os.close(os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+        return True
+    except FileExistsError:
+        logger.info("Skipping app.startup event on reload (debug mode)")
+        return False
+
+
 def emit_startup_event() -> None:
     from task_manager.events.emitters import emit_event
 
@@ -170,7 +198,8 @@ def start_controller() -> None:
                 start_scheduler()
                 reload_user_schedules()
                 setup_triggers_from_registry()
-                emit_startup_event()
+                if _should_emit_startup_event():
+                    emit_startup_event()
 
             _controller_started = True
         except Exception:

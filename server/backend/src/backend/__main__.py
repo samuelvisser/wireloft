@@ -5,6 +5,7 @@ import os
 import psutil
 import signal
 import sys
+import tempfile
 from pathlib import Path
 from typing import Optional
 import uvicorn
@@ -78,6 +79,11 @@ def _validate_db_health() -> None:
         # If inspection fails, let the app start; runtime errors will surface
         pass
 
+def _reload_startup_marker(supervisor_pid: str) -> Path:
+    """Marker file shared by all worker subprocesses of one reload session."""
+    return Path(tempfile.gettempdir()) / f"wireloft-reload-startup-{supervisor_pid}.lock"
+
+
 def _stop_backend() -> None:
     """Stop all running backend-api processes"""
     stopped_count = 0
@@ -129,15 +135,29 @@ def main(argv: Optional[list[str]] = None) -> None:
         # Validate database health before starting server
         _validate_db_health()
         debug = args.debug
-        uvicorn.run(
-            "backend.app:create_app",
-            factory=True,
-            host=args.host,
-            port=args.port,
-            reload=debug,
-            reload_dirs=str(PROJECT_ROOT / "server"),
-            log_level="debug" if debug else "info"
-        )
+
+        if debug:
+            # In reload mode this process becomes uvicorn's long-lived reloader
+            # supervisor; worker subprocesses inherit its environment. Stamp a
+            # session token so workers can tell the first startup from a reload,
+            # and clear any stale marker left by a crashed prior run of this pid.
+            supervisor_pid = str(os.getpid())
+            os.environ["WIRELOFT_RELOAD_SUPERVISOR_PID"] = supervisor_pid
+            _reload_startup_marker(supervisor_pid).unlink(missing_ok=True)
+
+        try:
+            uvicorn.run(
+                "backend.app:create_app",
+                factory=True,
+                host=args.host,
+                port=args.port,
+                reload=debug,
+                reload_dirs=str(PROJECT_ROOT / "server"),
+                log_level="debug" if debug else "info"
+            )
+        finally:
+            if debug:
+                _reload_startup_marker(os.getpid()).unlink(missing_ok=True)
 
 if __name__ == "__main__":
     main(sys.argv[1:])
