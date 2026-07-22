@@ -9,13 +9,12 @@ dependencies = [
   "pyventus>=0.7.2",
   "SQLAlchemy>=2.0.43,<3.0",
   "backend",
-  "dailywire-api"
+  "dailywire-api",
+  "config",
+  "controller",
+  "dailywire-authorisation",
 ]
 
 [build-system]
 requires = ["uv_build>=0.8.17,<0.9.0"]
 build-backend = "uv_build"
-
-[tool.uv.sources]
-backend = { workspace = true }
-dailywire-api = { workspace = true }

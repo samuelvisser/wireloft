@@ -7,6 +7,9 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     "requests>=2.32.3,<3.0",
     "SQLAlchemy>=2.0.43,<3.0",
+    "backend",
+    "config",
+    "task-manager",
 ]
 
 [project.scripts]

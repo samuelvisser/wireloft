@@ -1,5 +1,28 @@
+[project]
+name = "Wireloft"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "backend",
+    "config",
+    "controller",
+    "dailywire-api",
+    "dailywire-authorisation",
+    "dailywire-downloader",
+    "task-manager"
+]
+
 [tool.uv.workspace]
 members = ["server/*"]
+
+[tool.uv.sources]
+backend = { workspace = true }
+config = { workspace = true }
+controller = { workspace = true }
+dailywire-api = { workspace = true }
+dailywire-authorisation = { workspace = true }
+dailywire-downloader = { workspace = true }
+task-manager = { workspace = true }
 
 [dependency-groups]
 dev = [
