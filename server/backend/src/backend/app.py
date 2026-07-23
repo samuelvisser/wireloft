@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.api.errors import integrity_error_handler
 from backend.db import get_session
 from backend.security.auth import is_authenticated
-from wireloft_config import get_settings
+from config import get_settings
 
 
 @contextmanager
@@ -23,11 +23,27 @@ def db_session():
         s.close()
 
 
+@asynccontextmanager
+async def application_lifespan(app: FastAPI):
+    """Own the background controller for exactly one ASGI app lifespan."""
+    import controller
+
+    started = False
+    try:
+        controller.start_controller()
+        started = True
+        yield
+    finally:
+        if started:
+            controller.stop_controller()
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="WireLoft API",
         summary="Internal API for WireLoft",
         version=get_settings().app_version,
+        lifespan=application_lifespan,
     )
 
     # Allow the React dev server to call the API during development (with credentials)
@@ -107,28 +123,5 @@ def create_app() -> FastAPI:
     app.include_router(rss_stream_profile_router, prefix="/api")
     app.include_router(stream_profile_router, prefix="/api")
     app.include_router(task_router, prefix="/api")
-
-    # Start scheduler and sync task registry if enabled
-    try:
-        # Ensure controller tasks are imported so they are registered
-        import wireloft_controller  # noqa: F401
-
-        from wireloft_scheduler.scheduler import start_scheduler
-        from wireloft_scheduler.registry import sync_registry_to_db
-        if get_settings().scheduler.enabled:
-            sync_registry_to_db()
-            # Start the APScheduler instance
-            sch = start_scheduler()
-
-            # Let the controller package plan startup schedules dynamically
-            try:
-                from wireloft_controller.app import setup_startup_schedules
-                setup_startup_schedules(scheduler=sch)
-            except Exception:
-                # Do not crash app if auto-scheduling fails
-                pass
-    except Exception:
-        # Do not crash app if scheduler is not available
-        pass
 
     return app

@@ -1,5 +1,5 @@
 [project]
-name = "wireloft-controller"
+name = "controller"
 version = "0.1.0"
 description = "Task controller and definitions for WireLoft"
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
@@ -7,10 +7,13 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     "requests>=2.32.3,<3.0",
     "SQLAlchemy>=2.0.43,<3.0",
+    "backend",
+    "config",
+    "task-manager",
 ]
 
 [project.scripts]
-controller = "wireloft_controller.cli:run_cli"
+controller = "controller.cli:run_cli"
 
 [build-system]
 requires = ["uv_build>=0.8.17,<0.9.0"]

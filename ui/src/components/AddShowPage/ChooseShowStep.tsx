@@ -308,15 +308,14 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                                     <div className="help" id="episode-identification-help">
                                         <ReadMore summary={<span>How are episodes in this show identified?</span>}>
                                             <p>Determines how show episodes are grouped in the UI, and how they are indexed.</p>
+                                            <p><b>Numbered</b> episodes are identified by an episode number. Wireloft will know
+                                                when an episode is part of another episode (e.g. a clip) and label it as such.</p>
                                             <p><b>Date-based</b> episodes are identified simply by their publish date.</p>
-                                            <p><b>Numbered</b> episodes are identified by a number in the title. For numbered episodes, WireLoft
-                                                expects to see "Ep. " followed by a number in the title. Episodes without it will be considered
-                                                auxiliary content.</p>
                                             <p><b>Seasonal</b> episodes are identified by a season number and an episode number. WireLoft will count
                                                 episodes by season and identify them like "S01E01". Auxiliary content like trailers will be identified
                                                 separately. Episodes in a show of type series are automatically assigned this seasonal identification.
                                                 Generally, we do not recommend it for Podcasts.</p>
-                                            <p>If you're unsure, select "Date-based".</p>
+                                            <p>If you're unsure, select "Numbered".</p>
                                         </ReadMore>
                                     </div>
                                 </div>

@@ -19,7 +19,6 @@ class Season(Base):
 
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    dw_id: Mapped[str] = mapped_column(index=True, unique=True)
     show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"))
     index: Mapped[int]
     slug: Mapped[str] = mapped_column(index=True, unique=True)

@@ -5,9 +5,9 @@ from typing import Optional
 from sqlalchemy import select
 
 from backend.db.core import get_session
-from wireloft_scheduler.db import TaskDefinition, TaskSchedule, TaskRun
-from wireloft_scheduler.scheduler import schedule_job, remove_job
-from wireloft_scheduler.executor import trigger_now as exec_trigger_now
+from task_manager.scheduler.db import TaskDefinition, TaskSchedule, TaskRun
+from task_manager.scheduler.scheduler import schedule_job, remove_job
+from task_manager.scheduler.executor import trigger_now as exec_trigger_now
 
 
 def list_definitions() -> list[dict]:
@@ -143,6 +143,6 @@ def list_runs(
         s.close()
 
 
-def trigger_now(definition_key: str, resource_type: str, resource_id: int, max_retries: Optional[int] = None) -> dict:
-    job_id = exec_trigger_now(def_key=definition_key, resource_type=resource_type, resource_id=resource_id, max_retries=max_retries)
+def trigger_now(definition_key: str, resource_type: str, resource_id: Optional[int], max_retries: Optional[int] = None, **kwargs) -> dict:
+    job_id = exec_trigger_now(def_key=definition_key, resource_type=resource_type, resource_id=resource_id, max_retries=max_retries, **kwargs)
     return {"jobId": job_id}

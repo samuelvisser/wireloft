@@ -18,7 +18,6 @@ class Show(Base, HasMetadataMixin):
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     uuid: Mapped[str] = mapped_column(index=True, unique=True)
-    dw_id: Mapped[str] = mapped_column(index=True, unique=True)
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     title: Mapped[str]
     description: Mapped[Optional[str]]

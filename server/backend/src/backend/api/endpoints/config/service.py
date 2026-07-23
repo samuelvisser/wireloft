@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from wireloft_config import get_settings
+from config import get_settings
 
 from backend.api.models.config_public import *
 

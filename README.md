@@ -89,10 +89,10 @@ Run the backend (in repo root):
 
 ```bash
 uv sync
-backend-api --debug
+backend-api run --debug
 ```
 
-This starts FastAPI at http://127.0.0.1:5001
+This starts the backend API at http://127.0.0.1:5001
 
 Run the React UI (in ui/):
 
@@ -101,19 +101,105 @@ npm install
 npm run dev
 ```
 
-#### Create and seed the database 
+### Automated tests
+
+The default backend suite is isolated from both the live Daily Wire API and
+`data/wireloft.db`. Install the development dependency group and run it from
+the repository root:
+
+```bash
+uv sync --group dev
+uv run pytest
+```
+
+Network sockets are disabled during this suite. Requests in `tests/rest` are
+manual integration aids and require an access token supplied through a private
+JetBrains HTTP Client environment file.
+
+### Dailywire API
+#### DailyWire API CLI
+
+You can list episodes for a DailyWire show using the dailywire-api helper.
+
+Example (bash):
+```bash
+dailywire-api show list --slug the-ben-shapiro-show
+```
+
+Options:
+- --all: include all episodes by following seasons and pagination
+- --json: output JSON instead of plain lines
+- --access-token <JWT>: optional bearer token for premium content
+- --membership-plan <PLAN>: optional membership plan (e.g., AllAccess)
+
+### Database (SQLite)
+
+This project includes a required SQLite database for the backend.
+- Default DB path: data/wireloft.db
+
+#### Create and seed the database
+
 Bash (repo root):
 ```bash
 # Create database and tables
-backend-api --init-db
+backend-api db init
 
-# Seed database with the same demo data currently hardcoded in the backend
-backend-api --seed-db
+# Seed database with demo data
+backend-api db seed
 
 # Use a custom database path
-backend-api --init-db --db <DATA_DIR>\data\wireloft.db
-backend-api --seed-db --db <DATA_DIR>\data\wireloft.db
+backend-api db init --db <DATA_DIR>/data/wireloft.db
+backend-api db seed --db <DATA_DIR>/data/wireloft.db
 ```
+
+#### Backend API commands
+
+```bash
+# Start backend server (development mode with auto-reload)
+backend-api run --debug
+
+# Start backend server (production mode)
+backend-api run
+
+# Start on custom host/port
+backend-api run --host 0.0.0.0 --port 8000
+
+# Stop all running backend processes
+backend-api stop
+```
+
+Notes:
+- Database seeding is idempotent: running it multiple times won't duplicate rows.
+
+
+## Authentication and session persistence
+
+When logging in, if you see a message like:
+
+WL_SECRET_KEY not set; generating ephemeral key for this process. Tokens will not persist across restarts.
+
+It means the application did not find a secret key to encrypt/decrypt your session cookies. A new, in-memory key was generated for that process only. If the process restarts, that key is lost and existing logins become invalid.
+
+How to persist logins safely:
+
+- Option A: Set WL_SECRET_KEY (recommended for non-Docker setups)
+  - Generate a Fernet key once and keep it safe:
+    - Python: python - <<'PY'\nfrom cryptography.fernet import Fernet\nprint(Fernet.generate_key().decode())\nPY
+  - Put the printed value into your environment (or .env) as WL_SECRET_KEY=... and restart the app.
+
+- Option B: Point to a key file with WL_SECRET_KEY_FILE (great for Docker/Kubernetes secrets)
+  - Store the key string (from Option A) in a file readable by the app, and set WL_SECRET_KEY_FILE to that path.
+  - Example .env:
+    - WL_SECRET_KEY_FILE=./data/wl_secret.key
+
+- Option C: Do nothing (auto-persist default)
+  - If neither WL_SECRET_KEY nor WL_SECRET_KEY_FILE is set, WireLoft will now automatically create a persistent key file at data/wl_secret.key on first run and reuse it thereafter. Ensure your data/ directory is persisted across restarts (e.g., bind mounted as a Docker volume) so logins survive container restarts.
+
+Security notes:
+- Keep your secret key private. Anyone with this key can forge session cookies.
+- Rotating the key will immediately invalidate all existing sessions. To rotate, replace the key (env or file) and restart the app.
+- File permissions are set to 600 when possible.
+
 Docker tip:
 - Make sure the data directory is mapped to a persistent volume, so the auto-generated key and the database persist:
   - volumes:

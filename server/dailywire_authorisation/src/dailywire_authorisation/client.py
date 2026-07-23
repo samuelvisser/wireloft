@@ -7,7 +7,7 @@ import requests
 from .config import DeviceAuthConfig, OAuthTokens, get_default_config, DeviceAuthStatus
 from .storage import TokenStore
 
-from wireloft_config import get_settings  # type: ignore
+from config import get_settings  # type: ignore
 
 class DeviceAuthClient:
     """

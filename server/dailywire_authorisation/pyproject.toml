@@ -8,6 +8,7 @@ dependencies = [
   "requests>=2.32.0",
   "keyring>=24.3.0",
   "keyrings.alt>=5.0.0",
+  "config",
 ]
 
 [project.scripts]

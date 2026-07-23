@@ -1,5 +1,5 @@
 [project]
-name = "wireloft-config"
+name = "config"
 version = "0.1.0"
 description = "Central configuration package for WireLoft"
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
@@ -8,6 +8,7 @@ dependencies = [
   "pydantic>=2.11.7",
   "pydantic-settings>=2.6.1",
   "pyyaml>=6.0.2",
+  "dailywire-api",
 ]
 
 [project.scripts]

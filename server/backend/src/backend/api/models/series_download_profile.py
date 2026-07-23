@@ -2,15 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from backend.api.models.base import RequestBase, ResponseBase
+from backend.api.models.base import RequestBase
+from backend.api.models.download_profile import DownloadProfileAPIBaseIn, DownloadProfileAPICreate, DownloadProfileAPIUpdate, \
+    DownloadProfileAPIBaseOut
 from backend.api.models.season import SeasonAPIRequestDetached, SeasonAPIRead
 
 
 # ---------- Strict input (create/update) ----------
-class _SeriesDownloadProfileAPIBaseIn(RequestBase):
+class _SeriesDownloadProfileAPIBaseIn(DownloadProfileAPIBaseIn):
     """Fields for requests: validate here if needed."""
 
-    enable_profile: bool
     seasons: list[SeasonAPIRequestDetached]
     include_upcoming_seasons: bool
 
@@ -20,28 +21,20 @@ class SeriesDownloadProfileAPICreateBundle(_SeriesDownloadProfileAPIBaseIn):
     pass
 
 
-class SeriesDownloadProfileAPICreate(_SeriesDownloadProfileAPIBaseIn):
+class SeriesDownloadProfileAPICreate(_SeriesDownloadProfileAPIBaseIn, DownloadProfileAPICreate):
     """Request body for creating a download profile for series."""
-
-    show_id: int
-    local_media_profile_id: int
+    pass
 
 
-class SeriesDownloadProfileAPIUpdate(_SeriesDownloadProfileAPIBaseIn):
+class SeriesDownloadProfileAPIUpdate(_SeriesDownloadProfileAPIBaseIn, DownloadProfileAPIUpdate):
     """Request body for updating a download profile for series."""
-
-    local_media_profile_id: int
+    pass
 
 
 # ---------- Lenient output (read) ----------
-class _SeriesDownloadProfileAPIBaseOut(ResponseBase):
+class _SeriesDownloadProfileAPIBaseOut(DownloadProfileAPIBaseOut):
     """Fields for responses: no validators, no constraints."""
 
-    id: int
-    show_id: int
-    local_media_profile_id: int
-    type: str
-    enable_profile: bool
     seasons: list[SeasonAPIRead]
     include_upcoming_seasons: bool
 

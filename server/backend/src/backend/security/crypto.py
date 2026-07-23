@@ -9,7 +9,7 @@ from functools import lru_cache
 from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
-from wireloft_config import get_settings
+from config import get_settings
 
 
 def _normalize_to_fernet_key(raw: str | bytes) -> bytes:

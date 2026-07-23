@@ -13,7 +13,7 @@ from pydantic import ValidationError
 
 from dailywire_api.records import DwEpisodeDetailRecord, DwShowRecord, DwEpisodeRecord, DwUserInfo
 from dailywire_authorisation import DeviceAuthClient
-from wireloft_config import get_settings
+from config import get_settings
 
 # ---------------- request pacing (global across dailywire_api) ----------------
 # We intentionally keep this module-level so that all clients share the same pacing state.
@@ -250,7 +250,6 @@ class MiddlewareClient:
             has_next=bool(next_url)
         )
 
-
     def get_episode_details(self, episode_slug: str, *, require_member_exclusive: bool = False) -> DwEpisodeDetailRecord:
         endpoint = 'v4/getEpisode'
         params: Dict[str, Any] = {
@@ -273,6 +272,19 @@ class MiddlewareClient:
             raise MiddlewareAPIError("Invalid episode detail response") from e
 
         return record
+
+    def get_show_id_by_slug(self, show_slug: str) -> str:
+        dw_show = self.get_show_page(show_slug)
+        return dw_show.id
+
+    def get_season_id_by_slugs(self, show_slug: str, season_slug: str) -> str:
+        dw_show = self.get_show_page(show_slug)
+        dw_season = next((s for s in dw_show.seasons if s.slug == season_slug), None)
+        if dw_season is None:
+            raise ValueError(f"Season '{season_slug}' not found in DW API for show '{show_slug}'")
+        return dw_season.id
+
+
 
 
     # --------------- internals ---------------

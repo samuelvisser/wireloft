@@ -86,17 +86,20 @@ class DwShowRecord(BaseRecord):
         """
         Determine episode identification within this show.
         """
+        # All DW shows are now numbered. In case this ever changes, we will keep the workflow for our legacy system of determining episode
+        # identification here. If this behavior never changes, we might consider removing this (2026-07-22)
+
         # Numbered if this is a series
         if self.probable_show_type == ProbableShowType.series:
             return ProbableEpisodeIdentification.numbered
 
         # Unknown if fewer than 5 episodes
         total = len(self.latest_episodes or [])
-        if total <= 5:
-            return ProbableEpisodeIdentification.unknown
+        # if total <= 5: (as type should always be numbered, we no longer need this check)
+        #     return ProbableEpisodeIdentification.unknown
 
-        # Numbered if >= 40% of episode titles contain the exact substring "Ep. "
-        podcast_like = sum(1 for ep in self.latest_episodes if isinstance(ep, DwEpisodeRecord) and "Ep. " in (ep.title or ""))
+        # Numbered if >= 40% of episode results contain non-empty episodeNumber metadata
+        podcast_like = sum(1 for ep in self.latest_episodes if isinstance(ep, DwEpisodeRecord) and ep.episode_number)
         ratio = podcast_like / total if total else 0
         if ratio >= 0.4:
             return ProbableEpisodeIdentification.numbered

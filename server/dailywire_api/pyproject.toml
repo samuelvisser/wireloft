@@ -6,6 +6,8 @@ authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "pydantic>=2.11.7",
+  "config",
+  "dailywire-authorisation",
 ]
 
 [project.scripts]

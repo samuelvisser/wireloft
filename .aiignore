@@ -1,3 +1,5 @@
 # Show the config file to any AI tools
 !config/config.yml
 !.venv
+!data/
+!tests/rest/http-client.private.env.json

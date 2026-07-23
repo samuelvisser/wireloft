@@ -22,8 +22,6 @@
 - After installing/in workspace, use:
   - List tasks: `controller list` (add `--verbose` for details)
   - Run a task by key: `controller run --key <definition_key> [--resource-id <id>] [--show-slug <slug>] [--arg name=value --arg other=123]`
-- Example:
-  - `controller run --key index_show_worker --show-slug the-ben-shapiro-show`
 
 ### Defining a new task
 - Create a new module under wireloft_controller/tasks and decorate a function:

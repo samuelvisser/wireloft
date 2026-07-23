@@ -1,5 +1,3 @@
-from typing import Optional
-
 from .MediaItemBase import MediaItemBase
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import ForeignKey
@@ -13,7 +11,6 @@ class Movie(MediaItemBase):
 
     # Fields
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
-    dw_id: Mapped[Optional[str]] = mapped_column(index=True)
     slug: Mapped[str]
 
     def __repr__(self) -> str:

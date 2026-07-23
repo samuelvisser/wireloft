@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, MetaData
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 
-from wireloft_config import get_settings
+from config import get_settings
 
 # include more patterns if you want; the key one is "uq"
 naming_convention = {
@@ -89,7 +89,7 @@ def create_tables() -> None:
 
     # Scheduler tables
     try:
-        importlib.import_module("wireloft_scheduler.models")
+        importlib.import_module("task_manager.scheduler.db")
     except Exception:
         # If scheduler package not installed, ignore
         pass

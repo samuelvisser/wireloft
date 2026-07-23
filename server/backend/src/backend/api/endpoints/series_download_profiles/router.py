@@ -65,7 +65,7 @@ def series_download_profiles_update(download_profile_series_id: int, body: Serie
 
 
 @router.delete("/{download_profile_series_id}", response_model=SeriesDownloadProfileAPIRead)
-def series_download_profiles_delete(download_profile_series_id: int):
+async def series_download_profiles_delete(download_profile_series_id: int):
     """
     Delete a series download profile from the system.
 
@@ -74,7 +74,7 @@ def series_download_profiles_delete(download_profile_series_id: int):
     """
     with db_session() as s:
         try:
-            result = delete_download_profile_series(s, download_profile_series_id)
+            result = await delete_download_profile_series(s, download_profile_series_id)
             s.commit()
             return result
         except Exception:

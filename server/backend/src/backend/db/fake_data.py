@@ -56,7 +56,6 @@ shows: List[Dict[str, Any]] = [
     {
         "id": 1,
         "uuid": "uuid-1",
-        "dw_id": "dw-1",
         "slug": "the-ben-shapiro-show",
         "local_media_profile_id": 1,
         "title": "The Ben Shapiro Show",
@@ -84,7 +83,6 @@ shows: List[Dict[str, Any]] = [
     {
         "id": 2,
         "uuid": "uuid-2",
-        "dw_id": "dw-2",
         "slug": "the-matt-walsh-show",
         "local_media_profile_id": 1,
         "title": "The Matt Walsh Show",
@@ -112,7 +110,6 @@ shows: List[Dict[str, Any]] = [
     {
         "id": 3,
         "uuid": "uuid-3",
-        "dw_id": "dw-3",
         "slug": "ben-after-dark",
         "local_media_profile_id": 2,
         "title": "Ben After Dark",
@@ -150,7 +147,7 @@ for i in range(1, 31):
         "index": i,
         "show_id": 1,
         "uuid": f"uuid-1-{i}",
-        "dw_id": f"dw-1-{i}",
+
         "slug": f"the-ben-shapiro-show-{i}",
         "title": f"The Ben Shapiro Show — Episode {i}",
         "description": "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
@@ -170,7 +167,7 @@ for i in range(1, 21):
         "index": i,
         "show_id": 2,
         "uuid": f"uuid-2-{i}",
-        "dw_id": f"dw-2-{i}",
+
         "slug": f"the-matt-walsh-show-{i}",
         "title": f"The Matt Walsh Show — Episode {i}",
         "description": "Consectetur adipiscing elit.",
@@ -190,7 +187,7 @@ for i in range(1, 8):
         "index": i,
         "show_id": 3,
         "uuid": f"uuid-3-{i}",
-        "dw_id": f"dw-3-{i}",
+
         "slug": f"ben-after-dark-{i}",
         "title": f"Ben After Dark — Episode {i}",
         "description": None,

@@ -24,7 +24,6 @@ class Episode(MediaItemBase, HasMetadataMixin):
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
     show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"), primary_key=True)
     season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
-    dw_id: Mapped[Optional[str]] = mapped_column(index=True, unique=True)
     index: Mapped[int]
     episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the show")
     slug: Mapped[str] = mapped_column(index=True, unique=True)

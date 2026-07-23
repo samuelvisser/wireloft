@@ -5,8 +5,8 @@ from typing import Optional
 
 
 def get_default_config() -> "DeviceAuthConfig":
-    """Lazily load config from wireloft_config and return a DeviceAuthConfig instance."""
-    from wireloft_config import get_settings
+    """Lazily load config from config and return a DeviceAuthConfig instance."""
+    from config import get_settings
     settings = get_settings()
     return DeviceAuthConfig(
         issuer=settings.dw_oauth.issuer,

@@ -2,7 +2,8 @@ from datetime import datetime
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, UniqueConstraint, DateTime, func
+from sqlalchemy import ForeignKey, UniqueConstraint, DateTime, func, JSON
+from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.types.download_profile_types import DownloadProfileType
@@ -27,6 +28,11 @@ class DownloadProfileBase(Base):
     local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
     type: Mapped[str]
     enable_profile: Mapped[bool] = mapped_column(default=True)
+    ep_id_type_list: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON),
+        default=list,
+        nullable=False,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

@@ -7,6 +7,7 @@ from backend.api.models.show import *
 from fastapi import HTTPException
 
 from backend.db.models import Show
+from task_manager.events.transactional import queue_event
 
 
 def get_shows_list(s: Session) -> list[ShowAPIRead]:
@@ -38,6 +39,14 @@ def create_show(s: Session, body: ShowAPICreate) -> ShowAPIRead:
     show = Show(**data)
     s.add(show)
     s.flush()
+
+    queue_event(s, "show.added", {
+        "resource_id": show.id,
+        "id": show.id,
+        "slug": show.slug,
+        "title": show.title,
+    })
+
     return ShowAPIRead.model_validate(show)
 
 
@@ -53,6 +62,13 @@ def update_show(s: Session, show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
     # Apply changes and flush
     update_database_fields(show, body)
     s.flush()
+
+    queue_event(s, "show.updated", {
+        "resource_id": show.id,
+        "id": show.id,
+        "slug": show.slug,
+    })
+
     return ShowAPIRead.model_validate(show)
 
 
@@ -66,6 +82,14 @@ def delete_show(s: Session, show_slug: str) -> ShowAPIRead:
         raise HTTPException(status_code=404, detail="Show not found")
 
     payload = ShowAPIRead.model_validate(show)
+
+    queue_event(s, "show.deleted", {
+        "resource_id": show.id,
+        "id": show.id,
+        "slug": show.slug,
+    })
+
     s.delete(show)
     s.flush()
+
     return payload

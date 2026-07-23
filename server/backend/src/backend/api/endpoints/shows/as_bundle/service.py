@@ -11,6 +11,7 @@ from backend.api.models.show import ShowAPIRead
 from backend.api.models.show_as_bundle import ShowAPICreateBundle
 from backend.db.models import Show, LocalMediaProfile, Season
 from backend.db.models.download_profile import PodcastDownloadProfile, SeriesDownloadProfile
+from task_manager.events.transactional import queue_event
 
 
 def upsert_local_media_profile(s: Session, mp_input: dict) -> LocalMediaProfile:
@@ -72,7 +73,7 @@ def create_show_bundle(s: Session, payload: ShowAPICreateBundle) -> ShowAPIRead:
         series_profile_seasons: set[Season] = set()
         for season in seasons:
             for season_in_profile in payload.download_profile.seasons:
-                if season.dw_id == season_in_profile.dw_id or season.slug == season_in_profile.slug:
+                if season.slug == season_in_profile.slug:
                     series_profile_seasons.add(season)
                     break
 
@@ -84,4 +85,10 @@ def create_show_bundle(s: Session, payload: ShowAPICreateBundle) -> ShowAPIRead:
     download_profile.local_media_profile = local_media_profile
 
     s.flush()
+    queue_event(s, "show.added", {
+        "resource_id": show.id,
+        "id": show.id,
+        "slug": show.slug,
+        "title": show.title,
+    })
     return ShowAPIRead.model_validate(show)

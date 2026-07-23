@@ -23,7 +23,6 @@ class MovieAPICreate(_MovieAPIBaseIn):
     """Request body for creating a movie."""
 
     # Fields in the media_items table
-    dw_id: Optional[str] = None
     slug: str
 
     @computed_field(return_type=str)
@@ -44,7 +43,6 @@ class _MovieAPIBaseOut(ResponseBase):
     # Fields in the media_items table
     id: int
     uuid: str
-    dw_id: Optional[str] = None
     slug: str
     title: str
     description: Optional[str]
