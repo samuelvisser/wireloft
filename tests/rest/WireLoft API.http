@@ -13,6 +13,10 @@ GET http://localhost:5001/api/tasks/runs?resource_type=show&resource_id=2
 
 
 
+### Get last 5 episodes for The Ben Shapiro Show
+GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-ben-shapiro-show
+
+
 
 
 ### Get shows list as view
@@ -20,7 +24,6 @@ GET http://localhost:5001/api/shows/as-view/
 
 ### DW episode details
 GET http://localhost:5001/api/dailywire/episodes/ben-shapiro-show-2454-memberblock
-
 
 
 <> 2025-10-30T173007.200.json
