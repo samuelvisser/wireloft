@@ -15,7 +15,7 @@ def get_episodes_by_show_list(s: Session, show_slug: str, limit: int | None = No
     stmt = (
         select(Episode)
         .filter(Episode.show.has(slug=show_slug))
-        .order_by(Episode.index.desc())
+        .order_by(Episode.published_date.desc())
     )
     if limit is not None:
         stmt = stmt.limit(limit)

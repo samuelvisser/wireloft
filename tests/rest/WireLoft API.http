@@ -19,7 +19,7 @@ GET http://localhost:5001/api/tasks/runs?resource_type=show&resource_id=2
 GET http://localhost:5001/api/shows/as-view/
 
 ### DW episode details
-GET http://localhost:5001/api/dailywire/episodes/ep-2307-how-the-radical-left-created-the-horseshoe-theory-right
+GET http://localhost:5001/api/dailywire/episodes/ben-shapiro-show-ep-24664
 
 
 
@@ -35,8 +35,25 @@ GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-isabel-brown-s
 ### Get list of episodes from DailyWire show
 GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-ben-shapiro-show
 
-### Get show from The Daily WIre
+### Get show from The Daily Wire (The Ben Shapiro Show)
 GET http://localhost:5001/api/dailywire/shows/the-ben-shapiro-show
+
+### Get show episodes (home page)
+GET http://localhost:5001/api/episodes/by-show-slug/the-ben-shapiro-show?limit=20
+
+
+
+
+
+### Get show from The Daily WIre
+GET http://localhost:5001/api/dailywire/shows/the-isabel-brown-show
+
+### Get show from The Daily WIre
+GET http://localhost:5001/api/dailywire/shows/pints-with-aquinas
+
+
+
+
 
 <> 2025-10-17T152238.200.json
 
