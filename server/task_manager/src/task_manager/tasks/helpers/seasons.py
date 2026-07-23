@@ -1,10 +1,11 @@
 from backend.api.endpoints.seasons.service import create_season
 from backend.api.models.season import SeasonAPICreate, SeasonAPIRead
 from backend.db.models import Show
+from sqlalchemy.orm import Session
 from dailywire_api.records import DwSeasonRecord
 
 
-def create_season_by_dw_season(s, *, show: Show, dw_season: DwSeasonRecord) -> SeasonAPIRead:
+def create_season_by_dw_season(s: Session, *, show: Show, dw_season: DwSeasonRecord) -> SeasonAPIRead:
 
     last_index = show.seasons[0].index if len(show.seasons) > 0 else 0
     data = {

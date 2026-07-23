@@ -97,7 +97,6 @@ def _scan_seasons(client: MiddlewareClient, *,
     """
     ep_map: EpisodeMapTuple = OrderedDict()
     current_values: IdentifierMaxValues = since_episode_tuple[0] if since_episode_tuple is not None else {}
-    identifiers: set[str] = set()
 
     seasons_asc = sorted(seasons, key=lambda s: s.index)
     season_count = len(seasons_asc)
@@ -116,6 +115,9 @@ def _scan_seasons(client: MiddlewareClient, *,
         ))
         eps = list(dict.fromkeys(eps))  # remove duplicates
 
+        # The API doesn't reliably honor CreatedAt_ASC, so enforce oldest -> newest ourselves.
+        eps.sort(key=lambda rec: (rec.published_date, rec.episode_number))
+
         # Remove episodes before since episode
         if since_episode_tuple is not None:
             index = next((i for i, rec in enumerate(eps) if rec.slug == since_episode_tuple[1].slug), None)
@@ -123,10 +125,7 @@ def _scan_seasons(client: MiddlewareClient, *,
                 eps: list[DwEpisodeRecord] = eps[index + 1:]
 
         identifier: EpisodeIdentifier = EpisodeIdentifier(show.episode_identifier)
-        eps_with_id, current_values, identifiers = identify_episodes_in_season(identifier, eps, current_values, identifiers)
-
-        if len(eps_with_id) != len(eps):
-            raise ValueError(f"Encountered non-unique episode numbered identifiers in season \"{season.name}\", aborting")
+        eps_with_id, current_values = identify_episodes_in_season(identifier, eps, current_values, season=season)
 
         if order == RecordOrder.DESC:
             eps_with_id.reverse()

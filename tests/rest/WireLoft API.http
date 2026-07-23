@@ -19,7 +19,7 @@ GET http://localhost:5001/api/tasks/runs?resource_type=show&resource_id=2
 GET http://localhost:5001/api/shows/as-view/
 
 ### DW episode details
-GET http://localhost:5001/api/dailywire/episodes/ben-shapiro-show-ep-24664
+GET http://localhost:5001/api/dailywire/episodes/ben-shapiro-show-2454-memberblock
 
 
 
@@ -43,7 +43,8 @@ GET http://localhost:5001/api/episodes/by-show-slug/the-ben-shapiro-show?limit=2
 
 
 
-
+### Get show from The Daily WIre
+GET http://localhost:5001/api/dailywire/shows/the-michael-knowles-show
 
 ### Get show from The Daily WIre
 GET http://localhost:5001/api/dailywire/shows/the-isabel-brown-show
@@ -51,11 +52,8 @@ GET http://localhost:5001/api/dailywire/shows/the-isabel-brown-show
 ### Get show from The Daily WIre
 GET http://localhost:5001/api/dailywire/shows/pints-with-aquinas
 
-
-
-
-
-<> 2025-10-17T152238.200.json
+### Get series from The Daily WIre
+GET http://localhost:5001/api/dailywire/shows/the-pendragon-cycle
 
 ### Get app config
 GET http://localhost:5001/api/config/public

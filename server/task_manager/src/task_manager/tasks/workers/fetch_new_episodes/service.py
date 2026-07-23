@@ -19,8 +19,8 @@ from ...helpers.episodes.save import save_dw_episodes_per_season_asc
 from ...types.general import RecordOrder
 
 
-async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
-    print("Starting fetch_new_episodes")
+async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, show_slug: Optional[str] = None, dry_run: bool = False, progress=None) -> None:
+    print("Starting fetch_new_episodes" + (" (dry run: nothing will be saved)" if dry_run else ""))
 
     shows: Sequence[Show] = get_shows(s, show_id=show_id, show_slug=show_slug)
 
@@ -65,11 +65,12 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
 
         # Add any new seasons to the db
         for new_dw_season in new_dw_seasons:
-            if not any(s.slug == new_dw_season.slug for s in show.seasons):
+            if not any(season.slug == new_dw_season.slug for season in show.seasons):
                 create_season_by_dw_season(s, show=show, dw_season=new_dw_season)
                 s.flush()
                 s.refresh(show, attribute_names=['seasons'])
-        s.commit()
+        if not dry_run:
+            s.commit()
 
         # Get prev max values
         prev_max_values: IdentifierMaxValues = {
@@ -96,6 +97,14 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
                                                                      progress=progress,
                                                                      progress_bounds=ProgressBounds(1, upper),
                                                                      order=RecordOrder.ASC)
+
+        # Dry run: report what would happen and discard every in-session change
+        # (the freshly created seasons included), persisting nothing.
+        if dry_run:
+            _print_dry_run_report(show, ep_map_asc, identifier_max_values)
+            s.rollback()
+            update_progress(progress, 100, f"Dry run complete for '{show.slug}' (nothing saved)")
+            continue
 
         # Save identifier max values
         for k, v in identifier_max_values.items():
@@ -144,3 +153,19 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
         update_progress(progress, 100, f"Indexed all episodes")
 
     print("fetch_new_episodes finished")
+
+
+def _print_dry_run_report(show: Show, ep_map_asc, identifier_max_values: IdentifierMaxValues) -> None:
+    """Print the episodes and identifiers a real run would have saved."""
+    total = count_total_episodes(ep_map_asc)
+    print(f"\n=== DRY RUN: '{show.slug}' — {total} new episode(s), nothing saved ===")
+    for season_id, ep_list in ep_map_asc.items():
+        season = get_season_from_list_by_id(show.seasons, season_id)
+        season_label = f"season {season.index}: {season.name}" if season is not None else f"season id {season_id}"
+        print(f"\n[{season_label}] {len(ep_list)} episode(s):")
+        for ep_id, ep in ep_list:
+            print(f"  {ep_id:<32} {ep.title}")
+    print("\nResulting identifier_max_values (not saved):")
+    for k, v in sorted(identifier_max_values.items()):
+        print(f"  {k} = {v}")
+    print("=== END DRY RUN ===\n")

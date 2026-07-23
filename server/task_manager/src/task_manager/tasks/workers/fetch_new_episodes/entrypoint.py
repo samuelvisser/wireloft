@@ -30,7 +30,7 @@ from .service import run_fetch_new_episodes
     default_max_retries=5,
     tracks_progress=False,
 )
-async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None) -> None:
+async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optional[str] = None, dry_run: bool = False, progress=None) -> None:
     """
     Finds new episodes in all shows.
 
@@ -42,6 +42,10 @@ async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optiona
         The ID of a specific show if the task needs to focus on one.
     slug : Optional[str]
         The slug of a specific show if the task needs to focus on one.
+    dry_run : bool
+        When True, run the full detection flow but persist nothing to the
+        database: computed episode identifiers are printed and all changes are
+        rolled back. Intended for testing.
     progress : Any
         A progress tracker object.
 
@@ -50,4 +54,4 @@ async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optiona
         or async tasks.
     """
     with db_session() as s:
-        await run_fetch_new_episodes(s, show_id=resource_id, show_slug=slug, progress=progress)
+        await run_fetch_new_episodes(s, show_id=resource_id, show_slug=slug, dry_run=dry_run, progress=progress)
