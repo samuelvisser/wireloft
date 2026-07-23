@@ -31,6 +31,7 @@ def get_dw_episodes_by_seasons(client: MiddlewareClient, *,
                                membership_plan: str,
                                seasons: Sequence[Season],
                                dw_id_by_slug: dict[str, str],
+                               known_episode_slugs: set[str] | None = None,
                                progress: Optional[Any] = None,
                                progress_bounds: ProgressBounds = ProgressBounds(1, 100),
                                order: RecordOrder) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
@@ -44,6 +45,7 @@ def get_dw_episodes_by_seasons(client: MiddlewareClient, *,
                          membership_plan=membership_plan,
                          seasons=seasons,
                          dw_id_by_slug=dw_id_by_slug,
+                         known_episode_slugs=known_episode_slugs,
                          bounds=progress_bounds,
                          progress=progress,
                          order=order)
@@ -54,6 +56,7 @@ def get_dw_episodes_since_ep(client: MiddlewareClient, *,
                              membership_plan: str,
                              seasons: Sequence[Season],
                              dw_id_by_slug: dict[str, str],
+                             known_episode_slugs: set[str] | None = None,
                              since_episode: Optional[Episode],
                              prev_max_values: IdentifierMaxValues,
                              progress: Optional[Any] = None,
@@ -77,6 +80,7 @@ def get_dw_episodes_since_ep(client: MiddlewareClient, *,
                          membership_plan=membership_plan,
                          seasons=seasons_to_scan,
                          dw_id_by_slug=dw_id_by_slug,
+                         known_episode_slugs=known_episode_slugs,
                          since_episode_tuple=since_episode_tuple,
                          bounds=progress_bounds,
                          progress=progress,
@@ -88,6 +92,7 @@ def _scan_seasons(client: MiddlewareClient, *,
                   membership_plan: str,
                   seasons: Sequence[Season],
                   dw_id_by_slug: dict[str, str],
+                  known_episode_slugs: set[str] | None = None,
                   since_episode_tuple: Optional[SinceEpisodeTuple] = None,
                   bounds: ProgressBounds,
                   progress: Optional[Any],
@@ -123,6 +128,12 @@ def _scan_seasons(client: MiddlewareClient, *,
             index = next((i for i, rec in enumerate(eps) if rec.slug == since_episode_tuple[1].slug), None)
             if index is not None:
                 eps: list[DwEpisodeRecord] = eps[index + 1:]
+
+        # A non-final episode remains after the latest final cursor until its
+        # monitor completes it. Do not repeatedly allocate a new identifier for
+        # a record that the monitor has already created locally.
+        if known_episode_slugs:
+            eps = [ep for ep in eps if ep.slug not in known_episode_slugs]
 
         identifier: EpisodeIdentifier = EpisodeIdentifier(show.episode_identifier)
         eps_with_id, current_values = identify_episodes_in_season(identifier, eps, current_values, season=season)

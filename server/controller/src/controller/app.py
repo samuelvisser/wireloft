@@ -115,6 +115,14 @@ def setup_triggers_from_registry() -> None:
                 event_callback=create_event_handler(task_key, trigger.resource_type),
             )
 
+    # Episode monitoring is a dynamic recurring schedule rather than a one-shot
+    # task trigger. Its lifecycle is still driven entirely through domain events.
+    from task_manager.tasks.workers.monitor_episode_worker.scheduling import (
+        register_monitor_event_handlers,
+    )
+
+    register_monitor_event_handlers()
+
 
 def _should_emit_startup_event() -> bool:
     """Whether this worker should fire ``app.startup`` (and its subscribed tasks).

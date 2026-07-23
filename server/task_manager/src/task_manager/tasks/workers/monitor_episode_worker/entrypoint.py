@@ -15,7 +15,17 @@ from .service import run_monitor_episode_worker
     default_max_retries=5,
     tracks_progress=False,
 )
-async def monitor_episode_worker(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None, show_slug: Optional[str] = None, show_id: Optional[int] = None) -> None:
+async def monitor_episode_worker(
+        *,
+        resource_id: Optional[int] = None,
+        slug: Optional[str] = None,
+        progress=None,
+        show_slug: Optional[str] = None,
+        show_id: Optional[int] = None,
+        season_id: Optional[int] = None,
+        episode_identifier: Optional[str] = None,
+        episode_index: Optional[int] = None,
+) -> None:
     """
     Monitor and update the status of a currently live or not fully processed episode
 
@@ -37,4 +47,13 @@ async def monitor_episode_worker(*, resource_id: Optional[int] = None, slug: Opt
         or async tasks.
     """
     with db_session() as s:
-        await run_monitor_episode_worker(s, episode_id=resource_id, episode_slug=slug, show_id=show_id, show_slug=show_slug)
+        await run_monitor_episode_worker(
+            s,
+            episode_id=resource_id,
+            episode_slug=slug,
+            show_id=show_id,
+            show_slug=show_slug,
+            season_id=season_id,
+            episode_identifier=episode_identifier,
+            episode_index=episode_index,
+        )
