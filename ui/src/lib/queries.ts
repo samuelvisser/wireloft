@@ -14,6 +14,8 @@ import {RssStreamProfileRead} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
 import {TaskRunRead, TaskRunReadSchema} from "../types/schemas/task";
+import {MediaDownloadViewRead} from "../types/schemas/media_download";
+import {ACTIVE_DOWNLOAD_STATUSES} from "../types/media_download";
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
     const r = await fetch(url, {signal, credentials: 'include'})
@@ -219,6 +221,37 @@ export function useStreamProfilesByShowSlug(showSlug?: string) {
         queryKey: ['streamProfilesByShowSlug', showSlug] as const,
         enabled: !!showSlug,
         queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/stream-profiles/by-show-slug/${showSlug}`, signal),
+        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
+    })
+}
+
+function hasActiveDownloads(rows: unknown): boolean {
+    return Array.isArray(rows) && rows.some((r) => ACTIVE_DOWNLOAD_STATUSES.has(String(r?.downloadStatus)))
+}
+
+export function useEpisodeDownloads(episodeSlug?: string) {
+    return useQuery<any[], Error, MediaDownloadViewRead[], readonly ['episodeDownloads', string | undefined]>({
+        queryKey: ['episodeDownloads', episodeSlug] as const,
+        enabled: !!episodeSlug,
+        queryFn: ({signal}) => {
+            const base = (window as any).appConfig.API_URL
+            return fetchJSON<any[]>(`${base}/media-downloads/as-view?episode_slug=${encodeURIComponent(episodeSlug!)}`, signal)
+        },
+        // Poll while a download is running; starting one invalidates this key
+        refetchInterval: (q) => (hasActiveDownloads(q.state.data) ? 1500 : false),
+        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
+    })
+}
+
+export function useMediaDownloadsView() {
+    return useQuery<any[], Error, MediaDownloadViewRead[], readonly ['mediaDownloadsView']>({
+        queryKey: ['mediaDownloadsView'] as const,
+        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/media-downloads/as-view`, signal),
+        // Poll fast while anything is downloading; keep a slow heartbeat otherwise
+        // so downloads started elsewhere show up while the page stays open
+        refetchInterval: (q) => (hasActiveDownloads(q.state.data) ? 1500 : 8000),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })

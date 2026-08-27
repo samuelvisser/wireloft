@@ -11,6 +11,7 @@ library.add(fas)
 const items: NavItem[] = [
     {path: '/', label: 'Home', icon: ['fas', 'house'], end: true},
     {path: '/shows', label: 'Shows', icon: ['fas', 'tv']},
+    {path: '/downloads', label: 'Downloads', icon: ['fas', 'circle-down']},
     {
         label: 'Profiles',
         icon: ['fas', 'layer-group'],

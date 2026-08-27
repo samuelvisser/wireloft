@@ -24,9 +24,29 @@ export type MediaDownloadUpdateOut = z.output<typeof MediaDownloadUpdateSchema>;
 // ------------ Lenient response (read) ------------
 export const MediaDownloadReadSchema = z.looseObject({
     id: z.int(),
-    downloadStatus: z.union([z.enum(MediaDownloadStatus), z.string()]),
+    mediaItemId: z.int(),
+    localMediaProfileId: z.int(),
+    downloadStatus: z.string(),
     filePath: z.string(),
+    progress: z.int(),
+    errorMessage: z.string().nullable(),
+    downloadedBytes: z.int().nullable(),
+    formatDownloaded: z.string().nullable(),
+    startedAt: z.iso.datetime().transform((s) => new Date(s)).nullable(),
+    finishedAt: z.iso.datetime().transform((s) => new Date(s)).nullable(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })
 export type MediaDownloadRead = z.infer<typeof MediaDownloadReadSchema>;
+
+
+export const MediaDownloadViewReadSchema = MediaDownloadReadSchema.extend({
+    episodeSlug: z.string().nullable(),
+    episodeTitle: z.string().nullable(),
+    episodeIdentifier: z.string().nullable(),
+    showSlug: z.string().nullable(),
+    showTitle: z.string().nullable(),
+    localMediaProfileName: z.string().nullable(),
+    preferredFormat: z.string().nullable(),
+})
+export type MediaDownloadViewRead = z.infer<typeof MediaDownloadViewReadSchema>;
