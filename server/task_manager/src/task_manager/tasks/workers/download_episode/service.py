@@ -67,44 +67,59 @@ async def run_download_episode(s: Session, *, media_download_id: int, is_redownl
     row_progress = RowProgressWriter(media_download_id, task_progress=progress)
 
     try:
-        result = _download_with_url_refresh(
-            s,
-            download=download,
-            episode=episode,
-            show=show,
-            want_audio=want_audio,
-            row_progress=row_progress,
+        try:
+            result = _download_with_url_refresh(
+                s,
+                download=download,
+                episode=episode,
+                show=show,
+                want_audio=want_audio,
+                row_progress=row_progress,
+            )
+        except Exception as e:
+            s.rollback()
+            download.download_status = MediaDownloadStatus.ERROR.value
+            download.error_message = str(e)[:1000]
+            download.finished_at = datetime.now(timezone.utc)
+            s.commit()
+            raise
+
+        download.download_status = (
+            MediaDownloadStatus.REDOWNLOADED.value if is_redownload else MediaDownloadStatus.DOWNLOADED.value
         )
-    except Exception as e:
-        s.rollback()
-        download.download_status = MediaDownloadStatus.ERROR.value
-        download.error_message = str(e)[:1000]
+        download.progress = 100
+        download.downloaded_bytes = result.bytes_downloaded
+        download.format_downloaded = result.format_downloaded
+        download.file_path = result.file_path
         download.finished_at = datetime.now(timezone.utc)
+        # Records what version was actually fetched, so a Download Profile can later
+        # tell whether this file still needs replacing (e.g. still countdown-era)
+        # instead of redownloading on every check.
+        download.downloaded_publish_status = episode.publish_status
+        if episode.downloaded_date is None:
+            episode.downloaded_date = datetime.now(timezone.utc)
+        if is_redownload:
+            episode.redownloaded_date = datetime.now(timezone.utc)
         s.commit()
-        raise
 
-    download.download_status = (
-        MediaDownloadStatus.REDOWNLOADED.value if is_redownload else MediaDownloadStatus.DOWNLOADED.value
-    )
-    download.progress = 100
-    download.downloaded_bytes = result.bytes_downloaded
-    download.format_downloaded = result.format_downloaded
-    download.file_path = result.file_path
-    download.finished_at = datetime.now(timezone.utc)
-    # Records what version was actually fetched, so a Download Profile can later
-    # tell whether this file still needs replacing (e.g. still countdown-era)
-    # instead of redownloading on every check.
-    download.downloaded_publish_status = episode.publish_status
-    if episode.downloaded_date is None:
-        episode.downloaded_date = datetime.now(timezone.utc)
-    if is_redownload:
-        episode.redownloaded_date = datetime.now(timezone.utc)
-    s.commit()
+        print(
+            f"download_episode completed for {episode.slug}: "
+            f"{result.format_downloaded} -> {result.file_path} ({result.bytes_downloaded} bytes)"
+        )
+    finally:
+        # This download just freed a concurrency slot, one way or another;
+        # immediately backfill it from the queue instead of leaving it idle
+        # until the next full Download Profile sweep.
+        _drain_next_pending_downloads(s)
 
-    print(
-        f"download_episode completed for {episode.slug}: "
-        f"{result.format_downloaded} -> {result.file_path} ({result.bytes_downloaded} bytes)"
-    )
+
+def _drain_next_pending_downloads(s: Session) -> None:
+    try:
+        from task_manager.tasks.workers.download_profile_worker._helpers import trigger_next_pending_downloads
+
+        trigger_next_pending_downloads(s)
+    except Exception:
+        logger.exception("Failed to trigger the next pending download(s) after completion")
 
 
 def _download_with_url_refresh(

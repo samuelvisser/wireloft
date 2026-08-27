@@ -469,3 +469,96 @@ def test_run_worker_no_enabled_profiles_is_a_noop(db_session, monkeypatch):
     asyncio.run(service.run_download_profile_worker(db_session, resource_id=0, resource_type="download_profile"))
 
     triggered.assert_not_called()
+
+
+# ---------- trigger_next_pending_downloads (queue draining) ----------
+
+def _make_pending_download(db_session, episode, lmp, *, profile=None):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.media_types import MediaType
+
+    download = EpisodeMediaDownload(
+        type=MediaType.EPISODE.value,
+        media_item_id=episode.id,
+        local_media_profile_id=lmp.id,
+        download_profile_id=profile.id if profile else None,
+        download_status=MediaDownloadStatus.PENDING.value,
+        file_path=f"/downloads/{episode.slug}.m4a",
+        progress=0,
+    )
+    db_session.add(download)
+    db_session.flush()
+    return download
+
+
+def test_trigger_next_pending_downloads_respects_budget(db_session, monkeypatch):
+    from task_manager.tasks.workers.download_profile_worker import _helpers as helpers_module
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    episodes = [
+        _make_episode(db_session, show, season, slug=f"ep{i}", ep_id=f"ep.{i}", status="published_final", published_at=now, index=i)
+        for i in range(3)
+    ]
+    downloads = [_make_pending_download(db_session, ep, lmp) for ep in episodes]
+    db_session.commit()
+
+    triggered = Mock()
+    monkeypatch.setattr(helpers_module, "trigger_now", triggered)
+
+    count = helpers_module.trigger_next_pending_downloads(db_session, budget=2)
+
+    assert count == 2
+    assert triggered.call_count == 2
+    triggered_ids = {call.kwargs["media_download_id"] for call in triggered.call_args_list}
+    assert triggered_ids == {downloads[0].id, downloads[1].id}
+
+
+def test_trigger_next_pending_downloads_noop_when_budget_exhausted(db_session, monkeypatch):
+    from task_manager.tasks.workers.download_profile_worker import _helpers as helpers_module
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    episode = _make_episode(db_session, show, season, slug="ep", ep_id="ep.1", status="published_final", published_at=now, index=1)
+    _make_pending_download(db_session, episode, lmp)
+    db_session.commit()
+
+    triggered = Mock()
+    monkeypatch.setattr(helpers_module, "trigger_now", triggered)
+
+    count = helpers_module.trigger_next_pending_downloads(db_session, budget=0)
+
+    assert count == 0
+    triggered.assert_not_called()
+
+
+def test_trigger_next_pending_downloads_derives_budget_when_not_given(db_session, monkeypatch):
+    from config import get_settings
+    from task_manager.tasks.workers.download_profile_worker import _helpers as helpers_module
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    episodes = [
+        _make_episode(db_session, show, season, slug=f"ep{i}", ep_id=f"ep.{i}", status="published_final", published_at=now, index=i)
+        for i in range(2)
+    ]
+    for ep in episodes:
+        _make_pending_download(db_session, ep, lmp)
+    db_session.commit()
+
+    monkeypatch.setattr(get_settings().download_settings, "max_concurrent_downloads", 1)
+    triggered = Mock()
+    monkeypatch.setattr(helpers_module, "trigger_now", triggered)
+
+    count = helpers_module.trigger_next_pending_downloads(db_session)
+
+    assert count == 1
+    assert triggered.call_count == 1

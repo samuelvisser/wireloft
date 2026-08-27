@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import Mock
 
 import pytest
 from sqlalchemy import create_engine
@@ -483,6 +484,70 @@ def test_run_download_episode_audio_unaffected_by_remux_setting(tmp_path, monkey
     session.refresh(download)
     assert download.file_path.endswith(".m4a")
     assert remux_calls == []
+
+    session.close()
+    engine.dispose()
+
+
+# ---------- queue draining after completion ----------
+
+def test_run_download_episode_drains_next_pending_download_on_success(tmp_path, monkeypatch):
+    from config import get_settings
+    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from task_manager.tasks.workers.download_episode import service
+    from task_manager.tasks.workers.download_profile_worker import _helpers as profile_helpers
+
+    session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    audio_info = MediaInfo(url=episode.audio_url, kind=MediaKind.DIRECT_FILE, content_type="audio/mp4")
+    monkeypatch.setattr(service, "probe", lambda url: audio_info)
+
+    def fake_download_file(url, dest_path, *, progress=None):
+        __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
+        with open(dest_path, "wb") as f:
+            f.write(b"audio-bytes")
+        return DownloadResult(path=dest_path, bytes_downloaded=11)
+
+    monkeypatch.setattr(service, "download_file", fake_download_file)
+
+    drained = Mock()
+    monkeypatch.setattr(profile_helpers, "trigger_next_pending_downloads", drained)
+
+    asyncio.run(service.run_download_episode(session, media_download_id=download.id))
+
+    session.refresh(download)
+    assert download.download_status == "downloaded"
+    drained.assert_called_once_with(session)
+
+    session.close()
+    engine.dispose()
+
+
+def test_run_download_episode_drains_next_pending_download_on_failure(tmp_path, monkeypatch):
+    from config import get_settings
+    from task_manager.tasks.workers.download_episode import service
+    from task_manager.tasks.workers.download_profile_worker import _helpers as profile_helpers
+
+    session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    def broken_probe(url):
+        raise RuntimeError("network is down")
+
+    monkeypatch.setattr(service, "probe", broken_probe)
+
+    drained = Mock()
+    monkeypatch.setattr(profile_helpers, "trigger_next_pending_downloads", drained)
+
+    with pytest.raises(RuntimeError, match="network is down"):
+        asyncio.run(service.run_download_episode(session, media_download_id=download.id))
+
+    session.refresh(download)
+    assert download.download_status == "error"
+    # A failed download frees its own concurrency slot just as much as a
+    # successful one, so the queue must still be backfilled.
+    drained.assert_called_once_with(session)
 
     session.close()
     engine.dispose()

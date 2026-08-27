@@ -16,6 +16,7 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
+from task_manager.scheduler.executor import trigger_now
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +255,38 @@ def remaining_download_budget(s: Session) -> int:
         .where(MediaDownloadBase.download_status == MediaDownloadStatus.DOWNLOADING.value)
     ).scalar_one()
     return max(0, max_concurrent - in_flight)
+
+
+def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) -> int:
+    """Start as many queued episode downloads as the concurrency budget allows.
+
+    A Download Profile sweep can only trigger up to the budget available at
+    that moment and leaves the rest PENDING; without this, those would sit
+    idle until the next full sweep (the verification cron, by default every
+    couple of hours). Call this whenever a download finishes (success or
+    failure alike free up a concurrency slot) so the queue keeps draining
+    itself between sweeps instead of stalling after the first batch.
+    """
+    if budget is None:
+        budget = remaining_download_budget(s)
+    if budget <= 0:
+        return 0
+
+    stmt = (
+        select(EpisodeMediaDownload)
+        .where(EpisodeMediaDownload.download_status == MediaDownloadStatus.PENDING.value)
+        .order_by(EpisodeMediaDownload.id)
+        .limit(budget)
+    )
+    pending = list(s.execute(stmt).scalars())
+    for download in pending:
+        trigger_now(
+            def_key="download_episode",
+            resource_type="episode",
+            resource_id=download.media_item_id,
+            media_download_id=download.id,
+        )
+    return len(pending)
 
 
 def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
