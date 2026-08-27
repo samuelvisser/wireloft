@@ -10,6 +10,7 @@ dependencies = [
   "SQLAlchemy>=2.0.43,<3.0",
   "backend",
   "dailywire-api",
+  "dailywire-downloader",
   "config",
   "controller",
   "dailywire-authorisation",

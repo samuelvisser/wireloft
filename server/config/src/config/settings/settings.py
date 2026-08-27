@@ -60,7 +60,8 @@ class AppSettings(SettingsBase):
         verify_downloads_cron="0 */2 * * *",
         max_concurrent_downloads=5,
         max_download_attempts=3,
-        download_timeout_seconds=600
+        download_timeout_seconds=600,
+        download_root=PROJECT_ROOT / "downloads",
     ))
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):

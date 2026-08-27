@@ -132,6 +132,9 @@ def main(argv: Optional[list[str]] = None) -> None:
         print("Starting Wireloft backend...")
         configure_db()
 
+        # Create any missing tables / apply pending schema updates (idempotent)
+        create_tables()
+
         # Validate database health before starting server
         _validate_db_health()
         debug = args.debug

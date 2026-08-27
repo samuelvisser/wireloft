@@ -112,3 +112,4 @@ class DownloadSettings(SubmodelBase):
     max_concurrent_downloads: int = Field(..., description="Maximum number of concurrent downloads")
     max_download_attempts: int = Field(..., description="Maximum number of download attempts")
     download_timeout_seconds: int = Field(..., description="Timeout in seconds for each download")
+    download_root: Path = Field(..., description="Directory on disk that the '/downloads/' prefix of output templates maps to")

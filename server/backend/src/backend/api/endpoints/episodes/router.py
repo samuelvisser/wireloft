@@ -2,9 +2,35 @@ from fastapi import APIRouter, status
 
 from .service import *
 from ...models.episode import *
+from ...models.media_download import EpisodeDownloadAPICreate, MediaDownloadAPIRead
+from ..media_downloads.service import create_episode_download
+from ..media_downloads.router import _trigger_download_task
 from backend.app import db_session
 
 router = APIRouter(prefix="/episodes", tags=["Episodes"])
+
+
+@router.post("/{episode_slug}/downloads", response_model=MediaDownloadAPIRead, status_code=status.HTTP_201_CREATED)
+def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
+    """
+    Start downloading an episode according to a Local Media Profile.
+
+    Creates the download record and queues the download task. Each episode can
+    have at most one download per Local Media Profile; a pending or errored
+    download for the same profile is restarted instead.
+    """
+    with db_session() as s:
+        try:
+            download = create_episode_download(s, episode_slug, body)
+            payload = MediaDownloadAPIRead.model_validate(download)
+            episode_id = download.media_item_id
+            s.commit()
+        except Exception:
+            s.rollback()
+            raise
+
+    _trigger_download_task(media_download_id=payload.id, episode_id=episode_id)
+    return payload
 
 @router.get("/by-show-slug/{show_slug}", response_model=list[EpisodeAPIRead])
 def episodes_by_show_list(show_slug: str, limit: int | None = None):

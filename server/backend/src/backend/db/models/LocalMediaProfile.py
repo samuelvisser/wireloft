@@ -9,6 +9,7 @@ from backend.db import Base
 
 if TYPE_CHECKING:
     from backend.db.models.download_profile import DownloadProfileBase
+    from backend.db.models.media_download import MediaDownloadBase
 
 
 class LocalMediaProfile(Base):
@@ -30,6 +31,7 @@ class LocalMediaProfile(Base):
 
     # Relationships
     download_profiles: Mapped[list["DownloadProfileBase"]] = relationship(back_populates="local_media_profile")
+    media_downloads: Mapped[list["MediaDownloadBase"]] = relationship(back_populates="local_media_profile")
 
 
     def __repr__(self) -> str:

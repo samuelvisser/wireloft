@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import DateTime, func
+from sqlalchemy import DateTime, func, UniqueConstraint
 from sqlalchemy.sql.schema import ForeignKey
 
 from backend.db import Base
@@ -10,6 +10,7 @@ from backend.types.media_types import MediaType
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import MediaItemBase
+    from backend.db.models import LocalMediaProfile
 
 
 class MediaDownloadBase(Base):
@@ -18,12 +19,24 @@ class MediaDownloadBase(Base):
         "polymorphic_on": "type",
         "polymorphic_identity": MediaType.BASE.value,
     }
+    __table_args__ = (
+        # A media item can only be downloaded once per local media profile
+        UniqueConstraint("media_item_id", "local_media_profile_id", name="uq_download_per_media_profile"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     type: Mapped[str]
     media_item_id: Mapped[int] = mapped_column(ForeignKey("media_items.id"))
+    local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
     download_status: Mapped[str]
     file_path: Mapped[str]
+    progress: Mapped[int] = mapped_column(default=0)
+    error_message: Mapped[Optional[str]]
+    downloaded_bytes: Mapped[Optional[int]]
+    # What was actually fetched, e.g. "1920x1080" or "audio"
+    format_downloaded: Mapped[Optional[str]]
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -34,6 +47,7 @@ class MediaDownloadBase(Base):
 
     # Relationships
     media: Mapped["MediaItemBase"] = relationship(back_populates="downloads")
+    local_media_profile: Mapped["LocalMediaProfile"] = relationship(back_populates="media_downloads")
 
 
     def __repr__(self) -> str:

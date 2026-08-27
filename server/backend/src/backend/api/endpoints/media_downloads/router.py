@@ -1,4 +1,6 @@
-from fastapi import APIRouter, status
+from typing import Optional
+
+from fastapi import APIRouter, Query, status
 
 from .service import *
 from ...models.media_download import *
@@ -17,22 +19,43 @@ def media_downloads_list():
         return get_media_downloads_list(s)
 
 
-@router.post("", response_model=MediaDownloadAPIRead, status_code=status.HTTP_201_CREATED)
-def media_downloads_create(body: MediaDownloadAPICreate):
+@router.get("/as-view", response_model=list[MediaDownloadAPIReadView])
+def media_downloads_view(
+        episode_slug: Optional[str] = None,
+        status_filter: Optional[list[str]] = Query(default=None, alias="status"),
+        limit: Optional[int] = None,
+):
     """
-    Create a new media download task.
+    List media downloads joined with their episode, show and profile context.
 
-    Initiates a new download operation for the specified media with the provided configuration.
-    Returns the created download task with tracking information.
+    Optional query parameters:
+    - episode_slug: only downloads of this episode
+    - status: repeatable; only downloads in these statuses (e.g. downloading, error)
+    - limit: maximum number of rows, newest first
+    """
+    with db_session() as s:
+        return get_media_downloads_view(s, episode_slug=episode_slug, statuses=status_filter, limit=limit)
+
+
+@router.post("/{media_download_id}/retry", response_model=MediaDownloadAPIRead)
+def media_downloads_retry(media_download_id: int):
+    """
+    Restart a pending or errored download.
+
+    Resets the download record and queues the download task again.
     """
     with db_session() as s:
         try:
-            result = create_media_download(s, body)
+            download = retry_media_download(s, media_download_id)
+            payload = MediaDownloadAPIRead.model_validate(download)
+            episode_id = download.media_item_id
             s.commit()
-            return result
         except Exception:
             s.rollback()
             raise
+
+    _trigger_download_task(media_download_id=payload.id, episode_id=episode_id)
+    return payload
 
 
 @router.get("/{media_download_id}", response_model=MediaDownloadAPIRead)
@@ -80,3 +103,15 @@ def media_downloads_delete(media_download_id: int):
         except Exception:
             s.rollback()
             raise
+
+
+def _trigger_download_task(*, media_download_id: int, episode_id: int) -> None:
+    """Queue the download worker for a freshly created/reset download row."""
+    from task_manager.scheduler.executor import trigger_now
+
+    trigger_now(
+        def_key="download_episode",
+        resource_type="episode",
+        resource_id=episode_id,
+        media_download_id=media_download_id,
+    )

@@ -94,7 +94,48 @@ def create_tables() -> None:
         # If scheduler package not installed, ignore
         pass
 
+    _recreate_outdated_empty_tables(get_engine())
     Base.metadata.create_all(bind=get_engine())
+
+
+def _recreate_outdated_empty_tables(engine: Engine) -> None:
+    """Poor-man's migration: recreate tables whose schema is outdated.
+
+    There is no migration framework (yet); model changes are applied by dropping
+    and recreating a table — but only when it holds no data. A non-empty table
+    with an outdated schema raises so the user can decide what to do instead of
+    silently losing data. Only tables listed here are ever considered.
+    """
+    from sqlalchemy import inspect as sa_inspect, text
+
+    # Child tables first so foreign keys don't block the drop
+    migratable = ["media_downloads_episode", "media_downloads"]
+
+    inspector = sa_inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
+    to_drop: list[str] = []
+    for table_name in migratable:
+        if table_name not in existing_tables:
+            continue
+        model_columns = {c.name for c in Base.metadata.tables[table_name].columns}
+        db_columns = {c["name"] for c in inspector.get_columns(table_name)}
+        if model_columns <= db_columns:
+            continue
+
+        with engine.connect() as conn:
+            row_count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+        if row_count:
+            raise RuntimeError(
+                f"Table '{table_name}' is missing columns {sorted(model_columns - db_columns)} "
+                f"but holds {row_count} row(s); refusing to recreate it automatically"
+            )
+        to_drop.append(table_name)
+
+    if to_drop:
+        with engine.begin() as conn:
+            for table_name in to_drop:
+                conn.execute(text(f"DROP TABLE {table_name}"))
 
 
 def seed_db() -> None:

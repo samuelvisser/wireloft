@@ -686,6 +686,7 @@ dependencies = [
     { name = "controller" },
     { name = "dailywire-api" },
     { name = "dailywire-authorisation" },
+    { name = "dailywire-downloader" },
     { name = "pyventus" },
     { name = "sqlalchemy" },
 ]
@@ -698,6 +699,7 @@ requires-dist = [
     { name = "controller", editable = "server/controller" },
     { name = "dailywire-api", editable = "server/dailywire_api" },
     { name = "dailywire-authorisation", editable = "server/dailywire_authorisation" },
+    { name = "dailywire-downloader", editable = "server/dailywire_downloader" },
     { name = "pyventus", specifier = ">=0.7.2" },
     { name = "sqlalchemy", specifier = ">=2.0.43,<3.0" },
 ]

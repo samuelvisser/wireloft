@@ -9,6 +9,8 @@ class DownloadProfileType(Enum):
     BASE = "base"
 
 class MediaDownloadStatus(Enum):
+    # Download requested but not picked up by the download worker yet
+    PENDING = "pending"
     DOWNLOADED = "downloaded"
     DOWNLOADING = "downloading"
     REDOWNLOADED = "redownloaded"
