@@ -8,22 +8,15 @@ import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import {MediaDownloadStatusReg} from '../../types/media_download'
+import {PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import ProgressBar from '../../components/common/ProgressBar'
+import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
-
-const PUBLISH_STATUS_LABELS: Record<string, string> = {
-    scheduled: 'Scheduled',
-    delayed: 'Officially delayed',
-    live: 'Live',
-    dw_processing: 'Processing on DailyWire',
-    published_with_countdown: 'Published (still contains countdown)',
-    published_final: 'Published',
-}
 
 function formatDate(value: Date | string | null | undefined) {
     if (!value) return '—'
@@ -58,6 +51,7 @@ function ProfileDownloadRow({
 }) {
     const qc = useQueryClient()
     const [busy, setBusy] = useState(false)
+    const [showLog, setShowLog] = useState(false)
 
     const invalidate = () =>
         Promise.all([
@@ -145,6 +139,18 @@ function ProfileDownloadRow({
                     <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
                 )}
             </div>
+            {download && (
+                <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => setShowLog(true)}
+                    title="View log"
+                    aria-label={`View log for ${profile.name}`}
+                >
+                    <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+                </button>
+            )}
+            <DownloadLogDialog row={showLog ? (download ?? null) : null} onClose={() => setShowLog(false)}/>
         </div>
     )
 }

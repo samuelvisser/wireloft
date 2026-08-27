@@ -48,5 +48,7 @@ export const MediaDownloadViewReadSchema = MediaDownloadReadSchema.extend({
     showTitle: z.string().nullable(),
     localMediaProfileName: z.string().nullable(),
     preferredFormat: z.string().nullable(),
+    isRedownloadAttempt: z.boolean().nullable(),
+    downloadedPublishStatus: z.string().nullable(),
 })
 export type MediaDownloadViewRead = z.infer<typeof MediaDownloadViewReadSchema>;

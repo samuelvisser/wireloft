@@ -53,3 +53,8 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
     show_title: Optional[str]
     local_media_profile_name: Optional[str]
     preferred_format: Optional[str]
+    # Whether the most recent attempt was a redownload of an already-completed
+    # file, and what publish_status that file was actually fetched at; both
+    # None until the first attempt starts. Shown in the download's log.
+    is_redownload_attempt: Optional[bool]
+    downloaded_publish_status: Optional[str]

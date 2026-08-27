@@ -61,6 +61,8 @@ def get_media_downloads_view(
             show_title=show.title,
             local_media_profile_name=profile.name,
             preferred_format=profile.preferred_format,
+            is_redownload_attempt=download.is_redownload_attempt,
+            downloaded_publish_status=download.downloaded_publish_status,
         ))
     return views
 

@@ -61,6 +61,10 @@ async def run_download_episode(s: Session, *, media_download_id: int, is_redownl
     download.error_message = None
     download.started_at = datetime.now(timezone.utc)
     download.finished_at = None
+    # Recorded up front so it survives a failed attempt too, not just a
+    # successful one: the download's log shows what kind of attempt this was
+    # regardless of how it ends.
+    download.is_redownload_attempt = is_redownload
     s.commit()
 
     want_audio = profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
@@ -255,11 +259,14 @@ def _download_and_remux_to_mp4(source_url: str, dest_path: str, *, row_progress:
     )
 
 
-def _truncate_message(message: str, limit: int = 1000) -> str:
+def _truncate_message(message: str, limit: int = 20_000) -> str:
     """Cap a stored error message, keeping its *end* rather than its start.
 
-    Errors built from a diagnostic tail (e.g. ffmpeg's own last output lines)
-    put the actually useful part at the end; a plain head slice (``msg[:limit]``)
+    This is the full text shown in a download's log, so the cap is generous -
+    it exists only to bound a pathological case, not to compact the message
+    for a table row (the UI truncates that display on its own). Errors built
+    from a diagnostic tail (e.g. ffmpeg's own last output lines) put the
+    actually useful part at the end; a plain head slice (``msg[:limit]``)
     would just as easily cut that off and keep only a generic prefix instead.
     """
     if len(message) <= limit:

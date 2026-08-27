@@ -797,6 +797,47 @@ a.btn,
   gap: 8px;
 }
 
+/* Wider modal variant, for content-heavy dialogs like a download's log */
+.modal-wide {
+  max-width: 720px;
+}
+.log-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 12px;
+  row-gap: 6px;
+  margin: 0 0 16px;
+}
+.log-meta > div {
+  display: contents;
+}
+.log-meta dt {
+  color: var(--muted, #777);
+  font-weight: 500;
+}
+.log-meta dd {
+  margin: 0;
+  word-break: break-word;
+}
+.log-section-label {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.log-output {
+  margin: 0 0 16px;
+  padding: 12px;
+  max-height: 360px;
+  overflow: auto;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Danger button */
 .btn-danger {
   background: #ef4444;

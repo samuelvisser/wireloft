@@ -623,6 +623,86 @@ def test_run_download_episode_drains_next_pending_download_on_failure(tmp_path, 
     engine.dispose()
 
 
+# ---------- is_redownload_attempt persists regardless of outcome ----------
+
+def test_run_download_episode_records_redownload_attempt_on_success(tmp_path, monkeypatch):
+    from config import get_settings
+    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from task_manager.tasks.workers.download_episode import service
+
+    session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    audio_info = MediaInfo(url=episode.audio_url, kind=MediaKind.DIRECT_FILE, content_type="audio/mp4")
+    monkeypatch.setattr(service, "probe", lambda url: audio_info)
+
+    def fake_download_file(url, dest_path, *, progress=None):
+        __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
+        with open(dest_path, "wb") as f:
+            f.write(b"audio-bytes")
+        return DownloadResult(path=dest_path, bytes_downloaded=11)
+
+    monkeypatch.setattr(service, "download_file", fake_download_file)
+
+    asyncio.run(service.run_download_episode(session, media_download_id=download.id, is_redownload=True))
+
+    session.refresh(download)
+    assert download.download_status == "redownloaded"
+    assert download.is_redownload_attempt is True
+
+    session.close()
+    engine.dispose()
+
+
+def test_run_download_episode_records_redownload_attempt_on_failure(tmp_path, monkeypatch):
+    from config import get_settings
+    from task_manager.tasks.workers.download_episode import service
+
+    session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    monkeypatch.setattr(service, "probe", lambda url: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(service.run_download_episode(session, media_download_id=download.id, is_redownload=True))
+
+    session.refresh(download)
+    assert download.download_status == "error"
+    # Recorded up front, so it survives even though the attempt itself failed.
+    assert download.is_redownload_attempt is True
+
+    session.close()
+    engine.dispose()
+
+
+def test_run_download_episode_records_initial_attempt(tmp_path, monkeypatch):
+    from config import get_settings
+    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from task_manager.tasks.workers.download_episode import service
+
+    session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    audio_info = MediaInfo(url=episode.audio_url, kind=MediaKind.DIRECT_FILE, content_type="audio/mp4")
+    monkeypatch.setattr(service, "probe", lambda url: audio_info)
+
+    def fake_download_file(url, dest_path, *, progress=None):
+        __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
+        with open(dest_path, "wb") as f:
+            f.write(b"audio-bytes")
+        return DownloadResult(path=dest_path, bytes_downloaded=11)
+
+    monkeypatch.setattr(service, "download_file", fake_download_file)
+
+    asyncio.run(service.run_download_episode(session, media_download_id=download.id))
+
+    session.refresh(download)
+    assert download.is_redownload_attempt is False
+
+    session.close()
+    engine.dispose()
+
+
 # ---------- error message truncation ----------
 
 def test_truncate_message_keeps_the_end_not_the_start():
@@ -634,7 +714,31 @@ def test_truncate_message_keeps_the_end_not_the_start():
     # The real diagnostic content sits right at the end, well within the last
     # 1000 characters; a head slice (message[:1000]) would miss it entirely.
     long_message = "A" * 2000 + "THE REAL ERROR IS HERE"
-    truncated = _truncate_message(long_message)
+    truncated = _truncate_message(long_message, limit=1000)
     assert len(truncated) <= 1000
     assert truncated.endswith("THE REAL ERROR IS HERE")
     assert truncated != long_message[:1000]
+
+    # The default limit is generous: this is the full text a download's log
+    # shows, not the compact table row, so a merely-long message survives whole.
+    assert _truncate_message(long_message) == long_message
+
+
+# ---------- download log fields surfaced via the API view ----------
+
+def test_media_downloads_view_exposes_redownload_and_version_fields():
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_view
+
+    session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
+    download.is_redownload_attempt = True
+    download.downloaded_publish_status = "published_final"
+    download.error_message = "boom"
+    session.commit()
+
+    [view] = get_media_downloads_view(session)
+    assert view.is_redownload_attempt is True
+    assert view.downloaded_publish_status == "published_final"
+    assert view.error_message == "boom"
+
+    session.close()
+    engine.dispose()
