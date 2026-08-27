@@ -23,7 +23,7 @@ GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-ben-shapiro-sh
 GET http://localhost:5001/api/shows/as-view/
 
 ### DW episode details
-GET http://localhost:5001/api/dailywire/episodes/ben-shapiro-show-2454-memberblock
+GET http://localhost:5001/api/dailywire/episodes/ben-shapiro-show-ep-2470
 
 
 <> 2025-10-30T173007.200.json

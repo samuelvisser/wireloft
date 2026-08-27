@@ -15,7 +15,9 @@ def get_show_from_params(s: Session, *,
     if show_slug is not None:
         return s.query(Show).filter(Show.slug == show_slug).first()
     if episode_id is not None:
-        return s.get(Episode, episode_id).show
+        episode = s.get(Episode, episode_id)
+        return episode.show if episode is not None else None
     if episode_slug is not None:
-        return s.query(Episode).filter(Episode.slug == episode_slug).first().show
+        episode = s.query(Episode).filter(Episode.slug == episode_slug).first()
+        return episode.show if episode is not None else None
     return None

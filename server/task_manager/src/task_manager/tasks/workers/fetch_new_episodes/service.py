@@ -12,12 +12,12 @@ from dailywire_api.records import DwSeasonRecord
 from dailywire_authorisation import DeviceAuthClient
 from task_manager.events.transactional import queue_event
 from ._helpers import get_shows, get_season_from_list_by_id, get_latest_ep_index
+from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier import IdentifierMaxValues
 from ...helpers.episodes.mapper import get_dw_episodes_since_ep, count_total_episodes
-from ...helpers.episodes.status import is_published_final
 from ...helpers.progress import ProgressBounds, update_progress
 from ...helpers.seasons import create_season_by_dw_season
-from ...helpers.episodes.save import save_dw_episodes_per_season_asc
+from ...helpers.episodes.save import save_dw_episodes_per_season_asc, SavedEpisode
 from ...types.general import RecordOrder
 from ..monitor_episode_worker.scheduling import MONITOR_REQUESTED_EVENT
 
@@ -44,18 +44,6 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
                 continue
         if membership_plan == WlDwMembershipLevel.WL_ANY.value:
             membership_plan = WlDwMembershipLevel.FREE.value
-
-        known_episodes = {
-            episode.slug: episode
-            for episode in s.execute(
-                select(Episode).where(Episode.show_id == show.id)
-            ).scalars()
-        }
-        monitor_requests = {
-            episode.episode_identifier: _monitor_request_for_db_episode(show, episode)
-            for episode in known_episodes.values()
-            if episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value
-        }
 
         # Get the last episode that is fully published
         stmt = (
@@ -107,7 +95,6 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
                                                                      membership_plan=membership_plan,
                                                                      seasons=show.seasons,
                                                                      dw_id_by_slug=dw_id_by_slug,
-                                                                     known_episode_slugs=set(known_episodes),
                                                                      since_episode=latest_final_episode,
                                                                      prev_max_values=prev_max_values,
                                                                      progress=progress,
@@ -154,31 +141,25 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
                 logger.warning(f"No season found for show {show.slug} with id {season_id}")
                 continue
 
-            for offset, (episode_identifier, dw_episode) in enumerate(ep_list):
-                if not is_published_final(dw_episode):
-                    request = {
-                        "resource_id": None,
-                        "slug": dw_episode.slug,
-                        "show_id": show.id,
-                        "show_slug": show.slug,
-                        "season_id": season.id,
-                        "episode_identifier": episode_identifier,
-                        "episode_index": current_index + offset,
-                        "status": dw_episode.publish_status,
-                    }
-                    monitor_requests[episode_identifier] = request
-
             try:
-                current_index = save_dw_episodes_per_season_asc(s,
-                                                                show=show,
-                                                                season=season,
-                                                                episodes=ep_map_asc[season_id],
-                                                                start_index=current_index)
+                current_index, saved_episodes = save_dw_episodes_per_season_asc(
+                    s,
+                    show=show,
+                    season=season,
+                    episodes=ep_map_asc[season_id],
+                    start_index=current_index,
+                    client=client,
+                    require_member_exclusive=require_member_exclusive,
+                )
             except Exception as e:
                 # rollback of the season has already occurred inside save_dw_episodes_per_season
                 # Re raise to allow scheduler to retry; caller expects retry to be scheduled
                 print(f"Exception: {e}")
                 raise e
+
+            # Announce the episodes whose status was resolved from the detail endpoint
+            # (the live/recent ones) and keep monitoring any that are still non-final.
+            _announce_new_episodes(s, show=show, saved_episodes=saved_episodes, monitor_requests=monitor_requests)
 
             # Update progress roughly based on completed seasons
             processed = current_index - 1
@@ -191,6 +172,38 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
         update_progress(progress, 100, _completion_message(total, len(monitor_requests)))
 
     print("fetch_new_episodes finished")
+
+
+def _announce_new_episodes(
+        s: Session,
+        *,
+        show: Show,
+        saved_episodes: list[SavedEpisode],
+        monitor_requests: dict,
+) -> None:
+    """Emit status-lifecycle events for freshly indexed live/recent episodes.
+
+    Only episodes whose status was resolved from the detail endpoint are announced;
+    the bulk final back catalog is saved silently, as before. Any episode that is
+    still non-final is (re)scheduled for monitoring, now with a real ``resource_id``.
+    """
+    for saved in saved_episodes:
+        if not saved.detail_resolved:
+            continue
+
+        queue_episode_status_events(
+            s,
+            episode=saved.episode,
+            show=show,
+            old_status=None,
+            new_status=saved.status,
+            was_created=True,
+        )
+
+        if saved.status is not EpisodePublishStatus.PUBLISHED_FINAL:
+            monitor_requests[saved.episode.episode_identifier] = (
+                _monitor_request_for_db_episode(show, saved.episode)
+            )
 
 
 def _monitor_request_for_db_episode(show: Show, episode: Episode) -> dict:

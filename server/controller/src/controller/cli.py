@@ -66,12 +66,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--resource-id", "--id", type=int, help="Resource id for the task (if required)")
     p_run.add_argument("--slug", help="Resource slug for the task (if supported by the worker)")
 
-    # Generic passthrough kwargs: name=value; may be repeated
+    # Generic passthrough kwargs: name=value; accepts several per flag and
+    # may be repeated (e.g. --arg slug=foo show_slug=bar --arg season_id=1)
     p_run.add_argument(
         "--arg",
-        action="append",
+        action="extend",
+        nargs="+",
         default=[],
-        help="Additional keyword arguments as name=value. Repeat for multiple.",
+        metavar="NAME=VALUE",
+        help="Additional keyword arguments as name=value. Pass several after one --arg and/or repeat the flag.",
     )
 
     return parser
