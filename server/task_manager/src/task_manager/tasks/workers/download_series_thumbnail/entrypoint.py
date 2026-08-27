@@ -21,5 +21,5 @@ async def download_series_thumbnail(*, resource_id: int, progress):  # progress 
 
     The saved file will be named 'series_thumbnail.jpg' in the target directory.
     """
-    with db_session():
-        await run_download_series_thumbnail(resource_id=resource_id, progress=progress)
+    with db_session() as s:
+        await run_download_series_thumbnail(s, resource_id=resource_id, progress=progress)

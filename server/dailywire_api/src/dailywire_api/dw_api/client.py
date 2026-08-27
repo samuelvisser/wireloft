@@ -224,8 +224,13 @@ class MiddlewareClient:
 
         try:
             payload = self._get(endpoint, params)
-        except MiddlewareAPIError as e:
-            # Usually thrown when there are no more episodes in the current season
+        except MiddlewareAPIError:
+            # A season without (further) episodes tends to answer with an error rather
+            # than an empty page, so a failing *initial* season request means "no
+            # episodes". A failing continuation request however would silently truncate
+            # the season, so those are propagated to the caller.
+            if isinstance(selector, ByNextPage):
+                raise
             return EpisodesPaginatedResult([], None, False)
 
         # Extract items
@@ -262,9 +267,16 @@ class MiddlewareClient:
             if not tokens:
                 raise MiddlewareAPIError("No valid access token in token store")
             access_token = tokens.access_token
-            self._headers['Authorization'] = f'Bearer {access_token}'
 
-        payload = self._get(endpoint, params)
+            # Temporarily set Authorization header, preserving any existing value
+            headers_backup = self._headers.copy()
+            try:
+                self._headers['Authorization'] = f'Bearer {access_token}'
+                payload = self._get(endpoint, params)
+            finally:
+                self._headers = headers_backup
+        else:
+            payload = self._get(endpoint, params)
 
         try:
             record = DwEpisodeDetailRecord.model_validate(payload)
@@ -275,41 +287,55 @@ class MiddlewareClient:
 
     def get_show_id_by_slug(self, show_slug: str) -> str:
         dw_show = self.get_show_page(show_slug)
-        return dw_show.id
+        return dw_show.dw_id
 
     def get_season_id_by_slugs(self, show_slug: str, season_slug: str) -> str:
         dw_show = self.get_show_page(show_slug)
         dw_season = next((s for s in dw_show.seasons if s.slug == season_slug), None)
         if dw_season is None:
             raise ValueError(f"Season '{season_slug}' not found in DW API for show '{show_slug}'")
-        return dw_season.id
+        return dw_season.dw_id
 
 
 
 
     # --------------- internals ---------------
-    def _get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        # Enforce request pacing according to configuration
-        _wait_before_request()
+    _TRANSIENT_HTTP_CODES = (429, 502, 503, 504)
+    _TRANSIENT_RETRIES = 2
+    _TRANSIENT_RETRY_DELAY_S = 2.0
 
+    def _get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         qs = urlencode(params or {})
         url = f"{self._base_url}/{endpoint}"
         if qs:
             url = f"{url}?{qs}"
-        req = Request(url, headers=self._headers, method='GET')
-        try:
-            with urlopen(req, timeout=self._req_timeout) as resp:
-                data = resp.read()
-        except HTTPError as e:
+
+        data: Optional[bytes] = None
+        for attempt in range(self._TRANSIENT_RETRIES + 1):
+            # Enforce request pacing according to configuration
+            _wait_before_request()
+
+            req = Request(url, headers=self._headers, method='GET')
             try:
-                err_body = e.read().decode('utf-8', errors='ignore')
-            except Exception:
-                err_body = ''
-            raise MiddlewareAPIError(f"HTTP error {e.code}: {err_body or e.reason}") from e
-        except URLError as e:
-            raise MiddlewareAPIError(f"Network error: {e.reason}") from e
-        except Exception as e:
-            raise MiddlewareAPIError(str(e)) from e
+                with urlopen(req, timeout=self._req_timeout) as resp:
+                    data = resp.read()
+                break
+            except HTTPError as e:
+                try:
+                    err_body = e.read().decode('utf-8', errors='ignore')
+                except Exception:
+                    err_body = ''
+                if e.code in self._TRANSIENT_HTTP_CODES and attempt < self._TRANSIENT_RETRIES:
+                    time.sleep(self._TRANSIENT_RETRY_DELAY_S * (attempt + 1))
+                    continue
+                raise MiddlewareAPIError(f"HTTP error {e.code}: {err_body or e.reason}") from e
+            except URLError as e:
+                if attempt < self._TRANSIENT_RETRIES:
+                    time.sleep(self._TRANSIENT_RETRY_DELAY_S * (attempt + 1))
+                    continue
+                raise MiddlewareAPIError(f"Network error: {e.reason}") from e
+            except Exception as e:
+                raise MiddlewareAPIError(str(e)) from e
 
         try:
             parsed = json.loads(data.decode('utf-8'))

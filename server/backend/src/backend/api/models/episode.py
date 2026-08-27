@@ -53,15 +53,20 @@ class _EpisodeAPIBaseOut(ResponseBase):
     # Fields in the episodes' table
     id: int
     show_id: int
+    season_id: int
     index: int
+    episode_identifier: str
     publish_status: Union[EpisodePublishStatus, str]
     went_live_date: Optional[datetime]
     published_date: Optional[datetime]
+    scheduled_date: Optional[datetime]
     redownloaded_date: Optional[datetime]
+    sharing_url: str
 
     # Fields in the media_items table
     title: str
     description: str
+    duration: float
     downloaded_date: Optional[datetime]
     uuid: str
     slug: str

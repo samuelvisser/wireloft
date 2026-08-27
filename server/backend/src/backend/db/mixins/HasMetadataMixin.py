@@ -31,6 +31,12 @@ class HasMetadataMixin:
         self.meta_items.append(m)
         return m
 
+    def get_meta(self, key: str) -> str | None:
+        for m in self.meta_items:
+            if m.key == key:
+                return m.value
+        return None
+
 def _on_append(parent, meta, initiator):
     meta.parent_table = parent.__class__.__tablename__
 

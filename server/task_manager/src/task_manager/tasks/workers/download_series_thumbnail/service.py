@@ -7,18 +7,10 @@ from sqlalchemy.orm import Session
 import requests
 
 from backend.db.models import SeriesDownloadProfile
-from task_manager.scheduler.registry import task
 from ._helpers import ensure_dir_from_template, pick_thumbnail_url
 
 
-@task(
-    key="download_series_thumbnail",
-    title="Download series thumbnail",
-    description="Downloads a series thumbnail image to the media profile output directory for the given download profile.",
-    allowed_resource_types=("download_profile_series",),
-    default_max_retries=5,
-    tracks_progress=False,
-)
+# Registered as a task in entrypoint.py; this service function expects an open session.
 async def run_download_series_thumbnail(s: Session, *, resource_id: int, progress):  # progress provided by executor
     """Given a DownloadProfileSeries id, download the show's thumbnail into the media output dir.
 

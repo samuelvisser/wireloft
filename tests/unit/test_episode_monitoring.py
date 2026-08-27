@@ -195,14 +195,15 @@ def test_mapper_does_not_reidentify_an_existing_non_final_episode():
     assert identifier_values["ep_id.latest_ep_num"] == 102
 
 
-def _episode_detail(slug: str):
+def _episode_detail(slug: str, episode_number: str = "103.00", *, status: str = "LIVE"):
     from dailywire_api.records import DwEpisodeDetailRecord
 
     return DwEpisodeDetailRecord(
         **_episode_record(
             slug,
-            "103.00",
+            episode_number,
             datetime(2026, 7, 22, 13, tzinfo=timezone.utc),
+            status=status,
         ).model_dump(mode="python", by_alias=False),
         audio_url="https://example.test/audio.mp3",
         video_url="https://example.test/video.m3u8",
@@ -213,19 +214,10 @@ def _episode_detail(slug: str):
     )
 
 
-def test_monitor_creates_updates_and_completes_one_episode(monkeypatch):
-    from backend.db import Base
-    from backend.db.models import Episode, Season, Show
-    from backend.types.episode_types import EpisodePublishStatus
+def _make_show_and_season(session):
+    from backend.db.models import Season, Show
     from backend.types.show_types import EpisodeIdentifier, ShowType
-    from task_manager.tasks.workers.monitor_episode_worker import service
-    from task_manager.tasks.workers.monitor_episode_worker.scheduling import (
-        MONITOR_COMPLETED_EVENT,
-    )
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    session = Session(engine)
     show = Show(
         uuid="show-uuid",
         slug="test-show",
@@ -241,8 +233,44 @@ def test_monitor_creates_updates_and_completes_one_episode(monkeypatch):
     season = Season(show=show, index=1, slug="season-1", name="One")
     session.add_all([show, season])
     session.commit()
+    return show, season
+
+
+def test_monitor_updates_and_completes_one_episode(monkeypatch):
+    from backend.db import Base
+    from backend.db.models import Episode
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.helpers.episodes import events as episode_events
+    from task_manager.tasks.helpers.episodes.save import upsert_episode
+    from task_manager.tasks.workers.monitor_episode_worker import service
+    from task_manager.tasks.workers.monitor_episode_worker.scheduling import (
+        MONITOR_COMPLETED_EVENT,
+    )
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    show, season = _make_show_and_season(session)
 
     detail = _episode_detail("live-episode")
+
+    # fetch_new_episodes indexes the episode before any monitor runs
+    upsert_episode(
+        session,
+        show=show,
+        season=season,
+        ep=_episode_record(
+            detail.slug,
+            "103.00",
+            datetime(2026, 7, 22, 13, tzinfo=timezone.utc),
+        ).model_copy(
+            update={"publish_status": EpisodePublishStatus.SCHEDULED.value},
+            deep=True,
+        ),
+        index_value=1,
+        ep_id="ep.103",
+    )
+    session.commit()
 
     class FakeClient:
         def get_episode_details(self, slug, *, require_member_exclusive):
@@ -264,6 +292,7 @@ def test_monitor_creates_updates_and_completes_one_episode(monkeypatch):
         lambda episode: next(statuses),
     )
     monkeypatch.setattr(service, "queue_event", queued)
+    monkeypatch.setattr(episode_events, "queue_event", queued)
 
     result = asyncio.run(
         service.run_monitor_episode_worker(
@@ -282,14 +311,10 @@ def test_monitor_creates_updates_and_completes_one_episode(monkeypatch):
     assert episode.publish_status == EpisodePublishStatus.LIVE.value
     assert episode.episode_identifier == "ep.103"
     assert episode.index == 1
-    assert any(
-        call.args[1] == "episode.added"
-        for call in queued.call_args_list
-    )
-    assert not any(
-        call.args[1] == MONITOR_COMPLETED_EVENT
-        for call in queued.call_args_list
-    )
+    event_names = [call.args[1] for call in queued.call_args_list]
+    assert "episode.status_updated" in event_names
+    assert "episode.added" not in event_names
+    assert MONITOR_COMPLETED_EVENT not in event_names
 
     queued.reset_mock()
     result = asyncio.run(
@@ -317,20 +342,39 @@ def test_monitor_creates_updates_and_completes_one_episode(monkeypatch):
     engine.dispose()
 
 
-def test_fetch_emits_monitor_request_without_saving_non_final(monkeypatch):
-    from dailywire_api.dw_api.client import EpisodesPaginatedResult
+def test_monitor_refuses_unindexed_episode(monkeypatch):
+    import pytest
+
     from backend.db import Base
-    from backend.db.models import Episode, Season, Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
-    from task_manager.tasks.helpers.episodes.save import upsert_episode
-    from task_manager.tasks.workers.fetch_new_episodes import service
-    from task_manager.tasks.workers.monitor_episode_worker.scheduling import (
-        MONITOR_REQUESTED_EVENT,
-    )
+    from task_manager.tasks.workers.monitor_episode_worker import service
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
+    show, season = _make_show_and_season(session)
+
+    with pytest.raises(ValueError, match="not found in database"):
+        asyncio.run(
+            service.run_monitor_episode_worker(
+                session,
+                episode_slug="never-indexed",
+                show_slug=show.slug,
+                season_id=season.id,
+                episode_identifier="ep.999",
+                episode_index=1,
+            )
+        )
+
+    session.close()
+    engine.dispose()
+
+
+def _fetch_test_fixture(session):
+    """A show with one final cursor episode (ep.100) already indexed."""
+    from backend.db.models import Season, Show
+    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from task_manager.tasks.helpers.episodes.save import upsert_episode
+
     show = Show(
         uuid="fetch-show-uuid",
         slug="fetch-test-show",
@@ -366,12 +410,11 @@ def test_fetch_emits_monitor_request_without_saving_non_final(monkeypatch):
     )
     show.set_meta("ep_id.latest_ep_num", "100")
     session.commit()
+    return show, season, cursor
 
-    live = _episode_record(
-        "live-episode",
-        "101.00",
-        datetime(2026, 7, 23, 10, tzinfo=timezone.utc),
-    )
+
+def _fetch_fakes(season, remote_episodes, detail_by_slug):
+    from dailywire_api.dw_api.client import EpisodesPaginatedResult
 
     class FakeDeviceAuthClient:
         def get_token(self):
@@ -392,12 +435,45 @@ def test_fetch_emits_monitor_request_without_saving_non_final(monkeypatch):
             )
 
         def get_episodes_paginated(self, show_slug, selector):
-            return EpisodesPaginatedResult([live, cursor], None, False)
+            return EpisodesPaginatedResult(list(remote_episodes), None, False)
 
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            assert require_member_exclusive is False
+            return detail_by_slug[slug]
+
+    return FakeDeviceAuthClient, FakeClient
+
+
+def test_fetch_saves_non_final_episode_and_requests_monitor(monkeypatch):
+    from backend.db import Base
+    from backend.db.models import Episode
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.helpers.episodes import events as episode_events
+    from task_manager.tasks.workers.fetch_new_episodes import service
+    from task_manager.tasks.workers.monitor_episode_worker.scheduling import (
+        MONITOR_REQUESTED_EVENT,
+    )
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    show, season, cursor = _fetch_test_fixture(session)
+
+    live = _episode_record(
+        "live-episode",
+        "101.00",
+        datetime(2026, 7, 23, 10, tzinfo=timezone.utc),
+    )
+    live_detail = _episode_detail(live.slug, "101.00")
+
+    fake_auth, fake_client = _fetch_fakes(
+        season, [live, cursor], {live.slug: live_detail}
+    )
     queued = Mock()
-    monkeypatch.setattr(service, "DeviceAuthClient", FakeDeviceAuthClient)
-    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+    monkeypatch.setattr(service, "DeviceAuthClient", fake_auth)
+    monkeypatch.setattr(service, "MiddlewareClient", fake_client)
     monkeypatch.setattr(service, "queue_event", queued)
+    monkeypatch.setattr(episode_events, "queue_event", queued)
 
     asyncio.run(
         service.run_fetch_new_episodes(
@@ -406,12 +482,20 @@ def test_fetch_emits_monitor_request_without_saving_non_final(monkeypatch):
         )
     )
 
-    assert (
+    # The non-final episode is indexed immediately, with its real remote status
+    episode = (
         session.query(Episode)
         .filter(Episode.slug == live.slug)
-        .one_or_none()
-        is None
+        .one()
     )
+    assert episode.publish_status == EpisodePublishStatus.LIVE.value
+    assert episode.episode_identifier == "ep.101"
+    assert episode.index == 2
+    assert episode.season_id == season.id
+
+    event_names = [call.args[1] for call in queued.call_args_list]
+    assert "episode.added" in event_names
+
     monitor_calls = [
         call
         for call in queued.call_args_list
@@ -419,11 +503,81 @@ def test_fetch_emits_monitor_request_without_saving_non_final(monkeypatch):
     ]
     assert len(monitor_calls) == 1
     payload = monitor_calls[0].args[2]
+    assert payload["resource_id"] == episode.id
     assert payload["slug"] == live.slug
     assert payload["show_slug"] == show.slug
     assert payload["season_id"] == season.id
     assert payload["episode_identifier"] == "ep.101"
     assert payload["episode_index"] == 2
+
+    assert show.get_meta("ep_id.latest_ep_num") == "101"
+
+    session.close()
+    engine.dispose()
+
+
+def test_fetch_rerun_requeues_monitor_without_reidentifying(monkeypatch):
+    from backend.db import Base
+    from backend.db.models import Episode
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.helpers.episodes import events as episode_events
+    from task_manager.tasks.workers.fetch_new_episodes import service
+    from task_manager.tasks.workers.monitor_episode_worker.scheduling import (
+        MONITOR_REQUESTED_EVENT,
+    )
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    show, season, cursor = _fetch_test_fixture(session)
+
+    live = _episode_record(
+        "live-episode",
+        "101.00",
+        datetime(2026, 7, 23, 10, tzinfo=timezone.utc),
+    )
+    live_detail = _episode_detail(live.slug, "101.00")
+
+    fake_auth, fake_client = _fetch_fakes(
+        season, [live, cursor], {live.slug: live_detail}
+    )
+    queued = Mock()
+    monkeypatch.setattr(service, "DeviceAuthClient", fake_auth)
+    monkeypatch.setattr(service, "MiddlewareClient", fake_client)
+    monkeypatch.setattr(service, "queue_event", queued)
+    monkeypatch.setattr(episode_events, "queue_event", queued)
+
+    asyncio.run(service.run_fetch_new_episodes(session, show_slug=show.slug))
+    queued.reset_mock()
+
+    # Second run: same remote state. The still-live episode must keep its row,
+    # identifier and index, and its monitor must be requested again (monitor jobs
+    # are in-memory only, so a fetch after a restart has to restore them).
+    asyncio.run(service.run_fetch_new_episodes(session, show_slug=show.slug))
+
+    episodes = (
+        session.query(Episode)
+        .filter(Episode.show_id == show.id)
+        .order_by(Episode.index)
+        .all()
+    )
+    assert [(e.episode_identifier, e.slug) for e in episodes] == [
+        ("ep.100", cursor.slug),
+        ("ep.101", live.slug),
+    ]
+    assert episodes[1].publish_status == EpisodePublishStatus.LIVE.value
+    assert show.get_meta("ep_id.latest_ep_num") == "101"
+    assert show.get_meta("ep_id.latest_aux_num") == "0"
+
+    monitor_calls = [
+        call
+        for call in queued.call_args_list
+        if call.args[1] == MONITOR_REQUESTED_EVENT
+    ]
+    assert len(monitor_calls) == 1
+    payload = monitor_calls[0].args[2]
+    assert payload["resource_id"] == episodes[1].id
+    assert payload["episode_identifier"] == "ep.101"
 
     session.close()
     engine.dispose()

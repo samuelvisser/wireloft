@@ -7,19 +7,11 @@ from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason
 from dailywire_api.types.user_info import DwMembershipLevel
 from controller.m3u8 import get_vod_info
 from controller.m3u8.get_vod_info import _fmt_hhmmss
-from task_manager.scheduler.registry import task
 from ...helpers.episodes.status import get_publish_status_from_dw_detail, is_published_final
 from ...helpers.shows.get import get_show_from_params
 
 
-@task(
-    key="debug_ep_details",
-    title="Debug episode details",
-    description="Debugs episode details for the given show.",
-    allowed_resource_types=("shows",),
-    default_max_retries=5,
-    tracks_progress=False,
-)
+# Registered as a task in entrypoint.py; this service function expects an open session.
 async def run_debug_ep_details(s: Session, *, show_slug: str, progress):  # progress provided by executor
     print("Starting debug_ep_details")
 

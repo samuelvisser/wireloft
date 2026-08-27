@@ -27,5 +27,5 @@ def get_season_from_list_by_id(season_list: list[Season], season_id: int) -> Opt
     return None
 
 
-def get_latest_ep_index(s: Session, *, show: Show) -> int:
+def get_latest_ep_index(s: Session, *, show: Show) -> Optional[int]:
     return s.execute(select(Episode.index).where(Episode.show_id == show.id).order_by(Episode.index.desc()).limit(1)).scalar()

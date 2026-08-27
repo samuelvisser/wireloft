@@ -45,6 +45,9 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
         if membership_plan == WlDwMembershipLevel.WL_ANY.value:
             membership_plan = WlDwMembershipLevel.FREE.value
 
+        # Member-exclusive episode details need an authorised request
+        require_member_exclusive = membership_plan != WlDwMembershipLevel.FREE.value
+
         # Get the last episode that is fully published
         stmt = (
             select(Episode)
@@ -54,6 +57,23 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
             .limit(1)
         )
         latest_final_episode: Optional[Episode] = s.execute(stmt).scalar_one_or_none()
+
+        # Episodes already indexed must never be re-identified by the mapper
+        known_episode_slugs: set[str] = set(
+            s.execute(select(Episode.slug).where(Episode.show_id == show.id)).scalars()
+        )
+
+        # Monitor jobs are in-memory only, so (re)request a monitor for every episode
+        # that is already indexed but not final yet — even when this run finds nothing new.
+        non_final_stmt = (
+            select(Episode)
+            .where(Episode.show_id == show.id)
+            .where(Episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value)
+        )
+        monitor_requests: dict[str, dict] = {
+            ep.episode_identifier: _monitor_request_for_db_episode(show, ep)
+            for ep in s.execute(non_final_stmt).scalars()
+        }
 
         # Fetch remote seasons
         last_known_season: Optional[Season] = latest_final_episode.season if latest_final_episode is not None else None
@@ -87,7 +107,7 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
         upper = int(65 + (x - 1) * (95 - 65) / (5 - 1))
 
         # Build slug→dw_id mapping from fresh API data
-        dw_id_by_slug = {s.slug: s.dw_id for s in all_dw_seasons}
+        dw_id_by_slug = {dw_season.slug: dw_season.dw_id for dw_season in all_dw_seasons}
 
         # Find new episodes
         ep_map_asc, identifier_max_values = get_dw_episodes_since_ep(client,
@@ -97,6 +117,7 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
                                                                      dw_id_by_slug=dw_id_by_slug,
                                                                      since_episode=latest_final_episode,
                                                                      prev_max_values=prev_max_values,
+                                                                     known_episode_slugs=known_episode_slugs,
                                                                      progress=progress,
                                                                      progress_bounds=ProgressBounds(1, upper),
                                                                      order=RecordOrder.ASC)
@@ -146,7 +167,7 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
                     s,
                     show=show,
                     season=season,
-                    episodes=ep_map_asc[season_id],
+                    episodes=ep_list,
                     start_index=current_index,
                     client=client,
                     require_member_exclusive=require_member_exclusive,
@@ -162,7 +183,7 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
             _announce_new_episodes(s, show=show, saved_episodes=saved_episodes, monitor_requests=monitor_requests)
 
             # Update progress roughly based on completed seasons
-            processed = current_index - 1
+            processed = current_index - 1 - latest_episode_index
             frac = max(0.0, min(1.0, processed / total)) if total > 0 else 1.0
             scaled_pct = upper + min(99 - upper + 1, int(frac * (99 - upper)))
             update_progress(progress, scaled_pct,f"Indexed {processed}/{total} episodes (season {season.index}: {season.name})")

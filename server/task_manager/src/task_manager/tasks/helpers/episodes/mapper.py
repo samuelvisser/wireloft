@@ -3,7 +3,6 @@ from __future__ import annotations
 from task_manager.tasks.types.general import RecordOrder
 
 type EpisodeMapTuple = OrderedDict[int, List[EpisodeWithIdentifier]]
-type SinceEpisodeTuple = Tuple[IdentifierMaxValues, Episode]
 
 from typing import Tuple, Optional, Sequence, List, Any, OrderedDict
 
@@ -56,28 +55,34 @@ def get_dw_episodes_since_ep(client: MiddlewareClient, *,
                              dw_id_by_slug: dict[str, str],
                              since_episode: Optional[Episode],
                              prev_max_values: IdentifierMaxValues,
+                             known_episode_slugs: Optional[set[str]] = None,
                              progress: Optional[Any] = None,
                              progress_bounds: ProgressBounds = ProgressBounds(1, 100),
                              order: RecordOrder) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
     """
     Fetch episodes strictly *after* the given final episode, across *all* remote seasons that follow it.
 
+    ``known_episode_slugs`` holds the slugs of episodes that are already indexed in the
+    database. Those are excluded from the result so an already-identified episode is
+    never assigned a fresh identifier (which, with the identifier max values already
+    advanced past it, would wrongly re-identify it as auxiliary content).
+
     Returns a mapping in descending order
     """
     if since_episode is not None:
         index = next((i for i, s in enumerate(seasons) if s.slug == since_episode.season.slug), -1) + 1
         seasons_to_scan = seasons[: index]
-        since_episode_tuple = (prev_max_values, since_episode)
     else:
         seasons_to_scan = seasons
-        since_episode_tuple = None
 
     return _scan_seasons(client,
                          show=show,
                          membership_plan=membership_plan,
                          seasons=seasons_to_scan,
                          dw_id_by_slug=dw_id_by_slug,
-                         since_episode_tuple=since_episode_tuple,
+                         since_episode=since_episode,
+                         prev_max_values=prev_max_values,
+                         known_episode_slugs=known_episode_slugs,
                          bounds=progress_bounds,
                          progress=progress,
                          order=order)
@@ -88,7 +93,9 @@ def _scan_seasons(client: MiddlewareClient, *,
                   membership_plan: str,
                   seasons: Sequence[Season],
                   dw_id_by_slug: dict[str, str],
-                  since_episode_tuple: Optional[SinceEpisodeTuple] = None,
+                  since_episode: Optional[Episode] = None,
+                  prev_max_values: Optional[IdentifierMaxValues] = None,
+                  known_episode_slugs: Optional[set[str]] = None,
                   bounds: ProgressBounds,
                   progress: Optional[Any],
                   order: RecordOrder) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
@@ -96,7 +103,8 @@ def _scan_seasons(client: MiddlewareClient, *,
     Core scanner.
     """
     ep_map: EpisodeMapTuple = OrderedDict()
-    current_values: IdentifierMaxValues = since_episode_tuple[0] if since_episode_tuple is not None else {}
+    current_values: IdentifierMaxValues = dict(prev_max_values) if prev_max_values else {}
+    known_episode_slugs = known_episode_slugs or set()
 
     seasons_asc = sorted(seasons, key=lambda s: s.index)
     season_count = len(seasons_asc)
@@ -116,13 +124,19 @@ def _scan_seasons(client: MiddlewareClient, *,
         eps = list(dict.fromkeys(eps))  # remove duplicates
 
         # The API doesn't reliably honor CreatedAt_ASC, so enforce oldest -> newest ourselves.
-        eps.sort(key=lambda rec: (rec.published_date, rec.episode_number))
+        eps.sort(key=lambda rec: (rec.published_date, rec.ep_number or 0, rec.ep_segment))
 
         # Remove episodes before since episode
-        if since_episode_tuple is not None:
-            index = next((i for i, rec in enumerate(eps) if rec.slug == since_episode_tuple[1].slug), None)
+        if since_episode is not None:
+            index = next((i for i, rec in enumerate(eps) if rec.slug == since_episode.slug), None)
             if index is not None:
                 eps: list[DwEpisodeRecord] = eps[index + 1:]
+
+        # Episodes already indexed in the database keep the identifier they were
+        # given back then; re-identifying them here (with the max values already
+        # advanced past them) would wrongly classify them as auxiliary content.
+        if known_episode_slugs:
+            eps = [rec for rec in eps if rec.slug not in known_episode_slugs]
 
         identifier: EpisodeIdentifier = EpisodeIdentifier(show.episode_identifier)
         eps_with_id, current_values = identify_episodes_in_season(identifier, eps, current_values, season=season)

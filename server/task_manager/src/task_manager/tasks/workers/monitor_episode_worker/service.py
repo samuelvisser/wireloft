@@ -67,8 +67,11 @@ async def run_monitor_episode_worker(
         )
 
     client = MiddlewareClient()
+    # The database slug is the freshest one we know: Daily Wire may change an
+    # episode's slug between statuses, and the slug baked into the scheduled job's
+    # kwargs goes stale, while the row is refreshed on every successful poll.
     dw_episode = client.get_episode_details(
-        episode_slug or db_episode.slug,
+        db_episode.slug,
         require_member_exclusive=(
             show.membership_level != DwMembershipLevel.FREE.value
         ),

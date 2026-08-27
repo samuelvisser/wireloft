@@ -11,7 +11,7 @@ from task_manager.scheduler.registry import task
     key="debug_ep_details",
     title="Debug episode details",
     description="Debugs episode details for the given show.",
-    allowed_resource_types=("shows",),
+    allowed_resource_types=("show",),
     default_max_retries=5,
     tracks_progress=False,
 )

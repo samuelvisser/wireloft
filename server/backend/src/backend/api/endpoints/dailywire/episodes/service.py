@@ -40,11 +40,10 @@ def get_episodes_list_by_season(show_slug: str, season_dw_id: str, *,
         membership_plan=membership_plan,
         page_size=page_size,
     ))
-    if not has_next:
-        return items
-    while has_next:
-        episode_list.extend(items)
+    episode_list.extend(items)
+    while has_next and next_page_url:
         items, next_page_url, has_next = client.get_episodes_paginated(show_slug, ByNextPage(next_page_url=next_page_url))
+        episode_list.extend(items)
 
     # Dailywire tends to return duplicate episodes, so we remove duplicates here
     episode_list = list(dict.fromkeys(episode_list))

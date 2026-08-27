@@ -129,7 +129,7 @@ class DwShowRecord(BaseRecord):
             for tab in data.get("tabs"):
                 for comp in tab.get("components", []) or []:
                     items = comp.get("items", [])
-                    first_type = items[0].get("type") if items[0] else None
+                    first_type = items[0].get("type") if items else None
                     if first_type != "ShowEpisode":
                         continue
 
