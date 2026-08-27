@@ -208,7 +208,7 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         s.flush()
         return DownloadAction(media_download_id=existing.id, needs_trigger=True)
 
-    if existing.download_status in _COMPLETED_STATUSES and _wants_redownload(profile, episode):
+    if existing.download_status in _COMPLETED_STATUSES and _wants_redownload(profile, episode, existing):
         _reset_download(existing)
         s.flush()
         return DownloadAction(media_download_id=existing.id, needs_trigger=True, is_redownload=True)
@@ -217,12 +217,21 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
     return DownloadAction(media_download_id=existing.id, needs_trigger=False)
 
 
-def _wants_redownload(profile: DownloadProfileBase, episode: Episode) -> bool:
+def _wants_redownload(profile: DownloadProfileBase, episode: Episode, existing: EpisodeMediaDownload) -> bool:
+    """Whether an already-downloaded file needs replacing with the final version.
+
+    Only true for a podcast profile that both downloads countdown-era episodes
+    *and* wants them replaced once final, and only when the file we actually
+    have on disk was fetched while the episode was still in its countdown
+    phase: a file downloaded after the episode was already final never needs
+    redownloading, no matter how "final" it looks now.
+    """
     return (
         isinstance(profile, PodcastDownloadProfile)
+        and profile.download_with_countdown
         and profile.redownload_final
         and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
-        and episode.redownloaded_date is None
+        and existing.downloaded_publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value
     )
 
 

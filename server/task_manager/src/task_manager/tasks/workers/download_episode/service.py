@@ -91,6 +91,10 @@ async def run_download_episode(s: Session, *, media_download_id: int, is_redownl
     download.format_downloaded = result.format_downloaded
     download.file_path = result.file_path
     download.finished_at = datetime.now(timezone.utc)
+    # Records what version was actually fetched, so a Download Profile can later
+    # tell whether this file still needs replacing (e.g. still countdown-era)
+    # instead of redownloading on every check.
+    download.downloaded_publish_status = episode.publish_status
     if episode.downloaded_date is None:
         episode.downloaded_date = datetime.now(timezone.utc)
     if is_redownload:

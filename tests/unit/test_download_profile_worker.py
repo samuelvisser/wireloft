@@ -261,11 +261,29 @@ def test_ensure_episode_download_adopts_manual_download(db_session):
     assert manual.download_profile_id == profile.id
 
 
-def test_ensure_episode_download_redownload_final(db_session):
-    from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
+def _make_completed_download(db_session, episode, lmp, profile, *, downloaded_publish_status):
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadStatus
     from backend.types.media_types import MediaType
+
+    existing = EpisodeMediaDownload(
+        type=MediaType.EPISODE.value,
+        media_item_id=episode.id,
+        local_media_profile_id=lmp.id,
+        download_profile_id=profile.id,
+        download_status=MediaDownloadStatus.DOWNLOADED.value,
+        downloaded_publish_status=downloaded_publish_status,
+        file_path="/downloads/existing.m4a",
+        progress=100,
+    )
+    db_session.add(existing)
+    db_session.commit()
+    return existing
+
+
+def test_ensure_episode_download_redownload_final(db_session):
+    from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
+    from backend.types.download_profile_types import MediaDownloadStatus
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
@@ -274,17 +292,9 @@ def test_ensure_episode_download_redownload_final(db_session):
     episode = _make_episode(db_session, show, season, slug="ep", ep_id="ep.1", status="published_final", published_at=now, index=1)
     profile = _make_podcast_profile(db_session, show, lmp, download_with_countdown=True, redownload_final=True)
 
-    existing = EpisodeMediaDownload(
-        type=MediaType.EPISODE.value,
-        media_item_id=episode.id,
-        local_media_profile_id=lmp.id,
-        download_profile_id=profile.id,
-        download_status=MediaDownloadStatus.DOWNLOADED.value,
-        file_path="/downloads/countdown-era.m4a",
-        progress=100,
-    )
-    db_session.add(existing)
-    db_session.commit()
+    # The file on disk was actually fetched while still countdown-era: the only
+    # case that genuinely needs replacing.
+    existing = _make_completed_download(db_session, episode, lmp, profile, downloaded_publish_status="published_with_countdown")
 
     action = ensure_episode_download(db_session, profile, episode)
     db_session.commit()
@@ -292,10 +302,52 @@ def test_ensure_episode_download_redownload_final(db_session):
     assert action.is_redownload is True
     assert existing.download_status == MediaDownloadStatus.PENDING.value
 
-    # Once the episode is marked as redownloaded, it must not be re-armed again
-    episode.redownloaded_date = now
+    # Once the redownload actually completes, downloaded_publish_status reflects
+    # the final version fetched, so it must never be re-armed again.
     existing.download_status = MediaDownloadStatus.REDOWNLOADED.value
+    existing.downloaded_publish_status = "published_final"
     db_session.commit()
+
+    action = ensure_episode_download(db_session, profile, episode)
+    assert action.needs_trigger is False
+
+
+def test_ensure_episode_download_no_redownload_when_already_downloaded_final(db_session):
+    """The file we have was already fetched as the final version (e.g. countdown
+    downloading was off, or DW had already gone final by the time we grabbed
+    it): there is nothing to replace, regardless of redownload_final."""
+    from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    episode = _make_episode(db_session, show, season, slug="ep", ep_id="ep.1", status="published_final", published_at=now, index=1)
+    profile = _make_podcast_profile(db_session, show, lmp, download_with_countdown=True, redownload_final=True)
+
+    _make_completed_download(db_session, episode, lmp, profile, downloaded_publish_status="published_final")
+
+    action = ensure_episode_download(db_session, profile, episode)
+    assert action.needs_trigger is False
+
+
+def test_ensure_episode_download_no_redownload_when_countdown_downloading_disabled(db_session):
+    """A profile that never downloads countdown episodes has nothing to replace
+    later: the only version it ever fetches is already final."""
+    from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    episode = _make_episode(db_session, show, season, slug="ep", ep_id="ep.1", status="published_final", published_at=now, index=1)
+    # redownload_final left True (as if toggled on before countdown downloading
+    # was turned back off) to prove download_with_countdown alone gates this.
+    profile = _make_podcast_profile(db_session, show, lmp, download_with_countdown=False, redownload_final=True)
+
+    # Even a row that (implausibly) recorded a countdown-era fetch must not be
+    # redownloaded once the profile no longer wants countdown episodes at all.
+    _make_completed_download(db_session, episode, lmp, profile, downloaded_publish_status="published_with_countdown")
 
     action = ensure_episode_download(db_session, profile, episode)
     assert action.needs_trigger is False
