@@ -281,18 +281,8 @@ requires-dist = [
 
 [[package]]
 name = "dailywire-downloader"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "server/dailywire_downloader" }
-dependencies = [
-    { name = "pyyaml" },
-    { name = "yt-dlp" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "yt-dlp", git = "https://github.com/yt-dlp/yt-dlp.git?rev=311bb3b" },
-]
 
 [[package]]
 name = "fastapi"
@@ -812,8 +802,3 @@ dev = [
     { name = "pytest", specifier = ">=8.4,<9" },
     { name = "pytest-socket", specifier = ">=0.7,<1" },
 ]
-
-[[package]]
-name = "yt-dlp"
-version = "2024.10.22"
-source = { git = "https://github.com/yt-dlp/yt-dlp.git?rev=311bb3b#311bb3b02a3425ef7811866371ebb5a6126be95e" }

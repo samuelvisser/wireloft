@@ -1,13 +1,10 @@
 [project]
 name = "dailywire-downloader"
-version = "0.1.0"
-description = "DailyWire show downloader built on yt-dlp"
+version = "1.0.0"
+description = "Standalone HLS / direct-file media downloader used by Wireloft (no yt-dlp)"
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
-dependencies = [
-  "PyYAML>=6.0",
-  "yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git@311bb3b",
-]
+dependencies = []
 
 [project.scripts]
 dailywire-downloader = "dailywire_downloader.__main__:main"

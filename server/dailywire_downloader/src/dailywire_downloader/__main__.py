@@ -1,70 +1,80 @@
-"""Main entry point for DailyWire Downloader when run as a module."""
+"""Small CLI for probing and downloading media URLs by hand.
 
-import os
-import sys
+Examples:
+    dailywire-downloader probe "https://stream.mux.com/<id>.m3u8?token=..."
+    dailywire-downloader download "<rendition or file url>" out.ts
+"""
+
+from __future__ import annotations
+
 import argparse
-import logging
-from dailywire_downloader import __version__
+import sys
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-logger = logging.getLogger(__name__)
+from . import DownloadError, MediaKind, __version__, download_file, download_hls, probe
 
 
-def parse_args():
-    current_dir = os.getcwd()
-    default_config = os.path.join(current_dir, "config", "config.yml")
-    default_cookies = os.path.join(current_dir, "config", "cookies.txt")
-    default_download_dir = os.path.join(current_dir, "downloads")
+def _print_progress(p) -> None:
+    if p.segments_total:
+        print(f"\r{p.segments_done}/{p.segments_total} segments, {p.bytes_downloaded // 1024} KiB", end="", flush=True)
+    elif p.total_bytes:
+        print(f"\r{p.bytes_downloaded}/{p.total_bytes} bytes", end="", flush=True)
+    else:
+        print(f"\r{p.bytes_downloaded} bytes", end="", flush=True)
 
-    """Parse command-line arguments."""
+
+def _cmd_probe(args: argparse.Namespace) -> int:
+    info = probe(args.url)
+    print(f"kind: {info.kind.value}")
+    if info.kind is MediaKind.HLS_MASTER:
+        for r in info.renditions:
+            print(f"  {r.resolution or '?'}  bandwidth={r.bandwidth or '?'}  codecs={r.codecs or '?'}")
+            print(f"    {r.url}")
+    else:
+        print(f"  content_type: {info.content_type}")
+        print(f"  content_length: {info.content_length}")
+    print(f"suggested extension: .{info.suggested_extension}")
+    return 0
+
+
+def _cmd_download(args: argparse.Namespace) -> int:
+    info = probe(args.url)
+    if info.kind is MediaKind.HLS_MASTER:
+        print("URL is a master playlist; pick a rendition URL from `probe` output", file=sys.stderr)
+        return 2
+
+    if info.kind is MediaKind.HLS_MEDIA:
+        result = download_hls(args.url, args.dest, progress=_print_progress)
+    else:
+        result = download_file(args.url, args.dest, progress=_print_progress)
+
+    print(f"\nsaved {result.bytes_downloaded} bytes to {result.path}")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Download DailyWire shows using your account credentials."
+        prog="dailywire-downloader",
+        description="Probe and download HLS renditions or direct media files.",
     )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"DailyWire Downloader v{__version__}"
-    )
-    parser.add_argument(
-        "--config", 
-        dest="config_file",
-        help="Path to the configuration file (default: $(pwd)/config/config.yml or $WL_CONFIG_FILE env var)",
-        default = os.environ.get("WL_CONFIG_FILE", default_config)
-    )
-    parser.add_argument(
-        "--cookies", 
-        dest="cookies_file",
-        help="Path to the cookies file (default: $(pwd)/config/cookies.txt or $WL_COOKIES_FILE env var)",
-        default = os.environ.get("WL_COOKIES_FILE", default_cookies)
-    )
-    parser.add_argument(
-        "--download-dir",
-        dest="download_dir",
-        help="Path to the download dir (default: $(pwd)/downloads or $WL_DOWNLOAD_DIR env var)",
-        default = os.environ.get("WL_DOWNLOAD_DIR", default_download_dir)
-    )
-    return parser.parse_args()
+    parser.add_argument("--version", action="version", version=f"dailywire-downloader v{__version__}")
+    sub = parser.add_subparsers(dest="command", required=True)
 
-def main():
-    """Entry point for the dailywire-download command."""
-    args = parse_args()
+    p_probe = sub.add_parser("probe", help="Show what a media URL offers")
+    p_probe.add_argument("url")
+    p_probe.set_defaults(func=_cmd_probe)
+
+    p_dl = sub.add_parser("download", help="Download a rendition/media URL to a file")
+    p_dl.add_argument("url")
+    p_dl.add_argument("dest")
+    p_dl.set_defaults(func=_cmd_download)
+
+    args = parser.parse_args(argv)
     try:
-        # Lazy import to avoid importing fcntl on Windows when just showing --help
-        from dailywire_downloader import download
-        download.download_shows(config_file=args.config_file, cookies_file=args.cookies_file, download_dir=args.download_dir)
-        return 0
-    except SystemExit:
-        # argparse --help triggers SystemExit; re-raise to allow proper exit code/behavior
-        raise
-    except Exception as e:
-        logger.error(f"Fatal Error: {e}")
+        return args.func(args)
+    except DownloadError as e:
+        print(f"\nERROR: {e}", file=sys.stderr)
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
