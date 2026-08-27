@@ -79,7 +79,7 @@ async def run_download_episode(s: Session, *, media_download_id: int, is_redownl
         except Exception as e:
             s.rollback()
             download.download_status = MediaDownloadStatus.ERROR.value
-            download.error_message = str(e)[:1000]
+            download.error_message = _truncate_message(str(e))
             download.finished_at = datetime.now(timezone.utc)
             s.commit()
             raise
@@ -253,6 +253,18 @@ def _download_and_remux_to_mp4(source_url: str, dest_path: str, *, row_progress:
         bytes_downloaded=ts_result.bytes_downloaded,
         segments_downloaded=ts_result.segments_downloaded,
     )
+
+
+def _truncate_message(message: str, limit: int = 1000) -> str:
+    """Cap a stored error message, keeping its *end* rather than its start.
+
+    Errors built from a diagnostic tail (e.g. ffmpeg's own last output lines)
+    put the actually useful part at the end; a plain head slice (``msg[:limit]``)
+    would just as easily cut that off and keep only a generic prefix instead.
+    """
+    if len(message) <= limit:
+        return message
+    return "…" + message[-(limit - 1):]
 
 
 def _remove_quietly(path: str) -> None:

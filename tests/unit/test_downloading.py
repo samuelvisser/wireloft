@@ -356,6 +356,47 @@ def test_remux_to_mp4_error_uses_tail_lines_not_a_raw_character_slice(monkeypatc
     assert "configuration line 0 " not in str(exc_info.value)
 
 
+def test_remux_to_mp4_strips_ffmpeg_banner_even_when_output_is_short(monkeypatch, tmp_path):
+    """The actual failure reported: ffmpeg's own banner (version, "built with",
+    the huge "configuration:" line, lib version lines) is short enough in total
+    that a plain last-N-lines tail still included it wholesale, burying the one
+    real diagnostic line under noise. The banner must be dropped outright, not
+    just hoped to fall outside the tail window."""
+    from dailywire_downloader import ffmpeg as ffmpeg_module
+    from dailywire_downloader.errors import DownloadError
+
+    monkeypatch.setattr(ffmpeg_module.shutil, "which", lambda path: "/usr/bin/ffmpeg")
+
+    huge_configuration_line = "configuration: " + " ".join(f"--enable-lib{i}" for i in range(60))
+    real_error = "[mp4 @ 0x0] Malformed AAC bitstream detected, use audio bitstream filter 'aac_adtstoasc' to fix it"
+    banner = "\n".join([
+        "ffmpeg version 8.0.1 Copyright (c) 2000-2025 the FFmpeg developers",
+        "built with Apple clang version 16.0.0 (clang-1600.0.26.6)",
+        huge_configuration_line,
+        "libavutil      60.  8.100 / 60.  8.100",
+        "libavcodec     62. 11.100 / 62. 11.100",
+        "libavformat    62.  3.100 / 62.  3.100",
+    ])
+
+    class FakeFailed:
+        returncode = 234
+        stdout = f"{banner}\n{real_error}\n"
+
+    monkeypatch.setattr(ffmpeg_module.subprocess, "run", lambda cmd, **kwargs: FakeFailed())
+
+    with pytest.raises(DownloadError) as exc_info:
+        ffmpeg_module.remux_to_mp4(str(tmp_path / "raw.ts"), str(tmp_path / "final.mp4"))
+
+    message = str(exc_info.value)
+    assert real_error in message
+    assert "configuration:" not in message
+    assert "ffmpeg version" not in message
+    # The huge banner line must not survive even after the outer 1000-char cap
+    # applied when this becomes a stored error_message.
+    from task_manager.tasks.workers.download_episode.service import _truncate_message
+    assert real_error in _truncate_message(message)
+
+
 # ---------- video downloads remux end-to-end ----------
 
 def _db_with_episode_and_download(video_local_media_profile=True):
@@ -580,3 +621,20 @@ def test_run_download_episode_drains_next_pending_download_on_failure(tmp_path, 
 
     session.close()
     engine.dispose()
+
+
+# ---------- error message truncation ----------
+
+def test_truncate_message_keeps_the_end_not_the_start():
+    from task_manager.tasks.workers.download_episode.service import _truncate_message
+
+    short = "boom"
+    assert _truncate_message(short) == short
+
+    # The real diagnostic content sits right at the end, well within the last
+    # 1000 characters; a head slice (message[:1000]) would miss it entirely.
+    long_message = "A" * 2000 + "THE REAL ERROR IS HERE"
+    truncated = _truncate_message(long_message)
+    assert len(truncated) <= 1000
+    assert truncated.endswith("THE REAL ERROR IS HERE")
+    assert truncated != long_message[:1000]

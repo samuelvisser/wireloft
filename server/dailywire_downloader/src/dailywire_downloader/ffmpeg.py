@@ -9,13 +9,29 @@ from .errors import DownloadError, FfmpegNotFoundError
 
 logger = logging.getLogger(__name__)
 
-# How many of the last output lines to surface in the raised error / stored
-# error_message. A raw character slice can land mid-line (e.g. inside
-# ffmpeg's multi-line "configuration:" banner), which is what showed up in
-# practice: a chunk of build flags with no actual error visible. Lines are a
-# much more reliable unit to keep, since ffmpeg's real error is always its
-# own line near the end.
-_ERROR_TAIL_LINES = 20
+# How many of the last (non-boilerplate) output lines to surface in the
+# raised error / stored error_message.
+_ERROR_TAIL_LINES = 15
+
+# ffmpeg always prints these before touching the actual input/output, and
+# they carry no diagnostic value for a remux failure: the "configuration:"
+# line alone is routinely 600-900+ characters (every --enable-lib flag the
+# binary was built with), so on a build with a large config, keeping it in
+# the tail can by itself fill (and overflow) the entire error budget before
+# the line that actually explains the failure. Drop them outright rather
+# than count on the tail window happening to be short enough to exclude them.
+_FFMPEG_BANNER_PREFIXES = (
+    "ffmpeg version",
+    "built with",
+    "configuration:",
+    "libavutil",
+    "libavcodec",
+    "libavformat",
+    "libavdevice",
+    "libavfilter",
+    "libswscale",
+    "libswresample",
+)
 
 
 def ffmpeg_available(ffmpeg_path: str = "ffmpeg") -> bool:
@@ -77,7 +93,14 @@ def remux_to_mp4(src_path: str, dest_path: str, *, ffmpeg_path: str = "ffmpeg") 
 
 
 def _tail_lines(output: str, count: int = _ERROR_TAIL_LINES) -> str:
-    lines = [line for line in output.splitlines() if line.strip()]
+    all_lines = [line for line in output.splitlines() if line.strip()]
+    content_lines = [
+        line for line in all_lines
+        if not line.strip().startswith(_FFMPEG_BANNER_PREFIXES)
+    ]
+    # If literally everything was banner (e.g. ffmpeg died before printing
+    # anything else), fall back to the raw tail so something is still shown.
+    lines = content_lines or all_lines
     return "\n".join(lines[-count:])
 
 
