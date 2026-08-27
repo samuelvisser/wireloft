@@ -14,7 +14,7 @@ import {RssStreamProfileRead} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
 import {TaskRunRead, TaskRunReadSchema} from "../types/schemas/task";
-import {MediaDownloadViewRead} from "../types/schemas/media_download";
+import {MediaDownloadAttemptRead, MediaDownloadViewRead} from "../types/schemas/media_download";
 import {ACTIVE_DOWNLOAD_STATUSES} from "../types/media_download";
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
@@ -253,6 +253,19 @@ export function useMediaDownloadsView() {
         // so downloads started elsewhere show up while the page stays open
         refetchInterval: (q) => (hasActiveDownloads(q.state.data) ? 1500 : 8000),
         placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
+    })
+}
+
+export function useMediaDownloadAttempts(mediaDownloadId?: number) {
+    return useQuery<any[], Error, MediaDownloadAttemptRead[], readonly ['mediaDownloadAttempts', number | undefined]>({
+        queryKey: ['mediaDownloadAttempts', mediaDownloadId] as const,
+        enabled: mediaDownloadId != null,
+        queryFn: ({signal}) =>
+            fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/media-downloads/${mediaDownloadId}/attempts`, signal),
+        // A light poll so a ledger entry from a redownload finishing while the
+        // log dialog is open shows up without the user having to reopen it.
+        refetchInterval: 2000,
         refetchOnMount: 'always',
     })
 }

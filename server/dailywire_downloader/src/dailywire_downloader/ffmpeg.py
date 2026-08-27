@@ -47,8 +47,15 @@ def remux_to_mp4(src_path: str, dest_path: str, *, ffmpeg_path: str = "ffmpeg") 
     segments concatenate into) plays poorly in most media players/servers
     compared to MP4. Writes to ``<dest_path>.part`` and renames on success.
 
-    Two flags address the failure modes actually seen remuxing HLS-downloaded
-    TS into MP4: ``-fflags +genpts`` regenerates timestamps across the segment
+    ``-f mp4`` forces the output muxer explicitly: ffmpeg otherwise picks it
+    from the *output filename's own extension*, and the real destination
+    write path here is ``<dest_path>.part`` (renamed into place only once
+    the mux succeeds) - an extension ffmpeg can't map to any muxer at all,
+    so without this it fails outright with "Unable to choose an output
+    format" before ever touching a single frame.
+
+    Two more flags address failure modes that show up once muxing actually
+    starts: ``-fflags +genpts`` regenerates timestamps across the segment
     boundaries in a concatenated TS file (MP4 is far less forgiving of
     discontinuous/non-monotonic timestamps than TS is), and
     ``-bsf:a aac_adtstoasc`` converts ADTS-framed AAC audio (how HLS carries
@@ -72,6 +79,7 @@ def remux_to_mp4(src_path: str, dest_path: str, *, ffmpeg_path: str = "ffmpeg") 
                 "-c", "copy",
                 "-bsf:a", "aac_adtstoasc",
                 "-movflags", "+faststart",
+                "-f", "mp4",
                 part_path,
             ],
             stdout=subprocess.PIPE,

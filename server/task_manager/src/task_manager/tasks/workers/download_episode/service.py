@@ -9,7 +9,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
-from backend.db.models.media_download import MediaDownloadBase
+from backend.db.models.media_download import MediaDownloadAttempt, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.utils.output_template import resolve_episode_output_path
@@ -85,6 +85,7 @@ async def run_download_episode(s: Session, *, media_download_id: int, is_redownl
             download.download_status = MediaDownloadStatus.ERROR.value
             download.error_message = _truncate_message(str(e))
             download.finished_at = datetime.now(timezone.utc)
+            _record_attempt(s, download, is_redownload=is_redownload)
             s.commit()
             raise
 
@@ -104,6 +105,7 @@ async def run_download_episode(s: Session, *, media_download_id: int, is_redownl
             episode.downloaded_date = datetime.now(timezone.utc)
         if is_redownload:
             episode.redownloaded_date = datetime.now(timezone.utc)
+        _record_attempt(s, download, is_redownload=is_redownload)
         s.commit()
 
         print(
@@ -115,6 +117,27 @@ async def run_download_episode(s: Session, *, media_download_id: int, is_redownl
         # immediately backfill it from the queue instead of leaving it idle
         # until the next full Download Profile sweep.
         _drain_next_pending_downloads(s)
+
+
+def _record_attempt(s: Session, download: MediaDownloadBase, *, is_redownload: bool) -> None:
+    """Append this attempt's outcome to the download's permanent ledger.
+
+    download's own error_message/status/bytes get reset the moment the next
+    attempt starts, so without this a previous error would simply vanish the
+    instant someone clicks retry. Call this after the download row's own
+    fields have been set to their final state for this attempt (status,
+    error_message, finished_at, ...), right before committing.
+    """
+    s.add(MediaDownloadAttempt(
+        media_download_id=download.id,
+        is_redownload=is_redownload,
+        status=download.download_status,
+        error_message=download.error_message,
+        downloaded_bytes=download.downloaded_bytes,
+        format_downloaded=download.format_downloaded,
+        started_at=download.started_at,
+        finished_at=download.finished_at,
+    ))
 
 
 def _drain_next_pending_downloads(s: Session) -> None:

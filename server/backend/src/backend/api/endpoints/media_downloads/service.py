@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from backend.api.helpers import update_database_fields
 from backend.api.models.media_download import *
 from backend.db.models import Episode, LocalMediaProfile, Show
-from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
+from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadAttempt, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.media_types import MediaType
 from backend.utils.output_template import resolve_episode_output_path
@@ -65,6 +65,20 @@ def get_media_downloads_view(
             downloaded_publish_status=download.downloaded_publish_status,
         ))
     return views
+
+
+def get_media_download_attempts(s: Session, media_download_id: int) -> list[MediaDownloadAttemptAPIRead]:
+    """A download's full attempt ledger, newest first."""
+    if s.get(MediaDownloadBase, media_download_id) is None:
+        raise HTTPException(status_code=404, detail="Media download not found")
+
+    items = (
+        s.query(MediaDownloadAttempt)
+        .filter_by(media_download_id=media_download_id)
+        .order_by(MediaDownloadAttempt.id.desc())
+        .all()
+    )
+    return [MediaDownloadAttemptAPIRead.model_validate(it) for it in items]
 
 
 def get_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRead:

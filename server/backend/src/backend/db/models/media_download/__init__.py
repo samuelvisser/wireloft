@@ -1,2 +1,3 @@
 from .MediaDownloadBase import MediaDownloadBase
 from .EpisodeMediaDownload import EpisodeMediaDownload
+from .MediaDownloadAttempt import MediaDownloadAttempt

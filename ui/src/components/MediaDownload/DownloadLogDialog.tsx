@@ -1,4 +1,5 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {useMediaDownloadAttempts} from '../../lib/queries'
 import {MediaDownloadStatusReg} from '../../types/media_download'
 import {PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
@@ -17,20 +18,24 @@ function formatDateTime(value: Date | null | undefined): string {
     }
 }
 
-function attemptLabel(row: MediaDownloadViewRead): string | null {
-    if (row.isRedownloadAttempt === true) return 'Redownload'
-    if (row.isRedownloadAttempt === false) return 'Initial download'
+function attemptLabel(isRedownload: boolean | null | undefined): string | null {
+    if (isRedownload === true) return 'Redownload'
+    if (isRedownload === false) return 'Initial download'
     return null
 }
 
-/** Full detail view for one download row: attempt type, versions, timestamps and the full error. */
+/** Full detail view for one download row: current state plus its permanent attempt ledger. */
 export default function DownloadLogDialog({row, onClose}: Props) {
+    // Called unconditionally (Rules of Hooks): disabled via `enabled` while row is null.
+    const {data: attempts, isLoading} = useMediaDownloadAttempts(row?.id)
+
     if (!row) return null
 
-    const attempt = attemptLabel(row)
+    const currentAttempt = attemptLabel(row.isRedownloadAttempt)
     const downloadedVersion = row.downloadedPublishStatus
         ? PUBLISH_STATUS_LABELS[row.downloadedPublishStatus] ?? row.downloadedPublishStatus
         : null
+    const isActive = row.downloadStatus === 'pending' || row.downloadStatus === 'downloading'
 
     return (
         <div className="modal-overlay" role="presentation" onClick={onClose}>
@@ -53,21 +58,40 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                 <dl className="log-meta">
                     <div><dt>Show</dt><dd>{row.showTitle ?? '—'}</dd></div>
                     <div><dt>Profile</dt><dd>{row.localMediaProfileName ?? '—'}</dd></div>
-                    <div><dt>Status</dt><dd>{MediaDownloadStatusReg.getLabelLoose(String(row.downloadStatus))}</dd></div>
-                    {attempt && <div><dt>Attempt</dt><dd>{attempt}</dd></div>}
+                    <div>
+                        <dt>Current status</dt>
+                        <dd>
+                            {MediaDownloadStatusReg.getLabelLoose(String(row.downloadStatus))}
+                            {isActive ? ` (${row.progress}%)` : ''}
+                        </dd>
+                    </div>
+                    {currentAttempt && <div><dt>Current attempt</dt><dd>{currentAttempt}</dd></div>}
                     {downloadedVersion && <div><dt>Version downloaded</dt><dd>{downloadedVersion}</dd></div>}
-                    <div><dt>Started</dt><dd>{formatDateTime(row.startedAt)}</dd></div>
-                    <div><dt>Finished</dt><dd>{formatDateTime(row.finishedAt)}</dd></div>
                     <div><dt>File</dt><dd className="mono">{row.filePath}</dd></div>
                 </dl>
 
-                {row.errorMessage ? (
-                    <>
-                        <p className="modal-text log-section-label">Full error</p>
-                        <pre className="log-output">{row.errorMessage}</pre>
-                    </>
+                <p className="modal-text log-section-label">Attempt history</p>
+                {isLoading ? (
+                    <p className="modal-text">Loading…</p>
+                ) : !attempts || attempts.length === 0 ? (
+                    <p className="modal-text">No completed attempts yet.</p>
                 ) : (
-                    <p className="modal-text">No errors recorded for this download.</p>
+                    <div className="log-attempts">
+                        {attempts.map((a) => (
+                            <div key={a.id} className="log-attempt">
+                                <div className="log-attempt-header">
+                                    <span className={`log-attempt-status log-attempt-status-${String(a.status)}`}>
+                                        {MediaDownloadStatusReg.getLabelLoose(String(a.status))}
+                                    </span>
+                                    <span className="log-attempt-type">
+                                        {a.isRedownload ? 'Redownload' : 'Initial download'}
+                                    </span>
+                                    <span className="log-attempt-time">{formatDateTime(a.finishedAt ?? a.startedAt)}</span>
+                                </div>
+                                {a.errorMessage && <pre className="log-output">{a.errorMessage}</pre>}
+                            </div>
+                        ))}
+                    </div>
                 )}
 
                 <div className="modal-actions">

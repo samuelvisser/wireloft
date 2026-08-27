@@ -43,6 +43,21 @@ class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):
     updated_at: datetime
 
 
+class MediaDownloadAttemptAPIRead(ResponseBase):
+    """One permanent entry in a download's attempt ledger."""
+
+    id: int
+    media_download_id: int
+    is_redownload: bool
+    status: Union[MediaDownloadStatus, str]
+    error_message: Optional[str]
+    downloaded_bytes: Optional[int]
+    format_downloaded: Optional[str]
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    created_at: datetime
+
+
 class MediaDownloadAPIReadView(MediaDownloadAPIRead):
     """A media download joined with its episode, show and profile context."""
 

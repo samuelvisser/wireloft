@@ -58,6 +58,18 @@ def media_downloads_retry(media_download_id: int):
     return payload
 
 
+@router.get("/{media_download_id}/attempts", response_model=list[MediaDownloadAttemptAPIRead])
+def media_downloads_attempts(media_download_id: int):
+    """
+    List a download's full attempt ledger, newest first.
+
+    Every completed attempt (successful or not) is recorded permanently here,
+    so a previous error is never lost just because a retry was started.
+    """
+    with db_session() as s:
+        return get_media_download_attempts(s, media_download_id)
+
+
 @router.get("/{media_download_id}", response_model=MediaDownloadAPIRead)
 def media_downloads_detail(media_download_id: int):
     """

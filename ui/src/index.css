@@ -824,9 +824,9 @@ a.btn,
   font-weight: 600;
 }
 .log-output {
-  margin: 0 0 16px;
+  margin: 8px 0 0;
   padding: 12px;
-  max-height: 360px;
+  max-height: 280px;
   overflow: auto;
   background: #0f172a;
   color: #e2e8f0;
@@ -836,6 +836,43 @@ a.btn,
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.log-attempts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 360px;
+  overflow: auto;
+  margin-bottom: 16px;
+}
+.log-attempt {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.log-attempt-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+.log-attempt-status {
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+.log-attempt-status-error { background: #fee2e2; color: #b91c1c; }
+.log-attempt-status-downloaded, .log-attempt-status-redownloaded { background: #dcfce7; color: #15803d; }
+.log-attempt-type { color: var(--muted, #777); }
+.log-attempt-time { margin-left: auto; color: var(--muted, #777); }
+
+@media (prefers-color-scheme: dark) {
+  .log-attempt { border-color: rgba(255,255,255,0.14); }
+  .log-attempt-status { background: rgba(255,255,255,0.08); }
+  .log-attempt-status-error { background: rgba(239,68,68,0.18); color: #fecaca; }
+  .log-attempt-status-downloaded, .log-attempt-status-redownloaded { background: rgba(34,197,94,0.18); color: #86efac; }
 }
 
 /* Danger button */

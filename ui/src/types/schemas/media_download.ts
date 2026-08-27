@@ -52,3 +52,19 @@ export const MediaDownloadViewReadSchema = MediaDownloadReadSchema.extend({
     downloadedPublishStatus: z.string().nullable(),
 })
 export type MediaDownloadViewRead = z.infer<typeof MediaDownloadViewReadSchema>;
+
+
+// ------------ Lenient response (read): one entry in a download's attempt ledger ------------
+export const MediaDownloadAttemptReadSchema = z.looseObject({
+    id: z.int(),
+    mediaDownloadId: z.int(),
+    isRedownload: z.boolean(),
+    status: z.string(),
+    errorMessage: z.string().nullable(),
+    downloadedBytes: z.int().nullable(),
+    formatDownloaded: z.string().nullable(),
+    startedAt: z.iso.datetime().transform((s) => new Date(s)).nullable(),
+    finishedAt: z.iso.datetime().transform((s) => new Date(s)).nullable(),
+    createdAt: z.iso.datetime().transform((s) => new Date(s)),
+})
+export type MediaDownloadAttemptRead = z.infer<typeof MediaDownloadAttemptReadSchema>;

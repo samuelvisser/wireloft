@@ -288,9 +288,13 @@ def test_remux_to_mp4_runs_ffmpeg_and_renames_part_file(tmp_path, monkeypatch):
     assert not (tmp_path / "final.mp4.part").exists()
     assert calls[0][0] == "ffmpeg"
     assert "-i" in calls[0] and calls[0][calls[0].index("-i") + 1] == str(src)
-    # The flags that fix the two common HLS-TS-to-MP4 remux failures
+    # The flags that fix the HLS-TS-to-MP4 remux failures actually seen
     assert "+genpts" in calls[0]
     assert "-bsf:a" in calls[0] and "aac_adtstoasc" in calls[0]
+    # The real bug: ffmpeg picks the muxer from the output filename's own
+    # extension, and that's "<dest>.part" - an extension it can't map to any
+    # muxer. "-f mp4" forces it explicitly instead of guessing wrong.
+    assert "-f" in calls[0] and calls[0][calls[0].index("-f") + 1] == "mp4"
     assert str(src) in calls[0]
     assert str(dest) not in calls[0]  # ffmpeg wrote the .part path, not dest directly
 
@@ -698,6 +702,151 @@ def test_run_download_episode_records_initial_attempt(tmp_path, monkeypatch):
 
     session.refresh(download)
     assert download.is_redownload_attempt is False
+
+    session.close()
+    engine.dispose()
+
+
+# ---------- download ledger: previous attempts survive a retry ----------
+
+def test_run_download_episode_appends_ledger_entry_on_success(tmp_path, monkeypatch):
+    from config import get_settings
+    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from task_manager.tasks.workers.download_episode import service
+    from backend.db.models.media_download import MediaDownloadAttempt
+
+    session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    audio_info = MediaInfo(url=episode.audio_url, kind=MediaKind.DIRECT_FILE, content_type="audio/mp4")
+    monkeypatch.setattr(service, "probe", lambda url: audio_info)
+
+    def fake_download_file(url, dest_path, *, progress=None):
+        __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
+        with open(dest_path, "wb") as f:
+            f.write(b"audio-bytes")
+        return DownloadResult(path=dest_path, bytes_downloaded=11)
+
+    monkeypatch.setattr(service, "download_file", fake_download_file)
+
+    asyncio.run(service.run_download_episode(session, media_download_id=download.id))
+
+    [entry] = session.query(MediaDownloadAttempt).filter_by(media_download_id=download.id).all()
+    assert entry.status == "downloaded"
+    assert entry.is_redownload is False
+    assert entry.error_message is None
+    assert entry.downloaded_bytes == 11
+    assert entry.started_at is not None and entry.finished_at is not None
+
+    session.close()
+    engine.dispose()
+
+
+def test_run_download_episode_appends_ledger_entry_on_failure_and_survives_a_retry(tmp_path, monkeypatch):
+    """The exact bug reported: a retry clears download.error_message so the
+    live row shows "no errors" again while it re-downloads, but the previous
+    error must still be readable from the ledger."""
+    from config import get_settings
+    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from task_manager.tasks.workers.download_episode import service
+    from backend.db.models.media_download import MediaDownloadAttempt
+
+    session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    monkeypatch.setattr(service, "probe", lambda url: (_ for _ in ()).throw(RuntimeError("ffmpeg exploded")))
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(service.run_download_episode(session, media_download_id=download.id))
+
+    session.refresh(download)
+    assert download.error_message and "ffmpeg exploded" in download.error_message
+
+    # Simulate a retry: the row's own error is cleared before the next attempt,
+    # exactly like the live row does while re-downloading.
+    download.download_status = "pending"
+    download.error_message = None
+    session.commit()
+
+    [entry] = session.query(MediaDownloadAttempt).filter_by(media_download_id=download.id).all()
+    assert entry.status == "error"
+    assert entry.is_redownload is False
+    assert "ffmpeg exploded" in entry.error_message
+
+    session.close()
+    engine.dispose()
+
+
+def test_run_download_episode_ledger_keeps_every_attempt_across_retries(tmp_path, monkeypatch):
+    from config import get_settings
+    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from task_manager.tasks.workers.download_episode import service
+    from backend.db.models.media_download import MediaDownloadAttempt
+
+    session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    monkeypatch.setattr(service, "probe", lambda url: (_ for _ in ()).throw(RuntimeError("first failure")))
+    with pytest.raises(RuntimeError):
+        asyncio.run(service.run_download_episode(session, media_download_id=download.id))
+
+    audio_info = MediaInfo(url=episode.audio_url, kind=MediaKind.DIRECT_FILE, content_type="audio/mp4")
+    monkeypatch.setattr(service, "probe", lambda url: audio_info)
+
+    def fake_download_file(url, dest_path, *, progress=None):
+        __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
+        with open(dest_path, "wb") as f:
+            f.write(b"audio-bytes")
+        return DownloadResult(path=dest_path, bytes_downloaded=11)
+
+    monkeypatch.setattr(service, "download_file", fake_download_file)
+    asyncio.run(service.run_download_episode(session, media_download_id=download.id))
+
+    entries = (
+        session.query(MediaDownloadAttempt)
+        .filter_by(media_download_id=download.id)
+        .order_by(MediaDownloadAttempt.id)
+        .all()
+    )
+    assert [e.status for e in entries] == ["error", "downloaded"]
+    assert "first failure" in entries[0].error_message
+    assert entries[1].error_message is None
+
+    session.close()
+    engine.dispose()
+
+
+# ---------- media-download-attempts endpoint ----------
+
+def test_get_media_download_attempts_returns_newest_first():
+    from backend.api.endpoints.media_downloads.service import get_media_download_attempts
+    from backend.db.models.media_download import MediaDownloadAttempt
+
+    session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
+    session.add_all([
+        MediaDownloadAttempt(media_download_id=download.id, is_redownload=False, status="error", error_message="first"),
+        MediaDownloadAttempt(media_download_id=download.id, is_redownload=False, status="downloaded", error_message=None),
+    ])
+    session.commit()
+
+    attempts = get_media_download_attempts(session, download.id)
+    assert [a.status for a in attempts] == ["downloaded", "error"]
+    assert attempts[1].error_message == "first"
+
+    session.close()
+    engine.dispose()
+
+
+def test_get_media_download_attempts_404s_for_missing_download():
+    from fastapi import HTTPException
+
+    from backend.api.endpoints.media_downloads.service import get_media_download_attempts
+
+    session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_media_download_attempts(session, download.id + 999)
+    assert exc_info.value.status_code == 404
 
     session.close()
     engine.dispose()
