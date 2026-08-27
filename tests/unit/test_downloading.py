@@ -265,7 +265,7 @@ def test_remux_to_mp4_runs_ffmpeg_and_renames_part_file(tmp_path, monkeypatch):
 
     class FakeCompleted:
         returncode = 0
-        stderr = ""
+        stdout = ""
 
     def fake_run(cmd, **kwargs):
         calls.append(cmd)
@@ -286,7 +286,11 @@ def test_remux_to_mp4_runs_ffmpeg_and_renames_part_file(tmp_path, monkeypatch):
 
     assert dest.exists()
     assert not (tmp_path / "final.mp4.part").exists()
-    assert calls[0][:3] == ["ffmpeg", "-y", "-i"]
+    assert calls[0][0] == "ffmpeg"
+    assert "-i" in calls[0] and calls[0][calls[0].index("-i") + 1] == str(src)
+    # The flags that fix the two common HLS-TS-to-MP4 remux failures
+    assert "+genpts" in calls[0]
+    assert "-bsf:a" in calls[0] and "aac_adtstoasc" in calls[0]
     assert str(src) in calls[0]
     assert str(dest) not in calls[0]  # ffmpeg wrote the .part path, not dest directly
 
@@ -309,7 +313,7 @@ def test_remux_to_mp4_cleans_up_part_file_on_failure(monkeypatch, tmp_path):
 
     class FakeFailed:
         returncode = 1
-        stderr = "boom"
+        stdout = "boom"
 
     def fake_run(cmd, **kwargs):
         part_path = cmd[-1]
@@ -320,11 +324,36 @@ def test_remux_to_mp4_cleans_up_part_file_on_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(ffmpeg_module.subprocess, "run", fake_run)
 
     dest = tmp_path / "final.mp4"
-    with pytest.raises(DownloadError):
+    with pytest.raises(DownloadError, match="boom"):
         ffmpeg_module.remux_to_mp4(str(tmp_path / "raw.ts"), str(dest))
 
     assert not dest.exists()
     assert not (tmp_path / "final.mp4.part").exists()
+
+
+def test_remux_to_mp4_error_uses_tail_lines_not_a_raw_character_slice(monkeypatch, tmp_path):
+    """A raw character slice of long ffmpeg output can land mid-line (this is
+    literally what was reported: a chunk of the multi-line "configuration:"
+    banner with no visible error). Lines are the unit that must be kept."""
+    from dailywire_downloader import ffmpeg as ffmpeg_module
+    from dailywire_downloader.errors import DownloadError
+
+    monkeypatch.setattr(ffmpeg_module.shutil, "which", lambda path: "/usr/bin/ffmpeg")
+
+    noise = "\n".join(f"configuration line {i} " + "x" * 80 for i in range(50))
+    real_error = "[mp4 @ 0x0] Malformed AAC bitstream detected, use audio bitstream filter 'aac_adtstoasc' to fix it"
+
+    class FakeFailed:
+        returncode = 234
+        stdout = f"{noise}\n{real_error}\n"
+
+    monkeypatch.setattr(ffmpeg_module.subprocess, "run", lambda cmd, **kwargs: FakeFailed())
+
+    with pytest.raises(DownloadError) as exc_info:
+        ffmpeg_module.remux_to_mp4(str(tmp_path / "raw.ts"), str(tmp_path / "final.mp4"))
+
+    assert real_error in str(exc_info.value)
+    assert "configuration line 0 " not in str(exc_info.value)
 
 
 # ---------- video downloads remux end-to-end ----------
