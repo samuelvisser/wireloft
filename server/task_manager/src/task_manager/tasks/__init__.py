@@ -1,5 +1,6 @@
 # Import all workers to ensure they are registered
 from .workers.debug_ep_details import debug_ep_details
+from .workers.resume_interrupted_downloads import resume_interrupted_downloads
 from .workers.download_profile_worker import download_profile_worker
 from .workers.download_series_thumbnail import download_series_thumbnail
 from .workers.monitor_episode_worker import monitor_episode_worker
@@ -9,6 +10,7 @@ from .workers.trigger_task_worker import trigger_task_worker
 
 __all__ = [
     "debug_ep_details",
+    "resume_interrupted_downloads",
     "download_profile_worker",
     "download_series_thumbnail",
     "monitor_episode_worker",
