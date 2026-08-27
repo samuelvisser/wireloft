@@ -19,6 +19,7 @@ async def download_episode(
         *,
         resource_id: Optional[int] = None,
         media_download_id: int,
+        is_redownload: bool = False,
         progress=None,
 ) -> None:
     """Download one episode according to the referenced media download row.
@@ -26,6 +27,9 @@ async def download_episode(
     ``media_download_id`` points at the EpisodeMediaDownload row created when the
     download was requested; it carries the episode and the Local Media Profile.
     ``resource_id`` is the episode id, used only for task-run bookkeeping.
+    ``is_redownload`` marks a re-fetch of an episode that was already downloaded
+    (e.g. a Download Profile replacing a countdown-era file once the episode goes
+    final): the row is marked REDOWNLOADED instead of DOWNLOADED on success.
     """
     with db_session() as s:
-        await run_download_episode(s, media_download_id=media_download_id, progress=progress)
+        await run_download_episode(s, media_download_id=media_download_id, is_redownload=is_redownload, progress=progress)

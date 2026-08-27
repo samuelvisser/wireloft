@@ -116,6 +116,14 @@ def update_download_profile_series(s: Session, download_profile_series_id: int, 
     item.seasons = seasons
 
     s.flush()
+
+    queue_event(s, "download_profile.updated", {
+        "resource_id": item.id,
+        "id": item.id,
+        "show_id": item.show_id,
+        "profile_type": item.type,
+    })
+
     return SeriesDownloadProfileAPIRead.model_validate(item)
 
 

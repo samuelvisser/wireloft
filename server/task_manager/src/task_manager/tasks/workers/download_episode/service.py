@@ -33,7 +33,7 @@ class _AttemptResult:
     format_downloaded: str
 
 
-async def run_download_episode(s: Session, *, media_download_id: int, progress=None) -> None:
+async def run_download_episode(s: Session, *, media_download_id: int, is_redownload: bool = False, progress=None) -> None:
     """Download one episode's media according to its media download row.
 
     The media URLs stored on the episode are used first; when they are missing or
@@ -79,7 +79,9 @@ async def run_download_episode(s: Session, *, media_download_id: int, progress=N
         s.commit()
         raise
 
-    download.download_status = MediaDownloadStatus.DOWNLOADED.value
+    download.download_status = (
+        MediaDownloadStatus.REDOWNLOADED.value if is_redownload else MediaDownloadStatus.DOWNLOADED.value
+    )
     download.progress = 100
     download.downloaded_bytes = result.bytes_downloaded
     download.format_downloaded = result.format_downloaded
@@ -87,6 +89,8 @@ async def run_download_episode(s: Session, *, media_download_id: int, progress=N
     download.finished_at = datetime.now(timezone.utc)
     if episode.downloaded_date is None:
         episode.downloaded_date = datetime.now(timezone.utc)
+    if is_redownload:
+        episode.redownloaded_date = datetime.now(timezone.utc)
     s.commit()
 
     print(

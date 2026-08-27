@@ -47,6 +47,38 @@ def test_successful_task_persists_progress_and_terminal_state(task_database, mon
         assert run.meta == {"inputs": {"slug": "stable-slug"}}
 
 
+def test_resource_type_is_forwarded_only_when_declared_and_never_persisted(task_database, monkeypatch):
+    """Tasks that bind to more than one resource type (per-episode event vs. a
+    global cron sweep, say) need to know which one a given run is for. That value
+    is derived from the call, not a genuine input, so it must never leak into
+    run.meta where a later retry would replay it as a stored input."""
+    from task_manager.scheduler.db import TaskRun
+    from task_manager.scheduler.executor import execute_task
+
+    seen = []
+
+    async def worker(*, resource_id=None, progress=None, resource_type=None):
+        seen.append(resource_type)
+
+    _install_task(monkeypatch, key="test_resource_type", function=worker)
+    execute_task(def_key="test_resource_type", resource_type="episode", resource_id=3)
+
+    assert seen == ["episode"]
+    with task_database() as session:
+        run = session.execute(select(TaskRun)).scalar_one()
+        assert run.meta is None
+
+
+def test_resource_type_not_forwarded_when_undeclared(task_database, monkeypatch):
+    from task_manager.scheduler.executor import execute_task
+
+    async def worker(*, resource_id=None, progress=None):
+        pass  # would raise TypeError if resource_type were forwarded
+
+    _install_task(monkeypatch, key="test_no_resource_type", function=worker)
+    execute_task(def_key="test_no_resource_type", resource_type="show", resource_id=1)
+
+
 def test_zero_retry_override_is_terminal(task_database, monkeypatch):
     import task_manager.scheduler.scheduler as scheduler_module
     from task_manager.scheduler.db import TaskRun
