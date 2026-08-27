@@ -113,3 +113,10 @@ class DownloadSettings(SubmodelBase):
     max_download_attempts: int = Field(..., description="Maximum number of download attempts")
     download_timeout_seconds: int = Field(..., description="Timeout in seconds for each download")
     download_root: Path = Field(..., description="Directory on disk that the '/downloads/' prefix of output templates maps to")
+    remux_video_to_mp4: bool = Field(
+        ...,
+        description="Repackage downloaded HLS video into an .mp4 file instead of leaving it as raw .ts. "
+                    "This is a fast, lossless container change (no re-encoding) and requires ffmpeg to be "
+                    "installed and on PATH.",
+    )
+    ffmpeg_path: str = Field(default="ffmpeg", description="Path to the ffmpeg binary used for remuxing video to mp4")

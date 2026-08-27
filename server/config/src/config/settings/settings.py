@@ -62,6 +62,8 @@ class AppSettings(SettingsBase):
         max_download_attempts=3,
         download_timeout_seconds=600,
         download_root=PROJECT_ROOT / "downloads",
+        remux_video_to_mp4=True,
+        ffmpeg_path="ffmpeg",
     ))
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):

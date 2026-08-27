@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
@@ -12,13 +13,16 @@ from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.utils.output_template import resolve_episode_output_path
+from config import get_settings
 from dailywire_downloader import (
     DownloadError,
+    DownloadResult,
     MediaKind,
     MediaUnavailableError,
     download_file,
     download_hls,
     probe,
+    remux_to_mp4,
 )
 
 from ._helpers import FORMAT_HEIGHTS, RowProgressWriter, refresh_episode_media_urls, select_rendition
@@ -186,15 +190,20 @@ def _attempt_download(
             format_downloaded = "video"
             use_hls = False
 
+    remux_video = not want_audio and use_hls and get_settings().download_settings.remux_video_to_mp4
+    extension = "mp4" if remux_video else info.suggested_extension
+
     dest = resolve_episode_output_path(
         profile.output_template,
         episode=episode,
-        extension=info.suggested_extension,
+        extension=extension,
     )
     download.file_path = str(dest)
     s.commit()
 
-    if use_hls:
+    if remux_video:
+        result = _download_and_remux_to_mp4(source_url, str(dest), row_progress=row_progress)
+    elif use_hls:
         result = download_hls(source_url, str(dest), progress=row_progress)
     else:
         result = download_file(source_url, str(dest), progress=row_progress)
@@ -204,3 +213,31 @@ def _attempt_download(
         bytes_downloaded=result.bytes_downloaded,
         format_downloaded=format_downloaded,
     )
+
+
+def _download_and_remux_to_mp4(source_url: str, dest_path: str, *, row_progress: RowProgressWriter) -> DownloadResult:
+    """Download an HLS video to a temporary .ts file, then remux it into dest_path.
+
+    The raw TS download reports progress as usual; the remux itself is a fast
+    stream copy (no re-encoding) so it isn't broken out into its own progress
+    phase. The temporary file is always cleaned up, even on failure.
+    """
+    raw_ts_path = dest_path + ".rawts"
+    try:
+        ts_result = download_hls(source_url, raw_ts_path, progress=row_progress)
+        remux_to_mp4(raw_ts_path, dest_path, ffmpeg_path=get_settings().download_settings.ffmpeg_path)
+    finally:
+        _remove_quietly(raw_ts_path)
+
+    return DownloadResult(
+        path=dest_path,
+        bytes_downloaded=ts_result.bytes_downloaded,
+        segments_downloaded=ts_result.segments_downloaded,
+    )
+
+
+def _remove_quietly(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass

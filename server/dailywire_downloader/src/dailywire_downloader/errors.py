@@ -19,3 +19,7 @@ class EncryptedMediaError(DownloadError):
 
 class DownloadCancelled(DownloadError):
     """The download was cancelled through the should_cancel callback."""
+
+
+class FfmpegNotFoundError(DownloadError):
+    """The ffmpeg binary required for remuxing could not be found on PATH."""

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -245,6 +247,242 @@ def test_create_episode_download_enforces_one_per_profile(monkeypatch, tmp_path)
     assert restarted.id == download.id
     assert restarted.download_status == MediaDownloadStatus.PENDING.value
     assert restarted.error_message is None
+
+    session.close()
+    engine.dispose()
+
+
+# ---------- ffmpeg remux ----------
+
+def test_remux_to_mp4_runs_ffmpeg_and_renames_part_file(tmp_path, monkeypatch):
+    from dailywire_downloader import ffmpeg as ffmpeg_module
+
+    calls = []
+
+    def fake_which(path):
+        return "/usr/bin/ffmpeg"
+
+    class FakeCompleted:
+        returncode = 0
+        stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        # Simulate ffmpeg writing the .part output file
+        part_path = cmd[-1]
+        with open(part_path, "wb") as f:
+            f.write(b"fake-mp4-data")
+        return FakeCompleted()
+
+    monkeypatch.setattr(ffmpeg_module.shutil, "which", fake_which)
+    monkeypatch.setattr(ffmpeg_module.subprocess, "run", fake_run)
+
+    src = tmp_path / "raw.ts"
+    src.write_bytes(b"fake-ts-data")
+    dest = tmp_path / "final.mp4"
+
+    ffmpeg_module.remux_to_mp4(str(src), str(dest))
+
+    assert dest.exists()
+    assert not (tmp_path / "final.mp4.part").exists()
+    assert calls[0][:3] == ["ffmpeg", "-y", "-i"]
+    assert str(src) in calls[0]
+    assert str(dest) not in calls[0]  # ffmpeg wrote the .part path, not dest directly
+
+
+def test_remux_to_mp4_raises_when_ffmpeg_missing(monkeypatch, tmp_path):
+    from dailywire_downloader import ffmpeg as ffmpeg_module
+    from dailywire_downloader.errors import FfmpegNotFoundError
+
+    monkeypatch.setattr(ffmpeg_module.shutil, "which", lambda path: None)
+
+    with pytest.raises(FfmpegNotFoundError):
+        ffmpeg_module.remux_to_mp4(str(tmp_path / "a.ts"), str(tmp_path / "b.mp4"))
+
+
+def test_remux_to_mp4_cleans_up_part_file_on_failure(monkeypatch, tmp_path):
+    from dailywire_downloader import ffmpeg as ffmpeg_module
+    from dailywire_downloader.errors import DownloadError
+
+    monkeypatch.setattr(ffmpeg_module.shutil, "which", lambda path: "/usr/bin/ffmpeg")
+
+    class FakeFailed:
+        returncode = 1
+        stderr = "boom"
+
+    def fake_run(cmd, **kwargs):
+        part_path = cmd[-1]
+        with open(part_path, "wb") as f:
+            f.write(b"partial")
+        return FakeFailed()
+
+    monkeypatch.setattr(ffmpeg_module.subprocess, "run", fake_run)
+
+    dest = tmp_path / "final.mp4"
+    with pytest.raises(DownloadError):
+        ffmpeg_module.remux_to_mp4(str(tmp_path / "raw.ts"), str(dest))
+
+    assert not dest.exists()
+    assert not (tmp_path / "final.mp4.part").exists()
+
+
+# ---------- video downloads remux end-to-end ----------
+
+def _db_with_episode_and_download(video_local_media_profile=True):
+    from backend.db.models import EpisodeMediaDownload, LocalMediaProfile
+    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.media_types import MediaType
+
+    session, engine, episode = _db_with_episode()
+
+    profile = LocalMediaProfile(
+        slug="video-1080p" if video_local_media_profile else "audio",
+        name="Video 1080p" if video_local_media_profile else "Audio",
+        output_template="/downloads/{show}/{episode}.ext",
+        preferred_format="format_1080p" if video_local_media_profile else "format_audio_only",
+    )
+    session.add(profile)
+    session.flush()
+
+    episode.video_url = "https://example.test/master.m3u8"
+    episode.audio_url = "https://example.test/audio.m4a"
+
+    download = EpisodeMediaDownload(
+        type=MediaType.EPISODE.value,
+        media_item_id=episode.id,
+        local_media_profile_id=profile.id,
+        download_status=MediaDownloadStatus.PENDING.value,
+        file_path="/downloads/pending.ext",
+        progress=0,
+    )
+    session.add(download)
+    session.commit()
+    return session, engine, episode, download
+
+
+def test_run_download_episode_remuxes_hls_video_to_mp4(tmp_path, monkeypatch):
+    from config import get_settings
+    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind, VideoRendition
+    from task_manager.tasks.workers.download_episode import service
+
+    session, engine, episode, download = _db_with_episode_and_download()
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+    monkeypatch.setattr(get_settings().download_settings, "remux_video_to_mp4", True)
+
+    master_info = MediaInfo(
+        url=episode.video_url,
+        kind=MediaKind.HLS_MASTER,
+        renditions=(VideoRendition(url="https://example.test/1080/rendition.m3u8", width=1920, height=1080, bandwidth=1000, codecs=None),),
+    )
+    monkeypatch.setattr(service, "probe", lambda url: master_info)
+
+    hls_calls = []
+    remux_calls = []
+
+    def fake_download_hls(url, dest_path, *, progress=None):
+        hls_calls.append((url, dest_path))
+        __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
+        with open(dest_path, "wb") as f:
+            f.write(b"raw-ts-bytes")
+        return DownloadResult(path=dest_path, bytes_downloaded=12, segments_downloaded=3)
+
+    def fake_remux_to_mp4(src_path, dest_path, *, ffmpeg_path="ffmpeg"):
+        remux_calls.append((src_path, dest_path, ffmpeg_path))
+        with open(dest_path, "wb") as f:
+            f.write(b"remuxed-mp4-bytes")
+
+    monkeypatch.setattr(service, "download_hls", fake_download_hls)
+    monkeypatch.setattr(service, "remux_to_mp4", fake_remux_to_mp4)
+
+    asyncio.run(service.run_download_episode(session, media_download_id=download.id))
+
+    session.refresh(download)
+    assert download.file_path.endswith(".mp4")
+    assert download.download_status == "downloaded"
+    assert download.format_downloaded == "1920x1080"
+
+    assert len(hls_calls) == 1
+    raw_ts_path = hls_calls[0][1]
+    assert raw_ts_path.endswith(".mp4.rawts")
+    assert len(remux_calls) == 1
+    assert remux_calls[0][0] == raw_ts_path
+    assert remux_calls[0][1] == download.file_path
+
+    # The temporary raw .ts file must be cleaned up, only the final .mp4 remains
+    assert not __import__("os").path.exists(raw_ts_path)
+    assert __import__("os").path.exists(download.file_path)
+
+    session.close()
+    engine.dispose()
+
+
+def test_run_download_episode_keeps_ts_when_remux_disabled(tmp_path, monkeypatch):
+    from config import get_settings
+    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind, VideoRendition
+    from task_manager.tasks.workers.download_episode import service
+
+    session, engine, episode, download = _db_with_episode_and_download()
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+    monkeypatch.setattr(get_settings().download_settings, "remux_video_to_mp4", False)
+
+    master_info = MediaInfo(
+        url=episode.video_url,
+        kind=MediaKind.HLS_MASTER,
+        renditions=(VideoRendition(url="https://example.test/1080/rendition.m3u8", width=1920, height=1080, bandwidth=1000, codecs=None),),
+    )
+    monkeypatch.setattr(service, "probe", lambda url: master_info)
+
+    remux_calls = []
+    monkeypatch.setattr(service, "remux_to_mp4", lambda *a, **k: remux_calls.append((a, k)))
+
+    def fake_download_hls(url, dest_path, *, progress=None):
+        __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
+        with open(dest_path, "wb") as f:
+            f.write(b"raw-ts-bytes")
+        return DownloadResult(path=dest_path, bytes_downloaded=12, segments_downloaded=3)
+
+    monkeypatch.setattr(service, "download_hls", fake_download_hls)
+
+    asyncio.run(service.run_download_episode(session, media_download_id=download.id))
+
+    session.refresh(download)
+    assert download.file_path.endswith(".ts")
+    assert download.download_status == "downloaded"
+    assert remux_calls == []
+
+    session.close()
+    engine.dispose()
+
+
+def test_run_download_episode_audio_unaffected_by_remux_setting(tmp_path, monkeypatch):
+    from config import get_settings
+    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from task_manager.tasks.workers.download_episode import service
+
+    session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+    monkeypatch.setattr(get_settings().download_settings, "remux_video_to_mp4", True)
+
+    audio_info = MediaInfo(url=episode.audio_url, kind=MediaKind.DIRECT_FILE, content_type="audio/mp4")
+    monkeypatch.setattr(service, "probe", lambda url: audio_info)
+
+    remux_calls = []
+    monkeypatch.setattr(service, "remux_to_mp4", lambda *a, **k: remux_calls.append((a, k)))
+
+    def fake_download_file(url, dest_path, *, progress=None):
+        __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
+        with open(dest_path, "wb") as f:
+            f.write(b"audio-bytes")
+        from dailywire_downloader import DownloadResult
+        return DownloadResult(path=dest_path, bytes_downloaded=11)
+
+    monkeypatch.setattr(service, "download_file", fake_download_file)
+
+    asyncio.run(service.run_download_episode(session, media_download_id=download.id))
+
+    session.refresh(download)
+    assert download.file_path.endswith(".m4a")
+    assert remux_calls == []
 
     session.close()
     engine.dispose()
