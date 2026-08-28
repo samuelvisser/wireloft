@@ -46,18 +46,47 @@ use a self-hosted media server like Plex or Jellyfin for series, or Audiobooksel
 - Maybe: support for Bentkey - feasibility not yet known (if anyone knows how their API works, please let me know!)
 - Maybe: support for browsing series- and movies not yet downloaded inside WireLoft (add them to WireLoft without a URL)
 
-### Building your own Docker image
-If you want to build the image yourself:
+### Running with Docker
+The included Docker setup builds the React UI and the FastAPI backend into a
+single image. One container serves the web UI, the API, and the background
+scheduler/downloader -- everything starts automatically, and the SQLite
+database is created (and migrated) on first boot if it doesn't already exist.
+
+Using Docker Compose (recommended):
 
 ```bash
-docker build -t dailywire-downloader .
+docker compose up -d --build
+```
+
+Then open http://localhost:8080.
+
+Or with plain `docker`:
+
+```bash
+docker build -t wireloft -f docker/Dockerfile .
 
 docker run -d \
-  -v $(pwd)/config:/config:ro \
+  -p 8080:80 \
+  -v $(pwd)/config:/config \
   -v $(pwd)/downloads:/downloads \
-  --name dailywire-downloader \
-  dailywire-downloader
+  -e TZ=Europe/Amsterdam \
+  --name wireloft \
+  wireloft
 ```
+
+Volumes:
+- `/config` -- app config (`config.yml`), the SQLite database, the session
+  secret key, and your DailyWire login token. Persist this so settings, shows,
+  and your login survive container restarts/upgrades.
+- `/downloads` -- downloaded episodes/movies.
+
+Useful environment variables:
+- `TZ` -- container timezone (default `UTC`).
+- `WL_ADMIN_AUTH__PASSWORD` -- set this to require a login to access the UI.
+  Leave unset for open access on your local network.
+- `API_URL` -- override the API base URL the UI is told to use (defaults to
+  the relative `/api`, which works out of the box regardless of which host
+  port you map).
 
 ### Special thanks
 While WireLoft is fully build from the ground up with original code, the open source [DailyWirePodcastProxy](https://github.com/fpnewton/DailyWirePodcastProxy) project has helped 
@@ -202,6 +231,6 @@ Security notes:
 - File permissions are set to 600 when possible.
 
 Docker tip:
-- Make sure the data directory is mapped to a persistent volume, so the auto-generated key and the database persist:
-  - volumes:
-    - ./data:/app/data
+- The provided image already persists this for you: the auto-generated key
+  and the database both live under `/config`, which `docker-compose.yml` maps
+  to `./config` on the host. Nothing extra to configure.

@@ -1,0 +1,24 @@
+.git
+.github
+
+# Persistent app state -- never bake this into an image
+config/config.yml
+config/cookies.txt
+data/
+downloads/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+
+# Node / UI
+ui/node_modules/
+ui/dist/
+
+# Misc
+tests/
+dev/
+*.md
