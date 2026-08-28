@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
+from .episode import episode_type_info
 from config import get_settings
 
 if TYPE_CHECKING:
@@ -34,6 +35,11 @@ def resolve_episode_output_path(
     directory, and the mandatory ``.ext`` suffix is replaced with the actual file
     extension once it is known.
     """
+
+    ep_info = episode_type_info(episode.episode_identifier)
+    ep_type = ep_info["type"]
+    ep_number = ep_info["number"]
+
     substitutions = {
         "show": episode.show.slug,
         "show_title": episode.show.title,
@@ -42,7 +48,14 @@ def resolve_episode_output_path(
         "episode": episode.slug,
         "episode_title": episode.title,
         "title": episode.title,
-        "ep_id": episode.episode_identifier,
+        "episode_type": ep_type,
+        "episode_number": ep_number,
+        "episode_published_date": episode.published_date.strftime("%Y-%m-%d") if episode.published_date else "",
+        "date": episode.published_date.strftime("%Y-%m-%d") if episode.published_date else "",
+        "episode_published_time": episode.published_date.strftime("%H:%M:%S") if episode.published_date else "",
+        "time": episode.published_date.strftime("%H:%M:%S") if episode.published_date else "",
+        "episode_published_datetime": episode.published_date.strftime("%Y-%m-%d %H:%M:%S") if episode.published_date else "",
+        "datetime": episode.published_date.strftime("%Y-%m-%d %H:%M:%S") if episode.published_date else "",
     }
 
     resolved = output_template

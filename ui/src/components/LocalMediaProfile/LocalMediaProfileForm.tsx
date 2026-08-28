@@ -3,6 +3,7 @@ import Select from 'react-select'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {LocalMediaProfileServerErrors} from '../../types/schemas/local_media_profile'
 import {PreferredFormatReg} from "../../types/local_media_profile";
+import ReadMore from "../../utils/ReadMore";
 
 type Props = {
     mode?: 'create' | 'update'
@@ -67,14 +68,33 @@ export default function LocalMediaProfileForm({form}: Props) {
                     placeholder="/downloads/podcasts/{show}/{episode_name}.ext"
                     {...register('outputTemplate')}
                     aria-invalid={!!errors.outputTemplate}
-                    aria-describedby={errors.outputTemplate ? 'mp-path-error' : undefined}
+                    aria-describedby={errors.outputTemplate ? 'mp-path-error' : 'mp-path-help'}
                 />
                 {errors.outputTemplate && (
                     <div id="mp-path-error" className="error" role="alert" aria-live="polite">
                         {String(errors.outputTemplate.message)}
                     </div>
                 )}
-                <div className="help">Use placeholders like {'{show}'} and {'{season}'}.</div>
+
+                <div className="help" id="mp-path-help">
+                    <ReadMore summary={<span>Output path where Wireloft will download media to</span>}>
+                        <p>This path can be dynamically generated based on placeholders. Supported placeholders:</p>
+                        <ul>
+                            <li><b>{'{show}'}</b>: The slug of the show (the show's name in the URL)</li>
+                            <li><b>{'{show_title}'}</b>: The title of the show</li>
+                            <li><b>{'{season}'}</b>: The slug of the season (the season's name in the URL)</li>
+                            <li><b>{'{season_name}'}</b>: The name of the season</li>
+                            <li><b>{'{episode}'}</b>: The slug of the episode (the episode's name in the URL)</li>
+                            <li><b>{'{episode_title}'}</b> or <b>{'{title}'}</b>: The title of the episode</li>
+                            <li><b>{'{episode_type}'}</b>: The episode type as categorized by Wireloft<br />
+                            Supported types are: 'ep', 'ep-extra', 'auxiliary', 'trailer'</li>
+                            <li><b>{'{episode_number}'}</b>: The episode number</li>
+                            <li><b>{'{episode_published_date}'}</b> or <b>{'{date}'}</b>: The published date of the episode (Y-m-d)</li>
+                            <li><b>{'{episode_published_time}'}</b> or <b>{'{time}'}</b>: The published time of the episode (H:M:S)</li>
+                            <li><b>{'{episode_published_datetime}'}</b> or <b>{'{datetime}'}</b>: The published date and time of the episode (Y-m-d H:M:S)</li>
+                        </ul>
+                    </ReadMore>
+                </div>
             </div>
 
             <div className="form-row">
