@@ -2,7 +2,7 @@
 # Build the WireLoft image and push it to GitHub Container Registry.
 #
 # Usage:
-#   ./deploy.sh [tag]        # tag defaults to "latest"
+#   ./deploy.sh [tag]        # defaults to "latest" on main, "develop" otherwise
 #
 # The ghcr.io token is never hardcoded or passed on the command line. It's
 # picked up, in order:
@@ -20,7 +20,13 @@ cd "$SCRIPT_DIR"
 IMAGE_NAME="wireloft"
 REGISTRY="ghcr.io"
 GHCR_USER="${GHCR_USER:-samuelvisser}"
-TAG="${1:-latest}"
+CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || true)"
+if [ "$CURRENT_BRANCH" = "main" ]; then
+    DEFAULT_TAG="latest"
+else
+    DEFAULT_TAG="develop"
+fi
+TAG="${1:-$DEFAULT_TAG}"
 FULL_IMAGE="$REGISTRY/$GHCR_USER/$IMAGE_NAME"
 TOKEN_FILE="${GHCR_TOKEN_FILE:-$HOME/.config/wireloft/ghcr_token}"
 NPMRC="ui/.npmrc"
@@ -77,10 +83,5 @@ printf '%s' "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GHCR_USER" --password-
 
 docker tag "$IMAGE_NAME" "$FULL_IMAGE:$TAG"
 docker push "$FULL_IMAGE:$TAG"
-
-if [ "$TAG" != "latest" ]; then
-    docker tag "$IMAGE_NAME" "$FULL_IMAGE:latest"
-    docker push "$FULL_IMAGE:latest"
-fi
 
 echo "Pushed $FULL_IMAGE:$TAG"
