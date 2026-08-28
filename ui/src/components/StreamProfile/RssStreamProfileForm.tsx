@@ -1,5 +1,6 @@
 import {useState} from 'react'
 import {UseFormReturn} from 'react-hook-form'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import ReadMore from '../../utils/ReadMore'
 
 // Only renders fields specific to the RSS stream profile implementation
@@ -37,15 +38,57 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
             {/* RSS Feed URL */}
             <div className="form-row">
                 <label htmlFor="feed-url">RSS feed URL</label>
-                <input
-                    id="feed-url"
-                    className="input"
-                    type="text"
-                    placeholder={isCreating ? 'Leave blank to auto-generate' : 'https://example.com/feed.xml'}
-                    {...register('feedUrl')}
-                    aria-invalid={!!errors.feedUrl}
-                    aria-describedby={errors.feedUrl ? 'feed-url-error' : 'feed-url-help'}
-                />
+                <div className={`rss-feed-url-group${errors.feedUrl ? ' rss-feed-url-group-invalid' : ''}`}>
+                    <input
+                        id="feed-url"
+                        className="input rss-feed-url-input"
+                        type="text"
+                        placeholder={isCreating ? 'Leave blank to auto-generate' : 'https://example.com/feed.xml'}
+                        {...register('feedUrl')}
+                        aria-invalid={!!errors.feedUrl}
+                        aria-describedby={errors.feedUrl ? 'feed-url-error' : 'feed-url-help'}
+                    />
+                    {!isCreating && (
+                        <div className="rss-feed-url-actions">
+                            <button
+                                type="button"
+                                className="rss-feed-url-action"
+                                onClick={onCopy}
+                                disabled={!feedUrl}
+                                aria-label={copied ? 'RSS feed URL copied' : 'Copy RSS feed URL'}
+                                title={copied ? 'Copied!' : 'Copy RSS feed URL'}
+                                aria-live="polite"
+                            >
+                                <FontAwesomeIcon
+                                    className="rss-feed-url-action-icon"
+                                    icon={['fas', copied ? 'check' : 'copy'] as any}
+                                    aria-hidden="true"
+                                />
+                                <span className="rss-feed-url-action-text">{copied ? 'Copied!' : 'Copy'}</span>
+                            </button>
+                            {onRegenerateToken && (
+                                <button
+                                    type="button"
+                                    className="rss-feed-url-action rss-feed-url-action-danger"
+                                    onClick={onRegenerateToken}
+                                    disabled={!!regeneratingToken}
+                                    aria-label={regeneratingToken ? 'Regenerating RSS feed URL' : 'Regenerate RSS feed URL'}
+                                    title={regeneratingToken ? 'Regenerating…' : 'Regenerate RSS feed URL'}
+                                >
+                                    <FontAwesomeIcon
+                                        className="rss-feed-url-action-icon"
+                                        icon={['fas', regeneratingToken ? 'spinner' : 'arrows-rotate'] as any}
+                                        spin={!!regeneratingToken}
+                                        aria-hidden="true"
+                                    />
+                                    <span className="rss-feed-url-action-text">
+                                        {regeneratingToken ? 'Regenerating…' : 'Regenerate'}
+                                    </span>
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
                 {errors.feedUrl && (
                     <div id="feed-url-error" className="error" role="alert" aria-live="polite">
                         {String(errors.feedUrl.message)}
@@ -65,18 +108,6 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
                         )}
                     </ReadMore>
                 </div>
-                {!isCreating && (
-                    <div className="actions" style={{marginTop: 8}}>
-                        <button type="button" className="btn" onClick={onCopy} disabled={!feedUrl}>
-                            {copied ? 'Copied!' : 'Copy'}
-                        </button>
-                        {onRegenerateToken && (
-                            <button type="button" className="btn btn-danger" onClick={onRegenerateToken} disabled={!!regeneratingToken}>
-                                {regeneratingToken ? 'Regenerating…' : 'Regenerate'}
-                            </button>
-                        )}
-                    </div>
-                )}
             </div>
         </>
     )
