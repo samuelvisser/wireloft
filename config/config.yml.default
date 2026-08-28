@@ -1,2 +1,28 @@
-# Cron timing: minute hour day_of_month month day_of_week
-schedule: "*/15 * * * *"
+# Default WireLoft configuration, seeded into /config/config.yml on first
+# container start (see docker/app/scripts/entrypoint.sh). Safe to edit
+# in-place afterwards -- it is only ever copied once, when config.yml does
+# not yet exist.
+#
+# Note: pydantic-settings does not merge a partially-specified nested block
+# here with the application's built-in defaults for the *same* block -- once
+# a top-level key below is present at all, every field under it must be
+# supplied. That's why the two blocks below are given in full, matching the
+# application's own defaults (see server/config/src/config/settings/settings.py)
+# except for the two paths that need to point into the container's /config
+# and /downloads volumes.
+
+crypto:
+  # Fallback location for the auto-generated session-signing key, used when
+  # neither secretKey nor secretKeyFile is set. Keep this on a persistent
+  # volume so logins survive container restarts.
+  defaultSecretFile: /config/wl_secret.key
+
+downloadSettings:
+  verifyDownloadsCron: "0 */2 * * *"
+  maxConcurrentDownloads: 5
+  maxDownloadAttempts: 3
+  downloadTimeoutSeconds: 600
+  # Directory the '/downloads/' prefix of output templates maps to.
+  downloadRoot: /downloads
+  remuxVideoToMp4: true
+  ffmpegPath: ffmpeg
