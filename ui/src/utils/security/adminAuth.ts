@@ -5,7 +5,18 @@
  * sending the raw admin password over the wire, we derive a stable hash in the
  * browser and send that as `passwordHash` to the API. The server then verifies
  * that value against its stored scrypt hash.
+ *
+ * This uses the pure-JS `js-sha256` rather than the native
+ * `crypto.subtle.digest`: SubtleCrypto is only exposed by browsers in a
+ * "secure context" (HTTPS, or the special-cased http://localhost), so on a
+ * plain-HTTP LAN address WireLoft is commonly reached at (e.g.
+ * http://192.168.1.50:8080) `crypto.subtle` is `undefined` and calling it
+ * throws -- which login's generic error handling then surfaces as a
+ * misleading "Network error, please try again." js-sha256 produces a
+ * byte-identical SHA-256 digest (verified against crypto.subtle output) but
+ * works in any context.
  */
+import { sha256 } from "js-sha256"
 
 /** Convert an ArrayBuffer/TypedArray to a base64url string (no padding). */
 function toBase64Url(bytes: ArrayBuffer | Uint8Array): string {
@@ -24,6 +35,6 @@ function toBase64Url(bytes: ArrayBuffer | Uint8Array): string {
 export async function hashPasswordForAdminAuth(password: string): Promise<string> {
   const enc = new TextEncoder()
   const data = enc.encode(password)
-  const digest = await (globalThis.crypto || (window as any).crypto).subtle.digest("SHA-256", data)
+  const digest = sha256.arrayBuffer(data)
   return toBase64Url(digest)
 }
