@@ -20,44 +20,44 @@ class AppSettings(SettingsBase):
     log_level: str = "INFO"
     timezone: str = Field(default=os.environ.get("TZ", "UTC"), description="Application timezone")
 
-    crypto: CryptoSettings = Field(default_factory=lambda: CryptoSettings(
+    crypto: CryptoSettings = Field(default=CryptoSettings(
         default_secret_file=PROJECT_ROOT / "data" / "wl_secret.key"
     ))
-    login_session: SessionSettings = Field(default_factory=lambda: SessionSettings(
+    login_session: SessionSettings = Field(default=SessionSettings(
         ttl_seconds=60 * 60 * 24 * 30                   # 30 days
     ))
     admin_auth: AdminAuthSettings = Field(default_factory=AdminAuthSettings)
-    dw_api: DailyWireAPISettings = Field(default_factory=lambda: DailyWireAPISettings(
+    dw_api: DailyWireAPISettings = Field(default=DailyWireAPISettings(
         middleware_api="https://middleware-prod.dailywire.com/middleware",
         stream_api="https://stream.media.dailywire.com",
     ))
-    dw_oauth: OAuthSettings = Field(default_factory=lambda: OAuthSettings(
+    dw_oauth: OAuthSettings = Field(default=OAuthSettings(
         issuer="https://authorize.dailywire.com",
         audience="https://api.dailywire.com/",
         client_id="FCgw3nA6cxkcXLVseAQvCSVBrymwvfpE",
         scope="openid profile offline_access",
     ))
-    dw_timeout: TimeoutSettings = Field(default_factory=lambda: TimeoutSettings(
+    dw_timeout: TimeoutSettings = Field(default=TimeoutSettings(
         min_fast_request_ms=100,
         max_fast_requests=350,
         min_slow_request_ms=int(1.000 * 60 * 2),        # 2 minutes
     ))
-    scheduler: SchedulerSettings = Field(default_factory=lambda: SchedulerSettings(
+    scheduler: SchedulerSettings = Field(default=SchedulerSettings(
         enabled=True,
         max_workers=5,
         default_max_retries=3,
         retry_backoff_seconds=5.0,
     ))
-    new_episode_schedule: TrackNewEpisodeSchedule = Field(default_factory=lambda: TrackNewEpisodeSchedule(
+    new_episode_schedule: TrackNewEpisodeSchedule = Field(default=TrackNewEpisodeSchedule(
         find_episodes_cron="*/30 * * * *",
         monitor_episode_cron="*/1 * * * *",
         check_no_show_today_cron="0 */6 * * *",
     ))
-    episode_status_timing: EpisodeStatusTiming = Field(default_factory=lambda: EpisodeStatusTiming(
+    episode_status_timing: EpisodeStatusTiming = Field(default=EpisodeStatusTiming(
         published_countdown_after_minutes=20,
         published_final_after_minutes=3 * 60
     ))
-    download_settings: DownloadSettings = Field(default_factory=lambda: DownloadSettings(
+    download_settings: DownloadSettings = Field(default=DownloadSettings(
         verify_downloads_cron="0 */2 * * *",
         max_concurrent_downloads=5,
         max_download_attempts=3,
@@ -66,7 +66,7 @@ class AppSettings(SettingsBase):
         remux_video_to_mp4=True,
         ffmpeg_path="ffmpeg",
     ))
-    file_watcher: FileWatcherSettings = Field(default_factory=lambda: FileWatcherSettings(
+    file_watcher: FileWatcherSettings = Field(default=FileWatcherSettings(
         enabled=True,
         scan_cron="*/10 * * * *",
         verify_file_size=True,

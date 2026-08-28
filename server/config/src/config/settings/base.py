@@ -21,5 +21,6 @@ class SettingsBase(BaseSettings):
         env_nested_delimiter="__",
         env_file=getenv("WL_ENV_FILE", PROJECT_ROOT / ".env"),
         yaml_file=getenv("WL_CONFIG_FILE", PROJECT_ROOT / "config" / "config.yml"),
-        extra="ignore"
+        extra="ignore",
+        nested_model_default_partial_update=True,
     )
