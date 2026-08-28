@@ -20,19 +20,6 @@ class AppSettings(SettingsBase):
     log_level: str = "INFO"
     timezone: str = Field(default=os.environ.get("TZ", "UTC"), description="Application timezone")
 
-    # These nested blocks are given as `default=` (a plain instance built once,
-    # not a lambda). That's required, not stylistic: with
-    # nested_model_default_partial_update=True (see base.py),
-    # pydantic-settings dumps a field's *default* to fill in whatever a lower
-    # priority source (config.yml, in practice) left unspecified in the same
-    # block -- but it only reads a field's `default`, never a `default_factory`,
-    # so a block still defined via `default_factory=lambda: ...` would keep
-    # demanding every one of its fields the moment config.yml sets just one.
-    #
-    # admin_auth is the one exception, left on `default_factory`: constructing
-    # it runs a model_validator that reads env vars and hashes a password, and
-    # must stay lazy (per AppSettings() call) rather than run once at import
-    # time, before Docker/deployment env vars are necessarily in place.
     crypto: CryptoSettings = Field(default=CryptoSettings(
         default_secret_file=PROJECT_ROOT / "data" / "wl_secret.key"
     ))
