@@ -144,8 +144,7 @@ export default function StreamProfileForm({form, mode, showRoot, isCreating, onR
                     )}
                     <div className="help" id="sp-pref-format-help">
                         <ReadMore summary={<span>Content type to prefer while streaming.</span>}>
-                            <p>Streams the specified content type if available. If not, it will try to stream the next best option (WireLoft will
-                                never mix audio and video in the same stream).</p>
+                            <p>Serves the specified content type if available. If not, it will try to serve the next best option by default.</p>
                             <p>If you need audio-only content, you can set this to 'Audio Only' to stream audio only.</p>
                         </ReadMore>
                     </div>
