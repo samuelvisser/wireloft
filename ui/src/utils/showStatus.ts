@@ -22,6 +22,8 @@ export function statusIcon(status: EpisodePublishStatus | MediaDownloadStatus | 
         case MediaDownloadStatus.downloading:
             return ['fas', 'circle-down'] as const
         case MediaDownloadStatus.error:
+        case MediaDownloadStatus.missing:
+        case MediaDownloadStatus.corrupted:
             return ['fas', 'circle-exclamation'] as const
         default:
             return ['fas', 'circle-exclamation'] as const
@@ -50,6 +52,10 @@ export function statusLabel(status: EpisodePublishStatus | MediaDownloadStatus |
             return 'Locally processing the episode'
         case MediaDownloadStatus.error:
             return 'Error'
+        case MediaDownloadStatus.missing:
+            return 'File missing'
+        case MediaDownloadStatus.corrupted:
+            return 'File corrupted'
         default:
             return 'Unknown error'
     }

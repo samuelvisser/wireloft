@@ -16,6 +16,10 @@ class MediaDownloadStatus(Enum):
     REDOWNLOADED = "redownloaded"
     LOCAL_PROCESSING = "local_processing"
     ERROR = "error"
+    # The file watcher could not find the file that was previously downloaded
+    MISSING = "missing"
+    # The file watcher found the file, but it is empty or smaller than expected
+    CORRUPTED = "corrupted"
 
 # Types for the episode identification field
 class EpIdType(StrEnum):

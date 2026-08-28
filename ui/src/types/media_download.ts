@@ -5,7 +5,9 @@ export enum MediaDownloadStatus {
     downloading = 'Downloading...',
     redownloaded = 'Redownloaded',
     localProcessing = 'Processing locally...',
-    error = 'Download error'
+    error = 'Download error',
+    missing = 'File missing',
+    corrupted = 'File corrupted',
 }
 
 /** Wire values of a media download's downloadStatus field. */
@@ -16,6 +18,8 @@ export const MediaDownloadStatusReg = createSelectRegistry('MediaDownloadStatus'
     'redownloaded': {label: 'Redownloaded', help: 'Episode was downloaded again'},
     'local_processing': {label: 'Processing', help: 'Processing the downloaded file locally'},
     'error': {label: 'Error', help: 'The download failed'},
+    'missing': {label: 'Missing', help: 'The file watcher could not find the downloaded file on disk'},
+    'corrupted': {label: 'Corrupted', help: 'The file watcher found the downloaded file, but it is empty or truncated'},
 });
 
 /** Statuses that mean a download is still in flight. */

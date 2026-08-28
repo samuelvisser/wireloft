@@ -131,17 +131,18 @@ function ProfileDownloadRow({
                         <div className="download-row-path mono truncate" title={download.filePath}>{download.filePath}</div>
                     </div>
                 )}
-                {download && status === 'error' && (
+                {download && (status === 'error' || status === 'missing' || status === 'corrupted') && (
                     <div className="download-row-error">
                         <span className="download-state-error">
-                            <FontAwesomeIcon icon={['fas', 'circle-exclamation']}/> {download.errorMessage || 'Download failed'}
+                            <FontAwesomeIcon icon={['fas', 'circle-exclamation']}/>{' '}
+                            {download.errorMessage || MediaDownloadStatusReg.getLabelLoose(status)}
                         </span>
                         <button className="btn" onClick={retryDownload} disabled={busy}>
                             <FontAwesomeIcon icon={['fas', 'rotate-right']}/> Retry
                         </button>
                     </div>
                 )}
-                {download && status && !['pending', 'downloading', 'downloaded', 'error'].includes(status) && (
+                {download && status && !['pending', 'downloading', 'downloaded', 'error', 'missing', 'corrupted'].includes(status) && (
                     <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
                 )}
             </div>

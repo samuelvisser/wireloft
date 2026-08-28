@@ -63,6 +63,11 @@ class AppSettings(SettingsBase):
         download_timeout_seconds=600,
         download_root=PROJECT_ROOT / "downloads",
     ))
+    file_watcher: FileWatcherSettings = Field(default_factory=lambda: FileWatcherSettings(
+        enabled=True,
+        scan_cron="*/10 * * * *",
+        verify_file_size=True,
+    ))
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):
         # kwargs > env > .env > YAML > file secrets > defaults

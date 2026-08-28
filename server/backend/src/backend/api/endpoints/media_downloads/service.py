@@ -15,7 +15,12 @@ from backend.types.media_types import MediaType
 from backend.utils.output_template import resolve_episode_output_path
 
 # Statuses that are safe to restart or replace: nothing is actively running
-_RESTARTABLE_STATUSES = {MediaDownloadStatus.PENDING.value, MediaDownloadStatus.ERROR.value}
+_RESTARTABLE_STATUSES = {
+    MediaDownloadStatus.PENDING.value,
+    MediaDownloadStatus.ERROR.value,
+    MediaDownloadStatus.MISSING.value,
+    MediaDownloadStatus.CORRUPTED.value,
+}
 
 
 def get_media_downloads_list(s: Session) -> list[MediaDownloadAPIRead]:

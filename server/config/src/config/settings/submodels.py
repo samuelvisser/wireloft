@@ -113,3 +113,9 @@ class DownloadSettings(SubmodelBase):
     max_download_attempts: int = Field(..., description="Maximum number of download attempts")
     download_timeout_seconds: int = Field(..., description="Timeout in seconds for each download")
     download_root: Path = Field(..., description="Directory on disk that the '/downloads/' prefix of output templates maps to")
+
+
+class FileWatcherSettings(SubmodelBase):
+    enabled: bool = Field(..., description="Enable the file watcher that keeps downloaded episode files in sync with the database")
+    scan_cron: str = Field(..., description="Cron schedule for the periodic file watcher scan")
+    verify_file_size: bool = Field(..., description="Flag a download as corrupted when its file is empty or smaller than the size recorded when it finished downloading")

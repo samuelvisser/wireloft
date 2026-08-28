@@ -35,15 +35,18 @@ function StatusCell({row}: {row: MediaDownloadViewRead}) {
             </div>
         )
     }
-    if (status === 'error') {
+    if (status === 'error' || status === 'missing' || status === 'corrupted') {
         return (
             <span style={{color: 'var(--error, #d64545)'}} title={row.errorMessage ?? undefined}>
-                Error: {row.errorMessage ?? 'unknown'}
+                {MediaDownloadStatusReg.getLabelLoose(status)}{row.errorMessage ? `: ${row.errorMessage}` : ''}
             </span>
         )
     }
     return <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
 }
+
+// Statuses for which the download can be retried/redownloaded
+const _RETRYABLE_STATUSES = new Set(['error', 'missing', 'corrupted'])
 
 export default function DownloadsPage() {
     const navigate = useNavigate()
@@ -110,7 +113,7 @@ export default function DownloadsPage() {
                     }}
                     actions={(row) => {
                         const actions: DataTableAction<MediaDownloadViewRead>[] = []
-                        if (String(row.downloadStatus) === 'error') {
+                        if (_RETRYABLE_STATUSES.has(String(row.downloadStatus))) {
                             actions.push({
                                 onClick: () => void retry(row),
                                 icon: ['fas', 'rotate-right'],
