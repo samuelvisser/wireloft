@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session, joinedload
 
 from backend.db.models import Episode, LocalMediaProfile, RssStreamProfile
 from backend.db.models.media_download import EpisodeMediaDownload
+from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.local_media_profile_types import PreferredFormat
+from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 
 # A download is only fit to stream once the file watcher has confirmed the
 # file exists at (or near) its expected size - "pending"/"error"/"missing"/
@@ -81,41 +83,50 @@ def _select_best_download(
     return min(pool, key=lambda d: _VIDEO_HEIGHTS.get(d.local_media_profile.preferred_format, 0))
 
 
-def get_feed_items(s: Session, profile: RssStreamProfile) -> list[tuple[Episode, EpisodeMediaDownload]]:
+def get_feed_items(s: Session, profile: RssStreamProfile) -> list[tuple[Episode, Optional[EpisodeMediaDownload]]]:
     """Episodes eligible for this profile's feed, newest first.
 
-    Only ``use_downloads`` is implemented so far: streaming straight from
-    Daily Wire for episodes with no matching download (``use_dw_stream``) is
-    a later step, so such episodes are simply omitted from the feed for now.
+    A matching local download is preferred whenever downloads are enabled.
+    When Daily Wire streaming is enabled as well, episodes without a matching
+    download stay in the feed and are resolved to a fresh remote URL when the
+    enclosure is requested.
     """
-    if not profile.use_downloads:
+    if not profile.use_downloads and not profile.use_dw_stream:
         return []
 
-    rows = (
-        s.query(Episode, EpisodeMediaDownload)
-        .join(EpisodeMediaDownload, EpisodeMediaDownload.media_item_id == Episode.id)
-        .options(joinedload(EpisodeMediaDownload.local_media_profile))
+    episodes = (
+        s.query(Episode)
         .filter(Episode.show_id == profile.show_id)
-        .filter(EpisodeMediaDownload.download_status.in_(_AVAILABLE_STATUSES))
+        .filter(Episode.is_no_show_today.is_not(True))
         .all()
     )
 
-    by_episode: dict[int, tuple[Episode, list[EpisodeMediaDownload]]] = {}
-    for episode, download in rows:
-        _, downloads = by_episode.setdefault(episode.id, (episode, []))
-        downloads.append(download)
-
-    items: list[tuple[Episode, EpisodeMediaDownload]] = []
-    for episode, downloads in by_episode.values():
-        best = _select_best_download(
-            downloads,
-            preferred_format=profile.preferred_format,
-            require_exact_match=profile.require_exact_match,
+    downloads_by_episode: dict[int, list[EpisodeMediaDownload]] = {}
+    if profile.use_downloads:
+        rows = (
+            s.query(EpisodeMediaDownload)
+            .join(Episode, EpisodeMediaDownload.media_item_id == Episode.id)
+            .options(joinedload(EpisodeMediaDownload.local_media_profile))
+            .filter(Episode.show_id == profile.show_id)
+            .filter(EpisodeMediaDownload.download_status.in_(_AVAILABLE_STATUSES))
+            .all()
         )
-        if best is not None:
+        for download in rows:
+            downloads_by_episode.setdefault(download.media_item_id, []).append(download)
+
+    items: list[tuple[Episode, Optional[EpisodeMediaDownload]]] = []
+    for episode in episodes:
+        best = None
+        if profile.use_downloads:
+            best = _select_best_download(
+                downloads_by_episode.get(episode.id, []),
+                preferred_format=profile.preferred_format,
+                require_exact_match=profile.require_exact_match,
+            )
+        if best is not None or profile.use_dw_stream:
             items.append((episode, best))
 
-    def sort_key(pair: tuple[Episode, EpisodeMediaDownload]):
+    def sort_key(pair: tuple[Episode, Optional[EpisodeMediaDownload]]):
         dt = pair[0].published_date or pair[0].went_live_date or pair[0].created_at
         if dt.tzinfo is not None:
             dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
@@ -125,8 +136,12 @@ def get_feed_items(s: Session, profile: RssStreamProfile) -> list[tuple[Episode,
     return items
 
 
-def get_download_for_episode(s: Session, profile: RssStreamProfile, episode_slug: str) -> EpisodeMediaDownload:
-    """The one download this profile would serve for a single episode, by slug."""
+def get_media_for_episode(
+        s: Session,
+        profile: RssStreamProfile,
+        episode_slug: str,
+) -> tuple[Episode, Optional[EpisodeMediaDownload]]:
+    """Resolve an enclosure to a local download or a Daily Wire fallback."""
     episode: Optional[Episode] = (
         s.query(Episode)
         .filter_by(slug=episode_slug, show_id=profile.show_id)
@@ -135,24 +150,57 @@ def get_download_for_episode(s: Session, profile: RssStreamProfile, episode_slug
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
 
-    if not profile.use_downloads:
-        raise HTTPException(status_code=404, detail="This feed does not stream downloaded media")
+    best = None
+    if profile.use_downloads:
+        downloads = (
+            s.query(EpisodeMediaDownload)
+            .options(joinedload(EpisodeMediaDownload.local_media_profile))
+            .filter(EpisodeMediaDownload.media_item_id == episode.id)
+            .filter(EpisodeMediaDownload.download_status.in_(_AVAILABLE_STATUSES))
+            .all()
+        )
+        best = _select_best_download(
+            downloads,
+            preferred_format=profile.preferred_format,
+            require_exact_match=profile.require_exact_match,
+        )
 
-    downloads = (
-        s.query(EpisodeMediaDownload)
-        .options(joinedload(EpisodeMediaDownload.local_media_profile))
-        .filter(EpisodeMediaDownload.media_item_id == episode.id)
-        .filter(EpisodeMediaDownload.download_status.in_(_AVAILABLE_STATUSES))
-        .all()
-    )
-    best = _select_best_download(
-        downloads,
-        preferred_format=profile.preferred_format,
-        require_exact_match=profile.require_exact_match,
-    )
-    if best is None:
+    if best is not None:
+        return episode, best
+    if profile.use_dw_stream and episode.is_no_show_today is not True:
+        return episode, None
+
+    raise HTTPException(status_code=404, detail="No media available for this episode")
+
+
+def get_download_for_episode(s: Session, profile: RssStreamProfile, episode_slug: str) -> EpisodeMediaDownload:
+    """The local download this profile would serve for a single episode."""
+    _, download = get_media_for_episode(s, profile, episode_slug)
+    if download is None:
         raise HTTPException(status_code=404, detail="No downloaded media available for this episode")
-    return best
+    return download
+
+
+def get_dailywire_stream_url(profile: RssStreamProfile, episode: Episode) -> str:
+    """Fetch a fresh Daily Wire media URL for the profile's requested format."""
+    require_member_exclusive = profile.show.membership_level not in {
+        WlDwMembershipLevel.FREE.value,
+        WlDwMembershipLevel.WL_ANY.value,
+    }
+    try:
+        detail = MiddlewareClient().get_episode_details(
+            episode.slug,
+            require_member_exclusive=require_member_exclusive,
+        )
+    except MiddlewareAPIError as exc:
+        raise HTTPException(status_code=502, detail="Daily Wire stream is currently unavailable") from exc
+
+    wants_audio = profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
+    media_url = detail.audio_url if wants_audio else detail.video_url
+    if not media_url:
+        media_kind = "audio" if wants_audio else "video"
+        raise HTTPException(status_code=404, detail=f"No Daily Wire {media_kind} stream available for this episode")
+    return media_url
 
 
 def _sub_text(parent: Element, tag: str, text: Optional[str]) -> Element:
@@ -161,7 +209,14 @@ def _sub_text(parent: Element, tag: str, text: Optional[str]) -> Element:
     return el
 
 
-def _append_item(channel: Element, *, media_base_url: str, episode: Episode, download: EpisodeMediaDownload) -> None:
+def _append_item(
+        channel: Element,
+        *,
+        media_base_url: str,
+        episode: Episode,
+        download: Optional[EpisodeMediaDownload],
+        preferred_format: str,
+) -> None:
     item = SubElement(channel, "item")
     _sub_text(item, "title", episode.title)
 
@@ -177,10 +232,18 @@ def _append_item(channel: Element, *, media_base_url: str, episode: Episode, dow
             pub_date = pub_date.replace(tzinfo=timezone.utc)
         _sub_text(item, "pubDate", format_datetime(pub_date))
 
-    file_path = Path(download.file_path)
-    length = file_path.stat().st_size if file_path.is_file() else (download.downloaded_bytes or 0)
-    default_type = "audio/mpeg" if _is_audio_download(download) else "video/mp4"
-    mime_type = mimetypes.guess_type(file_path.name)[0] or default_type
+    if download is not None:
+        file_path = Path(download.file_path)
+        length = file_path.stat().st_size if file_path.is_file() else (download.downloaded_bytes or 0)
+        default_type = "audio/mpeg" if _is_audio_download(download) else "video/mp4"
+        mime_type = mimetypes.guess_type(file_path.name)[0] or default_type
+    else:
+        length = 0
+        mime_type = (
+            "audio/mpeg"
+            if preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
+            else "application/vnd.apple.mpegurl"
+        )
 
     media_url = f"{media_base_url}/episodes/{episode.slug}"
     SubElement(item, "enclosure", {"url": media_url, "length": str(length), "type": mime_type})
@@ -219,6 +282,12 @@ def render_rss_feed(s: Session, request: Request, profile: RssStreamProfile) -> 
         _sub_text(image, "link", show.sharing_url)
 
     for episode, download in items:
-        _append_item(channel, media_base_url=media_base_url, episode=episode, download=download)
+        _append_item(
+            channel,
+            media_base_url=media_base_url,
+            episode=episode,
+            download=download,
+            preferred_format=profile.preferred_format,
+        )
 
     return tostring(rss, encoding="UTF-8", xml_declaration=True)
