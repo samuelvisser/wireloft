@@ -1,5 +1,5 @@
-> This version of WireLoft is currently in active development. If you want to download Daily Wire shows, use the version in the master branch. 
-> You can see a sneak peak of what is to come in the next version of WireLoft here, though!
+> Wireloft is currently in active development. It works and basic functionality is tested, but its very early days still.
+> Absolutely use at your own risk, especially if you are using it behind a reverse proxy!
 
 # WireLoft
 
@@ -20,11 +20,6 @@ Pinchflat is an awesome project that allows you to automatically download videos
 WireLoft takes that concept to The Daily Wire. Additionally, WireLoft allows downloading individual episodes and movies (coming soon!), 
 making it truly a one-stop-shop for all things Daily Wire.<br>
 
-The project uses a specific [pull request](https://github.com/yt-dlp/yt-dlp/pull/9920) to yt-dlp that adds support for downloading 
-shows and movies from Daily Wire. We will implement an in-house downloader inside WireLoft in a future release, as the API this
-pull requests uses seems to be deprecated: official Daily Wire apps moved on to a new Middleware API. WireLoft already uses that
-Middleware API to get metadata: soon it will also use it to download episodes.<br>
-
 WireLoft is not meant to be used for consuming the content, it just downloads it. For consuming the downloaded content 
 use a self-hosted media server like Plex or Jellyfin for series, or Audiobookself for podcasts.
 
@@ -38,7 +33,6 @@ use a self-hosted media server like Plex or Jellyfin for series, or Audiobooksel
 - Downloads video thumbnails and sets them as cover art in the media items
 - Intelligently helps you avoid downloading the countdown timer shown in live versions of show episodes
 - Optionally automatically delete old content
-- Repackages downloaded video into `.mp4` instead of raw `.ts` (requires [ffmpeg](https://ffmpeg.org/) on PATH; controlled by the `downloadSettings.remuxVideoToMp4` / `downloadSettings.ffmpegPath` configuration fields, on by default)
 - Open a private RSS feed of a show's downloaded episodes for use in any podcast app, via Stream Profiles (see below)
 
 ### Planned
