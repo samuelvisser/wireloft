@@ -38,6 +38,7 @@ export const EpisodeReadSchema = z.looseObject({
     dwId: z.string().optional(),
     showId: z.int(),
     index: z.number(),
+    episodeIdentifier: z.string(),
     slug: z.string(),
     title: z.string(),
     publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),

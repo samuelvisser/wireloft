@@ -193,6 +193,18 @@ a.show-header:focus-visible {
   scroll-snap-align: start;
 }
 
+/* Paginated episode grid (show page), reusing the same episode-card styling
+   as the horizontally-scrolling .episodes-row on the home page. */
+.episodes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+@media (min-width: 900px) {
+  .episodes-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
+}
+
 .cover {
   position: relative;
   width: 100%;
@@ -556,23 +568,88 @@ a.btn,
 }
 
 
-/* Episode status icon (bottom-left of thumbnail) */
-.status {
+/* Episode download status icons (bottom-left of thumbnail) */
+.status-group {
   position: absolute;
   left: 8px;
   bottom: 8px;
   display: inline-flex;
   align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.65);
   pointer-events: none;
 }
-.status > svg { width: 16px; height: 16px; }
+.status > svg { width: 12px; height: 12px; }
 
-/* Status colors */
-.status.status-downloaded { color: #22c55e; } /* green */
+/* Status colors (raw backend status values, e.g. MediaDownload.downloadStatus) */
+.status.status-pending { color: #facc15; } /* amber */
 .status.status-downloading { color: #4ade80; } /* medium green for better contrast */
-.status.status-processing { color: #94a3b8; } /* gray */
+.status.status-downloaded,
+.status.status-redownloaded { color: #22c55e; } /* green */
+.status.status-local_processing { color: #94a3b8; } /* gray */
 .status.status-error { color: #ef4444; } /* red */
+
+/* "No storage" label shown in place of icons when an episode has no downloads */
+.status.status-none-label {
+  width: auto;
+  height: auto;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+/* Overflow "+N" pill when there are more downloads than can be shown */
+.status.status-more {
+  width: auto;
+  height: auto;
+  border-radius: 999px;
+  padding: 2px 6px;
+  background: rgba(15, 23, 42, 0.65);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Episode type badge (top-right of thumbnail): Extra / Trailer / Auxiliary */
+.type-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.type-badge-ep-extra { background: rgba(217, 119, 6, 0.92); }
+.type-badge-trailer { background: rgba(59, 130, 246, 0.92); }
+.type-badge-aux { background: rgba(100, 116, 139, 0.92); }
+
+/* Episode number badge variant to match the "extra" type color */
+.badge-ep-extra { background: rgba(217, 119, 6, 0.92); }
+@media (prefers-color-scheme: dark) {
+  .badge-ep-extra { background: rgba(217, 119, 6, 0.92); color: #fff; }
+}
 
 
 /* Remove underline from sidebar nav links */

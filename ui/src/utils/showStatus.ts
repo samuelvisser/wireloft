@@ -1,56 +1,62 @@
-import {EpisodePublishStatus} from "../types/episode";
-import {MediaDownloadStatus} from "../types/media_download";
+// Icon/label lookups for the raw snake_case status strings the backend sends
+// (Episode.publishStatus, MediaDownload.downloadStatus) - not the display-label
+// TS enums in types/episode.ts / types/media_download.ts, which hold pretty
+// strings ("Downloaded") rather than wire values ("downloaded") and can't be
+// switched on directly against API responses.
 
-
-export function statusIcon(status: EpisodePublishStatus | MediaDownloadStatus | string) {
+export function statusIcon(status: string) {
     switch (status) {
-        case EpisodePublishStatus.scheduled:
+        case 'scheduled':
             return ['fas', 'clock'] as const
-        case EpisodePublishStatus.delayed:
+        case 'delayed':
             return ['fas', 'clock-rotate-left'] as const
-        case EpisodePublishStatus.live:
+        case 'live':
             return ['fas', 'circle-video'] as const
-        case EpisodePublishStatus.dwProcessing:
-        case MediaDownloadStatus.localProcessing:
+        case 'dw_processing':
+        case 'local_processing':
             return ['fas', 'spinner'] as const
-        case EpisodePublishStatus.publishedWithCountdown:
-        case EpisodePublishStatus.publishedFinal:
+        case 'published_with_countdown':
+        case 'published_final':
             return ['fas', 'circle-play'] as const
-        case MediaDownloadStatus.downloaded:
-        case MediaDownloadStatus.redownloaded:
+        case 'downloaded':
+        case 'redownloaded':
             return ['fas', 'circle-check'] as const
-        case MediaDownloadStatus.downloading:
+        case 'pending':
+            return ['fas', 'clock'] as const
+        case 'downloading':
             return ['fas', 'circle-down'] as const
-        case MediaDownloadStatus.error:
+        case 'error':
             return ['fas', 'circle-exclamation'] as const
         default:
             return ['fas', 'circle-exclamation'] as const
     }
 }
 
-export function statusLabel(status: EpisodePublishStatus | MediaDownloadStatus | string) {
+export function statusLabel(status: string) {
     switch (status) {
-        case EpisodePublishStatus.scheduled:
+        case 'scheduled':
             return 'Scheduled'
-        case EpisodePublishStatus.delayed:
+        case 'delayed':
             return 'Officially delayed'
-        case EpisodePublishStatus.live:
+        case 'live':
             return 'Live'
-        case EpisodePublishStatus.publishedWithCountdown:
-        case EpisodePublishStatus.publishedFinal:
+        case 'published_with_countdown':
+        case 'published_final':
             return 'Published'
-        case MediaDownloadStatus.downloaded:
-        case MediaDownloadStatus.redownloaded:
+        case 'downloaded':
+        case 'redownloaded':
             return 'Downloaded'
-        case MediaDownloadStatus.downloading:
+        case 'pending':
+            return 'Queued'
+        case 'downloading':
             return 'Downloading'
-        case EpisodePublishStatus.dwProcessing:
+        case 'dw_processing':
             return 'Dailywire is processing the episode'
-        case MediaDownloadStatus.localProcessing:
+        case 'local_processing':
             return 'Locally processing the episode'
-        case MediaDownloadStatus.error:
+        case 'error':
             return 'Error'
         default:
-            return 'Unknown error'
+            return 'Unknown status'
     }
 }
