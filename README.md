@@ -255,9 +255,9 @@ paste it into your podcast app and go. The URL can be freely edited afterwards (
 through a different hostname than the one WireLoft guessed), and can be regenerated at any time from the
 profile's edit page, which immediately invalidates the old URL.
 
-The feed only lists episodes for which a matching downloaded file exists (per the profile's preferred format
-and "require exact match" setting); streaming episodes straight from Daily Wire when no download exists yet is
-planned but not implemented yet.
+The feed can serve matching downloaded files (per the profile's preferred format and "require exact match"
+setting), stream episodes directly from Daily Wire, or use both sources. When both are enabled, a matching
+download is preferred and Daily Wire is used as the fallback.
 
 Feed URLs (and the media files they link to) are served without going through WireLoft's own login: each
 profile's URL contains a long, unguessable secret token, so the feed keeps working for your podcast app even
