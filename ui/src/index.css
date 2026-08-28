@@ -762,6 +762,62 @@ a.btn,
 .table tbody tr:nth-child(odd) td { background: #fafbfc; }
 .table tbody tr:hover td { background: #f8fafc; }
 
+/* Sortable column headers */
+.th-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.th-sort-btn:hover { text-decoration: underline; }
+.th-sort-icon { font-size: 0.75em; opacity: 0.4; }
+th[aria-sort="ascending"] .th-sort-icon,
+th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
+
+/* Filter chips (e.g. the Downloads page status filter) */
+.filter-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.filter-chip {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: inherit;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.filter-chip[aria-pressed="true"] {
+  background: #0d6efd;
+  border-color: #0d6efd;
+  color: #fff;
+}
+.filter-chip-reset {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .filter-chip { background: #0b1220; border-color: rgba(255, 255, 255, 0.2); }
+  .filter-chip[aria-pressed="true"] { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+}
+
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
 .truncate { max-width: 520px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

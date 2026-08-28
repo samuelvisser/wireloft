@@ -12,6 +12,17 @@ export type Column<T> = {
     headerStyle?: CSSProperties
     cellStyle?: CSSProperties
     dataLabel?: string
+    /** When set, the column header becomes clickable and sorts rows by this value. */
+    sortAccessor?: (row: T) => string | number | Date | null | undefined
+}
+
+type SortDirection = 'asc' | 'desc'
+type SortState = { id: string; direction: SortDirection }
+
+function compareSortValues(a: string | number | Date, b: string | number | Date): number {
+    if (a instanceof Date && b instanceof Date) return a.getTime() - b.getTime()
+    if (typeof a === 'number' && typeof b === 'number') return a - b
+    return String(a).localeCompare(String(b), undefined, {sensitivity: 'base', numeric: true})
 }
 
 export type DataTableAction<T> = {
@@ -66,20 +77,61 @@ export function DataTable<T>(props: DataTableProps<T>) {
 
     const colSpan = useMemo(() => (columns.length + (actions ? 1 : 0)) || 1, [columns, actions])
 
+    const [sortState, setSortState] = useState<SortState | null>(null)
+    const toggleSort = (id: string) => {
+        setSortState((prev) => {
+            if (!prev || prev.id !== id) return {id, direction: 'asc'}
+            if (prev.direction === 'asc') return {id, direction: 'desc'}
+            return null
+        })
+    }
+
+    const sortedData = useMemo(() => {
+        if (!data || !sortState) return data
+        const col = columns.find((c, idx) => (c.id ?? String(idx)) === sortState.id)
+        const accessor = col?.sortAccessor
+        if (!accessor) return data
+        const dir = sortState.direction === 'asc' ? 1 : -1
+        return [...data].sort((rowA, rowB) => {
+            const a = accessor(rowA)
+            const b = accessor(rowB)
+            const aEmpty = a === null || a === undefined
+            const bEmpty = b === null || b === undefined
+            if (aEmpty && bEmpty) return 0
+            if (aEmpty) return 1
+            if (bEmpty) return -1
+            return compareSortValues(a, b) * dir
+        })
+    }, [data, sortState, columns])
+
     return (
         <div className={wrapperClassName ?? 'table-wrapper'}>
             <table className={className ?? 'table'} aria-label={ariaLabel}>
                 <thead>
                 <tr>
                     {columns.map((c, idx) => {
+                        const id = c.id ?? String(idx)
                         const style: CSSProperties = {
                             width: c.width,
                             textAlign: c.align,
                             ...c.headerStyle,
                         }
+                        if (!c.sortAccessor) {
+                            return (
+                                <th key={id} scope="col" style={style}>
+                                    {c.header}
+                                </th>
+                            )
+                        }
+                        const isSorted = sortState?.id === id
+                        const direction = isSorted ? sortState!.direction : undefined
+                        const sortIcon = direction === 'asc' ? (['fas', 'sort-up'] as const) : direction === 'desc' ? (['fas', 'sort-down'] as const) : (['fas', 'sort'] as const)
                         return (
-                            <th key={c.id ?? String(idx)} scope="col" style={style}>
-                                {c.header}
+                            <th key={id} scope="col" style={style} aria-sort={direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none'}>
+                                <button type="button" className="th-sort-btn" onClick={() => toggleSort(id)}>
+                                    <span>{c.header}</span>
+                                    <FontAwesomeIcon className="th-sort-icon" icon={sortIcon as any}/>
+                                </button>
                             </th>
                         )
                     })}
@@ -89,16 +141,16 @@ export function DataTable<T>(props: DataTableProps<T>) {
                 </tr>
                 </thead>
                 <tbody>
-                {loading && (!data || data.length === 0) ? (
+                {loading && (!sortedData || sortedData.length === 0) ? (
                     <tr>
                         <td colSpan={colSpan}>{loadingMessage}</td>
                     </tr>
-                ) : !data || data.length === 0 ? (
+                ) : !sortedData || sortedData.length === 0 ? (
                     <tr>
                         <td colSpan={colSpan}>{(error as any)?.message ?? emptyMessage}</td>
                     </tr>
                 ) : (
-                    data.map((row) => {
+                    sortedData.map((row) => {
                         const clickable = Boolean(onRowClick)
                         const rowKeyValue = String(rowKey(row))
                         const rowProps: HTMLAttributes<HTMLTableRowElement> = {
