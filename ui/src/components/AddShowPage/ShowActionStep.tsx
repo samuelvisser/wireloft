@@ -1,3 +1,5 @@
+import './ShowActionStep.css'
+
 export type ShowAction = 'index' | 'stream' | 'download-stream'
 
 type Props = {
