@@ -133,3 +133,57 @@ def test_recreate_outdated_empty_tables_raises_for_non_nullable_gap_with_data(tm
         _recreate_outdated_empty_tables(engine)
 
     engine.dispose()
+
+
+def test_recreate_outdated_empty_tables_adds_is_no_show_today_to_populated_episodes(tmp_path: Path):
+    """The exact real-world case this was added for: episodes.is_no_show_today
+    is a new nullable column on a table real users already have populated."""
+    from backend.db.core import _recreate_outdated_empty_tables
+    from backend.types.show_types import EpisodeIdentifier, ShowType
+
+    db_path = tmp_path / "episodes-migration-test.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    _create_all_tables(engine)
+
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE episodes DROP COLUMN is_no_show_today"))
+
+    session = Session(engine)
+    from backend.db.models import Episode, Season, Show
+    from backend.utils.helpers import generate_uuid
+
+    show = Show(
+        uuid="show-uuid", slug="show", title="Show", description=None,
+        sharing_url="https://example.test/show", membership_level="FREE",
+        type=ShowType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
+        author_name="Host", author_slug="host",
+    )
+    season = Season(show=show, index=1, slug="season-1", name="One")
+    session.add_all([show, season])
+    session.flush()
+    session.execute(text(
+        "INSERT INTO media_items (uuid, type, title, duration) VALUES (:uuid, 'episode', 'Ep', 100.0)"
+    ), {"uuid": generate_uuid()})
+    media_item_id = session.execute(text("SELECT id FROM media_items")).scalar_one()
+    session.execute(text(
+        "INSERT INTO episodes (id, show_id, season_id, \"index\", episode_identifier, slug, publish_status, sharing_url) "
+        "VALUES (:id, :show_id, :season_id, 1, 'ep.1', 'ep-1', 'published_final', 'https://example.test/ep-1')"
+    ), {"id": media_item_id, "show_id": show.id, "season_id": season.id})
+    session.commit()
+    session.close()
+
+    columns_before = {c["name"] for c in inspect(engine).get_columns("episodes")}
+    assert "is_no_show_today" not in columns_before
+
+    _recreate_outdated_empty_tables(engine)
+
+    columns_after = {c["name"] for c in inspect(engine).get_columns("episodes")}
+    assert "is_no_show_today" in columns_after
+
+    session = Session(engine)
+    episode = session.query(Episode).one()
+    assert episode.slug == "ep-1"
+    assert episode.is_no_show_today is None
+    session.close()
+
+    engine.dispose()

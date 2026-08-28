@@ -35,6 +35,11 @@ class Episode(MediaItemBase, HasMetadataMixin):
     published_date: Mapped[Optional[datetime]]
     scheduled_date: Mapped[Optional[datetime]]
     redownloaded_date: Mapped[Optional[datetime]]
+    # Daily Wire publishes a placeholder entry titled "... - No Show Today" on
+    # days a show doesn't air: a real feed item, but with no media behind it.
+    # Never eligible for download, and (unlike a real episode) deleted locally
+    # once Daily Wire removes it - see check_no_show_today_episodes.
+    is_no_show_today: Mapped[Optional[bool]]
 
     # Relationships
     show: Mapped["Show"] = relationship(back_populates="episodes")

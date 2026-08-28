@@ -100,6 +100,7 @@ class RepeatingTaskSettings(SubmodelBase):
 class TrackNewEpisodeSchedule(SubmodelBase):
     find_episodes_cron: str = Field(..., description="Cron schedule string for finding new episodes")
     monitor_episode_cron: str = Field(..., description="Cron schedule string for monitoring an episode that exists but is not yet fully published")
+    check_no_show_today_cron: str = Field(..., description="Cron schedule string for checking whether 'No Show Today' placeholder episodes have been removed from Daily Wire")
 
 
 class EpisodeStatusTiming(SubmodelBase):

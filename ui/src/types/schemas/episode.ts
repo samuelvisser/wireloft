@@ -50,6 +50,7 @@ export const EpisodeReadSchema = z.looseObject({
     publishedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
     redownloadedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
     downloadedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
+    isNoShowToday: z.boolean().nullable().optional(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })

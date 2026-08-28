@@ -104,6 +104,8 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
     )
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
+    if episode.is_no_show_today:
+        raise HTTPException(status_code=422, detail="This is not a downloadable episode")
 
     profile: Optional[LocalMediaProfile] = s.get(LocalMediaProfile, body.local_media_profile_id)
     if profile is None:

@@ -114,6 +114,10 @@ class EpisodesPaginatedResult(NamedTuple):
 class MiddlewareAPIError(Exception):
     """Errors raised while communicating with DailyWire Middleware API."""
 
+    def __init__(self, message: str, *, status_code: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class MiddlewareClient:
     """
@@ -328,7 +332,7 @@ class MiddlewareClient:
                 if e.code in self._TRANSIENT_HTTP_CODES and attempt < self._TRANSIENT_RETRIES:
                     time.sleep(self._TRANSIENT_RETRY_DELAY_S * (attempt + 1))
                     continue
-                raise MiddlewareAPIError(f"HTTP error {e.code}: {err_body or e.reason}") from e
+                raise MiddlewareAPIError(f"HTTP error {e.code}: {err_body or e.reason}", status_code=e.code) from e
             except URLError as e:
                 if attempt < self._TRANSIENT_RETRIES:
                     time.sleep(self._TRANSIENT_RETRY_DELAY_S * (attempt + 1))

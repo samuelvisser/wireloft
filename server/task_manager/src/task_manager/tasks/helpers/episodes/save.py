@@ -15,6 +15,7 @@ from backend.types.media_types import MediaType
 from dailywire_api.dw_api.client import MiddlewareClient
 from dailywire_api.records import DwEpisodeRecord
 from .identifier import EpisodeWithIdentifier
+from .no_show import is_no_show_today_title
 from .status import is_published_final, get_publish_status_from_dw_detail
 
 
@@ -51,6 +52,7 @@ def upsert_episode(
                 "season_id": season.id,
                 "index": index_value,
                 "episode_identifier": ep_id,
+                "is_no_show_today": is_no_show_today_title(ep.title),
             }
         })
         s.add(episode)
@@ -60,6 +62,7 @@ def upsert_episode(
         episode.season_id = season.id
         episode.index = index_value
         episode.episode_identifier = ep_id
+        episode.is_no_show_today = is_no_show_today_title(ep.title)
 
     s.flush()
     return episode

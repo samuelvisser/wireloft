@@ -125,6 +125,12 @@ def get_download_profile_episodes(
 
     eligible: list[Episode] = []
     for episode in candidates:
+        # A "No Show Today" placeholder has no real media behind it (Daily
+        # Wire's own episode-details endpoint 404s for it) and must never be
+        # queued, regardless of what episode types the profile otherwise wants.
+        if episode.is_no_show_today:
+            continue
+
         if _episode_type_prefix(episode) not in allowed_types:
             continue
 

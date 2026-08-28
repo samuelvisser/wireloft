@@ -272,23 +272,29 @@ export default function EpisodePage() {
 
                 <div className="episode-downloads" aria-labelledby="episode-downloads-title">
                     <h2 id="episode-downloads-title">Downloads</h2>
-                    {!profiles?.length && (
-                        <p>
-                            No Local Media Profiles configured yet.{' '}
-                            <Link to="/add-local-media-profile">Add one</Link> to download this episode.
-                        </p>
-                    )}
-                    {!!profiles?.length && (
-                        <div role="list" aria-label="Available downloads per Local Media Profile">
-                            {profiles.map((profile) => (
-                                <ProfileDownloadRow
-                                    key={profile.id}
-                                    profile={profile}
-                                    download={downloadByProfileId.get(profile.id)}
-                                    episodeSlug={episode.slug}
-                                />
-                            ))}
-                        </div>
+                    {episode.isNoShowToday ? (
+                        <p>This is not a downloadable episode.</p>
+                    ) : (
+                        <>
+                            {!profiles?.length && (
+                                <p>
+                                    No Local Media Profiles configured yet.{' '}
+                                    <Link to="/add-local-media-profile">Add one</Link> to download this episode.
+                                </p>
+                            )}
+                            {!!profiles?.length && (
+                                <div role="list" aria-label="Available downloads per Local Media Profile">
+                                    {profiles.map((profile) => (
+                                        <ProfileDownloadRow
+                                            key={profile.id}
+                                            profile={profile}
+                                            download={downloadByProfileId.get(profile.id)}
+                                            episodeSlug={episode.slug}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             </article>
