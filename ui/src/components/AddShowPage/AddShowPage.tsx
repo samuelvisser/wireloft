@@ -103,8 +103,8 @@ function clearWizardState() {
 
 const defaultStreamProfile = (action?: ShowAction): Partial<RssStreamProfileBundleIn> => ({
     enableProfile: true,
-    useDownloads: action === 'download-stream',
-    useDwStream: action !== 'download-stream',
+    useDownloads: true,
+    useDwStream: action === 'stream',
     preferredFormat: 'format_1080p',
     requireExactMatch: false,
 })
@@ -259,8 +259,8 @@ export default function AddShowPage({onCancel}: Props) {
             return
         }
         setStreamProfileInput((current) => ({...defaultStreamProfile(showAction), ...current,
-            useDownloads: showAction === 'download-stream',
-            useDwStream: showAction !== 'download-stream',
+            useDownloads: true,
+            useDwStream: showAction === 'stream',
         }))
         setStep(3)
     }
@@ -356,7 +356,7 @@ export default function AddShowPage({onCancel}: Props) {
                         },
                     }}
                     onBack={() => setStep(3)}
-                    onFinish={() => setStep(5)}
+                    onContinue={() => setStep(5)}
                     onCancel={handleCancel}
                     showSlug={showSubmit?.slug}
                     showType={showSubmit?.type}

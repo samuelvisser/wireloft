@@ -21,7 +21,7 @@ const OPTIONS: Array<{
         value: 'index',
         eyebrow: 'Index',
         title: 'Only index this show',
-        description: 'Have WireLoft keep track of the show and its episodes, while still letting you download individual episodes manually.',
+        description: 'Have WireLoft keep track of the show and its episodes, letting you download individual episodes manually.',
     },
     {
         value: 'stream',
@@ -33,7 +33,7 @@ const OPTIONS: Array<{
         value: 'download-stream',
         eyebrow: 'Index + Download + Stream',
         title: 'Index, download and stream downloaded files',
-        description: 'Archive DailyWire content and serve it from your own server. WireLoft downloads episodes automatically and exposes them through a stream.',
+        description: 'Archive The Daily Wire content and serve it from your own server. WireLoft downloads episodes automatically and exposes them through a stream.',
     },
 ]
 
