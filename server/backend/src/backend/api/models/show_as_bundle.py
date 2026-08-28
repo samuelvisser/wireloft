@@ -6,6 +6,7 @@ from backend.api.models.base import RequestBase
 from backend.api.models.series_download_profile import SeriesDownloadProfileAPICreateBundle
 from backend.api.models.local_media_profile import LocalMediaProfileAPICreate, LocalMediaProfileAPIUpdate
 from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPICreateBundle
+from backend.api.models.rss_stream_profile import RssStreamProfileAPICreate
 from backend.api.models.season import SeasonAPIRequestDetached
 from backend.api.models.show import ShowAPICreate
 
@@ -25,7 +26,6 @@ LocalMediaProfileAPIUpsert = Union[
 ]
 
 
-# Download profile inputs for bundle (no IDs yet, include discriminator)
 class PodcastDownloadProfileCreateInBundle(PodcastDownloadProfileAPICreateBundle):
     op: Literal["podcast"] = "podcast"
 
@@ -40,8 +40,13 @@ DownloadProfileCreateInBundle = Union[
 ]
 
 
+class RssStreamProfileCreateInBundle(RssStreamProfileAPICreate):
+    show_id: Optional[int] = None
+
+
 class ShowAPICreateBundle(RequestBase):
     show: ShowAPICreate
-    download_profile: DownloadProfileCreateInBundle = Field(discriminator="op")
-    local_media_profile: LocalMediaProfileAPIUpsert = Field(discriminator="op")
     seasons: list[SeasonAPIRequestDetached]
+    local_media_profile: Optional[LocalMediaProfileAPIUpsert] = Field(default=None, discriminator="op")
+    download_profile: Optional[DownloadProfileCreateInBundle] = Field(default=None, discriminator="op")
+    stream_profile: Optional[RssStreamProfileCreateInBundle] = None
