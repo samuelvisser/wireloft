@@ -13,11 +13,11 @@ export type PodcastDownloadProfileProps = {
     onChange: (v: Partial<DownloadProfileUnifiedCreateIn>) => void;
     onSubmit: (v: DownloadProfileUnifiedCreateOut) => void;
     onBack: () => void
-    onFinish: () => void
+    onContinue: () => void
     onCancel: () => void
 }
 
-export default function PodcastDownloadProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onFinish, onCancel}: PodcastDownloadProfileProps) {
+export default function PodcastDownloadProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel}: PodcastDownloadProfileProps) {
     const form = useForm<DownloadProfileUnifiedCreateIn>({
         resolver: zodResolver(DownloadProfileUnifiedCreateSchema),
         mode: 'onBlur',
@@ -25,7 +25,7 @@ export default function PodcastDownloadProfileStep({value, onChange, onSubmit: o
         defaultValues: value,
     })
 
-    const {watch, setValue, formState: {isSubmitting}} = form
+    const {watch, setValue} = form
 
     // Subscribe to ALL changes
     useEffect(() => {
@@ -46,7 +46,7 @@ export default function PodcastDownloadProfileStep({value, onChange, onSubmit: o
 
     const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfileUnifiedCreateOut) => {
         onSubmitParent(dataOut)
-        onFinish()
+        onContinue()
     })
 
     return (
@@ -55,7 +55,7 @@ export default function PodcastDownloadProfileStep({value, onChange, onSubmit: o
 
             <div className="actions">
                 <button type="button" className="btn" onClick={onBack}>Back</button>
-                <input type="submit" className="btn btn-primary" value="Finish" disabled={isSubmitting}/>
+                <input type="submit" className="btn btn-primary" value="Continue" />
                 <button type="button" className="btn" onClick={onCancel}>Cancel</button>
             </div>
         </form>

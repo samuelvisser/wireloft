@@ -2,16 +2,8 @@
 # Build the WireLoft image and push it to GitHub Container Registry.
 #
 # Usage:
-#   ./deploy.sh [tag]        # tag defaults to "latest"
-#
-# The ghcr.io token is never hardcoded or passed on the command line. It's
-# picked up, in order:
-#   1. $GHCR_TOKEN, if already set in the environment.
-#   2. A local token file (default ~/.config/wireloft/ghcr_token, override
-#      with $GHCR_TOKEN_FILE), if one was saved by a previous run.
-#   3. An interactive, hidden prompt -- with an offer to save it to that
-#      file (created with permissions restricted to your user only) so
-#      future runs don't ask again.
+#   ./deploy.sh [tag]        # defaults to "latest" on main, "develop" otherwise
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,7 +12,13 @@ cd "$SCRIPT_DIR"
 IMAGE_NAME="wireloft"
 REGISTRY="ghcr.io"
 GHCR_USER="${GHCR_USER:-samuelvisser}"
-TAG="${1:-latest}"
+CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || true)"
+if [ "$CURRENT_BRANCH" = "main" ]; then
+    DEFAULT_TAG="latest"
+else
+    DEFAULT_TAG="develop"
+fi
+TAG="${1:-$DEFAULT_TAG}"
 FULL_IMAGE="$REGISTRY/$GHCR_USER/$IMAGE_NAME"
 TOKEN_FILE="${GHCR_TOKEN_FILE:-$HOME/.config/wireloft/ghcr_token}"
 NPMRC="ui/.npmrc"
@@ -77,10 +75,5 @@ printf '%s' "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GHCR_USER" --password-
 
 docker tag "$IMAGE_NAME" "$FULL_IMAGE:$TAG"
 docker push "$FULL_IMAGE:$TAG"
-
-if [ "$TAG" != "latest" ]; then
-    docker tag "$IMAGE_NAME" "$FULL_IMAGE:latest"
-    docker push "$FULL_IMAGE:latest"
-fi
 
 echo "Pushed $FULL_IMAGE:$TAG"

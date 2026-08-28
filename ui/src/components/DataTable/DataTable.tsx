@@ -1,4 +1,4 @@
-import {CSSProperties, HTMLAttributes, ReactNode, useEffect, useMemo, useState} from 'react'
+import {CSSProperties, HTMLAttributes, ReactNode, useId, useMemo, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 
@@ -12,6 +12,8 @@ export type Column<T> = {
     headerStyle?: CSSProperties
     cellStyle?: CSSProperties
     dataLabel?: string
+    /** Hide this column from the expanded mobile details (usually the title shown in mobileSummary). */
+    mobileHidden?: boolean
     /** When set, the column header becomes clickable and sorts rows by this value. */
     sortAccessor?: (row: T) => string | number | Date | null | undefined
 }
@@ -47,6 +49,10 @@ export type DataTableProps<T> = {
     className?: string
     wrapperClassName?: string
     actions?: (row: T) => DataTableAction<T>[]
+    /** Compact, always-visible content at the top of each mobile accordion card. */
+    mobileSummary?: (row: T) => ReactNode
+    /** Adds a mobile-only action that invokes onRowClick after the card is expanded. */
+    mobileRowActionLabel?: string
 }
 
 export function DataTable<T>(props: DataTableProps<T>) {
@@ -65,15 +71,12 @@ export function DataTable<T>(props: DataTableProps<T>) {
         className,
         wrapperClassName,
         actions,
+        mobileSummary,
+        mobileRowActionLabel,
     } = props
 
-    const [isMobile, setIsMobile] = useState<boolean>(typeof window !== 'undefined' ? window.innerWidth <= 640 : false)
-    useEffect(() => {
-        if (typeof window === 'undefined') return
-        const onResize = () => setIsMobile(window.innerWidth <= 640)
-        window.addEventListener('resize', onResize)
-        return () => window.removeEventListener('resize', onResize)
-    }, [])
+    const tableId = useId().replace(/:/g, '')
+    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
     const colSpan = useMemo(() => (columns.length + (actions ? 1 : 0)) || 1, [columns, actions])
 
@@ -104,9 +107,33 @@ export function DataTable<T>(props: DataTableProps<T>) {
         })
     }, [data, sortState, columns])
 
+    const cellContent = (column: Column<T>, row: T): ReactNode =>
+        column.cell
+            ? column.cell(row)
+            : typeof column.accessor === 'function'
+                ? column.accessor(row)
+                : column.accessor
+                    ? (row as any)[column.accessor as any]
+                    : null
+
+    const toggleMobileRow = (key: string) => {
+        setExpandedRows((previous) => {
+            const next = new Set(previous)
+            if (next.has(key)) next.delete(key)
+            else next.add(key)
+            return next
+        })
+    }
+
+    const renderMobileMessage = () => {
+        if (loading && (!sortedData || sortedData.length === 0)) return loadingMessage
+        if (!sortedData || sortedData.length === 0) return (error as any)?.message ?? emptyMessage
+        return null
+    }
+
     return (
         <div className={wrapperClassName ?? 'table-wrapper'}>
-            <table className={className ?? 'table'} aria-label={ariaLabel}>
+            <table className={`${className ?? 'table'} desktop-data-table`} aria-label={ariaLabel}>
                 <thead>
                 <tr>
                     {columns.map((c, idx) => {
@@ -180,14 +207,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                         return (
                             <tr key={rowKeyValue} {...rowProps}>
                                 {columns.map((c, idx) => {
-                                    const content: ReactNode =
-                                        c.cell
-                                            ? c.cell(row)
-                                            : typeof c.accessor === 'function'
-                                                ? c.accessor(row)
-                                                : c.accessor
-                                                    ? (row as any)[c.accessor as any]
-                                                    : null
+                                    const content = cellContent(c, row)
                                     const style: CSSProperties = {
                                         textAlign: c.align,
                                         ...c.cellStyle,
@@ -205,19 +225,15 @@ export function DataTable<T>(props: DataTableProps<T>) {
                                                 <button
                                                     key={i}
                                                     type="button"
-                                                    className={isMobile ? (a.classes ?? 'btn') : 'icon-btn'}
-                                                    aria-label={!isMobile ? `${a.text}${rowAriaLabel ? ' ' + (rowAriaLabel(row) ?? '') : ''}` : undefined}
-                                                    title={!isMobile ? a.text : undefined}
+                                                    className="icon-btn"
+                                                    aria-label={`${a.text}${rowAriaLabel ? ' ' + (rowAriaLabel(row) ?? '') : ''}`}
+                                                    title={a.text}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         a.onClick(row)
                                                     }}
                                                 >
-                                                    {isMobile ? (
-                                                        a.text
-                                                    ) : (
-                                                        <FontAwesomeIcon icon={a.icon}/>
-                                                    )}
+                                                    <FontAwesomeIcon icon={a.icon}/>
                                                 </button>
                                             ))}
                                         </div>
@@ -229,6 +245,79 @@ export function DataTable<T>(props: DataTableProps<T>) {
                 )}
                 </tbody>
             </table>
+
+            <div className="mobile-data-list" role="list" aria-label={ariaLabel}>
+                {renderMobileMessage() ? (
+                    <div className="mobile-data-message">{renderMobileMessage()}</div>
+                ) : (
+                    sortedData?.map((row, rowIndex) => {
+                        const rowKeyValue = String(rowKey(row))
+                        const isExpanded = expandedRows.has(rowKeyValue)
+                        const detailsId = `${tableId}-details-${rowIndex}`
+                        const rowActions = actions?.(row) ?? []
+
+                        return (
+                            <article className={`mobile-data-card${isExpanded ? ' is-expanded' : ''}`} role="listitem" key={rowKeyValue}>
+                                <button
+                                    type="button"
+                                    className="mobile-data-summary"
+                                    aria-expanded={isExpanded}
+                                    aria-controls={detailsId}
+                                    aria-label={rowAriaLabel ? `${rowAriaLabel(row)} details` : undefined}
+                                    onClick={() => toggleMobileRow(rowKeyValue)}
+                                >
+                                    <span className="mobile-data-summary-content">
+                                        {mobileSummary ? mobileSummary(row) : cellContent(columns[0], row)}
+                                    </span>
+                                    <FontAwesomeIcon
+                                        className="mobile-data-chevron"
+                                        icon={(isExpanded ? ['fas', 'chevron-up'] : ['fas', 'chevron-down']) as IconProp}
+                                        aria-hidden="true"
+                                    />
+                                </button>
+
+                                {isExpanded && (
+                                    <div className="mobile-data-details" id={detailsId}>
+                                        {columns.filter((column) => !column.mobileHidden).map((column, columnIndex) => (
+                                            <div className="mobile-data-detail-row" key={(column.id ?? String(columnIndex)) + '-mobile'}>
+                                                <span className="mobile-data-detail-label">
+                                                    {column.dataLabel ?? column.header}
+                                                </span>
+                                                <div className="mobile-data-detail-value">
+                                                    {cellContent(column, row)}
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {(mobileRowActionLabel || rowActions.length > 0) && (
+                                            <div className="mobile-data-detail-row mobile-data-actions-row">
+                                                <span className="mobile-data-detail-label">Actions</span>
+                                                <div className="mobile-data-actions">
+                                                    {mobileRowActionLabel && onRowClick && (
+                                                        <button type="button" className="btn" onClick={() => onRowClick(row)}>
+                                                            {mobileRowActionLabel}
+                                                        </button>
+                                                    )}
+                                                    {rowActions.map((action, actionIndex) => (
+                                                        <button
+                                                            key={actionIndex}
+                                                            type="button"
+                                                            className={action.classes ?? 'btn'}
+                                                            onClick={() => action.onClick(row)}
+                                                        >
+                                                            {action.text}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </article>
+                        )
+                    })
+                )}
+            </div>
         </div>
     )
 }

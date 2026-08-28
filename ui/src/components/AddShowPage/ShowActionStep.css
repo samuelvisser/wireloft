@@ -1,0 +1,201 @@
+.show-action-step {
+    max-width: 920px;
+    display: grid;
+    gap: 24px;
+}
+
+.show-action-heading {
+    display: grid;
+    gap: 8px;
+    max-width: 720px;
+}
+
+.show-action-heading h2 {
+    margin: 0;
+    font-size: clamp(24px, 3vw, 34px);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+}
+
+.show-action-heading p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.show-action-options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.show-action-option {
+    appearance: none;
+    position: relative;
+    min-height: 235px;
+    padding: 20px;
+    border: 1px solid rgba(148, 163, 184, 0.42);
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.96));
+    color: #0f172a;
+    text-align: left;
+    cursor: pointer;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 24px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
+    transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.show-action-option:hover {
+    transform: translateY(-2px);
+    border-color: rgba(59, 130, 246, 0.58);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.show-action-option:focus-visible {
+    outline: 3px solid rgba(59, 130, 246, 0.5);
+    outline-offset: 3px;
+}
+
+.show-action-option.selected {
+    border-color: #3b82f6;
+    background: linear-gradient(180deg, rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0.05));
+    box-shadow: 0 0 0 1px #3b82f6, 0 12px 32px rgba(59, 130, 246, 0.14);
+}
+
+.show-action-number {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    display: grid;
+    place-items: center;
+    background: rgba(148, 163, 184, 0.16);
+    color: #334155;
+    font-weight: 800;
+    font-size: 15px;
+}
+
+.show-action-option.selected .show-action-number {
+    background: #3b82f6;
+    color: white;
+}
+
+.show-action-copy {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+}
+
+.show-action-eyebrow {
+    color: #3b82f6;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.show-action-title {
+    font-size: 18px;
+    line-height: 1.25;
+    font-weight: 800;
+}
+
+.show-action-description {
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.show-action-check {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: #3b82f6;
+    color: white;
+    font-size: 13px;
+    font-weight: 900;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.show-action-option.selected .show-action-check {
+    opacity: 1;
+    transform: scale(1);
+}
+
+@media (prefers-color-scheme: dark) {
+    .show-action-option {
+        background: linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(11, 18, 32, 0.96));
+        color: var(--text);
+        border-color: rgba(148, 163, 184, 0.22);
+        box-shadow: none;
+    }
+
+    .show-action-option:hover {
+        border-color: rgba(96, 165, 250, 0.6);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+    }
+
+    .show-action-option.selected {
+        border-color: #60a5fa;
+        background: linear-gradient(180deg, rgba(59, 130, 246, 0.18), rgba(59, 130, 246, 0.08));
+        box-shadow: 0 0 0 1px #60a5fa, 0 14px 34px rgba(0, 0, 0, 0.2);
+    }
+
+    .show-action-number {
+        background: rgba(148, 163, 184, 0.12);
+        color: #cbd5e1;
+    }
+
+    .show-action-description {
+        color: var(--muted);
+    }
+}
+
+@media (max-width: 900px) {
+    .show-action-options {
+        grid-template-columns: 1fr;
+    }
+
+    .show-action-option {
+        min-height: 0;
+        grid-template-columns: auto 1fr;
+        grid-template-rows: 1fr;
+        align-items: start;
+        gap: 16px;
+    }
+}
+
+@media (max-width: 560px) {
+    .show-action-step {
+        gap: 18px;
+    }
+
+    .show-action-heading h2 {
+        font-size: 24px;
+    }
+
+    .show-action-option {
+        padding: 16px;
+        border-radius: 14px;
+    }
+
+    .show-action-number {
+        width: 36px;
+        height: 36px;
+        border-radius: 11px;
+    }
+
+    .show-action-check {
+        top: 14px;
+        right: 14px;
+    }
+}

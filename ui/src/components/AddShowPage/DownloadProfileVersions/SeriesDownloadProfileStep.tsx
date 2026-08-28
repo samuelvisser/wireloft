@@ -17,14 +17,14 @@ export type SeriesDownloadProfileProps = {
     onSubmit: (v: DownloadProfileUnifiedCreateOut) => void;
     seasons: SeasonItem[]
     onBack: () => void
-    onFinish: () => void
+    onContinue: () => void
     onCancel: () => void
 }
 
 
 export default function SeriesDownloadProfileStep({
                                                       value, onChange, onSubmit: onSubmitParent, seasons, onBack,
-                                                      onFinish, onCancel
+                                                      onContinue, onCancel
                                                   }: SeriesDownloadProfileProps) {
     const form = useForm<DownloadProfileUnifiedCreateIn>({
         resolver: zodResolver(DownloadProfileUnifiedCreateSchema),
@@ -32,7 +32,7 @@ export default function SeriesDownloadProfileStep({
         shouldFocusError: true,
         defaultValues: value,
     })
-    const {watch, formState: {isSubmitting}} = form
+    const {watch} = form
 
     // Subscribe to ALL changes
     useEffect(() => {
@@ -44,7 +44,7 @@ export default function SeriesDownloadProfileStep({
 
     const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfileUnifiedCreateOut) => {
         onSubmitParent(dataOut)
-        onFinish()
+        onContinue()
     })
 
     return (
@@ -53,7 +53,7 @@ export default function SeriesDownloadProfileStep({
 
             <div className="actions">
                 <button type="button" className="btn" onClick={onBack}>Back</button>
-                <input type="submit" className="btn btn-primary" value="Finish" disabled={isSubmitting}/>
+                <input type="submit" className="btn btn-primary" value="Continue" />
                 <button type="button" className="btn" onClick={onCancel}>Cancel</button>
             </div>
         </form>

@@ -3,9 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
-from .service import get_download_for_episode, get_rss_stream_profile_by_token, render_rss_feed
+from .service import (
+    get_dailywire_stream_url,
+    get_media_for_episode,
+    get_rss_stream_profile_by_token,
+    render_rss_feed,
+)
 from backend.app import db_session
 
 # Deliberately mounted outside the /api prefix (see backend.app.create_app) so
@@ -31,14 +36,17 @@ def rss_feed(token: str, show_slug: str, request: Request):
 @router.get("/rss/{token}/episodes/{episode_slug}")
 def rss_feed_episode_media(token: str, episode_slug: str):
     """
-    Serve the downloaded media file backing one feed item.
+    Serve the media backing one feed item.
 
-    Supports HTTP Range requests (via FileResponse) so podcast apps can seek
-    and resume downloads.
+    Local downloads are served directly (including HTTP Range support). When
+    no matching download exists and Daily Wire streaming is enabled, resolve a
+    fresh upstream URL and redirect the podcast client to it.
     """
     with db_session() as s:
         profile = get_rss_stream_profile_by_token(s, token)
-        download = get_download_for_episode(s, profile, episode_slug)
+        episode, download = get_media_for_episode(s, profile, episode_slug)
+        if download is None:
+            return RedirectResponse(get_dailywire_stream_url(profile, episode))
         file_path = Path(download.file_path)
 
     if not file_path.is_file():

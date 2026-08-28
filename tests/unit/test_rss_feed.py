@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine
@@ -52,7 +54,7 @@ def _make_season(session, show, *, index=1, slug="season-1", name="One"):
     return season
 
 
-def _make_episode(session, show, season, *, slug, index, published_at=None):
+def _make_episode(session, show, season, *, slug, index, published_at=None, is_no_show_today=False):
     from backend.db.models import Episode
     from backend.utils.helpers import generate_uuid
 
@@ -70,6 +72,7 @@ def _make_episode(session, show, season, *, slug, index, published_at=None):
         publish_status="published_final",
         sharing_url=f"https://example.test/{slug}",
         published_date=published_at,
+        is_no_show_today=is_no_show_today,
     )
     session.add(episode)
     session.flush()
@@ -249,6 +252,73 @@ def test_get_feed_items_empty_when_use_downloads_disabled(db_session, real_file)
     assert get_feed_items(db_session, profile) == []
 
 
+def test_get_feed_items_dailywire_only_includes_episodes_without_downloads(db_session):
+    from backend.api.endpoints.feeds.service import get_feed_items
+
+    show = _make_show(db_session, slug="show-a")
+    other_show = _make_show(db_session, slug="show-b")
+    season = _make_season(db_session, show, slug="show-a-season-1")
+    other_season = _make_season(db_session, other_show, slug="show-b-season-1")
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    older = _make_episode(db_session, show, season, slug="older", index=1, published_at=now - timedelta(days=1))
+    newer = _make_episode(db_session, show, season, slug="newer", index=2, published_at=now)
+    _make_episode(
+        db_session,
+        show,
+        season,
+        slug="no-show-today",
+        index=3,
+        published_at=now + timedelta(days=1),
+        is_no_show_today=True,
+    )
+    _make_episode(db_session, other_show, other_season, slug="other", index=1, published_at=now)
+
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        preferred_format="format_audio_only",
+        use_downloads=False,
+        use_dw_stream=True,
+    )
+    items = get_feed_items(db_session, profile)
+
+    assert [episode.slug for episode, _ in items] == [newer.slug, older.slug]
+    assert all(download is None for _, download in items)
+
+
+def test_get_feed_items_prefers_downloads_and_falls_back_to_dailywire(db_session, real_file):
+    from backend.api.endpoints.feeds.service import get_feed_items
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session, slug="audio", preferred_format="format_audio_only")
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    downloaded = _make_episode(db_session, show, season, slug="downloaded", index=1, published_at=now)
+    remote = _make_episode(db_session, show, season, slug="remote", index=2, published_at=now - timedelta(days=1))
+    local_file = _make_download(
+        db_session,
+        downloaded,
+        lmp,
+        status="downloaded",
+        file_path=real_file("downloaded.mp3"),
+    )
+
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        preferred_format="format_audio_only",
+        use_downloads=True,
+        use_dw_stream=True,
+    )
+    items = get_feed_items(db_session, profile)
+
+    assert [(episode.slug, download.id if download else None) for episode, download in items] == [
+        (downloaded.slug, local_file.id),
+        (remote.slug, None),
+    ]
+
+
 # ---------- get_download_for_episode / get_rss_stream_profile_by_token ----------
 
 def test_get_rss_stream_profile_by_token_404s_for_unknown_or_disabled(db_session):
@@ -282,6 +352,66 @@ def test_get_download_for_episode_404s_when_nothing_matches(db_session, real_fil
     with pytest.raises(HTTPException) as exc2:
         get_download_for_episode(db_session, profile, ep.slug)
     assert exc2.value.status_code == 404
+
+
+def test_get_media_for_episode_uses_dailywire_only_as_fallback(db_session, real_file):
+    from backend.api.endpoints.feeds.service import get_media_for_episode
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(db_session, show, season, slug="ep-1", index=1)
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        preferred_format="format_audio_only",
+        use_downloads=True,
+        use_dw_stream=True,
+    )
+
+    resolved_episode, download = get_media_for_episode(db_session, profile, episode.slug)
+    assert resolved_episode.id == episode.id
+    assert download is None
+
+
+@pytest.mark.parametrize(
+    ("preferred_format", "expected_url"),
+    [
+        ("format_audio_only", "https://media.example/audio.mp3"),
+        ("format_1080p", "https://media.example/video.m3u8"),
+    ],
+)
+def test_get_dailywire_stream_url_fetches_fresh_requested_media(
+        db_session,
+        monkeypatch,
+        preferred_format,
+        expected_url,
+):
+    import backend.api.endpoints.feeds.service as feed_service
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(db_session, show, season, slug="ep-1", index=1)
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        preferred_format=preferred_format,
+        use_downloads=False,
+        use_dw_stream=True,
+    )
+    calls = []
+
+    class FakeClient:
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            calls.append((slug, require_member_exclusive))
+            return SimpleNamespace(
+                audio_url="https://media.example/audio.mp3",
+                video_url="https://media.example/video.m3u8",
+            )
+
+    monkeypatch.setattr(feed_service, "MiddlewareClient", FakeClient)
+
+    assert feed_service.get_dailywire_stream_url(profile, episode) == expected_url
+    assert calls == [(episode.slug, False)]
 
 
 # ---------- render_rss_feed ----------
@@ -322,6 +452,69 @@ def test_render_rss_feed_handles_missing_file_gracefully(db_session, tmp_path):
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode("utf-8")
     assert "<enclosure" in xml
     assert 'length="0"' in xml
+
+
+@pytest.mark.parametrize(
+    ("preferred_format", "expected_mime_type"),
+    [
+        ("format_audio_only", "audio/mpeg"),
+        ("format_1080p", "application/vnd.apple.mpegurl"),
+    ],
+)
+def test_render_rss_feed_includes_dailywire_only_items(db_session, preferred_format, expected_mime_type):
+    from backend.api.endpoints.feeds.service import render_rss_feed
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(db_session, show, season, slug="ep-1", index=1)
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        preferred_format=preferred_format,
+        use_downloads=False,
+        use_dw_stream=True,
+        token="dw-only",
+    )
+
+    xml = render_rss_feed(db_session, _FakeRequest(), profile).decode("utf-8")
+
+    assert "<title>Episode 1</title>" in xml
+    assert "http://localhost:5001/feeds/rss/dw-only/episodes/ep-1" in xml
+    assert 'length="0"' in xml
+    assert f'type="{expected_mime_type}"' in xml
+
+
+def test_episode_media_route_redirects_dailywire_fallback(db_session, monkeypatch):
+    import backend.api.endpoints.feeds.router as feed_router
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(db_session, show, season, slug="ep-1", index=1)
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        preferred_format="format_audio_only",
+        use_downloads=False,
+        use_dw_stream=True,
+    )
+
+    @contextmanager
+    def fake_db_session():
+        yield db_session
+
+    monkeypatch.setattr(feed_router, "db_session", fake_db_session)
+    monkeypatch.setattr(feed_router, "get_rss_stream_profile_by_token", lambda _session, _token: profile)
+    monkeypatch.setattr(feed_router, "get_media_for_episode", lambda _session, _profile, _slug: (episode, None))
+    monkeypatch.setattr(
+        feed_router,
+        "get_dailywire_stream_url",
+        lambda _profile, _episode: "https://media.example/audio.mp3",
+    )
+
+    response = feed_router.rss_feed_episode_media(profile.token, episode.slug)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "https://media.example/audio.mp3"
 
 
 # ---------- create / regenerate (rss_stream_profiles service) ----------

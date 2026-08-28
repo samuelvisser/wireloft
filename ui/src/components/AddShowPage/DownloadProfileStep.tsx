@@ -22,14 +22,14 @@ type Props = {
         series: (v: DownloadProfileUnifiedCreateOut) => void,
     }
     onBack: () => void
-    onFinish: () => void
+    onContinue: () => void
     onCancel: () => void
     showSlug?: string
     showType?: ShowTypeValue | ''
     seasons: SeasonDetachedOut[]
 }
 
-export default function DownloadProfileStep({value, onChange, onSubmit, onBack, onFinish, onCancel, showSlug, showType, seasons}: Props) {
+export default function DownloadProfileStep({value, onChange, onSubmit, onBack, onContinue, onCancel, showSlug, showType, seasons}: Props) {
     // Return the appropriate step component based on the show type
     return (
         <div className="wizard-with-aside">
@@ -40,7 +40,7 @@ export default function DownloadProfileStep({value, onChange, onSubmit, onBack, 
                         onChange={onChange.podcast}
                         onSubmit={onSubmit.podcast}
                         onBack={onBack}
-                        onFinish={onFinish}
+                        onContinue={onContinue}
                         onCancel={onCancel}
                     />
                 ) : (
@@ -50,7 +50,7 @@ export default function DownloadProfileStep({value, onChange, onSubmit, onBack, 
                         onSubmit={onSubmit.series}
                         seasons={seasons}
                         onBack={onBack}
-                        onFinish={onFinish}
+                        onContinue={onContinue}
                         onCancel={onCancel}
                     />
                 )}
