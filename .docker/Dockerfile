@@ -48,10 +48,10 @@ COPY config/config.yml.default ./config/config.yml.default
 COPY --from=ui-build /ui/dist /usr/share/nginx/html
 
 # nginx: single entrypoint on :80 serving the UI and proxying /api to uvicorn
-COPY docker/app/nginx.conf /etc/nginx/conf.d/default.conf
+COPY .docker/app/nginx.conf /etc/nginx/conf.d/default.conf
 RUN rm -f /etc/nginx/sites-enabled/default
 
-COPY docker/app/scripts/entrypoint.sh /entrypoint.sh
+COPY .docker/app/scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENV PATH="/app/.venv/bin:${PATH}" \

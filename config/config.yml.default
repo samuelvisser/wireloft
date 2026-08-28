@@ -1,5 +1,5 @@
 # Default WireLoft configuration, seeded into /config/config.yml on first
-# container start (see docker/app/scripts/entrypoint.sh). Safe to edit
+# container start (see .docker/app/scripts/entrypoint.sh). Safe to edit
 # in-place afterwards -- it is only ever copied once, when config.yml does
 # not yet exist.
 #

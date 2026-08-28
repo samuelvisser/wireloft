@@ -64,7 +64,7 @@ Then open http://localhost:8080.
 Or with plain `docker`:
 
 ```bash
-docker build -t wireloft -f docker/Dockerfile .
+docker build -t wireloft -f .docker/Dockerfile .
 
 docker run -d \
   -p 8080:80 \
