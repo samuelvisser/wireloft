@@ -3,15 +3,7 @@
 #
 # Usage:
 #   ./deploy.sh [tag]        # defaults to "latest" on main, "develop" otherwise
-#
-# The ghcr.io token is never hardcoded or passed on the command line. It's
-# picked up, in order:
-#   1. $GHCR_TOKEN, if already set in the environment.
-#   2. A local token file (default ~/.config/wireloft/ghcr_token, override
-#      with $GHCR_TOKEN_FILE), if one was saved by a previous run.
-#   3. An interactive, hidden prompt -- with an offer to save it to that
-#      file (created with permissions restricted to your user only) so
-#      future runs don't ask again.
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
