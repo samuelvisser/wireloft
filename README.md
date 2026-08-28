@@ -111,11 +111,12 @@ and pushes it to `ghcr.io/samuelvisser/wireloft`, tagged `latest` by default
 or with `tag` (e.g. `./deploy.sh v1.2.0`) plus `latest`.
 
 It needs a GitHub personal access token with `write:packages` scope to log
-in to ghcr.io, picked up in order from: the `GHCR_TOKEN` env var, the macOS
-Keychain (if run on a Mac that has one saved), or an interactive hidden
-prompt as a last resort -- which then offers to save it to the Keychain so
-later runs don't ask again. The token is never written to disk in plaintext
-by this script, never passed as a CLI argument, and never printed.
+in to ghcr.io, picked up in order from: the `GHCR_TOKEN` env var, a local
+token file (default `~/.config/wireloft/ghcr_token`, override with
+`$GHCR_TOKEN_FILE`), or an interactive hidden prompt as a last resort --
+which then offers to save it to that file (created with permissions
+restricted to your user only) so later runs don't ask again. The token is
+never passed as a CLI argument and never printed.
 
 ### Special thanks
 While WireLoft is fully build from the ground up with original code, the open source [DailyWirePodcastProxy](https://github.com/fpnewton/DailyWirePodcastProxy) project has helped 

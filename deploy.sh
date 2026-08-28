@@ -7,9 +7,11 @@
 # The ghcr.io token is never hardcoded or passed on the command line. It's
 # picked up, in order:
 #   1. $GHCR_TOKEN, if already set in the environment.
-#   2. macOS Keychain (service "wireloft-ghcr-token"), if present.
-#   3. An interactive, hidden prompt -- with an offer to save it to the
-#      Keychain so future runs don't ask again.
+#   2. A local token file (default ~/.config/wireloft/ghcr_token, override
+#      with $GHCR_TOKEN_FILE), if one was saved by a previous run.
+#   3. An interactive, hidden prompt -- with an offer to save it to that
+#      file (created with permissions restricted to your user only) so
+#      future runs don't ask again.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,7 +22,7 @@ REGISTRY="ghcr.io"
 GHCR_USER="${GHCR_USER:-samuelvisser}"
 TAG="${1:-latest}"
 FULL_IMAGE="$REGISTRY/$GHCR_USER/$IMAGE_NAME"
-KEYCHAIN_SERVICE="wireloft-ghcr-token"
+TOKEN_FILE="${GHCR_TOKEN_FILE:-$HOME/.config/wireloft/ghcr_token}"
 NPMRC="ui/.npmrc"
 
 resolve_token() {
@@ -28,10 +30,10 @@ resolve_token() {
         return
     fi
 
-    if [ "$(uname -s)" = "Darwin" ] && command -v security >/dev/null 2>&1; then
-        GHCR_TOKEN="$(security find-generic-password -a "$GHCR_USER" -s "$KEYCHAIN_SERVICE" -w 2>/dev/null || true)"
+    if [ -f "$TOKEN_FILE" ]; then
+        GHCR_TOKEN="$(cat "$TOKEN_FILE")"
         if [ -n "$GHCR_TOKEN" ]; then
-            echo "Using ghcr.io token from macOS Keychain." >&2
+            echo "Using ghcr.io token from $TOKEN_FILE." >&2
             return
         fi
     fi
@@ -44,16 +46,16 @@ resolve_token() {
         exit 1
     fi
 
-    if [ "$(uname -s)" = "Darwin" ] && command -v security >/dev/null 2>&1; then
-        read -r -p "Save this token to the macOS Keychain for next time? [Y/n] " save_choice >&2
-        case "${save_choice:-Y}" in
-            [nN]*) ;;
-            *)
-                security add-generic-password -a "$GHCR_USER" -s "$KEYCHAIN_SERVICE" -w "$GHCR_TOKEN" -U
-                echo "Saved to Keychain (service: $KEYCHAIN_SERVICE)." >&2
-                ;;
-        esac
-    fi
+    read -r -p "Save this token to $TOKEN_FILE for next time? [Y/n] " save_choice >&2
+    case "${save_choice:-Y}" in
+        [nN]*) ;;
+        *)
+            mkdir -p "$(dirname "$TOKEN_FILE")"
+            ( umask 077; printf '%s' "$GHCR_TOKEN" > "$TOKEN_FILE" )
+            chmod 600 "$TOKEN_FILE"
+            echo "Saved to $TOKEN_FILE (readable by your user only)." >&2
+            ;;
+    esac
 }
 
 if [ ! -f "$NPMRC" ]; then
