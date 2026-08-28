@@ -60,9 +60,11 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     # Persistent app state (config, SQLite DB, session secret key) lives on
     # the /config volume; downloaded media lives on the /downloads volume.
     # The download root and the secret-key fallback path are set inside
-    # config/config.yml.default instead of as env vars here -- see the
-    # comment at the top of that file for why (nested-settings overrides via
-    # env vars must supply every field of the block, not just one).
+    # config/config.yml.default instead of as env vars here: pydantic-settings
+    # can merge a *YAML* block that only sets some fields with that block's
+    # own defaults (nested_model_default_partial_update, see settings/base.py),
+    # but nested env var overrides (WL_DOWNLOAD_SETTINGS__...) still replace
+    # the whole block, so those two settings go through config.yml instead.
     WL_CONFIG_FILE=/config/config.yml \
     WL_DATABASE_PATH=/config/wireloft.db \
     # DailyWire login tokens are stored via the `keyring` package. Containers
