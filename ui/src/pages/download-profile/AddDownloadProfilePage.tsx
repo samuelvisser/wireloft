@@ -1,7 +1,7 @@
-import {useCallback, useEffect, useMemo, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {Controller, useForm, UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {useNavigate} from 'react-router-dom'
+import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useDownloadProfilesByShowSlug, useLocalMediaProfiles, useShowSeasons, useShows} from '../../lib/queries'
 import DownloadProfileForm, {DownloadProfileMode} from '../../components/DownloadProfile/DownloadProfileForm'
 import {
@@ -29,6 +29,7 @@ type AnyForm = UseFormReturn<PodcastDownloadProfileCreateIn> | UseFormReturn<Ser
 
 export default function AddDownloadProfilePage() {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
 
     const [mode, setMode] = useState<DownloadProfileMode>('base')
 
@@ -55,6 +56,21 @@ export default function AddDownloadProfilePage() {
     })
     const form: AnyForm = mode === 'series' ? formSeries : formPodcast
     const {formState: {errors}} = form
+    const prefillApplied = useRef(false)
+    const requestedShowSlug = searchParams.get('show')
+
+    useEffect(() => {
+        if (prefillApplied.current || !requestedShowSlug || !Array.isArray(shows)) return
+        const requestedShow = shows.find((show) => show.slug === requestedShowSlug)
+        if (!requestedShow) return
+
+        formPodcast.setValue('showId', requestedShow.id, {shouldDirty: false, shouldValidate: true})
+        formSeries.setValue('showId', requestedShow.id, {shouldDirty: false, shouldValidate: true})
+        if (requestedShow.type === 'podcast') setMode('podcast')
+        else if (requestedShow.type === 'series') setMode('series')
+        else setMode('base')
+        prefillApplied.current = true
+    }, [formPodcast, formSeries, requestedShowSlug, shows])
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
