@@ -5,6 +5,7 @@ from sqlalchemy import DateTime, func, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.types.stream_profile_types import StreamProfileType
+from backend.utils.helpers import generate_stream_profile_token
 
 if TYPE_CHECKING:
     from backend.db.models import Show
@@ -22,6 +23,13 @@ class StreamProfileBase(Base):
     type: Mapped[str]
     show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"))
     enable_profile: Mapped[bool] = mapped_column(default=True)
+    # Secret path segment identifying this profile's feed/media routes. Stays
+    # constant across edits to the (user-editable, purely informational)
+    # feed_url so the feed keeps working even if that text is changed; can be
+    # rotated via the regenerate-token endpoint to invalidate a leaked URL.
+    token: Mapped[str] = mapped_column(
+        unique=True, index=True, default=generate_stream_profile_token
+    )
 
     use_downloads: Mapped[bool] = mapped_column(default=False, comment="Use local downloads for stream")
     use_dw_stream: Mapped[bool] = mapped_column(default=False, comment="Use direct DW stream endpoints for stream")

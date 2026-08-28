@@ -1,3 +1,4 @@
+import secrets
 import uuid
 
 def slugify(text: str | None) -> str:
@@ -20,3 +21,7 @@ def generate_uuid() -> str:
     Generate a new random UUID (v4) as a string.
     """
     return str(uuid.uuid4())
+
+def generate_stream_profile_token() -> str:
+    """An unguessable secret used to serve a stream profile's feed without authentication."""
+    return secrets.token_urlsafe(24)

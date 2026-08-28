@@ -112,7 +112,7 @@ def _recreate_outdated_empty_tables(engine: Engine) -> None:
     from sqlalchemy import inspect as sa_inspect, text
 
     # Child tables first so foreign keys don't block the drop
-    migratable = ["media_downloads_episode", "media_downloads", "episodes"]
+    migratable = ["media_downloads_episode", "media_downloads", "episodes", "stream_profiles_rss", "stream_profiles"]
 
     inspector = sa_inspect(engine)
     existing_tables = set(inspector.get_table_names())

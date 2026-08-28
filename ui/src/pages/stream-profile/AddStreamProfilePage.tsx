@@ -42,10 +42,12 @@ export default function AddStreamProfilePage() {
         })
     }
 
-    const onSuccess = async () => {
+    const onSuccess = async (result: {id: number}) => {
         await qc.invalidateQueries({queryKey: ['rssStreamProfiles']})
         await qc.invalidateQueries({queryKey: ['streamProfilesView']})
-        navigate('/stream-profiles')
+        // Land on the edit page so the user immediately sees (and can copy)
+        // the feed URL WireLoft just generated for this profile.
+        navigate(`/edit-stream-profile/rss/${result.id}`)
     }
 
     const onSubmit = buildServerAwareSubmit(form as any, submitFn, {
@@ -120,7 +122,7 @@ export default function AddStreamProfilePage() {
                 </div>
 
                 {/* Stream Profile Form (common + variant-specific fields) */}
-                <StreamProfileForm form={form as any} mode={mode} showRoot={false} />
+                <StreamProfileForm form={form as any} mode={mode} showRoot={false} isCreating />
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>

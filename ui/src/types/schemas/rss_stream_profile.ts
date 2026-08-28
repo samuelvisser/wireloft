@@ -8,16 +8,20 @@ const RssStreamProfileBaseSchema = z.object({
     useDwStream: z.boolean().default(true),
     preferredFormat: z.enum(PreferredFormatReg.values),
     requireExactMatch: z.boolean().default(false),
-    feedUrl: z.string().min(1),
 })
 
+// On create, feedUrl is optional: leave it blank to have WireLoft generate
+// one automatically once the profile (and its secret token) exists.
 export const RssStreamProfileCreateSchema = RssStreamProfileBaseSchema.extend({
     showId: z.int(),
+    feedUrl: z.string().optional(),
 })
 export type RssStreamProfileCreateIn = z.input<typeof RssStreamProfileCreateSchema>
 export type RssStreamProfileCreateOut = z.output<typeof RssStreamProfileCreateSchema>
 
-export const RssStreamProfileUpdateSchema = RssStreamProfileBaseSchema.extend({})
+export const RssStreamProfileUpdateSchema = RssStreamProfileBaseSchema.extend({
+    feedUrl: z.string().min(1),
+})
 export type RssStreamProfileUpdateIn = z.input<typeof RssStreamProfileUpdateSchema>
 export type RssStreamProfileUpdateOut = z.output<typeof RssStreamProfileUpdateSchema>
 

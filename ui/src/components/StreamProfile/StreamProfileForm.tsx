@@ -13,9 +13,13 @@ type Props = {
     form: UseFormReturn<any>
     mode: StreamProfileMode
     showRoot?: boolean
+    // Passed through to RssStreamProfileForm; see its own props for details.
+    isCreating?: boolean
+    onRegenerateToken?: () => void | Promise<void>
+    regeneratingToken?: boolean
 }
 
-export default function StreamProfileForm({form, mode, showRoot}: Props) {
+export default function StreamProfileForm({form, mode, showRoot, isCreating, onRegenerateToken, regeneratingToken}: Props) {
     const {control, formState: {errors}, setValue, watch} = form
     showRoot ??= true
 
@@ -228,7 +232,12 @@ export default function StreamProfileForm({form, mode, showRoot}: Props) {
 
             {/* Variant-specific fields */}
             {mode === 'rss' ? (
-                <RssStreamProfileForm form={form}/>
+                <RssStreamProfileForm
+                    form={form}
+                    isCreating={isCreating}
+                    onRegenerateToken={onRegenerateToken}
+                    regeneratingToken={regeneratingToken}
+                />
             ) : undefined}
         </>
     )

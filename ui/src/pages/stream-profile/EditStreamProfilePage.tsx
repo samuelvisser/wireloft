@@ -1,4 +1,4 @@
-import {useCallback, useEffect} from 'react'
+import {useCallback, useEffect, useState} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
@@ -44,6 +44,27 @@ export default function EditStreamProfilePage() {
     }, [streamProfile, form])
 
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
+
+    const [regenerating, setRegenerating] = useState(false)
+    const onRegenerateToken = useCallback(async () => {
+        if (!profileId) return
+        if (!window.confirm('Regenerating will immediately invalidate the current feed URL. Any podcast app already subscribed to it will need the new URL. Continue?')) return
+        setRegenerating(true)
+        try {
+            const res = await fetch(`${(window as any).appConfig.API_URL}/rss-stream-profiles/${profileId}/regenerate-token`, {
+                method: 'POST',
+                credentials: 'include',
+            })
+            if (res.ok) {
+                const updated = await res.json()
+                form.setValue('feedUrl', updated.feedUrl, {shouldDirty: false})
+                await qc.invalidateQueries({queryKey: ['streamProfile', id]})
+                await qc.invalidateQueries({queryKey: ['streamProfilesView']})
+            }
+        } finally {
+            setRegenerating(false)
+        }
+    }, [profileId, id, qc, form])
 
     const submitFn = async (data: RssStreamProfileUpdateIn) => {
         if (!profileId) return undefined as any
@@ -110,7 +131,13 @@ export default function EditStreamProfilePage() {
                     )}
 
                     {/* Stream Profile Form (common + variant-specific fields) */}
-                    <StreamProfileForm form={form as any} mode="rss" showRoot={false} />
+                    <StreamProfileForm
+                        form={form as any}
+                        mode="rss"
+                        showRoot={false}
+                        onRegenerateToken={onRegenerateToken}
+                        regeneratingToken={regenerating}
+                    />
 
                     <div className="actions">
                         <button type="button" className="btn" onClick={onCancel}>Cancel</button>

@@ -11,9 +11,9 @@ Once setup, WireLoft will handle it all for you. Additionally, it supports downl
 as long as you have a Daily Wire premium subscription. WireLoft is perfect for those who want to consume Daily Wire content 
 through their media server (Plex, Jellyfin, Audiobookshelf) or who just want the content available locally.<br>
 
-WireLoft is also great if your goal is to listen to premium versions of the Daily Wire podcasts in your favorite Podcast app. 
-We plan on supporting creating an RSS feed directly from WireLoft to consume in your podcast app. 
-Currently, you will need a third party server like Audiobookshelf to generate an RSS feed from locally available files.<br>
+WireLoft is also great if your goal is to listen to premium versions of the Daily Wire podcasts in your favorite Podcast app.
+Add a Stream Profile to any show and WireLoft generates a private RSS feed URL you can paste straight into your podcast app -
+no third-party server needed to turn locally downloaded files into a feed.<br>
 
 This project was inspired by [Pinchflat](https://github.com/kieraneglin/pinchflat).
 Pinchflat is an awesome project that allows you to automatically download videos from YouTube channels or playlists.
@@ -39,6 +39,7 @@ use a self-hosted media server like Plex or Jellyfin for series, or Audiobooksel
 - Intelligently helps you avoid downloading the countdown timer shown in live versions of show episodes
 - Optionally automatically delete old content
 - Repackages downloaded video into `.mp4` instead of raw `.ts` (requires [ffmpeg](https://ffmpeg.org/) on PATH; controlled by the `downloadSettings.remuxVideoToMp4` / `downloadSettings.ffmpegPath` configuration fields, on by default)
+- Open a private RSS feed of a show's downloaded episodes for use in any podcast app, via Stream Profiles (see below)
 
 ### Planned
 
@@ -172,6 +173,23 @@ backend-api stop
 Notes:
 - Database seeding is idempotent: running it multiple times won't duplicate rows.
 
+
+## Podcast RSS feeds
+
+Add a Stream Profile (of type RSS) to a show and WireLoft generates a feed URL for you automatically -
+paste it into your podcast app and go. The URL can be freely edited afterwards (e.g. if you access WireLoft
+through a different hostname than the one WireLoft guessed), and can be regenerated at any time from the
+profile's edit page, which immediately invalidates the old URL.
+
+The feed only lists episodes for which a matching downloaded file exists (per the profile's preferred format
+and "require exact match" setting); streaming episodes straight from Daily Wire when no download exists yet is
+planned but not implemented yet.
+
+Feed URLs (and the media files they link to) are served without going through WireLoft's own login: each
+profile's URL contains a long, unguessable secret token, so the feed keeps working for your podcast app even
+when local authentication is enabled for the web UI - similar to how [Pinchflat handles this](https://github.com/kieraneglin/pinchflat/wiki/Podcast-RSS-Feeds).
+Treat a feed URL like a password: anyone who has it can stream (and see the titles/descriptions of) that
+show's downloaded episodes.
 
 ## Authentication and session persistence
 

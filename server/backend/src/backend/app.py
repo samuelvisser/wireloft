@@ -100,11 +100,18 @@ def create_app() -> FastAPI:
         rss_stream_profile_router,
         stream_profile_router,
         task_router,
+        feeds_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
     # Public auth endpoints
     app.include_router(auth_router, prefix="/api")
+
+    # Podcast feed endpoints: intentionally mounted outside /api (and thus
+    # outside the auth middleware below) so feed URLs keep working in podcast
+    # apps even when local auth is enabled. Secured instead by an unguessable
+    # per-profile token baked into the URL - see backend.api.endpoints.feeds.
+    app.include_router(feeds_router)
 
     # Protected API endpoints (shielded by middleware above)
     app.include_router(dailywire_router, prefix="/api")

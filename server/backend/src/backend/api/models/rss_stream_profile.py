@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 
 from pydantic import Field
 
@@ -16,18 +17,24 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     use_dw_stream: bool
     preferred_format: str = Field(min_length=1)
     require_exact_match: bool
-    feed_url: str = Field(min_length=1)
 
 
 class RssStreamProfileAPICreate(_RssStreamProfileAPIBaseIn):
-    """Request body for creating an RSS stream profile."""
+    """Request body for creating an RSS stream profile.
+
+    ``feed_url`` is optional: leave it unset (or blank) to have WireLoft
+    generate one automatically from the request host and the profile's
+    secret token. It can always be edited afterwards.
+    """
 
     show_id: int
+    feed_url: Optional[str] = None
 
 
 class RssStreamProfileAPIUpdate(_RssStreamProfileAPIBaseIn):
     """Request body for updating an RSS stream profile."""
-    pass
+
+    feed_url: str = Field(min_length=1)
 
 
 # ---------- Lenient output (read) ----------

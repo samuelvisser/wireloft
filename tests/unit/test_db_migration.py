@@ -135,6 +135,70 @@ def test_recreate_outdated_empty_tables_raises_for_non_nullable_gap_with_data(tm
     engine.dispose()
 
 
+def test_recreate_outdated_empty_tables_adds_token_to_empty_stream_profiles(tmp_path: Path):
+    """stream_profiles.token is new and non-nullable; an empty pre-token table
+    (the realistic case, since RSS feeds are a brand new feature) is dropped
+    and recreated rather than refused."""
+    from backend.db.core import _recreate_outdated_empty_tables
+
+    db_path = tmp_path / "stream-profile-migration-test.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    _create_all_tables(engine)
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP INDEX ix_stream_profiles_token"))
+        conn.execute(text("ALTER TABLE stream_profiles DROP COLUMN token"))
+
+    columns_before = {c["name"] for c in inspect(engine).get_columns("stream_profiles")}
+    assert "token" not in columns_before
+
+    _recreate_outdated_empty_tables(engine)
+    _create_all_tables(engine)
+
+    columns_after = {c["name"] for c in inspect(engine).get_columns("stream_profiles")}
+    assert "token" in columns_after
+
+    engine.dispose()
+
+
+def test_recreate_outdated_empty_tables_raises_for_populated_stream_profiles_missing_token(tmp_path: Path):
+    """A non-empty stream_profiles table missing the new non-nullable token
+    column must refuse to auto-migrate, same as any other unsafe gap."""
+    from backend.db.core import _recreate_outdated_empty_tables
+
+    db_path = tmp_path / "stream-profile-unsafe-migration-test.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    _create_all_tables(engine)
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP INDEX ix_stream_profiles_token"))
+        conn.execute(text("ALTER TABLE stream_profiles DROP COLUMN token"))
+
+    session = Session(engine)
+    from backend.db.models import Show
+    from backend.types.show_types import EpisodeIdentifier, ShowType
+
+    show = Show(
+        uuid="show-uuid", slug="show", title="Show", description=None,
+        sharing_url="https://example.test/show", membership_level="FREE",
+        type=ShowType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
+        author_name="Host", author_slug="host",
+    )
+    session.add(show)
+    session.flush()
+    session.execute(text(
+        "INSERT INTO stream_profiles (type, show_id, enable_profile, use_downloads, use_dw_stream, "
+        "preferred_format, require_exact_match) VALUES ('rss', :show_id, 1, 1, 0, 'format_1080p', 0)"
+    ), {"show_id": show.id})
+    session.commit()
+    session.close()
+
+    with pytest.raises(RuntimeError, match="token"):
+        _recreate_outdated_empty_tables(engine)
+
+    engine.dispose()
+
+
 def test_recreate_outdated_empty_tables_adds_is_no_show_today_to_populated_episodes(tmp_path: Path):
     """The exact real-world case this was added for: episodes.is_no_show_today
     is a new nullable column on a table real users already have populated."""

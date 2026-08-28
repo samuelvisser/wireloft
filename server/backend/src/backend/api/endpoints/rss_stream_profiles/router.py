@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
 
 from .service import *
 from ...models.rss_stream_profile import *
@@ -19,16 +19,17 @@ def rss_stream_profiles_list():
 
 
 @router.post("", response_model=RssStreamProfileAPIRead, status_code=status.HTTP_201_CREATED)
-def rss_stream_profiles_create(body: RssStreamProfileAPICreate):
+def rss_stream_profiles_create(body: RssStreamProfileAPICreate, request: Request):
     """
     Create a new RSS stream profile.
 
     Creates a profile defining how RSS streams should be handled for a show.
-    Returns the created profile with tracking information.
+    Returns the created profile with tracking information. If no feed_url is
+    given, one is generated automatically.
     """
     with db_session() as s:
         try:
-            result = create_stream_profile_rss(s, body)
+            result = create_stream_profile_rss(s, request, body)
             s.commit()
             return result
         except Exception:
@@ -58,6 +59,23 @@ def rss_stream_profiles_update(rss_stream_profile_id: int, body: RssStreamProfil
     with db_session() as s:
         try:
             result = update_stream_profile_rss(s, rss_stream_profile_id, body)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post("/{rss_stream_profile_id}/regenerate-token", response_model=RssStreamProfileAPIRead)
+def rss_stream_profiles_regenerate_token(rss_stream_profile_id: int, request: Request):
+    """
+    Rotate the secret token backing this profile's feed and media URLs.
+
+    Immediately invalidates the previous feed URL (e.g. if it leaked).
+    """
+    with db_session() as s:
+        try:
+            result = regenerate_stream_profile_rss_token(s, request, rss_stream_profile_id)
             s.commit()
             return result
         except Exception:
