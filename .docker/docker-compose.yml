@@ -4,7 +4,7 @@
 #   mkdir wireloft && cd wireloft
 #   curl -O https://raw.githubusercontent.com/samuelvisser/wireloft/develop/.docker/docker-compose.yml
 #   docker compose up -d
-# Then open http://localhost:8080.
+# Then open http://localhost:5273.
 #
 # Building from source instead? Use the docker-compose.yml at the repo root.
 services:
@@ -13,7 +13,7 @@ services:
     container_name: wireloft
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "5273:80"
     volumes:
       # App config, SQLite database, session/keyring secrets. Auto-created
       # and auto-migrated on the first start -- no manual setup needed.
