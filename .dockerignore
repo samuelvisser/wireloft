@@ -17,6 +17,9 @@ __pycache__/
 # Node / UI
 ui/node_modules/
 ui/dist/
+# Never send this to the build context; it holds a real credential and is
+# only ever passed in as a build secret (see docker-compose.yml).
+ui/.npmrc
 
 # Misc
 tests/

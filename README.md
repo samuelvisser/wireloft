@@ -53,7 +53,22 @@ single image. One container serves the web UI, the API, and the background
 scheduler/downloader -- everything starts automatically, and the SQLite
 database is created (and migrated) on first boot if it doesn't already exist.
 
-Using Docker Compose (recommended):
+Building the UI needs your own Font Awesome Pro credentials: create
+`ui/.npmrc` (never committed, see `ui/.gitignore`) with the same npm auth
+token you use for local development, e.g.:
+
+```
+@awesome.me:registry=https://npm.fontawesome.com/
+//npm.fontawesome.com/:_authToken=<your token>
+```
+
+The build reads it as a [BuildKit secret](https://docs.docker.com/build/building/secrets/)
+mounted only into the `npm ci` step -- it's never copied into the build
+context or baked into any image layer, so the published image stays safe to
+make public.
+
+Using Docker Compose (recommended -- already wired to `ui/.npmrc` as a
+build secret):
 
 ```bash
 docker compose up -d --build
@@ -64,7 +79,8 @@ Then open http://localhost:8080.
 Or with plain `docker`:
 
 ```bash
-docker build -t wireloft -f .docker/Dockerfile .
+docker build -t wireloft -f .docker/Dockerfile . \
+  --secret id=npmrc,src=ui/.npmrc
 
 docker run -d \
   -p 8080:80 \

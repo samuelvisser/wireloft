@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: .docker/Dockerfile
+      secrets:
+        - npmrc
     container_name: wireloft
     restart: unless-stopped
     ports:
@@ -17,3 +19,9 @@ services:
       - TZ=Europe/Amsterdam
       # Uncomment to require a login (leave unset for open/no-auth access):
       # - WL_ADMIN_AUTH__PASSWORD=change-me
+
+secrets:
+  # Font Awesome Pro registry token for the UI build (see .docker/Dockerfile).
+  # Never committed -- create ui/.npmrc yourself with your own credentials.
+  npmrc:
+    file: ./ui/.npmrc
