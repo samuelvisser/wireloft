@@ -7,14 +7,7 @@ FROM node:22-alpine AS ui-build
 WORKDIR /ui
 
 COPY ui/package.json ui/package-lock.json ./
-# @awesome.me/kit-... is a private (paid) Font Awesome package; npm needs the
-# auth token from ui/.npmrc to fetch it. That file holds a real credential and
-# must never end up in an image layer or in this repo (it's git- and
-# dockerignored). --mount=type=secret makes it available to this RUN step
-# only -- it's not copied into the build context and leaves no trace in any
-# layer, including this one. Build it in via `docker compose build` (already
-# wired to ui/.npmrc, see docker-compose.yml's top-level `secrets:`) or
-# `docker build --secret id=npmrc,src=ui/.npmrc ...`.
+# Make sure we can build npm including premium Font Awesome
 RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=true \
     npm ci
 
