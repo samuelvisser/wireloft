@@ -601,20 +601,8 @@ a.btn,
 .status.status-local_processing { color: #94a3b8; } /* gray */
 .status.status-error { color: #ef4444; } /* red */
 
-/* "No storage" label shown in place of icons when an episode has no downloads */
-.status.status-none-label {
-  width: auto;
-  height: auto;
-  border-radius: 999px;
-  padding: 2px 8px;
-  background: #ef4444;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  white-space: nowrap;
-}
+/* Icon shown in place of download-status icons when an episode has no downloads */
+.status.status-none { color: #ef4444; }
 
 /* Overflow "+N" pill when there are more downloads than can be shown */
 .status.status-more {
@@ -629,26 +617,15 @@ a.btn,
   white-space: nowrap;
 }
 
-/* Episode type badge (top-right of thumbnail): Extra / Trailer / Auxiliary */
-.type-badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  color: #fff;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-.type-badge-ep-extra { background: rgba(217, 119, 6, 0.92); }
-.type-badge-trailer { background: rgba(59, 130, 246, 0.92); }
-.type-badge-aux { background: rgba(100, 116, 139, 0.92); }
-
-/* Episode number badge variant to match the "extra" type color */
+/* Bottom-right badge color variants: episode number (ep/ep-extra) or content-type
+   label (trailer/aux) in the same corner slot. */
 .badge-ep-extra { background: rgba(217, 119, 6, 0.92); }
+.badge-trailer { background: rgba(59, 130, 246, 0.92); }
+.badge-aux { background: rgba(100, 116, 139, 0.92); }
 @media (prefers-color-scheme: dark) {
-  .badge-ep-extra { background: rgba(217, 119, 6, 0.92); color: #fff; }
+  .badge-ep-extra,
+  .badge-trailer,
+  .badge-aux { color: #fff; }
 }
 
 

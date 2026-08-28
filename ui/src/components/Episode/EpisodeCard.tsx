@@ -36,7 +36,6 @@ export function groupDownloadsByEpisodeSlug(
 }
 
 const TYPE_BADGE_LABEL: Record<string, string> = {
-    'ep-extra': 'Extra',
     trailer: 'Trailer',
     aux: 'Auxiliary',
 }
@@ -52,7 +51,9 @@ function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }
     if (downloads.length === 0) {
         return (
             <span className="status-group">
-                <span className="status status-none-label" title="No downloads on disk">No storage</span>
+                <span className="status status-none" title="No downloads on disk">
+                    <FontAwesomeIcon icon={['fas', 'floppy-disk-circle-xmark'] as any}/>
+                </span>
             </span>
         )
     }
@@ -104,9 +105,12 @@ export default function EpisodeCard({ep, showSlug, downloads}: Props) {
     const style = imageUrl ? {backgroundImage: `url(${imageUrl})`} : undefined
 
     const {type, number} = episodeTypeInfo(ep.episodeIdentifier)
-    // Only a regular episode or an ep-extra has a meaningful "episode number" to show.
+    // Bottom-right badge: the episode number for regular/extra episodes (color-coded
+    // by type), or the content-type label for trailers/auxiliary content, which have
+    // no meaningful episode number.
     const showNumberBadge = (type === 'ep' || type === 'ep-extra') && !!number
     const typeBadgeLabel = type ? TYPE_BADGE_LABEL[type] : undefined
+    const cornerBadgeText = showNumberBadge ? `#${number}` : typeBadgeLabel
 
     const navigate = useNavigate()
     const goToEpisode = () => navigate(`/show/${showSlug}/episode/${ep.slug}`)
@@ -127,11 +131,8 @@ export default function EpisodeCard({ep, showSlug, downloads}: Props) {
             {initials}
           </span>
                 )}
-                {typeBadgeLabel && (
-                    <span className={`type-badge type-badge-${type}`}>{typeBadgeLabel}</span>
-                )}
-                {showNumberBadge && (
-                    <span className={`badge badge-${type}`}>#{number}</span>
+                {cornerBadgeText && (
+                    <span className={`badge badge-${type}`}>{cornerBadgeText}</span>
                 )}
             </div>
             <div className="episode-title" title={ep.title}>{ep.title}</div>
