@@ -3,14 +3,22 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
-import { useShow, useEpisodes, useMediaDownloadsView } from '../../lib/queries'
+import { useDownloadProfilesView, useEpisodes, useMediaDownloadsView, useShow, useStreamProfilesView } from '../../lib/queries'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
+import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import {PreferredFormatReg} from '../../types/local_media_profile'
+import './ShowPage.css'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
 
+function preferredFormatLabel(value?: string | null) {
+  if (!value) return 'Unknown'
+  const label = PreferredFormatReg.getLabelLoose(value)
+  return label === 'Audio Only' ? 'Audio' : label
+}
 
 export default function ShowPage() {
   const { id } = useParams()
@@ -22,8 +30,20 @@ export default function ShowPage() {
   const { data: episodesData } = useEpisodes(id)
   const episodes: any[] = episodesData ?? []
   const { data: downloads } = useMediaDownloadsView()
+  const { data: downloadProfiles } = useDownloadProfilesView()
+  const { data: streamProfiles } = useStreamProfilesView()
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
   const [confirm, setConfirm] = useState(false)
+  const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
+
+  const attachedDownloadProfiles = useMemo(
+    () => (downloadProfiles ?? []).filter((profile) => profile.showSlug === id),
+    [downloadProfiles, id],
+  )
+  const attachedStreamProfiles = useMemo(
+    () => (streamProfiles ?? []).filter((profile) => profile.showSlug === id),
+    [streamProfiles, id],
+  )
 
   // Lazily reveal more episodes as the user scrolls, instead of paginating with buttons.
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
@@ -89,6 +109,17 @@ export default function ShowPage() {
     navigate(`/edit-show/${id}`)
   }
 
+  const copyFeedUrl = async (profileId: number, feedUrl?: string) => {
+    if (!feedUrl) return
+    try {
+      await navigator.clipboard.writeText(feedUrl)
+      setCopiedStreamProfileId(profileId)
+      window.setTimeout(() => setCopiedStreamProfileId((current) => current === profileId ? null : current), 1800)
+    } catch {
+      toast.error('Could not copy the RSS URL')
+    }
+  }
+
   const closeConfirm = () => setConfirm(false)
   const onConfirmDelete = async () => {
     if (!id) return
@@ -132,19 +163,105 @@ export default function ShowPage() {
       </div>
 
       <article className="show-details" aria-label="Show details">
-        <header className="show-header">
-          <div className="show-author">{show.authorName}</div>
-          <div className="show-meta">
-            {total} episodes{show.years ? ` • ${show.years}` : ''}
+        <header className="show-page-header">
+          <div className="show-page-heading">
+            <div className="show-author">{show.authorName}</div>
+            <div className="show-meta">
+              {total} episodes{show.years ? ` • ${show.years}` : ''}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button type="button" className="btn" title="Edit show (not implemented)" onClick={onEdit}>
-              Edit
+
+          <div className="show-page-actions">
+            <button type="button" className="btn" title="Edit show" onClick={onEdit}>
+              <FontAwesomeIcon icon={['fas', 'pen-to-square'] as any} aria-hidden="true"/>
+              <span>Edit</span>
             </button>
             <button type="button" className="btn btn-danger" onClick={onDelete}>
-              Delete
+              <FontAwesomeIcon icon={['fas', 'trash'] as any} aria-hidden="true"/>
+              <span>Delete</span>
             </button>
+            <ActionMenu
+              items={[
+                {
+                  label: 'Create download profile',
+                  icon: ['fas', 'download'],
+                  onSelect: () => navigate(`/add-download-profile?show=${encodeURIComponent(id)}`),
+                },
+                {
+                  label: 'Create stream profile',
+                  icon: ['fas', 'rss'],
+                  onSelect: () => navigate(`/add-stream-profile?show=${encodeURIComponent(id)}`),
+                },
+              ]}
+            />
           </div>
+
+          {(attachedDownloadProfiles.length > 0 || attachedStreamProfiles.length > 0) && (
+            <div className="show-profile-summary" aria-label="Profiles attached to this show">
+              {attachedDownloadProfiles.length > 0 && (
+                <div className="show-profile-group">
+                  <div className="show-profile-group-label">
+                    <FontAwesomeIcon icon={['fas', 'download'] as any} aria-hidden="true"/>
+                    <span>Download {attachedDownloadProfiles.length === 1 ? 'profile' : 'profiles'}</span>
+                  </div>
+                  <div className="show-profile-links">
+                    {attachedDownloadProfiles.map((profile) => (
+                      <button
+                        key={`${profile.type}-${profile.id}`}
+                        type="button"
+                        className="show-profile-chip"
+                        onClick={() => navigate(`/edit-download-profile/${profile.type}/${profile.id}`, {state: profile})}
+                        title={`Open ${preferredFormatLabel(profile.localMediaProfilePreferredFormat)} download profile`}
+                      >
+                        <span>{preferredFormatLabel(profile.localMediaProfilePreferredFormat)}</span>
+                        <FontAwesomeIcon icon={['fas', 'arrow-up-right-from-square'] as any} aria-hidden="true"/>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {attachedStreamProfiles.length > 0 && (
+                <div className="show-profile-group">
+                  <div className="show-profile-group-label">
+                    <FontAwesomeIcon icon={['fas', 'rss'] as any} aria-hidden="true"/>
+                    <span>Stream {attachedStreamProfiles.length === 1 ? 'profile' : 'profiles'}</span>
+                  </div>
+                  <div className="show-profile-links">
+                    {attachedStreamProfiles.map((profile) => {
+                      const feedUrl = profile.type === 'rss' ? profile.streamProfileImpl?.feedUrl : undefined
+                      const copied = copiedStreamProfileId === profile.id
+                      const label = `${profile.type.toUpperCase()} ${preferredFormatLabel(profile.preferredFormat)}`
+                      return (
+                        <div key={`${profile.type}-${profile.id}`} className="show-profile-chip-group">
+                          <button
+                            type="button"
+                            className="show-profile-chip show-profile-chip-main"
+                            onClick={() => navigate(`/edit-stream-profile/${profile.type}/${profile.id}`, {state: profile})}
+                            title={`Open ${label} stream profile`}
+                          >
+                            <span>{label}</span>
+                            <FontAwesomeIcon icon={['fas', 'arrow-up-right-from-square'] as any} aria-hidden="true"/>
+                          </button>
+                          {profile.type === 'rss' && feedUrl && (
+                            <button
+                              type="button"
+                              className="show-profile-copy"
+                              onClick={() => copyFeedUrl(profile.id, feedUrl)}
+                              aria-label={copied ? 'RSS URL copied' : 'Copy RSS URL'}
+                              title={copied ? 'Copied!' : 'Copy RSS URL'}
+                            >
+                              <FontAwesomeIcon icon={['fas', copied ? 'check' : 'copy'] as any} aria-hidden="true"/>
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </header>
 
         <div className="episodes-grid" role="list" aria-label={`${show.title} episodes`}>

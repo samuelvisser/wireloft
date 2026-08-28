@@ -1,7 +1,7 @@
-import {useCallback, useState} from 'react'
+import {useCallback, useEffect, useRef, useState} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {useNavigate} from 'react-router-dom'
+import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useShows} from '../../lib/queries'
 import {buildShowSelectRegistry} from '../../types/show'
 import {SelectRegistry} from '../../utils/selectRegistry'
@@ -16,6 +16,7 @@ import ReadMore from "../../utils/ReadMore";
 
 export default function AddStreamProfilePage() {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const qc = useQueryClient()
 
     const [mode, setMode] = useState<StreamProfileMode>('rss')
@@ -30,6 +31,17 @@ export default function AddStreamProfilePage() {
         defaultValues: getZodDefaults(RssStreamProfileCreateSchema),
     })
     const {watch, formState: {errors, isSubmitting}} = form
+    const prefillApplied = useRef(false)
+    const requestedShowSlug = searchParams.get('show')
+
+    useEffect(() => {
+        if (prefillApplied.current || !requestedShowSlug || !Array.isArray(shows)) return
+        const requestedShow = shows.find((show) => show.slug === requestedShowSlug)
+        if (!requestedShow) return
+
+        form.setValue('showId', requestedShow.id, {shouldDirty: false, shouldValidate: true})
+        prefillApplied.current = true
+    }, [form, requestedShowSlug, shows])
 
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
 
