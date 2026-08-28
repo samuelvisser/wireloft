@@ -1,4 +1,4 @@
-import {useRef, useState} from 'react'
+import {useMemo, useRef, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -13,6 +13,29 @@ import {useMediaDownloadsView} from '../lib/queries'
 import {MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {getErrorMessageFromResponse} from '../utils/helpers'
+
+// Downloads that are not yet in a final, successfully-downloaded state.
+const DEFAULT_STATUS_FILTER = new Set(['pending', 'downloading', 'error'])
+
+function formatDateTime(value: Date | null | undefined): string {
+    if (!value) return '—'
+    try {
+        return value.toLocaleString()
+    } catch {
+        return String(value)
+    }
+}
+
+/** The timestamp to show for a download row: when it finished, or else when it was queued. */
+function rowTimestamp(row: MediaDownloadViewRead): Date | null {
+    return row.finishedAt ?? row.createdAt ?? null
+}
+
+function setsEqual(a: Set<string>, b: Set<string>): boolean {
+    if (a.size !== b.size) return false
+    for (const v of a) if (!b.has(v)) return false
+    return true
+}
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -55,6 +78,21 @@ export default function DownloadsPage() {
     const {data: downloads, isLoading, error} = useMediaDownloadsView()
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
+    const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(DEFAULT_STATUS_FILTER))
+
+    const toggleStatusFilter = (status: string) => {
+        setStatusFilter((prev) => {
+            const next = new Set(prev)
+            if (next.has(status)) next.delete(status)
+            else next.add(status)
+            return next
+        })
+    }
+
+    const filteredDownloads = useMemo(
+        () => downloads?.filter((row) => statusFilter.has(String(row.downloadStatus))),
+        [downloads, statusFilter],
+    )
 
     const retry = async (row: MediaDownloadViewRead) => {
         try {
@@ -81,11 +119,41 @@ export default function DownloadsPage() {
                 </div>
             ),
             dataLabel: 'Episode',
+            sortAccessor: (row) => row.episodeTitle,
         },
-        {header: 'Profile', accessor: (row) => row.localMediaProfileName ?? '—', dataLabel: 'Profile'},
-        {header: 'Format', accessor: (row) => row.formatDownloaded ?? '—', align: 'center', dataLabel: 'Format'},
-        {header: 'Status', cell: (row) => <StatusCell row={row}/>, dataLabel: 'Status', width: 260},
-        {header: 'Size', accessor: (row) => formatBytes(row.downloadedBytes), align: 'right', dataLabel: 'Size'},
+        {
+            header: 'Profile',
+            accessor: (row) => row.localMediaProfileName ?? '—',
+            dataLabel: 'Profile',
+            sortAccessor: (row) => row.localMediaProfileName,
+        },
+        {
+            header: 'Format',
+            accessor: (row) => row.formatDownloaded ?? '—',
+            align: 'center',
+            dataLabel: 'Format',
+            sortAccessor: (row) => row.formatDownloaded,
+        },
+        {
+            header: 'Status',
+            cell: (row) => <StatusCell row={row}/>,
+            dataLabel: 'Status',
+            width: 260,
+            sortAccessor: (row) => MediaDownloadStatusReg.getLabelLoose(String(row.downloadStatus)),
+        },
+        {
+            header: 'Size',
+            accessor: (row) => formatBytes(row.downloadedBytes),
+            align: 'right',
+            dataLabel: 'Size',
+            sortAccessor: (row) => row.downloadedBytes,
+        },
+        {
+            header: 'Updated',
+            accessor: (row) => formatDateTime(rowTimestamp(row)),
+            dataLabel: 'Updated',
+            sortAccessor: (row) => rowTimestamp(row),
+        },
     ]
 
     return (
@@ -100,14 +168,40 @@ export default function DownloadsPage() {
                     </p>
                 </PageSubtitle>
             </div>
+            <div className="filter-chip-group" role="group" aria-label="Filter downloads by status">
+                {MediaDownloadStatusReg.options.map((opt) => (
+                    <button
+                        key={opt.value}
+                        type="button"
+                        className="filter-chip"
+                        aria-pressed={statusFilter.has(opt.value)}
+                        onClick={() => toggleStatusFilter(opt.value)}
+                    >
+                        {opt.label}
+                    </button>
+                ))}
+                {!setsEqual(statusFilter, DEFAULT_STATUS_FILTER) && (
+                    <button
+                        type="button"
+                        className="filter-chip-reset"
+                        onClick={() => setStatusFilter(new Set(DEFAULT_STATUS_FILTER))}
+                    >
+                        Reset filters
+                    </button>
+                )}
+            </div>
             <div className="form-row">
                 <DataTable<MediaDownloadViewRead>
                     ariaLabel="Episode downloads"
                     columns={columns}
-                    data={downloads}
+                    data={filteredDownloads}
                     loading={isLoading}
                     error={error}
-                    emptyMessage="No downloads yet. Start one from an episode's page."
+                    emptyMessage={
+                        downloads && downloads.length > 0
+                            ? 'No downloads match the selected filters.'
+                            : "No downloads yet. Start one from an episode's page."
+                    }
                     rowKey={(row) => row.id}
                     rowAriaLabel={(row) => `${row.episodeTitle} (${row.localMediaProfileName})`}
                     onRowClick={(row) => {
