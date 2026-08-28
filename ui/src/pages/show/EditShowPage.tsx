@@ -130,6 +130,7 @@ export default function EditShowPage() {
             placeholder="https://www.dailywire.com/show/the-ben-shapiro-show"
             value={form.url}
             onChange={(e) => setForm({ ...form, url: e.target.value })}
+            disabled
           />
         </div>
 
@@ -142,7 +143,7 @@ export default function EditShowPage() {
             className="input"
             value={form.localMediaProfileId}
             onChange={(e) => setForm({ ...form, localMediaProfileId: e.target.value })}
-            disabled={profiles === null || profiles.length === 0}
+            disabled
           >
             {profiles === null ? (
               <option>Loading profiles...</option>
