@@ -1471,3 +1471,126 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   }
   .submenu-items .nav-item { white-space: nowrap; }
 }
+
+/* RSS feed URL input with integrated actions */
+.rss-feed-url-group {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 8px;
+  background: var(--bg);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.rss-feed-url-group:hover {
+  border-color: #60a5fa;
+}
+
+.rss-feed-url-group:focus-within {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25);
+}
+
+.rss-feed-url-group-invalid,
+.rss-feed-url-group-invalid:hover {
+  border-color: #ef4444;
+}
+
+.rss-feed-url-group-invalid:focus-within {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.rss-feed-url-input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.rss-feed-url-input:hover,
+.rss-feed-url-input:focus,
+.rss-feed-url-input:focus-visible,
+.rss-feed-url-input[aria-invalid="true"] {
+  border: 0;
+  box-shadow: none;
+}
+
+.rss-feed-url-actions {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.rss-feed-url-action {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 68px;
+  padding: 0 12px;
+  border: 0;
+  border-left: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 0;
+  background: #e2e8f0;
+  color: #0f172a;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.rss-feed-url-action:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+.rss-feed-url-action:focus-visible {
+  position: relative;
+  outline: 2px solid #60a5fa;
+  outline-offset: -3px;
+}
+
+.rss-feed-url-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.rss-feed-url-action-danger {
+  min-width: 104px;
+  border-left-color: rgba(255, 255, 255, 0.28);
+  background: #ef4444;
+  color: #fff;
+}
+
+.rss-feed-url-action-danger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.rss-feed-url-action-icon {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .rss-feed-url-action:not(.rss-feed-url-action-danger) {
+    background: rgba(255, 255, 255, 0.09);
+    color: var(--text);
+  }
+}
+
+@media (max-width: 560px) {
+  .rss-feed-url-action {
+    min-width: 40px;
+    padding: 0 10px;
+  }
+
+  .rss-feed-url-action-text {
+    display: none;
+  }
+
+  .rss-feed-url-action-icon {
+    display: block;
+    font-size: 13px;
+  }
+}
+
