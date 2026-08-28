@@ -2,6 +2,7 @@ import {ShowCreatePayloadSchema} from "./show";
 import {PodcastDownloadProfileCreateSchema} from "./podcast_download_profile";
 import {SeriesDownloadProfileCreateSchema} from "./series_download_profile";
 import {LocalMediaProfileCreateSchema, LocalMediaProfileUpdateSchema} from "./local_media_profile";
+import {RssStreamProfileCreateSchema} from "./rss_stream_profile";
 import {z} from "zod";
 import {SeasonDetachedSchema} from "./season";
 
@@ -56,11 +57,17 @@ export type LocalMediaProfileUpsertIn = z.input<typeof LocalMediaProfileUpsertSc
 export type LocalMediaProfileUpsertOut = z.output<typeof LocalMediaProfileUpsertSchema>
 
 
+export const RssStreamProfileBundleSchema = RssStreamProfileCreateSchema.omit({showId: true})
+export type RssStreamProfileBundleIn = z.input<typeof RssStreamProfileBundleSchema>
+export type RssStreamProfileBundleOut = z.output<typeof RssStreamProfileBundleSchema>
+
+
 export const ShowCreateBundleSchema = z.object({
     show: ShowCreatePayloadSchema,
-    localMediaProfile: LocalMediaProfileUpsertSchema,
-    downloadProfile: DownloadProfileUnifiedCreateSchema,
     seasons: z.array(SeasonDetachedSchema),
+    localMediaProfile: LocalMediaProfileUpsertSchema.optional(),
+    downloadProfile: DownloadProfileUnifiedCreateSchema.optional(),
+    streamProfile: RssStreamProfileBundleSchema.optional(),
 })
 export type ShowCreateBundleIn = z.input<typeof ShowCreateBundleSchema>
 export type ShowCreateBundleOut = z.output<typeof ShowCreateBundleSchema>
