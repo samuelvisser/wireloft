@@ -2,7 +2,7 @@ services:
   wireloft:
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: .docker/Dockerfile
     container_name: wireloft
     restart: unless-stopped
     ports:
