@@ -18,6 +18,7 @@ export default function ShowsPage() {
         {
             header: 'Title',
             accessor: (s) => s.title,
+            mobileHidden: true,
         },
         {
             header: 'Author',
@@ -51,6 +52,18 @@ export default function ShowsPage() {
                     error={error}
                     rowKey={(s) => s.slug}
                     rowAriaLabel={(s) => s.title}
+                    mobileSummary={(s) => (
+                        <>
+                            <span className="mobile-summary-title">{s.title}</span>
+                            <span className="mobile-summary-subtitle">{s.authorName}</span>
+                            <span className="mobile-summary-meta">
+                                <span>{ShowTypeReg.getLabelLoose(s.type)}</span>
+                                <span aria-hidden="true">•</span>
+                                <span>{EpisodeIdentifierReg.getLabelLoose(s.episodeIdentifier)}</span>
+                            </span>
+                        </>
+                    )}
+                    mobileRowActionLabel="Open show"
                     onRowClick={(s) => navigate(`/show/${s.slug}`)}
                     actions={(s) => [
                         {

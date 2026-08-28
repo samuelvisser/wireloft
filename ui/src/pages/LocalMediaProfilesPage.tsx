@@ -20,6 +20,7 @@ export default function LocalMediaProfilesPage() {
         {
             header: 'Name',
             accessor: (p) => p.name,
+            mobileHidden: true,
         },
         {
             header: 'Output Path Template',
@@ -54,6 +55,14 @@ export default function LocalMediaProfilesPage() {
                     error={error}
                     rowKey={(p) => p.id}
                     rowAriaLabel={(p) => p.name}
+                    mobileSummary={(p) => (
+                        <>
+                            <span className="mobile-summary-title">{p.name}</span>
+                            <span className="mobile-summary-meta">
+                                <span>{PreferredFormatReg.getLabelLoose(p.preferredFormat)}</span>
+                            </span>
+                        </>
+                    )}
                     onRowClick={(p) => navigate(`/edit-local-media-profile/${p.slug}`, { state: { ...p, outputPathTemplate: p.outputTemplate } })}
                     actions={(p) => [
                         {

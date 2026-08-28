@@ -119,6 +119,7 @@ export default function DownloadsPage() {
                 </div>
             ),
             dataLabel: 'Episode',
+            mobileHidden: true,
             sortAccessor: (row) => row.episodeTitle,
         },
         {
@@ -204,6 +205,31 @@ export default function DownloadsPage() {
                     }
                     rowKey={(row) => row.id}
                     rowAriaLabel={(row) => `${row.episodeTitle} (${row.localMediaProfileName})`}
+                    mobileSummary={(row) => {
+                        const status = String(row.downloadStatus)
+                        const statusClass = status === 'downloaded' || status === 'redownloaded'
+                            ? 'is-success'
+                            : status === 'pending' || status === 'downloading' || status === 'processing'
+                                ? 'is-progress'
+                                : status === 'error' || status === 'missing' || status === 'corrupted'
+                                    ? 'is-error'
+                                    : ''
+                        return (
+                            <>
+                                <span className="mobile-summary-title">{row.episodeTitle ?? 'Unknown episode'}</span>
+                                <span className="mobile-summary-subtitle">{row.showTitle ?? 'Unknown show'}</span>
+                                <span className="mobile-summary-meta">
+                                    <span>{formatBytes(row.downloadedBytes)}</span>
+                                    <span aria-hidden="true">•</span>
+                                    <span>{row.formatDownloaded ?? 'Unknown format'}</span>
+                                    <span className={`mobile-summary-status ${statusClass}`}>
+                                        {MediaDownloadStatusReg.getLabelLoose(status)}
+                                    </span>
+                                </span>
+                            </>
+                        )
+                    }}
+                    mobileRowActionLabel="Open episode"
                     onRowClick={(row) => {
                         if (row.showSlug && row.episodeSlug) navigate(`/show/${row.showSlug}/episode/${row.episodeSlug}`)
                     }}

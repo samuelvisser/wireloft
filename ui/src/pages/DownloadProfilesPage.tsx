@@ -20,6 +20,7 @@ export default function DownloadProfilesPage() {
         {
             header: 'Show Title',
             accessor: (p) => p.showTitle,
+            mobileHidden: true,
         },
         {
             header: 'Preferred Format',
@@ -57,6 +58,19 @@ export default function DownloadProfilesPage() {
                     error={error}
                     rowKey={(p) => `${p.type}-${p.id}`}
                     rowAriaLabel={(p) => `${p.type} ${p.showTitle}`}
+                    mobileSummary={(p) => (
+                        <>
+                            <span className="mobile-summary-title">{p.showTitle}</span>
+                            <span className="mobile-summary-meta">
+                                <span>{PreferredFormatReg.getLabelLoose(p.localMediaProfilePreferredFormat)}</span>
+                                <span aria-hidden="true">•</span>
+                                <span>{ShowTypeReg.getLabelLoose(p.type)}</span>
+                                <span className={`mobile-summary-status ${p.enableProfile ? 'is-success' : ''}`}>
+                                    {p.enableProfile ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </span>
+                        </>
+                    )}
                     onRowClick={(p) => navigate(`/edit-download-profile/${p.type}/${p.id}`, {state: p})}
                     actions={(p) => [
                         {
