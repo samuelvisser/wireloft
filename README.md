@@ -48,10 +48,26 @@ use a self-hosted media server like Plex or Jellyfin for series, or Audiobooksel
 - Maybe: support for browsing series- and movies not yet downloaded inside WireLoft (add them to WireLoft without a URL)
 
 ### Running with Docker
-The included Docker setup builds the React UI and the FastAPI backend into a
-single image. One container serves the web UI, the API, and the background
+One container serves the web UI, the API, and the background
 scheduler/downloader -- everything starts automatically, and the SQLite
 database is created (and migrated) on first boot if it doesn't already exist.
+
+#### Quick start: use the published image
+No clone or build needed -- pulls `ghcr.io/samuelvisser/wireloft`:
+
+```bash
+mkdir wireloft && cd wireloft
+curl -O https://raw.githubusercontent.com/samuelvisser/wireloft/develop/.docker/docker-compose.yml
+docker compose up -d
+```
+
+Then open http://localhost:8080. See Volumes and Useful environment
+variables below for what to persist/configure; edit the compose file in
+place for anything beyond the defaults.
+
+#### Building it yourself
+The included Docker setup builds the React UI and the FastAPI backend into a
+single image.
 
 Building the UI needs your own Font Awesome Pro credentials: create
 `ui/.npmrc` (never committed, see `ui/.gitignore`) with the same npm auth
