@@ -11,7 +11,7 @@ services:
       - "8080:80"
     volumes:
       # App config, SQLite database, session/keyring secrets. Auto-created
-      # and auto-migrated on first start -- no manual setup needed.
+      # and auto-migrated on the first start -- no manual setup needed.
       - ./config:/config
       # Downloaded shows/podcasts.
       - ./downloads:/downloads

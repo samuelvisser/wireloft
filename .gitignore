@@ -1,8 +1,9 @@
 .cadence/
 
 # Project- specific
-config/config.yml
-config/cookies.txt
+config/*
+!config/config.yml.default
+!config/config.yaml.default
 data/
 tests/rest/http-client.private.env.json
 
