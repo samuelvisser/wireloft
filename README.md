@@ -93,5 +93,5 @@ Useful environment variables:
 
 ## Special thanks
 While WireLoft is fully build from the ground up with original code, the open source [DailyWirePodcastProxy](https://github.com/fpnewton/DailyWirePodcastProxy) project has helped 
-tremendously in figuring out how the Daily Wire API works. DailyWirePodcastProxy enables you to download premium versions of the shows 
+tremendously in figuring out how The Daily Wire API works. DailyWirePodcastProxy enables you to download premium versions of the shows 
 directly from The Daily Wire to your podcast app. Definitely check it out if you’re interested!
