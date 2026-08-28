@@ -1,12 +1,11 @@
-# Run WireLoft from the published image -- no local build/clone needed.
+# Run WireLoft from the published image
 #
 # Usage:
 #   mkdir wireloft && cd wireloft
 #   curl -O https://raw.githubusercontent.com/samuelvisser/wireloft/develop/.docker/docker-compose.yml
 #   docker compose up -d
 # Then open http://localhost:5273.
-#
-# Building from source instead? Use the docker-compose.yml at the repo root.
+
 services:
   wireloft:
     image: ghcr.io/samuelvisser/wireloft:latest
@@ -15,12 +14,11 @@ services:
     ports:
       - "5273:80"
     volumes:
-      # App config, SQLite database, session/keyring secrets. Auto-created
-      # and auto-migrated on the first start -- no manual setup needed.
+      # App config (keep to retain over container restarts)
       - ./config:/config
       # Downloaded shows/podcasts.
       - ./downloads:/downloads
     environment:
       - TZ=UTC
-      # Uncomment to require a login (leave unset for open/no-auth access):
+      # Uncomment to require a login (recommended when running behind a reverse proxy):
       # - WL_ADMIN_AUTH__PASSWORD=change-me
