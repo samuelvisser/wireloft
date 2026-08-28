@@ -1,12 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
-import { useShow, useEpisodes } from '../../lib/queries'
+import { useShow, useEpisodes, useMediaDownloadsView } from '../../lib/queries'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
-import {statusIcon, statusLabel} from '../../utils/showStatus'
+import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -16,13 +16,36 @@ export default function ShowPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const [page, setPage] = useState(1)
-  const pageSize = 25
+  const PAGE_SIZE = 25
 
   const { data: show, isLoading, error } = useShow(id)
   const { data: episodesData } = useEpisodes(id)
   const episodes: any[] = episodesData ?? []
+  const { data: downloads } = useMediaDownloadsView()
+  const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
   const [confirm, setConfirm] = useState(false)
+
+  // Lazily reveal more episodes as the user scrolls, instead of paginating with buttons.
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [id])
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const node = sentinelRef.current
+    if (!node) return
+    const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting) {
+            setVisibleCount((c) => Math.min(c + PAGE_SIZE, episodes.length))
+          }
+        },
+        {rootMargin: '600px'},
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [episodes.length])
 
   if (!id) {
     return (
@@ -58,11 +81,8 @@ export default function ShowPage() {
   }
 
   const total = episodes.length
-  const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  const currentPage = Math.min(page, totalPages)
-  const start = (currentPage - 1) * pageSize
-  const end = start + pageSize
-  const pageItems = episodes.slice(start, end)
+  const visibleItems = episodes.slice(0, visibleCount)
+  const hasMore = visibleCount < total
 
   const onDelete = () => setConfirm(true)
   const onEdit = () => {
@@ -127,56 +147,17 @@ export default function ShowPage() {
           </div>
         </header>
 
-        <div className="episodes-list" role="list" aria-label={`${show.title} episodes`}>
-          {pageItems.map((ep: any) => {
-            const icon = statusIcon(ep.unified_status)
-            const isProcessing = ep.unified_status === 'dw_processing' || ep.unified_status === 'local_processing'
-            const label = statusLabel(ep.unified_status)
-            const thumb = (ep?.thumbnailPortraitPath && String(ep.thumbnailPortraitPath).trim())
-              ? ep.thumbnailPortraitPath
-              : `https://placehold.co/640x360/png?text=Episode+%23${ep.index}`
-            return (
-              <div
-                key={ep.id}
-                className="episode-list-item"
-                role="listitem"
-                aria-label={ep.title}
-                tabIndex={0}
-                onClick={() => navigate(`/show/${id}/episode/${ep.slug}`)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    navigate(`/show/${id}/episode/${ep.slug}`)
-                  }
-                }}
-              >
-                <div className="episode-thumb" aria-hidden style={{ backgroundImage: `url('${thumb}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-                  <div className="thumb-inner">
-                    <span className={`status status-${ep.unified_status}`} aria-label={label} title={label}>
-                      <FontAwesomeIcon icon={icon as any} spin={isProcessing} />
-                    </span>
-                    <span className="badge">#{ep.index}</span>
-                  </div>
-                </div>
-                <div className="episode-info">
-                  <div className="episode-title" title={ep.title}>{ep.title}</div>
-                </div>
-              </div>
-            )
-          })}
+        <div className="episodes-grid" role="list" aria-label={`${show.title} episodes`}>
+          {visibleItems.map((ep: any) => (
+            <EpisodeCard key={ep.id} ep={ep} showSlug={id} downloads={downloadsBySlug.get(ep.slug)}/>
+          ))}
         </div>
 
-        <div className="pagination" aria-label="Pagination" style={{ display: 'flex', gap: 8, marginTop: 16, alignItems: 'center' }}>
-          <button className="btn" disabled={currentPage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            Previous
-          </button>
-          <span>
-            Page {currentPage} of {totalPages}
-          </span>
-          <button className="btn" disabled={currentPage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
-            Next
-          </button>
-        </div>
+        {hasMore && (
+          <div ref={sentinelRef} className="episodes-load-more" aria-hidden>
+            Loading more episodes…
+          </div>
+        )}
       </article>
 
       {confirm && (
@@ -205,18 +186,6 @@ export default function ShowPage() {
           </div>
         </div>
       )}
-
-      <style>{`
-        /* Basic large list thumbnail styling leveraging existing classes */
-        .episodes-list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
-        .episode-list-item { display: flex; gap: 12px; align-items: center; border: 1px solid var(--border-color, #ddd); border-radius: 8px; padding: 8px; cursor: pointer; }
-        .episode-thumb { width: 120px; height: 68px; border-radius: 6px; background: var(--cover-bg, #222); position: relative; overflow: hidden; flex: 0 0 auto; }
-        .episode-thumb .thumb-inner { position: relative; width: 100%; height: 100%; display: flex; align-items: end; justify-content: start; }
-        .episode-info { flex: 1 1 auto; min-width: 0; }
-        .episode-info .episode-title { font-weight: 600; }
-        .badge { position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.6); color: #fff; padding: 2px 6px; border-radius: 12px; font-size: 12px; }
-        .status { position: absolute; left: 6px; bottom: 6px; color: #fff; background: rgba(0,0,0,0.5); padding: 4px; border-radius: 50%; }
-      `}</style>
     </section>
   )
 }

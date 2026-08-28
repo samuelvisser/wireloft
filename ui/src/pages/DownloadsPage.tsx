@@ -1,4 +1,4 @@
-import {useRef} from 'react'
+import {useRef, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -6,6 +6,7 @@ import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {Column, DataTable, DataTableAction} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
+import DownloadLogDialog from '../components/MediaDownload/DownloadLogDialog'
 import PageSubtitle from '../components/common/PageSubtitle'
 import ProgressBar from '../components/common/ProgressBar'
 import {useMediaDownloadsView} from '../lib/queries'
@@ -53,6 +54,7 @@ export default function DownloadsPage() {
     const qc = useQueryClient()
     const {data: downloads, isLoading, error} = useMediaDownloadsView()
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
+    const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
 
     const retry = async (row: MediaDownloadViewRead) => {
         try {
@@ -112,7 +114,14 @@ export default function DownloadsPage() {
                         if (row.showSlug && row.episodeSlug) navigate(`/show/${row.showSlug}/episode/${row.episodeSlug}`)
                     }}
                     actions={(row) => {
-                        const actions: DataTableAction<MediaDownloadViewRead>[] = []
+                        const actions: DataTableAction<MediaDownloadViewRead>[] = [
+                            {
+                                onClick: (r) => setLogRow(r),
+                                icon: ['fas', 'file-lines'],
+                                text: 'View log',
+                                classes: 'btn',
+                            },
+                        ]
                         if (_RETRYABLE_STATUSES.has(String(row.downloadStatus))) {
                             actions.push({
                                 onClick: () => void retry(row),
@@ -145,6 +154,7 @@ export default function DownloadsPage() {
                 }
                 invalidateQueries={[['mediaDownloadsView'], ['episodeDownloads']]}
             />
+            <DownloadLogDialog row={logRow} onClose={() => setLogRow(null)}/>
         </section>
     )
 }

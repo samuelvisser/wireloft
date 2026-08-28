@@ -59,6 +59,14 @@ def update_download_profile_podcast(s: Session, download_profile_id: int, body: 
 
     update_database_fields(item, body)
     s.flush()
+
+    queue_event(s, "download_profile.updated", {
+        "resource_id": item.id,
+        "id": item.id,
+        "show_id": item.show_id,
+        "profile_type": item.type,
+    })
+
     return PodcastDownloadProfileAPIRead.model_validate(item)
 
 

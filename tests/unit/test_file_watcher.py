@@ -160,7 +160,25 @@ def test_truncated_file_is_flagged_corrupted(tmp_path):
     _run(session)
 
     assert download.download_status == MediaDownloadStatus.CORRUPTED.value
-    assert "smaller" in download.error_message
+    assert "well under" in download.error_message
+
+    session.close()
+    engine.dispose()
+
+
+def test_modest_shrinkage_is_tolerated(tmp_path):
+    """A remuxed .mp4 is legitimately a bit smaller than the raw .ts it came
+    from (download.downloaded_bytes records the latter); that must never
+    read as corruption."""
+    from backend.types.download_profile_types import MediaDownloadStatus
+
+    session, engine, show, episode, download = _db_with_download(tmp_path, write_bytes=b"x" * 1000)
+    with open(download.file_path, "wb") as f:
+        f.write(b"x" * 900)  # 10% smaller, well within tolerance
+
+    _run(session)
+
+    assert download.download_status == MediaDownloadStatus.DOWNLOADED.value
 
     session.close()
     engine.dispose()

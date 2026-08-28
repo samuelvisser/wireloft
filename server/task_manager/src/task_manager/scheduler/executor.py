@@ -164,6 +164,15 @@ def execute_task(
         if isinstance(run.meta, dict):
             stored_inputs = dict(run.meta.get("inputs") or {})
         call_kwargs = {**stored_inputs, **kwargs}
+
+        # Some tasks are triggered from more than one resource type (e.g. a cron
+        # sweep vs. a single-episode event) and need to know which one this run
+        # is for. Forward it only when the task actually declares the parameter,
+        # and only as a call-time value: it must never be persisted into
+        # run.meta as if it were a genuine input, so retries keep recomputing it
+        # from the resource_type this execute_task call was given.
+        if "resource_type" in inspect.signature(fn).parameters and "resource_type" not in call_kwargs:
+            call_kwargs["resource_type"] = resource_type
         try:
             if inspect.iscoroutinefunction(fn):
                 # run async function in dedicated loop

@@ -12,8 +12,10 @@ from .errors import (
     DownloadCancelled,
     DownloadError,
     EncryptedMediaError,
+    FfmpegNotFoundError,
     MediaUnavailableError,
 )
+from .ffmpeg import ffmpeg_available, remux_to_mp4
 from .models import (
     DownloadProgress,
     DownloadResult,
@@ -28,6 +30,8 @@ __all__ = [
     "probe",
     "download_hls",
     "download_file",
+    "remux_to_mp4",
+    "ffmpeg_available",
     "MediaInfo",
     "MediaKind",
     "VideoRendition",
@@ -37,5 +41,6 @@ __all__ = [
     "MediaUnavailableError",
     "EncryptedMediaError",
     "DownloadCancelled",
+    "FfmpegNotFoundError",
     "__version__",
 ]

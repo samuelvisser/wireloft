@@ -38,6 +38,7 @@ use a self-hosted media server like Plex or Jellyfin for series, or Audiobooksel
 - Downloads video thumbnails and sets them as cover art in the media items
 - Intelligently helps you avoid downloading the countdown timer shown in live versions of show episodes
 - Optionally automatically delete old content
+- Repackages downloaded video into `.mp4` instead of raw `.ts` (requires [ffmpeg](https://ffmpeg.org/) on PATH; controlled by the `downloadSettings.remuxVideoToMp4` / `downloadSettings.ffmpegPath` configuration fields, on by default)
 
 ### Planned
 

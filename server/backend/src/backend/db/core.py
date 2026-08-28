@@ -99,17 +99,20 @@ def create_tables() -> None:
 
 
 def _recreate_outdated_empty_tables(engine: Engine) -> None:
-    """Poor-man's migration: recreate tables whose schema is outdated.
+    """Poor-man's migration: bring tables whose schema is outdated up to date.
 
-    There is no migration framework (yet); model changes are applied by dropping
-    and recreating a table — but only when it holds no data. A non-empty table
-    with an outdated schema raises so the user can decide what to do instead of
+    There is no migration framework (yet). A missing *nullable* column on a
+    table that already holds data is added in place with ``ALTER TABLE ...
+    ADD COLUMN`` — safe, since SQLite backfills it as NULL on every existing
+    row. Anything else (a missing non-nullable column) is only ever applied by
+    dropping and recreating the table, and only when it holds no data; on a
+    non-empty table it raises so the user can decide what to do instead of
     silently losing data. Only tables listed here are ever considered.
     """
     from sqlalchemy import inspect as sa_inspect, text
 
     # Child tables first so foreign keys don't block the drop
-    migratable = ["media_downloads_episode", "media_downloads"]
+    migratable = ["media_downloads_episode", "media_downloads", "episodes"]
 
     inspector = sa_inspect(engine)
     existing_tables = set(inspector.get_table_names())
@@ -118,19 +121,31 @@ def _recreate_outdated_empty_tables(engine: Engine) -> None:
     for table_name in migratable:
         if table_name not in existing_tables:
             continue
-        model_columns = {c.name for c in Base.metadata.tables[table_name].columns}
+        table = Base.metadata.tables[table_name]
+        model_columns = {c.name for c in table.columns}
         db_columns = {c["name"] for c in inspector.get_columns(table_name)}
-        if model_columns <= db_columns:
+        missing_columns = model_columns - db_columns
+        if not missing_columns:
             continue
 
         with engine.connect() as conn:
             row_count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
-        if row_count:
+
+        if not row_count:
+            to_drop.append(table_name)
+            continue
+
+        non_addable = {name for name in missing_columns if not table.columns[name].nullable}
+        if non_addable:
             raise RuntimeError(
-                f"Table '{table_name}' is missing columns {sorted(model_columns - db_columns)} "
+                f"Table '{table_name}' is missing non-nullable columns {sorted(non_addable)} "
                 f"but holds {row_count} row(s); refusing to recreate it automatically"
             )
-        to_drop.append(table_name)
+
+        with engine.begin() as conn:
+            for name in missing_columns:
+                ddl_type = table.columns[name].type.compile(dialect=engine.dialect)
+                conn.execute(text(f'ALTER TABLE {table_name} ADD COLUMN "{name}" {ddl_type}'))
 
     if to_drop:
         with engine.begin() as conn:

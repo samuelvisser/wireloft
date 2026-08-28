@@ -43,6 +43,21 @@ class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):
     updated_at: datetime
 
 
+class MediaDownloadAttemptAPIRead(ResponseBase):
+    """One permanent entry in a download's attempt ledger."""
+
+    id: int
+    media_download_id: int
+    is_redownload: bool
+    status: Union[MediaDownloadStatus, str]
+    error_message: Optional[str]
+    downloaded_bytes: Optional[int]
+    format_downloaded: Optional[str]
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    created_at: datetime
+
+
 class MediaDownloadAPIReadView(MediaDownloadAPIRead):
     """A media download joined with its episode, show and profile context."""
 
@@ -53,3 +68,8 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
     show_title: Optional[str]
     local_media_profile_name: Optional[str]
     preferred_format: Optional[str]
+    # Whether the most recent attempt was a redownload of an already-completed
+    # file, and what publish_status that file was actually fetched at; both
+    # None until the first attempt starts. Shown in the download's log.
+    is_redownload_attempt: Optional[bool]
+    downloaded_publish_status: Optional[str]

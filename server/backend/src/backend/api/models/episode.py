@@ -61,6 +61,7 @@ class _EpisodeAPIBaseOut(ResponseBase):
     published_date: Optional[datetime]
     scheduled_date: Optional[datetime]
     redownloaded_date: Optional[datetime]
+    is_no_show_today: Optional[bool]
     sharing_url: str
 
     # Fields in the media_items table

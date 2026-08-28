@@ -84,23 +84,75 @@ def _reload_startup_marker(supervisor_pid: str) -> Path:
     return Path(tempfile.gettempdir()) / f"wireloft-reload-startup-{supervisor_pid}.lock"
 
 
+_STOP_SIGTERM_TIMEOUT_S = 5.0
+
+
+def _matches_backend_api(cmdline: Optional[list[str]]) -> bool:
+    """Whether a process's cmdline looks like a backend-api invocation.
+
+    Matches the entry-point argument exactly (or as a path ending in it)
+    rather than a loose substring check, so an unrelated process whose
+    cmdline merely contains "backend-api" somewhere (e.g. in a directory
+    path) is not mistaken for a real backend-api process.
+    """
+    if not cmdline:
+        return False
+    return any(arg == "backend-api" or arg.endswith(("/backend-api", "\\backend-api")) for arg in cmdline)
+
+
 def _stop_backend() -> None:
-    """Stop all running backend-api processes"""
-    stopped_count = 0
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+    """Stop all other running backend-api processes.
+
+    Deliberately excludes this very process: psutil.process_iter() also
+    yields the `backend-api stop` invocation itself, whose own cmdline
+    contains "backend-api" just like the server it's trying to stop. Without
+    excluding it, this command would find and SIGTERM itself before ever
+    reaching the actual server, dying mid-loop with the server left running.
+    """
+    own_pid = os.getpid()
+    targets: dict[int, psutil.Process] = {}
+
+    for proc in psutil.process_iter(['pid', 'cmdline']):
+        if proc.pid == own_pid:
+            continue
         try:
-            cmdline = proc.info.get('cmdline')
-            if cmdline and any('backend-api' in str(arg) for arg in cmdline):
-                print(f"Stopping backend-api process (PID: {proc.info['pid']})")
-                proc.send_signal(signal.SIGTERM)
-                stopped_count += 1
+            if _matches_backend_api(proc.info.get('cmdline')):
+                targets[proc.pid] = proc
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+
+    if not targets:
+        print("No running backend-api processes found")
+        return
+
+    # A --debug run's reload supervisor spawns its own worker subprocess; that
+    # child holds the actual listening socket, so it must be stopped too or it
+    # keeps the port bound even after the supervisor exits.
+    for proc in list(targets.values()):
+        try:
+            for child in proc.children(recursive=True):
+                targets.setdefault(child.pid, child)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    for proc in targets.values():
+        try:
+            print(f"Stopping backend-api process (PID: {proc.pid})")
+            proc.send_signal(signal.SIGTERM)
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
 
-    if stopped_count == 0:
-        print("No running backend-api processes found")
-    else:
-        print(f"Stopped {stopped_count} backend-api process(es)")
+    _gone, alive = psutil.wait_procs(list(targets.values()), timeout=_STOP_SIGTERM_TIMEOUT_S)
+    for proc in alive:
+        try:
+            print(f"Process {proc.pid} did not stop in time; killing it")
+            proc.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+    if alive:
+        psutil.wait_procs(alive, timeout=_STOP_SIGTERM_TIMEOUT_S)
+
+    print(f"Stopped {len(targets)} backend-api process(es)")
 
 def main(argv: Optional[list[str]] = None) -> None:
     args = _parse_args(argv)

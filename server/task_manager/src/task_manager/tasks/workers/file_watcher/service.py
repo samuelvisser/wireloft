@@ -18,6 +18,15 @@ logger = logging.getLogger(__name__)
 _HEALTHY_STATUS = MediaDownloadStatus.DOWNLOADED.value
 _PROBLEM_STATUSES = (MediaDownloadStatus.MISSING.value, MediaDownloadStatus.CORRUPTED.value)
 
+# How much smaller than the recorded size a file is allowed to be before it's
+# flagged corrupted. `downloaded_bytes` is the size of what was actually
+# fetched (e.g. the raw .ts for a remuxed video, see download_settings.
+# remux_video_to_mp4), not necessarily of the file at file_path: remuxing to
+# .mp4 legitimately drops container/packetization overhead. A generous
+# tolerance keeps that from ever looking like corruption while still catching
+# a genuinely truncated file, which loses far more than this.
+_MIN_SIZE_RATIO = 0.5
+
 
 async def run_file_watcher(s: Session, *, show_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
     """Reconcile media_downloads rows with what is actually on disk.
@@ -91,10 +100,9 @@ def _detect_problem(download: MediaDownloadBase, *, verify_file_size: bool) -> O
     if size == 0:
         return MediaDownloadStatus.CORRUPTED, f"File at '{path}' is empty"
 
-    if verify_file_size and download.downloaded_bytes and size < download.downloaded_bytes:
-        shortfall = download.downloaded_bytes - size
+    if verify_file_size and download.downloaded_bytes and size < download.downloaded_bytes * _MIN_SIZE_RATIO:
         return MediaDownloadStatus.CORRUPTED, (
-            f"File at '{path}' is {shortfall} bytes smaller than the "
+            f"File at '{path}' is only {size} bytes, well under the "
             f"{download.downloaded_bytes} recorded when it finished downloading"
         )
 

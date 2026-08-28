@@ -100,6 +100,7 @@ class RepeatingTaskSettings(SubmodelBase):
 class TrackNewEpisodeSchedule(SubmodelBase):
     find_episodes_cron: str = Field(..., description="Cron schedule string for finding new episodes")
     monitor_episode_cron: str = Field(..., description="Cron schedule string for monitoring an episode that exists but is not yet fully published")
+    check_no_show_today_cron: str = Field(..., description="Cron schedule string for checking whether 'No Show Today' placeholder episodes have been removed from Daily Wire")
 
 
 class EpisodeStatusTiming(SubmodelBase):
@@ -113,6 +114,13 @@ class DownloadSettings(SubmodelBase):
     max_download_attempts: int = Field(..., description="Maximum number of download attempts")
     download_timeout_seconds: int = Field(..., description="Timeout in seconds for each download")
     download_root: Path = Field(..., description="Directory on disk that the '/downloads/' prefix of output templates maps to")
+    remux_video_to_mp4: bool = Field(
+        ...,
+        description="Repackage downloaded HLS video into an .mp4 file instead of leaving it as raw .ts. "
+                    "This is a fast, lossless container change (no re-encoding) and requires ffmpeg to be "
+                    "installed and on PATH.",
+    )
+    ffmpeg_path: str = Field(default="ffmpeg", description="Path to the ffmpeg binary used for remuxing video to mp4")
 
 
 class FileWatcherSettings(SubmodelBase):

@@ -38,6 +38,7 @@ export const EpisodeReadSchema = z.looseObject({
     dwId: z.string().optional(),
     showId: z.int(),
     index: z.number(),
+    episodeIdentifier: z.string(),
     slug: z.string(),
     title: z.string(),
     publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),
@@ -50,6 +51,7 @@ export const EpisodeReadSchema = z.looseObject({
     publishedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
     redownloadedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
     downloadedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
+    isNoShowToday: z.boolean().nullable().optional(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })

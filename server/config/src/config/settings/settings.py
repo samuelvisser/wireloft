@@ -50,7 +50,8 @@ class AppSettings(SettingsBase):
     ))
     new_episode_schedule: TrackNewEpisodeSchedule = Field(default_factory=lambda: TrackNewEpisodeSchedule(
         find_episodes_cron="*/30 * * * *",
-        monitor_episode_cron="*/1 * * * *"
+        monitor_episode_cron="*/1 * * * *",
+        check_no_show_today_cron="0 */6 * * *",
     ))
     episode_status_timing: EpisodeStatusTiming = Field(default_factory=lambda: EpisodeStatusTiming(
         published_countdown_after_minutes=20,
@@ -62,6 +63,8 @@ class AppSettings(SettingsBase):
         max_download_attempts=3,
         download_timeout_seconds=600,
         download_root=PROJECT_ROOT / "downloads",
+        remux_video_to_mp4=True,
+        ffmpeg_path="ffmpeg",
     ))
     file_watcher: FileWatcherSettings = Field(default_factory=lambda: FileWatcherSettings(
         enabled=True,

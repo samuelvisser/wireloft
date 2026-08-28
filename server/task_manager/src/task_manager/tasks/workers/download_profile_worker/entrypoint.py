@@ -13,6 +13,14 @@ from .service import run_download_profile_worker
     resource_type="show",
 )
 @on_event(
+    event_name="download_profile.added",
+    resource_type="download_profile",
+)
+@on_event(
+    event_name="download_profile.updated",
+    resource_type="download_profile",
+)
+@on_event(
     event_name="episode.published_final",
     resource_type="episode",
 )
@@ -32,15 +40,26 @@ from .service import run_download_profile_worker
 )
 @task(
     key="download_profile_worker",
-    title="Implement Download Profiles",
-    description="This worker makes sure download profiles actually work by downloading the episodes they request",
-    allowed_resource_types=("download_profile",),
+    title="Run Download Profiles",
+    description="Makes sure Download Profiles actually work by downloading the episodes they request",
+    allowed_resource_types=("download_profile", "show", "episode"),
     default_max_retries=5,
     tracks_progress=True,
 )
-async def download_profile_worker(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None) -> None:
+async def download_profile_worker(
+        *,
+        resource_id: Optional[int] = None,
+        resource_type: Optional[str] = None,
+        progress=None,
+) -> None:
     """
-    Downloads the episodes of a download profile.
+    Ensures the episodes requested by enabled Download Profiles are downloaded.
+
+    ``resource_id`` is polymorphic: an episode id when triggered by an episode
+    publish event (checks just that episode), a show id (checks the whole show's
+    profiles), a specific download_profile id, or 0/None for a global sweep across
+    every enabled profile (cron, app.startup, or a manual "show"/"download_profile"
+    trigger). ``resource_type`` disambiguates which one it is.
     """
     with db_session() as s:
-        await run_download_profile_worker(s, resource_id=resource_id, show_slug=slug, progress=progress)
+        await run_download_profile_worker(s, resource_id=resource_id, resource_type=resource_type, progress=progress)

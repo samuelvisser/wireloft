@@ -17,6 +17,16 @@ class EpisodeMediaDownload(MediaDownloadBase):
     # Columns
     id: Mapped[int] = mapped_column(ForeignKey("media_downloads.id", ondelete="CASCADE"), primary_key=True)
     download_profile_id: Mapped[Optional[int]] = mapped_column(ForeignKey("download_profiles.id"))
+    # The episode's publish_status at the moment this download last completed
+    # (e.g. "published_with_countdown" or "published_final"). Lets a Download
+    # Profile tell a countdown-era file from an already-final one, so it only
+    # ever redownloads a file that actually needs replacing.
+    downloaded_publish_status: Mapped[Optional[str]]
+    # Whether the most recent attempt (successful or not) was requested as a
+    # redownload of an already-completed file, vs. this episode's first
+    # download. Set at the start of every attempt so it survives a failure,
+    # not just a success - shown in the download's log regardless of outcome.
+    is_redownload_attempt: Mapped[Optional[bool]]
 
     # Relationships
     download_profile: Mapped[Optional["DownloadProfileBase"]] = relationship(back_populates="episode_downloads")
