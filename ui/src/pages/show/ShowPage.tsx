@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
@@ -16,8 +16,7 @@ export default function ShowPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const [page, setPage] = useState(1)
-  const pageSize = 25
+  const PAGE_SIZE = 25
 
   const { data: show, isLoading, error } = useShow(id)
   const { data: episodesData } = useEpisodes(id)
@@ -25,6 +24,28 @@ export default function ShowPage() {
   const { data: downloads } = useMediaDownloadsView()
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
   const [confirm, setConfirm] = useState(false)
+
+  // Lazily reveal more episodes as the user scrolls, instead of paginating with buttons.
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [id])
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const node = sentinelRef.current
+    if (!node) return
+    const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting) {
+            setVisibleCount((c) => Math.min(c + PAGE_SIZE, episodes.length))
+          }
+        },
+        {rootMargin: '600px'},
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [episodes.length])
 
   if (!id) {
     return (
@@ -60,11 +81,8 @@ export default function ShowPage() {
   }
 
   const total = episodes.length
-  const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  const currentPage = Math.min(page, totalPages)
-  const start = (currentPage - 1) * pageSize
-  const end = start + pageSize
-  const pageItems = episodes.slice(start, end)
+  const visibleItems = episodes.slice(0, visibleCount)
+  const hasMore = visibleCount < total
 
   const onDelete = () => setConfirm(true)
   const onEdit = () => {
@@ -130,22 +148,16 @@ export default function ShowPage() {
         </header>
 
         <div className="episodes-grid" role="list" aria-label={`${show.title} episodes`}>
-          {pageItems.map((ep: any) => (
+          {visibleItems.map((ep: any) => (
             <EpisodeCard key={ep.id} ep={ep} showSlug={id} downloads={downloadsBySlug.get(ep.slug)}/>
           ))}
         </div>
 
-        <div className="pagination" aria-label="Pagination" style={{ display: 'flex', gap: 8, marginTop: 16, alignItems: 'center' }}>
-          <button className="btn" disabled={currentPage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            Previous
-          </button>
-          <span>
-            Page {currentPage} of {totalPages}
-          </span>
-          <button className="btn" disabled={currentPage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
-            Next
-          </button>
-        </div>
+        {hasMore && (
+          <div ref={sentinelRef} className="episodes-load-more" aria-hidden>
+            Loading more episodes…
+          </div>
+        )}
       </article>
 
       {confirm && (

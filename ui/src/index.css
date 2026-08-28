@@ -205,6 +205,13 @@ a.show-header:focus-visible {
   .episodes-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
 }
 
+.episodes-load-more {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .cover {
   position: relative;
   width: 100%;
