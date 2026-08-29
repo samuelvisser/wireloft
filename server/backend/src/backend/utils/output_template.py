@@ -8,7 +8,7 @@ from .episode import episode_type_info
 from config import get_settings
 
 if TYPE_CHECKING:
-    from backend.db.models import Episode
+    from backend.db.models import Episode, Movie
 
 _DOWNLOADS_PREFIX = "/downloads/"
 # Characters that may not appear in a single path component
@@ -50,6 +50,7 @@ def resolve_episode_output_path(
         "title": episode.title,
         "episode_type": ep_type,
         "episode_number": ep_number,
+        "ep_id": episode.episode_identifier or "",
         "episode_published_date": episode.published_date.strftime("%Y-%m-%d") if episode.published_date else "",
         "date": episode.published_date.strftime("%Y-%m-%d") if episode.published_date else "",
         "episode_published_time": episode.published_date.strftime("%H:%M:%S") if episode.published_date else "",
@@ -71,3 +72,49 @@ def resolve_episode_output_path(
 
     root = Path(get_settings().download_settings.download_root)
     return (root / resolved).resolve()
+
+
+def resolve_movie_output_path(
+    output_template: str,
+    *,
+    movie: "Movie",
+    extension: Optional[str] = None,
+) -> Path:
+    """Resolve a Local Media Profile template for a one-off movie.
+
+    Movie-specific placeholders are ``{movie}``, ``{movie_title}``, and
+    ``{title}``. Episode/show placeholders receive useful compatibility values
+    so an existing general-purpose profile can still be selected manually.
+    """
+    substitutions = {
+        "movie": movie.slug,
+        "movie_title": movie.title,
+        "title": movie.title,
+        "show": "Movies",
+        "show_title": "Movies",
+        "season": "",
+        "season_name": "",
+        "episode": movie.slug,
+        "episode_title": movie.title,
+        "episode_type": "movie",
+        "episode_number": "",
+        "ep_id": "",
+        "episode_published_date": "",
+        "date": "",
+        "episode_published_time": "",
+        "time": "",
+        "episode_published_datetime": "",
+        "datetime": "",
+    }
+
+    resolved = output_template
+    for key, value in substitutions.items():
+        resolved = resolved.replace("{" + key + "}", sanitize_path_component(str(value)))
+
+    if resolved.startswith(_DOWNLOADS_PREFIX):
+        resolved = resolved[len(_DOWNLOADS_PREFIX):]
+    resolved = resolved.lstrip("/")
+    if extension is not None and resolved.endswith(".ext"):
+        resolved = resolved[: -len("ext")] + extension.lstrip(".")
+
+    return (Path(get_settings().download_settings.download_root) / resolved).resolve()

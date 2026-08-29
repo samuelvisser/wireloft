@@ -31,6 +31,14 @@ function rowTimestamp(row: MediaDownloadViewRead): Date | null {
     return row.finishedAt ?? row.createdAt ?? null
 }
 
+function rowTitle(row: MediaDownloadViewRead): string {
+    return row.movieTitle ?? row.episodeTitle ?? 'Unknown media'
+}
+
+function rowContext(row: MediaDownloadViewRead): string {
+    return row.movieTitle ? 'Movie' : row.showTitle ?? 'Unknown show'
+}
+
 function setsEqual(a: Set<string>, b: Set<string>): boolean {
     if (a.size !== b.size) return false
     for (const v of a) if (!b.has(v)) return false
@@ -53,7 +61,7 @@ function StatusCell({row}: {row: MediaDownloadViewRead}) {
         return (
             <div style={{display: 'flex', alignItems: 'center', gap: 8, minWidth: 140}} aria-live="polite">
                 <div style={{flex: 1}}>
-                    <ProgressBar value={row.progress} ariaLabel={`Progress for ${row.episodeTitle}`}/>
+                    <ProgressBar value={row.progress} ariaLabel={`Progress for ${rowTitle(row)}`}/>
                 </div>
                 <span style={{minWidth: 52}}>{status === 'pending' ? 'Queued' : `${row.progress}%`}</span>
             </div>
@@ -111,16 +119,16 @@ export default function DownloadsPage() {
 
     const columns: Column<MediaDownloadViewRead>[] = [
         {
-            header: 'Episode',
+            header: 'Media',
             cell: (row) => (
                 <div>
-                    <div>{row.episodeTitle ?? '—'}</div>
-                    <div style={{color: 'var(--muted, #777)', fontSize: '0.85rem'}}>{row.showTitle ?? ''}</div>
+                    <div>{rowTitle(row)}</div>
+                    <div style={{color: 'var(--muted, #777)', fontSize: '0.85rem'}}>{rowContext(row)}</div>
                 </div>
             ),
-            dataLabel: 'Episode',
+            dataLabel: 'Media',
             mobileHidden: true,
-            sortAccessor: (row) => row.episodeTitle,
+            sortAccessor: (row) => rowTitle(row),
         },
         {
             header: 'Profile',
@@ -161,9 +169,9 @@ export default function DownloadsPage() {
         <section className="view" aria-labelledby="downloads-title">
             <div className="view-header">
                 <h1 id="downloads-title">Downloads</h1>
-                <PageSubtitle summary={<>All episode downloads: running, finished and failed.</>}>
+                <PageSubtitle summary={<>All media downloads: running, finished and failed.</>}>
                     <p>
-                        Every download requested for an episode shows up here, one row per Local Media Profile.
+                        Every episode and movie download shows up here, one row per Local Media Profile.
                         Running downloads report live progress; failed ones show the error and can be retried.
                         Deleting a row only removes the record, never the downloaded file.
                     </p>
@@ -193,7 +201,7 @@ export default function DownloadsPage() {
             </div>
             <div className="form-row">
                 <DataTable<MediaDownloadViewRead>
-                    ariaLabel="Episode downloads"
+                    ariaLabel="Media downloads"
                     columns={columns}
                     data={filteredDownloads}
                     loading={isLoading}
@@ -201,10 +209,10 @@ export default function DownloadsPage() {
                     emptyMessage={
                         downloads && downloads.length > 0
                             ? 'No downloads match the selected filters.'
-                            : "No downloads yet. Start one from an episode's page."
+                            : "No downloads yet. Start one from an episode or movie page."
                     }
                     rowKey={(row) => row.id}
-                    rowAriaLabel={(row) => `${row.episodeTitle} (${row.localMediaProfileName})`}
+                    rowAriaLabel={(row) => `${rowTitle(row)} (${row.localMediaProfileName})`}
                     mobileSummary={(row) => {
                         const status = String(row.downloadStatus)
                         const statusClass = status === 'downloaded' || status === 'redownloaded'
@@ -216,8 +224,8 @@ export default function DownloadsPage() {
                                     : ''
                         return (
                             <>
-                                <span className="mobile-summary-title">{row.episodeTitle ?? 'Unknown episode'}</span>
-                                <span className="mobile-summary-subtitle">{row.showTitle ?? 'Unknown show'}</span>
+                                <span className="mobile-summary-title">{rowTitle(row)}</span>
+                                <span className="mobile-summary-subtitle">{rowContext(row)}</span>
                                 <span className="mobile-summary-meta">
                                     <span>{formatBytes(row.downloadedBytes)}</span>
                                     <span aria-hidden="true">•</span>
@@ -229,9 +237,10 @@ export default function DownloadsPage() {
                             </>
                         )
                     }}
-                    mobileRowActionLabel="Open episode"
+                    mobileRowActionLabel="Open media"
                     onRowClick={(row) => {
-                        if (row.showSlug && row.episodeSlug) navigate(`/show/${row.showSlug}/episode/${row.episodeSlug}`)
+                        if (row.movieSlug) navigate(`/movie/${row.movieSlug}`)
+                        else if (row.showSlug && row.episodeSlug) navigate(`/show/${row.showSlug}/episode/${row.episodeSlug}`)
                     }}
                     actions={(row) => {
                         const actions: DataTableAction<MediaDownloadViewRead>[] = [
@@ -265,7 +274,7 @@ export default function DownloadsPage() {
             <ConfirmDeleteDialog
                 ref={confirmRef}
                 title="Delete download record"
-                subjectProp={(row: MediaDownloadViewRead) => `${row.episodeTitle} (${row.localMediaProfileName})`}
+                subjectProp={(row: MediaDownloadViewRead) => `${rowTitle(row)} (${row.localMediaProfileName})`}
                 deleteRequest={(row: MediaDownloadViewRead) =>
                     fetch(`${(window as any).appConfig.API_URL}/media-downloads/${row.id}`, {
                         method: 'DELETE',

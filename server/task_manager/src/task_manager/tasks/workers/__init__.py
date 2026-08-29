@@ -1,6 +1,7 @@
 # Load in all workers to make sure WireLoft knows about them
 from .debug_ep_details import debug_ep_details
 from .download_episode import download_episode
+from .download_movie import download_movie
 from .resume_interrupted_downloads import resume_interrupted_downloads
 from .download_profile_worker import download_profile_worker
 from .download_series_thumbnail import download_series_thumbnail

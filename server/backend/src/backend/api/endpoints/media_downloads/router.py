@@ -22,6 +22,7 @@ def media_downloads_list():
 @router.get("/as-view", response_model=list[MediaDownloadAPIReadView])
 def media_downloads_view(
         episode_slug: Optional[str] = None,
+        movie_slug: Optional[str] = None,
         status_filter: Optional[list[str]] = Query(default=None, alias="status"),
         limit: Optional[int] = None,
 ):
@@ -34,7 +35,13 @@ def media_downloads_view(
     - limit: maximum number of rows, newest first
     """
     with db_session() as s:
-        return get_media_downloads_view(s, episode_slug=episode_slug, statuses=status_filter, limit=limit)
+        return get_media_downloads_view(
+            s,
+            episode_slug=episode_slug,
+            movie_slug=movie_slug,
+            statuses=status_filter,
+            limit=limit,
+        )
 
 
 @router.post("/{media_download_id}/retry", response_model=MediaDownloadAPIRead)
@@ -48,13 +55,18 @@ def media_downloads_retry(media_download_id: int):
         try:
             download = retry_media_download(s, media_download_id)
             payload = MediaDownloadAPIRead.model_validate(download)
-            episode_id = download.media_item_id
+            media_item_id = download.media_item_id
+            media_type = download.type
             s.commit()
         except Exception:
             s.rollback()
             raise
 
-    _trigger_download_task(media_download_id=payload.id, episode_id=episode_id)
+    _trigger_download_task(
+        media_download_id=payload.id,
+        media_item_id=media_item_id,
+        media_type=media_type,
+    )
     return payload
 
 
@@ -117,13 +129,22 @@ def media_downloads_delete(media_download_id: int):
             raise
 
 
-def _trigger_download_task(*, media_download_id: int, episode_id: int) -> None:
+def _trigger_download_task(*, media_download_id: int, media_item_id: int, media_type: str) -> None:
     """Queue the download worker for a freshly created/reset download row."""
     from task_manager.scheduler.executor import trigger_now
+
+    if media_type == "movie":
+        trigger_now(
+            def_key="download_movie",
+            resource_type="movie",
+            resource_id=media_item_id,
+            media_download_id=media_download_id,
+        )
+        return
 
     trigger_now(
         def_key="download_episode",
         resource_type="episode",
-        resource_id=episode_id,
+        resource_id=media_item_id,
         media_download_id=media_download_id,
     )

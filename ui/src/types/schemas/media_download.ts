@@ -24,6 +24,7 @@ export type MediaDownloadUpdateOut = z.output<typeof MediaDownloadUpdateSchema>;
 // ------------ Lenient response (read) ------------
 export const MediaDownloadReadSchema = z.looseObject({
     id: z.int(),
+    type: z.string(),
     mediaItemId: z.int(),
     localMediaProfileId: z.int(),
     downloadStatus: z.string(),
@@ -46,6 +47,8 @@ export const MediaDownloadViewReadSchema = MediaDownloadReadSchema.extend({
     episodeIdentifier: z.string().nullable(),
     showSlug: z.string().nullable(),
     showTitle: z.string().nullable(),
+    movieSlug: z.string().nullable(),
+    movieTitle: z.string().nullable(),
     localMediaProfileName: z.string().nullable(),
     preferredFormat: z.string().nullable(),
     isRedownloadAttempt: z.boolean().nullable(),

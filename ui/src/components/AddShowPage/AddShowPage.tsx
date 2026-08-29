@@ -24,6 +24,7 @@ import {SeasonDetachedOut} from "../../types/schemas/season";
 
 export type Props = {
     onCancel: () => void
+    initialUrl?: string
 }
 
 const STORAGE_KEY = 'addShowWizardV8'
@@ -109,8 +110,10 @@ const defaultStreamProfile = (action?: ShowAction): Partial<RssStreamProfileBund
     requireExactMatch: false,
 })
 
-export default function AddShowPage({onCancel}: Props) {
-    const persisted = loadWizardState()
+export default function AddShowPage({onCancel, initialUrl}: Props) {
+    // A catalog choice is an explicit new-show intent. Ignore a half-finished
+    // persisted wizard so the selected Daily Wire URL is reliably pre-filled.
+    const persisted = initialUrl ? null : loadWizardState()
     const [globalMessage, setGlobalMessage] = useState<WizardMessage | null>(() => persisted?.globalMessage ?? null)
     const [isFinishing, setIsFinishing] = useState(false)
     const setWizardMessage = (message: string, type: WizardType) => setGlobalMessage({text: message, type})
@@ -121,7 +124,10 @@ export default function AddShowPage({onCancel}: Props) {
     const [showAction, setShowAction] = useState<ShowAction | undefined>(() => persisted?.action)
 
     const [showInput, setShowInput] = useState<Partial<ShowCreatePayloadIn>>(
-        () => persisted?.show.input ?? getZodDefaults(ShowCreatePayloadSchema))
+        () => ({
+            ...(persisted?.show.input ?? getZodDefaults(ShowCreatePayloadSchema)),
+            ...(initialUrl ? {url: initialUrl} : {}),
+        }))
     const [showSubmit, setShowSubmit] = useState<ShowCreatePayloadOut | undefined>(() => persisted?.show.submit)
 
     const [localMediaProfileInput, setLocalMediaProfileInput] = useState<Partial<LocalMediaProfileUpsertIn>>(

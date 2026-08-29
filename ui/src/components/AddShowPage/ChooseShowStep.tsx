@@ -78,7 +78,9 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
     }, [watchedType, setValue]);
 
     // --- Fetch DailyWire data using the slug
-    const lastPrefilledUrlRef = useRef<string | undefined>(value.url);
+    const lastPrefilledUrlRef = useRef<string | undefined>(
+        value.type && value.episodeIdentifier ? value.url : undefined,
+    );
     const dw: UseQueryResult<any> = useDailywireShow(slugFromUrl);
 
     // --- Fetch current DailyWire membership level
@@ -116,7 +118,9 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
         if (currentUrl === (lastPrefilledUrlRef.current ?? "")) return;
 
         const inferredType: ShowTypeValue | "" = ShowTypeReg.normalize(dw.data.probableShowType) ?? "";
-        const inferredEpisodeId: EpisodeIdentifierValue | "" = EpisodeIdentifierReg.normalize(dw.data.probableEpisodeIdentification) ?? "";
+        const inferredEpisodeId: EpisodeIdentifierValue | "" = inferredType === ShowTypeReg.Enum.series
+            ? EpisodeIdentifierReg.Enum.seasonal
+            : (EpisodeIdentifierReg.normalize(dw.data.probableEpisodeIdentification) ?? "");
 
         setValue("type", inferredType, {shouldDirty: true});
         setValue("episodeIdentifier", inferredEpisodeId, {shouldDirty: true});

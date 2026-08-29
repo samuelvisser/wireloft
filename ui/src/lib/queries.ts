@@ -1,4 +1,4 @@
-import {keepPreviousData, QueryClient, useQuery, useQueryClient} from '@tanstack/react-query'
+import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClient} from '@tanstack/react-query'
 import {useEffect} from 'react'
 import {saveProfilesToStorage, saveShowsToStorage} from './cache'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
@@ -16,6 +16,15 @@ import {DailywireShowRead} from "../types/schemas/dailywire_show";
 import {TaskRunRead, TaskRunReadSchema} from "../types/schemas/task";
 import {MediaDownloadAttemptRead, MediaDownloadViewRead} from "../types/schemas/media_download";
 import {ACTIVE_DOWNLOAD_STATUSES} from "../types/media_download";
+import {MovieRead} from "../types/schemas/movie";
+import {
+    DailywireCatalogRead,
+    DailywireCatalogReadSchema,
+    DailywireCatalogMoviePageReadSchema,
+    DailywireCatalogShowPageReadSchema,
+    DailywireMovieRead,
+    DailywireMovieReadSchema,
+} from "../types/schemas/dailywire_catalog";
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
     const r = await fetch(url, {signal, credentials: 'include'})
@@ -100,6 +109,97 @@ export function useShowsView() {
         queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/shows/as-view`, signal),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
+    })
+}
+
+export function useMovies() {
+    return useQuery<any[], Error, MovieRead[], readonly ['movies']>({
+        queryKey: ['movies'] as const,
+        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/movies`, signal),
+        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
+    })
+}
+
+export function useDailywireCatalog() {
+    return useQuery<any, Error, DailywireCatalogRead, readonly ['dailywireCatalog']>({
+        queryKey: ['dailywireCatalog'] as const,
+        queryFn: async ({signal}) => {
+            const value = await fetchJSON<any>(`${(window as any).appConfig.API_URL}/dailywire/catalog`, signal)
+            return DailywireCatalogReadSchema.parse(value)
+        },
+        staleTime: 5 * 60 * 1000,
+        refetchOnMount: false,
+    })
+}
+
+const DAILYWIRE_CATALOG_PAGE_SIZE = 24
+
+export function useDailywireShowCatalog(search: string, grouping: 'host' | 'alphabetical', enabled = true) {
+    return useInfiniteQuery({
+        queryKey: ['dailywireCatalog', 'shows', search, grouping] as const,
+        enabled,
+        initialPageParam: 0,
+        queryFn: async ({pageParam, signal}) => {
+            const params = new URLSearchParams({
+                offset: String(pageParam),
+                limit: String(DAILYWIRE_CATALOG_PAGE_SIZE),
+                grouping,
+            })
+            if (search) params.set('search', search)
+            const value = await fetchJSON<any>(
+                `${(window as any).appConfig.API_URL}/dailywire/catalog/shows?${params}`,
+                signal,
+            )
+            return DailywireCatalogShowPageReadSchema.parse(value)
+        },
+        getNextPageParam: (lastPage) => lastPage.hasMore
+            ? lastPage.offset + lastPage.items.length
+            : undefined,
+        staleTime: 5 * 60 * 1000,
+        gcTime: 30 * 60 * 1000,
+        refetchOnMount: false,
+    })
+}
+
+export function useDailywireMovieCatalog(search: string, enabled = true) {
+    return useInfiniteQuery({
+        queryKey: ['dailywireCatalog', 'movies', search] as const,
+        enabled,
+        initialPageParam: 0,
+        queryFn: async ({pageParam, signal}) => {
+            const params = new URLSearchParams({
+                offset: String(pageParam),
+                limit: String(DAILYWIRE_CATALOG_PAGE_SIZE),
+            })
+            if (search) params.set('search', search)
+            const value = await fetchJSON<any>(
+                `${(window as any).appConfig.API_URL}/dailywire/catalog/movies?${params}`,
+                signal,
+            )
+            return DailywireCatalogMoviePageReadSchema.parse(value)
+        },
+        getNextPageParam: (lastPage) => lastPage.hasMore
+            ? lastPage.offset + lastPage.items.length
+            : undefined,
+        staleTime: 5 * 60 * 1000,
+        gcTime: 30 * 60 * 1000,
+        refetchOnMount: false,
+    })
+}
+
+export function useDailywireMovie(slug?: string) {
+    return useQuery<any, Error, DailywireMovieRead, readonly ['dailywireMovie', string | undefined]>({
+        queryKey: ['dailywireMovie', slug] as const,
+        enabled: !!slug,
+        queryFn: async ({signal}) => {
+            const value = await fetchJSON<any>(
+                `${(window as any).appConfig.API_URL}/dailywire/movies/${encodeURIComponent(slug!)}`,
+                signal,
+            )
+            return DailywireMovieReadSchema.parse(value)
+        },
+        staleTime: 5 * 60 * 1000,
     })
 }
 
@@ -245,6 +345,20 @@ export function useEpisodeDownloads(episodeSlug?: string) {
     })
 }
 
+export function useMovieDownloads(movieSlug?: string) {
+    return useQuery<any[], Error, MediaDownloadViewRead[], readonly ['movieDownloads', string | undefined]>({
+        queryKey: ['movieDownloads', movieSlug] as const,
+        enabled: !!movieSlug,
+        queryFn: ({signal}) => fetchJSON<any[]>(
+            `${(window as any).appConfig.API_URL}/media-downloads/as-view?movie_slug=${encodeURIComponent(movieSlug!)}`,
+            signal,
+        ),
+        refetchInterval: (query) => (hasActiveDownloads(query.state.data) ? 1500 : false),
+        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
+    })
+}
+
 export function useMediaDownloadsView() {
     return useQuery<any[], Error, MediaDownloadViewRead[], readonly ['mediaDownloadsView']>({
         queryKey: ['mediaDownloadsView'] as const,
@@ -305,6 +419,10 @@ export function prefetchCoreData(qc: QueryClient) {
             const shows = qc.getQueryData<any[]>(['shows'])
             if (shows) saveShowsToStorage(shows)
         })
+    void qc.prefetchQuery({
+        queryKey: ['movies'],
+        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/movies`, signal),
+    })
     void qc
         .prefetchQuery({
             queryKey: ['localMediaProfiles'],

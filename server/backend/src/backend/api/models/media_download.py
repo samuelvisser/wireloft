@@ -12,6 +12,12 @@ class EpisodeDownloadAPICreate(RequestBase):
     local_media_profile_id: int
 
 
+class MovieDownloadAPICreate(RequestBase):
+    """Request body for starting a movie download for a Local Media Profile."""
+
+    local_media_profile_id: int
+
+
 class MediaDownloadAPIUpdate(RequestBase):
     """Request body for updating a media download record."""
 
@@ -24,6 +30,7 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, no constraints."""
 
     id: int
+    type: str
     media_item_id: int
     local_media_profile_id: int
     download_status: Union[MediaDownloadStatus, str]
@@ -66,6 +73,8 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
     episode_identifier: Optional[str]
     show_slug: Optional[str]
     show_title: Optional[str]
+    movie_slug: Optional[str]
+    movie_title: Optional[str]
     local_media_profile_name: Optional[str]
     preferred_format: Optional[str]
     # Whether the most recent attempt was a redownload of an already-completed

@@ -11,7 +11,18 @@ from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
 
-from dailywire_api.records import DwEpisodeDetailRecord, DwShowRecord, DwEpisodeRecord, DwUserInfo
+from dailywire_api.records import (
+    DwCatalogMovieRecord,
+    DwCatalogRecord,
+    DwCatalogShowRecord,
+    DwEpisodeDetailRecord,
+    DwEpisodeRecord,
+    DwMoviePlaybackRecord,
+    DwMovieRecord,
+    DwShowRecord,
+    DwTrailerRecord,
+    DwUserInfo,
+)
 from dailywire_authorisation import DeviceAuthClient
 from config import get_settings
 
@@ -146,6 +157,98 @@ class MiddlewareClient:
 
         payload = self._get('v4/getShowPage', params)
         return DwShowRecord.model_validate(payload)
+
+    def get_catalog(self, *, membership_plan: Optional[str] = None) -> DwCatalogRecord:
+        """Return the shows and movies exposed by Daily Wire's browse page.
+
+        The upstream response repeats items across curated carousels. WireLoft
+        deliberately flattens and de-duplicates those rows so the frontend can
+        offer stable alphabetical and host-grouped browsing.
+        """
+        params: Dict[str, Any] = {'slug': 'web-shows-movies-page'}
+        if membership_plan:
+            params['membershipPlan'] = membership_plan
+        payload = self._get('v4/getPage', params)
+
+        shows: dict[str, DwCatalogShowRecord] = {}
+        movies: dict[str, DwCatalogMovieRecord] = {}
+        for component in payload.get('components') or []:
+            for item in component.get('items') or []:
+                raw_show = item.get('show')
+                if isinstance(raw_show, dict) and raw_show.get('slug'):
+                    record = self._catalog_show_from_payload(raw_show)
+                    shows.setdefault(record.slug, record)
+
+                raw_movie = item.get('video')
+                if isinstance(raw_movie, dict) and raw_movie.get('slug'):
+                    record = self._catalog_movie_from_payload(raw_movie)
+                    movies.setdefault(record.slug, record)
+
+        return DwCatalogRecord(
+            shows=sorted(shows.values(), key=lambda value: value.title.casefold()),
+            movies=sorted(movies.values(), key=lambda value: value.title.casefold()),
+        )
+
+    def get_movie_page(self, slug: str, *, membership_plan: Optional[str] = None) -> DwMovieRecord:
+        params: Dict[str, Any] = {'slug': slug}
+        if membership_plan:
+            params['membershipPlan'] = membership_plan
+        payload = self._get('v4/getVideoPage', params)
+        raw = payload.get('video')
+        if not isinstance(raw, dict) or not raw.get('slug'):
+            raise MiddlewareAPIError(f"Daily Wire movie '{slug}' was not found")
+
+        trailer: Optional[DwTrailerRecord] = None
+        for tab in payload.get('tabs') or []:
+            for component in tab.get('components') or []:
+                for item in component.get('items') or []:
+                    extra = item.get('showEpisode')
+                    if not isinstance(extra, dict):
+                        continue
+                    title = str(extra.get('title') or '')
+                    if 'trailer' not in title.casefold():
+                        continue
+                    images = extra.get('images') or {}
+                    thumbnails = images.get('thumbnail') or {}
+                    trailer = DwTrailerRecord(
+                        dw_id=str(extra.get('id') or ''),
+                        slug=str(extra.get('slug') or ''),
+                        title=title,
+                        sharing_url=str(extra.get('sharingURL') or ''),
+                        duration=float(extra.get('duration') or 0),
+                        thumbnail_landscape_path=thumbnails.get('land') or None,
+                    )
+                    break
+                if trailer:
+                    break
+            if trailer:
+                break
+
+        summary = self._catalog_movie_from_payload(raw)
+        return DwMovieRecord(
+            **summary.model_dump(),
+            duration=float(raw.get('duration') or 0),
+            sharing_url=str(raw.get('sharingURL') or f"https://www.dailywire.com/videos/{slug}"),
+            mature_rating=raw.get('matureRating') or None,
+            is_downloadable=bool(raw.get('isDownloadable', True)),
+            available_for=[str(value) for value in raw.get('availableFor') or []],
+            trailer=trailer,
+        )
+
+    def get_movie_playback(self, slug: str) -> DwMoviePlaybackRecord:
+        """Fetch a fresh, signed playback URL for a movie download."""
+        payload = self._get('v2/getVideo', {'slug': slug})
+        raw = payload.get('video')
+        if not isinstance(raw, dict):
+            message = payload.get('error') or payload.get('message') or 'Movie playback is unavailable'
+            raise MiddlewareAPIError(str(message))
+        return DwMoviePlaybackRecord(
+            video_url=raw.get('secureVideoURL') or raw.get('videoURL') or None,
+            trailer_url=raw.get('trailerURL') or None,
+            duration=float(raw.get('duration') or 0),
+            trailer_duration=float(raw.get('trailerDuration') or 0),
+            has_video=bool(raw.get('hasVideo')),
+        )
 
     def get_user_info(self) -> DwUserInfo:
         """
@@ -299,6 +402,69 @@ class MiddlewareClient:
         if dw_season is None:
             raise ValueError(f"Season '{season_slug}' not found in DW API for show '{show_slug}'")
         return dw_season.dw_id
+
+    @staticmethod
+    def _catalog_show_from_payload(raw: dict[str, Any]) -> DwCatalogShowRecord:
+        host = raw.get('host') or raw.get('author') or {}
+        images = raw.get('images') or {}
+        thumbnails = images.get('thumbnail') or {}
+        return DwCatalogShowRecord(
+            dw_id=str(raw.get('id') or ''),
+            slug=str(raw.get('slug') or ''),
+            title=str(raw.get('title') or ''),
+            description=raw.get('description') or None,
+            author_name=host.get('name') or None,
+            author_slug=host.get('slug') or None,
+            author_headshot_path=host.get('imageUrl') or host.get('headshot') or None,
+            background_image_path=raw.get('backgroundImage') or None,
+            logo_image_path=raw.get('logoImage') or None,
+            thumbnail_landscape_path=thumbnails.get('land') or None,
+            thumbnail_portrait_path=thumbnails.get('port') or None,
+            thumbnail_square_path=thumbnails.get('square') or None,
+        )
+
+    @staticmethod
+    def _catalog_movie_from_payload(raw: dict[str, Any]) -> DwCatalogMovieRecord:
+        host = raw.get('host') or raw.get('author') or {}
+        images = raw.get('images') or {}
+        thumbnails = images.get('thumbnail') or {}
+        title = MiddlewareClient._short_catalog_movie_title(raw)
+        return DwCatalogMovieRecord(
+            dw_id=str(raw.get('id') or ''),
+            slug=str(raw.get('slug') or ''),
+            title=title,
+            description=raw.get('description') or None,
+            author_name=host.get('name') or None,
+            author_slug=host.get('slug') or None,
+            background_image_path=raw.get('backgroundImage') or None,
+            logo_image_path=raw.get('logoImage') or None,
+            thumbnail_landscape_path=thumbnails.get('land') or None,
+            thumbnail_portrait_path=thumbnails.get('port') or None,
+            thumbnail_square_path=thumbnails.get('square') or None,
+        )
+
+    @staticmethod
+    def _short_catalog_movie_title(raw: dict[str, Any]) -> str:
+        """Remove browse-page marketing copy from a movie title.
+
+        Daily Wire's catalog sometimes appends the full description or a
+        pipe-delimited call to action to ``title``. The video detail endpoint
+        returns the actual display title, but fetching every detail page would
+        turn one catalog request into dozens. These two forms cover the catalog
+        payloads while preserving punctuation in the real title.
+        """
+        original = str(raw.get('title') or '').strip()
+        title = original
+        description = str(raw.get('description') or '').strip()
+
+        if description and title.casefold().endswith(description.casefold()):
+            title = title[:len(title) - len(description)].rstrip()
+            title = title.rstrip('|').rstrip()
+
+        if ' | ' in title:
+            title = title.split(' | ', 1)[0].strip()
+
+        return title or original
 
 
 

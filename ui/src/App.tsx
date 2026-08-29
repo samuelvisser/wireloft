@@ -18,8 +18,10 @@ import EditDownloadProfilePage from './pages/download-profile/EditDownloadProfil
 import StreamProfilesPage from './pages/StreamProfilesPage'
 import AddStreamProfilePage from './pages/stream-profile/AddStreamProfilePage'
 import EditStreamProfilePage from './pages/stream-profile/EditStreamProfilePage'
-import ShowsPage from './pages/ShowsPage'
 import DownloadsPage from './pages/DownloadsPage'
+import LibraryPage from './pages/LibraryPage'
+import BrowsePage from './pages/BrowsePage'
+import MoviePage from './pages/movie/MoviePage'
 
 export default function App() {
   const navigate = useNavigate()
@@ -43,8 +45,7 @@ export default function App() {
     }
   }, [])
 
-  const goToAddShow = useCallback(() => navigate('/add-show'), [navigate])
-  const cancelAddShow = useCallback(() => navigate('/'), [navigate])
+  const cancelAddShow = useCallback(() => navigate('/library'), [navigate])
 
   if (authState === 'checking') {
     return (
@@ -63,8 +64,10 @@ export default function App() {
       <Sidebar />
       <main className="content" role="main">
         <Routes>
-          <Route path="/" element={<HomePage onAddShow={goToAddShow} />} />
-          <Route path="/shows" element={<ShowsPage />} />
+          <Route path="/" element={<HomePage />} />
+          <Route path="/library" element={<LibraryPage />} />
+          <Route path="/shows" element={<Navigate to="/library?type=shows" replace />} />
+          <Route path="/browse" element={<BrowsePage />} />
           <Route path="/downloads" element={<DownloadsPage />} />
           <Route path="/local-media-profiles" element={<LocalMediaProfilesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
@@ -78,6 +81,7 @@ export default function App() {
           <Route path="/add-stream-profile" element={<AddStreamProfilePage />} />
           <Route path="/edit-stream-profile/:type/:id" element={<EditStreamProfilePage />} />
           <Route path="/show/:id" element={<ShowPage />} />
+          <Route path="/movie/:slug" element={<MoviePage />} />
           <Route path="/show/:id/episode/:episodeId" element={<EpisodePage />} />
           <Route path="/edit-show/:id" element={<EditShow />} />
           <Route path="*" element={<Navigate to="/" replace />} />

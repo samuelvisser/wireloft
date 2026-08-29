@@ -1,10 +1,39 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, status
 
 from .service import *
 from ...models.movie import *
+from ...models.media_download import MediaDownloadAPIRead, MovieDownloadAPICreate
+from ..dailywire.movies.service import get_movie as get_dailywire_movie
+from ..media_downloads.router import _trigger_download_task
+from ..media_downloads.service import create_movie_download
 from backend.app import db_session
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
+
+
+@router.post("/{movie_slug}/downloads", response_model=MediaDownloadAPIRead, status_code=status.HTTP_201_CREATED)
+def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
+    """Persist a browsed Daily Wire movie and start its manual download."""
+    try:
+        movie_data = get_dailywire_movie(movie_slug)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    with db_session() as s:
+        try:
+            download = create_movie_download(s, movie_data, body)
+            payload = MediaDownloadAPIRead.model_validate(download)
+            movie_id = download.media_item_id
+            s.commit()
+        except Exception:
+            s.rollback()
+            raise
+
+    _trigger_download_task(
+        media_download_id=payload.id,
+        media_item_id=movie_id,
+        media_type="movie",
+    )
+    return payload
 
 @router.get("", response_model=list[MovieAPIRead])
 def movie_list():
