@@ -75,6 +75,8 @@ def get_media_downloads_view(
         base = MediaDownloadAPIRead.model_validate(download)
         views.append(MediaDownloadAPIReadView(
             **base.model_dump(by_alias=False),
+            media_slug=getattr(media, "slug", None),
+            media_title=getattr(media, "title", None),
             episode_slug=episode.slug if episode else None,
             episode_title=episode.title if episode else None,
             episode_identifier=episode.episode_identifier if episode else None,
