@@ -19,12 +19,13 @@ export type SeriesDownloadProfileProps = {
     onBack: () => void
     onContinue: () => void
     onCancel: () => void
+    continueLabel?: string
 }
 
 
 export default function SeriesDownloadProfileStep({
                                                       value, onChange, onSubmit: onSubmitParent, seasons, onBack,
-                                                      onContinue, onCancel
+                                                      onContinue, onCancel, continueLabel = 'Continue'
                                                   }: SeriesDownloadProfileProps) {
     const form = useForm<DownloadProfileUnifiedCreateIn>({
         resolver: zodResolver(DownloadProfileUnifiedCreateSchema),
@@ -53,7 +54,7 @@ export default function SeriesDownloadProfileStep({
 
             <div className="actions">
                 <button type="button" className="btn" onClick={onBack}>Back</button>
-                <input type="submit" className="btn btn-primary" value="Continue" />
+                <input type="submit" className="btn btn-primary" value={continueLabel} />
                 <button type="button" className="btn" onClick={onCancel}>Cancel</button>
             </div>
         </form>
