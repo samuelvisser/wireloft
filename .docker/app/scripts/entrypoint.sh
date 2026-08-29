@@ -10,8 +10,7 @@ KEYRING_DATA_HOME="${XDG_DATA_HOME:-/config/keyring/data}"
 KEYRING_CONFIG_HOME="${XDG_CONFIG_HOME:-/config/keyring/config}"
 
 # Make sure every directory backed by a volume mount actually exists. The
-# database file itself is created lazily below by the backend (create_tables()
-# is idempotent), never here.
+# database file itself is created by Alembic when migrations run below.
 mkdir -p \
     "$(dirname "$CONFIG_FILE")" \
     "$(dirname "$DATABASE_PATH")" \
@@ -27,8 +26,7 @@ fi
 
 # The UI fetches /config.json at startup for the API base URL. Regenerate it
 # on every boot so it always matches how this container is being served,
-# while still allowing an override (e.g. the API is exposed on a different
-# host/port than the UI) via the API_URL env var.
+# while still allowing an override via API_URL.
 cat > /usr/share/nginx/html/config.json <<EOF
 {"API_URL": "${API_URL:-/api}"}
 EOF
@@ -58,9 +56,11 @@ run_supervised() {
 }
 
 if [ "$#" -eq 0 ]; then
+    echo "[entrypoint] Applying database migrations"
+    backend-api db upgrade
     run_supervised
 else
     # Escape hatch for one-off maintenance, e.g.:
-    #   docker compose run --rm wireloft backend-api db seed
+    #   docker compose run --rm wireloft backend-api db current
     exec "$@"
 fi

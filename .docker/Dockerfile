@@ -42,8 +42,9 @@ COPY server ./server
 # every package's config.py derives PROJECT_ROOT from its own file location by
 # walking up a fixed number of parents, assuming the server/<pkg>/src/<pkg>/
 # source layout stays on disk. A non-editable install would flatten that
-# layout and break the derived path.
-RUN uv sync --frozen --no-dev
+# layout and break the derived path. uv refreshes the lock here when dependency
+# declarations changed, then installs that resolved environment.
+RUN uv sync --no-dev
 
 # Default config seed, copied into the /config volume on first run if missing
 COPY config/config.yml.default ./config/config.yml.default
