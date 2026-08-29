@@ -814,6 +814,21 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
   padding: 4px 4px;
 }
 
+/* Keep long download errors inside the viewport while letting Status use the
+   width left over after the table's predictable metadata columns. */
+.downloads-table-wrapper { overflow-x: hidden; }
+.downloads-table { table-layout: fixed; }
+.downloads-table th:nth-child(4),
+.downloads-table td:nth-child(4) { overflow: hidden; }
+.downloads-table .download-status-message {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  color: var(--error, #d64545);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (prefers-color-scheme: dark) {
   .filter-chip { background: #0b1220; border-color: rgba(255, 255, 255, 0.2); }
   .filter-chip[aria-pressed="true"] { background: #3b82f6; border-color: #3b82f6; color: #fff; }

@@ -14,8 +14,28 @@ import {MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {getErrorMessageFromResponse} from '../utils/helpers'
 
-// Downloads that are not yet in a final, successfully-downloaded state.
-const DEFAULT_STATUS_FILTER = new Set(['pending', 'downloading', 'error'])
+type StatusFilterOption = {
+    value: string
+    label: string
+    statuses: readonly string[]
+}
+
+const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
+    {value: 'pending', label: 'Queued', statuses: ['pending']},
+    {value: 'downloading', label: 'Downloading', statuses: ['downloading']},
+    {value: 'downloaded', label: 'Downloaded', statuses: ['downloaded', 'redownloaded']},
+    {value: 'local_processing', label: 'Processing', statuses: ['local_processing']},
+    {value: 'error', label: 'Error', statuses: ['error']},
+    {value: 'missing', label: 'Missing', statuses: ['missing']},
+    {value: 'corrupted', label: 'Corrupted', statuses: ['corrupted']},
+]
+
+// Show everything by default except completed downloads.
+const DEFAULT_STATUS_FILTER = new Set(
+    STATUS_FILTER_OPTIONS
+        .filter((option) => option.value !== 'downloaded')
+        .flatMap((option) => option.statuses),
+)
 
 function formatDateTime(value: Date | null | undefined): string {
     if (!value) return '—'
@@ -69,7 +89,7 @@ function StatusCell({row}: {row: MediaDownloadViewRead}) {
     }
     if (status === 'error' || status === 'missing' || status === 'corrupted') {
         return (
-            <span style={{color: 'var(--error, #d64545)'}} title={row.errorMessage ?? undefined}>
+            <span className="download-status-message" title={row.errorMessage ?? undefined}>
                 {MediaDownloadStatusReg.getLabelLoose(status)}{row.errorMessage ? `: ${row.errorMessage}` : ''}
             </span>
         )
@@ -88,11 +108,14 @@ export default function DownloadsPage() {
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
     const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(DEFAULT_STATUS_FILTER))
 
-    const toggleStatusFilter = (status: string) => {
+    const toggleStatusFilter = (option: StatusFilterOption) => {
         setStatusFilter((prev) => {
             const next = new Set(prev)
-            if (next.has(status)) next.delete(status)
-            else next.add(status)
+            const enabled = option.statuses.every((status) => next.has(status))
+            for (const status of option.statuses) {
+                if (enabled) next.delete(status)
+                else next.add(status)
+            }
             return next
         })
     }
@@ -129,12 +152,14 @@ export default function DownloadsPage() {
             dataLabel: 'Media',
             mobileHidden: true,
             sortAccessor: (row) => rowTitle(row),
+            width: '18%',
         },
         {
             header: 'Profile',
             accessor: (row) => row.localMediaProfileName ?? '—',
             dataLabel: 'Profile',
             sortAccessor: (row) => row.localMediaProfileName,
+            width: '14%',
         },
         {
             header: 'Format',
@@ -142,12 +167,12 @@ export default function DownloadsPage() {
             align: 'center',
             dataLabel: 'Format',
             sortAccessor: (row) => row.formatDownloaded,
+            width: '9%',
         },
         {
             header: 'Status',
             cell: (row) => <StatusCell row={row}/>,
             dataLabel: 'Status',
-            width: 260,
             sortAccessor: (row) => MediaDownloadStatusReg.getLabelLoose(String(row.downloadStatus)),
         },
         {
@@ -156,12 +181,14 @@ export default function DownloadsPage() {
             align: 'right',
             dataLabel: 'Size',
             sortAccessor: (row) => row.downloadedBytes,
+            width: '10%',
         },
         {
             header: 'Updated',
             accessor: (row) => formatDateTime(rowTimestamp(row)),
             dataLabel: 'Updated',
             sortAccessor: (row) => rowTimestamp(row),
+            width: '16%',
         },
     ]
 
@@ -178,15 +205,15 @@ export default function DownloadsPage() {
                 </PageSubtitle>
             </div>
             <div className="filter-chip-group" role="group" aria-label="Filter downloads by status">
-                {MediaDownloadStatusReg.options.map((opt) => (
+                {STATUS_FILTER_OPTIONS.map((option) => (
                     <button
-                        key={opt.value}
+                        key={option.value}
                         type="button"
                         className="filter-chip"
-                        aria-pressed={statusFilter.has(opt.value)}
-                        onClick={() => toggleStatusFilter(opt.value)}
+                        aria-pressed={option.statuses.every((status) => statusFilter.has(status))}
+                        onClick={() => toggleStatusFilter(option)}
                     >
-                        {opt.label}
+                        {option.label}
                     </button>
                 ))}
                 {!setsEqual(statusFilter, DEFAULT_STATUS_FILTER) && (
@@ -204,6 +231,8 @@ export default function DownloadsPage() {
                     ariaLabel="Media downloads"
                     columns={columns}
                     data={filteredDownloads}
+                    className="table downloads-table"
+                    wrapperClassName="table-wrapper downloads-table-wrapper"
                     loading={isLoading}
                     error={error}
                     emptyMessage={
