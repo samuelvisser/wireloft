@@ -1758,7 +1758,8 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .catalog-show-card { grid-template-columns: 92px minmax(0,1fr); }
 .catalog-show-card .show-summary-title { padding-right: 64px; }
 .catalog-added { position: absolute; top: 9px; right: 9px; color: #22a95e; font-size: 10px; }
-.catalog-movie-grid .movie-poster-card { flex-basis: 155px; max-width: 155px; }
+.catalog-movie-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); }
+.catalog-movie-grid .movie-poster-card { width: 100%; max-width: none; }
 .catalog-load-more { min-height: 72px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 13px; }
 .catalog-load-error { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 18px 0; color: var(--error); }
 .catalog-empty { min-height: 240px; display: grid; place-items: center; align-content: center; gap: 10px; color: var(--muted); }
@@ -1839,6 +1840,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   .view-header .btn { margin-left: auto; }
   .movie-poster-grid { gap: 18px 12px; }
   .movie-poster-grid .movie-poster-card { flex: 0 0 calc(50% - 6px); max-width: none; }
+  .catalog-movie-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .browse-toolbar { align-items: stretch; flex-direction: column; }
   .browse-search { max-width: none; }
   .compact-switch { align-self: flex-start; }
