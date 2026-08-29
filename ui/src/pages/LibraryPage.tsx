@@ -3,10 +3,9 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
+import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import {useMediaDownloadsView, useMovies, useShowsView} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
-
-type LibraryType = 'shows' | 'movies'
 
 function latestMovieDownload(downloads: MediaDownloadViewRead[] | undefined, slug: string) {
     return downloads?.find((download) => download.movieSlug === slug)
@@ -20,16 +19,16 @@ export default function LibraryPage() {
     const {data: downloads} = useMediaDownloadsView()
     const hasShows = !!shows?.length
     const hasMovies = !!movies?.length
-    const requested = params.get('type') as LibraryType | null
-    const initialType: LibraryType = requested === 'movies' ? 'movies' : 'shows'
-    const [activeType, setActiveType] = useState<LibraryType>(initialType)
+    const requested = params.get('type') as MediaType | null
+    const initialType: MediaType = requested === 'movies' ? 'movies' : 'shows'
+    const [activeType, setActiveType] = useState<MediaType>(initialType)
 
     useEffect(() => {
         if (hasShows && !hasMovies && activeType !== 'shows') setActiveType('shows')
         if (hasMovies && !hasShows && activeType !== 'movies') setActiveType('movies')
     }, [activeType, hasMovies, hasShows])
 
-    const chooseType = (type: LibraryType) => {
+    const chooseType = (type: MediaType) => {
         setActiveType(type)
         setParams({type}, {replace: true})
     }
@@ -52,16 +51,13 @@ export default function LibraryPage() {
             </div>
 
             {showTabs && (
-                <div className="media-type-tabs" role="tablist" aria-label="Library media type">
-                    <button type="button" role="tab" aria-selected={activeType === 'shows'} onClick={() => chooseType('shows')}>
-                        <FontAwesomeIcon icon={['fas', 'tv']}/>
-                        Shows <span>{shows?.length ?? 0}</span>
-                    </button>
-                    <button type="button" role="tab" aria-selected={activeType === 'movies'} onClick={() => chooseType('movies')}>
-                        <FontAwesomeIcon icon={['fas', 'clapperboard']}/>
-                        Movies <span>{movies?.length ?? 0}</span>
-                    </button>
-                </div>
+                <MediaTypeTabs
+                    activeType={activeType}
+                    onChange={chooseType}
+                    ariaLabel="Library media type"
+                    showCount={shows?.length ?? 0}
+                    movieCount={movies?.length ?? 0}
+                />
             )}
 
             {loading && !hasShows && !hasMovies ? (
