@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -30,6 +31,12 @@ _RESTARTABLE_STATUSES = {
     MediaDownloadStatus.MISSING.value,
     MediaDownloadStatus.CORRUPTED.value,
 }
+_ACTIVE_STATUSES = {
+    MediaDownloadStatus.DOWNLOADING.value,
+    MediaDownloadStatus.LOCAL_PROCESSING.value,
+}
+_RETRYABLE_STATUSES = _RESTARTABLE_STATUSES | _ACTIVE_STATUSES
+_USER_RESTART_MESSAGE = "Cancelled by the user and restarted"
 
 
 def get_media_downloads_list(s: Session) -> list[MediaDownloadAPIRead]:
@@ -257,12 +264,24 @@ def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
 
 
 def retry_media_download(s: Session, media_download_id: int) -> MediaDownloadBase:
-    """Reset an errored download so it can be started again."""
+    """Cancel any active attempt and arm a fresh generation for download."""
     download: Optional[MediaDownloadBase] = s.get(MediaDownloadBase, media_download_id)
     if download is None:
         raise HTTPException(status_code=404, detail="Media download not found")
-    if download.download_status not in _RESTARTABLE_STATUSES:
-        raise HTTPException(status_code=409, detail="Only pending or errored downloads can be retried")
+    if download.download_status not in _RETRYABLE_STATUSES:
+        raise HTTPException(status_code=409, detail="This download cannot be retried in its current state")
+
+    if download.download_status in _ACTIVE_STATUSES:
+        s.add(MediaDownloadAttempt(
+            media_download_id=download.id,
+            is_redownload=bool(getattr(download, "is_redownload_attempt", False) or False),
+            status="cancelled",
+            error_message=_USER_RESTART_MESSAGE,
+            downloaded_bytes=download.downloaded_bytes,
+            format_downloaded=download.format_downloaded,
+            started_at=download.started_at,
+            finished_at=datetime.now(timezone.utc),
+        ))
 
     _reset_download(download)
     s.flush()
@@ -270,6 +289,7 @@ def retry_media_download(s: Session, media_download_id: int) -> MediaDownloadBas
 
 
 def _reset_download(download: MediaDownloadBase) -> None:
+    download.attempt_generation += 1
     download.download_status = MediaDownloadStatus.PENDING.value
     download.progress = 0
     download.error_message = None

@@ -23,7 +23,8 @@ class MediaDownloadAttempt(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     media_download_id: Mapped[int] = mapped_column(ForeignKey("media_downloads.id", ondelete="CASCADE"), index=True)
     is_redownload: Mapped[bool]
-    # The MediaDownloadStatus this attempt ended in: "downloaded", "redownloaded" or "error"
+    # The final status: "downloaded", "redownloaded", "error", or a
+    # user-initiated "cancelled" recorded when an active attempt is restarted.
     status: Mapped[str]
     error_message: Mapped[Optional[str]]
     downloaded_bytes: Mapped[Optional[int]]

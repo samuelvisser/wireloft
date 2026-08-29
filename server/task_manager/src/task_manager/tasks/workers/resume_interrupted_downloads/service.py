@@ -52,6 +52,7 @@ async def run_resume_interrupted_downloads(s: Session, *, progress=None) -> None
             finished_at=now,
         ))
 
+        download.attempt_generation += 1
         download.download_status = MediaDownloadStatus.PENDING.value
         download.progress = 0
         download.error_message = None

@@ -4,6 +4,7 @@ from typing import Optional
 
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import task
+from task_manager.tasks.workers.download_attempt import serialize_download_attempt
 from .service import run_download_episode
 
 
@@ -19,6 +20,7 @@ async def download_episode(
         *,
         resource_id: Optional[int] = None,
         media_download_id: int,
+        attempt_generation: Optional[int] = None,
         is_redownload: bool = False,
         progress=None,
 ) -> None:
@@ -31,5 +33,12 @@ async def download_episode(
     (e.g. a Download Profile replacing a countdown-era file once the episode goes
     final): the row is marked REDOWNLOADED instead of DOWNLOADED on success.
     """
-    with db_session() as s:
-        await run_download_episode(s, media_download_id=media_download_id, is_redownload=is_redownload, progress=progress)
+    with serialize_download_attempt(media_download_id):
+        with db_session() as s:
+            await run_download_episode(
+                s,
+                media_download_id=media_download_id,
+                attempt_generation=attempt_generation,
+                is_redownload=is_redownload,
+                progress=progress,
+            )

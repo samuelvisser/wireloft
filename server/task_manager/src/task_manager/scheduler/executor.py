@@ -14,6 +14,7 @@ from task_manager.scheduler.db import *
 from .types import ResourceType, TaskStatus
 from .registry import get_task
 from config import get_settings
+from dailywire_downloader import DownloadCancelled
 from task_manager.scheduler import scheduler
 
 
@@ -183,6 +184,11 @@ def execute_task(
             run.status = TaskStatus.SUCCEEDED
             run.progress = 100
             run.message = "OK"
+            run.last_error = None
+            run.next_retry_at = None
+        except DownloadCancelled as e:
+            run.status = TaskStatus.CANCELED
+            run.message = str(e)
             run.last_error = None
             run.next_retry_at = None
         except Exception as e:

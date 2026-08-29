@@ -47,9 +47,10 @@ def media_downloads_view(
 @router.post("/{media_download_id}/retry", response_model=MediaDownloadAPIRead)
 def media_downloads_retry(media_download_id: int):
     """
-    Restart a pending or errored download.
+    Restart a queued, active, or failed download.
 
-    Resets the download record and queues the download task again.
+    Advances its attempt generation so an existing worker cancels, resets the
+    download record, and queues a fresh worker for the same item and profile.
     """
     with db_session() as s:
         try:
@@ -57,6 +58,7 @@ def media_downloads_retry(media_download_id: int):
             payload = MediaDownloadAPIRead.model_validate(download)
             media_item_id = download.media_item_id
             media_type = download.type
+            attempt_generation = download.attempt_generation
             s.commit()
         except Exception:
             s.rollback()
@@ -66,6 +68,7 @@ def media_downloads_retry(media_download_id: int):
         media_download_id=payload.id,
         media_item_id=media_item_id,
         media_type=media_type,
+        attempt_generation=attempt_generation,
     )
     return payload
 
@@ -129,7 +132,13 @@ def media_downloads_delete(media_download_id: int):
             raise
 
 
-def _trigger_download_task(*, media_download_id: int, media_item_id: int, media_type: str) -> None:
+def _trigger_download_task(
+        *,
+        media_download_id: int,
+        media_item_id: int,
+        media_type: str,
+        attempt_generation: int,
+) -> None:
     """Queue the download worker for a freshly created/reset download row."""
     from task_manager.scheduler.executor import trigger_now
 
@@ -139,6 +148,7 @@ def _trigger_download_task(*, media_download_id: int, media_item_id: int, media_
             resource_type="movie",
             resource_id=media_item_id,
             media_download_id=media_download_id,
+            attempt_generation=attempt_generation,
         )
         return
 
@@ -147,4 +157,5 @@ def _trigger_download_task(*, media_download_id: int, media_item_id: int, media_
         resource_type="episode",
         resource_id=media_item_id,
         media_download_id=media_download_id,
+        attempt_generation=attempt_generation,
     )

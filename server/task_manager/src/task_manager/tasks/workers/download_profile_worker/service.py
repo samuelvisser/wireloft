@@ -66,6 +66,7 @@ async def run_download_profile_worker(
                 resource_type="episode",
                 resource_id=episode.id,
                 media_download_id=action.media_download_id,
+                attempt_generation=action.attempt_generation,
                 is_redownload=action.is_redownload,
             )
             budget -= 1

@@ -32,6 +32,9 @@ class MediaDownloadBase(Base):
     download_status: Mapped[str]
     file_path: Mapped[str]
     progress: Mapped[int] = mapped_column(default=0)
+    # Incremented whenever a download is explicitly restarted. Workers carry
+    # the generation they were queued for and cancel themselves when stale.
+    attempt_generation: Mapped[int] = mapped_column(default=0, server_default="0")
     error_message: Mapped[Optional[str]]
     downloaded_bytes: Mapped[Optional[int]]
     # What was actually fetched, e.g. "1920x1080" or "audio"

@@ -15,6 +15,7 @@ from backend.types.local_media_profile_types import LocalMediaProfileType, Prefe
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
 from dailywire_downloader import (
+    DownloadCancelled,
     DownloadError,
     DownloadResult,
     MediaKind,
@@ -26,6 +27,7 @@ from dailywire_downloader import (
 )
 
 from ._helpers import FORMAT_HEIGHTS, RowProgressWriter, refresh_episode_media_urls, select_rendition
+from task_manager.tasks.workers.download_attempt import DownloadAttemptGuard
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,14 @@ class _AttemptResult:
     format_downloaded: str
 
 
-async def run_download_episode(s: Session, *, media_download_id: int, is_redownload: bool = False, progress=None) -> None:
+async def run_download_episode(
+        s: Session,
+        *,
+        media_download_id: int,
+        attempt_generation: Optional[int] = None,
+        is_redownload: bool = False,
+        progress=None,
+) -> None:
     """Download one episode's media according to its media download row.
 
     The media URLs stored on the episode are used first; when they are missing or
@@ -47,6 +56,14 @@ async def run_download_episode(s: Session, *, media_download_id: int, is_redownl
     download: Optional[MediaDownloadBase] = s.get(MediaDownloadBase, media_download_id)
     if download is None:
         raise ValueError(f"Media download {media_download_id} not found")
+
+    expected_generation = (
+        download.attempt_generation
+        if attempt_generation is None
+        else attempt_generation
+    )
+    attempt_guard = DownloadAttemptGuard(media_download_id, expected_generation)
+    attempt_guard.ensure_current()
 
     episode: Optional[Episode] = s.get(Episode, download.media_item_id)
     if episode is None:
@@ -58,19 +75,28 @@ async def run_download_episode(s: Session, *, media_download_id: int, is_redownl
 
     print(f"Starting download_episode for {episode.slug} ({profile.name})")
 
-    download.download_status = MediaDownloadStatus.DOWNLOADING.value
-    download.progress = 0
-    download.error_message = None
-    download.started_at = datetime.now(timezone.utc)
-    download.finished_at = None
     # Recorded up front so it survives a failed attempt too, not just a
     # successful one: the download's log shows what kind of attempt this was
     # regardless of how it ends.
     download.is_redownload_attempt = is_redownload
+    attempt_guard.update_current(
+        s,
+        download_status=MediaDownloadStatus.DOWNLOADING.value,
+        progress=0,
+        error_message=None,
+        started_at=datetime.now(timezone.utc),
+        finished_at=None,
+    )
     s.commit()
+    s.refresh(download)
 
     want_audio = profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
-    row_progress = RowProgressWriter(media_download_id, task_progress=progress)
+    row_progress = RowProgressWriter(
+        media_download_id,
+        task_progress=progress,
+        attempt_generation=expected_generation,
+    )
+    cancelled = False
 
     try:
         try:
@@ -81,24 +107,42 @@ async def run_download_episode(s: Session, *, media_download_id: int, is_redownl
                 show=show,
                 want_audio=want_audio,
                 row_progress=row_progress,
+                attempt_guard=attempt_guard,
             )
+            attempt_guard.ensure_current()
+        except DownloadCancelled:
+            s.rollback()
+            cancelled = True
+            raise
         except Exception as e:
             s.rollback()
-            download.download_status = MediaDownloadStatus.ERROR.value
-            download.error_message = _truncate_message(str(e))
-            download.finished_at = datetime.now(timezone.utc)
+            try:
+                attempt_guard.update_current(
+                    s,
+                    download_status=MediaDownloadStatus.ERROR.value,
+                    error_message=_truncate_message(str(e)),
+                    finished_at=datetime.now(timezone.utc),
+                )
+            except DownloadCancelled:
+                cancelled = True
+                raise
+            s.refresh(download)
             _record_attempt(s, download, is_redownload=is_redownload)
             s.commit()
             raise
 
-        download.download_status = (
-            MediaDownloadStatus.REDOWNLOADED.value if is_redownload else MediaDownloadStatus.DOWNLOADED.value
+        attempt_guard.update_current(
+            s,
+            download_status=(
+                MediaDownloadStatus.REDOWNLOADED.value if is_redownload else MediaDownloadStatus.DOWNLOADED.value
+            ),
+            progress=100,
+            downloaded_bytes=result.bytes_downloaded,
+            format_downloaded=result.format_downloaded,
+            file_path=result.file_path,
+            finished_at=datetime.now(timezone.utc),
         )
-        download.progress = 100
-        download.downloaded_bytes = result.bytes_downloaded
-        download.format_downloaded = result.format_downloaded
-        download.file_path = result.file_path
-        download.finished_at = datetime.now(timezone.utc)
+        s.refresh(download)
         # Records what version was actually fetched, so a Download Profile can later
         # tell whether this file still needs replacing (e.g. still countdown-era)
         # instead of redownloading on every check.
@@ -118,7 +162,8 @@ async def run_download_episode(s: Session, *, media_download_id: int, is_redownl
         # This download just freed a concurrency slot, one way or another;
         # immediately backfill it from the queue instead of leaving it idle
         # until the next full Download Profile sweep.
-        _drain_next_pending_downloads(s)
+        if not cancelled:
+            _drain_next_pending_downloads(s)
 
 
 def _record_attempt(s: Session, download: MediaDownloadBase, *, is_redownload: bool) -> None:
@@ -159,8 +204,10 @@ def _download_with_url_refresh(
         show: Show,
         want_audio: bool,
         row_progress: RowProgressWriter,
+        attempt_guard: DownloadAttemptGuard,
 ) -> _AttemptResult:
     """Try the stored media URL; on a missing/unusable URL refresh from DW once."""
+    attempt_guard.ensure_current()
     url = episode.audio_url if want_audio else episode.video_url
     refreshed = False
 
@@ -174,7 +221,13 @@ def _download_with_url_refresh(
 
     try:
         return _attempt_download(
-            s, download=download, episode=episode, url=url, want_audio=want_audio, row_progress=row_progress
+            s,
+            download=download,
+            episode=episode,
+            url=url,
+            want_audio=want_audio,
+            row_progress=row_progress,
+            attempt_guard=attempt_guard,
         )
     except MediaUnavailableError:
         if refreshed:
@@ -186,7 +239,13 @@ def _download_with_url_refresh(
             kind = "audio" if want_audio else "video"
             raise MediaUnavailableError(f"Daily Wire provides no {kind} URL for episode '{episode.slug}'")
         return _attempt_download(
-            s, download=download, episode=episode, url=url, want_audio=want_audio, row_progress=row_progress
+            s,
+            download=download,
+            episode=episode,
+            url=url,
+            want_audio=want_audio,
+            row_progress=row_progress,
+            attempt_guard=attempt_guard,
         )
 
 
@@ -209,10 +268,13 @@ def _attempt_download(
         url: str,
         want_audio: bool,
         row_progress: RowProgressWriter,
+        attempt_guard: DownloadAttemptGuard,
 ) -> _AttemptResult:
     """Probe the URL, pick what to fetch, and download it to its final path."""
     profile = download.local_media_profile
+    attempt_guard.ensure_current()
     info = probe(url)
+    attempt_guard.ensure_current()
 
     if want_audio:
         if info.kind is MediaKind.HLS_MASTER:
@@ -246,15 +308,31 @@ def _attempt_download(
         episode=episode,
         extension=extension,
     )
-    download.file_path = str(dest)
+    attempt_guard.update_current(s, file_path=str(dest))
     s.commit()
+    s.refresh(download)
 
     if remux_video:
-        result = _download_and_remux_to_mp4(source_url, str(dest), row_progress=row_progress)
+        result = _download_and_remux_to_mp4(
+            source_url,
+            str(dest),
+            row_progress=row_progress,
+            attempt_guard=attempt_guard,
+        )
     elif use_hls:
-        result = download_hls(source_url, str(dest), progress=row_progress)
+        result = download_hls(
+            source_url,
+            str(dest),
+            progress=row_progress,
+            should_cancel=attempt_guard,
+        )
     else:
-        result = download_file(source_url, str(dest), progress=row_progress)
+        result = download_file(
+            source_url,
+            str(dest),
+            progress=row_progress,
+            should_cancel=attempt_guard,
+        )
 
     return _AttemptResult(
         file_path=result.path,
@@ -263,7 +341,13 @@ def _attempt_download(
     )
 
 
-def _download_and_remux_to_mp4(source_url: str, dest_path: str, *, row_progress: RowProgressWriter) -> DownloadResult:
+def _download_and_remux_to_mp4(
+        source_url: str,
+        dest_path: str,
+        *,
+        row_progress: RowProgressWriter,
+        attempt_guard: DownloadAttemptGuard,
+) -> DownloadResult:
     """Download an HLS video to a temporary .ts file, then remux it into dest_path.
 
     The raw TS download reports progress as usual; the remux itself is a fast
@@ -272,8 +356,19 @@ def _download_and_remux_to_mp4(source_url: str, dest_path: str, *, row_progress:
     """
     raw_ts_path = dest_path + ".rawts"
     try:
-        ts_result = download_hls(source_url, raw_ts_path, progress=row_progress)
-        remux_to_mp4(raw_ts_path, dest_path, ffmpeg_path=get_settings().download_settings.ffmpeg_path)
+        ts_result = download_hls(
+            source_url,
+            raw_ts_path,
+            progress=row_progress,
+            should_cancel=attempt_guard,
+        )
+        attempt_guard.ensure_current()
+        remux_to_mp4(
+            raw_ts_path,
+            dest_path,
+            ffmpeg_path=get_settings().download_settings.ffmpeg_path,
+            should_cancel=attempt_guard,
+        )
     finally:
         _remove_quietly(raw_ts_path)
 

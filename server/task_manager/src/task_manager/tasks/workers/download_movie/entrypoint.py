@@ -4,6 +4,7 @@ from typing import Optional
 
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import task
+from task_manager.tasks.workers.download_attempt import serialize_download_attempt
 
 from .service import run_download_movie
 
@@ -20,7 +21,14 @@ async def download_movie(
     *,
     resource_id: Optional[int] = None,
     media_download_id: int,
+    attempt_generation: Optional[int] = None,
     progress=None,
 ) -> None:
-    with db_session() as session:
-        await run_download_movie(session, media_download_id=media_download_id, progress=progress)
+    with serialize_download_attempt(media_download_id):
+        with db_session() as session:
+            await run_download_movie(
+                session,
+                media_download_id=media_download_id,
+                attempt_generation=attempt_generation,
+                progress=progress,
+            )
