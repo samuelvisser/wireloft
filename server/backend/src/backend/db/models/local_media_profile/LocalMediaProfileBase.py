@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Index, func
+from sqlalchemy import Boolean, DateTime, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -22,6 +22,7 @@ class LocalMediaProfileBase(Base):
             "type",
             "output_template",
             "preferred_format",
+            "append_media_type_to_filename",
             unique=True,
         ),
     )
@@ -40,6 +41,12 @@ class LocalMediaProfileBase(Base):
     name: Mapped[str] = mapped_column(unique=True)
     output_template: Mapped[str]
     preferred_format: Mapped[str]
+    append_media_type_to_filename: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default="1",
+        nullable=False,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
