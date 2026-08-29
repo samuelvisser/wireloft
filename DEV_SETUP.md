@@ -100,7 +100,7 @@ npm run dev
 ### Automated tests
 
 The default backend suite is isolated from both the live Daily Wire API and
-`data/wireloft.db`. Install the development dependency group and run it from
+`config/wireloft.db`. Install the development dependency group and run it from
 the repository root:
 
 ```bash
@@ -131,7 +131,8 @@ Options:
 ### Database (SQLite)
 
 This project includes a required SQLite database for the backend.
-- Default DB path: data/wireloft.db
+- Default development DB path: config/wireloft.db
+- Docker mounts the same project `config` directory at `/config` and uses `/config/wireloft.db`, so local development and Docker operate on the same database by default.
 
 #### Create and seed the database
 
@@ -144,8 +145,8 @@ backend-api db init
 backend-api db seed
 
 # Use a custom database path
-backend-api db init --db <DATA_DIR>/data/wireloft.db
-backend-api db seed --db <DATA_DIR>/data/wireloft.db
+backend-api db init --db <DATA_DIR>/wireloft.db
+backend-api db seed --db <DATA_DIR>/wireloft.db
 ```
 
 #### Backend API commands
