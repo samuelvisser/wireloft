@@ -313,7 +313,7 @@ class MiddlewareClient:
             payload = None
 
         if isinstance(payload, dict):
-            for key in ('videoURL', 'url'):
+            for key in ('destination', 'videoURL', 'url'):
                 candidate = payload.get(key)
                 if isinstance(candidate, str) and candidate:
                     return self._validated_playback_url(candidate)
