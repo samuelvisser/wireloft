@@ -31,6 +31,7 @@ def _ensure_unique_profile_settings(
         LocalMediaProfileBase.type == body.type,
         LocalMediaProfileBase.output_template == body.output_template,
         LocalMediaProfileBase.preferred_format == body.preferred_format,
+        LocalMediaProfileBase.append_media_type_to_filename == body.append_media_type_to_filename,
     )
     if exclude_id is not None:
         query = query.filter(LocalMediaProfileBase.id != exclude_id)
@@ -39,7 +40,7 @@ def _ensure_unique_profile_settings(
             status_code=409,
             detail=[{
                 "loc": ["body", "outputTemplate"],
-                "msg": "A Local Media Profile with this type, output path template, and preferred format already exists",
+                "msg": "A Local Media Profile with these output settings already exists",
                 "type": "unique_violation",
             }],
         )
@@ -51,7 +52,6 @@ def get_local_media_profiles_list(s: Session) -> list[LocalMediaProfileAPIRead]:
         .order_by(LocalMediaProfileBase.id)
         .all()
     )
-    
     return [LocalMediaProfileAPIRead.model_validate(mp) for mp in local_media_profiles]
 
 
@@ -63,7 +63,6 @@ def get_local_media_profile(s: Session, local_media_profile_slug: str) -> LocalM
     )
     if local_media_profile is None:
         raise HTTPException(status_code=404, detail="Media profile not found")
-
     return LocalMediaProfileAPIRead.model_validate(local_media_profile)
 
 
