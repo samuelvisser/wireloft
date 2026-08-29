@@ -24,7 +24,7 @@ async def run_download_profile_worker(
 
     Scope depends on how the run was triggered: a single episode going final (or
     countdown-published) only checks that episode against its show's profiles; a
-    freshly added show, a manual "run this show/profile" trigger, or the periodic
+    freshly indexed show, a manual "run this show/profile" trigger, or the periodic
     verification cron/app-startup sweep all fall through to a full re-check of the
     profile(s) in scope, which also runs the podcast "delete older episodes"
     cleanup.

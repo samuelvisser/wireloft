@@ -5,11 +5,12 @@ from typing import Optional
 from config import get_settings
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import task, on_cron, on_event
+from ..fetch_new_episodes.service import SHOW_INDEXED_EVENT
 from .service import run_download_profile_worker
 
 
 @on_event(
-    event_name="show.added",
+    event_name=SHOW_INDEXED_EVENT,
     resource_type="show",
 )
 @on_event(

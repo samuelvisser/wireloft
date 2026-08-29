@@ -3,6 +3,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
+import ShowIndexingProgress from '../components/ShowIndexingProgress/ShowIndexingProgress'
 import {useMediaDownloadsView, useMovies, useShowsView} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 
@@ -86,12 +87,18 @@ export default function LibraryPage() {
                                 <span className="show-summary-art">
                                     {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={['fas', 'podcast']}/></span>}
                                 </span>
-                                <span className="show-summary-copy">
+                                <div className="show-summary-copy">
                                     <span className="show-summary-title">{show.title}</span>
                                     <span className="show-summary-author">{show.authorName || 'Daily Wire'}</span>
                                     <span className="show-summary-meta">{show.episodeCount} episodes{show.years ? ` • ${show.years}` : ''}</span>
                                     {show.description && <span className="show-summary-description">{show.description}</span>}
-                                </span>
+                                    <ShowIndexingProgress
+                                        showId={show.id}
+                                        showSlug={show.slug}
+                                        pollForStart={show.episodeCount === 0}
+                                        className="library-show-indexing"
+                                    />
+                                </div>
                                 <FontAwesomeIcon icon={['fas', 'chevron-right']} aria-hidden="true"/>
                             </Link>
                         )

@@ -1,0 +1,32 @@
+.show-indexing-progress {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
+.show-indexing-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.library-show-indexing {
+    margin-top: 7px;
+}
+
+.show-page-indexing {
+    grid-column: 1 / -1;
+    padding: 12px;
+    border: 1px solid rgba(59, 130, 246, .26);
+    border-radius: 12px;
+    background: rgba(59, 130, 246, .07);
+}
+
+@media (max-width: 700px) {
+    .show-page-indexing {
+        grid-column: 1;
+    }
+}

@@ -495,6 +495,19 @@ def test_fetch_saves_non_final_episode_and_requests_monitor(monkeypatch):
 
     event_names = [call.args[1] for call in queued.call_args_list]
     assert "episode.added" in event_names
+    assert service.SHOW_INDEXED_EVENT in event_names
+
+    indexed_call = next(
+        call
+        for call in queued.call_args_list
+        if call.args[1] == service.SHOW_INDEXED_EVENT
+    )
+    assert indexed_call.args[2] == {
+        "resource_id": show.id,
+        "id": show.id,
+        "slug": show.slug,
+        "indexed_count": 1,
+    }
 
     monitor_calls = [
         call
@@ -578,6 +591,15 @@ def test_fetch_rerun_requeues_monitor_without_reidentifying(monkeypatch):
     payload = monitor_calls[0].args[2]
     assert payload["resource_id"] == episodes[1].id
     assert payload["episode_identifier"] == "ep.101"
+
+    indexed_calls = [
+        call
+        for call in queued.call_args_list
+        if call.args[1] == service.SHOW_INDEXED_EVENT
+    ]
+    assert len(indexed_calls) == 1
+    assert indexed_calls[0].args[2]["resource_id"] == show.id
+    assert indexed_calls[0].args[2]["indexed_count"] == 0
 
     session.close()
     engine.dispose()

@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import ShowIndexingProgress from '../../components/ShowIndexingProgress/ShowIndexingProgress'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import './ShowPage.css'
 
@@ -195,6 +196,13 @@ export default function ShowPage() {
               ]}
             />
           </div>
+
+          <ShowIndexingProgress
+            showId={show.id}
+            showSlug={show.slug}
+            pollForStart={episodes.length === 0}
+            className="show-page-indexing"
+          />
 
           {(attachedDownloadProfiles.length > 0 || attachedStreamProfiles.length > 0) && (
             <div className="show-profile-summary" aria-label="Profiles attached to this show">

@@ -1,5 +1,5 @@
 import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClient} from '@tanstack/react-query'
-import {useEffect} from 'react'
+import {useEffect, useRef} from 'react'
 import {saveProfilesToStorage, saveShowsToStorage} from './cache'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
 import {PodcastDownloadProfileRead} from "../types/schemas/podcast_download_profile";
@@ -384,8 +384,11 @@ export function useMediaDownloadAttempts(mediaDownloadId?: number) {
     })
 }
 
-// Prefetch core data to warm the cache on app start
-export function useShowIndexingRun(showId?: number) {
+export function useShowIndexingRun(showId?: number, options?: {pollForStart?: boolean}) {
+    const discoveryWindow = useRef({showId, startedAt: Date.now()})
+    if (discoveryWindow.current.showId !== showId) {
+        discoveryWindow.current = {showId, startedAt: Date.now()}
+    }
     return useQuery<any, Error, TaskRunRead | null, readonly ['showIndexingRun', number | undefined]>({
         queryKey: ['showIndexingRun', showId] as const,
         enabled: !!showId,
@@ -399,16 +402,21 @@ export function useShowIndexingRun(showId?: number) {
             }
             return null
         },
-        // Poll periodically while enabled (when an active run exists)
+        // Keep polling an active run. Newly added zero-episode shows also get a
+        // short discovery window so a just-scheduled task cannot lose the race
+        // against the first Library/Show page request.
         refetchInterval: (q) => {
-            const r = q.state.data as TaskRunRead[] | null
-            return r ? 1500 : false
+            const run = q.state.data as TaskRunRead | null
+            const waitingForStart = options?.pollForStart
+                && Date.now() - discoveryWindow.current.startedAt < 30_000
+            return run || waitingForStart ? 1500 : false
         },
         placeholderData: null,
         refetchOnMount: 'always',
     })
 }
 
+// Prefetch core data to warm the cache on app start
 export function prefetchCoreData(qc: QueryClient) {
     void qc
         .prefetchQuery({
