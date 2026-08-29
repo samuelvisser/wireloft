@@ -134,10 +134,17 @@ def upgrade() -> None:
     op.create_table(
         "movies",
         sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("dw_id", sa.String(), nullable=True),
         sa.Column("slug", sa.String(), nullable=False),
+        sa.Column("rating", sa.String(), nullable=True),
+        sa.Column("sharing_url", sa.String(), nullable=True),
+        sa.Column("license_start_date", sa.String(), nullable=True),
+        sa.Column("license_end_date", sa.String(), nullable=True),
+        sa.Column("available_in_watchlist", sa.Boolean(), nullable=True),
         sa.ForeignKeyConstraint(["id"], ["media_items.id"], name=op.f("fk_movies_id_media_items"), ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_movies")),
     )
+    op.create_index(op.f("ix_movies_dw_id"), "movies", ["dw_id"], unique=True)
 
     op.create_table(
         "download_profiles",
@@ -281,6 +288,13 @@ def upgrade() -> None:
         sa.UniqueConstraint("media_item_id", "local_media_profile_id", name="uq_download_per_media_profile"),
     )
 
+    op.create_table(
+        "media_downloads_movie",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.ForeignKeyConstraint(["id"], ["media_downloads.id"], name=op.f("fk_media_downloads_movie_id_media_downloads"), ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_media_downloads_movie")),
+    )
+
     task_status_enum = sa.Enum(
         "SCHEDULED",
         "QUEUED",
@@ -369,6 +383,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_task_runs_resource_id"), table_name="task_runs")
     op.drop_index(op.f("ix_task_runs_definition_id"), table_name="task_runs")
     op.drop_table("task_runs")
+    op.drop_table("media_downloads_movie")
     op.drop_table("media_downloads")
     op.drop_table("stream_profiles_rss")
     op.drop_table("download_profiles_series")
@@ -384,6 +399,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_stream_profiles_token"), table_name="stream_profiles")
     op.drop_table("stream_profiles")
     op.drop_table("download_profiles")
+    op.drop_index(op.f("ix_movies_dw_id"), table_name="movies")
     op.drop_table("movies")
     op.drop_index(op.f("ix_seasons_slug"), table_name="seasons")
     op.drop_table("seasons")
