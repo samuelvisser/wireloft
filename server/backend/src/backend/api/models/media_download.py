@@ -66,7 +66,13 @@ class MediaDownloadAttemptAPIRead(ResponseBase):
 
 
 class MediaDownloadAPIReadView(MediaDownloadAPIRead):
-    """A media download joined with its episode, show and profile context."""
+    """A media download joined with its media item, parent context and profile."""
+
+    # Generic identity of the actual item being downloaded. These remain useful
+    # as additional media subtypes are added without making the UI infer the
+    # downloaded item from its parent movie/show context.
+    media_slug: Optional[str]
+    media_title: Optional[str]
 
     episode_slug: Optional[str]
     episode_title: Optional[str]
