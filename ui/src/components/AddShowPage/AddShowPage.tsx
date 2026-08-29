@@ -27,7 +27,7 @@ export type Props = {
     initialUrl?: string
 }
 
-const STORAGE_KEY = 'addShowWizardV8'
+const STORAGE_KEY = 'addShowWizardV9'
 
 type WizardType = 'ERROR' | 'INFO'
 type WizardMessage = { text: string; type: WizardType }
@@ -190,7 +190,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
         let downloadProfile: DownloadProfileUnifiedCreateOut | undefined
         let streamProfile: RssStreamProfileBundleOut | undefined
 
-        if (action === 'download-stream') {
+        if (action === 'download' || action === 'download-stream') {
             localMediaProfile = localMediaProfileSubmit
             if (!localMediaProfile) {
                 setWizardMessage('Please complete the Media Profile step before finishing.', 'ERROR')
@@ -264,14 +264,16 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
             await handleFinish('index')
             return
         }
-        setStreamProfileInput((current) => ({...defaultStreamProfile(showAction), ...current,
-            useDownloads: true,
-            useDwStream: showAction === 'stream',
-        }))
+        if (showAction === 'stream' || showAction === 'download-stream') {
+            setStreamProfileInput((current) => ({...defaultStreamProfile(showAction), ...current,
+                useDownloads: true,
+                useDwStream: showAction === 'stream',
+            }))
+        }
         setStep(3)
     }
 
-    const totalSteps = showAction === 'download-stream' ? 5 : showAction === 'stream' ? 3 : 2
+    const totalSteps = showAction === 'download-stream' ? 5 : showAction === 'download' ? 4 : showAction === 'stream' ? 3 : 2
     const stepTitle = step === 1 ? 'Choose show'
         : step === 2 ? 'Choose what WireLoft should do'
         : showAction === 'stream' ? 'Stream Profile'
@@ -335,11 +337,19 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                 />
             )}
 
-            {step === 3 && showAction === 'download-stream' && (
+            {step === 3 && (showAction === 'download' || showAction === 'download-stream') && (
                 <LocalMediaProfileStep
                     value={localMediaProfileInput}
                     onChange={setLocalMediaProfileInput}
-                    onSubmit={setLocalMediaProfileSubmit}
+                    onSubmit={(value) => {
+                        setLocalMediaProfileSubmit(value)
+                        if (showAction === 'download-stream') {
+                            setStreamProfileInput((current) => ({
+                                ...current,
+                                preferredFormat: value.preferredFormat,
+                            }))
+                        }
+                    }}
                     onBack={() => setStep(2)}
                     onContinue={() => setStep(4)}
                     onCancel={handleCancel}
@@ -347,7 +357,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                 />
             )}
 
-            {step === 4 && showAction === 'download-stream' && (
+            {step === 4 && (showAction === 'download' || showAction === 'download-stream') && (
                 <DownloadProfileStep
                     value={{podcast: downloadProfilePodcastInput, series: downloadProfileSeriesInput}}
                     onChange={{podcast: setPodcastDownloadProfileInput, series: setSeriesDownloadProfileInput}}
@@ -362,11 +372,18 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                         },
                     }}
                     onBack={() => setStep(3)}
-                    onContinue={() => setStep(5)}
+                    onContinue={() => {
+                        if (showAction === 'download') {
+                            void handleFinish('download')
+                            return
+                        }
+                        setStep(5)
+                    }}
                     onCancel={handleCancel}
                     showSlug={showSubmit?.slug}
                     showType={showSubmit?.type}
                     seasons={seasonsSubmit as any}
+                    continueLabel={showAction === 'download' ? 'Save show' : 'Continue'}
                 />
             )}
 
