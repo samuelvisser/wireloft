@@ -40,7 +40,7 @@ def _ensure_unique_profile_settings(
             status_code=409,
             detail=[{
                 "loc": ["body", "outputTemplate"],
-                "msg": "A Local Media Profile with these output settings already exists",
+                "msg": "A Local Media Profile with this type, output path template, preferred format, and media-type filename setting already exists",
                 "type": "unique_violation",
             }],
         )
