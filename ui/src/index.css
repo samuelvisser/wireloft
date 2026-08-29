@@ -1709,10 +1709,10 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .movie-poster-card {
   appearance: none;
   display: flex;
-  flex: 1 1 170px;
+  flex: 0 0 170px;
   flex-direction: column;
   align-self: flex-start;
-  max-width: 220px;
+  max-width: 170px;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -1754,11 +1754,11 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .compact-switch button[aria-pressed="true"] { background: rgba(100,116,139,.2); color: var(--text); }
 .catalog-groups { display: grid; gap: 30px; }
 .catalog-group h2 { margin: 0 0 11px; font-size: 18px; }
-.catalog-show-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; }
+.catalog-show-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; }
 .catalog-show-card { grid-template-columns: 92px minmax(0,1fr); }
 .catalog-show-card .show-summary-title { padding-right: 64px; }
 .catalog-added { position: absolute; top: 9px; right: 9px; color: #22a95e; font-size: 10px; }
-.catalog-movie-grid .movie-poster-card { flex-basis: 155px; }
+.catalog-movie-grid .movie-poster-card { flex-basis: 155px; max-width: 155px; }
 .catalog-load-more { min-height: 72px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 13px; }
 .catalog-load-error { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 18px 0; color: var(--error); }
 .catalog-empty { min-height: 240px; display: grid; place-items: center; align-content: center; gap: 10px; color: var(--muted); }
