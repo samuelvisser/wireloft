@@ -31,7 +31,6 @@ def _ensure_unique_profile_settings(
         LocalMediaProfileBase.type == body.type,
         LocalMediaProfileBase.output_template == body.output_template,
         LocalMediaProfileBase.preferred_format == body.preferred_format,
-        LocalMediaProfileBase.append_media_type_to_filename == body.append_media_type_to_filename,
     )
     if exclude_id is not None:
         query = query.filter(LocalMediaProfileBase.id != exclude_id)
@@ -40,7 +39,7 @@ def _ensure_unique_profile_settings(
             status_code=409,
             detail=[{
                 "loc": ["body", "outputTemplate"],
-                "msg": "A Local Media Profile with this type, output path template, preferred format, and media-type filename setting already exists",
+                "msg": "A Local Media Profile with this type, output path template, and preferred format already exists",
                 "type": "unique_violation",
             }],
         )
