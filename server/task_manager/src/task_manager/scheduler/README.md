@@ -54,7 +54,7 @@ print(get_settings().scheduler.default_max_retries)
 
 
 ## Database and initialization
-- The scheduler’s tables are created alongside the backend tables. backend.db.core.create_tables() imports wireloft_scheduler.models and then runs Base.metadata.create_all(...).
+- Scheduler tables that belong to WireLoft are part of the shared SQLAlchemy metadata and are created or upgraded by the backend's Alembic migrations. APScheduler alone owns its separate `apscheduler_jobs` table.
 - During the FastAPI application lifespan, if the scheduler is enabled:
   1) `task_manager.scheduler.registry.sync_registry_to_db()` synchronizes registered tasks into `TaskDefinition`.
   2) `task_manager.scheduler.scheduler.start_scheduler()` starts APScheduler on the ASGI event loop.

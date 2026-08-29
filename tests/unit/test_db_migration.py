@@ -3,8 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from alembic import command
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 
 @pytest.fixture
@@ -38,7 +39,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     current, head = get_database_status()
     assert current == (head,)
-    assert head == "0001"
+    assert head == "828421f64d03"
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -49,14 +50,35 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "movies",
         "media_downloads",
         "media_downloads_movie",
+        "local_media_profiles_show",
+        "local_media_profiles_movie",
         "task_schedules",
         "task_runs",
     } <= tables
+
+    profile_columns = {
+        column["name"] for column in inspector.get_columns("local_media_profiles")
+    }
+    assert "type" in profile_columns
+    profile_indexes = {
+        index["name"]: index
+        for index in inspector.get_indexes("local_media_profiles")
+    }
+    settings_index = profile_indexes[
+        "uq_local_media_profiles_type_output_template_preferred_format"
+    ]
+    assert settings_index["column_names"] == [
+        "type",
+        "output_template",
+        "preferred_format",
+    ]
+    assert bool(settings_index["unique"])
 
     movie_columns = {column["name"] for column in inspector.get_columns("movies")}
     assert movie_columns == {
         "id",
         "slug",
+        "extended_title",
         "dw_id",
         "sharing_url",
         "author_name",
@@ -71,6 +93,89 @@ def test_fresh_database_upgrades_to_head(migration_database):
     movie_indexes = {index["name"]: index for index in inspector.get_indexes("movies")}
     assert "ix_movies_dw_id" in movie_indexes
     assert bool(movie_indexes["ix_movies_dw_id"]["unique"])
+
+
+def test_upgrade_from_0001_migrates_existing_profiles_to_show_type(migration_database):
+    _database_path, engine = migration_database
+
+    from backend.db.migrations import (
+        get_alembic_config,
+        get_database_status,
+        upgrade_database,
+    )
+    from backend.db.models import LocalMediaProfileBase, ShowLocalMediaProfile
+
+    command.upgrade(get_alembic_config(), "0001")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO local_media_profiles "
+            "(id, slug, name, output_template, preferred_format) VALUES "
+            "(1, 'audio', 'Audio', '/downloads/{show}/{episode}.ext', "
+            "'format_audio_only')"
+        ))
+
+    upgrade_database()
+
+    current, head = get_database_status()
+    assert current == (head,)
+    with Session(engine) as session:
+        profile = session.query(LocalMediaProfileBase).one()
+        assert isinstance(profile, ShowLocalMediaProfile)
+        assert profile.type == "show"
+        assert session.execute(
+            text("SELECT id FROM local_media_profiles_show")
+        ).scalar_one() == profile.id
+
+
+def test_upgrade_from_0001_rejects_duplicate_profile_settings(migration_database):
+    _database_path, engine = migration_database
+
+    from backend.db.migrations import (
+        get_alembic_config,
+        get_current_revisions,
+        upgrade_database,
+    )
+
+    command.upgrade(get_alembic_config(), "0001")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO local_media_profiles "
+            "(slug, name, output_template, preferred_format) VALUES "
+            "('first', 'First', '/downloads/{show}/{episode}.ext', 'format_1080p'), "
+            "('second', 'Second', '/downloads/{show}/{episode}.ext', 'format_1080p')"
+        ))
+
+    with pytest.raises(RuntimeError, match="must be unique"):
+        upgrade_database()
+
+    assert get_current_revisions() == ("0001",)
+    assert "type" not in {
+        column["name"] for column in inspect(engine).get_columns("local_media_profiles")
+    }
+    assert not {
+        "local_media_profiles_show",
+        "local_media_profiles_movie",
+    } & set(inspect(engine).get_table_names())
+
+
+def test_local_media_profile_migration_downgrades_to_0001(migration_database):
+    _database_path, engine = migration_database
+
+    from backend.db.migrations import get_alembic_config, upgrade_database
+
+    upgrade_database()
+    command.downgrade(get_alembic_config(), "0001")
+
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    assert "local_media_profiles_show" not in tables
+    assert "local_media_profiles_movie" not in tables
+    assert "type" not in {
+        column["name"] for column in inspector.get_columns("local_media_profiles")
+    }
+    assert "extended_title" not in {
+        column["name"] for column in inspector.get_columns("movies")
+    }
 
 
 def test_upgrade_is_idempotent(migration_database):
@@ -125,4 +230,4 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 def test_migration_history_has_exactly_one_head():
     from backend.db.migrations import get_head_revisions
 
-    assert get_head_revisions() == ("0001",)
+    assert get_head_revisions() == ("828421f64d03",)

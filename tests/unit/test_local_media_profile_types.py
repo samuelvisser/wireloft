@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -258,46 +258,5 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
         )
     assert profile_error.value.status_code == 422
 
-    session.close()
-    engine.dispose()
-
-
-def test_existing_untyped_local_media_profiles_migrate_to_show_profiles(tmp_path: Path) -> None:
-    import backend.db.models  # noqa: F401
-    from backend.db import Base
-    from backend.db.core import (
-        _finalize_local_media_profile_type_migration,
-        _recreate_outdated_empty_tables,
-    )
-    from backend.db.models import LocalMediaProfileBase, ShowLocalMediaProfile
-
-    engine = create_engine(f"sqlite:///{tmp_path / 'profiles.db'}")
-    with engine.begin() as conn:
-        conn.execute(text(
-            "CREATE TABLE local_media_profiles ("
-            "id INTEGER PRIMARY KEY, slug VARCHAR NOT NULL UNIQUE, name VARCHAR NOT NULL UNIQUE, "
-            "output_template VARCHAR NOT NULL, preferred_format VARCHAR NOT NULL, "
-            "created_at DATETIME, updated_at DATETIME)"
-        ))
-        conn.execute(text(
-            "INSERT INTO local_media_profiles "
-            "(id, slug, name, output_template, preferred_format) VALUES "
-            "(1, 'audio', 'Audio', '/downloads/{show}/{episode}.ext', 'format_audio_only')"
-        ))
-
-    _recreate_outdated_empty_tables(engine)
-    Base.metadata.create_all(engine)
-    _finalize_local_media_profile_type_migration(engine)
-
-    columns = {column["name"] for column in inspect(engine).get_columns("local_media_profiles")}
-    indexes = {index["name"] for index in inspect(engine).get_indexes("local_media_profiles")}
-    assert "type" in columns
-    assert "uq_local_media_profiles_type_output_template_preferred_format" in indexes
-
-    session = Session(engine)
-    profile = session.query(LocalMediaProfileBase).one()
-    assert isinstance(profile, ShowLocalMediaProfile)
-    assert profile.type == "show"
-    assert session.execute(text("SELECT id FROM local_media_profiles_show")).scalar_one() == profile.id
     session.close()
     engine.dispose()
