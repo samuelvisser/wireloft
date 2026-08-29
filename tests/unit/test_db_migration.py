@@ -56,13 +56,16 @@ def test_fresh_database_upgrades_to_head(migration_database):
     movie_columns = {column["name"] for column in inspector.get_columns("movies")}
     assert movie_columns == {
         "id",
-        "dw_id",
         "slug",
-        "rating",
+        "dw_id",
         "sharing_url",
-        "license_start_date",
-        "license_end_date",
-        "available_in_watchlist",
+        "author_name",
+        "mature_rating",
+        "is_downloadable",
+        "trailer_slug",
+        "trailer_title",
+        "trailer_sharing_url",
+        "trailer_thumbnail_path",
     }
 
     movie_indexes = {index["name"]: index for index in inspector.get_indexes("movies")}
