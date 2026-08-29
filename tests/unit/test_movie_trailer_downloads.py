@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 
 def test_movie_profile_requires_item_placeholder_when_suffix_disabled() -> None:
@@ -125,3 +127,73 @@ def test_trailer_suffix_is_added_before_extension(tmp_path: Path, monkeypatch) -
     )
 
     assert result == (tmp_path / "movies" / "Movie" / "Official Trailer-trailer.mp4").resolve()
+
+
+def test_scheduler_accepts_trailer_resource_type() -> None:
+    from task_manager.scheduler.types import ResourceType
+
+    assert ResourceType("trailer") is ResourceType.TRAILER
+
+
+def test_download_view_uses_trailer_as_media_identity_and_movie_as_parent() -> None:
+    import backend.db.models  # noqa: F401
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_view
+    from backend.db import Base
+    from backend.db.models import Movie, MovieLocalMediaProfile, Trailer
+    from backend.db.models.media_download import TrailerMediaDownload
+    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.media_types import MediaType
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    try:
+        profile = MovieLocalMediaProfile(
+            slug="movies",
+            name="Movies",
+            output_template="/downloads/movies/{movie_title}/{title}.ext",
+            preferred_format="format_1080p",
+            append_media_type_to_filename=True,
+        )
+        movie = Movie(
+            uuid="movie-view-uuid",
+            type=MediaType.MOVIE.value,
+            slug="parent-movie",
+            title="Parent Movie",
+            description=None,
+            downloaded_date=None,
+            duration=100,
+        )
+        trailer = Trailer(
+            uuid="trailer-view-uuid",
+            type=MediaType.TRAILER.value,
+            movie=movie,
+            slug="official-trailer",
+            title="Official Trailer",
+            description=None,
+            downloaded_date=None,
+            duration=10,
+        )
+        session.add_all([profile, movie, trailer])
+        session.flush()
+        session.add(TrailerMediaDownload(
+            type=MediaType.TRAILER.value,
+            media_item_id=trailer.id,
+            local_media_profile_id=profile.id,
+            download_status=MediaDownloadStatus.PENDING.value,
+            file_path="/downloads/movies/Parent Movie/Official Trailer-trailer.ext",
+            progress=0,
+        ))
+        session.commit()
+
+        rows = get_media_downloads_view(session)
+
+        assert len(rows) == 1
+        assert rows[0].type == MediaType.TRAILER.value
+        assert rows[0].media_slug == "official-trailer"
+        assert rows[0].media_title == "Official Trailer"
+        assert rows[0].movie_slug == "parent-movie"
+        assert rows[0].movie_title == "Parent Movie"
+    finally:
+        session.close()
+        engine.dispose()
