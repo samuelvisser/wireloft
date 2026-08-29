@@ -44,7 +44,7 @@ COPY server ./server
 # source layout stays on disk. A non-editable install would flatten that
 # layout and break the derived path. uv refreshes the lock here when dependency
 # declarations changed, then installs that resolved environment.
-RUN uv sync --no-dev
+RUN uv sync --frozen --no-dev
 
 # Default config seed, copied into the /config volume on first run if missing
 COPY config/config.yml.default ./config/config.yml.default
