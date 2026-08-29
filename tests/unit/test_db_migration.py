@@ -40,16 +40,34 @@ def test_fresh_database_upgrades_to_head(migration_database):
     assert current == (head,)
     assert head == "0001"
 
-    tables = set(inspect(engine).get_table_names())
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
     assert {
         "alembic_version",
         "shows",
         "episodes",
         "movies",
         "media_downloads",
+        "media_downloads_movie",
         "task_schedules",
         "task_runs",
     } <= tables
+
+    movie_columns = {column["name"] for column in inspector.get_columns("movies")}
+    assert movie_columns == {
+        "id",
+        "dw_id",
+        "slug",
+        "rating",
+        "sharing_url",
+        "license_start_date",
+        "license_end_date",
+        "available_in_watchlist",
+    }
+
+    movie_indexes = {index["name"]: index for index in inspector.get_indexes("movies")}
+    assert "ix_movies_dw_id" in movie_indexes
+    assert bool(movie_indexes["ix_movies_dw_id"]["unique"])
 
 
 def test_upgrade_is_idempotent(migration_database):
