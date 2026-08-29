@@ -6,8 +6,8 @@ from builtins import str
 from dataclasses import dataclass
 from typing import Dict, ClassVar, Any, Optional, Literal, NamedTuple
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlparse, parse_qs
-from urllib.request import Request, urlopen
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from pydantic import ValidationError
 
@@ -130,6 +130,13 @@ class MiddlewareAPIError(Exception):
         self.status_code = status_code
 
 
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Expose a redirect response without following it with API credentials."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class MiddlewareClient:
     """
     HTTP client for DailyWire Middleware API.
@@ -242,13 +249,95 @@ class MiddlewareClient:
         if not isinstance(raw, dict):
             message = payload.get('error') or payload.get('message') or 'Movie playback is unavailable'
             raise MiddlewareAPIError(str(message))
+
+        secure_video_url = raw.get('secureVideoURL') or None
+        video_url = (
+            self._resolve_secure_video_url(secure_video_url)
+            if secure_video_url
+            else raw.get('videoURL') or None
+        )
         return DwMoviePlaybackRecord(
-            video_url=raw.get('secureVideoURL') or raw.get('videoURL') or None,
+            video_url=video_url,
             trailer_url=raw.get('trailerURL') or None,
             duration=float(raw.get('duration') or 0),
             trailer_duration=float(raw.get('trailerDuration') or 0),
             has_video=bool(raw.get('hasVideo')),
         )
+
+    def _resolve_secure_video_url(self, secure_url: str) -> str:
+        """Exchange Daily Wire's authenticated resolver URL for its CDN URL.
+
+        ``getVideo`` returns premium playback as a middleware URL rather than
+        the final signed manifest. That resolver requires the same bearer token
+        as ``getVideo``. Redirects are intentionally not followed here because
+        urllib otherwise forwards the Authorization header to the media CDN.
+        """
+        if not self._is_middleware_url(secure_url):
+            return self._validated_playback_url(secure_url)
+
+        _wait_before_request()
+        request = Request(secure_url, headers=self._headers, method='GET')
+        opener = build_opener(_NoRedirectHandler())
+        try:
+            with opener.open(request, timeout=self._req_timeout) as response:
+                data = response.read()
+        except HTTPError as error:
+            if 300 <= error.code < 400:
+                location = error.headers.get('Location')
+                if not location:
+                    raise MiddlewareAPIError(
+                        'Daily Wire returned a secure-video redirect without a destination',
+                        status_code=error.code,
+                    ) from error
+                return self._validated_playback_url(urljoin(secure_url, location))
+
+            try:
+                error_body = error.read().decode('utf-8', errors='ignore')
+            except Exception:
+                error_body = ''
+            raise MiddlewareAPIError(
+                f"HTTP error {error.code} while resolving movie playback: {error_body or error.reason}",
+                status_code=error.code,
+            ) from error
+        except URLError as error:
+            raise MiddlewareAPIError(f"Network error while resolving movie playback: {error.reason}") from error
+        except Exception as error:
+            raise MiddlewareAPIError(f"Could not resolve movie playback: {error}") from error
+
+        # Some middleware versions answer with JSON or a plain URL instead of
+        # redirecting. Supporting both keeps the boundary resilient while still
+        # ensuring the authenticated request is made only to Daily Wire.
+        try:
+            payload = json.loads(data.decode('utf-8'))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            payload = None
+
+        if isinstance(payload, dict):
+            for key in ('videoURL', 'url'):
+                candidate = payload.get(key)
+                if isinstance(candidate, str) and candidate:
+                    return self._validated_playback_url(candidate)
+
+        plain_url = data.decode('utf-8', errors='ignore').strip().strip('"')
+        if plain_url:
+            return self._validated_playback_url(plain_url)
+        raise MiddlewareAPIError('Daily Wire returned no movie playback URL')
+
+    def _is_middleware_url(self, url: str) -> bool:
+        candidate = urlparse(url)
+        middleware = urlparse(self._base_url)
+        return (
+            candidate.scheme in {'http', 'https'}
+            and candidate.scheme == middleware.scheme
+            and candidate.netloc == middleware.netloc
+        )
+
+    @staticmethod
+    def _validated_playback_url(url: str) -> str:
+        parsed = urlparse(url)
+        if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+            raise MiddlewareAPIError('Daily Wire returned an invalid movie playback URL')
+        return url
 
     def get_user_info(self) -> DwUserInfo:
         """
