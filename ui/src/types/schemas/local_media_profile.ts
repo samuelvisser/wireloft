@@ -2,16 +2,14 @@ import {z} from "zod";
 import {createServerErrorMapper} from "../../utils/serverMessageMap";
 import {MoviePreferredFormatReg, PreferredFormatReg} from "../local_media_profile";
 
-// Only override what you care about for this form.
 export const LocalMediaProfileServerErrors = createServerErrorMapper({
     name: {unique_violation: "Name is already taken."},
     slug: {unique_violation: "Slug is already taken."},
     outputTemplate: {
-        unique_violation: "A profile with this type, output path template, and preferred format already exists.",
+        unique_violation: "A profile with these output settings already exists.",
     },
 });
 
-// ---------- Strict request (create/update) ----------
 const outputTemplateSchema = (allowedFields: readonly string[]) => z.string()
     .regex(/^\/downloads\//, "Output template must start with '/downloads/'")
     .regex(/\.ext$/, "Output template must end with '.ext'")
@@ -36,8 +34,16 @@ export const SHOW_OUTPUT_TEMPLATE_FIELDS = [
 export const MOVIE_OUTPUT_TEMPLATE_FIELDS = [
     'movie', 'movie_slug', 'movie_title', 'title', 'movie_extended_title', 'extended_title',
     'movie_dw_id', 'dw_id', 'movie_author', 'author', 'movie_mature_rating', 'mature_rating',
-    'rating', 'movie_duration_seconds', 'duration_seconds',
+    'rating', 'movie_duration_seconds', 'duration_seconds', 'media_type',
 ] as const
+
+const MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS = new Set([
+    'title', 'extended_title', 'dw_id', 'author', 'mature_rating', 'rating',
+    'duration_seconds', 'media_type',
+])
+
+const TRAILER_COLLISION_MESSAGE =
+    "Movie and trailer downloads could resolve to the same file. Enable 'Append media type to filename' (recommended), or include at least one placeholder that describes the actual downloaded item, such as {title}, {dw_id}, {duration_seconds}, or {media_type}."
 
 const LocalMediaProfileCommonSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -47,13 +53,32 @@ export const ShowLocalMediaProfileCreateSchema = LocalMediaProfileCommonSchema.e
     type: z.literal('show'),
     outputTemplate: outputTemplateSchema(SHOW_OUTPUT_TEMPLATE_FIELDS),
     preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
+    appendMediaTypeToFilename: z.boolean().default(true),
 })
 
-export const MovieLocalMediaProfileCreateSchema = LocalMediaProfileCommonSchema.extend({
+const MovieLocalMediaProfileBaseSchema = LocalMediaProfileCommonSchema.extend({
     type: z.literal('movie'),
     outputTemplate: outputTemplateSchema(MOVIE_OUTPUT_TEMPLATE_FIELDS),
     preferredFormat: z.enum(MoviePreferredFormatReg.values).default('format_1080p'),
+    appendMediaTypeToFilename: z.boolean().default(true),
 })
+
+function validateMovieFilenameSafety(
+    value: {outputTemplate: string; appendMediaTypeToFilename: boolean},
+    ctx: z.RefinementCtx,
+) {
+    if (value.appendMediaTypeToFilename) return
+    const placeholders = [...value.outputTemplate.matchAll(/\{([^{}]+)}/g)].map((match) => match[1])
+    if (!placeholders.some((field) => MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS.has(field))) {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['outputTemplate'],
+            message: TRAILER_COLLISION_MESSAGE,
+        })
+    }
+}
+
+export const MovieLocalMediaProfileCreateSchema = MovieLocalMediaProfileBaseSchema.superRefine(validateMovieFilenameSafety)
 
 export const LocalMediaProfileCreateSchema = z.discriminatedUnion('type', [
     ShowLocalMediaProfileCreateSchema,
@@ -67,10 +92,10 @@ export const ShowLocalMediaProfileUpdateSchema = ShowLocalMediaProfileCreateSche
     slug: z.string(),
 })
 
-export const MovieLocalMediaProfileUpdateSchema = MovieLocalMediaProfileCreateSchema.extend({
+export const MovieLocalMediaProfileUpdateSchema = MovieLocalMediaProfileBaseSchema.extend({
     id: z.int(),
     slug: z.string(),
-})
+}).superRefine(validateMovieFilenameSafety)
 
 export const LocalMediaProfileUpdateSchema = z.discriminatedUnion('type', [
     ShowLocalMediaProfileUpdateSchema,
@@ -80,7 +105,6 @@ export type LocalMediaProfileUpdateIn = z.input<typeof LocalMediaProfileUpdateSc
 export type LocalMediaProfileUpdateOut = z.output<typeof LocalMediaProfileUpdateSchema>;
 
 
-// ------------ Lenient response (read) ------------
 export const LocalMediaProfileReadSchema = z.looseObject({
     id: z.int(),
     type: z.enum(['show', 'movie']),
@@ -88,6 +112,7 @@ export const LocalMediaProfileReadSchema = z.looseObject({
     name: z.string(),
     outputTemplate: z.string(),
     preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
+    appendMediaTypeToFilename: z.boolean().default(true),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })

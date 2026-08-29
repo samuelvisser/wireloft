@@ -5,7 +5,7 @@ from ...models.movie import *
 from ...models.media_download import MediaDownloadAPIRead, MovieDownloadAPICreate
 from ..dailywire.movies.service import get_movie as get_dailywire_movie
 from ..media_downloads.router import _trigger_download_task
-from ..media_downloads.service import create_movie_download
+from ..media_downloads.service import create_movie_download, create_trailer_download
 from backend.app import db_session
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
@@ -37,25 +37,48 @@ def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
     )
     return payload
 
+
+@router.post(
+    "/{movie_slug}/trailers/{trailer_slug}/downloads",
+    response_model=MediaDownloadAPIRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def trailer_download_create(movie_slug: str, trailer_slug: str, body: MovieDownloadAPICreate):
+    """Persist a browsed Daily Wire trailer and download it with a Movie profile."""
+    try:
+        movie_data = get_dailywire_movie(movie_slug)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    with db_session() as s:
+        try:
+            download = create_trailer_download(s, movie_data, trailer_slug, body)
+            payload = MediaDownloadAPIRead.model_validate(download)
+            trailer_id = download.media_item_id
+            attempt_generation = download.attempt_generation
+            s.commit()
+        except Exception:
+            s.rollback()
+            raise
+
+    _trigger_download_task(
+        media_download_id=payload.id,
+        media_item_id=trailer_id,
+        media_type="trailer",
+        attempt_generation=attempt_generation,
+    )
+    return payload
+
+
 @router.get("", response_model=list[MovieAPIRead])
 def movie_list():
-    """
-    List all movies in the system.
-
-    Returns a collection of all movie records with their metadata.
-    """
+    """List all movies in the system."""
     with db_session() as s:
         return get_movies_list(s)
 
 
 @router.post("", response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)
 def movie_create(body: MovieAPICreate):
-    """
-    Create a new movie entry.
-
-    Adds a new movie to the system with the provided metadata.
-    Returns the created movie with a generated slug identifier.
-    """
+    """Create a new movie entry."""
     with db_session() as s:
         try:
             result = create_movie(s, body)
@@ -68,23 +91,14 @@ def movie_create(body: MovieAPICreate):
 
 @router.get("/{movie_slug}", response_model=MovieAPIRead)
 def movie_detail(movie_slug: str):
-    """
-    Retrieve detailed information for a specific movie.
-
-    Returns complete movie metadata including title, description, and associated media.
-    """
+    """Retrieve detailed information for a specific movie."""
     with db_session() as s:
         return get_movie(s, movie_slug)
 
 
 @router.patch("/{movie_slug}", response_model=MovieAPIRead)
 def movie_update(movie_slug: str, body: MovieAPIUpdate):
-    """
-    Update an existing movie's metadata.
-
-    Partially updates movie information with the provided fields.
-    Only specified fields will be modified; omitted fields remain unchanged.
-    """
+    """Update an existing movie's metadata."""
     with db_session() as s:
         try:
             result = update_movie(s, movie_slug, body)
@@ -97,12 +111,7 @@ def movie_update(movie_slug: str, body: MovieAPIUpdate):
 
 @router.delete("/{movie_slug}", response_model=MovieAPIRead)
 def movie_delete(movie_slug: str):
-    """
-    Delete a movie from the system.
-
-    Permanently removes the specified movie and its associated data.
-    Returns the deleted movie's information for confirmation.
-    """
+    """Delete a movie from the system."""
     with db_session() as s:
         try:
             result = delete_movie(s, movie_slug)

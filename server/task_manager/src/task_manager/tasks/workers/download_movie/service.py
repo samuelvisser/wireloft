@@ -7,10 +7,11 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.db.models import Movie
+from backend.db.models import Movie, Trailer
 from backend.db.models.media_download import MediaDownloadAttempt, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
+from backend.types.media_types import MediaType
 from backend.utils.output_template import resolve_movie_output_path
 from config import get_settings
 from dailywire_api.dw_api.client import MiddlewareClient
@@ -47,21 +48,26 @@ async def run_download_movie(
     if download is None:
         raise ValueError(f"Media download {media_download_id} not found")
 
-    expected_generation = (
-        download.attempt_generation
-        if attempt_generation is None
-        else attempt_generation
-    )
+    expected_generation = download.attempt_generation if attempt_generation is None else attempt_generation
     attempt_guard = DownloadAttemptGuard(media_download_id, expected_generation)
     attempt_guard.ensure_current()
-    movie: Optional[Movie] = session.get(Movie, download.media_item_id)
-    if movie is None:
-        raise ValueError(f"Movie {download.media_item_id} for download {media_download_id} not found")
+
+    if download.type == MediaType.TRAILER.value:
+        media = session.get(Trailer, download.media_item_id)
+        if media is None:
+            raise ValueError(f"Trailer {download.media_item_id} for download {media_download_id} not found")
+        movie = media.movie
+    else:
+        media = session.get(Movie, download.media_item_id)
+        if media is None:
+            raise ValueError(f"Movie {download.media_item_id} for download {media_download_id} not found")
+        movie = media
+
     profile = download.local_media_profile
     if profile.type != LocalMediaProfileType.MOVIE.value:
-        raise DownloadError("Movies require a Movie Local Media Profile")
+        raise DownloadError("Movies and trailers require a Movie Local Media Profile")
     if profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value:
-        raise DownloadError("Movies require a video Local Media Profile")
+        raise DownloadError("Movies and trailers require a video Local Media Profile")
 
     attempt_guard.update_current(
         session,
@@ -85,6 +91,7 @@ async def run_download_movie(
             result, format_downloaded = _download_movie_media(
                 session,
                 movie=movie,
+                media=media,
                 download=download,
                 row_progress=row_progress,
                 attempt_guard=attempt_guard,
@@ -120,7 +127,7 @@ async def run_download_movie(
             file_path=result.path,
             finished_at=datetime.now(timezone.utc),
         )
-        movie.downloaded_date = movie.downloaded_date or datetime.now(timezone.utc)
+        media.downloaded_date = media.downloaded_date or datetime.now(timezone.utc)
         session.refresh(download)
         _record_attempt(session, download)
         session.commit()
@@ -128,16 +135,16 @@ async def run_download_movie(
         if not cancelled:
             try:
                 from task_manager.tasks.workers.download_profile_worker._helpers import trigger_next_pending_downloads
-
                 trigger_next_pending_downloads(session)
             except Exception:
-                logger.exception("Failed to trigger the next queued download after movie completion")
+                logger.exception("Failed to trigger the next queued download after movie-media completion")
 
 
 def _download_movie_media(
     session: Session,
     *,
     movie: Movie,
+    media: Movie | Trailer,
     download: MediaDownloadBase,
     row_progress: RowProgressWriter,
     attempt_guard: DownloadAttemptGuard,
@@ -147,21 +154,28 @@ def _download_movie_media(
     client = MiddlewareClient(access_token=tokens.access_token if tokens else None)
     playback = client.get_movie_playback(movie.slug)
     attempt_guard.ensure_current()
-    if not playback.has_video or not playback.video_url:
-        raise MediaUnavailableError(f"Daily Wire provides no playable video for '{movie.title}'")
 
-    # Without sufficient membership Daily Wire may return the public trailer in
-    # the movie endpoint. Never silently save that short fallback as the movie.
-    if playback.trailer_url and playback.video_url == playback.trailer_url:
-        raise MediaUnavailableError(
-            f"The connected Daily Wire account does not provide access to the full movie '{movie.title}'"
-        )
-    if movie.duration and playback.duration and playback.duration < movie.duration * 0.5:
-        raise MediaUnavailableError(
-            f"Daily Wire returned only a preview for '{movie.title}', not the full movie"
-        )
+    is_trailer = isinstance(media, Trailer)
+    if is_trailer:
+        source_playback_url = playback.trailer_url
+        if not source_playback_url:
+            raise MediaUnavailableError(f"Daily Wire provides no playable video for trailer '{media.title}'")
+    else:
+        if not playback.has_video or not playback.video_url:
+            raise MediaUnavailableError(f"Daily Wire provides no playable video for '{movie.title}'")
+        source_playback_url = playback.video_url
+        # Without sufficient membership Daily Wire may return the public trailer in
+        # the movie endpoint. Never silently save that short fallback as the movie.
+        if playback.trailer_url and source_playback_url == playback.trailer_url:
+            raise MediaUnavailableError(
+                f"The connected Daily Wire account does not provide access to the full movie '{movie.title}'"
+            )
+        if movie.duration and playback.duration and playback.duration < movie.duration * 0.5:
+            raise MediaUnavailableError(
+                f"Daily Wire returned only a preview for '{movie.title}', not the full movie"
+            )
 
-    info = probe(playback.video_url)
+    info = probe(source_playback_url)
     attempt_guard.ensure_current()
     if info.kind is MediaKind.HLS_MASTER:
         requested_height = FORMAT_HEIGHTS.get(download.local_media_profile.preferred_format)
@@ -174,11 +188,11 @@ def _download_movie_media(
         format_downloaded = rendition.resolution or "video"
         use_hls = True
     elif info.kind is MediaKind.HLS_MEDIA:
-        source_url = playback.video_url
+        source_url = source_playback_url
         format_downloaded = "video"
         use_hls = True
     else:
-        source_url = playback.video_url
+        source_url = source_playback_url
         format_downloaded = "video"
         use_hls = False
 
@@ -187,6 +201,8 @@ def _download_movie_media(
     destination = resolve_movie_output_path(
         download.local_media_profile.output_template,
         movie=movie,
+        media_item=media,
+        append_media_type_to_filename=download.local_media_profile.append_media_type_to_filename,
         extension=extension,
     )
     attempt_guard.update_current(session, file_path=str(destination))
@@ -194,12 +210,7 @@ def _download_movie_media(
     session.refresh(download)
 
     if remux:
-        result = _download_and_remux(
-            source_url,
-            str(destination),
-            row_progress,
-            attempt_guard,
-        )
+        result = _download_and_remux(source_url, str(destination), row_progress, attempt_guard)
     elif use_hls:
         result = download_hls(
             source_url,
