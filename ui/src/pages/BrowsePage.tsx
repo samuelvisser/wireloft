@@ -3,10 +3,10 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
+import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import {useDailywireMovieCatalog, useDailywireShowCatalog, useShows} from '../lib/queries'
 import {DailywireCatalogShowRead} from '../types/schemas/dailywire_catalog'
 
-type BrowseType = 'shows' | 'movies'
 type ShowGrouping = 'alphabetical' | 'host'
 
 function groupShows(shows: DailywireCatalogShowRead[], grouping: ShowGrouping) {
@@ -24,7 +24,7 @@ export default function BrowsePage() {
     const navigate = useNavigate()
     const [params, setParams] = useSearchParams()
     const initialType = params.get('type') === 'movies' ? 'movies' : 'shows'
-    const [activeType, setActiveType] = useState<BrowseType>(initialType)
+    const [activeType, setActiveType] = useState<MediaType>(initialType)
     const [grouping, setGrouping] = useState<ShowGrouping>('host')
     const [search, setSearch] = useState('')
     const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -61,7 +61,7 @@ export default function BrowsePage() {
         return () => observer.disconnect()
     }, [activeQuery.fetchNextPage, activeQuery.hasNextPage, activeQuery.isFetchNextPageError, activeQuery.isFetchingNextPage, activeType])
 
-    const chooseType = (type: BrowseType) => {
+    const chooseType = (type: MediaType) => {
         setActiveType(type)
         setParams({type}, {replace: true})
     }
@@ -79,14 +79,7 @@ export default function BrowsePage() {
                     <p className="view-description">Choose a show to add, or a movie to view and download manually.</p>
                 </div>
             </div>
-            <div className="media-type-tabs browse-type-tabs" role="tablist" aria-label="Browse media type">
-                <button type="button" role="tab" aria-selected={activeType === 'shows'} onClick={() => chooseType('shows')}>
-                    <FontAwesomeIcon icon={['fas', 'tv']}/> Shows
-                </button>
-                <button type="button" role="tab" aria-selected={activeType === 'movies'} onClick={() => chooseType('movies')}>
-                    <FontAwesomeIcon icon={['fas', 'clapperboard']}/> Movies
-                </button>
-            </div>
+            <MediaTypeTabs activeType={activeType} onChange={chooseType} ariaLabel="Browse media type"/>
             <div className="browse-toolbar">
                 <label className="browse-search">
                     <span className="sr-only">Search {activeType}</span>
