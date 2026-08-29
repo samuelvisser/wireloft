@@ -27,17 +27,21 @@ export default function MoviePage() {
         [profiles],
     )
     const [profileId, setProfileId] = useState('')
-    const [submitting, setSubmitting] = useState(false)
+    const [submitting, setSubmitting] = useState<'movie' | 'trailer' | null>(null)
 
     useEffect(() => {
         if (!profileId && videoProfiles[0]) setProfileId(String(videoProfiles[0].id))
     }, [profileId, videoProfiles])
 
-    const startDownload = async () => {
+    const startDownload = async (mediaType: 'movie' | 'trailer') => {
         if (!slug || !profileId) return
-        setSubmitting(true)
+        if (mediaType === 'trailer' && !movie?.trailer?.slug) return
+        setSubmitting(mediaType)
         try {
-            const response = await fetch(`${(window as any).appConfig.API_URL}/movies/${encodeURIComponent(slug)}/downloads`, {
+            const path = mediaType === 'trailer'
+                ? `/movies/${encodeURIComponent(slug)}/trailers/${encodeURIComponent(movie!.trailer!.slug)}/downloads`
+                : `/movies/${encodeURIComponent(slug)}/downloads`
+            const response = await fetch(`${(window as any).appConfig.API_URL}${path}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',
@@ -45,19 +49,19 @@ export default function MoviePage() {
             })
             if (!response.ok) {
                 const {error: message} = await getErrorMessageFromResponse(response)
-                toast.error(message || 'Could not start the movie download')
+                toast.error(message || `Could not start the ${mediaType} download`)
                 return
             }
-            toast.success('Movie download queued')
+            toast.success(`${mediaType === 'movie' ? 'Movie' : 'Trailer'} download queued`)
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['movies']}),
                 queryClient.invalidateQueries({queryKey: ['movieDownloads', slug]}),
                 queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
             ])
         } catch {
-            toast.error('Could not start the movie download')
+            toast.error(`Could not start the ${mediaType} download`)
         } finally {
-            setSubmitting(false)
+            setSubmitting(null)
         }
     }
 
@@ -104,22 +108,28 @@ export default function MoviePage() {
                 </div>
 
                 <aside className="movie-download-panel" aria-labelledby="download-movie-title">
-                    <h2 id="download-movie-title">Download movie</h2>
-                    <p>Movies are downloaded manually using a Local Media Profile. Download Profiles are not used.</p>
+                    <h2 id="download-movie-title">Download movie media</h2>
+                    <p>Movies and trailers are downloaded manually using the same Movie Local Media Profile.</p>
                     {videoProfiles.length ? (
                         <>
                             <label htmlFor="movie-profile">Local Media Profile</label>
                             <select id="movie-profile" className="input" value={profileId} onChange={(event) => setProfileId(event.target.value)}>
                                 {videoProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
                             </select>
-                            <button className="btn btn-primary movie-download-button" type="button" onClick={startDownload} disabled={submitting || !movie.isDownloadable}>
+                            <button className="btn btn-primary movie-download-button" type="button" onClick={() => startDownload('movie')} disabled={submitting !== null || !movie.isDownloadable}>
                                 <FontAwesomeIcon icon={['fas', 'download']}/>
-                                {submitting ? 'Queuing…' : 'Download movie'}
+                                {submitting === 'movie' ? 'Queuing…' : 'Download movie'}
                             </button>
+                            {movie.trailer && (
+                                <button className="btn movie-download-button" type="button" onClick={() => startDownload('trailer')} disabled={submitting !== null}>
+                                    <FontAwesomeIcon icon={['fas', 'download']}/>
+                                    {submitting === 'trailer' ? 'Queuing…' : 'Download trailer'}
+                                </button>
+                            )}
                         </>
                     ) : (
                         <div className="movie-profile-empty">
-                            <p>Create a Movie Local Media Profile before downloading a movie.</p>
+                            <p>Create a Movie Local Media Profile before downloading a movie or trailer.</p>
                             <Link className="btn" to="/add-local-media-profile?type=movie">Create profile</Link>
                         </div>
                     )}
@@ -131,7 +141,10 @@ export default function MoviePage() {
                     <h2 id="movie-downloads-title">Downloads</h2>
                     {downloads.map((download) => (
                         <div className="movie-download-row" key={download.id}>
-                            <div><strong>{download.localMediaProfileName}</strong><small>{download.formatDownloaded || download.preferredFormat || 'Waiting for format'}</small></div>
+                            <div>
+                                <strong>{download.type === 'trailer' ? 'Trailer' : 'Movie'} · {download.localMediaProfileName}</strong>
+                                <small>{download.formatDownloaded || download.preferredFormat || 'Waiting for format'}</small>
+                            </div>
                             {(download.downloadStatus === 'downloading' || download.downloadStatus === 'pending') ? (
                                 <div className="movie-download-progress"><ProgressBar value={download.progress} ariaLabel={`Download progress for ${movie.title}`}/><span>{download.downloadStatus === 'pending' ? 'Queued' : `${download.progress}%`}</span></div>
                             ) : <span className={`download-status status-${download.downloadStatus}`}>{String(download.downloadStatus).replace(/_/g, ' ')}</span>}
