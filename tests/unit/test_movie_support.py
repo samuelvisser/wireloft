@@ -95,6 +95,10 @@ def test_dailywire_catalog_uses_short_movie_display_titles(monkeypatch):
         "Bonhoeffer: Pastor. Spy. Assassin.",
         "Run Hide Fight",
     ]
+    assert [movie.extended_title for movie in catalog.movies] == [
+        "Bonhoeffer: Pastor. Spy. Assassin. A long marketing description.",
+        "Run Hide Fight | Watch The First One | More marketing copy",
+    ]
 
 
 def test_dailywire_catalog_pages_filter_sort_and_preserve_offsets(monkeypatch):
@@ -176,7 +180,7 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     from backend.api.endpoints.media_downloads.service import create_movie_download, get_media_downloads_view
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db.core import Base
-    from backend.db.models import LocalMediaProfile, Movie
+    from backend.db.models import Movie, MovieLocalMediaProfile
     from backend.db.models.media_download import MovieMediaDownload
     from config import get_settings
     from dailywire_api.records import DwMovieRecord, DwTrailerRecord
@@ -185,7 +189,7 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
-    profile = LocalMediaProfile(
+    profile = MovieLocalMediaProfile(
         slug="movies",
         name="Movies",
         output_template="/downloads/{movie_title}/{movie}.ext",
@@ -198,6 +202,7 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
         dw_id="movie-1",
         slug="a-movie",
         title="A Movie",
+        extended_title="A Movie | A Daily Wire Original",
         description="Movie description",
         duration=5400,
         sharing_url="https://www.dailywire.com/videos/a-movie",
@@ -221,6 +226,7 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
 
     movie = session.query(Movie).one()
     assert movie.slug == "a-movie"
+    assert movie.extended_title == "A Movie | A Daily Wire Original"
     assert movie.trailer_slug == "a-movie-trailer"
     assert isinstance(download, MovieMediaDownload)
     assert download.type == "movie"

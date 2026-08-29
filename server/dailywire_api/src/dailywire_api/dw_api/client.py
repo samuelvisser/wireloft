@@ -429,10 +429,12 @@ class MiddlewareClient:
         images = raw.get('images') or {}
         thumbnails = images.get('thumbnail') or {}
         title = MiddlewareClient._short_catalog_movie_title(raw)
+        extended_title = str(raw.get('title') or '').strip() or title
         return DwCatalogMovieRecord(
             dw_id=str(raw.get('id') or ''),
             slug=str(raw.get('slug') or ''),
             title=title,
+            extended_title=extended_title,
             description=raw.get('description') or None,
             author_name=host.get('name') or None,
             author_slug=host.get('slug') or None,

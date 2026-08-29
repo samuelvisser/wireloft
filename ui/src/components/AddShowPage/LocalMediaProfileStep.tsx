@@ -24,7 +24,7 @@ type Props = {
 
 export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, showSlug}: Props) {
     const profilesQuery = useLocalMediaProfiles()
-    const profiles: LocalMediaProfileRead[] | undefined = profilesQuery.data
+    const profiles: LocalMediaProfileRead[] | undefined = profilesQuery.data?.filter((profile) => profile.type === 'show')
     const profilesError = profilesQuery.isError ? ((profilesQuery.error)?.message ?? 'Failed to load media profiles') : null
 
     // React Hook Form setup
@@ -32,7 +32,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
         resolver: zodResolver(LocalMediaProfileUpsertSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: { op: 'create_new', ...(value) },
+        defaultValues: { op: 'create_new', type: 'show', ...(value) },
     })
     const {watch, setValue, formState: {isSubmitting}} = form
 
@@ -56,6 +56,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
         if (selected) {
             // Deselect: switch back to create_new and restore snapshot if any
             setValue('op', 'create_new', {shouldValidate: true, shouldDirty: true})
+            setValue('type', 'show', {shouldValidate: true, shouldDirty: true})
             setValue('id', undefined as any, {shouldValidate: true, shouldDirty: true})
             const snap = snapshotRef.current
             setValue('name', snap?.name ?? '', {shouldValidate: true})
@@ -73,6 +74,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                 }
             }
             setValue('op', 'update_by_slug', {shouldValidate: true, shouldDirty: true})
+            setValue('type', 'show', {shouldValidate: true, shouldDirty: true})
             setValue('slug', p.slug, {shouldValidate: true, shouldDirty: true})
             setValue('id', p.id as any, {shouldValidate: true, shouldDirty: true})
             setValue('name', p.name, {shouldValidate: true})
@@ -124,7 +126,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                          aria-hidden="true">{watchedOp === 'update_by_slug' ? 'Update current profile' : 'Or create a new profile'}</div>
 
                     {/* New or update profile form (user-editable fields) */}
-                    <LocalMediaProfileForm form={form}/>
+                    <LocalMediaProfileForm form={form} mode="show"/>
 
                     <div className="actions">
                         <button type="button" className="btn" onClick={onBack}>

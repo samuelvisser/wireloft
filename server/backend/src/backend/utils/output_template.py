@@ -13,12 +13,59 @@ if TYPE_CHECKING:
 _DOWNLOADS_PREFIX = "/downloads/"
 # Characters that may not appear in a single path component
 _UNSAFE_COMPONENT_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_PLACEHOLDER = re.compile(r"\{([^{}]+)}")
+
+SHOW_OUTPUT_TEMPLATE_FIELDS = frozenset({
+    "show",
+    "show_title",
+    "season",
+    "season_name",
+    "episode",
+    "episode_title",
+    "title",
+    "episode_type",
+    "episode_number",
+    "ep_id",
+    "episode_published_date",
+    "date",
+    "episode_published_time",
+    "time",
+    "episode_published_datetime",
+    "datetime",
+})
+
+MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
+    "movie",
+    "movie_slug",
+    "movie_title",
+    "title",
+    "movie_extended_title",
+    "extended_title",
+    "movie_dw_id",
+    "dw_id",
+    "movie_author",
+    "author",
+    "movie_mature_rating",
+    "mature_rating",
+    "rating",
+    "movie_duration_seconds",
+    "duration_seconds",
+})
 
 
 def sanitize_path_component(value: str) -> str:
     """Make a template substitution safe to use as one path component."""
     cleaned = _UNSAFE_COMPONENT_CHARS.sub("_", value).strip(" .")
     return cleaned or "_"
+
+
+def validate_output_template_fields(output_template: str, *, allowed_fields: frozenset[str]) -> str:
+    """Reject placeholders that cannot be resolved for a profile's media type."""
+    unsupported = sorted(set(_PLACEHOLDER.findall(output_template)) - allowed_fields)
+    if unsupported:
+        fields = ", ".join("{" + field + "}" for field in unsupported)
+        raise ValueError(f"Unsupported output template placeholder(s): {fields}")
+    return output_template
 
 
 def resolve_episode_output_path(
@@ -35,6 +82,8 @@ def resolve_episode_output_path(
     directory, and the mandatory ``.ext`` suffix is replaced with the actual file
     extension once it is known.
     """
+
+    validate_output_template_fields(output_template, allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS)
 
     ep_info = episode_type_info(episode.episode_identifier)
     ep_type = ep_info["type"]
@@ -80,31 +129,27 @@ def resolve_movie_output_path(
     movie: "Movie",
     extension: Optional[str] = None,
 ) -> Path:
-    """Resolve a Local Media Profile template for a one-off movie.
+    """Resolve a Movie Local Media Profile template for a one-off movie."""
+    validate_output_template_fields(output_template, allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS)
 
-    Movie-specific placeholders are ``{movie}``, ``{movie_title}``, and
-    ``{title}``. Episode/show placeholders receive useful compatibility values
-    so an existing general-purpose profile can still be selected manually.
-    """
+    extended_title = movie.extended_title or movie.title
+    duration_seconds = str(round(movie.duration or 0))
     substitutions = {
         "movie": movie.slug,
+        "movie_slug": movie.slug,
         "movie_title": movie.title,
         "title": movie.title,
-        "show": "Movies",
-        "show_title": "Movies",
-        "season": "",
-        "season_name": "",
-        "episode": movie.slug,
-        "episode_title": movie.title,
-        "episode_type": "movie",
-        "episode_number": "",
-        "ep_id": "",
-        "episode_published_date": "",
-        "date": "",
-        "episode_published_time": "",
-        "time": "",
-        "episode_published_datetime": "",
-        "datetime": "",
+        "movie_extended_title": extended_title,
+        "extended_title": extended_title,
+        "movie_dw_id": movie.dw_id or "",
+        "dw_id": movie.dw_id or "",
+        "movie_author": movie.author_name or "",
+        "author": movie.author_name or "",
+        "movie_mature_rating": movie.mature_rating or "",
+        "mature_rating": movie.mature_rating or "",
+        "rating": movie.mature_rating or "",
+        "movie_duration_seconds": duration_seconds,
+        "duration_seconds": duration_seconds,
     }
 
     resolved = output_template

@@ -4,6 +4,7 @@ import {z} from "zod";
 // ---------- Strict request (create/update) ----------
 const MovieBaseSchema = z.object({
     title: z.string(),
+    extendedTitle: z.string().nullable().optional(),
     description: z.string().nullable().optional(),
     downloadedDate: z.date().nullable().optional(),
     duration: z.number().default(0),
@@ -35,6 +36,7 @@ export const MovieReadSchema = z.looseObject({
     dwId: z.string().optional(),
     slug: z.string(),
     title: z.string(),
+    extendedTitle: z.string().nullable().optional(),
     description: z.string().nullable().optional(),
     downloadedDate: z.iso.datetime().transform((s) => new Date(s)).nullable().optional(),
     duration: z.number(),

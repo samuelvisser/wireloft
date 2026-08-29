@@ -96,6 +96,7 @@ def create_tables() -> None:
 
     _recreate_outdated_empty_tables(get_engine())
     Base.metadata.create_all(bind=get_engine())
+    _finalize_local_media_profile_type_migration(get_engine())
 
 
 def _recreate_outdated_empty_tables(engine: Engine) -> None:
@@ -120,6 +121,7 @@ def _recreate_outdated_empty_tables(engine: Engine) -> None:
         "episodes",
         "stream_profiles_rss",
         "stream_profiles",
+        "local_media_profiles",
     ]
 
     inspector = sa_inspect(engine)
@@ -143,7 +145,10 @@ def _recreate_outdated_empty_tables(engine: Engine) -> None:
             to_drop.append(table_name)
             continue
 
-        non_addable = {name for name in missing_columns if not table.columns[name].nullable}
+        non_addable = {
+            name for name in missing_columns
+            if not table.columns[name].nullable and table.columns[name].server_default is None
+        }
         if non_addable:
             raise RuntimeError(
                 f"Table '{table_name}' is missing non-nullable columns {sorted(non_addable)} "
@@ -151,14 +156,68 @@ def _recreate_outdated_empty_tables(engine: Engine) -> None:
             )
 
         with engine.begin() as conn:
+            from sqlalchemy.schema import CreateColumn
+
             for name in missing_columns:
-                ddl_type = table.columns[name].type.compile(dialect=engine.dialect)
-                conn.execute(text(f'ALTER TABLE {table_name} ADD COLUMN "{name}" {ddl_type}'))
+                column_ddl = CreateColumn(table.columns[name]).compile(dialect=engine.dialect)
+                conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_ddl}"))
 
     if to_drop:
         with engine.begin() as conn:
             for table_name in to_drop:
                 conn.execute(text(f"DROP TABLE {table_name}"))
+
+
+def _finalize_local_media_profile_type_migration(engine: Engine) -> None:
+    """Backfill joined subtype rows and the new composite unique index.
+
+    Profiles created before the type discriminator existed are Show profiles.
+    ``_recreate_outdated_empty_tables`` adds that discriminator using its
+    server default; this post-create step links those base rows to the joined
+    Show table and adds the index that SQLite cannot add via ``ALTER TABLE``.
+    """
+    from sqlalchemy import inspect as sa_inspect, text
+
+    inspector = sa_inspect(engine)
+    tables = set(inspector.get_table_names())
+    required = {
+        "local_media_profiles",
+        "local_media_profiles_show",
+        "local_media_profiles_movie",
+    }
+    if not required.issubset(tables):
+        return
+
+    with engine.begin() as conn:
+        for profile_type, child_table in (
+            ("show", "local_media_profiles_show"),
+            ("movie", "local_media_profiles_movie"),
+        ):
+            conn.execute(text(
+                f"INSERT INTO {child_table} (id) "
+                "SELECT profile.id FROM local_media_profiles AS profile "
+                "WHERE profile.type = :profile_type "
+                f"AND NOT EXISTS (SELECT 1 FROM {child_table} AS child WHERE child.id = profile.id)"
+            ), {"profile_type": profile_type})
+
+        duplicate = conn.execute(text(
+            "SELECT type, output_template, preferred_format, COUNT(*) AS profile_count "
+            "FROM local_media_profiles "
+            "GROUP BY type, output_template, preferred_format "
+            "HAVING COUNT(*) > 1 LIMIT 1"
+        )).first()
+        if duplicate is not None:
+            raise RuntimeError(
+                "Local Media Profiles must be unique by type, output template, and preferred format; "
+                f"found {duplicate.profile_count} duplicate profiles for type '{duplicate.type}'"
+            )
+
+    profile_table = Base.metadata.tables["local_media_profiles"]
+    unique_index = next(
+        index for index in profile_table.indexes
+        if index.name == "uq_local_media_profiles_type_output_template_preferred_format"
+    )
+    unique_index.create(bind=engine, checkfirst=True)
 
 
 def seed_db() -> None:

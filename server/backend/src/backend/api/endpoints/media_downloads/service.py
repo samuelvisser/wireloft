@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.media_download import *
-from backend.db.models import Episode, LocalMediaProfile, Movie, Show
+from backend.db.models import Episode, LocalMediaProfileBase, Movie, Show
 from backend.db.models.media_download import (
     EpisodeMediaDownload,
     MediaDownloadAttempt,
@@ -16,6 +16,7 @@ from backend.db.models.media_download import (
     MovieMediaDownload,
 )
 from backend.types.download_profile_types import MediaDownloadStatus
+from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 
@@ -47,8 +48,8 @@ def get_media_downloads_view(
 ) -> list[MediaDownloadAPIReadView]:
     """Downloads joined with media and profile context, newest first."""
     stmt = (
-        select(MediaDownloadBase, LocalMediaProfile)
-        .join(LocalMediaProfile, LocalMediaProfile.id == MediaDownloadBase.local_media_profile_id)
+        select(MediaDownloadBase, LocalMediaProfileBase)
+        .join(LocalMediaProfileBase, LocalMediaProfileBase.id == MediaDownloadBase.local_media_profile_id)
         .order_by(MediaDownloadBase.id.desc())
     )
     if statuses:
@@ -124,9 +125,11 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
     if episode.is_no_show_today:
         raise HTTPException(status_code=422, detail="This is not a downloadable episode")
 
-    profile: Optional[LocalMediaProfile] = s.get(LocalMediaProfile, body.local_media_profile_id)
+    profile: Optional[LocalMediaProfileBase] = s.get(LocalMediaProfileBase, body.local_media_profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Local media profile not found")
+    if profile.type != LocalMediaProfileType.SHOW.value:
+        raise HTTPException(status_code=422, detail="Episodes require a Show Local Media Profile")
 
     existing: Optional[EpisodeMediaDownload] = (
         s.query(EpisodeMediaDownload)
@@ -165,9 +168,11 @@ def create_movie_download(
     body: MovieDownloadAPICreate,
 ) -> MovieMediaDownload:
     """Upsert a browsed Daily Wire movie and queue its manual download."""
-    profile: Optional[LocalMediaProfile] = s.get(LocalMediaProfile, body.local_media_profile_id)
+    profile: Optional[LocalMediaProfileBase] = s.get(LocalMediaProfileBase, body.local_media_profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Local media profile not found")
+    if profile.type != LocalMediaProfileType.MOVIE.value:
+        raise HTTPException(status_code=422, detail="Movies require a Movie Local Media Profile")
     if not movie_data.is_downloadable:
         raise HTTPException(status_code=422, detail="Daily Wire marks this movie as unavailable for download")
 
@@ -176,6 +181,7 @@ def create_movie_download(
         "dw_id": movie_data.dw_id,
         "slug": movie_data.slug,
         "title": movie_data.title,
+        "extended_title": movie_data.extended_title,
         "description": movie_data.description,
         "duration": movie_data.duration,
         "background_image_path": movie_data.background_image_path,

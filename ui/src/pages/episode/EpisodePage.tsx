@@ -163,6 +163,7 @@ export default function EpisodePage() {
     const {data: episode, isLoading: isLoadingEpisode} = useEpisode(episodeId)
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads} = useEpisodeDownloads(episodeId)
+    const showProfiles = profiles?.filter((profile) => profile.type === 'show')
 
     if (!showId) {
         return (
@@ -277,15 +278,15 @@ export default function EpisodePage() {
                         <p>This is not a downloadable episode.</p>
                     ) : (
                         <>
-                            {!profiles?.length && (
+                            {!showProfiles?.length && (
                                 <p>
                                     No Local Media Profiles configured yet.{' '}
                                     <Link to="/add-local-media-profile">Add one</Link> to download this episode.
                                 </p>
                             )}
-                            {!!profiles?.length && (
+                            {!!showProfiles?.length && (
                                 <div role="list" aria-label="Available downloads per Local Media Profile">
-                                    {profiles.map((profile) => (
+                                    {showProfiles.map((profile) => (
                                         <ProfileDownloadRow
                                             key={profile.id}
                                             profile={profile}

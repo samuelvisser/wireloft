@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Movie
 from backend.db.models.media_download import MediaDownloadAttempt, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadStatus
-from backend.types.local_media_profile_types import PreferredFormat
+from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.output_template import resolve_movie_output_path
 from config import get_settings
 from dailywire_api.dw_api.client import MiddlewareClient
@@ -42,6 +42,8 @@ async def run_download_movie(session: Session, *, media_download_id: int, progre
     if movie is None:
         raise ValueError(f"Movie {download.media_item_id} for download {media_download_id} not found")
     profile = download.local_media_profile
+    if profile.type != LocalMediaProfileType.MOVIE.value:
+        raise DownloadError("Movies require a Movie Local Media Profile")
     if profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value:
         raise DownloadError("Movies require a video Local Media Profile")
 

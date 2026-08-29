@@ -14,6 +14,7 @@ class Movie(MediaItemBase):
     # Fields
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
     slug: Mapped[str]
+    extended_title: Mapped[Optional[str]]
     dw_id: Mapped[Optional[str]] = mapped_column(index=True, unique=True)
     sharing_url: Mapped[Optional[str]]
     author_name: Mapped[Optional[str]]

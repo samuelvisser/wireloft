@@ -15,6 +15,7 @@ class _MovieAPIBaseIn(RequestBase):
 
     # Fields in the media_items table
     title: str
+    extended_title: Optional[str] = None
     description: Optional[str]
     downloaded_date: Optional[datetime]
     duration: float = 0
@@ -59,6 +60,7 @@ class _MovieAPIBaseOut(ResponseBase):
     uuid: str
     slug: str
     title: str
+    extended_title: Optional[str]
     description: Optional[str]
     downloaded_date: Optional[datetime]
     duration: float

@@ -1,5 +1,14 @@
 # Ensure base and referenced tables are imported before dependents
-from .LocalMediaProfile import LocalMediaProfile
+from .local_media_profile import (
+    LocalMediaProfileBase,
+    MovieLocalMediaProfile,
+    ShowLocalMediaProfile,
+)
+
+# Existing code and third-party integrations historically constructed
+# ``LocalMediaProfile`` directly for shows. Keep that import compatible while
+# production code that needs all types queries ``LocalMediaProfileBase``.
+LocalMediaProfile = ShowLocalMediaProfile
 from .Season import Season
 from .Settings import Settings
 from .Show import Show

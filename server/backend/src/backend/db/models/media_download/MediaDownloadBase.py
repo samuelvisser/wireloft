@@ -10,7 +10,7 @@ from backend.types.media_types import MediaType
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import MediaItemBase
-    from backend.db.models import LocalMediaProfile
+    from backend.db.models import LocalMediaProfileBase
     from .MediaDownloadAttempt import MediaDownloadAttempt
 
 
@@ -48,7 +48,7 @@ class MediaDownloadBase(Base):
 
     # Relationships
     media: Mapped["MediaItemBase"] = relationship(back_populates="downloads")
-    local_media_profile: Mapped["LocalMediaProfile"] = relationship(back_populates="media_downloads")
+    local_media_profile: Mapped["LocalMediaProfileBase"] = relationship(back_populates="media_downloads")
     attempts: Mapped[List["MediaDownloadAttempt"]] = relationship(
         back_populates="media_download", cascade="all, delete-orphan", order_by="MediaDownloadAttempt.id.desc()"
     )

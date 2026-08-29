@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode, Show
 from backend.db.models.media_download import MediaDownloadAttempt, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadStatus
-from backend.types.local_media_profile_types import PreferredFormat
+from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
 from dailywire_downloader import (
@@ -53,6 +53,8 @@ async def run_download_episode(s: Session, *, media_download_id: int, is_redownl
         raise ValueError(f"Episode {download.media_item_id} for download {media_download_id} not found")
     show: Show = episode.show
     profile = download.local_media_profile
+    if profile.type != LocalMediaProfileType.SHOW.value:
+        raise DownloadError("Episodes require a Show Local Media Profile")
 
     print(f"Starting download_episode for {episode.slug} ({profile.name})")
 

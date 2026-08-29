@@ -22,7 +22,10 @@ export default function MoviePage() {
     const {data: movie, error} = useDailywireMovie(slug)
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads} = useMovieDownloads(slug)
-    const videoProfiles = useMemo(() => profiles?.filter((profile) => profile.preferredFormat !== 'format_audio_only') || [], [profiles])
+    const videoProfiles = useMemo(
+        () => profiles?.filter((profile) => profile.type === 'movie') || [],
+        [profiles],
+    )
     const [profileId, setProfileId] = useState('')
     const [submitting, setSubmitting] = useState(false)
 
@@ -116,8 +119,8 @@ export default function MoviePage() {
                         </>
                     ) : (
                         <div className="movie-profile-empty">
-                            <p>Create a video Local Media Profile before downloading a movie.</p>
-                            <Link className="btn" to="/add-local-media-profile">Create profile</Link>
+                            <p>Create a Movie Local Media Profile before downloading a movie.</p>
+                            <Link className="btn" to="/add-local-media-profile?type=movie">Create profile</Link>
                         </div>
                     )}
                 </aside>
