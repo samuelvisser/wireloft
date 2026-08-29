@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import Optional
 from datetime import datetime
 
-from pydantic import computed_field
+from pydantic import Field, computed_field
 
 from backend.api.models.base import ResponseBase, RequestBase
+from backend.api.models.trailer import TrailerAPICreate, TrailerAPIRead
 from backend.utils.helpers import generate_uuid
 
 
@@ -16,8 +17,8 @@ class _MovieAPIBaseIn(RequestBase):
     # Fields in the media_items table
     title: str
     extended_title: Optional[str] = None
-    description: Optional[str]
-    downloaded_date: Optional[datetime]
+    description: Optional[str] = None
+    downloaded_date: Optional[datetime] = None
     duration: float = 0
     background_image_path: Optional[str] = None
     thumbnail_landscape_path: Optional[str] = None
@@ -25,12 +26,11 @@ class _MovieAPIBaseIn(RequestBase):
     thumbnail_square_path: Optional[str] = None
     sharing_url: Optional[str] = None
     author_name: Optional[str] = None
+    author_slug: Optional[str] = None
+    logo_image_path: Optional[str] = None
     mature_rating: Optional[str] = None
     is_downloadable: Optional[bool] = True
-    trailer_slug: Optional[str] = None
-    trailer_title: Optional[str] = None
-    trailer_sharing_url: Optional[str] = None
-    trailer_thumbnail_path: Optional[str] = None
+    available_for: list[str] = Field(default_factory=list)
 
 
 class MovieAPICreate(_MovieAPIBaseIn):
@@ -39,6 +39,7 @@ class MovieAPICreate(_MovieAPIBaseIn):
     # Fields in the media_items table
     slug: str
     dw_id: Optional[str] = None
+    trailers: list[TrailerAPICreate] = Field(default_factory=list)
 
     @computed_field(return_type=str)
     @property
@@ -71,12 +72,12 @@ class _MovieAPIBaseOut(ResponseBase):
     dw_id: Optional[str]
     sharing_url: Optional[str]
     author_name: Optional[str]
+    author_slug: Optional[str]
+    logo_image_path: Optional[str]
     mature_rating: Optional[str]
     is_downloadable: Optional[bool]
-    trailer_slug: Optional[str]
-    trailer_title: Optional[str]
-    trailer_sharing_url: Optional[str]
-    trailer_thumbnail_path: Optional[str]
+    available_for: list[str]
+    trailers: list[TrailerAPIRead]
 
 
 class MovieAPIRead(_MovieAPIBaseOut):

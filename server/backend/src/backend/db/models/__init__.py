@@ -26,4 +26,5 @@ from .media_download import MediaDownloadAttempt
 from .media_download import MovieMediaDownload
 from .media_item import Episode
 from .media_item import Movie
+from .media_item import Trailer
 from .stream_profile import RssStreamProfile

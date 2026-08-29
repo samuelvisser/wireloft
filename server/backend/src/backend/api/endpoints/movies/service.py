@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from backend.api.helpers import update_database_fields
 from backend.api.models.movie import *
 from backend.db.models.media_item import Movie
+from backend.api.endpoints.trailers.service import create_trailer
 
 
 def get_movies_list(s: Session) -> list[MovieAPIRead]:
@@ -30,10 +31,16 @@ def get_movie(s: Session, movie_slug: str) -> MovieAPIRead:
 
 
 def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
-    data = body.model_dump(by_alias=True)
+    data = body.model_dump(by_alias=True, exclude={"trailers"})
     item = Movie(**data)
     s.add(item)
     s.flush()
+
+    for trailer in body.trailers:
+        create_trailer(s, item.id, trailer)
+
+    # Movie, trailers and any calling operation remain in the caller's single
+    # transaction. Services flush only; routers own commit and rollback.
     return MovieAPIRead.model_validate(item)
 
 

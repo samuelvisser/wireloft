@@ -1,0 +1,55 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Optional
+
+from pydantic import computed_field
+
+from backend.api.models.base import RequestBase, ResponseBase
+from backend.utils.helpers import generate_uuid
+
+
+class _TrailerAPIBaseIn(RequestBase):
+    title: str
+    description: Optional[str] = None
+    downloaded_date: Optional[datetime] = None
+    duration: float = 0
+    background_image_path: Optional[str] = None
+    thumbnail_landscape_path: Optional[str] = None
+    thumbnail_portrait_path: Optional[str] = None
+    thumbnail_square_path: Optional[str] = None
+    dw_id: Optional[str] = None
+    slug: str
+    sharing_url: Optional[str] = None
+
+
+class TrailerAPICreate(_TrailerAPIBaseIn):
+    """Trailer metadata; the owning movie is supplied by the service."""
+
+    @computed_field(return_type=str)
+    @property
+    def uuid(self) -> str:
+        return generate_uuid()
+
+
+class TrailerAPIUpdate(_TrailerAPIBaseIn):
+    pass
+
+
+class TrailerAPIRead(ResponseBase):
+    id: int
+    movie_id: int
+    uuid: str
+    title: str
+    description: Optional[str]
+    downloaded_date: Optional[datetime]
+    duration: float
+    background_image_path: Optional[str]
+    thumbnail_landscape_path: Optional[str]
+    thumbnail_portrait_path: Optional[str]
+    thumbnail_square_path: Optional[str]
+    dw_id: Optional[str]
+    slug: str
+    sharing_url: Optional[str]
+    created_at: datetime
+    updated_at: datetime

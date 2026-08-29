@@ -8,6 +8,8 @@ from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.media_download import *
+from backend.api.models.movie import MovieAPICreate
+from backend.api.models.trailer import TrailerAPICreate
 from backend.db.models import Episode, LocalMediaProfileBase, Movie, Show
 from backend.db.models.media_download import (
     EpisodeMediaDownload,
@@ -19,6 +21,7 @@ from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
+from dailywire_api.records import DwMovieRecord
 
 # Statuses that are safe to restart or replace: nothing is actively running
 _RESTARTABLE_STATUSES = {
@@ -164,10 +167,10 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
 
 def create_movie_download(
     s: Session,
-    movie_data,
+    movie_data: DwMovieRecord,
     body: MovieDownloadAPICreate,
 ) -> MovieMediaDownload:
-    """Upsert a browsed Daily Wire movie and queue its manual download."""
+    """Persist a new browsed movie through its API service and queue a download."""
     profile: Optional[LocalMediaProfileBase] = s.get(LocalMediaProfileBase, body.local_media_profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Local media profile not found")
@@ -176,36 +179,20 @@ def create_movie_download(
     if not movie_data.is_downloadable:
         raise HTTPException(status_code=422, detail="Daily Wire marks this movie as unavailable for download")
 
-    movie: Optional[Movie] = s.query(Movie).filter(Movie.slug == movie_data.slug).one_or_none()
-    values = {
-        "dw_id": movie_data.dw_id,
-        "slug": movie_data.slug,
-        "title": movie_data.title,
-        "extended_title": movie_data.extended_title,
-        "description": movie_data.description,
-        "duration": movie_data.duration,
-        "background_image_path": movie_data.background_image_path,
-        "thumbnail_landscape_path": movie_data.thumbnail_landscape_path,
-        "thumbnail_portrait_path": movie_data.thumbnail_portrait_path,
-        "thumbnail_square_path": movie_data.thumbnail_square_path,
-        "sharing_url": movie_data.sharing_url,
-        "author_name": movie_data.author_name,
-        "mature_rating": movie_data.mature_rating,
-        "is_downloadable": movie_data.is_downloadable,
-        "trailer_slug": movie_data.trailer.slug if movie_data.trailer else None,
-        "trailer_title": movie_data.trailer.title if movie_data.trailer else None,
-        "trailer_sharing_url": movie_data.trailer.sharing_url if movie_data.trailer else None,
-        "trailer_thumbnail_path": movie_data.trailer.thumbnail_landscape_path if movie_data.trailer else None,
-    }
+    movie: Optional[Movie] = (
+        s.query(Movie)
+        .filter(Movie.slug == movie_data.slug)
+        .one_or_none()
+    )
     if movie is None:
-        from backend.utils.helpers import generate_uuid
+        # Imported lazily because endpoint package initializers expose routers,
+        # and the Movies router also depends on this download service.
+        from backend.api.endpoints.movies.service import create_movie
 
-        movie = Movie(uuid=generate_uuid(), type=MediaType.MOVIE.value, downloaded_date=None, **values)
-        s.add(movie)
-        s.flush()
-    else:
-        for key, value in values.items():
-            setattr(movie, key, value)
+        created = create_movie(s, _movie_create_from_dailywire(movie_data))
+        movie = s.get(Movie, created.id)
+        if movie is None:
+            raise RuntimeError("Movie creation did not produce a persisted Movie record")
 
     existing: Optional[MovieMediaDownload] = (
         s.query(MovieMediaDownload)
@@ -233,6 +220,40 @@ def create_movie_download(
     s.add(download)
     s.flush()
     return download
+
+
+def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
+    trailers: list[TrailerAPICreate] = []
+    if movie_data.trailer is not None:
+        trailers.append(TrailerAPICreate(
+            dw_id=movie_data.trailer.dw_id,
+            slug=movie_data.trailer.slug,
+            title=movie_data.trailer.title,
+            sharing_url=movie_data.trailer.sharing_url,
+            duration=movie_data.trailer.duration,
+            thumbnail_landscape_path=movie_data.trailer.thumbnail_landscape_path,
+        ))
+
+    return MovieAPICreate(
+        dw_id=movie_data.dw_id,
+        slug=movie_data.slug,
+        title=movie_data.title,
+        extended_title=movie_data.extended_title,
+        description=movie_data.description,
+        duration=movie_data.duration,
+        background_image_path=movie_data.background_image_path,
+        thumbnail_landscape_path=movie_data.thumbnail_landscape_path,
+        thumbnail_portrait_path=movie_data.thumbnail_portrait_path,
+        thumbnail_square_path=movie_data.thumbnail_square_path,
+        sharing_url=movie_data.sharing_url,
+        author_name=movie_data.author_name,
+        author_slug=movie_data.author_slug,
+        logo_image_path=movie_data.logo_image_path,
+        mature_rating=movie_data.mature_rating,
+        is_downloadable=movie_data.is_downloadable,
+        available_for=movie_data.available_for,
+        trailers=trailers,
+    )
 
 
 def retry_media_download(s: Session, media_download_id: int) -> MediaDownloadBase:
