@@ -1,6 +1,14 @@
 from enum import Enum
 
 
+class LocalMediaProfileType(str, Enum):
+    SHOW = "show"
+    MOVIE = "movie"
+
+    # Only used by the polymorphic parent mapper.
+    BASE = "base"
+
+
 class PreferredFormat(str, Enum):
     FORMAT_4K = 'format_4k'
     FORMAT_1080P = 'format_1080p'

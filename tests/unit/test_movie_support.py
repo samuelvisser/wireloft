@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -95,6 +96,10 @@ def test_dailywire_catalog_uses_short_movie_display_titles(monkeypatch):
         "Bonhoeffer: Pastor. Spy. Assassin.",
         "Run Hide Fight",
     ]
+    assert [movie.extended_title for movie in catalog.movies] == [
+        "Bonhoeffer: Pastor. Spy. Assassin. A long marketing description.",
+        "Run Hide Fight | Watch The First One | More marketing copy",
+    ]
 
 
 def test_dailywire_catalog_pages_filter_sort_and_preserve_offsets(monkeypatch):
@@ -174,9 +179,10 @@ def test_dailywire_movie_page_exposes_trailer(monkeypatch):
 
 def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, monkeypatch):
     from backend.api.endpoints.media_downloads.service import create_movie_download, get_media_downloads_view
+    from backend.api.endpoints.movies import service as movie_service
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db.core import Base
-    from backend.db.models import LocalMediaProfile, Movie
+    from backend.db.models import Movie, MovieLocalMediaProfile, Trailer
     from backend.db.models.media_download import MovieMediaDownload
     from config import get_settings
     from dailywire_api.records import DwMovieRecord, DwTrailerRecord
@@ -185,7 +191,7 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
-    profile = LocalMediaProfile(
+    profile = MovieLocalMediaProfile(
         slug="movies",
         name="Movies",
         output_template="/downloads/{movie_title}/{movie}.ext",
@@ -194,13 +200,27 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     session.add(profile)
     session.commit()
 
+    create_movie_calls = []
+    original_create_movie = movie_service.create_movie
+
+    def tracked_create_movie(s, body):
+        create_movie_calls.append(body)
+        return original_create_movie(s, body)
+
+    monkeypatch.setattr(movie_service, "create_movie", tracked_create_movie)
+
     movie_data = DwMovieRecord(
         dw_id="movie-1",
         slug="a-movie",
         title="A Movie",
+        extended_title="A Movie | A Daily Wire Original",
         description="Movie description",
         duration=5400,
         sharing_url="https://www.dailywire.com/videos/a-movie",
+        author_name="A Director",
+        author_slug="a-director",
+        logo_image_path="movie-logo.png",
+        mature_rating="PG-13",
         is_downloadable=True,
         available_for=["ALL_ACCESS"],
         trailer=DwTrailerRecord(
@@ -220,8 +240,22 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     session.commit()
 
     movie = session.query(Movie).one()
+    trailer = session.query(Trailer).one()
+    assert len(create_movie_calls) == 1
+    assert create_movie_calls[0].author_slug == "a-director"
+    assert create_movie_calls[0].logo_image_path == "movie-logo.png"
+    assert create_movie_calls[0].available_for == ["ALL_ACCESS"]
     assert movie.slug == "a-movie"
-    assert movie.trailer_slug == "a-movie-trailer"
+    assert movie.extended_title == "A Movie | A Daily Wire Original"
+    assert movie.author_slug == "a-director"
+    assert movie.logo_image_path == "movie-logo.png"
+    assert movie.available_for == ["ALL_ACCESS"]
+    assert movie.trailers == [trailer]
+    assert trailer.type == "trailer"
+    assert trailer.movie_id == movie.id
+    assert trailer.dw_id == "trailer-1"
+    assert trailer.slug == "a-movie-trailer"
+    assert trailer.duration == 90
     assert isinstance(download, MovieMediaDownload)
     assert download.type == "movie"
     assert download.file_path == str(tmp_path / "A Movie" / "a-movie.ext")
@@ -230,6 +264,136 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     assert view[0].movie_slug == "a-movie"
     assert view[0].movie_title == "A Movie"
     assert view[0].episode_slug is None
+
+    session.close()
+    engine.dispose()
+
+
+def test_create_movie_supports_multiple_trailers_in_one_transaction():
+    from backend.api.endpoints.movies.service import create_movie
+    from backend.api.models.movie import MovieAPICreate
+    from backend.api.models.trailer import TrailerAPICreate
+    from backend.db.core import Base
+    from backend.db.models import Movie, Trailer
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+
+    result = create_movie(session, MovieAPICreate(
+        dw_id="movie-1",
+        slug="a-movie",
+        title="A Movie",
+        sharing_url="https://example.test/a-movie",
+        trailers=[
+            TrailerAPICreate(
+                dw_id="trailer-1",
+                slug="a-movie-trailer",
+                title="Official Trailer",
+                sharing_url="https://example.test/a-movie-trailer",
+            ),
+            TrailerAPICreate(
+                dw_id="trailer-2",
+                slug="a-movie-teaser",
+                title="Teaser",
+                sharing_url="https://example.test/a-movie-teaser",
+            ),
+        ],
+    ))
+    session.commit()
+
+    movie = session.query(Movie).one()
+    trailers = session.query(Trailer).order_by(Trailer.id).all()
+    assert result.id == movie.id
+    assert [trailer.slug for trailer in result.trailers] == [
+        "a-movie-trailer",
+        "a-movie-teaser",
+    ]
+    assert movie.trailers == trailers
+    assert {trailer.movie_id for trailer in trailers} == {movie.id}
+
+    session.close()
+    engine.dispose()
+
+
+def test_create_trailer_requires_an_existing_movie():
+    from fastapi import HTTPException
+
+    from backend.api.endpoints.trailers.service import create_trailer
+    from backend.api.models.trailer import TrailerAPICreate
+    from backend.db.core import Base
+    from backend.db.models import Trailer
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+
+    with pytest.raises(HTTPException) as exc_info:
+        create_trailer(session, 999, TrailerAPICreate(
+            dw_id="trailer-1",
+            slug="orphan-trailer",
+            title="Orphan Trailer",
+        ))
+
+    assert exc_info.value.status_code == 404
+    assert session.query(Trailer).count() == 0
+
+    session.close()
+    engine.dispose()
+
+
+def test_movie_download_rolls_back_movie_and_trailer_together(tmp_path, monkeypatch):
+    from backend.api.endpoints.media_downloads import service
+    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.db.core import Base
+    from backend.db.models import Movie, MovieLocalMediaProfile, Trailer
+    from backend.db.models.media_download import MovieMediaDownload
+    from config import get_settings
+    from dailywire_api.records import DwMovieRecord, DwTrailerRecord
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    profile = MovieLocalMediaProfile(
+        slug="movies",
+        name="Movies",
+        output_template="/downloads/{movie}.ext",
+        preferred_format="format_1080p",
+    )
+    session.add(profile)
+    session.commit()
+
+    movie_data = DwMovieRecord(
+        dw_id="movie-1",
+        slug="a-movie",
+        title="A Movie",
+        sharing_url="https://example.test/a-movie",
+        trailer=DwTrailerRecord(
+            dw_id="trailer-1",
+            slug="a-movie-trailer",
+            title="Official Trailer",
+            sharing_url="https://example.test/a-movie-trailer",
+        ),
+    )
+
+    def fail_output_path(*_args, **_kwargs):
+        raise RuntimeError("output path failed")
+
+    monkeypatch.setattr(service, "resolve_movie_output_path", fail_output_path)
+
+    with pytest.raises(RuntimeError, match="output path failed"):
+        service.create_movie_download(
+            session,
+            movie_data,
+            MovieDownloadAPICreate(local_media_profile_id=profile.id),
+        )
+    session.rollback()
+
+    assert session.query(Movie).count() == 0
+    assert session.query(Trailer).count() == 0
+    assert session.query(MovieMediaDownload).count() == 0
 
     session.close()
     engine.dispose()

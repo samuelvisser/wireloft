@@ -6,6 +6,7 @@ export const DailywireCatalogShowReadSchema = z.looseObject({
     dwId: z.string(),
     slug: z.string(),
     title: z.string(),
+    extendedTitle: nullableString,
     description: nullableString,
     authorName: nullableString,
     authorSlug: nullableString,

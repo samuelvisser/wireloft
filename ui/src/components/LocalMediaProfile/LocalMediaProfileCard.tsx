@@ -1,5 +1,5 @@
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
-import {PreferredFormatReg} from "../../types/local_media_profile";
+import {LocalMediaProfileTypeReg, PreferredFormatReg} from "../../types/local_media_profile";
 
 export type LocalMediaProfileCardProps = {
   profile: LocalMediaProfileRead
@@ -19,6 +19,7 @@ export default function LocalMediaProfileCard({ profile, selected = false, onCli
       <div className="card-title">{profile.name}</div>
       <div className="card-sub">{profile.outputTemplate}</div>
       <div className="card-meta">
+        <span>{LocalMediaProfileTypeReg.getLabelLoose(profile.type)}</span>
         <span>{PreferredFormatReg.getLabelLoose(profile.preferredFormat)}</span>
       </div>
     </button>

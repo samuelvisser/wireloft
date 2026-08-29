@@ -9,7 +9,7 @@ from backend.api.helpers import create_database_fields, update_database_fields
 from backend.api.models.local_media_profile import LocalMediaProfileAPIUpdate
 from backend.api.models.show import ShowAPIRead
 from backend.api.models.show_as_bundle import ShowAPICreateBundle
-from backend.db.models import Show, LocalMediaProfile, Season
+from backend.db.models import LocalMediaProfileBase, Season, Show, ShowLocalMediaProfile
 from backend.db.models.download_profile import PodcastDownloadProfile, SeriesDownloadProfile
 from backend.db.models.stream_profile import RssStreamProfile
 from backend.utils.feed_urls import build_rss_feed_url
@@ -17,9 +17,9 @@ from backend.utils.helpers import generate_stream_profile_token
 from task_manager.events.transactional import queue_event
 
 
-def upsert_local_media_profile(s: Session, mp_input: dict) -> LocalMediaProfile:
+def upsert_local_media_profile(s: Session, mp_input: dict) -> LocalMediaProfileBase:
     if mp_input['op'] == "create_new":
-        local_media_profile = create_database_fields(LocalMediaProfile, mp_input)
+        local_media_profile = create_database_fields(ShowLocalMediaProfile, mp_input)
         s.add(local_media_profile)
         return local_media_profile
     elif mp_input['op'] == "update_by_slug":
@@ -30,8 +30,8 @@ def upsert_local_media_profile(s: Session, mp_input: dict) -> LocalMediaProfile:
         if not slug:
             raise ValueError("update_by_slug requires a slug")
 
-        local_media_profile: Optional[LocalMediaProfile] = (
-            s.query(LocalMediaProfile)
+        local_media_profile: Optional[ShowLocalMediaProfile] = (
+            s.query(ShowLocalMediaProfile)
             .filter_by(slug=slug)
             .one_or_none()
         )
@@ -56,7 +56,7 @@ def create_show_bundle(s: Session, request: Request, payload: ShowAPICreateBundl
         s.add(season)
         seasons.append(season)
 
-    local_media_profile: Optional[LocalMediaProfile] = None
+    local_media_profile: Optional[LocalMediaProfileBase] = None
     if payload.local_media_profile is not None:
         local_media_profile = upsert_local_media_profile(
             s,

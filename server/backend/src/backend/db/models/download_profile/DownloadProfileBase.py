@@ -9,7 +9,7 @@ from backend.db import Base
 from backend.types.download_profile_types import DownloadProfileType
 
 if TYPE_CHECKING:
-    from backend.db.models import Show, LocalMediaProfile, EpisodeMediaDownload  # or from backend.db.models import Show, Season
+    from backend.db.models import EpisodeMediaDownload, LocalMediaProfileBase, Show
 
 
 class DownloadProfileBase(Base):
@@ -43,7 +43,7 @@ class DownloadProfileBase(Base):
 
     # Relationships
     show: Mapped["Show"] = relationship(back_populates="download_profiles")
-    local_media_profile: Mapped["LocalMediaProfile"] = relationship(back_populates="download_profiles")
+    local_media_profile: Mapped["LocalMediaProfileBase"] = relationship(back_populates="download_profiles")
 
     episode_downloads: Mapped[list["EpisodeMediaDownload"]] = relationship(
         back_populates="download_profile"

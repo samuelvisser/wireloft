@@ -1,6 +1,6 @@
-import {useCallback} from 'react'
-import LocalMediaProfileForm from '../../components/LocalMediaProfile/LocalMediaProfileForm'
-import {useNavigate} from 'react-router-dom'
+import {useCallback, useState} from 'react'
+import LocalMediaProfileForm, {LocalMediaProfileMode} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
+import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {
     LocalMediaProfileCreateIn, LocalMediaProfileCreateOut,
@@ -10,21 +10,34 @@ import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {WithRoot} from "../../types/form";
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
-import {PreferredFormatReg} from "../../types/local_media_profile";
+import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions'
+import ReadMore from '../../utils/ReadMore'
 
 export default function AddLocalMediaProfilePage() {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const qc = useQueryClient()
+    const initialMode: LocalMediaProfileMode = searchParams.get('type') === 'movie' ? 'movie' : 'show'
+    const [mode, setMode] = useState<LocalMediaProfileMode>(initialMode)
+    const defaultValues: LocalMediaProfileCreateIn = initialMode === 'movie'
+        ? {
+            type: 'movie',
+            name: '',
+            outputTemplate: '/downloads/movies/{movie_title}/{movie_title}.ext',
+            preferredFormat: 'format_1080p',
+        }
+        : {
+            type: 'show',
+            name: '',
+            outputTemplate: '/downloads/shows/{show}/{episode_title}.ext',
+            preferredFormat: 'format_audio_only',
+        }
 
     const form = useForm<WithRoot<LocalMediaProfileCreateIn>>({
         resolver: zodResolver(LocalMediaProfileCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: {
-            name: "",
-            outputTemplate: "/downloads/",
-            preferredFormat: PreferredFormatReg.Enum.format_audio_only,
-        },
+        defaultValues,
     })
 
     const submitFn = async (data: LocalMediaProfileCreateOut) => {
@@ -43,7 +56,7 @@ export default function AddLocalMediaProfilePage() {
     };
 
     const onCancel = useCallback(() => navigate('/local-media-profiles'), [navigate])
-    const onCreate = buildLocalMediaProfileOnSubmit(form, submitFn, {
+    const onCreate = buildLocalMediaProfileOnSubmit(form as any, submitFn, {
         onSuccess,
         mode: 'create',
     });
@@ -57,7 +70,52 @@ export default function AddLocalMediaProfilePage() {
             </div>
 
             <form className="form" onSubmit={onCreate} noValidate>
-                <LocalMediaProfileForm form={form} />
+                <div className="form-row">
+                    <label>Profile type</label>
+                    <SegmentedOptions
+                        name="local-media-profile-mode"
+                        value={mode}
+                        onChange={(value) => {
+                            const nextMode = value as LocalMediaProfileMode
+                            setMode(nextMode)
+                            form.setValue('type', nextMode, {shouldDirty: true, shouldValidate: true})
+                            form.setValue(
+                                'outputTemplate',
+                                nextMode === 'movie'
+                                    ? '/downloads/movies/{movie_title}/{movie_title}.ext'
+                                    : '/downloads/shows/{show}/{episode_title}.ext',
+                                {shouldDirty: true, shouldValidate: true},
+                            )
+                            if (nextMode === 'movie' && form.getValues('preferredFormat') === 'format_audio_only') {
+                                form.setValue('preferredFormat', 'format_1080p', {shouldDirty: true, shouldValidate: true})
+                            }
+                        }}
+                        options={[
+                            {
+                                value: 'show',
+                                label: 'Show',
+                                description: (
+                                    <ReadMore summary={<span>Store downloaded show episodes.</span>}>
+                                        <p>Show profiles support episode, season, show, and publication-date placeholders.</p>
+                                        <p>They can use either video formats or audio-only output.</p>
+                                    </ReadMore>
+                                ),
+                            },
+                            {
+                                value: 'movie',
+                                label: 'Movie',
+                                description: (
+                                    <ReadMore summary={<span>Store manually downloaded movies.</span>}>
+                                        <p>Movie profiles support movie-specific title, slug, author, rating, and ID placeholders.</p>
+                                        <p>Movies are always downloaded as video.</p>
+                                    </ReadMore>
+                                ),
+                            },
+                        ]}
+                    />
+                </div>
+
+                <LocalMediaProfileForm form={form} mode={mode}/>
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>

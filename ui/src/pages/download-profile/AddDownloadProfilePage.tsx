@@ -39,7 +39,7 @@ export default function AddDownloadProfilePage() {
     const qc = useQueryClient()
 
     const showReg: SelectRegistry = useMemo(() => buildShowSelectRegistry(shows), [shows])
-    const mediaProfileReg: SelectRegistry = useLocalMediaProfileSelectRegistry(mediaProfiles)
+    const mediaProfileReg: SelectRegistry = useLocalMediaProfileSelectRegistry(mediaProfiles, 'show')
 
     const formPodcast = useForm<PodcastDownloadProfileCreateIn>({
         resolver: zodResolver(PodcastDownloadProfileCreateSchema),

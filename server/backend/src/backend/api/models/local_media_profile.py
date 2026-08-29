@@ -3,10 +3,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Union
 
-from pydantic import computed_field, Field, field_validator
+from pydantic import computed_field, Field, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.types.local_media_profile_types import PreferredFormat
+from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
+from backend.utils.output_template import (
+    MOVIE_OUTPUT_TEMPLATE_FIELDS,
+    SHOW_OUTPUT_TEMPLATE_FIELDS,
+    validate_output_template_fields,
+)
 from backend.utils.helpers import slugify
 
 
@@ -33,12 +38,40 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
         return v
 
 
-class LocalMediaProfileAPICreate(_LocalMediaProfileAPIBaseIn):
+class _TypedLocalMediaProfileAPIBaseIn(_LocalMediaProfileAPIBaseIn):
+    type: LocalMediaProfileType
+
+    @model_validator(mode="after")
+    def _validate_type_specific_fields(self):
+        if self.type == LocalMediaProfileType.BASE:
+            raise ValueError("A Local Media Profile must be for shows or movies")
+
+        allowed_fields = (
+            MOVIE_OUTPUT_TEMPLATE_FIELDS
+            if self.type == LocalMediaProfileType.MOVIE
+            else SHOW_OUTPUT_TEMPLATE_FIELDS
+        )
+        validate_output_template_fields(
+            self.output_template,
+            allowed_fields=allowed_fields,
+        )
+
+        if (
+            self.type == LocalMediaProfileType.MOVIE
+            and self.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY
+        ):
+            raise ValueError("Movie Local Media Profiles require a video format")
+        return self
+
+
+class LocalMediaProfileAPICreate(_TypedLocalMediaProfileAPIBaseIn):
     """Request body for creating a media profile. Slug derived from name."""
-    pass
+
+    # Existing clients created show profiles before this discriminator existed.
+    type: LocalMediaProfileType = LocalMediaProfileType.SHOW
 
 
-class LocalMediaProfileAPIUpdate(_LocalMediaProfileAPIBaseIn):
+class LocalMediaProfileAPIUpdate(_TypedLocalMediaProfileAPIBaseIn):
     """Request body for updating a media profile."""
     pass
 
@@ -48,6 +81,7 @@ class _LocalMediaProfileAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, no constraints."""
 
     id: int
+    type: Union[LocalMediaProfileType, str]
     slug: str
     name: str
     output_template: str

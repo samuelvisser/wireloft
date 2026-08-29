@@ -8,6 +8,8 @@ from backend.api.helpers import create_database_fields, update_database_fields
 from backend.api.models.series_download_profile import *
 from backend.db.models.download_profile import SeriesDownloadProfile
 from backend.db.models import Season
+from backend.types.local_media_profile_types import LocalMediaProfileType
+from backend.utils.local_media_profiles import require_local_media_profile_type
 from task_manager.events.transactional import queue_event
 
 
@@ -78,6 +80,7 @@ def _resolve_or_create_seasons_for_show(s: Session, show_id: int, seasons_req: l
 
 
 def create_download_profile_series(s: Session, body: SeriesDownloadProfileAPICreate) -> SeriesDownloadProfileAPIRead:
+    require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
     # Create the profile without directly assigning seasons
     data = body.model_dump(by_alias=True, exclude={"seasons"}, exclude_none=True, exclude_unset=True)
     item = SeriesDownloadProfile(**data)
@@ -108,6 +111,7 @@ def update_download_profile_series(s: Session, download_profile_series_id: int, 
     if item is None:
         raise HTTPException(status_code=404, detail="Download profile for series not found")
 
+    require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
     # Update scalar fields but do not assign seasons directly from body
     update_database_fields(item, body, exclude_fields={"seasons"})
 

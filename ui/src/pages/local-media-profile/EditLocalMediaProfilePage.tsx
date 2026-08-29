@@ -7,6 +7,7 @@ import {zodResolver} from '@hookform/resolvers/zod'
 import {LocalMediaProfileUpdateIn, LocalMediaProfileUpdateOut, LocalMediaProfileUpdateSchema} from '../../types/schemas/local_media_profile'
 import {WithRoot} from '../../types/form'
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
+import {LocalMediaProfileTypeReg} from '../../types/local_media_profile'
 
 export default function EditLocalMediaProfilePage() {
     const navigate = useNavigate()
@@ -96,7 +97,12 @@ export default function EditLocalMediaProfilePage() {
             </div>
 
             <form className="form" onSubmit={onUpdate} noValidate>
-                <LocalMediaProfileForm form={form}/>
+                <div className="form-row">
+                    <label>Profile type</label>
+                    <div style={{padding: '6px 0'}}>{LocalMediaProfileTypeReg.getLabelLoose(profile.type)}</div>
+                </div>
+
+                <LocalMediaProfileForm form={form} mode={profile.type}/>
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>

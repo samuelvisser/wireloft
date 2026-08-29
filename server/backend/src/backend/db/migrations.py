@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from alembic import command
@@ -22,7 +23,10 @@ class DatabaseMigrationError(RuntimeError):
 
 
 def get_alembic_config() -> Config:
-    config = Config()
+    # Alembic's Config default binds stdout when Alembic itself is imported.
+    # Test runners and other embedders can replace and close that stream later,
+    # so always bind the currently active stream when creating a config.
+    config = Config(stdout=sys.stdout)
     config.set_main_option("script_location", str(ALEMBIC_DIR))
     return config
 

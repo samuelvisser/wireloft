@@ -35,6 +35,7 @@ class DwCatalogMovieRecord(BaseRecord):
     dw_id: str
     slug: str
     title: str
+    extended_title: Optional[str] = None
     description: Optional[str] = None
     author_name: Optional[str] = None
     author_slug: Optional[str] = None

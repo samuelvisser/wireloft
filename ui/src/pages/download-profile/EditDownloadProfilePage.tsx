@@ -74,7 +74,7 @@ export default function EditDownloadProfilePage() {
     }, [downloadProfile, form])
 
 
-    const mediaProfileReg = useLocalMediaProfileSelectRegistry(mediaProfiles)
+    const mediaProfileReg = useLocalMediaProfileSelectRegistry(mediaProfiles, 'show')
 
     // Compute which local media profiles are already used by this show and must be disabled,
     // but allow the current profile's own media profile to remain selectable.

@@ -8,6 +8,8 @@ from fastapi import HTTPException
 from backend.api.helpers import update_database_fields
 from backend.api.models.podcast_download_profile import *
 from backend.db.models.download_profile import PodcastDownloadProfile
+from backend.types.local_media_profile_types import LocalMediaProfileType
+from backend.utils.local_media_profiles import require_local_media_profile_type
 from task_manager.events.transactional import queue_event
 
 
@@ -33,6 +35,7 @@ def get_download_profile_podcast(s: Session, download_profile_id: int) -> Podcas
 
 
 def create_download_profile_podcast(s: Session, body: PodcastDownloadProfileAPICreate) -> PodcastDownloadProfileAPIRead:
+    require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
     data = body.model_dump(by_alias=True)
     item = PodcastDownloadProfile(**data)
     s.add(item)
@@ -57,6 +60,7 @@ def update_download_profile_podcast(s: Session, download_profile_id: int, body: 
     if item is None:
         raise HTTPException(status_code=404, detail="Download profile not found")
 
+    require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
     update_database_fields(item, body)
     s.flush()
 

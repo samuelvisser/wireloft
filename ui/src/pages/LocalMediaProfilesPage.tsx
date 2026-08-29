@@ -3,7 +3,7 @@ import {useNavigate} from 'react-router-dom'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {useLocalMediaProfiles} from '../lib/queries'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
-import {PreferredFormatReg} from "../types/local_media_profile";
+import {LocalMediaProfileTypeReg, PreferredFormatReg} from "../types/local_media_profile";
 import DataTable, { Column } from '../components/DataTable/DataTable';
 import ConfirmDeleteDialog, { ConfirmDeleteDialogRef } from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import PageSubtitle from "../components/common/PageSubtitle";
@@ -25,6 +25,10 @@ export default function LocalMediaProfilesPage() {
         {
             header: 'Output Path Template',
             cell: (p) => <span className="mono truncate">{p.outputTemplate}</span>,
+        },
+        {
+            header: 'Type',
+            accessor: (p) => LocalMediaProfileTypeReg.getLabelLoose(p.type),
         },
         {
             header: 'Preferred Format',
@@ -59,6 +63,7 @@ export default function LocalMediaProfilesPage() {
                         <>
                             <span className="mobile-summary-title">{p.name}</span>
                             <span className="mobile-summary-meta">
+                                <span>{LocalMediaProfileTypeReg.getLabelLoose(p.type)}</span>
                                 <span>{PreferredFormatReg.getLabelLoose(p.preferredFormat)}</span>
                             </span>
                         </>
