@@ -42,6 +42,8 @@ export type MediaDownloadRead = z.infer<typeof MediaDownloadReadSchema>;
 
 
 export const MediaDownloadViewReadSchema = MediaDownloadReadSchema.extend({
+    mediaSlug: z.string().nullable(),
+    mediaTitle: z.string().nullable(),
     episodeSlug: z.string().nullable(),
     episodeTitle: z.string().nullable(),
     episodeIdentifier: z.string().nullable(),
