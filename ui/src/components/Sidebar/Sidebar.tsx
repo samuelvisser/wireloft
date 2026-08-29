@@ -10,7 +10,7 @@ library.add(fas)
 
 const items: NavItem[] = [
     {path: '/', label: 'Home', icon: ['fas', 'house'], end: true},
-    {path: '/library?type=shows', label: 'Library', icon: ['fas', 'book-open']},
+    {path: '/library', label: 'Library', icon: ['fas', 'book-open']},
     {path: '/downloads', label: 'Downloads', icon: ['fas', 'circle-down']},
     {
         label: 'Profiles',
