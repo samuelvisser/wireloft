@@ -435,6 +435,91 @@ def _db_with_episode_and_download(video_local_media_profile=True):
     return session, engine, episode, download
 
 
+def test_retry_active_download_starts_new_generation_and_records_cancellation():
+    from backend.api.endpoints.media_downloads.service import retry_media_download
+    from backend.db.models.media_download import MediaDownloadAttempt
+
+    session, engine, _episode, download = _db_with_episode_and_download(
+        video_local_media_profile=False,
+    )
+    download.download_status = "downloading"
+    download.progress = 42
+    download.downloaded_bytes = 1234
+    session.commit()
+
+    original_generation = download.attempt_generation
+    restarted = retry_media_download(session, download.id)
+    session.commit()
+
+    assert restarted.id == download.id
+    assert restarted.attempt_generation == original_generation + 1
+    assert restarted.download_status == "pending"
+    assert restarted.progress == 0
+    assert restarted.downloaded_bytes is None
+    [attempt] = session.query(MediaDownloadAttempt).all()
+    assert attempt.status == "cancelled"
+    assert attempt.error_message == "Cancelled by the user and restarted"
+    assert attempt.downloaded_bytes == 1234
+
+    session.close()
+    engine.dispose()
+
+
+def test_replaced_episode_worker_cancels_without_overwriting_fresh_state(tmp_path, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+
+    from config import get_settings
+    from dailywire_downloader import DownloadCancelled, MediaInfo, MediaKind
+    from task_manager.tasks.workers import download_attempt
+    from task_manager.tasks.workers.download_episode import service
+    from task_manager.tasks.workers.download_profile_worker import _helpers as profile_helpers
+
+    session, engine, episode, download = _db_with_episode_and_download(
+        video_local_media_profile=False,
+    )
+    session_factory = sessionmaker(bind=engine)
+    monkeypatch.setattr(download_attempt, "get_session", session_factory)
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+    monkeypatch.setattr(
+        service,
+        "probe",
+        lambda url: MediaInfo(url=url, kind=MediaKind.DIRECT_FILE, content_type="audio/mp4"),
+    )
+
+    original_generation = download.attempt_generation
+
+    def cancel_during_download(url, dest_path, *, progress=None, should_cancel=None):
+        with session_factory() as other_session:
+            current = other_session.get(type(download), download.id)
+            current.attempt_generation += 1
+            current.download_status = "pending"
+            current.progress = 0
+            other_session.commit()
+        assert should_cancel is not None
+        should_cancel.ensure_current()
+
+    monkeypatch.setattr(service, "download_file", cancel_during_download)
+    drained = Mock()
+    monkeypatch.setattr(profile_helpers, "trigger_next_pending_downloads", drained)
+
+    with pytest.raises(DownloadCancelled):
+        asyncio.run(service.run_download_episode(
+            session,
+            media_download_id=download.id,
+            attempt_generation=original_generation,
+        ))
+
+    session.expire_all()
+    refreshed = session.get(type(download), download.id)
+    assert refreshed.attempt_generation == original_generation + 1
+    assert refreshed.download_status == "pending"
+    assert refreshed.progress == 0
+    drained.assert_not_called()
+
+    session.close()
+    engine.dispose()
+
+
 def test_run_download_episode_remuxes_hls_video_to_mp4(tmp_path, monkeypatch):
     from config import get_settings
     from dailywire_downloader import DownloadResult, MediaInfo, MediaKind, VideoRendition
@@ -454,14 +539,14 @@ def test_run_download_episode_remuxes_hls_video_to_mp4(tmp_path, monkeypatch):
     hls_calls = []
     remux_calls = []
 
-    def fake_download_hls(url, dest_path, *, progress=None):
+    def fake_download_hls(url, dest_path, *, progress=None, should_cancel=None):
         hls_calls.append((url, dest_path))
         __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
         with open(dest_path, "wb") as f:
             f.write(b"raw-ts-bytes")
         return DownloadResult(path=dest_path, bytes_downloaded=12, segments_downloaded=3)
 
-    def fake_remux_to_mp4(src_path, dest_path, *, ffmpeg_path="ffmpeg"):
+    def fake_remux_to_mp4(src_path, dest_path, *, ffmpeg_path="ffmpeg", should_cancel=None):
         remux_calls.append((src_path, dest_path, ffmpeg_path))
         with open(dest_path, "wb") as f:
             f.write(b"remuxed-mp4-bytes")
@@ -510,7 +595,7 @@ def test_run_download_episode_keeps_ts_when_remux_disabled(tmp_path, monkeypatch
     remux_calls = []
     monkeypatch.setattr(service, "remux_to_mp4", lambda *a, **k: remux_calls.append((a, k)))
 
-    def fake_download_hls(url, dest_path, *, progress=None):
+    def fake_download_hls(url, dest_path, *, progress=None, should_cancel=None):
         __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
         with open(dest_path, "wb") as f:
             f.write(b"raw-ts-bytes")
@@ -544,7 +629,7 @@ def test_run_download_episode_audio_unaffected_by_remux_setting(tmp_path, monkey
     remux_calls = []
     monkeypatch.setattr(service, "remux_to_mp4", lambda *a, **k: remux_calls.append((a, k)))
 
-    def fake_download_file(url, dest_path, *, progress=None):
+    def fake_download_file(url, dest_path, *, progress=None, should_cancel=None):
         __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
         with open(dest_path, "wb") as f:
             f.write(b"audio-bytes")
@@ -577,7 +662,7 @@ def test_run_download_episode_drains_next_pending_download_on_success(tmp_path, 
     audio_info = MediaInfo(url=episode.audio_url, kind=MediaKind.DIRECT_FILE, content_type="audio/mp4")
     monkeypatch.setattr(service, "probe", lambda url: audio_info)
 
-    def fake_download_file(url, dest_path, *, progress=None):
+    def fake_download_file(url, dest_path, *, progress=None, should_cancel=None):
         __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
         with open(dest_path, "wb") as f:
             f.write(b"audio-bytes")
@@ -640,7 +725,7 @@ def test_run_download_episode_records_redownload_attempt_on_success(tmp_path, mo
     audio_info = MediaInfo(url=episode.audio_url, kind=MediaKind.DIRECT_FILE, content_type="audio/mp4")
     monkeypatch.setattr(service, "probe", lambda url: audio_info)
 
-    def fake_download_file(url, dest_path, *, progress=None):
+    def fake_download_file(url, dest_path, *, progress=None, should_cancel=None):
         __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
         with open(dest_path, "wb") as f:
             f.write(b"audio-bytes")
@@ -690,7 +775,7 @@ def test_run_download_episode_records_initial_attempt(tmp_path, monkeypatch):
     audio_info = MediaInfo(url=episode.audio_url, kind=MediaKind.DIRECT_FILE, content_type="audio/mp4")
     monkeypatch.setattr(service, "probe", lambda url: audio_info)
 
-    def fake_download_file(url, dest_path, *, progress=None):
+    def fake_download_file(url, dest_path, *, progress=None, should_cancel=None):
         __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
         with open(dest_path, "wb") as f:
             f.write(b"audio-bytes")
@@ -721,7 +806,7 @@ def test_run_download_episode_appends_ledger_entry_on_success(tmp_path, monkeypa
     audio_info = MediaInfo(url=episode.audio_url, kind=MediaKind.DIRECT_FILE, content_type="audio/mp4")
     monkeypatch.setattr(service, "probe", lambda url: audio_info)
 
-    def fake_download_file(url, dest_path, *, progress=None):
+    def fake_download_file(url, dest_path, *, progress=None, should_cancel=None):
         __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
         with open(dest_path, "wb") as f:
             f.write(b"audio-bytes")
@@ -793,7 +878,7 @@ def test_run_download_episode_ledger_keeps_every_attempt_across_retries(tmp_path
     audio_info = MediaInfo(url=episode.audio_url, kind=MediaKind.DIRECT_FILE, content_type="audio/mp4")
     monkeypatch.setattr(service, "probe", lambda url: audio_info)
 
-    def fake_download_file(url, dest_path, *, progress=None):
+    def fake_download_file(url, dest_path, *, progress=None, should_cancel=None):
         __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
         with open(dest_path, "wb") as f:
             f.write(b"audio-bytes")

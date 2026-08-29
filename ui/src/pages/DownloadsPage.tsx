@@ -97,8 +97,15 @@ function StatusCell({row}: {row: MediaDownloadViewRead}) {
     return <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
 }
 
-// Statuses for which the download can be retried/redownloaded
-const _RETRYABLE_STATUSES = new Set(['error', 'missing', 'corrupted'])
+// A retry also acts as a restart for queued or active attempts.
+const _RETRYABLE_STATUSES = new Set([
+    'pending',
+    'downloading',
+    'local_processing',
+    'error',
+    'missing',
+    'corrupted',
+])
 
 export default function DownloadsPage() {
     const navigate = useNavigate()

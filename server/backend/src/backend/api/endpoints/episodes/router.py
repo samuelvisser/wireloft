@@ -24,6 +24,7 @@ def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
             download = create_episode_download(s, episode_slug, body)
             payload = MediaDownloadAPIRead.model_validate(download)
             episode_id = download.media_item_id
+            attempt_generation = download.attempt_generation
             s.commit()
         except Exception:
             s.rollback()
@@ -33,6 +34,7 @@ def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
         media_download_id=payload.id,
         media_item_id=episode_id,
         media_type="episode",
+        attempt_generation=attempt_generation,
     )
     return payload
 

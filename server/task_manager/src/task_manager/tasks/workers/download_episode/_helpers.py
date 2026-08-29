@@ -57,9 +57,15 @@ class RowProgressWriter:
     main transaction; the downloader already throttles callbacks to ~1/second.
     """
 
-    def __init__(self, media_download_id: int, task_progress=None):
+    def __init__(
+            self,
+            media_download_id: int,
+            task_progress=None,
+            attempt_generation: Optional[int] = None,
+    ):
         self._id = media_download_id
         self._task_progress = task_progress
+        self._attempt_generation = attempt_generation
         self._last_pct: int = -1
 
     def __call__(self, p: DownloadProgress) -> None:
@@ -71,24 +77,27 @@ class RowProgressWriter:
             return
         self._last_pct = pct
 
-        self.write(pct, downloaded_bytes=p.bytes_downloaded)
-        if self._task_progress is not None:
+        updated = self.write(pct, downloaded_bytes=p.bytes_downloaded)
+        if updated and self._task_progress is not None:
             self._task_progress.set(pct)
 
-    def write(self, pct: int, *, downloaded_bytes: Optional[int] = None) -> None:
+    def write(self, pct: int, *, downloaded_bytes: Optional[int] = None) -> bool:
         values: dict = {"progress": pct}
         if downloaded_bytes is not None:
             values["downloaded_bytes"] = downloaded_bytes
 
         s = get_session()
         try:
-            s.execute(
-                update(MediaDownloadBase)
-                .where(MediaDownloadBase.id == self._id)
-                .values(**values)
-            )
+            stmt = update(MediaDownloadBase).where(MediaDownloadBase.id == self._id)
+            if self._attempt_generation is not None:
+                stmt = stmt.where(
+                    MediaDownloadBase.attempt_generation == self._attempt_generation
+                )
+            result = s.execute(stmt.values(**values))
             s.commit()
+            return bool(result.rowcount)
         except Exception:
             s.rollback()
+            return False
         finally:
             s.close()

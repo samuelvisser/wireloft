@@ -4,8 +4,10 @@ import logging
 import os
 import shutil
 import subprocess
+from typing import Optional
 
-from .errors import DownloadError, FfmpegNotFoundError
+from .errors import DownloadCancelled, DownloadError, FfmpegNotFoundError
+from .models import CancelCheck
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,13 @@ def ffmpeg_available(ffmpeg_path: str = "ffmpeg") -> bool:
     return shutil.which(ffmpeg_path) is not None
 
 
-def remux_to_mp4(src_path: str, dest_path: str, *, ffmpeg_path: str = "ffmpeg") -> None:
+def remux_to_mp4(
+        src_path: str,
+        dest_path: str,
+        *,
+        ffmpeg_path: str = "ffmpeg",
+        should_cancel: Optional[CancelCheck] = None,
+) -> None:
     """Repackage a downloaded media file (e.g. raw HLS/MPEG-TS) into an MP4 container.
 
     This is a stream copy, not a re-encode: ffmpeg only rewrites the container,
@@ -71,20 +79,25 @@ def remux_to_mp4(src_path: str, dest_path: str, *, ffmpeg_path: str = "ffmpeg") 
 
     part_path = dest_path + ".part"
     try:
-        result = subprocess.run(
-            [
-                ffmpeg_path, "-y",
-                "-fflags", "+genpts",
-                "-i", src_path,
-                "-c", "copy",
-                "-bsf:a", "aac_adtstoasc",
-                "-movflags", "+faststart",
-                "-f", "mp4",
-                part_path,
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
+        command = [
+            ffmpeg_path, "-y",
+            "-fflags", "+genpts",
+            "-i", src_path,
+            "-c", "copy",
+            "-bsf:a", "aac_adtstoasc",
+            "-movflags", "+faststart",
+            "-f", "mp4",
+            part_path,
+        ]
+        result = (
+            _run_cancellable(command, should_cancel)
+            if should_cancel is not None
+            else subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
         )
         if result.returncode != 0:
             logger.error(
@@ -98,6 +111,37 @@ def remux_to_mp4(src_path: str, dest_path: str, *, ffmpeg_path: str = "ffmpeg") 
     except BaseException:
         _remove_quietly(part_path)
         raise
+
+
+def _run_cancellable(command: list[str], should_cancel: CancelCheck):
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        while True:
+            if should_cancel():
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                raise DownloadCancelled("Download cancelled during local processing")
+            try:
+                output, _ = process.communicate(timeout=0.1)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+    except BaseException:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        raise
+
+    return subprocess.CompletedProcess(command, process.returncode, output)
 
 
 def _tail_lines(output: str, count: int = _ERROR_TAIL_LINES) -> str:

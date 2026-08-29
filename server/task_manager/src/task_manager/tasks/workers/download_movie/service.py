@@ -16,6 +16,7 @@ from config import get_settings
 from dailywire_api.dw_api.client import MiddlewareClient
 from dailywire_authorisation import DeviceAuthClient
 from dailywire_downloader import (
+    DownloadCancelled,
     DownloadError,
     DownloadResult,
     MediaKind,
@@ -25,6 +26,7 @@ from dailywire_downloader import (
     probe,
     remux_to_mp4,
 )
+from task_manager.tasks.workers.download_attempt import DownloadAttemptGuard
 from task_manager.tasks.workers.download_episode._helpers import (
     FORMAT_HEIGHTS,
     RowProgressWriter,
@@ -34,10 +36,24 @@ from task_manager.tasks.workers.download_episode._helpers import (
 logger = logging.getLogger(__name__)
 
 
-async def run_download_movie(session: Session, *, media_download_id: int, progress=None) -> None:
+async def run_download_movie(
+        session: Session,
+        *,
+        media_download_id: int,
+        attempt_generation: Optional[int] = None,
+        progress=None,
+) -> None:
     download: Optional[MediaDownloadBase] = session.get(MediaDownloadBase, media_download_id)
     if download is None:
         raise ValueError(f"Media download {media_download_id} not found")
+
+    expected_generation = (
+        download.attempt_generation
+        if attempt_generation is None
+        else attempt_generation
+    )
+    attempt_guard = DownloadAttemptGuard(media_download_id, expected_generation)
+    attempt_guard.ensure_current()
     movie: Optional[Movie] = session.get(Movie, download.media_item_id)
     if movie is None:
         raise ValueError(f"Movie {download.media_item_id} for download {media_download_id} not found")
@@ -47,14 +63,23 @@ async def run_download_movie(session: Session, *, media_download_id: int, progre
     if profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value:
         raise DownloadError("Movies require a video Local Media Profile")
 
-    download.download_status = MediaDownloadStatus.DOWNLOADING.value
-    download.progress = 0
-    download.error_message = None
-    download.started_at = datetime.now(timezone.utc)
-    download.finished_at = None
+    attempt_guard.update_current(
+        session,
+        download_status=MediaDownloadStatus.DOWNLOADING.value,
+        progress=0,
+        error_message=None,
+        started_at=datetime.now(timezone.utc),
+        finished_at=None,
+    )
     session.commit()
+    session.refresh(download)
 
-    row_progress = RowProgressWriter(media_download_id, task_progress=progress)
+    row_progress = RowProgressWriter(
+        media_download_id,
+        task_progress=progress,
+        attempt_generation=expected_generation,
+    )
+    cancelled = False
     try:
         try:
             result, format_downloaded = _download_movie_media(
@@ -62,32 +87,51 @@ async def run_download_movie(session: Session, *, media_download_id: int, progre
                 movie=movie,
                 download=download,
                 row_progress=row_progress,
+                attempt_guard=attempt_guard,
             )
+            attempt_guard.ensure_current()
+        except DownloadCancelled:
+            session.rollback()
+            cancelled = True
+            raise
         except Exception as exc:
             session.rollback()
-            download.download_status = MediaDownloadStatus.ERROR.value
-            download.error_message = _truncate_message(str(exc))
-            download.finished_at = datetime.now(timezone.utc)
+            try:
+                attempt_guard.update_current(
+                    session,
+                    download_status=MediaDownloadStatus.ERROR.value,
+                    error_message=_truncate_message(str(exc)),
+                    finished_at=datetime.now(timezone.utc),
+                )
+            except DownloadCancelled:
+                cancelled = True
+                raise
+            session.refresh(download)
             _record_attempt(session, download)
             session.commit()
             raise
 
-        download.download_status = MediaDownloadStatus.DOWNLOADED.value
-        download.progress = 100
-        download.downloaded_bytes = result.bytes_downloaded
-        download.format_downloaded = format_downloaded
-        download.file_path = result.path
-        download.finished_at = datetime.now(timezone.utc)
+        attempt_guard.update_current(
+            session,
+            download_status=MediaDownloadStatus.DOWNLOADED.value,
+            progress=100,
+            downloaded_bytes=result.bytes_downloaded,
+            format_downloaded=format_downloaded,
+            file_path=result.path,
+            finished_at=datetime.now(timezone.utc),
+        )
         movie.downloaded_date = movie.downloaded_date or datetime.now(timezone.utc)
+        session.refresh(download)
         _record_attempt(session, download)
         session.commit()
     finally:
-        try:
-            from task_manager.tasks.workers.download_profile_worker._helpers import trigger_next_pending_downloads
+        if not cancelled:
+            try:
+                from task_manager.tasks.workers.download_profile_worker._helpers import trigger_next_pending_downloads
 
-            trigger_next_pending_downloads(session)
-        except Exception:
-            logger.exception("Failed to trigger the next queued download after movie completion")
+                trigger_next_pending_downloads(session)
+            except Exception:
+                logger.exception("Failed to trigger the next queued download after movie completion")
 
 
 def _download_movie_media(
@@ -96,10 +140,13 @@ def _download_movie_media(
     movie: Movie,
     download: MediaDownloadBase,
     row_progress: RowProgressWriter,
+    attempt_guard: DownloadAttemptGuard,
 ) -> tuple[DownloadResult, str]:
+    attempt_guard.ensure_current()
     tokens = DeviceAuthClient().get_token()
     client = MiddlewareClient(access_token=tokens.access_token if tokens else None)
     playback = client.get_movie_playback(movie.slug)
+    attempt_guard.ensure_current()
     if not playback.has_video or not playback.video_url:
         raise MediaUnavailableError(f"Daily Wire provides no playable video for '{movie.title}'")
 
@@ -115,6 +162,7 @@ def _download_movie_media(
         )
 
     info = probe(playback.video_url)
+    attempt_guard.ensure_current()
     if info.kind is MediaKind.HLS_MASTER:
         requested_height = FORMAT_HEIGHTS.get(download.local_media_profile.preferred_format)
         if requested_height is None:
@@ -141,23 +189,55 @@ def _download_movie_media(
         movie=movie,
         extension=extension,
     )
-    download.file_path = str(destination)
+    attempt_guard.update_current(session, file_path=str(destination))
     session.commit()
+    session.refresh(download)
 
     if remux:
-        result = _download_and_remux(source_url, str(destination), row_progress)
+        result = _download_and_remux(
+            source_url,
+            str(destination),
+            row_progress,
+            attempt_guard,
+        )
     elif use_hls:
-        result = download_hls(source_url, str(destination), progress=row_progress)
+        result = download_hls(
+            source_url,
+            str(destination),
+            progress=row_progress,
+            should_cancel=attempt_guard,
+        )
     else:
-        result = download_file(source_url, str(destination), progress=row_progress)
+        result = download_file(
+            source_url,
+            str(destination),
+            progress=row_progress,
+            should_cancel=attempt_guard,
+        )
     return result, format_downloaded
 
 
-def _download_and_remux(source_url: str, destination: str, progress: RowProgressWriter) -> DownloadResult:
+def _download_and_remux(
+        source_url: str,
+        destination: str,
+        progress: RowProgressWriter,
+        attempt_guard: DownloadAttemptGuard,
+) -> DownloadResult:
     raw_path = destination + ".rawts"
     try:
-        downloaded = download_hls(source_url, raw_path, progress=progress)
-        remux_to_mp4(raw_path, destination, ffmpeg_path=get_settings().download_settings.ffmpeg_path)
+        downloaded = download_hls(
+            source_url,
+            raw_path,
+            progress=progress,
+            should_cancel=attempt_guard,
+        )
+        attempt_guard.ensure_current()
+        remux_to_mp4(
+            raw_path,
+            destination,
+            ffmpeg_path=get_settings().download_settings.ffmpeg_path,
+            should_cancel=attempt_guard,
+        )
     finally:
         try:
             os.remove(raw_path)

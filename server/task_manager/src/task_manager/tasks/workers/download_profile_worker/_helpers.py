@@ -178,6 +178,7 @@ def get_download_profile_episodes(
 class DownloadAction:
     """What (if anything) a profile needs done for one episode's download row."""
     media_download_id: int
+    attempt_generation: int
     needs_trigger: bool
     is_redownload: bool = False
 
@@ -211,7 +212,11 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         )
         s.add(download)
         s.flush()
-        return DownloadAction(media_download_id=download.id, needs_trigger=True)
+        return DownloadAction(
+            media_download_id=download.id,
+            attempt_generation=download.attempt_generation,
+            needs_trigger=True,
+        )
 
     # A manual download may already occupy this (episode, local media profile)
     # pairing without attribution; adopt it so it counts towards this profile.
@@ -222,15 +227,28 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         if existing.download_status in _NEEDS_RESET_BEFORE_TRIGGER:
             _reset_download(existing)
         s.flush()
-        return DownloadAction(media_download_id=existing.id, needs_trigger=True)
+        return DownloadAction(
+            media_download_id=existing.id,
+            attempt_generation=existing.attempt_generation,
+            needs_trigger=True,
+        )
 
     if existing.download_status in _COMPLETED_STATUSES and _wants_redownload(profile, episode, existing):
         _reset_download(existing)
         s.flush()
-        return DownloadAction(media_download_id=existing.id, needs_trigger=True, is_redownload=True)
+        return DownloadAction(
+            media_download_id=existing.id,
+            attempt_generation=existing.attempt_generation,
+            needs_trigger=True,
+            is_redownload=True,
+        )
 
     s.flush()
-    return DownloadAction(media_download_id=existing.id, needs_trigger=False)
+    return DownloadAction(
+        media_download_id=existing.id,
+        attempt_generation=existing.attempt_generation,
+        needs_trigger=False,
+    )
 
 
 def _wants_redownload(profile: DownloadProfileBase, episode: Episode, existing: EpisodeMediaDownload) -> bool:
@@ -252,6 +270,7 @@ def _wants_redownload(profile: DownloadProfileBase, episode: Episode, existing: 
 
 
 def _reset_download(download: MediaDownloadBase) -> None:
+    download.attempt_generation += 1
     download.download_status = MediaDownloadStatus.PENDING.value
     download.progress = 0
     download.error_message = None
@@ -301,6 +320,7 @@ def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) 
                 resource_type="movie",
                 resource_id=download.media_item_id,
                 media_download_id=download.id,
+                attempt_generation=download.attempt_generation,
             )
             continue
         trigger_now(
@@ -308,6 +328,7 @@ def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) 
             resource_type="episode",
             resource_id=download.media_item_id,
             media_download_id=download.id,
+            attempt_generation=download.attempt_generation,
             is_redownload=bool(getattr(download, "is_redownload_attempt", False)),
         )
     return len(pending)

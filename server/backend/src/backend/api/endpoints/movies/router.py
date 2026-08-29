@@ -23,6 +23,7 @@ def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
             download = create_movie_download(s, movie_data, body)
             payload = MediaDownloadAPIRead.model_validate(download)
             movie_id = download.media_item_id
+            attempt_generation = download.attempt_generation
             s.commit()
         except Exception:
             s.rollback()
@@ -32,6 +33,7 @@ def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
         media_download_id=payload.id,
         media_item_id=movie_id,
         media_type="movie",
+        attempt_generation=attempt_generation,
     )
     return payload
 

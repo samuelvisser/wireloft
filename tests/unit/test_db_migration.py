@@ -39,7 +39,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     current, head = get_database_status()
     assert current == (head,)
-    assert head == "a59b07916fb6"
+    assert head == "04f8d3fbc17a"
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -104,6 +104,11 @@ def test_fresh_database_upgrades_to_head(migration_database):
     movie_indexes = {index["name"]: index for index in inspector.get_indexes("movies")}
     assert "ix_movies_dw_id" in movie_indexes
     assert bool(movie_indexes["ix_movies_dw_id"]["unique"])
+
+    media_download_columns = {
+        column["name"] for column in inspector.get_columns("media_downloads")
+    }
+    assert "attempt_generation" in media_download_columns
 
 
 def test_trailer_migration_preserves_legacy_movie_trailer_metadata(migration_database):
@@ -310,4 +315,4 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 def test_migration_history_has_exactly_one_head():
     from backend.db.migrations import get_head_revisions
 
-    assert get_head_revisions() == ("a59b07916fb6",)
+    assert get_head_revisions() == ("04f8d3fbc17a",)
