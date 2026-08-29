@@ -23,14 +23,16 @@ export default function AddLocalMediaProfilePage() {
         ? {
             type: 'movie',
             name: '',
-            outputTemplate: '/downloads/movies/{movie_title}/{movie_title}.ext',
+            outputTemplate: '/downloads/movies/{movie_title}/{title}.ext',
             preferredFormat: 'format_1080p',
+            appendMediaTypeToFilename: true,
         }
         : {
             type: 'show',
             name: '',
             outputTemplate: '/downloads/shows/{show}/{episode_title}.ext',
             preferredFormat: 'format_audio_only',
+            appendMediaTypeToFilename: true,
         }
 
     const form = useForm<WithRoot<LocalMediaProfileCreateIn>>({
@@ -82,10 +84,11 @@ export default function AddLocalMediaProfilePage() {
                             form.setValue(
                                 'outputTemplate',
                                 nextMode === 'movie'
-                                    ? '/downloads/movies/{movie_title}/{movie_title}.ext'
+                                    ? '/downloads/movies/{movie_title}/{title}.ext'
                                     : '/downloads/shows/{show}/{episode_title}.ext',
                                 {shouldDirty: true, shouldValidate: true},
                             )
+                            form.setValue('appendMediaTypeToFilename', true, {shouldDirty: true, shouldValidate: true})
                             if (nextMode === 'movie' && form.getValues('preferredFormat') === 'format_audio_only') {
                                 form.setValue('preferredFormat', 'format_1080p', {shouldDirty: true, shouldValidate: true})
                             }
@@ -105,9 +108,9 @@ export default function AddLocalMediaProfilePage() {
                                 value: 'movie',
                                 label: 'Movie',
                                 description: (
-                                    <ReadMore summary={<span>Store manually downloaded movies.</span>}>
-                                        <p>Movie profiles support movie-specific title, slug, author, rating, and ID placeholders.</p>
-                                        <p>Movies are always downloaded as video.</p>
+                                    <ReadMore summary={<span>Store manually downloaded movies and trailers.</span>}>
+                                        <p>Movie profiles can keep movie metadata for folders while using trailer metadata for trailer filenames.</p>
+                                        <p>Movies and trailers are always downloaded as video.</p>
                                     </ReadMore>
                                 ),
                             },
