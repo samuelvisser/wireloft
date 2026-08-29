@@ -51,12 +51,13 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                         <FontAwesomeIcon icon={['fas', 'file-lines']}/>
                     </div>
                     <h2 id="download-log-title" className="modal-title">
-                        {row.episodeTitle ?? 'Download log'}
+                        {row.movieTitle ?? row.episodeTitle ?? 'Download log'}
                     </h2>
                 </div>
 
                 <dl className="log-meta">
-                    <div><dt>Show</dt><dd>{row.showTitle ?? '—'}</dd></div>
+                    <div><dt>Media type</dt><dd>{row.movieTitle ? 'Movie' : 'Episode'}</dd></div>
+                    {!row.movieTitle && <div><dt>Show</dt><dd>{row.showTitle ?? '—'}</dd></div>}
                     <div><dt>Profile</dt><dd>{row.localMediaProfileName ?? '—'}</dd></div>
                     <div>
                         <dt>Current status</dt>

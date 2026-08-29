@@ -4,8 +4,13 @@ import {z} from "zod";
 // ---------- Strict request (create/update) ----------
 const MovieBaseSchema = z.object({
     title: z.string(),
-    description: z.string().optional(),
-    downloadedDate: z.date().optional(),
+    description: z.string().nullable().optional(),
+    downloadedDate: z.date().nullable().optional(),
+    duration: z.number().default(0),
+    backgroundImagePath: z.string().nullable().optional(),
+    thumbnailLandscapePath: z.string().nullable().optional(),
+    thumbnailPortraitPath: z.string().nullable().optional(),
+    thumbnailSquarePath: z.string().nullable().optional(),
 })
 
 
@@ -30,8 +35,21 @@ export const MovieReadSchema = z.looseObject({
     dwId: z.string().optional(),
     slug: z.string(),
     title: z.string(),
-    description: z.string().optional(),
-    downloadedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
+    description: z.string().nullable().optional(),
+    downloadedDate: z.iso.datetime().transform((s) => new Date(s)).nullable().optional(),
+    duration: z.number(),
+    backgroundImagePath: z.string().nullable(),
+    thumbnailLandscapePath: z.string().nullable(),
+    thumbnailPortraitPath: z.string().nullable(),
+    thumbnailSquarePath: z.string().nullable(),
+    sharingUrl: z.string().nullable(),
+    authorName: z.string().nullable(),
+    matureRating: z.string().nullable(),
+    isDownloadable: z.boolean().nullable(),
+    trailerSlug: z.string().nullable(),
+    trailerTitle: z.string().nullable(),
+    trailerSharingUrl: z.string().nullable(),
+    trailerThumbnailPath: z.string().nullable(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })

@@ -5,3 +5,11 @@ from .DwEpisodeRecord import DwEpisodeRecord
 from .DwSeasonRecord import DwSeasonRecord
 from .DwShowRecord import DwShowRecord
 from .DwUserInfo import DwUserInfo
+from .DwCatalogRecord import (
+    DwCatalogMovieRecord,
+    DwCatalogRecord,
+    DwCatalogShowRecord,
+    DwMoviePlaybackRecord,
+    DwMovieRecord,
+    DwTrailerRecord,
+)

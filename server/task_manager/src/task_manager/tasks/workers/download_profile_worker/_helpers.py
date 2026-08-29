@@ -273,7 +273,7 @@ def remaining_download_budget(s: Session) -> int:
 
 
 def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) -> int:
-    """Start as many queued episode downloads as the concurrency budget allows.
+    """Start queued episode or movie downloads as the concurrency budget allows.
 
     A Download Profile sweep can only trigger up to the budget available at
     that moment and leaves the rest PENDING; without this, those would sit
@@ -288,18 +288,27 @@ def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) 
         return 0
 
     stmt = (
-        select(EpisodeMediaDownload)
-        .where(EpisodeMediaDownload.download_status == MediaDownloadStatus.PENDING.value)
-        .order_by(EpisodeMediaDownload.id)
+        select(MediaDownloadBase)
+        .where(MediaDownloadBase.download_status == MediaDownloadStatus.PENDING.value)
+        .order_by(MediaDownloadBase.id)
         .limit(budget)
     )
     pending = list(s.execute(stmt).scalars())
     for download in pending:
+        if download.type == "movie":
+            trigger_now(
+                def_key="download_movie",
+                resource_type="movie",
+                resource_id=download.media_item_id,
+                media_download_id=download.id,
+            )
+            continue
         trigger_now(
             def_key="download_episode",
             resource_type="episode",
             resource_id=download.media_item_id,
             media_download_id=download.id,
+            is_redownload=bool(getattr(download, "is_redownload_attempt", False)),
         )
     return len(pending)
 

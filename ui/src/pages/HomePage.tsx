@@ -1,118 +1,104 @@
-import {library} from '@fortawesome/fontawesome-svg-core'
-import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {Link} from 'react-router-dom'
-import React from 'react'
-import {useEpisodes, useMediaDownloadsView, useShowIndexingRun, useShowsView} from '../lib/queries'
-import EpisodeCard, {groupDownloadsByEpisodeSlug, toImageUrl} from '../components/Episode/EpisodeCard'
-import {EpisodeRead} from "../types/schemas/episode";
-import {useQueryClient} from '@tanstack/react-query'
+import {useNavigate} from 'react-router-dom'
 
-// Ensure icons from the kit are registered (idempotent)
-library.add(fas)
-export type Episode = EpisodeRead
+import ProgressBar from '../components/common/ProgressBar'
+import {useLocalMediaProfiles, useMediaDownloadsView, useMovies, useShows} from '../lib/queries'
+import {MediaDownloadViewRead} from '../types/schemas/media_download'
 
-function ShowSection({show, downloadsBySlug}: { show: any; downloadsBySlug: Map<string, any[]> }) {
-    const {data: episodes, isLoading} = useEpisodes(show.slug, { limit: 20 })
-    const eps: Episode[] = episodes ?? []
+const ACTIVE = new Set(['pending', 'downloading'])
+const PROBLEMS = new Set(['error', 'missing', 'corrupted'])
+const COMPLETE = new Set(['downloaded', 'redownloaded'])
 
-    const {data: indexingRun} = useShowIndexingRun(show.id as number | undefined)
-    const progress: number | undefined = indexingRun?.progress ?? undefined
-
-    // When indexing completes (progressbar disappears), refetch episodes for this show
-    const qc = useQueryClient()
-    const prevHadRun = React.useRef<boolean>(false)
-    React.useEffect(() => {
-        const hasRun = !!indexingRun
-        if (prevHadRun.current && !hasRun) {
-            // Indexing finished: refresh the entire show card (metadata + episodes)
-            qc.invalidateQueries({ queryKey: ['showsView'] })
-            qc.invalidateQueries({ queryKey: ['episodes', show.slug], exact: false })
-        }
-        prevHadRun.current = hasRun
-    }, [indexingRun, qc, show.slug])
-
-    const author = show.authorName
-    const portraitPath: string | undefined = show.thumbnailPortraitPath || show.thumbnailLandscapePath || show.logoImagePath || show.authorHeadshotPath
-    const portrait = toImageUrl(portraitPath)
-
-    return (
-        <article className="show-section" key={show.id} aria-labelledby={`${show.slug}-title`}>
-            <Link to={`/show/${show.slug}`} className="show-header" aria-labelledby={`${show.slug}-title`}>
-                <div className="show-header-row">
-                    {portrait ? (
-                        <img className="show-portrait" src={portrait} alt={`${show.title} cover`} />
-                    ) : null}
-                    <div className="show-header-text">
-                        <div className="show-author">{author}</div>
-                        <h2 id={`${show.slug}-title`} className="show-title">{show.title}</h2>
-                        <div className="show-meta">
-                            {isLoading && !episodes
-                                ? 'Loading episodes…'
-                                : `${show.episodeCount} episodes${show.years ? ` • ${show.years}` : ''}`}
-                        </div>
-                    </div>
-                </div>
-            </Link>
-            {indexingRun ? (
-                <div className="show-progress" style={{ padding: '6px 0 10px 0' }} aria-live="polite">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        <span style={{ fontSize: 12, color: '#666' }}>
-                            {progress !== undefined ? `Indexing… ${progress}%` : 'Indexing…'}
-                        </span>
-                        {progress === undefined && (
-                            <FontAwesomeIcon icon={["fas", "spinner"] as any} spin/>
-                        )}
-                    </div>
-                    {progress !== undefined && (
-                        <div
-                            className="progress"
-                            role="progressbar"
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-valuenow={progress}
-                            aria-label="Indexing progress"
-                            style={{ height: 6, background: '#eee', borderRadius: 4, overflow: 'hidden' }}
-                        >
-                            <div
-                                className="progress-fill"
-                                style={{ width: `${progress}%`, height: '100%', background: '#0d6efd', transition: 'width 0.3s ease' }}
-                            />
-                        </div>
-                    )}
-                </div>
-            ) : null}
-            <div className="episodes-row" role="list" aria-label={`${show.title} episodes`}>
-                {eps.map((ep: Episode) => (
-                    <EpisodeCard key={ep.id} ep={ep} showSlug={show.slug} downloads={downloadsBySlug.get(ep.slug)}/>
-                ))}
-            </div>
-        </article>
-    )
+function mediaTitle(download: MediaDownloadViewRead) {
+    return download.movieTitle || download.episodeTitle || 'Unknown media'
 }
 
-export default function HomePage({onAddShow}: { onAddShow: () => void }) {
-    const {data: shows, isLoading, error} = useShowsView()
-    const {data: downloads} = useMediaDownloadsView()
-    const downloadsBySlug = React.useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
+function mediaContext(download: MediaDownloadViewRead) {
+    return download.movieTitle ? 'Movie' : download.showTitle || 'Episode'
+}
+
+export default function HomePage() {
+    const navigate = useNavigate()
+    const {data: shows} = useShows()
+    const {data: movies} = useMovies()
+    const {data: profiles} = useLocalMediaProfiles()
+    const {data: downloads, isLoading, error} = useMediaDownloadsView()
+    const active = downloads?.filter((download) => ACTIVE.has(String(download.downloadStatus))) || []
+    const problems = downloads?.filter((download) => PROBLEMS.has(String(download.downloadStatus))) || []
+    const complete = downloads?.filter((download) => COMPLETE.has(String(download.downloadStatus))).slice(0, 4) || []
+    const hasAttention = problems.length > 0 || profiles?.length === 0
+
+    const openDownload = (download: MediaDownloadViewRead) => {
+        if (download.movieSlug) navigate(`/movie/${download.movieSlug}`)
+        else if (download.showSlug && download.episodeSlug) navigate(`/show/${download.showSlug}/episode/${download.episodeSlug}`)
+        else navigate('/downloads')
+    }
 
     return (
-        <section className="view shows-view" aria-labelledby="home-title">
+        <section className="view operations-home" aria-labelledby="home-title">
             <div className="view-header">
-                <h1 id="home-title">Shows</h1>
-                <button className="btn btn-primary" onClick={onAddShow}>
-                    Add show
+                <div>
+                    <h1 id="home-title">Home</h1>
+                    <p className="view-description">What WireLoft is doing now and anything that needs your attention.</p>
+                </div>
+                <button className="btn btn-primary" onClick={() => navigate('/browse')}>
+                    <FontAwesomeIcon icon={['fas', 'plus']}/> Add media
                 </button>
             </div>
-            {isLoading && !shows ? (
-                <p>Loading shows...</p>
-            ) : !shows || shows.length === 0 ? (
-                <p>{(error as any)?.message ?? 'No shows found'}</p>
-            ) : (
-                shows.map((show) => (
-                    <ShowSection key={show.id} show={show} downloadsBySlug={downloadsBySlug}/>
-                ))
-            )}
+
+            <div className={`system-health ${hasAttention ? 'needs-attention' : 'is-healthy'}`}>
+                <FontAwesomeIcon icon={['fas', hasAttention ? 'triangle-exclamation' : 'circle-check']}/>
+                <div>
+                    <strong>{hasAttention ? 'WireLoft needs attention' : 'WireLoft is running normally'}</strong>
+                    <small>{hasAttention ? `${problems.length} download problem${problems.length === 1 ? '' : 's'}${profiles?.length === 0 ? ' • No Local Media Profiles' : ''}` : 'No download or profile problems detected'}</small>
+                </div>
+            </div>
+
+            <div className="operation-stats" aria-label="WireLoft status summary">
+                <button type="button" onClick={() => navigate('/downloads')}><span>Active</span><strong>{active.filter((item) => item.downloadStatus === 'downloading').length}</strong></button>
+                <button type="button" onClick={() => navigate('/downloads')}><span>Queued</span><strong>{active.filter((item) => item.downloadStatus === 'pending').length}</strong></button>
+                <button type="button" onClick={() => navigate('/downloads')}><span>Failed</span><strong>{problems.length}</strong></button>
+                <button type="button" onClick={() => navigate('/library')}><span>Library</span><strong>{(shows?.length || 0) + (movies?.length || 0)}</strong></button>
+            </div>
+
+            {error && <div className="form-error-card" role="alert">Could not load download status: {error.message}</div>}
+
+            <div className="operations-grid">
+                <section className="operation-section" aria-labelledby="active-downloads-title">
+                    <div className="operation-section-header"><h2 id="active-downloads-title">Downloading now</h2><button type="button" onClick={() => navigate('/downloads')}>All downloads</button></div>
+                    {isLoading && !downloads ? <p>Loading downloads…</p> : active.length ? active.slice(0, 3).map((download) => (
+                        <button className="operation-download" type="button" key={download.id} onClick={() => openDownload(download)}>
+                            <span className="operation-icon"><FontAwesomeIcon icon={['fas', download.movieSlug ? 'clapperboard' : 'podcast']}/></span>
+                            <span className="operation-download-copy"><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small><ProgressBar value={download.progress} ariaLabel={`Progress for ${mediaTitle(download)}`}/></span>
+                            <span>{download.downloadStatus === 'pending' ? 'Queued' : `${download.progress}%`}</span>
+                        </button>
+                    )) : <div className="operation-empty"><FontAwesomeIcon icon={['fas', 'check']}/><span>No active downloads</span></div>}
+                </section>
+
+                <section className="operation-section" aria-labelledby="attention-title">
+                    <div className="operation-section-header"><h2 id="attention-title">Needs attention</h2></div>
+                    {profiles?.length === 0 && (
+                        <button className="operation-alert" type="button" onClick={() => navigate('/add-local-media-profile')}>
+                            <FontAwesomeIcon icon={['fas', 'folder-plus']}/><span><strong>No Local Media Profile</strong><small>Create one before downloading episodes or movies.</small></span><span>Fix</span>
+                        </button>
+                    )}
+                    {problems.slice(0, 3).map((download) => (
+                        <button className="operation-alert" type="button" key={download.id} onClick={() => openDownload(download)}>
+                            <FontAwesomeIcon icon={['fas', 'triangle-exclamation']}/><span><strong>{mediaTitle(download)}</strong><small>{download.errorMessage || `Download is ${download.downloadStatus}`}</small></span><span>View</span>
+                        </button>
+                    ))}
+                    {!hasAttention && <div className="operation-empty"><FontAwesomeIcon icon={['fas', 'circle-check']}/><span>Nothing needs attention</span></div>}
+                </section>
+            </div>
+
+            <section className="operation-section recent-activity" aria-labelledby="recent-title">
+                <div className="operation-section-header"><h2 id="recent-title">Recently completed</h2><button type="button" onClick={() => navigate('/downloads')}>View history</button></div>
+                {complete.length ? complete.map((download) => (
+                    <button className="recent-download" type="button" key={download.id} onClick={() => openDownload(download)}>
+                        <FontAwesomeIcon icon={['fas', 'circle-check']}/><span><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small></span><time>{download.finishedAt?.toLocaleString() || ''}</time>
+                    </button>
+                )) : <div className="operation-empty"><span>No completed downloads yet</span></div>}
+            </section>
         </section>
     )
 }

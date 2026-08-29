@@ -29,7 +29,11 @@ def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
             s.rollback()
             raise
 
-    _trigger_download_task(media_download_id=payload.id, episode_id=episode_id)
+    _trigger_download_task(
+        media_download_id=payload.id,
+        media_item_id=episode_id,
+        media_type="episode",
+    )
     return payload
 
 @router.get("/by-show-slug/{show_slug}", response_model=list[EpisodeAPIRead])

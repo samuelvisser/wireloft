@@ -17,6 +17,19 @@ class _MovieAPIBaseIn(RequestBase):
     title: str
     description: Optional[str]
     downloaded_date: Optional[datetime]
+    duration: float = 0
+    background_image_path: Optional[str] = None
+    thumbnail_landscape_path: Optional[str] = None
+    thumbnail_portrait_path: Optional[str] = None
+    thumbnail_square_path: Optional[str] = None
+    sharing_url: Optional[str] = None
+    author_name: Optional[str] = None
+    mature_rating: Optional[str] = None
+    is_downloadable: Optional[bool] = True
+    trailer_slug: Optional[str] = None
+    trailer_title: Optional[str] = None
+    trailer_sharing_url: Optional[str] = None
+    trailer_thumbnail_path: Optional[str] = None
 
 
 class MovieAPICreate(_MovieAPIBaseIn):
@@ -24,6 +37,7 @@ class MovieAPICreate(_MovieAPIBaseIn):
 
     # Fields in the media_items table
     slug: str
+    dw_id: Optional[str] = None
 
     @computed_field(return_type=str)
     @property
@@ -47,6 +61,20 @@ class _MovieAPIBaseOut(ResponseBase):
     title: str
     description: Optional[str]
     downloaded_date: Optional[datetime]
+    duration: float
+    background_image_path: Optional[str]
+    thumbnail_landscape_path: Optional[str]
+    thumbnail_portrait_path: Optional[str]
+    thumbnail_square_path: Optional[str]
+    dw_id: Optional[str]
+    sharing_url: Optional[str]
+    author_name: Optional[str]
+    mature_rating: Optional[str]
+    is_downloadable: Optional[bool]
+    trailer_slug: Optional[str]
+    trailer_title: Optional[str]
+    trailer_sharing_url: Optional[str]
+    trailer_thumbnail_path: Optional[str]
 
 
 class MovieAPIRead(_MovieAPIBaseOut):
