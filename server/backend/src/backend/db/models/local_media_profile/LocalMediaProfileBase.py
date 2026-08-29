@@ -22,7 +22,6 @@ class LocalMediaProfileBase(Base):
             "type",
             "output_template",
             "preferred_format",
-            "append_media_type_to_filename",
             unique=True,
         ),
     )
