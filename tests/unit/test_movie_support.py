@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-import io
-from email.message import Message
-from urllib.error import HTTPError
-
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -202,14 +198,22 @@ def test_dailywire_movie_playback_resolves_secure_url_with_api_authorization(mon
 
     requests = []
 
-    class FakeOpener:
-        def open(self, request, *, timeout):
-            requests.append((request, timeout))
-            headers = Message()
-            headers["Location"] = playback_url
-            raise HTTPError(request.full_url, 302, "Found", headers, io.BytesIO())
+    class FakeResponse:
+        def __enter__(self):
+            return self
 
-    monkeypatch.setattr(client_module, "build_opener", lambda *_handlers: FakeOpener())
+        def __exit__(self, *_exc_info):
+            return None
+
+        @staticmethod
+        def read():
+            return ('{"destination": "' + playback_url + '"}').encode()
+
+    def fake_urlopen(request, *, timeout):
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(client_module, "urlopen", fake_urlopen)
     monkeypatch.setattr(client_module, "_wait_before_request", lambda: None)
 
     playback = client.get_movie_playback("a-movie")
@@ -223,49 +227,7 @@ def test_dailywire_movie_playback_resolves_secure_url_with_api_authorization(mon
     assert timeout == 30.0
 
 
-def test_dailywire_movie_playback_reads_destination_from_resolver_json(monkeypatch):
-    from dailywire_api.dw_api import client as client_module
-    from dailywire_api.dw_api.client import MiddlewareClient
-
-    secure_url = "https://middleware.example/middleware/v2/getSecureVideoURL?d=opaque"
-    playback_url = "https://stream.example/movie/master.m3u8?token=signed"
-    client = MiddlewareClient(
-        access_token="account-token",
-        base_url="https://middleware.example/middleware",
-    )
-    monkeypatch.setattr(client, "_get", lambda endpoint, params: {
-        "video": {
-            "hasVideo": True,
-            "secureVideoURL": secure_url,
-        }
-    })
-
-    class FakeResponse:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_exc_info):
-            return None
-
-        @staticmethod
-        def read():
-            return ('{"destination": "' + playback_url + '"}').encode()
-
-    class FakeOpener:
-        @staticmethod
-        def open(request, *, timeout):
-            return FakeResponse()
-
-    monkeypatch.setattr(client_module, "build_opener", lambda *_handlers: FakeOpener())
-    monkeypatch.setattr(client_module, "_wait_before_request", lambda: None)
-
-    playback = client.get_movie_playback("a-movie")
-
-    assert playback.video_url == playback_url
-
-
 def test_dailywire_movie_playback_does_not_send_token_to_direct_media_url(monkeypatch):
-    from dailywire_api.dw_api import client as client_module
     from dailywire_api.dw_api.client import MiddlewareClient
 
     direct_url = "https://stream.example/movie/master.m3u8?token=signed"
@@ -279,13 +241,13 @@ def test_dailywire_movie_playback_does_not_send_token_to_direct_media_url(monkey
             "secureVideoURL": direct_url,
         }
     })
-    opened = []
-    monkeypatch.setattr(client_module, "build_opener", lambda *_handlers: opened.append(True))
+    resolver_calls = []
+    monkeypatch.setattr(client, "_get_url", lambda url: resolver_calls.append(url))
 
     playback = client.get_movie_playback("a-movie")
 
     assert playback.video_url == direct_url
-    assert opened == []
+    assert resolver_calls == []
 
 
 def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, monkeypatch):

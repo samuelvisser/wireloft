@@ -6,8 +6,8 @@ from builtins import str
 from dataclasses import dataclass
 from typing import Dict, ClassVar, Any, Optional, Literal, NamedTuple
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlencode, urljoin, urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
+from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
 
@@ -128,13 +128,6 @@ class MiddlewareAPIError(Exception):
     def __init__(self, message: str, *, status_code: Optional[int] = None) -> None:
         super().__init__(message)
         self.status_code = status_code
-
-
-class _NoRedirectHandler(HTTPRedirectHandler):
-    """Expose a redirect response without following it with API credentials."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
 
 
 class MiddlewareClient:
@@ -265,63 +258,15 @@ class MiddlewareClient:
         )
 
     def _resolve_secure_video_url(self, secure_url: str) -> str:
-        """Exchange Daily Wire's authenticated resolver URL for its CDN URL.
-
-        ``getVideo`` returns premium playback as a middleware URL rather than
-        the final signed manifest. That resolver requires the same bearer token
-        as ``getVideo``. Redirects are intentionally not followed here because
-        urllib otherwise forwards the Authorization header to the media CDN.
-        """
+        """Exchange Daily Wire's authenticated resolver URL for its CDN URL."""
         if not self._is_middleware_url(secure_url):
             return self._validated_playback_url(secure_url)
 
-        _wait_before_request()
-        request = Request(secure_url, headers=self._headers, method='GET')
-        opener = build_opener(_NoRedirectHandler())
-        try:
-            with opener.open(request, timeout=self._req_timeout) as response:
-                data = response.read()
-        except HTTPError as error:
-            if 300 <= error.code < 400:
-                location = error.headers.get('Location')
-                if not location:
-                    raise MiddlewareAPIError(
-                        'Daily Wire returned a secure-video redirect without a destination',
-                        status_code=error.code,
-                    ) from error
-                return self._validated_playback_url(urljoin(secure_url, location))
-
-            try:
-                error_body = error.read().decode('utf-8', errors='ignore')
-            except Exception:
-                error_body = ''
-            raise MiddlewareAPIError(
-                f"HTTP error {error.code} while resolving movie playback: {error_body or error.reason}",
-                status_code=error.code,
-            ) from error
-        except URLError as error:
-            raise MiddlewareAPIError(f"Network error while resolving movie playback: {error.reason}") from error
-        except Exception as error:
-            raise MiddlewareAPIError(f"Could not resolve movie playback: {error}") from error
-
-        # Some middleware versions answer with JSON or a plain URL instead of
-        # redirecting. Supporting both keeps the boundary resilient while still
-        # ensuring the authenticated request is made only to Daily Wire.
-        try:
-            payload = json.loads(data.decode('utf-8'))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            payload = None
-
-        if isinstance(payload, dict):
-            for key in ('destination', 'videoURL', 'url'):
-                candidate = payload.get(key)
-                if isinstance(candidate, str) and candidate:
-                    return self._validated_playback_url(candidate)
-
-        plain_url = data.decode('utf-8', errors='ignore').strip().strip('"')
-        if plain_url:
-            return self._validated_playback_url(plain_url)
-        raise MiddlewareAPIError('Daily Wire returned no movie playback URL')
+        payload = self._get_url(secure_url)
+        destination = payload.get('destination')
+        if not isinstance(destination, str) or not destination:
+            raise MiddlewareAPIError('Daily Wire returned no movie playback destination')
+        return self._validated_playback_url(destination)
 
     def _is_middleware_url(self, url: str) -> bool:
         candidate = urlparse(url)
@@ -336,7 +281,7 @@ class MiddlewareClient:
     def _validated_playback_url(url: str) -> str:
         parsed = urlparse(url)
         if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
-            raise MiddlewareAPIError(f'Daily Wire returned an invalid movie playback URL: {url}')
+            raise MiddlewareAPIError('Daily Wire returned an invalid movie playback URL')
         return url
 
     def get_user_info(self) -> DwUserInfo:
@@ -571,6 +516,9 @@ class MiddlewareClient:
         if qs:
             url = f"{url}?{qs}"
 
+        return self._get_url(url)
+
+    def _get_url(self, url: str) -> Dict[str, Any]:
         data: Optional[bytes] = None
         for attempt in range(self._TRANSIENT_RETRIES + 1):
             # Enforce request pacing according to configuration
