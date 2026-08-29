@@ -11,9 +11,9 @@ from .service import run_download_movie
 
 @task(
     key="download_movie",
-    title="Download movie",
-    description="Downloads one Daily Wire movie according to a Local Media Profile.",
-    allowed_resource_types=("movie",),
+    title="Download movie media",
+    description="Downloads one Daily Wire movie or trailer according to a Movie Local Media Profile.",
+    allowed_resource_types=("movie", "trailer"),
     default_max_retries=2,
     tracks_progress=True,
 )
