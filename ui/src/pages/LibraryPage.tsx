@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react'
+import {useMemo} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 
@@ -25,17 +25,13 @@ export default function LibraryPage() {
     )
     const hasShows = !!shows?.length
     const hasMovies = !!movies?.length
-    const requested = params.get('type') as MediaType | null
-    const initialType: MediaType = requested === 'movies' ? 'movies' : 'shows'
-    const [activeType, setActiveType] = useState<MediaType>(initialType)
 
-    useEffect(() => {
-        if (hasShows && !hasMovies && activeType !== 'shows') setActiveType('shows')
-        if (hasMovies && !hasShows && activeType !== 'movies') setActiveType('movies')
-    }, [activeType, hasMovies, hasShows])
+    // The URL is the single source of truth for the selected library type, just
+    // like on the Browse page. Never switch away from an explicitly requested
+    // type based on which query happens to finish first.
+    const activeType: MediaType = params.get('type') === 'movies' ? 'movies' : 'shows'
 
     const chooseType = (type: MediaType) => {
-        setActiveType(type)
         setParams({type}, {replace: true})
     }
 
