@@ -1,7 +1,7 @@
 """Add trailer download support
 
 Revision ID: d2c4a7318b90
-Revises: a59b07916fb6
+Revises: 04f8d3fbc17a
 Create Date: 2026-08-30
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 revision: str = "d2c4a7318b90"
-down_revision: Union[str, None] = "a59b07916fb6"
+down_revision: Union[str, None] = "04f8d3fbc17a"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
