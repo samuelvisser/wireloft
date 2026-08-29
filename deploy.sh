@@ -2,7 +2,7 @@
 # Build the WireLoft image and push it to GitHub Container Registry.
 #
 # Usage:
-#   ./deploy.sh [tag]        # defaults to "latest" on main, "develop" otherwise
+#   ./deploy.sh [tag]        # defaults by branch: main=latest, develop=develop, other=test
 
 set -euo pipefail
 
@@ -13,12 +13,28 @@ IMAGE_NAME="wireloft"
 REGISTRY="ghcr.io"
 GHCR_USER="${GHCR_USER:-samuelvisser}"
 CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || true)"
-if [ "$CURRENT_BRANCH" = "main" ]; then
-    DEFAULT_TAG="latest"
+MANUAL_TAG="${1:-}"
+
+if [ -n "$MANUAL_TAG" ]; then
+    TAG="$MANUAL_TAG"
+    TAGS=("$TAG")
 else
-    DEFAULT_TAG="develop"
+    case "$CURRENT_BRANCH" in
+        main)
+            TAG="latest"
+            TAGS=("latest" "develop" "test")
+            ;;
+        develop)
+            TAG="develop"
+            TAGS=("develop" "test")
+            ;;
+        *)
+            TAG="test"
+            TAGS=("test")
+            ;;
+    esac
 fi
-TAG="${1:-$DEFAULT_TAG}"
+
 FULL_IMAGE="$REGISTRY/$GHCR_USER/$IMAGE_NAME"
 TOKEN_FILE="${GHCR_TOKEN_FILE:-$HOME/.config/wireloft/ghcr_token}"
 NPMRC="ui/.npmrc"
@@ -73,7 +89,8 @@ docker build \
 
 printf '%s' "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GHCR_USER" --password-stdin
 
-docker tag "$IMAGE_NAME" "$FULL_IMAGE:$TAG"
-docker push "$FULL_IMAGE:$TAG"
-
-echo "Pushed $FULL_IMAGE:$TAG"
+for push_tag in "${TAGS[@]}"; do
+    docker tag "$IMAGE_NAME" "$FULL_IMAGE:$push_tag"
+    docker push "$FULL_IMAGE:$push_tag"
+    echo "Pushed $FULL_IMAGE:$push_tag"
+done
