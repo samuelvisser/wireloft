@@ -7,8 +7,10 @@ from .DwShowRecord import DwShowRecord
 from .DwUserInfo import DwUserInfo
 from .DwCatalogRecord import (
     DwCatalogMovieRecord,
+    DwCatalogMoviePageRecord,
     DwCatalogRecord,
     DwCatalogShowRecord,
+    DwCatalogShowPageRecord,
     DwMoviePlaybackRecord,
     DwMovieRecord,
     DwTrailerRecord,

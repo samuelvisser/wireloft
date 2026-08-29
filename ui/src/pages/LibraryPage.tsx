@@ -82,12 +82,15 @@ export default function LibraryPage() {
                             show.thumbnailPortraitPath || show.thumbnailLandscapePath || show.logoImagePath || show.authorHeadshotPath,
                         )
                         return (
-                            <Link className="library-show-row" to={`/show/${show.slug}`} key={show.slug} role="listitem">
-                                {image ? <img src={image} alt=""/> : <span className="library-art-placeholder"><FontAwesomeIcon icon={['fas', 'podcast']}/></span>}
-                                <span className="library-show-copy">
-                                    <span className="library-show-title">{show.title}</span>
-                                    <span className="library-show-author">{show.authorName || 'Daily Wire'}</span>
-                                    <span className="library-show-meta">{show.episodeCount} episodes{show.years ? ` • ${show.years}` : ''}</span>
+                            <Link className="show-summary-card library-show-card" to={`/show/${show.slug}`} key={show.slug} role="listitem">
+                                <span className="show-summary-art">
+                                    {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={['fas', 'podcast']}/></span>}
+                                </span>
+                                <span className="show-summary-copy">
+                                    <span className="show-summary-title">{show.title}</span>
+                                    <span className="show-summary-author">{show.authorName || 'Daily Wire'}</span>
+                                    <span className="show-summary-meta">{show.episodeCount} episodes{show.years ? ` • ${show.years}` : ''}</span>
+                                    {show.description && <span className="show-summary-description">{show.description}</span>}
                                 </span>
                                 <FontAwesomeIcon icon={['fas', 'chevron-right']} aria-hidden="true"/>
                             </Link>
@@ -102,7 +105,11 @@ export default function LibraryPage() {
                         const status = String(download?.downloadStatus || '')
                         return (
                             <Link className="movie-poster-card" to={`/movie/${movie.slug}`} key={movie.slug} role="listitem">
-                                <span className="movie-poster-art" style={image ? {backgroundImage: `url(${image})`} : undefined}>
+                                <span className="movie-poster-art">
+                                    {image
+                                        ? <img src={image} alt="" loading="lazy" decoding="async"/>
+                                        : <FontAwesomeIcon icon={['fas', 'clapperboard']}/>
+                                    }
                                     {status === 'downloaded' || status === 'redownloaded' ? (
                                         <span className="movie-state is-complete" aria-label="Downloaded"><FontAwesomeIcon icon={['fas', 'check']}/></span>
                                     ) : status === 'downloading' || status === 'pending' ? (

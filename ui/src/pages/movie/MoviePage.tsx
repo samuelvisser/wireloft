@@ -19,7 +19,7 @@ function formatDuration(seconds: number) {
 export default function MoviePage() {
     const {slug} = useParams()
     const queryClient = useQueryClient()
-    const {data: movie, isLoading, error} = useDailywireMovie(slug)
+    const {data: movie, error} = useDailywireMovie(slug)
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads} = useMovieDownloads(slug)
     const videoProfiles = useMemo(() => profiles?.filter((profile) => profile.preferredFormat !== 'format_audio_only') || [], [profiles])
@@ -58,7 +58,7 @@ export default function MoviePage() {
         }
     }
 
-    if (isLoading) return <section className="view"><p>Loading movie…</p></section>
+    if (!movie && !error) return <section className="view"><p>Loading movie…</p></section>
     if (error || !movie) return <section className="view"><div className="form-error-card" role="alert">Could not load this movie: {error?.message || 'Movie not found'}</div></section>
 
     const hero = toImageUrl(movie.backgroundImagePath || movie.thumbnailLandscapePath || movie.thumbnailPortraitPath)

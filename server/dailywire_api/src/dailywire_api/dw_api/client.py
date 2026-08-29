@@ -428,10 +428,11 @@ class MiddlewareClient:
         host = raw.get('host') or raw.get('author') or {}
         images = raw.get('images') or {}
         thumbnails = images.get('thumbnail') or {}
+        title = MiddlewareClient._short_catalog_movie_title(raw)
         return DwCatalogMovieRecord(
             dw_id=str(raw.get('id') or ''),
             slug=str(raw.get('slug') or ''),
-            title=str(raw.get('title') or ''),
+            title=title,
             description=raw.get('description') or None,
             author_name=host.get('name') or None,
             author_slug=host.get('slug') or None,
@@ -441,6 +442,29 @@ class MiddlewareClient:
             thumbnail_portrait_path=thumbnails.get('port') or None,
             thumbnail_square_path=thumbnails.get('square') or None,
         )
+
+    @staticmethod
+    def _short_catalog_movie_title(raw: dict[str, Any]) -> str:
+        """Remove browse-page marketing copy from a movie title.
+
+        Daily Wire's catalog sometimes appends the full description or a
+        pipe-delimited call to action to ``title``. The video detail endpoint
+        returns the actual display title, but fetching every detail page would
+        turn one catalog request into dozens. These two forms cover the catalog
+        payloads while preserving punctuation in the real title.
+        """
+        original = str(raw.get('title') or '').strip()
+        title = original
+        description = str(raw.get('description') or '').strip()
+
+        if description and title.casefold().endswith(description.casefold()):
+            title = title[:len(title) - len(description)].rstrip()
+            title = title.rstrip('|').rstrip()
+
+        if ' | ' in title:
+            title = title.split(' | ', 1)[0].strip()
+
+        return title or original
 
 
 

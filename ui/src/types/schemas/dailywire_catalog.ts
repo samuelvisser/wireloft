@@ -57,3 +57,21 @@ export const DailywireCatalogReadSchema = z.looseObject({
     movies: z.array(DailywireCatalogMovieReadSchema),
 })
 export type DailywireCatalogRead = z.infer<typeof DailywireCatalogReadSchema>
+
+export const DailywireCatalogShowPageReadSchema = z.looseObject({
+    items: z.array(DailywireCatalogShowReadSchema),
+    offset: z.number(),
+    limit: z.number(),
+    total: z.number(),
+    hasMore: z.boolean(),
+})
+export type DailywireCatalogShowPageRead = z.infer<typeof DailywireCatalogShowPageReadSchema>
+
+export const DailywireCatalogMoviePageReadSchema = z.looseObject({
+    items: z.array(DailywireCatalogMovieReadSchema),
+    offset: z.number(),
+    limit: z.number(),
+    total: z.number(),
+    hasMore: z.boolean(),
+})
+export type DailywireCatalogMoviePageRead = z.infer<typeof DailywireCatalogMoviePageReadSchema>

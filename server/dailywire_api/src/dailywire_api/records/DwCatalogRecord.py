@@ -65,3 +65,19 @@ class DwMoviePlaybackRecord(BaseRecord):
 class DwCatalogRecord(BaseRecord):
     shows: list[DwCatalogShowRecord] = Field(default_factory=list)
     movies: list[DwCatalogMovieRecord] = Field(default_factory=list)
+
+
+class DwCatalogShowPageRecord(BaseRecord):
+    items: list[DwCatalogShowRecord] = Field(default_factory=list)
+    offset: int = 0
+    limit: int = 0
+    total: int = 0
+    has_more: bool = False
+
+
+class DwCatalogMoviePageRecord(BaseRecord):
+    items: list[DwCatalogMovieRecord] = Field(default_factory=list)
+    offset: int = 0
+    limit: int = 0
+    total: int = 0
+    has_more: bool = False

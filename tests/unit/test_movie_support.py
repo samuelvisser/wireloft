@@ -65,6 +65,67 @@ def test_dailywire_catalog_flattens_sorts_and_deduplicates(monkeypatch):
     assert catalog.shows[1].author_name == "Host B"
 
 
+def test_dailywire_catalog_uses_short_movie_display_titles(monkeypatch):
+    from dailywire_api.dw_api.client import MiddlewareClient
+
+    payload = {
+        "components": [{
+            "items": [
+                {"video": {
+                    "id": "movie-1",
+                    "slug": "bonhoeffer",
+                    "title": "Bonhoeffer: Pastor. Spy. Assassin. A long marketing description.",
+                    "description": "A long marketing description.",
+                }},
+                {"video": {
+                    "id": "movie-2",
+                    "slug": "run-hide-fight",
+                    "title": "Run Hide Fight | Watch The First One | More marketing copy",
+                    "description": "More marketing copy",
+                }},
+            ],
+        }],
+    }
+    client = MiddlewareClient(base_url="https://example.invalid")
+    monkeypatch.setattr(client, "_get", lambda endpoint, params: payload)
+
+    catalog = client.get_catalog()
+
+    assert [movie.title for movie in catalog.movies] == [
+        "Bonhoeffer: Pastor. Spy. Assassin.",
+        "Run Hide Fight",
+    ]
+
+
+def test_dailywire_catalog_pages_filter_sort_and_preserve_offsets(monkeypatch):
+    from backend.api.endpoints.dailywire.catalog import service
+    from dailywire_api.records import DwCatalogRecord, DwCatalogShowRecord
+
+    catalog = DwCatalogRecord(shows=[
+        DwCatalogShowRecord(dw_id="3", slug="z", title="Zulu", author_name="Host B"),
+        DwCatalogShowRecord(dw_id="1", slug="b", title="Beta", author_name="Host A"),
+        DwCatalogShowRecord(dw_id="2", slug="a", title="Alpha", author_name="Host A"),
+    ])
+    monkeypatch.setattr(service, "get_catalog", lambda: catalog)
+
+    first_page = service.get_catalog_shows(
+        offset=0, limit=2, search=None, grouping="host",
+    )
+    second_page = service.get_catalog_shows(
+        offset=2, limit=2, search=None, grouping="host",
+    )
+    filtered = service.get_catalog_shows(
+        offset=0, limit=2, search="zulu host", grouping="alphabetical",
+    )
+
+    assert [show.slug for show in first_page.items] == ["a", "b"]
+    assert first_page.has_more is True
+    assert [show.slug for show in second_page.items] == ["z"]
+    assert second_page.has_more is False
+    assert filtered.total == 1
+    assert [show.slug for show in filtered.items] == ["z"]
+
+
 def test_dailywire_movie_page_exposes_trailer(monkeypatch):
     from dailywire_api.dw_api.client import MiddlewareClient
 
