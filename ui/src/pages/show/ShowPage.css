@@ -124,6 +124,46 @@
     color: var(--muted);
 }
 
+.episode-card-skeleton {
+    pointer-events: none;
+}
+
+.episode-skeleton-cover,
+.episode-skeleton-title {
+    background: #e5e7eb;
+    animation: episode-skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.episode-skeleton-cover {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 12px;
+}
+
+.episode-skeleton-title {
+    width: 88%;
+    height: 14px;
+    margin-top: 8px;
+    border-radius: 5px;
+}
+
+.episode-skeleton-title-short {
+    width: 58%;
+    margin-top: 6px;
+}
+
+@keyframes episode-skeleton-pulse {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .episode-skeleton-cover,
+    .episode-skeleton-title {
+        animation: none;
+    }
+}
+
 @media (prefers-color-scheme: dark) {
     .show-profile-summary {
         background: rgba(255, 255, 255, 0.035);
@@ -138,6 +178,11 @@
 
     .show-profile-chip-group .show-profile-chip {
         background: transparent;
+    }
+
+    .episode-skeleton-cover,
+    .episode-skeleton-title {
+        background: rgba(148, 163, 184, 0.22);
     }
 }
 
