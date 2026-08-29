@@ -17,23 +17,14 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-_INDEX_NAME = "uq_local_media_profiles_type_output_template_preferred_format"
-
-
 def upgrade() -> None:
     with op.batch_alter_table("local_media_profiles", schema=None) as batch_op:
-        batch_op.drop_index(_INDEX_NAME)
         batch_op.add_column(sa.Column(
             "append_media_type_to_filename",
             sa.Boolean(),
             server_default=sa.true(),
             nullable=False,
         ))
-        batch_op.create_index(
-            _INDEX_NAME,
-            ["type", "output_template", "preferred_format", "append_media_type_to_filename"],
-            unique=True,
-        )
 
     op.create_table(
         "media_downloads_trailer",
@@ -50,12 +41,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("media_downloads_trailer")
-
     with op.batch_alter_table("local_media_profiles", schema=None) as batch_op:
-        batch_op.drop_index(_INDEX_NAME)
         batch_op.drop_column("append_media_type_to_filename")
-        batch_op.create_index(
-            _INDEX_NAME,
-            ["type", "output_template", "preferred_format"],
-            unique=True,
-        )
