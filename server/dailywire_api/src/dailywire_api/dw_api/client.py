@@ -336,7 +336,7 @@ class MiddlewareClient:
     def _validated_playback_url(url: str) -> str:
         parsed = urlparse(url)
         if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
-            raise MiddlewareAPIError('Daily Wire returned an invalid movie playback URL')
+            raise MiddlewareAPIError(f'Daily Wire returned an invalid movie playback URL: {url}')
         return url
 
     def get_user_info(self) -> DwUserInfo:
