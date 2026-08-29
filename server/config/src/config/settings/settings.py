@@ -12,7 +12,7 @@ class AppSettings(SettingsBase):
 
     app_version: str = Field(default="0.1.0", frozen=True)
 
-    database_path: Path = PROJECT_ROOT / "data" / "wireloft.db"
+    database_path: Path = PROJECT_ROOT / "config" / "wireloft.db"
     @computed_field
     @property
     def database_url(self) -> str:

@@ -1,5 +1,5 @@
 .show-action-step {
-    max-width: 920px;
+    max-width: 1400px;
     display: grid;
     gap: 24px;
 }
@@ -25,15 +25,18 @@
 }
 
 .show-action-options {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: nowrap;
     gap: 14px;
+    width: 100%;
 }
 
 .show-action-option {
     appearance: none;
     position: relative;
+    min-width: 0;
     min-height: 235px;
+    flex: 1 1 0;
     padding: 20px;
     border: 1px solid rgba(148, 163, 184, 0.42);
     border-radius: 18px;
@@ -160,17 +163,24 @@
     }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1180px) {
     .show-action-options {
-        grid-template-columns: 1fr;
+        flex-wrap: wrap;
     }
 
     .show-action-option {
+        flex: 0 0 calc((100% - 14px) / 2);
         min-height: 0;
         grid-template-columns: auto 1fr;
         grid-template-rows: 1fr;
         align-items: start;
         gap: 16px;
+    }
+}
+
+@media (max-width: 680px) {
+    .show-action-option {
+        flex-basis: 100%;
     }
 }
 
