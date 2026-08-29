@@ -6,7 +6,7 @@ from builtins import str
 from dataclasses import dataclass
 from typing import Dict, ClassVar, Any, Optional, Literal, NamedTuple
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlparse, parse_qs
+from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
@@ -242,13 +242,47 @@ class MiddlewareClient:
         if not isinstance(raw, dict):
             message = payload.get('error') or payload.get('message') or 'Movie playback is unavailable'
             raise MiddlewareAPIError(str(message))
+
+        secure_video_url = raw.get('secureVideoURL') or None
+        video_url = (
+            self._resolve_secure_video_url(secure_video_url)
+            if secure_video_url
+            else raw.get('videoURL') or None
+        )
         return DwMoviePlaybackRecord(
-            video_url=raw.get('secureVideoURL') or raw.get('videoURL') or None,
+            video_url=video_url,
             trailer_url=raw.get('trailerURL') or None,
             duration=float(raw.get('duration') or 0),
             trailer_duration=float(raw.get('trailerDuration') or 0),
             has_video=bool(raw.get('hasVideo')),
         )
+
+    def _resolve_secure_video_url(self, secure_url: str) -> str:
+        """Exchange Daily Wire's authenticated resolver URL for its CDN URL."""
+        if not self._is_middleware_url(secure_url):
+            return self._validated_playback_url(secure_url)
+
+        payload = self._get_url(secure_url)
+        destination = payload.get('destination')
+        if not isinstance(destination, str) or not destination:
+            raise MiddlewareAPIError('Daily Wire returned no movie playback destination')
+        return self._validated_playback_url(destination)
+
+    def _is_middleware_url(self, url: str) -> bool:
+        candidate = urlparse(url)
+        middleware = urlparse(self._base_url)
+        return (
+            candidate.scheme in {'http', 'https'}
+            and candidate.scheme == middleware.scheme
+            and candidate.netloc == middleware.netloc
+        )
+
+    @staticmethod
+    def _validated_playback_url(url: str) -> str:
+        parsed = urlparse(url)
+        if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+            raise MiddlewareAPIError('Daily Wire returned an invalid movie playback URL')
+        return url
 
     def get_user_info(self) -> DwUserInfo:
         """
@@ -482,6 +516,9 @@ class MiddlewareClient:
         if qs:
             url = f"{url}?{qs}"
 
+        return self._get_url(url)
+
+    def _get_url(self, url: str) -> Dict[str, Any]:
         data: Optional[bytes] = None
         for attempt in range(self._TRANSIENT_RETRIES + 1):
             # Enforce request pacing according to configuration
