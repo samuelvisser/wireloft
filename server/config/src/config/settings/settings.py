@@ -70,6 +70,7 @@ class AppSettings(SettingsBase):
         middleware_api="https://middleware-prod.dailywire.com/middleware",
         stream_api="https://stream.media.dailywire.com",
     ))
+    movie_metadata: MovieMetadataSettings = Field(default_factory=MovieMetadataSettings)
     dw_oauth: OAuthSettings = Field(default=OAuthSettings(
         issuer="https://authorize.dailywire.com",
         audience="https://api.dailywire.com/",
