@@ -277,6 +277,51 @@ def test_dailywire_movie_playback_does_not_send_token_to_direct_media_url(monkey
     assert resolver_calls == []
 
 
+def test_dailywire_movie_extra_playback_uses_clip_endpoint(monkeypatch):
+    from dailywire_api.dw_api.client import MiddlewareClient
+
+    client = MiddlewareClient(base_url="https://middleware.example/middleware")
+    requests = []
+
+    def fake_get(endpoint, params):
+        requests.append((endpoint, params))
+        return {
+            "id": "extra-1",
+            "slug": "making-of-a-movie",
+            "title": "The Making of A Movie",
+            "duration": 600,
+            "videoURL": "https://stream.example/extra/master.m3u8",
+        }
+
+    monkeypatch.setattr(client, "_get", fake_get)
+
+    playback = client.get_movie_extra_playback("making-of-a-movie")
+
+    assert playback.video_url == "https://stream.example/extra/master.m3u8"
+    assert playback.duration == 600
+    assert playback.has_video is True
+    assert requests == [("v4/getClip", {"slug": "making-of-a-movie"})]
+
+
+def test_dailywire_movie_extra_playback_builds_signed_mux_url(monkeypatch):
+    from dailywire_api.dw_api.client import MiddlewareClient
+
+    client = MiddlewareClient(base_url="https://middleware.example/middleware")
+    monkeypatch.setattr(client, "_get", lambda endpoint, params: {
+        "slug": "member-extra",
+        "muxPlaybackId": "playback-id",
+        "muxPlaybackToken": "signed.token/value",
+        "playbackPolicy": "SIGNED",
+    })
+
+    playback = client.get_movie_extra_playback("member-extra")
+
+    assert playback.video_url == (
+        "https://stream.mux.com/playback-id.m3u8?token=signed.token%2Fvalue"
+    )
+    assert playback.has_video is True
+
+
 def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, monkeypatch):
     from backend.api.endpoints.media_downloads.service import create_movie_download, get_media_downloads_view
     from backend.api.endpoints.movies import service as movie_service

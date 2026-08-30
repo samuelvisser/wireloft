@@ -6,7 +6,7 @@ from builtins import str
 from dataclasses import dataclass
 from typing import Dict, ClassVar, Any, Optional, Literal, NamedTuple
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
@@ -269,6 +269,42 @@ class MiddlewareClient:
             duration=float(raw.get('duration') or 0),
             trailer_duration=float(raw.get('trailerDuration') or 0),
             has_video=bool(raw.get('hasVideo')),
+        )
+
+    def get_movie_extra_playback(self, slug: str) -> DwMoviePlaybackRecord:
+        """Fetch a fresh playback URL for a clip listed as a movie extra.
+
+        Daily Wire represents movie extras as ``showEpisode`` rows on the movie
+        page, but their playback endpoint is ``getClip``. The movie-only
+        ``getVideo`` endpoint returns ``404 video not found`` for these slugs.
+        """
+        payload = self._get('v4/getClip', {'slug': slug})
+        raw = payload.get('clip') if isinstance(payload.get('clip'), dict) else payload
+        if not isinstance(raw, dict) or not raw.get('slug'):
+            message = payload.get('error') or payload.get('message') or 'Movie-extra playback is unavailable'
+            raise MiddlewareAPIError(str(message))
+
+        secure_video_url = raw.get('secureVideoURL') or None
+        video_url = (
+            self._resolve_secure_video_url(secure_video_url)
+            if secure_video_url
+            else raw.get('videoURL') or None
+        )
+        if not video_url:
+            mux_playback_id = str(raw.get('muxPlaybackId') or '').strip()
+            mux_playback_token = str(raw.get('muxPlaybackToken') or '').strip()
+            playback_policy = str(raw.get('playbackPolicy') or '').strip().casefold()
+            if mux_playback_id and (mux_playback_token or playback_policy == 'public'):
+                video_url = f"https://stream.mux.com/{quote(mux_playback_id, safe='')}.m3u8"
+                if mux_playback_token:
+                    video_url = f"{video_url}?{urlencode({'token': mux_playback_token})}"
+
+        return DwMoviePlaybackRecord(
+            video_url=video_url,
+            trailer_url=None,
+            duration=float(raw.get('duration') or 0),
+            trailer_duration=0,
+            has_video=bool(video_url),
         )
 
     def _resolve_secure_video_url(self, secure_url: str) -> str:

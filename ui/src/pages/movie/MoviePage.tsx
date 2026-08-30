@@ -303,15 +303,15 @@ export default function MoviePage() {
                 </aside>
             </div>
 
-            <section className="movie-extras" aria-labelledby="movie-extras-title">
-                <div className="movie-section-heading">
-                    <div>
-                        <h2 id="movie-extras-title">Extras</h2>
-                        <p>{localMovie ? 'Extras indexed in your WireLoft library.' : 'Extra content available for this movie.'}</p>
+            {movieExtras.length > 0 && (
+                <section className="movie-extras" aria-labelledby="movie-extras-title">
+                    <div className="movie-section-heading">
+                        <div>
+                            <h2 id="movie-extras-title">Extras</h2>
+                            <p>{localMovie ? 'Extras indexed in your WireLoft library.' : 'Extra content available for this movie.'}</p>
+                        </div>
+                        <span>{movieExtras.length}</span>
                     </div>
-                    <span>{movieExtras.length}</span>
-                </div>
-                {movieExtras.length ? (
                     <div className="movie-extra-grid">
                         {movieExtras.map((extra) => {
                             const thumbnail = toImageUrl(extra.thumbnailLandscapePath || extra.backgroundImagePath)
@@ -353,13 +353,8 @@ export default function MoviePage() {
                             )
                         })}
                     </div>
-                ) : (
-                    <div className="movie-extras-empty">
-                        <FontAwesomeIcon icon={['fas', 'film']}/>
-                        <span>No extra content is currently indexed for this movie.</span>
-                    </div>
-                )}
-            </section>
+                </section>
+            )}
 
             {!!downloads?.length && (
                 <section className="movie-downloads" aria-labelledby="movie-downloads-title">

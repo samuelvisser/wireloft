@@ -241,8 +241,8 @@ def _movie_extra_playback_url(
 ) -> str:
     """Resolve an extra by its own slug, with a compatibility fallback for the official trailer."""
     try:
-        playback = client.get_movie_playback(extra.slug)
-        source_url = playback.video_url or playback.trailer_url
+        playback = client.get_movie_extra_playback(extra.slug)
+        source_url = playback.video_url
     except Exception:
         if movie.official_trailer_id != extra.id:
             raise

@@ -212,11 +212,10 @@ def test_movie_extra_playback_uses_the_extras_own_slug() -> None:
 
     class FakeClient:
         @staticmethod
-        def get_movie_playback(slug):
+        def get_movie_extra_playback(slug):
             requested_slugs.append(slug)
             return SimpleNamespace(
                 video_url="https://stream.example/interview.m3u8",
-                trailer_url=None,
             )
 
     source_url = _movie_extra_playback_url(
@@ -227,3 +226,34 @@ def test_movie_extra_playback_uses_the_extras_own_slug() -> None:
 
     assert source_url == "https://stream.example/interview.m3u8"
     assert requested_slugs == ["cast-interview"]
+
+
+def test_official_trailer_falls_back_to_parent_movie_playback() -> None:
+    from types import SimpleNamespace
+
+    from task_manager.tasks.workers.download_movie.service import _movie_extra_playback_url
+
+    requested_slugs = []
+
+    class FakeClient:
+        @staticmethod
+        def get_movie_extra_playback(slug):
+            requested_slugs.append(("extra", slug))
+            raise RuntimeError("Legacy trailer is unavailable from getClip")
+
+        @staticmethod
+        def get_movie_playback(slug):
+            requested_slugs.append(("movie", slug))
+            return SimpleNamespace(trailer_url="https://stream.example/trailer.m3u8")
+
+    source_url = _movie_extra_playback_url(
+        FakeClient(),
+        movie=SimpleNamespace(id=1, slug="parent-movie", official_trailer_id=20),
+        extra=SimpleNamespace(id=20, slug="official-trailer", title="Official Trailer"),
+    )
+
+    assert source_url == "https://stream.example/trailer.m3u8"
+    assert requested_slugs == [
+        ("extra", "official-trailer"),
+        ("movie", "parent-movie"),
+    ]
