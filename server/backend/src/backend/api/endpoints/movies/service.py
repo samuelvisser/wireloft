@@ -62,18 +62,13 @@ def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
     s.add(item)
     s.flush()
 
-    # The Daily Wire API has no canonical release date. Perform one external
-    # metadata lookup at the moment this movie is first persisted, then store
-    # both the result and the terminal lookup state on the movie row. Movie and
-    # trailer download entry points both reach this service through the same
-    # _get_or_create_movie flow.
-    ensure_movie_release_metadata(s, item)
-
     for trailer in body.trailers:
         create_trailer(s, item.id, trailer)
 
     # Movie, trailers and any calling operation remain in the caller's single
-    # transaction. Services flush only; routers own commit and rollback.
+    # transaction. Services flush only; routers own commit and rollback. The
+    # Daily Wire browser download flow performs release metadata enrichment in
+    # _get_or_create_movie, not for arbitrary direct API-created movies.
     return MovieAPIRead.model_validate(item)
 
 
