@@ -85,6 +85,24 @@ function formatBytes(n: number | null | undefined) {
     return `${Math.round(n / 1024)} KiB`
 }
 
+function tableErrorMessage(errorMessage: string | null | undefined): string | null {
+    if (!errorMessage) return null
+
+    const match = errorMessage.match(/^HTTP error \d+:\s*([\s\S]+)$/)
+    if (!match) return errorMessage
+
+    try {
+        const parsed = JSON.parse(match[1])
+        if (parsed && typeof parsed === 'object' && typeof parsed.error === 'string' && parsed.error.trim()) {
+            return parsed.error
+        }
+    } catch {
+        // Keep the original error when the HTTP response body is not JSON.
+    }
+
+    return errorMessage
+}
+
 function StatusCell({row}: {row: MediaDownloadViewRead}) {
     const status = String(row.downloadStatus)
     if (status === 'downloading' || status === 'pending') {
@@ -98,9 +116,10 @@ function StatusCell({row}: {row: MediaDownloadViewRead}) {
         )
     }
     if (status === 'error' || status === 'missing' || status === 'corrupted') {
+        const errorMessage = tableErrorMessage(row.errorMessage)
         return (
             <span className="download-status-message" title={row.errorMessage ?? undefined}>
-                {MediaDownloadStatusReg.getLabelLoose(status)}{row.errorMessage ? `: ${row.errorMessage}` : ''}
+                {MediaDownloadStatusReg.getLabelLoose(status)}{errorMessage ? `: ${errorMessage}` : ''}
             </span>
         )
     }
