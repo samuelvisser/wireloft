@@ -12,7 +12,7 @@ export default function SettingsPage() {
       </div>
 
       <section style={{marginTop: 24}} aria-labelledby="movie-metadata-title">
-        <h2 id="movie-metadata-title">Movie metadata</h2>
+        <h2 id="movie-metadata-title">Movie metadata &amp; credits</h2>
         <p>
           WireLoft can query TMDB once when a movie is first added, then permanently stores the
           canonical release date in its local database. Configure an API Read Access Token with
