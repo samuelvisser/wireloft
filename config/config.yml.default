@@ -20,3 +20,10 @@ downloadSettings:
 
   # Restrict generated download file and directory names to ASCII characters.
   asciiOnlyFilenames: true
+
+# WireLoft uses TMDB once, when a movie is first added by starting a movie or
+# trailer download, to find and persist the movie's canonical release date.
+# Create an API Read Access Token in your TMDB account and either uncomment the
+# value below or set WL_MOVIE_METADATA__TMDB_READ_ACCESS_TOKEN.
+# movieMetadata:
+#   tmdbReadAccessToken: "your-tmdb-api-read-access-token"
