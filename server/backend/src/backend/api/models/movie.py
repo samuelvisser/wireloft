@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import Field, computed_field
 
@@ -77,6 +77,12 @@ class _MovieAPIBaseOut(ResponseBase):
     mature_rating: Optional[str]
     is_downloadable: Optional[bool]
     available_for: list[str]
+    release_date: Optional[date]
+    release_date_source: Optional[str]
+    release_date_source_id: Optional[str]
+    release_date_lookup_status: str
+    release_date_lookup_attempted_at: Optional[datetime]
+    release_date_lookup_error: Optional[str]
     trailers: list[TrailerAPIRead]
 
 
