@@ -39,7 +39,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     current, head = get_database_status()
     assert current == (head,)
-    assert head == "04f8d3fbc17a"
+    assert head == "7f3c2a91d8b4"
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -51,6 +51,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "trailers",
         "media_downloads",
         "media_downloads_movie",
+        "media_downloads_trailer",
         "local_media_profiles_show",
         "local_media_profiles_movie",
         "task_schedules",
@@ -61,6 +62,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         column["name"] for column in inspector.get_columns("local_media_profiles")
     }
     assert "type" in profile_columns
+    assert "append_media_type_to_filename" in profile_columns
     profile_indexes = {
         index["name"]: index
         for index in inspector.get_indexes("local_media_profiles")
@@ -88,6 +90,12 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "mature_rating",
         "is_downloadable",
         "available_for",
+        "release_date",
+        "release_date_source",
+        "release_date_source_id",
+        "release_date_lookup_status",
+        "release_date_lookup_attempted_at",
+        "release_date_lookup_error",
     }
 
     trailer_columns = {
@@ -151,6 +159,8 @@ def test_trailer_migration_preserves_legacy_movie_trailer_metadata(migration_dat
         movie = session.query(Movie).one()
         trailer = session.query(Trailer).one()
         assert movie.available_for == []
+        assert movie.release_date is None
+        assert movie.release_date_lookup_status == "pending"
         assert movie.trailers == [trailer]
         assert trailer.movie_id == movie.id
         assert trailer.type == "trailer"
@@ -261,6 +271,9 @@ def test_local_media_profile_migration_downgrades_to_0001(migration_database):
     assert "extended_title" not in {
         column["name"] for column in inspector.get_columns("movies")
     }
+    assert "release_date" not in {
+        column["name"] for column in inspector.get_columns("movies")
+    }
 
 
 def test_upgrade_is_idempotent(migration_database):
@@ -315,4 +328,4 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 def test_migration_history_has_exactly_one_head():
     from backend.db.migrations import get_head_revisions
 
-    assert get_head_revisions() == ("04f8d3fbc17a",)
+    assert get_head_revisions() == ("7f3c2a91d8b4",)
