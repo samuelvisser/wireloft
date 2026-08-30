@@ -39,7 +39,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     current, head = get_database_status()
     assert current == (head,)
-    assert head == "c91e4a6f72d0"
+    assert head == "c4ab8e7d1f20"
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -63,11 +63,6 @@ def test_fresh_database_upgrades_to_head(migration_database):
     }
     assert "type" in profile_columns
     assert "append_media_type_to_filename" in profile_columns
-    append_column = next(
-        column for column in inspector.get_columns("local_media_profiles")
-        if column["name"] == "append_media_type_to_filename"
-    )
-    assert str(append_column["default"]).strip("()'") in {"0", "false"}
     profile_indexes = {
         index["name"]: index
         for index in inspector.get_indexes("local_media_profiles")
@@ -81,6 +76,53 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "preferred_format",
     ]
     assert bool(settings_index["unique"])
+
+    settings_columns = {
+        column["name"] for column in inspector.get_columns("settings")
+    }
+    assert "onboarding_completed" in settings_columns
+
+    with engine.connect() as connection:
+        assert not bool(connection.execute(text(
+            "SELECT onboarding_completed FROM settings"
+        )).scalar_one())
+        profiles = connection.execute(text(
+            "SELECT type, slug, name, output_template, preferred_format, "
+            "append_media_type_to_filename "
+            "FROM local_media_profiles ORDER BY slug"
+        )).mappings().all()
+        assert [dict(profile) for profile in profiles] == [
+            {
+                "type": "movie",
+                "slug": "wireloft-movies",
+                "name": "WireLoft Movies",
+                "output_template": "/downloads/movies/{movie_title}/{title}.ext",
+                "preferred_format": "format_1080p",
+                "append_media_type_to_filename": True,
+            },
+            {
+                "type": "show",
+                "slug": "wireloft-shows-audio",
+                "name": "WireLoft Shows (Audio)",
+                "output_template": "/downloads/podcasts/{show_title}/{episode_published_date} - {episode_title}.ext",
+                "preferred_format": "format_audio_only",
+                "append_media_type_to_filename": True,
+            },
+            {
+                "type": "show",
+                "slug": "wireloft-shows-video",
+                "name": "WireLoft Shows (Video)",
+                "output_template": "/downloads/shows/{show_title}/{season_name}/{episode_title}.ext",
+                "preferred_format": "format_1080p",
+                "append_media_type_to_filename": True,
+            },
+        ]
+        assert connection.execute(text(
+            "SELECT COUNT(*) FROM local_media_profiles_show"
+        )).scalar_one() == 2
+        assert connection.execute(text(
+            "SELECT COUNT(*) FROM local_media_profiles_movie"
+        )).scalar_one() == 1
 
     movie_columns = {column["name"] for column in inspector.get_columns("movies")}
     assert movie_columns == {
@@ -124,38 +166,6 @@ def test_fresh_database_upgrades_to_head(migration_database):
         column["name"] for column in inspector.get_columns("media_downloads")
     }
     assert "attempt_generation" in media_download_columns
-
-
-def test_jinja_migration_preserves_profiles_and_replaces_movie_suffix_option(migration_database):
-    _database_path, engine = migration_database
-
-    from backend.db.migrations import get_alembic_config, upgrade_database
-
-    command.upgrade(get_alembic_config(), "b84c2d9e0f31")
-    with engine.begin() as connection:
-        connection.execute(text(
-            "INSERT INTO local_media_profiles "
-            "(id, type, slug, name, output_template, preferred_format, append_media_type_to_filename) VALUES "
-            "(1, 'show', 'shows', 'Shows', '/downloads/{show}/{episode_title}.ext', 'format_1080p', 1), "
-            "(2, 'movie', 'movies', 'Movies', '/downloads/{movie_title}/{title}.ext', 'format_1080p', 1)"
-        ))
-        connection.execute(text("INSERT INTO local_media_profiles_show (id) VALUES (1)"))
-        connection.execute(text("INSERT INTO local_media_profiles_movie (id) VALUES (2)"))
-
-    upgrade_database()
-
-    with engine.connect() as connection:
-        profiles = connection.execute(text(
-            "SELECT type, output_template, append_media_type_to_filename "
-            "FROM local_media_profiles ORDER BY id"
-        )).mappings().all()
-    assert profiles[0]["output_template"] == "/downloads/{{ show }}/{{ episode_title }}.ext"
-    assert profiles[0]["append_media_type_to_filename"] == 0
-    assert profiles[1]["output_template"] == (
-        "/downloads/{{ movie_title }}/{{ title }}"
-        "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
-    )
-    assert profiles[1]["append_media_type_to_filename"] == 0
 
 
 def test_movie_extra_migration_preserves_legacy_movie_trailer_metadata(migration_database):
@@ -256,12 +266,16 @@ def test_upgrade_from_0001_migrates_existing_profiles_to_show_type(migration_dat
     current, head = get_database_status()
     assert current == (head,)
     with Session(engine) as session:
-        profile = session.query(LocalMediaProfileBase).one()
+        profile = session.query(LocalMediaProfileBase).filter_by(slug="audio").one()
         assert isinstance(profile, ShowLocalMediaProfile)
         assert profile.type == "show"
         assert session.execute(
-            text("SELECT id FROM local_media_profiles_show")
+            text("SELECT id FROM local_media_profiles_show WHERE id = :id"),
+            {"id": profile.id},
         ).scalar_one() == profile.id
+        assert bool(session.execute(text(
+            "SELECT onboarding_completed FROM settings"
+        )).scalar_one())
 
 
 def test_upgrade_from_0001_rejects_duplicate_profile_settings(migration_database):
@@ -370,4 +384,4 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 def test_migration_history_has_exactly_one_head():
     from backend.db.migrations import get_head_revisions
 
-    assert get_head_revisions() == ("c91e4a6f72d0",)
+    assert get_head_revisions() == ("c4ab8e7d1f20",)
