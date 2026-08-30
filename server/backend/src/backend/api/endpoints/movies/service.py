@@ -7,6 +7,7 @@ from backend.api.helpers import update_database_fields
 from backend.api.models.movie import *
 from backend.db.models.media_item import Movie
 from backend.api.endpoints.trailers.service import create_trailer
+from backend.integrations.tmdb import lookup_movie_release_metadata
 
 
 def get_movies_list(s: Session) -> list[MovieAPIRead]:
@@ -35,6 +36,25 @@ def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
     item = Movie(**data)
     s.add(item)
     s.flush()
+
+    # The Daily Wire API has no canonical release date. Perform one external
+    # metadata lookup at the moment this movie is first persisted, then store
+    # both the result and the terminal lookup state on the movie row. Movie and
+    # trailer download entry points both reach this service through the same
+    # _get_or_create_movie flow.
+    lookup = lookup_movie_release_metadata(
+        title=item.title,
+        description=item.description,
+        duration_seconds=item.duration,
+    )
+    if lookup is not None:
+        item.release_date = lookup.release_date
+        item.release_date_source = lookup.source
+        item.release_date_source_id = lookup.source_id
+        item.release_date_lookup_status = lookup.status
+        item.release_date_lookup_attempted_at = lookup.attempted_at
+        item.release_date_lookup_error = lookup.error
+        s.flush()
 
     for trailer in body.trailers:
         create_trailer(s, item.id, trailer)
