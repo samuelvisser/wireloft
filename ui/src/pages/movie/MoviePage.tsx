@@ -1,12 +1,12 @@
 import {useEffect, useMemo, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {Link, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
 import ProgressBar from '../../components/common/ProgressBar'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
-import {useDailywireMovie, useLocalMediaProfiles, useMovieDownloads} from '../../lib/queries'
+import {useDailywireMovie, useLocalMediaProfiles, useMovieDownloads, useMovies} from '../../lib/queries'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 
 function formatDuration(seconds: number) {
@@ -18,16 +18,24 @@ function formatDuration(seconds: number) {
 
 export default function MoviePage() {
     const {slug} = useParams()
+    const navigate = useNavigate()
     const queryClient = useQueryClient()
     const {data: movie, error} = useDailywireMovie(slug)
+    const {data: localMovies} = useMovies()
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads} = useMovieDownloads(slug)
+    const localMovie = useMemo(
+        () => localMovies?.find((item) => item.slug === slug),
+        [localMovies, slug],
+    )
     const videoProfiles = useMemo(
         () => profiles?.filter((profile) => profile.type === 'movie') || [],
         [profiles],
     )
     const [profileId, setProfileId] = useState('')
     const [submitting, setSubmitting] = useState<'movie' | 'trailer' | null>(null)
+    const [confirmDelete, setConfirmDelete] = useState(false)
+    const [deleting, setDeleting] = useState(false)
 
     useEffect(() => {
         if (!profileId && videoProfiles[0]) setProfileId(String(videoProfiles[0].id))
@@ -65,6 +73,33 @@ export default function MoviePage() {
         }
     }
 
+    const deleteMovie = async () => {
+        if (!slug || !localMovie || deleting) return
+        setDeleting(true)
+        try {
+            const response = await fetch(
+                `${(window as any).appConfig.API_URL}/movies/${encodeURIComponent(slug)}`,
+                {method: 'DELETE', credentials: 'include'},
+            )
+            if (!response.ok) {
+                const {error: message} = await getErrorMessageFromResponse(response)
+                toast.error(message || 'Could not delete the movie')
+                return
+            }
+            setConfirmDelete(false)
+            await Promise.all([
+                queryClient.invalidateQueries({queryKey: ['movies']}),
+                queryClient.invalidateQueries({queryKey: ['movieDownloads', slug]}),
+                queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+            ])
+            navigate('/library?type=movies')
+        } catch {
+            toast.error('Could not delete the movie')
+        } finally {
+            setDeleting(false)
+        }
+    }
+
     if (!movie && !error) return <section className="view"><p>Loading movie…</p></section>
     if (error || !movie) return <section className="view"><div className="form-error-card" role="alert">Could not load this movie: {error?.message || 'Movie not found'}</div></section>
 
@@ -91,6 +126,11 @@ export default function MoviePage() {
                     <a className="btn" href={movie.sharingUrl} target="_blank" rel="noreferrer">
                         <FontAwesomeIcon icon={['fas', 'arrow-up-right-from-square']}/> Open on Daily Wire
                     </a>
+                )}
+                {localMovie && (
+                    <button type="button" className="btn btn-danger" onClick={() => setConfirmDelete(true)}>
+                        <FontAwesomeIcon icon={['fas', 'trash']}/> Delete
+                    </button>
                 )}
             </div>
 
@@ -151,6 +191,37 @@ export default function MoviePage() {
                         </div>
                     ))}
                 </section>
+            )}
+
+            {confirmDelete && localMovie && (
+                <div className="modal-overlay" role="presentation" onClick={() => !deleting && setConfirmDelete(false)}>
+                    <div
+                        className="modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="delete-title"
+                        aria-describedby="delete-desc"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="modal-header">
+                            <div className="modal-icon danger" aria-hidden>
+                                <FontAwesomeIcon icon={['fas', 'trash']}/>
+                            </div>
+                            <h2 id="delete-title" className="modal-title">Delete movie</h2>
+                        </div>
+                        <p id="delete-desc" className="modal-text">
+                            Are you sure you want to delete "{movie.title}" from WireLoft? This removes the movie and
+                            its download history from the WireLoft database. Completed files already on disk will not
+                            be changed. Any download still in progress will be cancelled and its partial files removed.
+                        </p>
+                        <div className="modal-actions">
+                            <button type="button" className="btn" onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
+                            <button type="button" className="btn btn-danger" onClick={() => void deleteMovie()} disabled={deleting}>
+                                {deleting ? 'Deleting…' : 'Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </section>
     )
