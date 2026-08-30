@@ -6,11 +6,11 @@ def test_delete_movie_uses_download_cleanup_and_preserves_completed_files(tmp_pa
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.movies.service import delete_movie
     from backend.db import Base
-    from backend.db.models import Movie, MovieLocalMediaProfile, Trailer
+    from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
     from backend.db.models.media_download import (
         MediaDownloadBase,
         MovieMediaDownload,
-        TrailerMediaDownload,
+        MovieExtraMediaDownload,
     )
     from backend.types.download_profile_types import MediaDownloadStatus
     from backend.types.media_types import MediaType
@@ -40,10 +40,11 @@ def test_delete_movie_uses_download_cleanup_and_preserves_completed_files(tmp_pa
             downloaded_date=None,
             duration=100,
         )
-        trailer = Trailer(
+        trailer = MovieExtra(
             uuid="trailer-delete-uuid",
-            type=MediaType.TRAILER.value,
+            type=MediaType.MOVIE_EXTRA.value,
             movie=movie,
+            movie_extra_type="trailer",
             slug="movie-to-delete-trailer",
             title="Movie To Delete Trailer",
             description=None,
@@ -75,8 +76,8 @@ def test_delete_movie_uses_download_cleanup_and_preserves_completed_files(tmp_pa
                 file_path=str(movie_path),
                 progress=50,
             ),
-            TrailerMediaDownload(
-                type=MediaType.TRAILER.value,
+            MovieExtraMediaDownload(
+                type=MediaType.MOVIE_EXTRA.value,
                 media_item_id=trailer.id,
                 local_media_profile_id=active_profile.id,
                 download_status=MediaDownloadStatus.LOCAL_PROCESSING.value,
@@ -99,7 +100,7 @@ def test_delete_movie_uses_download_cleanup_and_preserves_completed_files(tmp_pa
 
         assert payload.slug == "movie-to-delete"
         assert session.query(Movie).count() == 0
-        assert session.query(Trailer).count() == 0
+        assert session.query(MovieExtra).count() == 0
         assert session.query(MediaDownloadBase).count() == 0
         assert all(not artifact.exists() for artifact in active_artifacts)
         assert completed_path.exists()

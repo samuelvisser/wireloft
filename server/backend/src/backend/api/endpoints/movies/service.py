@@ -8,7 +8,7 @@ from backend.api.helpers import update_database_fields
 from backend.api.models.movie import *
 from backend.db.models.media_download import MediaDownloadBase
 from backend.db.models.media_item import Movie
-from backend.api.endpoints.trailers.service import create_trailer
+from backend.api.endpoints.movie_extras.service import create_movie_extra
 from backend.integrations.tmdb import MovieReleaseLookupResult, lookup_movie_release_metadata
 
 
@@ -54,7 +54,7 @@ def ensure_movie_release_metadata(s: Session, item: Movie) -> None:
     )
     # A missing token is not counted as an attempt. This lets a movie that was
     # added before TMDB was configured receive its one lookup on the next movie
-    # or trailer download request.
+    # or movie-extra download request.
     if lookup is None:
         return
 
@@ -94,15 +94,32 @@ def retry_movie_release_metadata(s: Session, movie_slug: str) -> MovieAPIRead:
 
 
 def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
-    data = body.model_dump(by_alias=True, exclude={"trailers"})
+    data = body.model_dump(
+        by_alias=True,
+        exclude={"movie_extras", "official_trailer_slug"},
+    )
     item = Movie(**data)
     s.add(item)
     s.flush()
 
-    for trailer in body.trailers:
-        create_trailer(s, item.id, trailer)
+    for movie_extra in body.movie_extras:
+        create_movie_extra(s, item.id, movie_extra)
 
-    # Movie, trailers and any calling operation remain in the caller's single
+    if body.official_trailer_slug is not None:
+        official_trailer = next(
+            (
+                extra
+                for extra in item.movie_extras
+                if extra.slug == body.official_trailer_slug
+            ),
+            None,
+        )
+        if official_trailer is None:
+            raise ValueError("The official trailer must be included in movie_extras")
+        item.official_trailer = official_trailer
+        s.flush()
+
+    # Movie, extras and any calling operation remain in the caller's single
     # transaction. Services flush only; routers own commit and rollback. The
     # Daily Wire browser download flow performs release metadata enrichment in
     # _get_or_create_movie, not for arbitrary direct API-created movies.
@@ -134,11 +151,11 @@ def delete_movie(s: Session, movie_slug: str) -> MovieAPIRead:
 
     payload = MovieAPIRead.model_validate(item)
 
-    # Route every Movie and Trailer download through the normal deletion
+    # Route every Movie and MovieExtra download through the normal deletion
     # service before removing their media records. Active downloads are thereby
     # cancelled and their partial artifacts removed, while completed files are
     # deliberately left on disk.
-    media_item_ids = [item.id, *(trailer.id for trailer in item.trailers)]
+    media_item_ids = [item.id, *(extra.id for extra in item.movie_extras)]
     download_ids = list(s.scalars(
         select(MediaDownloadBase.id).where(
             MediaDownloadBase.media_item_id.in_(media_item_ids),

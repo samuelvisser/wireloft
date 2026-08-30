@@ -7,7 +7,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.db.models import Movie, Trailer
+from backend.db.models import Movie, MovieExtra
 from backend.db.models.media_download import MediaDownloadAttempt, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
@@ -53,10 +53,10 @@ async def run_download_movie(
     attempt_guard = DownloadAttemptGuard(media_download_id, expected_generation)
     attempt_guard.ensure_current()
 
-    if download.type == MediaType.TRAILER.value:
-        media = session.get(Trailer, download.media_item_id)
+    if download.type == MediaType.MOVIE_EXTRA.value:
+        media = session.get(MovieExtra, download.media_item_id)
         if media is None:
-            raise ValueError(f"Trailer {download.media_item_id} for download {media_download_id} not found")
+            raise ValueError(f"Movie extra {download.media_item_id} for download {media_download_id} not found")
         movie = media.movie
     else:
         media = session.get(Movie, download.media_item_id)
@@ -66,9 +66,9 @@ async def run_download_movie(
 
     profile = download.local_media_profile
     if profile.type != LocalMediaProfileType.MOVIE.value:
-        raise DownloadError("Movies and trailers require a Movie Local Media Profile")
+        raise DownloadError("Movies and movie extras require a Movie Local Media Profile")
     if profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value:
-        raise DownloadError("Movies and trailers require a video Local Media Profile")
+        raise DownloadError("Movies and movie extras require a video Local Media Profile")
 
     attempt_guard.update_current(
         session,
@@ -152,7 +152,7 @@ def _download_movie_media(
     session: Session,
     *,
     movie: Movie,
-    media: Movie | Trailer,
+    media: Movie | MovieExtra,
     download: MediaDownloadBase,
     row_progress: RowProgressWriter,
     attempt_guard: DownloadAttemptGuard,
@@ -160,15 +160,12 @@ def _download_movie_media(
     attempt_guard.ensure_current()
     tokens = DeviceAuthClient().get_token()
     client = MiddlewareClient(access_token=tokens.access_token if tokens else None)
-    playback = client.get_movie_playback(movie.slug)
-    attempt_guard.ensure_current()
-
-    is_trailer = isinstance(media, Trailer)
-    if is_trailer:
-        source_playback_url = playback.trailer_url
-        if not source_playback_url:
-            raise MediaUnavailableError(f"Daily Wire provides no playable video for trailer '{media.title}'")
+    if isinstance(media, MovieExtra):
+        source_playback_url = _movie_extra_playback_url(client, movie=movie, extra=media)
+        attempt_guard.ensure_current()
     else:
+        playback = client.get_movie_playback(movie.slug)
+        attempt_guard.ensure_current()
         if not playback.has_video or not playback.video_url:
             raise MediaUnavailableError(f"Daily Wire provides no playable video for '{movie.title}'")
         source_playback_url = playback.video_url
@@ -234,6 +231,32 @@ def _download_movie_media(
             should_cancel=attempt_guard,
         )
     return result, format_downloaded
+
+
+def _movie_extra_playback_url(
+    client: MiddlewareClient,
+    *,
+    movie: Movie,
+    extra: MovieExtra,
+) -> str:
+    """Resolve an extra by its own slug, with a compatibility fallback for the official trailer."""
+    try:
+        playback = client.get_movie_playback(extra.slug)
+        source_url = playback.video_url or playback.trailer_url
+    except Exception:
+        if movie.official_trailer_id != extra.id:
+            raise
+        source_url = None
+
+    # Older Daily Wire responses expose the official trailer only on the
+    # parent movie playback object. Other extras have no equivalent fallback.
+    if not source_url and movie.official_trailer_id == extra.id:
+        source_url = client.get_movie_playback(movie.slug).trailer_url
+    if not source_url:
+        raise MediaUnavailableError(
+            f"Daily Wire provides no playable video for movie extra '{extra.title}'"
+        )
+    return source_url
 
 
 def _download_and_remux(

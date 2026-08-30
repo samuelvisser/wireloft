@@ -2,6 +2,7 @@
 from .workers.debug_ep_details import debug_ep_details
 from .workers.download_episode import download_episode
 from .workers.download_movie import download_movie
+from .workers.refresh_movie_extras import refresh_movie_extras
 from .workers.resume_interrupted_downloads import resume_interrupted_downloads
 from .workers.download_profile_worker import download_profile_worker
 from .workers.download_series_thumbnail import download_series_thumbnail
@@ -15,6 +16,7 @@ __all__ = [
     "debug_ep_details",
     "download_episode",
     "download_movie",
+    "refresh_movie_extras",
     "resume_interrupted_downloads",
     "download_profile_worker",
     "download_series_thumbnail",

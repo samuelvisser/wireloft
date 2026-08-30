@@ -16,6 +16,6 @@ class ResourceType(str, Enum):
     SEASON = "season"
     EPISODE = "episode"
     MOVIE = "movie"
-    TRAILER = "trailer"
+    MOVIE_EXTRA = "movie_extra"
     DOWNLOAD_PROFILE = "download_profile"
     DOWNLOAD_PROFILE_SERIES = "download_profile_series"

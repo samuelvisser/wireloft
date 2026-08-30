@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -131,7 +133,7 @@ def test_dailywire_catalog_pages_filter_sort_and_preserve_offsets(monkeypatch):
     assert [show.slug for show in filtered.items] == ["z"]
 
 
-def test_dailywire_movie_page_exposes_trailer(monkeypatch):
+def test_dailywire_movie_page_exposes_and_classifies_all_extras(monkeypatch):
     from dailywire_api.dw_api.client import MiddlewareClient
 
     payload = {
@@ -160,7 +162,22 @@ def test_dailywire_movie_page_exposes_trailer(monkeypatch):
                                     "duration": 90,
                                     "images": {"thumbnail": {"land": "trailer.jpg"}},
                                 }
-                            }
+                            },
+                            {
+                                "showEpisode": {
+                                    "id": "behind-scenes-1",
+                                    "slug": "a-movie-behind-the-scenes",
+                                    "title": "A Movie | Behind the Scenes",
+                                }
+                            },
+                            {
+                                "showEpisode": {
+                                    "id": "interview-1",
+                                    "slug": "a-movie-cast-conversation",
+                                    "title": "Cast conversation",
+                                    "extraType": "Interview",
+                                }
+                            },
                         ]
                     }
                 ]
@@ -175,6 +192,16 @@ def test_dailywire_movie_page_exposes_trailer(monkeypatch):
     assert movie.duration == 5400
     assert movie.trailer is not None
     assert movie.trailer.slug == "a-movie-trailer"
+    assert [extra.slug for extra in movie.movie_extras] == [
+        "a-movie-trailer",
+        "a-movie-behind-the-scenes",
+        "a-movie-cast-conversation",
+    ]
+    assert [extra.movie_extra_type for extra in movie.movie_extras] == [
+        "trailer",
+        "behindthescenes",
+        "interview",
+    ]
 
 
 def test_dailywire_movie_playback_resolves_secure_url_with_api_authorization(monkeypatch):
@@ -255,10 +282,10 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     from backend.api.endpoints.movies import service as movie_service
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db.core import Base
-    from backend.db.models import Movie, MovieLocalMediaProfile, Trailer
+    from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
     from backend.db.models.media_download import MovieMediaDownload
     from config import get_settings
-    from dailywire_api.records import DwMovieRecord, DwTrailerRecord
+    from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -282,6 +309,14 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
 
     monkeypatch.setattr(movie_service, "create_movie", tracked_create_movie)
 
+    official_trailer = DwMovieExtraRecord(
+        dw_id="trailer-1",
+        slug="a-movie-trailer",
+        title="A Movie | Official Trailer",
+        movie_extra_type="trailer",
+        sharing_url="https://www.dailywire.com/clips/a-movie-trailer",
+        duration=90,
+    )
     movie_data = DwMovieRecord(
         dw_id="movie-1",
         slug="a-movie",
@@ -296,13 +331,8 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
         mature_rating="PG-13",
         is_downloadable=True,
         available_for=["ALL_ACCESS"],
-        trailer=DwTrailerRecord(
-            dw_id="trailer-1",
-            slug="a-movie-trailer",
-            title="A Movie | Official Trailer",
-            sharing_url="https://www.dailywire.com/clips/a-movie-trailer",
-            duration=90,
-        ),
+        movie_extras=[official_trailer],
+        trailer=official_trailer,
     )
 
     download = create_movie_download(
@@ -313,7 +343,7 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     session.commit()
 
     movie = session.query(Movie).one()
-    trailer = session.query(Trailer).one()
+    trailer = session.query(MovieExtra).one()
     assert len(create_movie_calls) == 1
     assert create_movie_calls[0].author_slug == "a-director"
     assert create_movie_calls[0].logo_image_path == "movie-logo.png"
@@ -323,8 +353,10 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     assert movie.author_slug == "a-director"
     assert movie.logo_image_path == "movie-logo.png"
     assert movie.available_for == ["ALL_ACCESS"]
-    assert movie.trailers == [trailer]
-    assert trailer.type == "trailer"
+    assert movie.movie_extras == [trailer]
+    assert movie.official_trailer == trailer
+    assert trailer.type == "movie_extra"
+    assert trailer.movie_extra_type == "trailer"
     assert trailer.movie_id == movie.id
     assert trailer.dw_id == "trailer-1"
     assert trailer.slug == "a-movie-trailer"
@@ -342,12 +374,12 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     engine.dispose()
 
 
-def test_create_movie_supports_multiple_trailers_in_one_transaction():
+def test_create_movie_supports_multiple_extras_in_one_transaction():
     from backend.api.endpoints.movies.service import create_movie
     from backend.api.models.movie import MovieAPICreate
-    from backend.api.models.trailer import TrailerAPICreate
+    from backend.api.models.movie_extra import MovieExtraAPICreate
     from backend.db.core import Base
-    from backend.db.models import Movie, Trailer
+    from backend.db.models import Movie, MovieExtra
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -358,71 +390,76 @@ def test_create_movie_supports_multiple_trailers_in_one_transaction():
         slug="a-movie",
         title="A Movie",
         sharing_url="https://example.test/a-movie",
-        trailers=[
-            TrailerAPICreate(
+        movie_extras=[
+            MovieExtraAPICreate(
                 dw_id="trailer-1",
                 slug="a-movie-trailer",
                 title="Official Trailer",
+                movie_extra_type="trailer",
                 sharing_url="https://example.test/a-movie-trailer",
             ),
-            TrailerAPICreate(
-                dw_id="trailer-2",
-                slug="a-movie-teaser",
-                title="Teaser",
-                sharing_url="https://example.test/a-movie-teaser",
+            MovieExtraAPICreate(
+                dw_id="interview-1",
+                slug="a-movie-interview",
+                title="Cast Interview",
+                movie_extra_type="interview",
+                sharing_url="https://example.test/a-movie-interview",
             ),
         ],
+        official_trailer_slug="a-movie-trailer",
     ))
     session.commit()
 
     movie = session.query(Movie).one()
-    trailers = session.query(Trailer).order_by(Trailer.id).all()
+    extras = session.query(MovieExtra).order_by(MovieExtra.id).all()
     assert result.id == movie.id
-    assert [trailer.slug for trailer in result.trailers] == [
+    assert [extra.slug for extra in result.movie_extras] == [
         "a-movie-trailer",
-        "a-movie-teaser",
+        "a-movie-interview",
     ]
-    assert movie.trailers == trailers
-    assert {trailer.movie_id for trailer in trailers} == {movie.id}
+    assert movie.movie_extras == extras
+    assert movie.official_trailer == extras[0]
+    assert {extra.movie_id for extra in extras} == {movie.id}
 
     session.close()
     engine.dispose()
 
 
-def test_create_trailer_requires_an_existing_movie():
+def test_create_movie_extra_requires_an_existing_movie():
     from fastapi import HTTPException
 
-    from backend.api.endpoints.trailers.service import create_trailer
-    from backend.api.models.trailer import TrailerAPICreate
+    from backend.api.endpoints.movie_extras.service import create_movie_extra
+    from backend.api.models.movie_extra import MovieExtraAPICreate
     from backend.db.core import Base
-    from backend.db.models import Trailer
+    from backend.db.models import MovieExtra
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
 
     with pytest.raises(HTTPException) as exc_info:
-        create_trailer(session, 999, TrailerAPICreate(
+        create_movie_extra(session, 999, MovieExtraAPICreate(
             dw_id="trailer-1",
             slug="orphan-trailer",
             title="Orphan Trailer",
+            movie_extra_type="trailer",
         ))
 
     assert exc_info.value.status_code == 404
-    assert session.query(Trailer).count() == 0
+    assert session.query(MovieExtra).count() == 0
 
     session.close()
     engine.dispose()
 
 
-def test_movie_download_rolls_back_movie_and_trailer_together(tmp_path, monkeypatch):
+def test_movie_download_rolls_back_movie_and_extras_together(tmp_path, monkeypatch):
     from backend.api.endpoints.media_downloads import service
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db.core import Base
-    from backend.db.models import Movie, MovieLocalMediaProfile, Trailer
+    from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
     from backend.db.models.media_download import MovieMediaDownload
     from config import get_settings
-    from dailywire_api.records import DwMovieRecord, DwTrailerRecord
+    from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -438,17 +475,20 @@ def test_movie_download_rolls_back_movie_and_trailer_together(tmp_path, monkeypa
     session.add(profile)
     session.commit()
 
+    official_trailer = DwMovieExtraRecord(
+        dw_id="trailer-1",
+        slug="a-movie-trailer",
+        title="Official Trailer",
+        movie_extra_type="trailer",
+        sharing_url="https://example.test/a-movie-trailer",
+    )
     movie_data = DwMovieRecord(
         dw_id="movie-1",
         slug="a-movie",
         title="A Movie",
         sharing_url="https://example.test/a-movie",
-        trailer=DwTrailerRecord(
-            dw_id="trailer-1",
-            slug="a-movie-trailer",
-            title="Official Trailer",
-            sharing_url="https://example.test/a-movie-trailer",
-        ),
+        movie_extras=[official_trailer],
+        trailer=official_trailer,
     )
 
     def fail_output_path(*_args, **_kwargs):
@@ -465,8 +505,100 @@ def test_movie_download_rolls_back_movie_and_trailer_together(tmp_path, monkeypa
     session.rollback()
 
     assert session.query(Movie).count() == 0
-    assert session.query(Trailer).count() == 0
+    assert session.query(MovieExtra).count() == 0
     assert session.query(MovieMediaDownload).count() == 0
+
+    session.close()
+    engine.dispose()
+
+
+def test_refresh_movie_extras_worker_adds_new_content_and_sets_official_trailer(monkeypatch):
+    from backend.db.core import Base
+    from backend.db.models import Movie, MovieExtra
+    from backend.types.media_types import MediaType
+    from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
+    from task_manager.tasks.workers.refresh_movie_extras import service
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+
+    movie = Movie(
+        uuid="movie-refresh-uuid",
+        type=MediaType.MOVIE.value,
+        dw_id="movie-1",
+        slug="a-movie",
+        title="A Movie",
+        description=None,
+        downloaded_date=None,
+        duration=5400,
+    )
+    existing = MovieExtra(
+        uuid="extra-existing-uuid",
+        type=MediaType.MOVIE_EXTRA.value,
+        movie=movie,
+        movie_extra_type="interview",
+        dw_id="interview-1",
+        slug="cast-interview",
+        title="Old interview title",
+        description=None,
+        downloaded_date=None,
+        duration=60,
+    )
+    session.add_all([movie, existing])
+    session.commit()
+
+    interview = DwMovieExtraRecord(
+        dw_id="interview-1",
+        slug="cast-interview",
+        title="Cast Interview",
+        movie_extra_type="interview",
+        duration=120,
+    )
+    trailer = DwMovieExtraRecord(
+        dw_id="trailer-1",
+        slug="official-trailer",
+        title="A Movie | Official Trailer",
+        movie_extra_type="trailer",
+        duration=90,
+    )
+    movie_data = DwMovieRecord(
+        dw_id="movie-1",
+        slug="a-movie",
+        title="A Movie",
+        sharing_url="https://example.test/a-movie",
+        movie_extras=[interview, trailer],
+        trailer=trailer,
+    )
+
+    class FakeAuth:
+        @staticmethod
+        def get_token():
+            return None
+
+    class FakeClient:
+        def __init__(self, *, access_token):
+            assert access_token is None
+
+        @staticmethod
+        def get_movie_page(slug):
+            assert slug == "a-movie"
+            return movie_data
+
+    monkeypatch.setattr(service, "DeviceAuthClient", FakeAuth)
+    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+
+    added = asyncio.run(service.run_refresh_movie_extras(session, movie_id=movie.id))
+
+    extras = session.query(MovieExtra).order_by(MovieExtra.id).all()
+    assert added == 1
+    assert [(extra.slug, extra.movie_extra_type) for extra in extras] == [
+        ("cast-interview", "interview"),
+        ("official-trailer", "trailer"),
+    ]
+    assert extras[0].title == "Cast Interview"
+    assert extras[0].duration == 120
+    assert movie.official_trailer == extras[1]
 
     session.close()
     engine.dispose()

@@ -10,14 +10,14 @@ from fastapi import HTTPException
 from backend.api.helpers import update_database_fields
 from backend.api.models.media_download import *
 from backend.api.models.movie import MovieAPICreate
-from backend.api.models.trailer import TrailerAPICreate
-from backend.db.models import Episode, LocalMediaProfileBase, Movie, Show, Trailer
+from backend.api.models.movie_extra import MovieExtraAPICreate
+from backend.db.models import Episode, LocalMediaProfileBase, Movie, MovieExtra, Show
 from backend.db.models.media_download import (
     EpisodeMediaDownload,
     MediaDownloadAttempt,
     MediaDownloadBase,
+    MovieExtraMediaDownload,
     MovieMediaDownload,
-    TrailerMediaDownload,
 )
 from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
@@ -69,8 +69,8 @@ def get_media_downloads_view(
     for download, profile in s.execute(stmt):
         media = download.media
         episode = media if isinstance(media, Episode) else None
-        trailer = media if isinstance(media, Trailer) else None
-        movie = media if isinstance(media, Movie) else (trailer.movie if trailer else None)
+        movie_extra = media if isinstance(media, MovieExtra) else None
+        movie = media if isinstance(media, Movie) else (movie_extra.movie if movie_extra else None)
         if episode_slug is not None and (episode is None or episode.slug != episode_slug):
             continue
         if movie_slug is not None and (movie is None or movie.slug != movie_slug):
@@ -88,6 +88,7 @@ def get_media_downloads_view(
             show_title=show.title if show else None,
             movie_slug=movie.slug if movie else None,
             movie_title=movie.title if movie else None,
+            movie_extra_type=movie_extra.movie_extra_type if movie_extra else None,
             local_media_profile_name=profile.name,
             preferred_format=profile.preferred_format,
             is_redownload_attempt=getattr(download, "is_redownload_attempt", None),
@@ -195,50 +196,54 @@ def create_movie_download(
     return download
 
 
-def create_trailer_download(
+def create_movie_extra_download(
     s: Session,
     movie_data: DwMovieRecord,
-    trailer_slug: str,
+    movie_extra_slug: str,
     body: MovieDownloadAPICreate,
-) -> TrailerMediaDownload:
-    """Persist a browsed movie/trailer and queue the trailer with a Movie profile."""
+) -> MovieExtraMediaDownload:
+    """Persist a browsed movie extra and queue it with a Movie profile."""
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE)
-    if movie_data.trailer is None or movie_data.trailer.slug != trailer_slug:
-        raise HTTPException(status_code=404, detail="Trailer not found for this movie")
+    remote_extra = next(
+        (extra for extra in movie_data.movie_extras if extra.slug == movie_extra_slug),
+        None,
+    )
+    if remote_extra is None:
+        raise HTTPException(status_code=404, detail="Movie extra not found for this movie")
 
     movie = _get_or_create_movie(s, movie_data)
-    trailer: Optional[Trailer] = (
-        s.query(Trailer)
-        .filter(Trailer.movie_id == movie.id, Trailer.slug == trailer_slug)
+    movie_extra: Optional[MovieExtra] = (
+        s.query(MovieExtra)
+        .filter(MovieExtra.movie_id == movie.id, MovieExtra.slug == movie_extra_slug)
         .one_or_none()
     )
-    if trailer is None:
-        raise HTTPException(status_code=404, detail="Trailer could not be persisted for this movie")
+    if movie_extra is None:
+        raise HTTPException(status_code=404, detail="Movie extra could not be persisted for this movie")
 
-    existing: Optional[TrailerMediaDownload] = (
-        s.query(TrailerMediaDownload)
+    existing: Optional[MovieExtraMediaDownload] = (
+        s.query(MovieExtraMediaDownload)
         .filter(
-            TrailerMediaDownload.media_item_id == trailer.id,
-            TrailerMediaDownload.local_media_profile_id == profile.id,
+            MovieExtraMediaDownload.media_item_id == movie_extra.id,
+            MovieExtraMediaDownload.local_media_profile_id == profile.id,
         )
         .one_or_none()
     )
     if existing is not None:
         if existing.download_status not in _RESTARTABLE_STATUSES:
-            raise HTTPException(status_code=409, detail=f"Trailer already has a download for profile '{profile.name}'")
+            raise HTTPException(status_code=409, detail=f"Movie extra already has a download for profile '{profile.name}'")
         _reset_download(existing)
         s.flush()
         return existing
 
-    download = TrailerMediaDownload(
-        type=MediaType.TRAILER.value,
-        media_item_id=trailer.id,
+    download = MovieExtraMediaDownload(
+        type=MediaType.MOVIE_EXTRA.value,
+        media_item_id=movie_extra.id,
         local_media_profile_id=profile.id,
         download_status=MediaDownloadStatus.PENDING.value,
         file_path=str(resolve_movie_output_path(
             profile.output_template,
             movie=movie,
-            media_item=trailer,
+            media_item=movie_extra,
             append_media_type_to_filename=profile.append_media_type_to_filename,
         )),
         progress=0,
@@ -253,7 +258,7 @@ def _get_profile(s: Session, profile_id: int, expected_type: LocalMediaProfileTy
     if profile is None:
         raise HTTPException(status_code=404, detail="Local media profile not found")
     if profile.type != expected_type.value:
-        label = "Movies and trailers" if expected_type == LocalMediaProfileType.MOVIE else "Episodes"
+        label = "Movies and movie extras" if expected_type == LocalMediaProfileType.MOVIE else "Episodes"
         raise HTTPException(status_code=422, detail=f"{label} require a {expected_type.value.title()} Local Media Profile")
     return profile
 
@@ -267,25 +272,41 @@ def _get_or_create_movie(s: Session, movie_data: DwMovieRecord) -> Movie:
         if movie is None:
             raise RuntimeError("Movie creation did not produce a persisted Movie record")
 
+    # A movie-extra download can be requested from the live Daily Wire page
+    # before the explicit refresh action has indexed that row locally.
+    from backend.api.endpoints.movie_extras.service import sync_movie_extras
+    sync_movie_extras(
+        s,
+        movie=movie,
+        extras=movie_data.movie_extras,
+        official_trailer=movie_data.trailer,
+    )
+
     if movie.release_date_lookup_attempted_at is None:
         # A new movie, or one added before TMDB was configured, receives one
-        # configured lookup at the first movie/trailer download request.
+        # configured lookup at the first movie/movie-extra download request.
         from backend.api.endpoints.movies.service import ensure_movie_release_metadata
         ensure_movie_release_metadata(s, movie)
     return movie
 
 
 def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
-    trailers: list[TrailerAPICreate] = []
-    if movie_data.trailer is not None:
-        trailers.append(TrailerAPICreate(
-            dw_id=movie_data.trailer.dw_id,
-            slug=movie_data.trailer.slug,
-            title=movie_data.trailer.title,
-            sharing_url=movie_data.trailer.sharing_url,
-            duration=movie_data.trailer.duration,
-            thumbnail_landscape_path=movie_data.trailer.thumbnail_landscape_path,
-        ))
+    movie_extras = [
+        MovieExtraAPICreate(
+            dw_id=extra.dw_id,
+            slug=extra.slug,
+            title=extra.title,
+            movie_extra_type=extra.movie_extra_type,
+            description=extra.description,
+            sharing_url=extra.sharing_url,
+            duration=extra.duration,
+            background_image_path=extra.background_image_path,
+            thumbnail_landscape_path=extra.thumbnail_landscape_path,
+            thumbnail_portrait_path=extra.thumbnail_portrait_path,
+            thumbnail_square_path=extra.thumbnail_square_path,
+        )
+        for extra in movie_data.movie_extras
+    ]
 
     return MovieAPICreate(
         dw_id=movie_data.dw_id,
@@ -305,7 +326,8 @@ def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
         mature_rating=movie_data.mature_rating,
         is_downloadable=movie_data.is_downloadable,
         available_for=movie_data.available_for,
-        trailers=trailers,
+        movie_extras=movie_extras,
+        official_trailer_slug=(movie_data.trailer.slug if movie_data.trailer else None),
     )
 
 

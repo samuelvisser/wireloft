@@ -13,5 +13,5 @@ from .DwCatalogRecord import (
     DwCatalogShowPageRecord,
     DwMoviePlaybackRecord,
     DwMovieRecord,
-    DwTrailerRecord,
+    DwMovieExtraRecord,
 )

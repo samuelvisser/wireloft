@@ -5,15 +5,19 @@ import ProgressBar from '../components/common/ProgressBar'
 import {useLocalMediaProfiles, useMediaDownloadsView, useMovies, useShows} from '../lib/queries'
 import {ACTIVE_DOWNLOAD_STATUSES} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
+import {movieExtraTypeLabel} from '../utils/movieExtras'
 
 const PROBLEMS = new Set(['error', 'missing', 'corrupted'])
 const COMPLETE = new Set(['downloaded', 'redownloaded'])
 
 function mediaTitle(download: MediaDownloadViewRead) {
-    return download.movieTitle || download.episodeTitle || 'Unknown media'
+    return download.mediaTitle || download.movieTitle || download.episodeTitle || 'Unknown media'
 }
 
 function mediaContext(download: MediaDownloadViewRead) {
+    if (download.type === 'movie_extra') {
+        return `${movieExtraTypeLabel(download.movieExtraType)} • ${download.movieTitle || 'Movie'}`
+    }
     return download.movieTitle ? 'Movie' : download.showTitle || 'Episode'
 }
 

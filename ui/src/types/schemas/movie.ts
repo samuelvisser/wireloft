@@ -1,10 +1,12 @@
 import {z} from "zod";
+import {MovieExtraTypeSchema} from './dailywire_catalog'
 
 
-export const TrailerCreateSchema = z.object({
+export const MovieExtraCreateSchema = z.object({
     dwId: z.string().nullable().optional(),
     slug: z.string(),
     title: z.string(),
+    movieExtraType: MovieExtraTypeSchema,
     description: z.string().nullable().optional(),
     downloadedDate: z.date().nullable().optional(),
     duration: z.number().default(0),
@@ -14,17 +16,18 @@ export const TrailerCreateSchema = z.object({
     thumbnailSquarePath: z.string().nullable().optional(),
     sharingUrl: z.string().nullable().optional(),
 })
-export type TrailerCreateIn = z.input<typeof TrailerCreateSchema>;
-export type TrailerCreateOut = z.output<typeof TrailerCreateSchema>;
+export type MovieExtraCreateIn = z.input<typeof MovieExtraCreateSchema>;
+export type MovieExtraCreateOut = z.output<typeof MovieExtraCreateSchema>;
 
 
-export const TrailerReadSchema = z.looseObject({
+export const MovieExtraReadSchema = z.looseObject({
     id: z.int(),
     movieId: z.int(),
     uuid: z.string(),
     dwId: z.string().nullable(),
     slug: z.string(),
     title: z.string(),
+    movieExtraType: MovieExtraTypeSchema,
     description: z.string().nullable(),
     downloadedDate: z.iso.datetime().transform((s) => new Date(s)).nullable(),
     duration: z.number(),
@@ -36,7 +39,7 @@ export const TrailerReadSchema = z.looseObject({
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })
-export type TrailerRead = z.infer<typeof TrailerReadSchema>;
+export type MovieExtraRead = z.infer<typeof MovieExtraReadSchema>;
 
 // ---------- Strict request (create/update) ----------
 const MovieBaseSchema = z.object({
@@ -62,7 +65,8 @@ const MovieBaseSchema = z.object({
 export const MovieCreateSchema = MovieBaseSchema.extend({
     dwId: z.string().nullable().optional(),
     slug: z.string(),
-    trailers: z.array(TrailerCreateSchema).default([]),
+    movieExtras: z.array(MovieExtraCreateSchema).default([]),
+    officialTrailerSlug: z.string().nullable().optional(),
 })
 export type MovieCreateIn = z.input<typeof MovieCreateSchema>;
 export type MovieCreateOut = z.output<typeof MovieCreateSchema>;
@@ -102,7 +106,9 @@ export const MovieReadSchema = z.looseObject({
     releaseDateLookupStatus: z.string(),
     releaseDateLookupAttemptedAt: z.iso.datetime().transform((s) => new Date(s)).nullable(),
     releaseDateLookupError: z.string().nullable(),
-    trailers: z.array(TrailerReadSchema),
+    officialTrailerId: z.int().nullable(),
+    officialTrailer: MovieExtraReadSchema.nullable(),
+    movieExtras: z.array(MovieExtraReadSchema),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })

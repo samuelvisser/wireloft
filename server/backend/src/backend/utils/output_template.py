@@ -10,7 +10,7 @@ from .episode import episode_type_info
 from config import get_settings
 
 if TYPE_CHECKING:
-    from backend.db.models import Episode, Movie, Trailer
+    from backend.db.models import Episode, Movie, MovieExtra
 
 _DOWNLOADS_PREFIX = "/downloads/"
 # Characters that may not appear in a single path component
@@ -34,7 +34,7 @@ MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 # These placeholders describe the actual downloaded item rather than always describing
-# the owning movie. At least one is required when the automatic trailer suffix is off.
+# the owning movie. At least one is required when the automatic extra suffix is off.
 MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "title", "extended_title", "dw_id", "author", "mature_rating", "rating",
     "duration_seconds", "media_type",
@@ -113,18 +113,19 @@ def resolve_movie_output_path(
     output_template: str,
     *,
     movie: "Movie",
-    media_item: "Movie | Trailer | None" = None,
+    media_item: "Movie | MovieExtra | None" = None,
     append_media_type_to_filename: bool = True,
     extension: Optional[str] = None,
 ) -> Path:
-    """Resolve a Movie Local Media Profile for either its movie or one of its trailers.
+    """Resolve a Movie Local Media Profile for a movie or one of its extras.
 
     ``movie_*`` placeholders always describe ``movie``. Their generic aliases describe
-    the actual downloaded media item, so for a trailer ``{title}``, ``{dw_id}``, and
-    ``{duration_seconds}`` come from the trailer. Date/time placeholders always describe
+    the actual downloaded media item, so for an extra ``{title}``, ``{dw_id}``, and
+    ``{duration_seconds}`` come from the extra. Date/time placeholders always describe
     the parent movie's canonical release date. TMDB supplies a date rather than a time,
     so movie time components resolve to midnight. ``{media_type}`` is ``movie`` or
-    ``trailer``. When requested, trailers also receive a ``-trailer`` filename suffix.
+    the extra's ``movie_extra_type``. When requested, extras also receive a matching
+    filename suffix such as ``-trailer`` or ``-interview``.
     """
     validate_output_template_fields(output_template, allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS)
 
@@ -137,7 +138,7 @@ def resolve_movie_output_path(
         if status == "pending":
             guidance = (
                 "Configure a TMDB API Read Access Token, restart WireLoft so the setting is "
-                "reloaded, and try this movie or trailer download again."
+                "reloaded, and try this movie or movie-extra download again."
             )
         else:
             guidance = (
@@ -150,13 +151,13 @@ def resolve_movie_output_path(
         )
 
     item = media_item or movie
-    is_trailer = getattr(item, "type", None) == "trailer"
-    media_type = "trailer" if is_trailer else "movie"
+    is_movie_extra = getattr(item, "type", None) == "movie_extra"
+    media_type = getattr(item, "movie_extra_type", "other") if is_movie_extra else "movie"
 
     movie_extended_title = movie.extended_title or movie.title
     movie_duration_seconds = str(round(movie.duration or 0))
 
-    if is_trailer:
+    if is_movie_extra:
         item_title = item.title
         item_extended_title = item.title
         item_dw_id = getattr(item, "dw_id", None) or ""
@@ -188,7 +189,7 @@ def resolve_movie_output_path(
         "movie_duration_seconds": movie_duration_seconds,
         "duration_seconds": item_duration_seconds,
         "media_type": media_type,
-        **_date_substitutions(movie.release_date),
+        **_date_substitutions(getattr(movie, "release_date", None)),
     }
 
     ascii_only = get_settings().download_settings.ascii_only_filenames
@@ -202,8 +203,8 @@ def resolve_movie_output_path(
     if ascii_only:
         resolved = _to_ascii(resolved)
 
-    if is_trailer and append_media_type_to_filename:
-        resolved = _append_filename_suffix(resolved, "-trailer")
+    if is_movie_extra and append_media_type_to_filename:
+        resolved = _append_filename_suffix(resolved, f"-{media_type}")
 
     return _finish_output_path(resolved, extension=extension)
 

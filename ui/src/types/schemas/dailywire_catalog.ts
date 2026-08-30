@@ -34,14 +34,32 @@ export const DailywireCatalogMovieReadSchema = z.looseObject({
 })
 export type DailywireCatalogMovieRead = z.infer<typeof DailywireCatalogMovieReadSchema>
 
-export const DailywireTrailerReadSchema = z.looseObject({
-    dwId: z.string(),
+export const MovieExtraTypeSchema = z.enum([
+    'behindthescenes',
+    'deleted',
+    'featurette',
+    'interview',
+    'scene',
+    'short',
+    'trailer',
+    'other',
+])
+export type MovieExtraType = z.infer<typeof MovieExtraTypeSchema>
+
+export const DailywireMovieExtraReadSchema = z.looseObject({
+    dwId: nullableString,
     slug: z.string(),
     title: z.string(),
-    sharingUrl: z.string(),
+    movieExtraType: MovieExtraTypeSchema,
+    description: nullableString,
+    sharingUrl: nullableString,
     duration: z.number(),
+    backgroundImagePath: nullableString,
     thumbnailLandscapePath: nullableString,
+    thumbnailPortraitPath: nullableString,
+    thumbnailSquarePath: nullableString,
 })
+export type DailywireMovieExtraRead = z.infer<typeof DailywireMovieExtraReadSchema>
 
 export const DailywireMovieReadSchema = DailywireCatalogMovieReadSchema.extend({
     duration: z.number(),
@@ -49,7 +67,8 @@ export const DailywireMovieReadSchema = DailywireCatalogMovieReadSchema.extend({
     matureRating: nullableString,
     isDownloadable: z.boolean(),
     availableFor: z.array(z.string()),
-    trailer: DailywireTrailerReadSchema.nullable().optional(),
+    movieExtras: z.array(DailywireMovieExtraReadSchema),
+    trailer: DailywireMovieExtraReadSchema.nullable().optional(),
 })
 export type DailywireMovieRead = z.infer<typeof DailywireMovieReadSchema>
 

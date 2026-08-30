@@ -3,6 +3,7 @@ import {useMediaDownloadAttempts} from '../../lib/queries'
 import {ACTIVE_DOWNLOAD_STATUSES, MediaDownloadStatusReg} from '../../types/media_download'
 import {PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
+import {movieExtraTypeLabel} from '../../utils/movieExtras'
 
 type Props = {
     row: MediaDownloadViewRead | null
@@ -24,9 +25,9 @@ function attemptLabel(isRedownload: boolean | null | undefined): string | null {
     return null
 }
 
-function mediaTypeLabel(type: string): string {
+function mediaTypeLabel(type: string, movieExtraType?: string | null): string {
     if (type === 'movie') return 'Movie'
-    if (type === 'trailer') return 'Trailer'
+    if (type === 'movie_extra') return movieExtraTypeLabel(movieExtraType)
     if (type === 'episode') return 'Episode'
     return type ? type.replace(/_/g, ' ').replace(/^./, (char) => char.toUpperCase()) : 'Media'
 }
@@ -67,8 +68,8 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                 </div>
 
                 <dl className="log-meta">
-                    <div><dt>Media type</dt><dd>{mediaTypeLabel(String(row.type))}</dd></div>
-                    {row.type === 'trailer' && <div><dt>Movie</dt><dd>{row.movieTitle ?? '—'}</dd></div>}
+                    <div><dt>Media type</dt><dd>{mediaTypeLabel(String(row.type), row.movieExtraType)}</dd></div>
+                    {row.type === 'movie_extra' && <div><dt>Movie</dt><dd>{row.movieTitle ?? '—'}</dd></div>}
                     {row.type === 'episode' && <div><dt>Show</dt><dd>{row.showTitle ?? '—'}</dd></div>}
                     <div><dt>Profile</dt><dd>{row.localMediaProfileName ?? '—'}</dd></div>
                     <div>

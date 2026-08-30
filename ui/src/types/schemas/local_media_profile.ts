@@ -48,8 +48,8 @@ const MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS = new Set([
     'duration_seconds', 'media_type',
 ])
 
-const TRAILER_COLLISION_MESSAGE =
-    "Movie and trailer downloads could resolve to the same file. Enable 'Append media type to filename' (recommended), or include at least one placeholder that describes the actual downloaded item, such as {title}, {dw_id}, {duration_seconds}, or {media_type}."
+const MOVIE_EXTRA_COLLISION_MESSAGE =
+    "Movie and movie-extra downloads could resolve to the same file. Enable 'Append media type to filename' (recommended), or include at least one placeholder that describes the actual downloaded item, such as {title}, {dw_id}, {duration_seconds}, or {media_type}."
 
 const LocalMediaProfileCommonSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -79,7 +79,7 @@ function validateMovieFilenameSafety(
         ctx.addIssue({
             code: 'custom',
             path: ['outputTemplate'],
-            message: TRAILER_COLLISION_MESSAGE,
+            message: MOVIE_EXTRA_COLLISION_MESSAGE,
         })
     }
 }

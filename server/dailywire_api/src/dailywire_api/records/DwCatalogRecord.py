@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import Field
 
@@ -22,13 +22,30 @@ class DwCatalogShowRecord(BaseRecord):
     thumbnail_square_path: Optional[str] = None
 
 
-class DwTrailerRecord(BaseRecord):
-    dw_id: str
+MovieExtraTypeValue = Literal[
+    "behindthescenes",
+    "deleted",
+    "featurette",
+    "interview",
+    "scene",
+    "short",
+    "trailer",
+    "other",
+]
+
+
+class DwMovieExtraRecord(BaseRecord):
+    dw_id: Optional[str] = None
     slug: str
     title: str
-    sharing_url: str
+    movie_extra_type: MovieExtraTypeValue
+    description: Optional[str] = None
+    sharing_url: Optional[str] = None
     duration: float = 0
+    background_image_path: Optional[str] = None
     thumbnail_landscape_path: Optional[str] = None
+    thumbnail_portrait_path: Optional[str] = None
+    thumbnail_square_path: Optional[str] = None
 
 
 class DwCatalogMovieRecord(BaseRecord):
@@ -52,7 +69,10 @@ class DwMovieRecord(DwCatalogMovieRecord):
     mature_rating: Optional[str] = None
     is_downloadable: bool = True
     available_for: list[str] = Field(default_factory=list)
-    trailer: Optional[DwTrailerRecord] = None
+    movie_extras: list[DwMovieExtraRecord] = Field(default_factory=list)
+    # Kept as the dedicated official-trailer field consumed by the prominent
+    # movie-page actions. It points to the matching item in movie_extras.
+    trailer: Optional[DwMovieExtraRecord] = None
 
 
 class DwMoviePlaybackRecord(BaseRecord):

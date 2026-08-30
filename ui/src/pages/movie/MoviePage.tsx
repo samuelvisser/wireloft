@@ -7,13 +7,30 @@ import toast from 'react-hot-toast'
 import ProgressBar from '../../components/common/ProgressBar'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import {useDailywireMovie, useLocalMediaProfiles, useMovieDownloads, useMovies} from '../../lib/queries'
+import {MovieExtraType} from '../../types/schemas/dailywire_catalog'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
+import {movieExtraTypeLabel} from '../../utils/movieExtras'
+
+type MovieExtraSummary = {
+    id?: number
+    slug: string
+    title: string
+    movieExtraType: MovieExtraType
+    duration: number
+    sharingUrl?: string | null
+    thumbnailLandscapePath?: string | null
+    backgroundImagePath?: string | null
+}
 
 function formatDuration(seconds: number) {
     if (!seconds) return null
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.round((seconds % 3600) / 60)
     return hours ? `${hours}h ${minutes}m` : `${minutes}m`
+}
+
+function sleep(milliseconds: number) {
+    return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 }
 
 export default function MoviePage() {
@@ -33,23 +50,37 @@ export default function MoviePage() {
         [profiles],
     )
     const [profileId, setProfileId] = useState('')
-    const [submitting, setSubmitting] = useState<'movie' | 'trailer' | null>(null)
+    const [submitting, setSubmitting] = useState<string | null>(null)
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [retryingMetadata, setRetryingMetadata] = useState(false)
+    const [refreshingExtras, setRefreshingExtras] = useState(false)
 
     useEffect(() => {
         if (!profileId && videoProfiles[0]) setProfileId(String(videoProfiles[0].id))
     }, [profileId, videoProfiles])
 
-    const startDownload = async (mediaType: 'movie' | 'trailer') => {
+    const startMovieDownload = async () => {
         if (!slug || !profileId) return
-        if (mediaType === 'trailer' && !movie?.trailer?.slug) return
-        setSubmitting(mediaType)
+        await startDownloadRequest({
+            key: 'movie',
+            path: `/movies/${encodeURIComponent(slug)}/downloads`,
+            label: 'Movie',
+        })
+    }
+
+    const startExtraDownload = async (extra: MovieExtraSummary) => {
+        if (!slug || !profileId) return
+        await startDownloadRequest({
+            key: `extra:${extra.slug}`,
+            path: `/movies/${encodeURIComponent(slug)}/extras/${encodeURIComponent(extra.slug)}/downloads`,
+            label: movieExtraTypeLabel(extra.movieExtraType),
+        })
+    }
+
+    const startDownloadRequest = async ({key, path, label}: {key: string; path: string; label: string}) => {
+        setSubmitting(key)
         try {
-            const path = mediaType === 'trailer'
-                ? `/movies/${encodeURIComponent(slug)}/trailers/${encodeURIComponent(movie!.trailer!.slug)}/downloads`
-                : `/movies/${encodeURIComponent(slug)}/downloads`
             const response = await fetch(`${(window as any).appConfig.API_URL}${path}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -59,19 +90,74 @@ export default function MoviePage() {
             if (!response.ok) {
                 const {error: message} = await getErrorMessageFromResponse(response)
                 await queryClient.invalidateQueries({queryKey: ['movies']})
-                toast.error(message || `Could not start the ${mediaType} download`)
+                toast.error(message || `Could not start the ${label.toLocaleLowerCase()} download`)
                 return
             }
-            toast.success(`${mediaType === 'movie' ? 'Movie' : 'Trailer'} download queued`)
+            toast.success(`${label} download queued`)
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['movies']}),
                 queryClient.invalidateQueries({queryKey: ['movieDownloads', slug]}),
                 queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
             ])
         } catch {
-            toast.error(`Could not start the ${mediaType} download`)
+            toast.error(`Could not start the ${label.toLocaleLowerCase()} download`)
         } finally {
             setSubmitting(null)
+        }
+    }
+
+    const refreshMovieExtras = async () => {
+        if (!slug || !localMovie || refreshingExtras) return
+        setRefreshingExtras(true)
+        const requestedAt = Date.now() - 2_000
+        try {
+            const base = (window as any).appConfig.API_URL
+            const response = await fetch(
+                `${base}/movies/${encodeURIComponent(slug)}/extras/refresh`,
+                {method: 'POST', credentials: 'include'},
+            )
+            if (!response.ok) {
+                const {error: message} = await getErrorMessageFromResponse(response)
+                toast.error(message || 'Could not start the movie-extra refresh')
+                return
+            }
+
+            toast.success('Movie-extra refresh started')
+            for (let attempt = 0; attempt < 60; attempt += 1) {
+                await sleep(1_000)
+                const params = new URLSearchParams({
+                    resource_type: 'movie',
+                    resource_id: String(localMovie.id),
+                    definition_key: 'refresh_movie_extras',
+                })
+                const runResponse = await fetch(`${base}/tasks/runs?${params}`, {credentials: 'include'})
+                if (!runResponse.ok) continue
+                const runs = await runResponse.json()
+                const run = Array.isArray(runs)
+                    ? runs.find((candidate) => {
+                        const startedAt = candidate?.startedAt ? Date.parse(candidate.startedAt) : 0
+                        return startedAt >= requestedAt
+                    })
+                    : null
+                if (!run) continue
+                if (run.status === 'SUCCEEDED') {
+                    await Promise.all([
+                        queryClient.invalidateQueries({queryKey: ['movies']}),
+                        queryClient.invalidateQueries({queryKey: ['dailywireMovie', slug]}),
+                    ])
+                    toast.success(run.message && run.message !== 'OK' ? run.message : 'Movie extras refreshed')
+                    return
+                }
+                if (run.status === 'FAILED' || run.status === 'CANCELED') {
+                    toast.error(run.lastError || run.message || 'Movie-extra refresh failed')
+                    return
+                }
+            }
+            toast.success('The refresh is still running in the background')
+        } catch {
+            toast.error('Could not refresh movie extras')
+        } finally {
+            setRefreshingExtras(false)
         }
     }
 
@@ -139,6 +225,8 @@ export default function MoviePage() {
 
     const hero = toImageUrl(movie.backgroundImagePath || movie.thumbnailLandscapePath || movie.thumbnailPortraitPath)
     const duration = formatDuration(movie.duration)
+    const officialTrailer: MovieExtraSummary | null = localMovie?.officialTrailer ?? movie.trailer ?? null
+    const movieExtras: MovieExtraSummary[] = localMovie?.movieExtras ?? movie.movieExtras
 
     return (
         <section className="view movie-detail-view" aria-labelledby="movie-title">
@@ -151,8 +239,8 @@ export default function MoviePage() {
             </div>
 
             <div className="movie-detail-actions">
-                {movie.trailer?.sharingUrl && (
-                    <a className="btn btn-secondary" href={movie.trailer.sharingUrl} target="_blank" rel="noreferrer">
+                {officialTrailer?.sharingUrl && (
+                    <a className="btn btn-secondary" href={officialTrailer.sharingUrl} target="_blank" rel="noreferrer">
                         <FontAwesomeIcon icon={['fas', 'play']}/> Watch trailer
                     </a>
                 )}
@@ -160,6 +248,12 @@ export default function MoviePage() {
                     <a className="btn" href={movie.sharingUrl} target="_blank" rel="noreferrer">
                         <FontAwesomeIcon icon={['fas', 'arrow-up-right-from-square']}/> Open on Daily Wire
                     </a>
+                )}
+                {localMovie && (
+                    <button type="button" className="btn" onClick={() => void refreshMovieExtras()} disabled={refreshingExtras}>
+                        <FontAwesomeIcon icon={['fas', 'rotate']} spin={refreshingExtras}/>
+                        {refreshingExtras ? 'Refreshing extras…' : 'Refresh extras'}
+                    </button>
                 )}
                 {localMovie?.releaseDateLookupStatus === 'error' && (
                     <button type="button" className="btn" onClick={() => void retryReleaseMetadata()} disabled={retryingMetadata}>
@@ -178,43 +272,94 @@ export default function MoviePage() {
                 <div className="movie-description">
                     <h2>About this movie</h2>
                     <p>{movie.description || 'Daily Wire did not provide a description for this movie.'}</p>
-                    {movie.trailer && (
-                        <div className="movie-trailer-row">
-                            {movie.trailer.thumbnailLandscapePath ? <img src={toImageUrl(movie.trailer.thumbnailLandscapePath)} alt=""/> : null}
-                            <span><strong>{movie.trailer.title}</strong><small>{formatDuration(movie.trailer.duration)}</small></span>
-                            <a href={movie.trailer.sharingUrl} target="_blank" rel="noreferrer" aria-label={`Watch ${movie.trailer.title}`}><FontAwesomeIcon icon={['fas', 'circle-play']}/></a>
-                        </div>
-                    )}
                 </div>
 
                 <aside className="movie-download-panel" aria-labelledby="download-movie-title">
                     <h2 id="download-movie-title">Download movie media</h2>
-                    <p>Movies and trailers are downloaded manually using the same Movie Local Media Profile.</p>
+                    <p>Movies and extras use the same Movie Local Media Profile.</p>
                     {videoProfiles.length ? (
                         <>
                             <label htmlFor="movie-profile">Local Media Profile</label>
                             <select id="movie-profile" className="input" value={profileId} onChange={(event) => setProfileId(event.target.value)}>
                                 {videoProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
                             </select>
-                            <button className="btn btn-primary movie-download-button" type="button" onClick={() => startDownload('movie')} disabled={submitting !== null || !movie.isDownloadable}>
+                            <button className="btn btn-primary movie-download-button" type="button" onClick={() => void startMovieDownload()} disabled={submitting !== null || !movie.isDownloadable}>
                                 <FontAwesomeIcon icon={['fas', 'download']}/>
                                 {submitting === 'movie' ? 'Queuing…' : 'Download movie'}
                             </button>
-                            {movie.trailer && (
-                                <button className="btn movie-download-button" type="button" onClick={() => startDownload('trailer')} disabled={submitting !== null}>
+                            {officialTrailer && (
+                                <button className="btn movie-download-button" type="button" onClick={() => void startExtraDownload(officialTrailer)} disabled={submitting !== null}>
                                     <FontAwesomeIcon icon={['fas', 'download']}/>
-                                    {submitting === 'trailer' ? 'Queuing…' : 'Download trailer'}
+                                    {submitting === `extra:${officialTrailer.slug}` ? 'Queuing…' : 'Download trailer'}
                                 </button>
                             )}
                         </>
                     ) : (
                         <div className="movie-profile-empty">
-                            <p>Create a Movie Local Media Profile before downloading a movie or trailer.</p>
+                            <p>Create a Movie Local Media Profile before downloading a movie or extra.</p>
                             <Link className="btn" to="/add-local-media-profile?type=movie">Create profile</Link>
                         </div>
                     )}
                 </aside>
             </div>
+
+            <section className="movie-extras" aria-labelledby="movie-extras-title">
+                <div className="movie-section-heading">
+                    <div>
+                        <h2 id="movie-extras-title">Extras</h2>
+                        <p>{localMovie ? 'Extras indexed in your WireLoft library.' : 'Extra content available for this movie.'}</p>
+                    </div>
+                    <span>{movieExtras.length}</span>
+                </div>
+                {movieExtras.length ? (
+                    <div className="movie-extra-grid">
+                        {movieExtras.map((extra) => {
+                            const thumbnail = toImageUrl(extra.thumbnailLandscapePath || extra.backgroundImagePath)
+                            const isOfficial = officialTrailer?.slug === extra.slug
+                            return (
+                                <article className="movie-extra-card" key={extra.id ?? extra.slug}>
+                                    <div className="movie-extra-art">
+                                        {thumbnail
+                                            ? <img src={thumbnail} alt=""/>
+                                            : <FontAwesomeIcon icon={['fas', 'film']}/>
+                                        }
+                                        <span>{movieExtraTypeLabel(extra.movieExtraType)}</span>
+                                    </div>
+                                    <div className="movie-extra-copy">
+                                        <div>
+                                            <strong>{extra.title}</strong>
+                                            <small>
+                                                {[formatDuration(extra.duration), isOfficial ? 'Official trailer' : null].filter(Boolean).join(' • ') || 'Movie extra'}
+                                            </small>
+                                        </div>
+                                        <div className="movie-extra-actions">
+                                            {extra.sharingUrl && (
+                                                <a className="btn btn-icon" href={extra.sharingUrl} target="_blank" rel="noreferrer" aria-label={`Watch ${extra.title}`} title="Watch on Daily Wire">
+                                                    <FontAwesomeIcon icon={['fas', 'play']}/>
+                                                </a>
+                                            )}
+                                            <button
+                                                className="btn btn-primary"
+                                                type="button"
+                                                onClick={() => void startExtraDownload(extra)}
+                                                disabled={submitting !== null || !profileId}
+                                            >
+                                                <FontAwesomeIcon icon={['fas', 'download']}/>
+                                                {submitting === `extra:${extra.slug}` ? 'Queuing…' : 'Download'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </article>
+                            )
+                        })}
+                    </div>
+                ) : (
+                    <div className="movie-extras-empty">
+                        <FontAwesomeIcon icon={['fas', 'film']}/>
+                        <span>No extra content is currently indexed for this movie.</span>
+                    </div>
+                )}
+            </section>
 
             {!!downloads?.length && (
                 <section className="movie-downloads" aria-labelledby="movie-downloads-title">
@@ -222,8 +367,8 @@ export default function MoviePage() {
                     {downloads.map((download) => (
                         <div className="movie-download-row" key={download.id}>
                             <div>
-                                <strong>{download.type === 'trailer' ? 'Trailer' : 'Movie'} · {download.localMediaProfileName}</strong>
-                                <small>{download.formatDownloaded || download.preferredFormat || 'Waiting for format'}</small>
+                                <strong>{download.type === 'movie_extra' ? movieExtraTypeLabel(download.movieExtraType) : 'Movie'} · {download.localMediaProfileName}</strong>
+                                <small>{download.mediaTitle && download.type === 'movie_extra' ? `${download.mediaTitle} • ` : ''}{download.formatDownloaded || download.preferredFormat || 'Waiting for format'}</small>
                             </div>
                             {(download.downloadStatus === 'downloading' || download.downloadStatus === 'pending') ? (
                                 <div className="movie-download-progress"><ProgressBar value={download.progress} ariaLabel={`Download progress for ${movie.title}`}/><span>{download.downloadStatus === 'pending' ? 'Queued' : `${download.progress}%`}</span></div>
@@ -250,9 +395,10 @@ export default function MoviePage() {
                             <h2 id="delete-title" className="modal-title">Delete movie</h2>
                         </div>
                         <p id="delete-desc" className="modal-text">
-                            Are you sure you want to delete "{movie.title}" from WireLoft? This removes the movie and
-                            its download history from the WireLoft database. Completed files already on disk will not
-                            be changed. Any download still in progress will be cancelled and its partial files removed.
+                            Are you sure you want to delete "{movie.title}" from WireLoft? This removes the movie, its
+                            indexed extras, and their download history from the WireLoft database. Completed files
+                            already on disk will not be changed. Any download still in progress will be cancelled and
+                            its partial files removed.
                         </p>
                         <div className="modal-actions">
                             <button type="button" className="btn" onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>

@@ -39,7 +39,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     current, head = get_database_status()
     assert current == (head,)
-    assert head == "7f3c2a91d8b4"
+    assert head == "b84c2d9e0f31"
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -48,10 +48,10 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "shows",
         "episodes",
         "movies",
-        "trailers",
+        "movie_extras",
         "media_downloads",
         "media_downloads_movie",
-        "media_downloads_trailer",
+        "media_downloads_movie_extra",
         "local_media_profiles_show",
         "local_media_profiles_movie",
         "task_schedules",
@@ -96,14 +96,16 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "release_date_lookup_status",
         "release_date_lookup_attempted_at",
         "release_date_lookup_error",
+        "official_trailer_id",
     }
 
-    trailer_columns = {
-        column["name"] for column in inspector.get_columns("trailers")
+    movie_extra_columns = {
+        column["name"] for column in inspector.get_columns("movie_extras")
     }
-    assert trailer_columns == {
+    assert movie_extra_columns == {
         "id",
         "movie_id",
+        "movie_extra_type",
         "dw_id",
         "slug",
         "sharing_url",
@@ -119,7 +121,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
     assert "attempt_generation" in media_download_columns
 
 
-def test_trailer_migration_preserves_legacy_movie_trailer_metadata(migration_database):
+def test_movie_extra_migration_preserves_legacy_movie_trailer_metadata(migration_database):
     _database_path, engine = migration_database
 
     from backend.db.migrations import (
@@ -127,7 +129,7 @@ def test_trailer_migration_preserves_legacy_movie_trailer_metadata(migration_dat
         get_database_status,
         upgrade_database,
     )
-    from backend.db.models import Movie, Trailer
+    from backend.db.models import Movie, MovieExtra
 
     command.upgrade(get_alembic_config(), "828421f64d03")
     with engine.begin() as connection:
@@ -157,13 +159,16 @@ def test_trailer_migration_preserves_legacy_movie_trailer_metadata(migration_dat
     assert current == (head,)
     with Session(engine) as session:
         movie = session.query(Movie).one()
-        trailer = session.query(Trailer).one()
+        trailer = session.query(MovieExtra).one()
         assert movie.available_for == []
         assert movie.release_date is None
         assert movie.release_date_lookup_status == "pending"
-        assert movie.trailers == [trailer]
+        assert movie.movie_extras == [trailer]
+        assert movie.official_trailer == trailer
+        assert movie.official_trailer_id == trailer.id
         assert trailer.movie_id == movie.id
-        assert trailer.type == "trailer"
+        assert trailer.type == "movie_extra"
+        assert trailer.movie_extra_type == "trailer"
         assert trailer.slug == "a-movie-trailer"
         assert trailer.title == "A Movie Trailer"
         assert trailer.sharing_url == "https://example.test/a-movie-trailer"
@@ -328,4 +333,4 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 def test_migration_history_has_exactly_one_head():
     from backend.db.migrations import get_head_revisions
 
-    assert get_head_revisions() == ("7f3c2a91d8b4",)
+    assert get_head_revisions() == ("b84c2d9e0f31",)

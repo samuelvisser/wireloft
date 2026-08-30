@@ -13,6 +13,7 @@ import {useMediaDownloadsView} from '../lib/queries'
 import {ACTIVE_DOWNLOAD_STATUSES, MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {getErrorMessageFromResponse} from '../utils/helpers'
+import {movieExtraTypeLabel} from '../utils/movieExtras'
 
 type StatusFilterOption = {
     value: string
@@ -56,15 +57,15 @@ function rowTitle(row: MediaDownloadViewRead): string {
     return row.mediaTitle ?? row.movieTitle ?? row.episodeTitle ?? 'Unknown media'
 }
 
-function mediaTypeLabel(type: string): string {
+function mediaTypeLabel(type: string, movieExtraType?: string | null): string {
     if (type === 'movie') return 'Movie'
-    if (type === 'trailer') return 'Trailer'
+    if (type === 'movie_extra') return movieExtraTypeLabel(movieExtraType)
     if (type === 'episode') return 'Episode'
     return type ? type.replace(/_/g, ' ').replace(/^./, (char) => char.toUpperCase()) : 'Media'
 }
 
 function rowContext(row: MediaDownloadViewRead): string {
-    if (row.type === 'movie' || row.type === 'trailer') return mediaTypeLabel(row.type)
+    if (row.type === 'movie' || row.type === 'movie_extra') return mediaTypeLabel(row.type, row.movieExtraType)
     return row.showTitle ?? mediaTypeLabel(String(row.type))
 }
 

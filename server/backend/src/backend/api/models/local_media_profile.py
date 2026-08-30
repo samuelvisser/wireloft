@@ -16,8 +16,8 @@ from backend.utils.output_template import (
 from backend.utils.helpers import slugify
 
 
-_TRAILER_COLLISION_MESSAGE = (
-    "Movie and trailer downloads could resolve to the same file. Either enable "
+_MOVIE_EXTRA_COLLISION_MESSAGE = (
+    "Movie and movie-extra downloads could resolve to the same file. Either enable "
     "'Append media type to filename' (recommended), or include at least one placeholder "
     "that describes the actual downloaded item, such as {title}, {dw_id}, "
     "{duration_seconds}, or {media_type}."
@@ -73,7 +73,7 @@ class _TypedLocalMediaProfileAPIBaseIn(_LocalMediaProfileAPIBaseIn):
                 not self.append_media_type_to_filename
                 and not movie_template_has_media_item_field(self.output_template)
             ):
-                raise ValueError(_TRAILER_COLLISION_MESSAGE)
+                raise ValueError(_MOVIE_EXTRA_COLLISION_MESSAGE)
         return self
 
 

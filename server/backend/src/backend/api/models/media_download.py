@@ -81,6 +81,7 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
     show_title: Optional[str]
     movie_slug: Optional[str]
     movie_title: Optional[str]
+    movie_extra_type: Optional[str]
     local_media_profile_name: Optional[str]
     preferred_format: Optional[str]
     # Whether the most recent attempt was a redownload of an already-completed

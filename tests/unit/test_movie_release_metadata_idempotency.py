@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkeypatch):
     from backend.api.endpoints.media_downloads.service import (
         create_movie_download,
-        create_trailer_download,
+        create_movie_extra_download,
     )
     from backend.api.endpoints.movies import service as movie_service
     from backend.api.models.media_download import MovieDownloadAPICreate
@@ -17,7 +17,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
     from backend.db.models import Movie, MovieLocalMediaProfile
     from backend.integrations.tmdb import MovieReleaseLookupResult
     from config import get_settings
-    from dailywire_api.records import DwMovieRecord, DwTrailerRecord
+    from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -54,6 +54,14 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
     session.add_all(profiles)
     session.commit()
 
+    official_trailer = DwMovieExtraRecord(
+        dw_id="trailer-1",
+        slug="run-hide-fight-trailer",
+        title="Official Trailer",
+        movie_extra_type="trailer",
+        sharing_url="https://www.dailywire.com/clips/run-hide-fight-trailer",
+        duration=120,
+    )
     movie_data = DwMovieRecord(
         dw_id="movie-1",
         slug="run-hide-fight",
@@ -61,13 +69,8 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
         duration=109 * 60,
         sharing_url="https://www.dailywire.com/videos/run-hide-fight",
         is_downloadable=True,
-        trailer=DwTrailerRecord(
-            dw_id="trailer-1",
-            slug="run-hide-fight-trailer",
-            title="Official Trailer",
-            sharing_url="https://www.dailywire.com/clips/run-hide-fight-trailer",
-            duration=120,
-        ),
+        movie_extras=[official_trailer],
+        trailer=official_trailer,
     )
 
     create_movie_download(
@@ -81,7 +84,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
     assert actual_lookups == []
 
     configured = True
-    create_trailer_download(
+    create_movie_extra_download(
         session,
         movie_data,
         "run-hide-fight-trailer",

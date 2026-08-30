@@ -5,8 +5,9 @@ from ...models.movie import *
 from ...models.media_download import MediaDownloadAPIRead, MovieDownloadAPICreate
 from ..dailywire.movies.service import get_movie as get_dailywire_movie
 from ..media_downloads.router import _trigger_download_task
-from ..media_downloads.service import create_movie_download, create_trailer_download
+from ..media_downloads.service import create_movie_download, create_movie_extra_download
 from backend.app import db_session
+from backend.db.models import Movie
 from backend.utils.output_template import MovieReleaseDateUnavailableError
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
@@ -46,25 +47,25 @@ def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
 
 
 @router.post(
-    "/{movie_slug}/trailers/{trailer_slug}/downloads",
+    "/{movie_slug}/extras/{movie_extra_slug}/downloads",
     response_model=MediaDownloadAPIRead,
     status_code=status.HTTP_201_CREATED,
 )
-def trailer_download_create(movie_slug: str, trailer_slug: str, body: MovieDownloadAPICreate):
-    """Persist a browsed Daily Wire trailer and download it with a Movie profile."""
+def movie_extra_download_create(movie_slug: str, movie_extra_slug: str, body: MovieDownloadAPICreate):
+    """Persist a browsed Daily Wire movie extra and download it with a Movie profile."""
     try:
         movie_data = get_dailywire_movie(movie_slug)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     with db_session() as s:
         try:
-            download = create_trailer_download(s, movie_data, trailer_slug, body)
+            download = create_movie_extra_download(s, movie_data, movie_extra_slug, body)
             payload = MediaDownloadAPIRead.model_validate(download)
-            trailer_id = download.media_item_id
+            movie_extra_id = download.media_item_id
             attempt_generation = download.attempt_generation
             s.commit()
         except MovieReleaseDateUnavailableError as exc:
-            # Keep the parent movie, trailer and lookup result even though this
+            # Keep the parent movie, extra and lookup result even though this
             # particular profile cannot create a safe release-dated path.
             s.commit()
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -74,11 +75,30 @@ def trailer_download_create(movie_slug: str, trailer_slug: str, body: MovieDownl
 
     _trigger_download_task(
         media_download_id=payload.id,
-        media_item_id=trailer_id,
-        media_type="trailer",
+        media_item_id=movie_extra_id,
+        media_type="movie_extra",
         attempt_generation=attempt_generation,
     )
     return payload
+
+
+@router.post("/{movie_slug}/extras/refresh", status_code=status.HTTP_202_ACCEPTED)
+def movie_extras_refresh(movie_slug: str):
+    """Queue a manual refresh that indexes newly published movie extras."""
+    with db_session() as s:
+        movie = s.query(Movie).filter(Movie.slug == movie_slug).one_or_none()
+        if movie is None:
+            raise HTTPException(status_code=404, detail="Movie not found")
+        movie_id = movie.id
+
+    from task_manager.scheduler.executor import trigger_now
+
+    job_id = trigger_now(
+        def_key="refresh_movie_extras",
+        resource_type="movie",
+        resource_id=movie_id,
+    )
+    return {"jobId": job_id}
 
 
 @router.get("", response_model=list[MovieAPIRead])

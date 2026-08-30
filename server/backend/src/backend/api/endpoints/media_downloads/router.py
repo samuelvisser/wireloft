@@ -122,7 +122,7 @@ def _trigger_download_task(
     """Queue the download worker for a freshly created/reset download row."""
     from task_manager.scheduler.executor import trigger_now
 
-    if media_type in {"movie", "trailer"}:
+    if media_type in {"movie", "movie_extra"}:
         trigger_now(
             def_key="download_movie",
             resource_type=media_type,

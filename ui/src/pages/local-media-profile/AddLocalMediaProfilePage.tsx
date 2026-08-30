@@ -108,9 +108,9 @@ export default function AddLocalMediaProfilePage() {
                                 value: 'movie',
                                 label: 'Movie',
                                 description: (
-                                    <ReadMore summary={<span>Store manually downloaded movies and trailers.</span>}>
-                                        <p>Movie profiles can keep movie metadata for folders while using trailer metadata for trailer filenames.</p>
-                                        <p>Movies and trailers are always downloaded as video.</p>
+                                    <ReadMore summary={<span>Store manually downloaded movies and their extras.</span>}>
+                                        <p>Movie profiles can keep parent-movie metadata for folders while using each extra's metadata for its filename.</p>
+                                        <p>Movies and movie extras are always downloaded as video.</p>
                                     </ReadMore>
                                 ),
                             },

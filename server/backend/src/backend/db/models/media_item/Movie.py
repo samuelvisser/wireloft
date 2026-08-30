@@ -11,7 +11,7 @@ from backend.types.media_types import MediaType
 from .MediaItemBase import MediaItemBase
 
 if TYPE_CHECKING:
-    from .Trailer import Trailer
+    from .MovieExtra import MovieExtra
 
 
 class Movie(MediaItemBase):
@@ -37,7 +37,7 @@ class Movie(MediaItemBase):
     )
 
     # Canonical release metadata is looked up once when a Daily Wire movie is
-    # first persisted through a movie or trailer download. Keeping both the
+    # first persisted through a movie or movie-extra download. Keeping both the
     # result and its lookup state prevents future downloads from querying TMDB.
     release_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     release_date_source: Mapped[Optional[str]]
@@ -53,13 +53,27 @@ class Movie(MediaItemBase):
     )
     release_date_lookup_error: Mapped[Optional[str]]
 
-    # A collection from the outset, even though Daily Wire currently exposes
-    # at most one trailer through this flow.
-    trailers: Mapped[list["Trailer"]] = relationship(
+    official_trailer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey(
+            "movie_extras.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_movies_official_trailer_id_movie_extras",
+        ),
+        unique=True,
+        nullable=True,
+    )
+
+    movie_extras: Mapped[list["MovieExtra"]] = relationship(
         back_populates="movie",
         cascade="all, delete-orphan",
-        foreign_keys="Trailer.movie_id",
-        order_by="Trailer.id",
+        foreign_keys="MovieExtra.movie_id",
+        order_by="MovieExtra.id",
+    )
+    official_trailer: Mapped[Optional["MovieExtra"]] = relationship(
+        foreign_keys=[official_trailer_id],
+        uselist=False,
+        post_update=True,
     )
 
     def __repr__(self) -> str:

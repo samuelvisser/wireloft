@@ -6,11 +6,13 @@ from typing import Optional
 from pydantic import computed_field
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.types.media_types import MovieExtraType
 from backend.utils.helpers import generate_uuid
 
 
-class _TrailerAPIBaseIn(RequestBase):
+class _MovieExtraAPIBaseIn(RequestBase):
     title: str
+    movie_extra_type: MovieExtraType
     description: Optional[str] = None
     downloaded_date: Optional[datetime] = None
     duration: float = 0
@@ -23,8 +25,8 @@ class _TrailerAPIBaseIn(RequestBase):
     sharing_url: Optional[str] = None
 
 
-class TrailerAPICreate(_TrailerAPIBaseIn):
-    """Trailer metadata; the owning movie is supplied by the service."""
+class MovieExtraAPICreate(_MovieExtraAPIBaseIn):
+    """Movie-extra metadata; the owning movie is supplied by the service."""
 
     @computed_field(return_type=str)
     @property
@@ -32,14 +34,15 @@ class TrailerAPICreate(_TrailerAPIBaseIn):
         return generate_uuid()
 
 
-class TrailerAPIUpdate(_TrailerAPIBaseIn):
+class MovieExtraAPIUpdate(_MovieExtraAPIBaseIn):
     pass
 
 
-class TrailerAPIRead(ResponseBase):
+class MovieExtraAPIRead(ResponseBase):
     id: int
     movie_id: int
     uuid: str
+    movie_extra_type: MovieExtraType
     title: str
     description: Optional[str]
     downloaded_date: Optional[datetime]

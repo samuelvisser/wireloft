@@ -51,6 +51,7 @@ export const MediaDownloadViewReadSchema = MediaDownloadReadSchema.extend({
     showTitle: z.string().nullable(),
     movieSlug: z.string().nullable(),
     movieTitle: z.string().nullable(),
+    movieExtraType: z.string().nullable(),
     localMediaProfileName: z.string().nullable(),
     preferredFormat: z.string().nullable(),
     isRedownloadAttempt: z.boolean().nullable(),

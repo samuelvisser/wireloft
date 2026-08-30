@@ -20,7 +20,7 @@ from dailywire_api.records import (
     DwMoviePlaybackRecord,
     DwMovieRecord,
     DwShowRecord,
-    DwTrailerRecord,
+    DwMovieExtraRecord,
     DwUserInfo,
 )
 from dailywire_authorisation import DeviceAuthClient
@@ -198,31 +198,44 @@ class MiddlewareClient:
         if not isinstance(raw, dict) or not raw.get('slug'):
             raise MiddlewareAPIError(f"Daily Wire movie '{slug}' was not found")
 
-        trailer: Optional[DwTrailerRecord] = None
+        extras_by_key: dict[str, DwMovieExtraRecord] = {}
         for tab in payload.get('tabs') or []:
             for component in tab.get('components') or []:
                 for item in component.get('items') or []:
                     extra = item.get('showEpisode')
-                    if not isinstance(extra, dict):
+                    if not isinstance(extra, dict) or not extra.get('slug'):
                         continue
                     title = str(extra.get('title') or '')
-                    if 'trailer' not in title.casefold():
-                        continue
                     images = extra.get('images') or {}
                     thumbnails = images.get('thumbnail') or {}
-                    trailer = DwTrailerRecord(
-                        dw_id=str(extra.get('id') or ''),
+                    record = DwMovieExtraRecord(
+                        dw_id=str(extra['id']) if extra.get('id') else None,
                         slug=str(extra.get('slug') or ''),
                         title=title,
-                        sharing_url=str(extra.get('sharingURL') or ''),
+                        movie_extra_type=self._movie_extra_type(extra),
+                        description=extra.get('description') or None,
+                        sharing_url=extra.get('sharingURL') or None,
                         duration=float(extra.get('duration') or 0),
+                        background_image_path=extra.get('backgroundImage') or None,
                         thumbnail_landscape_path=thumbnails.get('land') or None,
+                        thumbnail_portrait_path=thumbnails.get('port') or None,
+                        thumbnail_square_path=thumbnails.get('square') or None,
                     )
-                    break
-                if trailer:
-                    break
-            if trailer:
-                break
+                    key = record.dw_id or record.slug
+                    extras_by_key.setdefault(key, record)
+
+        movie_extras = list(extras_by_key.values())
+        trailer_candidates = [
+            extra for extra in movie_extras if extra.movie_extra_type == 'trailer'
+        ]
+        trailer = next(
+            (
+                extra
+                for extra in trailer_candidates
+                if 'official trailer' in extra.title.casefold()
+            ),
+            trailer_candidates[0] if trailer_candidates else None,
+        )
 
         summary = self._catalog_movie_from_payload(raw)
         return DwMovieRecord(
@@ -232,6 +245,7 @@ class MiddlewareClient:
             mature_rating=raw.get('matureRating') or None,
             is_downloadable=bool(raw.get('isDownloadable', True)),
             available_for=[str(value) for value in raw.get('availableFor') or []],
+            movie_extras=movie_extras,
             trailer=trailer,
         )
 
@@ -501,6 +515,49 @@ class MiddlewareClient:
             title = title.split(' | ', 1)[0].strip()
 
         return title or original
+
+    @staticmethod
+    def _movie_extra_type(raw: dict[str, Any]) -> str:
+        """Map Daily Wire metadata (or, as a fallback, its title) to one stable type."""
+        aliases = {
+            'behindthescenes': 'behindthescenes',
+            'makingof': 'behindthescenes',
+            'deleted': 'deleted',
+            'deletedscene': 'deleted',
+            'deletedscenes': 'deleted',
+            'featurette': 'featurette',
+            'interview': 'interview',
+            'scene': 'scene',
+            'clip': 'scene',
+            'short': 'short',
+            'shortfilm': 'short',
+            'trailer': 'trailer',
+            'teaser': 'trailer',
+            'other': 'other',
+        }
+        for field in ('movieExtraType', 'extraType', 'contentType'):
+            value = ''.join(character for character in str(raw.get(field) or '').casefold() if character.isalnum())
+            if value in aliases:
+                return aliases[value]
+
+        title = str(raw.get('title') or '').casefold()
+        compact_title = ''.join(character if character.isalnum() else ' ' for character in title)
+        words = f" {compact_title} "
+        if 'behind the scenes' in title or 'behind-the-scenes' in title or 'making of' in title:
+            return 'behindthescenes'
+        if 'deleted scene' in title:
+            return 'deleted'
+        if 'featurette' in title:
+            return 'featurette'
+        if 'interview' in title:
+            return 'interview'
+        if 'trailer' in title or 'teaser' in title:
+            return 'trailer'
+        if 'short film' in title or ' short ' in words:
+            return 'short'
+        if ' scene ' in words or ' clip ' in words:
+            return 'scene'
+        return 'other'
 
 
 

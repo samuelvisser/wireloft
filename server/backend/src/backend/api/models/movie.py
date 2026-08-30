@@ -6,7 +6,7 @@ from datetime import date, datetime
 from pydantic import Field, computed_field
 
 from backend.api.models.base import ResponseBase, RequestBase
-from backend.api.models.trailer import TrailerAPICreate, TrailerAPIRead
+from backend.api.models.movie_extra import MovieExtraAPICreate, MovieExtraAPIRead
 from backend.utils.helpers import generate_uuid
 
 
@@ -39,7 +39,10 @@ class MovieAPICreate(_MovieAPIBaseIn):
     # Fields in the media_items table
     slug: str
     dw_id: Optional[str] = None
-    trailers: list[TrailerAPICreate] = Field(default_factory=list)
+    movie_extras: list[MovieExtraAPICreate] = Field(default_factory=list)
+    # The extra rows do not have database IDs until this request is persisted,
+    # so create requests identify the official trailer by its stable DW slug.
+    official_trailer_slug: Optional[str] = None
 
     @computed_field(return_type=str)
     @property
@@ -83,7 +86,9 @@ class _MovieAPIBaseOut(ResponseBase):
     release_date_lookup_status: str
     release_date_lookup_attempted_at: Optional[datetime]
     release_date_lookup_error: Optional[str]
-    trailers: list[TrailerAPIRead]
+    official_trailer_id: Optional[int]
+    official_trailer: Optional[MovieExtraAPIRead]
+    movie_extras: list[MovieExtraAPIRead]
 
 
 class MovieAPIRead(_MovieAPIBaseOut):

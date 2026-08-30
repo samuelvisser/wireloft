@@ -142,10 +142,10 @@ def test_release_lookup_wrapper_uses_configured_read_token(monkeypatch):
     }
 
 
-def test_movie_and_trailer_downloads_share_one_persisted_release_lookup(tmp_path, monkeypatch):
+def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, monkeypatch):
     from backend.api.endpoints.media_downloads.service import (
         create_movie_download,
-        create_trailer_download,
+        create_movie_extra_download,
     )
     from backend.api.endpoints.movies import service as movie_service
     from backend.api.models.media_download import MovieDownloadAPICreate
@@ -153,7 +153,7 @@ def test_movie_and_trailer_downloads_share_one_persisted_release_lookup(tmp_path
     from backend.db.models import Movie, MovieLocalMediaProfile
     from backend.integrations.tmdb import MovieReleaseLookupResult
     from config import get_settings
-    from dailywire_api.records import DwMovieRecord, DwTrailerRecord
+    from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -184,6 +184,14 @@ def test_movie_and_trailer_downloads_share_one_persisted_release_lookup(tmp_path
     session.add(profile)
     session.commit()
 
+    official_trailer = DwMovieExtraRecord(
+        dw_id="trailer-1",
+        slug="run-hide-fight-trailer",
+        title="Official Trailer",
+        movie_extra_type="trailer",
+        sharing_url="https://www.dailywire.com/clips/run-hide-fight-trailer",
+        duration=120,
+    )
     movie_data = DwMovieRecord(
         dw_id="movie-1",
         slug="run-hide-fight",
@@ -192,18 +200,13 @@ def test_movie_and_trailer_downloads_share_one_persisted_release_lookup(tmp_path
         duration=109 * 60,
         sharing_url="https://www.dailywire.com/videos/run-hide-fight",
         is_downloadable=True,
-        trailer=DwTrailerRecord(
-            dw_id="trailer-1",
-            slug="run-hide-fight-trailer",
-            title="Official Trailer",
-            sharing_url="https://www.dailywire.com/clips/run-hide-fight-trailer",
-            duration=120,
-        ),
+        movie_extras=[official_trailer],
+        trailer=official_trailer,
     )
     body = MovieDownloadAPICreate(local_media_profile_id=profile.id)
 
     movie_download = create_movie_download(session, movie_data, body)
-    trailer_download = create_trailer_download(
+    trailer_download = create_movie_extra_download(
         session,
         movie_data,
         "run-hide-fight-trailer",
