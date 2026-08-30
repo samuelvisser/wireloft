@@ -136,7 +136,15 @@ function ProfileDownloadRow({
                         </button>
                     </div>
                 )}
-                {download && status && !['pending', 'downloading', 'downloaded', 'error', 'missing', 'corrupted'].includes(status) && (
+                {download && status === 'cancelled' && (
+                    <div className="download-row-error">
+                        <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
+                        <button className="btn" onClick={startDownload} disabled={busy}>
+                            <FontAwesomeIcon icon={['fas', 'download']}/> Download
+                        </button>
+                    </div>
+                )}
+                {download && status && !['pending', 'downloading', 'downloaded', 'cancelled', 'error', 'missing', 'corrupted'].includes(status) && (
                     <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
                 )}
             </div>

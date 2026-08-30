@@ -22,11 +22,13 @@ from backend.db.models.media_download import (
 from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
+from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
 
 _RESTARTABLE_STATUSES = {
     MediaDownloadStatus.PENDING.value,
+    MediaDownloadStatus.CANCELLED.value,
     MediaDownloadStatus.ERROR.value,
     MediaDownloadStatus.MISSING.value,
     MediaDownloadStatus.CORRUPTED.value,
@@ -36,6 +38,8 @@ _ACTIVE_STATUSES = {
     MediaDownloadStatus.LOCAL_PROCESSING.value,
 }
 _RETRYABLE_STATUSES = _RESTARTABLE_STATUSES | _ACTIVE_STATUSES
+_CANCELLABLE_STATUSES = _ACTIVE_STATUSES | {MediaDownloadStatus.PENDING.value}
+_USER_CANCEL_MESSAGE = "Cancelled by the user"
 _USER_RESTART_MESSAGE = "Cancelled by the user and restarted"
 
 
@@ -312,21 +316,47 @@ def retry_media_download(s: Session, media_download_id: int) -> MediaDownloadBas
     if download.download_status not in _RETRYABLE_STATUSES:
         raise HTTPException(status_code=409, detail="This download cannot be retried in its current state")
 
-    if download.download_status in _ACTIVE_STATUSES:
-        s.add(MediaDownloadAttempt(
-            media_download_id=download.id,
-            is_redownload=bool(getattr(download, "is_redownload_attempt", False) or False),
-            status="cancelled",
-            error_message=_USER_RESTART_MESSAGE,
-            downloaded_bytes=download.downloaded_bytes,
-            format_downloaded=download.format_downloaded,
-            started_at=download.started_at,
-            finished_at=datetime.now(timezone.utc),
-        ))
+    if download.download_status in _CANCELLABLE_STATUSES:
+        _record_cancellation(s, download, message=_USER_RESTART_MESSAGE)
 
     _reset_download(download)
     s.flush()
     return download
+
+
+def cancel_media_download(s: Session, media_download_id: int) -> MediaDownloadBase:
+    """Stop a queued/running download without scheduling a replacement."""
+    download: Optional[MediaDownloadBase] = s.get(MediaDownloadBase, media_download_id)
+    if download is None:
+        raise HTTPException(status_code=404, detail="Media download not found")
+    if download.download_status not in _CANCELLABLE_STATUSES:
+        raise HTTPException(status_code=409, detail="This download is not currently in progress")
+
+    _record_cancellation(s, download, message=_USER_CANCEL_MESSAGE)
+    download.attempt_generation += 1
+    download.download_status = MediaDownloadStatus.CANCELLED.value
+    download.progress = 0
+    download.error_message = None
+    download.downloaded_bytes = None
+    download.format_downloaded = None
+    download.started_at = None
+    download.finished_at = datetime.now(timezone.utc)
+    s.flush()
+    remove_download_artifacts(download.file_path)
+    return download
+
+
+def _record_cancellation(s: Session, download: MediaDownloadBase, *, message: str) -> None:
+    s.add(MediaDownloadAttempt(
+        media_download_id=download.id,
+        is_redownload=bool(getattr(download, "is_redownload_attempt", False) or False),
+        status=MediaDownloadStatus.CANCELLED.value,
+        error_message=message,
+        downloaded_bytes=download.downloaded_bytes,
+        format_downloaded=download.format_downloaded,
+        started_at=download.started_at,
+        finished_at=datetime.now(timezone.utc),
+    ))
 
 
 def _reset_download(download: MediaDownloadBase) -> None:
@@ -353,9 +383,11 @@ def delete_media_download(s: Session, media_download_id: int) -> MediaDownloadAP
     item = s.query(MediaDownloadBase).filter_by(id=media_download_id).one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Media download not found")
-    if item.download_status == MediaDownloadStatus.DOWNLOADING.value:
-        raise HTTPException(status_code=409, detail="Cannot delete a download that is currently running")
     payload = MediaDownloadAPIRead.model_validate(item)
+    if item.download_status in _CANCELLABLE_STATUSES:
+        # Removing the row invalidates every queued/running generation. Cleanup
+        # is also repeated by an already-running worker when it notices this.
+        remove_download_artifacts(item.file_path)
     s.delete(item)
     s.flush()
     return payload

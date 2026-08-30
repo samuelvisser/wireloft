@@ -12,6 +12,7 @@ from backend.db.models.media_download import MediaDownloadAttempt, MediaDownload
 from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.types.media_types import MediaType
+from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_movie_output_path
 from config import get_settings
 from dailywire_api.dw_api.client import MiddlewareClient
@@ -46,7 +47,7 @@ async def run_download_movie(
 ) -> None:
     download: Optional[MediaDownloadBase] = session.get(MediaDownloadBase, media_download_id)
     if download is None:
-        raise ValueError(f"Media download {media_download_id} not found")
+        raise DownloadCancelled(f"Media download {media_download_id} was deleted before it started")
 
     expected_generation = download.attempt_generation if attempt_generation is None else attempt_generation
     attempt_guard = DownloadAttemptGuard(media_download_id, expected_generation)
@@ -98,10 +99,11 @@ async def run_download_movie(
             )
             attempt_guard.ensure_current()
         except DownloadCancelled:
-            session.rollback()
+            _discard_cancelled_attempt(session, download.__dict__.get("file_path"))
             cancelled = True
             raise
         except Exception as exc:
+            file_path = download.__dict__.get("file_path")
             session.rollback()
             try:
                 attempt_guard.update_current(
@@ -111,6 +113,7 @@ async def run_download_movie(
                     finished_at=datetime.now(timezone.utc),
                 )
             except DownloadCancelled:
+                _discard_cancelled_attempt(session, file_path)
                 cancelled = True
                 raise
             session.refresh(download)
@@ -118,15 +121,20 @@ async def run_download_movie(
             session.commit()
             raise
 
-        attempt_guard.update_current(
-            session,
-            download_status=MediaDownloadStatus.DOWNLOADED.value,
-            progress=100,
-            downloaded_bytes=result.bytes_downloaded,
-            format_downloaded=format_downloaded,
-            file_path=result.path,
-            finished_at=datetime.now(timezone.utc),
-        )
+        try:
+            attempt_guard.update_current(
+                session,
+                download_status=MediaDownloadStatus.DOWNLOADED.value,
+                progress=100,
+                downloaded_bytes=result.bytes_downloaded,
+                format_downloaded=format_downloaded,
+                file_path=result.path,
+                finished_at=datetime.now(timezone.utc),
+            )
+        except DownloadCancelled:
+            _discard_cancelled_attempt(session, result.path)
+            cancelled = True
+            raise
         media.downloaded_date = media.downloaded_date or datetime.now(timezone.utc)
         session.refresh(download)
         _record_attempt(session, download)
@@ -272,6 +280,11 @@ def _record_attempt(session: Session, download: MediaDownloadBase) -> None:
         started_at=download.started_at,
         finished_at=download.finished_at,
     ))
+
+
+def _discard_cancelled_attempt(session: Session, file_path: Optional[str]) -> None:
+    session.rollback()
+    remove_download_artifacts(file_path)
 
 
 def _truncate_message(message: str, limit: int = 20_000) -> str:

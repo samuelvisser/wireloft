@@ -23,19 +23,23 @@ export function SettingsSection({
     title,
     description,
     children,
+    className,
 }: {
     title: string
     description?: string
     children: ReactNode
+    className?: string
 }) {
     return (
-        <section className="settings-section">
-            <div className="settings-section__header">
-                <h2>{title}</h2>
-                {description ? <p>{description}</p> : null}
-            </div>
-            <div className="settings-grid">{children}</div>
-        </section>
+        <details className={`settings-disclosure${className ? ` ${className}` : ''}`} open>
+            <summary>
+                <span>
+                    <strong>{title}</strong>
+                    {description ? <small>{description}</small> : null}
+                </span>
+            </summary>
+            <div className="settings-grid settings-disclosure__body">{children}</div>
+        </details>
     )
 }
 

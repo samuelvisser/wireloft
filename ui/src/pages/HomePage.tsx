@@ -3,9 +3,9 @@ import {useNavigate} from 'react-router-dom'
 
 import ProgressBar from '../components/common/ProgressBar'
 import {useLocalMediaProfiles, useMediaDownloadsView, useMovies, useShows} from '../lib/queries'
+import {ACTIVE_DOWNLOAD_STATUSES} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 
-const ACTIVE = new Set(['pending', 'downloading'])
 const PROBLEMS = new Set(['error', 'missing', 'corrupted'])
 const COMPLETE = new Set(['downloaded', 'redownloaded'])
 
@@ -23,7 +23,7 @@ export default function HomePage() {
     const {data: movies} = useMovies()
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads, isLoading, error} = useMediaDownloadsView()
-    const active = downloads?.filter((download) => ACTIVE.has(String(download.downloadStatus))) || []
+    const active = downloads?.filter((download) => ACTIVE_DOWNLOAD_STATUSES.has(String(download.downloadStatus))) || []
     const problems = downloads?.filter((download) => PROBLEMS.has(String(download.downloadStatus))) || []
     const complete = downloads?.filter((download) => COMPLETE.has(String(download.downloadStatus))).slice(0, 4) || []
     const hasAttention = problems.length > 0 || profiles?.length === 0
@@ -55,7 +55,7 @@ export default function HomePage() {
             </div>
 
             <div className="operation-stats" aria-label="WireLoft status summary">
-                <button type="button" onClick={() => navigate('/downloads')}><span>Active</span><strong>{active.filter((item) => item.downloadStatus === 'downloading').length}</strong></button>
+                <button type="button" onClick={() => navigate('/downloads')}><span>Active</span><strong>{active.filter((item) => item.downloadStatus !== 'pending').length}</strong></button>
                 <button type="button" onClick={() => navigate('/downloads')}><span>Queued</span><strong>{active.filter((item) => item.downloadStatus === 'pending').length}</strong></button>
                 <button type="button" onClick={() => navigate('/downloads')}><span>Failed</span><strong>{problems.length}</strong></button>
                 <button type="button" onClick={() => navigate('/library')}><span>Library</span><strong>{(shows?.length || 0) + (movies?.length || 0)}</strong></button>
@@ -70,7 +70,7 @@ export default function HomePage() {
                         <button className="operation-download" type="button" key={download.id} onClick={() => openDownload(download)}>
                             <span className="operation-icon"><FontAwesomeIcon icon={['fas', download.movieSlug ? 'clapperboard' : 'podcast']}/></span>
                             <span className="operation-download-copy"><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small><ProgressBar value={download.progress} ariaLabel={`Progress for ${mediaTitle(download)}`}/></span>
-                            <span>{download.downloadStatus === 'pending' ? 'Queued' : `${download.progress}%`}</span>
+                            <span>{download.downloadStatus === 'pending' ? 'Queued' : download.downloadStatus === 'local_processing' ? 'Processing' : `${download.progress}%`}</span>
                         </button>
                     )) : <div className="operation-empty"><FontAwesomeIcon icon={['fas', 'check']}/><span>No active downloads</span></div>}
                 </section>

@@ -274,6 +274,45 @@ def test_ensure_episode_download_adopts_manual_download(db_session):
     assert manual.download_profile_id == profile.id
 
 
+def test_ensure_episode_download_does_not_restart_user_cancelled_row(db_session):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.media_types import MediaType
+    from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="ep",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=now,
+        index=1,
+    )
+    profile = _make_podcast_profile(db_session, show, lmp)
+    cancelled = EpisodeMediaDownload(
+        type=MediaType.EPISODE.value,
+        media_item_id=episode.id,
+        local_media_profile_id=lmp.id,
+        download_profile_id=profile.id,
+        download_status=MediaDownloadStatus.CANCELLED.value,
+        file_path="/downloads/cancelled.m4a",
+        progress=0,
+    )
+    db_session.add(cancelled)
+    db_session.commit()
+
+    action = ensure_episode_download(db_session, profile, episode)
+
+    assert action.needs_trigger is False
+    assert cancelled.download_status == MediaDownloadStatus.CANCELLED.value
+
+
 def _make_completed_download(db_session, episode, lmp, profile, *, downloaded_publish_status):
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadStatus

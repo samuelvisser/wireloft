@@ -229,9 +229,13 @@ def _date_substitutions(value: Optional[date | datetime]) -> dict[str, str]:
 
 
 def _resolve_output_path(output_template: str, substitutions: dict[str, object], *, extension: Optional[str]) -> Path:
+    ascii_only = get_settings().download_settings.ascii_only_filenames
     resolved = output_template
     for key, value in substitutions.items():
-        resolved = resolved.replace("{" + key + "}", sanitize_path_component(str(value)))
+        resolved = resolved.replace(
+            "{" + key + "}",
+            sanitize_path_component(str(value), ascii_only=ascii_only),
+        )
     return _finish_output_path(resolved, extension=extension)
 
 

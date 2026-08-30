@@ -10,7 +10,7 @@ import DownloadLogDialog from '../components/MediaDownload/DownloadLogDialog'
 import PageSubtitle from '../components/common/PageSubtitle'
 import ProgressBar from '../components/common/ProgressBar'
 import {useMediaDownloadsView} from '../lib/queries'
-import {MediaDownloadStatusReg} from '../types/media_download'
+import {ACTIVE_DOWNLOAD_STATUSES, MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {getErrorMessageFromResponse} from '../utils/helpers'
 
@@ -25,6 +25,7 @@ const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
     {value: 'downloading', label: 'Downloading', statuses: ['downloading']},
     {value: 'downloaded', label: 'Downloaded', statuses: ['downloaded', 'redownloaded']},
     {value: 'local_processing', label: 'Processing', statuses: ['local_processing']},
+    {value: 'cancelled', label: 'Cancelled', statuses: ['cancelled']},
     {value: 'error', label: 'Error', statuses: ['error']},
     {value: 'missing', label: 'Missing', statuses: ['missing']},
     {value: 'corrupted', label: 'Corrupted', statuses: ['corrupted']},
@@ -110,6 +111,7 @@ const _RETRYABLE_STATUSES = new Set([
     'pending',
     'downloading',
     'local_processing',
+    'cancelled',
     'error',
     'missing',
     'corrupted',
@@ -150,6 +152,22 @@ export default function DownloadsPage() {
             }
         } catch {
             toast.error('Could not retry the download')
+        }
+        await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
+        if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
+        if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
+    }
+
+    const cancel = async (row: MediaDownloadViewRead) => {
+        try {
+            const base = (window as any).appConfig.API_URL
+            const r = await fetch(`${base}/media-downloads/${row.id}/cancel`, {method: 'POST', credentials: 'include'})
+            if (!r.ok) {
+                const {error: message} = await getErrorMessageFromResponse(r)
+                toast.error(message || 'Could not cancel the download')
+            }
+        } catch {
+            toast.error('Could not cancel the download')
         }
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
@@ -214,9 +232,9 @@ export default function DownloadsPage() {
                 <h1 id="downloads-title">Downloads</h1>
                 <PageSubtitle summary={<>All media downloads: running, finished and failed.</>}>
                     <p>
-                        Every episode, movie and trailer download shows up here, one row per Local Media Profile.
+                        Every episode and movie download shows up here, one row per Local Media Profile.
                         Running downloads report live progress; failed ones show the error and can be retried.
-                        Deleting a row only removes the record, never the downloaded file.
+                        Deleting a row only removes the record, never the downloaded file unless the download had never fully finished.
                     </p>
                 </PageSubtitle>
             </div>
@@ -262,7 +280,7 @@ export default function DownloadsPage() {
                         const status = String(row.downloadStatus)
                         const statusClass = status === 'downloaded' || status === 'redownloaded'
                             ? 'is-success'
-                            : status === 'pending' || status === 'downloading' || status === 'processing'
+                            : status === 'pending' || status === 'downloading' || status === 'local_processing'
                                 ? 'is-progress'
                                 : status === 'error' || status === 'missing' || status === 'corrupted'
                                     ? 'is-error'
@@ -304,14 +322,20 @@ export default function DownloadsPage() {
                                 classes: 'btn',
                             })
                         }
-                        if (String(row.downloadStatus) !== 'downloading') {
+                        if (ACTIVE_DOWNLOAD_STATUSES.has(String(row.downloadStatus))) {
                             actions.push({
-                                onClick: () => confirmRef.current?.open(row),
-                                icon: ['fas', 'trash'],
-                                text: 'Delete',
-                                classes: 'btn btn-danger',
+                                onClick: () => void cancel(row),
+                                icon: ['fas', 'ban'],
+                                text: 'Cancel',
+                                classes: 'btn',
                             })
                         }
+                        actions.push({
+                            onClick: () => confirmRef.current?.open(row),
+                            icon: ['fas', 'trash'],
+                            text: 'Delete',
+                            classes: 'btn btn-danger',
+                        })
                         return actions
                     }}
                 />
@@ -326,7 +350,7 @@ export default function DownloadsPage() {
                         credentials: 'include',
                     })
                 }
-                invalidateQueries={[['mediaDownloadsView'], ['episodeDownloads']]}
+                invalidateQueries={[['mediaDownloadsView'], ['episodeDownloads'], ['movieDownloads'], ['movies']]}
             />
             <DownloadLogDialog row={logRow} onClose={() => setLogRow(null)}/>
         </section>

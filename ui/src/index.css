@@ -1114,6 +1114,7 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
   background: #e2e8f0;
 }
 .log-attempt-status-error { background: #fee2e2; color: #b91c1c; }
+.log-attempt-status-cancelled { background: #fef3c7; color: #92400e; }
 .log-attempt-status-downloaded, .log-attempt-status-redownloaded { background: #dcfce7; color: #15803d; }
 .log-attempt-type { color: var(--muted, #777); }
 .log-attempt-time { margin-left: auto; color: var(--muted, #777); }
@@ -1122,6 +1123,7 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
   .log-attempt { border-color: rgba(255,255,255,0.14); }
   .log-attempt-status { background: rgba(255,255,255,0.08); }
   .log-attempt-status-error { background: rgba(239,68,68,0.18); color: #fecaca; }
+  .log-attempt-status-cancelled { background: rgba(245,158,11,0.18); color: #fde68a; }
   .log-attempt-status-downloaded, .log-attempt-status-redownloaded { background: rgba(34,197,94,0.18); color: #86efac; }
 }
 

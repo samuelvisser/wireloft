@@ -21,15 +21,15 @@ from task_manager.scheduler.executor import trigger_now
 logger = logging.getLogger(__name__)
 
 # Statuses that are safe to (re)trigger: nothing is actively running or already finished.
-# MISSING/CORRUPTED are the file watcher's verdict on a previously-completed
-# download whose file is no longer good on disk; a profile that still wants
-# that episode should heal it the same way it heals an errored download.
 _TRIGGERABLE_STATUSES = {
     MediaDownloadStatus.PENDING.value,
     MediaDownloadStatus.ERROR.value,
     MediaDownloadStatus.MISSING.value,
     MediaDownloadStatus.CORRUPTED.value,
 }
+
+# CANCELLED is deliberately absent: a profile sweep or cron run must not undo
+# the user's explicit stop. Only a manual download request or Retry re-arms it.
 _COMPLETED_STATUSES = {MediaDownloadStatus.DOWNLOADED.value, MediaDownloadStatus.REDOWNLOADED.value}
 _NEEDS_RESET_BEFORE_TRIGGER = _TRIGGERABLE_STATUSES - {MediaDownloadStatus.PENDING.value}
 
