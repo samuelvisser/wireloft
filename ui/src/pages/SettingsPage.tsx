@@ -21,7 +21,7 @@ export default function SettingsPage() {
         </p>
         <div className="help" style={{display: 'flex', alignItems: 'center', gap: 12}}>
           <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer" aria-label="Open TMDB">
-            <img src={TMDB_LOGO_URL} alt="TMDB" width="52" height="38"/>
+            <img src={TMDB_LOGO_URL} alt="TMDB" width="52" style={{display: 'block', height: 'auto'}}/>
           </a>
           <p style={{margin: 0}}>
             This product uses the TMDB API but is not endorsed or certified by TMDB.
