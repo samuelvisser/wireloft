@@ -31,6 +31,31 @@ Authorization: Bearer {{access_token}}
 <> 2025-11-07T175531.200.json
 <> 2025-11-07T175503.200.json
 
+### Get movie details: Run Hide Fight
+GET https://middleware-prod.dailywire.com/middleware/v4/getVideoPage?slug=run-hide-fight
+Authorization: Bearer {{access_token}}
+
+
+### Get movie details: Am I racist
+GET https://middleware-prod.dailywire.com/middleware/v4/getVideoPage?slug=am-i-racist
+Authorization: Bearer {{access_token}}
+
+
+### Get movie details: Bonhoeffer
+GET https://middleware-prod.dailywire.com/middleware/v4/getVideoPage?slug=bonhoeffer-pastor-spy-assassin
+Authorization: Bearer {{access_token}}
+
+
+### Get movie details
+GET https://middleware-prod.dailywire.com/middleware/v4/getVideoPage?slug=hiding-in-plain-sight-america-s-trafficking-epidemic
+Authorization: Bearer {{access_token}}
+
+### Movie get video
+GET https://middleware-prod.dailywire.com/middleware/v2/getVideo?slug=hiding-in-plain-sight-america-s-trafficking-epidemic
+Authorization: Bearer {{access_token}}
+
+
+
 
 ### NextPage for new show results
 GET https://middleware-prod.dailywire.com/middleware/v4/getPaginatedEpisodes?
