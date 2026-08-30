@@ -7,6 +7,10 @@
 # of a block below keeps its application default (see
 # server/config/src/config/settings/settings.py) -- pydantic-settings merges
 # this file's nested blocks with the built-in defaults field-by-field.
+#
+# Settings saved in the WireLoft UI are written to ui-settings.yml beside
+# config.yml. They override values from this file, while WL_* environment
+# variables retain the highest precedence.
 
 crypto:
   # Fallback location for the auto-generated session-signing key, used when

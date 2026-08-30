@@ -1,11 +1,23 @@
 from __future__ import annotations
 
-from pydantic import computed_field
+import os
+from pathlib import Path
+
+from pydantic import Field, computed_field
 from pydantic_settings import YamlConfigSettingsSource
 
 from config.config import PROJECT_ROOT
-from config.settings.base import SettingsBase
+from config.settings.base import (
+    SettingsBase,
+    get_ui_config_path,
+    normalize_settings_source_keys,
+)
 from config.settings.submodels import *
+
+
+class _AliasNormalizingYamlSource(YamlConfigSettingsSource):
+    def __call__(self):
+        return normalize_settings_source_keys(super().__call__(), self.settings_cls)
 
 
 class AppSettings(SettingsBase):
@@ -13,10 +25,12 @@ class AppSettings(SettingsBase):
     app_version: str = Field(default="0.1.0", frozen=True)
 
     database_path: Path = PROJECT_ROOT / "config" / "wireloft.db"
+
     @computed_field
     @property
     def database_url(self) -> str:
         return f"sqlite:///{self.database_path.as_posix()}"
+
     log_level: str = "INFO"
     timezone: str = Field(default=os.environ.get("TZ", "UTC"), description="Application timezone")
 
@@ -72,14 +86,32 @@ class AppSettings(SettingsBase):
         scan_cron="*/10 * * * *",
         verify_file_size=True,
     ))
+
     @classmethod
-    def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):
-        # kwargs > env > .env > YAML > file secrets > defaults
-        yaml_source = YamlConfigSettingsSource(settings_cls)
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        # kwargs > env > .env > Settings UI > config.yml > file secrets > defaults
+        ui_yaml_source = _AliasNormalizingYamlSource(
+            settings_cls,
+            yaml_file=get_ui_config_path(),
+            yaml_file_encoding="utf-8",
+        )
+        yaml_source = _AliasNormalizingYamlSource(settings_cls)
+
+        def normalized(source):
+            return lambda: normalize_settings_source_keys(source(), settings_cls)
+
         return (
-            init_settings,
-            env_settings,
-            dotenv_settings,
+            normalized(init_settings),
+            normalized(env_settings),
+            normalized(dotenv_settings),
+            ui_yaml_source,
             yaml_source,
-            file_secret_settings,
+            normalized(file_secret_settings),
         )
