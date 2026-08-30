@@ -83,6 +83,5 @@ class DownloadAttemptGuard:
             .values(**values)
         )
         if not result.rowcount:
-            session.rollback()
             self._cancelled = True
             raise DownloadCancelled("Download attempt was replaced by a retry")

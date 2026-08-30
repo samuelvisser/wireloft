@@ -30,6 +30,8 @@ _TRIGGERABLE_STATUSES = {
     MediaDownloadStatus.MISSING.value,
     MediaDownloadStatus.CORRUPTED.value,
 }
+# CANCELLED is deliberately absent: a profile sweep or cron run must not undo
+# the user's explicit stop. Only a manual download request or Retry re-arms it.
 _COMPLETED_STATUSES = {MediaDownloadStatus.DOWNLOADED.value, MediaDownloadStatus.REDOWNLOADED.value}
 _NEEDS_RESET_BEFORE_TRIGGER = _TRIGGERABLE_STATUSES - {MediaDownloadStatus.PENDING.value}
 

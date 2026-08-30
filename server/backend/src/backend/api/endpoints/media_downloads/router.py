@@ -73,6 +73,20 @@ def media_downloads_retry(media_download_id: int):
     return payload
 
 
+@router.post("/{media_download_id}/cancel", response_model=MediaDownloadAPIRead)
+def media_downloads_cancel(media_download_id: int):
+    """Cancel a queued or running download without starting another attempt."""
+    with db_session() as s:
+        try:
+            download = cancel_media_download(s, media_download_id)
+            payload = MediaDownloadAPIRead.model_validate(download)
+            s.commit()
+            return payload
+        except Exception:
+            s.rollback()
+            raise
+
+
 @router.get("/{media_download_id}/attempts", response_model=list[MediaDownloadAttemptAPIRead])
 def media_downloads_attempts(media_download_id: int):
     """
@@ -119,7 +133,9 @@ def media_downloads_delete(media_download_id: int):
     """
     Delete a media download record from the system.
 
-    Permanently removes the download record. Note: This does not delete the downloaded file.
+    Permanently removes the download record. A queued/running download is
+    cancelled and its partial artifacts are removed first. Completed files are
+    left on disk.
     Returns the deleted download's information for confirmation.
     """
     with db_session() as s:

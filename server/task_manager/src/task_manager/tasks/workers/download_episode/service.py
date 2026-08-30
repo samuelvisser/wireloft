@@ -12,6 +12,7 @@ from backend.db.models import Episode, Show
 from backend.db.models.media_download import MediaDownloadAttempt, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
+from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
 from dailywire_downloader import (
@@ -55,7 +56,7 @@ async def run_download_episode(
     """
     download: Optional[MediaDownloadBase] = s.get(MediaDownloadBase, media_download_id)
     if download is None:
-        raise ValueError(f"Media download {media_download_id} not found")
+        raise DownloadCancelled(f"Media download {media_download_id} was deleted before it started")
 
     expected_generation = (
         download.attempt_generation
@@ -111,10 +112,11 @@ async def run_download_episode(
             )
             attempt_guard.ensure_current()
         except DownloadCancelled:
-            s.rollback()
+            _discard_cancelled_attempt(s, download.__dict__.get("file_path"))
             cancelled = True
             raise
         except Exception as e:
+            file_path = download.__dict__.get("file_path")
             s.rollback()
             try:
                 attempt_guard.update_current(
@@ -124,6 +126,7 @@ async def run_download_episode(
                     finished_at=datetime.now(timezone.utc),
                 )
             except DownloadCancelled:
+                _discard_cancelled_attempt(s, file_path)
                 cancelled = True
                 raise
             s.refresh(download)
@@ -131,17 +134,22 @@ async def run_download_episode(
             s.commit()
             raise
 
-        attempt_guard.update_current(
-            s,
-            download_status=(
-                MediaDownloadStatus.REDOWNLOADED.value if is_redownload else MediaDownloadStatus.DOWNLOADED.value
-            ),
-            progress=100,
-            downloaded_bytes=result.bytes_downloaded,
-            format_downloaded=result.format_downloaded,
-            file_path=result.file_path,
-            finished_at=datetime.now(timezone.utc),
-        )
+        try:
+            attempt_guard.update_current(
+                s,
+                download_status=(
+                    MediaDownloadStatus.REDOWNLOADED.value if is_redownload else MediaDownloadStatus.DOWNLOADED.value
+                ),
+                progress=100,
+                downloaded_bytes=result.bytes_downloaded,
+                format_downloaded=result.format_downloaded,
+                file_path=result.file_path,
+                finished_at=datetime.now(timezone.utc),
+            )
+        except DownloadCancelled:
+            _discard_cancelled_attempt(s, result.file_path)
+            cancelled = True
+            raise
         s.refresh(download)
         # Records what version was actually fetched, so a Download Profile can later
         # tell whether this file still needs replacing (e.g. still countdown-era)
@@ -185,6 +193,11 @@ def _record_attempt(s: Session, download: MediaDownloadBase, *, is_redownload: b
         started_at=download.started_at,
         finished_at=download.finished_at,
     ))
+
+
+def _discard_cancelled_attempt(s: Session, file_path: Optional[str]) -> None:
+    s.rollback()
+    remove_download_artifacts(file_path)
 
 
 def _drain_next_pending_downloads(s: Session) -> None:

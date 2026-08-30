@@ -249,6 +249,15 @@ def test_create_episode_download_enforces_one_per_profile(monkeypatch, tmp_path)
     assert restarted.download_status == MediaDownloadStatus.PENDING.value
     assert restarted.error_message is None
 
+    # A user-cancelled row stays dormant until an explicit manual request,
+    # which reuses and re-arms the existing row rather than creating another.
+    download.download_status = MediaDownloadStatus.CANCELLED.value
+    session.commit()
+    restarted = create_episode_download(session, episode.slug, body)
+    session.commit()
+    assert restarted.id == download.id
+    assert restarted.download_status == MediaDownloadStatus.PENDING.value
+
     session.close()
     engine.dispose()
 
@@ -465,6 +474,82 @@ def test_retry_active_download_starts_new_generation_and_records_cancellation():
     engine.dispose()
 
 
+def test_cancel_active_download_records_attempt_and_removes_every_artifact(tmp_path):
+    from backend.api.endpoints.media_downloads.service import cancel_media_download
+    from backend.db.models.media_download import MediaDownloadAttempt
+    from backend.types.download_profile_types import MediaDownloadStatus
+
+    session, engine, _episode, download = _db_with_episode_and_download(
+        video_local_media_profile=False,
+    )
+    destination = tmp_path / "episode.m4a"
+    artifacts = [
+        destination,
+        tmp_path / "episode.m4a.part",
+        tmp_path / "episode.m4a.rawts",
+        tmp_path / "episode.m4a.rawts.part",
+    ]
+    for artifact in artifacts:
+        artifact.write_bytes(b"partial")
+
+    download.file_path = str(destination)
+    download.download_status = MediaDownloadStatus.DOWNLOADING.value
+    download.progress = 42
+    download.downloaded_bytes = 1234
+    session.commit()
+
+    original_generation = download.attempt_generation
+    cancelled = cancel_media_download(session, download.id)
+    session.commit()
+
+    assert cancelled.attempt_generation == original_generation + 1
+    assert cancelled.download_status == MediaDownloadStatus.CANCELLED.value
+    assert cancelled.progress == 0
+    assert cancelled.downloaded_bytes is None
+    assert cancelled.finished_at is not None
+    assert all(not artifact.exists() for artifact in artifacts)
+    [attempt] = session.query(MediaDownloadAttempt).all()
+    assert attempt.status == MediaDownloadStatus.CANCELLED.value
+    assert attempt.error_message == "Cancelled by the user"
+    assert attempt.downloaded_bytes == 1234
+
+    session.close()
+    engine.dispose()
+
+
+def test_delete_active_download_cancels_worker_and_removes_every_artifact(tmp_path):
+    from backend.api.endpoints.media_downloads.service import delete_media_download
+    from backend.types.download_profile_types import MediaDownloadStatus
+
+    session, engine, _episode, download = _db_with_episode_and_download(
+        video_local_media_profile=False,
+    )
+    destination = tmp_path / "episode.m4a"
+    artifacts = [
+        destination,
+        tmp_path / "episode.m4a.part",
+        tmp_path / "episode.m4a.rawts",
+        tmp_path / "episode.m4a.rawts.part",
+    ]
+    for artifact in artifacts:
+        artifact.write_bytes(b"partial")
+
+    download_id = download.id
+    download.file_path = str(destination)
+    download.download_status = MediaDownloadStatus.LOCAL_PROCESSING.value
+    session.commit()
+
+    deleted = delete_media_download(session, download_id)
+    session.commit()
+
+    assert deleted.id == download_id
+    assert session.get(type(download), download_id) is None
+    assert all(not artifact.exists() for artifact in artifacts)
+
+    session.close()
+    engine.dispose()
+
+
 def test_replaced_episode_worker_cancels_without_overwriting_fresh_state(tmp_path, monkeypatch):
     from sqlalchemy.orm import sessionmaker
 
@@ -487,8 +572,16 @@ def test_replaced_episode_worker_cancels_without_overwriting_fresh_state(tmp_pat
     )
 
     original_generation = download.attempt_generation
+    artifacts = []
 
     def cancel_during_download(url, dest_path, *, progress=None, should_cancel=None):
+        from pathlib import Path
+
+        destination = Path(dest_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        for artifact in (destination, Path(dest_path + ".part"), Path(dest_path + ".rawts")):
+            artifact.write_bytes(b"partial")
+            artifacts.append(artifact)
         with session_factory() as other_session:
             current = other_session.get(type(download), download.id)
             current.attempt_generation += 1
@@ -514,6 +607,7 @@ def test_replaced_episode_worker_cancels_without_overwriting_fresh_state(tmp_pat
     assert refreshed.attempt_generation == original_generation + 1
     assert refreshed.download_status == "pending"
     assert refreshed.progress == 0
+    assert artifacts and all(not artifact.exists() for artifact in artifacts)
     drained.assert_not_called()
 
     session.close()

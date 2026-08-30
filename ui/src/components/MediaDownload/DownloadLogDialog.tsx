@@ -1,6 +1,6 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useMediaDownloadAttempts} from '../../lib/queries'
-import {MediaDownloadStatusReg} from '../../types/media_download'
+import {ACTIVE_DOWNLOAD_STATUSES, MediaDownloadStatusReg} from '../../types/media_download'
 import {PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 
@@ -35,7 +35,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
     const downloadedVersion = row.downloadedPublishStatus
         ? PUBLISH_STATUS_LABELS[row.downloadedPublishStatus] ?? row.downloadedPublishStatus
         : null
-    const isActive = row.downloadStatus === 'pending' || row.downloadStatus === 'downloading'
+    const isActive = ACTIVE_DOWNLOAD_STATUSES.has(String(row.downloadStatus))
 
     return (
         <div className="modal-overlay" role="presentation" onClick={onClose}>

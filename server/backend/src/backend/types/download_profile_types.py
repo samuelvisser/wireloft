@@ -15,6 +15,7 @@ class MediaDownloadStatus(Enum):
     DOWNLOADING = "downloading"
     REDOWNLOADED = "redownloaded"
     LOCAL_PROCESSING = "local_processing"
+    CANCELLED = "cancelled"
     ERROR = "error"
     # The file watcher could not find the file that was previously downloaded
     MISSING = "missing"
