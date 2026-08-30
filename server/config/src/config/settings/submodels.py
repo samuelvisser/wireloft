@@ -114,6 +114,7 @@ class DownloadSettings(SubmodelBase):
     max_download_attempts: int = Field(..., description="Maximum number of download attempts")
     download_timeout_seconds: int = Field(..., description="Timeout in seconds for each download")
     download_root: Path = Field(..., description="Directory on disk that the '/downloads/' prefix of output templates maps to")
+    ascii_only_filenames: bool = Field(..., description="Restrict generated download path names to ASCII characters")
     remux_video_to_mp4: bool = Field(
         ...,
         description="Repackage downloaded HLS video into an .mp4 file instead of leaving it as raw .ts. "
