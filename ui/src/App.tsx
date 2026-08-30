@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import Sidebar from './components/Sidebar'
 import Footer from './components/Sidebar/Footer'
 import OnboardingFlow from './components/Onboarding/OnboardingFlow'
@@ -116,6 +117,10 @@ export default function App() {
         onComplete={() => {
           setOnboardingStatus((current) => current ? { ...current, completed: true } : current)
           navigate('/', { replace: true })
+          toast.success(
+            'WireLoft is setup. Look around a little and explore your very own media manager for all things Daily Wire. Enjoy!',
+            { duration: 8000 },
+          )
         }}
       />
     )
