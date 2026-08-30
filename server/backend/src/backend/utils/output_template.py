@@ -134,11 +134,19 @@ def resolve_movie_output_path(
         detail = f" Lookup status: {status}."
         if lookup_error:
             detail += f" {lookup_error}"
+        if status == "pending":
+            guidance = (
+                "Configure a TMDB API Read Access Token, restart WireLoft so the setting is "
+                "reloaded, and try this movie or trailer download again."
+            )
+        else:
+            guidance = (
+                "The one-time lookup has already completed. Use an output template without "
+                "date/time placeholders for this movie, or correct its stored release metadata."
+            )
         raise MovieReleaseDateUnavailableError(
             "This Movie Local Media Profile uses release-date placeholders, but WireLoft "
-            f"has no canonical release date stored for '{movie.title}'.{detail} "
-            "Configure a TMDB API Read Access Token before first adding the movie, or use "
-            "an output template without date/time placeholders."
+            f"has no canonical release date stored for '{movie.title}'.{detail} {guidance}"
         )
 
     item = media_item or movie
