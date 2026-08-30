@@ -1,33 +1,292 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Literal
+from urllib.parse import urlparse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from apscheduler.triggers.cron import CronTrigger
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic.alias_generators import to_camel
 
 from backend.api.models.base import RequestBase, ResponseBase
+from config.settings.settings import AppSettings
 
 
-# ---------- Strict input (create/update) ----------
-class _SettingsAPIBaseIn(RequestBase):
-    """Fields for requests: validate here if needed."""
-    pass
+SettingFieldPath = Literal[
+    "logLevel",
+    "timezone",
+    "crypto.secretKeyFile",
+    "crypto.defaultSecretFile",
+    "loginSession.ttlSeconds",
+    "dwApi.middlewareApi",
+    "dwApi.streamApi",
+    "dwOauth.issuer",
+    "dwOauth.audience",
+    "dwOauth.clientId",
+    "dwOauth.scope",
+    "dwTimeout.minFastRequestMs",
+    "dwTimeout.maxFastRequests",
+    "dwTimeout.minSlowRequestMs",
+    "scheduler.enabled",
+    "scheduler.maxWorkers",
+    "scheduler.defaultMaxRetries",
+    "scheduler.retryBackoffSeconds",
+    "newEpisodeSchedule.findEpisodesCron",
+    "newEpisodeSchedule.monitorEpisodeCron",
+    "newEpisodeSchedule.checkNoShowTodayCron",
+    "episodeStatusTiming.publishedCountdownAfterMinutes",
+    "episodeStatusTiming.publishedFinalAfterMinutes",
+    "downloadSettings.verifyDownloadsCron",
+    "downloadSettings.maxConcurrentDownloads",
+    "downloadSettings.maxDownloadAttempts",
+    "downloadSettings.downloadTimeoutSeconds",
+    "downloadSettings.downloadRoot",
+    "downloadSettings.asciiOnlyFilenames",
+    "downloadSettings.remuxVideoToMp4",
+    "downloadSettings.ffmpegPath",
+    "fileWatcher.enabled",
+    "fileWatcher.scanCron",
+    "fileWatcher.verifyFileSize",
+]
+
+UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
+    "logLevel",
+    "timezone",
+    "crypto.secretKeyFile",
+    "crypto.defaultSecretFile",
+    "loginSession.ttlSeconds",
+    "dwApi.middlewareApi",
+    "dwApi.streamApi",
+    "dwOauth.issuer",
+    "dwOauth.audience",
+    "dwOauth.clientId",
+    "dwOauth.scope",
+    "dwTimeout.minFastRequestMs",
+    "dwTimeout.maxFastRequests",
+    "dwTimeout.minSlowRequestMs",
+    "scheduler.enabled",
+    "scheduler.maxWorkers",
+    "scheduler.defaultMaxRetries",
+    "scheduler.retryBackoffSeconds",
+    "newEpisodeSchedule.findEpisodesCron",
+    "newEpisodeSchedule.monitorEpisodeCron",
+    "newEpisodeSchedule.checkNoShowTodayCron",
+    "episodeStatusTiming.publishedCountdownAfterMinutes",
+    "episodeStatusTiming.publishedFinalAfterMinutes",
+    "downloadSettings.verifyDownloadsCron",
+    "downloadSettings.maxConcurrentDownloads",
+    "downloadSettings.maxDownloadAttempts",
+    "downloadSettings.downloadTimeoutSeconds",
+    "downloadSettings.downloadRoot",
+    "downloadSettings.asciiOnlyFilenames",
+    "downloadSettings.remuxVideoToMp4",
+    "downloadSettings.ffmpegPath",
+    "fileWatcher.enabled",
+    "fileWatcher.scanCron",
+    "fileWatcher.verifyFileSize",
+)
 
 
-class SettingsAPICreate(_SettingsAPIBaseIn):
-    """Creates the settings record"""
-    pass
+class _SettingsValueModel(BaseModel):
+    """Strict, camelCase API model for settings that may be changed in the UI."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
 
 
-class SettingsAPIUpdate(_SettingsAPIBaseIn):
-    """Updates a setting"""
-    pass
+def _validate_cron_expression(value: str) -> str:
+    try:
+        CronTrigger.from_crontab(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Enter a valid five-part cron expression") from exc
+    return value
 
 
-# ---------- Lenient output (read) ----------
-class _SettingsAPIBaseOut(ResponseBase):
-    """Fields for responses: no validators, no constraints."""
-    id: int
+def _validate_http_url(value: str) -> str:
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Enter a complete http:// or https:// URL")
+    return value
 
 
-class SettingsAPIRead(_SettingsAPIBaseOut):
-    """Represents the settings record."""
-    created_at: datetime
-    updated_at: datetime
+def _validate_non_empty_path(value: Any) -> Any:
+    if isinstance(value, str) and not value.strip():
+        raise ValueError("Path cannot be empty")
+    return value
+
+
+class CryptoFileSettingsValue(_SettingsValueModel):
+    """Safe crypto settings; literal secret material is deliberately excluded."""
+
+    secret_key_file: Path | None = None
+    default_secret_file: Path
+
+    _validate_secret_key_file = field_validator(
+        "secret_key_file", mode="before"
+    )(_validate_non_empty_path)
+    _validate_default_secret_file = field_validator(
+        "default_secret_file", mode="before"
+    )(_validate_non_empty_path)
+
+
+class SessionSettingsValue(_SettingsValueModel):
+    ttl_seconds: int = Field(ge=60)
+
+
+class DailyWireAPISettingsValue(_SettingsValueModel):
+    middleware_api: str = Field(min_length=1)
+    stream_api: str = Field(min_length=1)
+
+    _validate_middleware_api = field_validator("middleware_api")(_validate_http_url)
+    _validate_stream_api = field_validator("stream_api")(_validate_http_url)
+
+
+class OAuthSettingsValue(_SettingsValueModel):
+    issuer: str = Field(min_length=1)
+    audience: str = Field(min_length=1)
+    client_id: str = Field(min_length=1)
+    scope: str = Field(min_length=1)
+
+    _validate_issuer = field_validator("issuer")(_validate_http_url)
+    _validate_audience = field_validator("audience")(_validate_http_url)
+
+
+class TimeoutSettingsValue(_SettingsValueModel):
+    min_fast_request_ms: int = Field(ge=0)
+    max_fast_requests: int = Field(ge=1)
+    min_slow_request_ms: int = Field(ge=0)
+
+
+class SchedulerSettingsValue(_SettingsValueModel):
+    enabled: bool
+    max_workers: int = Field(ge=1)
+    default_max_retries: int = Field(ge=0)
+    retry_backoff_seconds: float = Field(ge=0)
+
+
+class TrackNewEpisodeScheduleValue(_SettingsValueModel):
+    find_episodes_cron: str = Field(min_length=1)
+    monitor_episode_cron: str = Field(min_length=1)
+    check_no_show_today_cron: str = Field(min_length=1)
+
+    _validate_find_episodes_cron = field_validator("find_episodes_cron")(_validate_cron_expression)
+    _validate_monitor_episode_cron = field_validator("monitor_episode_cron")(_validate_cron_expression)
+    _validate_check_no_show_today_cron = field_validator("check_no_show_today_cron")(_validate_cron_expression)
+
+
+class EpisodeStatusTimingValue(_SettingsValueModel):
+    published_countdown_after_minutes: int = Field(ge=0)
+    published_final_after_minutes: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _final_must_not_precede_countdown(self):
+        if self.published_final_after_minutes < self.published_countdown_after_minutes:
+            raise ValueError(
+                "Final publication timing must be at least as long as countdown publication timing"
+            )
+        return self
+
+
+class DownloadSettingsValue(_SettingsValueModel):
+    verify_downloads_cron: str = Field(min_length=1)
+    max_concurrent_downloads: int = Field(ge=1)
+    max_download_attempts: int = Field(ge=1)
+    download_timeout_seconds: int = Field(ge=1)
+    download_root: Path
+    ascii_only_filenames: bool
+    remux_video_to_mp4: bool
+    ffmpeg_path: str = Field(min_length=1)
+
+    _validate_verify_downloads_cron = field_validator("verify_downloads_cron")(_validate_cron_expression)
+    _validate_download_root = field_validator(
+        "download_root", mode="before"
+    )(_validate_non_empty_path)
+
+
+class FileWatcherSettingsValue(_SettingsValueModel):
+    enabled: bool
+    scan_cron: str = Field(min_length=1)
+    verify_file_size: bool
+
+    _validate_scan_cron = field_validator("scan_cron")(_validate_cron_expression)
+
+
+class SettingsValues(_SettingsValueModel):
+    """Every application setting intentionally exposed by the Settings UI.
+
+    Admin authentication, database location, application version, and literal
+    crypto secret material are deliberately absent from this contract.
+    """
+
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    timezone: str = Field(min_length=1)
+    crypto: CryptoFileSettingsValue
+    login_session: SessionSettingsValue
+    dw_api: DailyWireAPISettingsValue
+    dw_oauth: OAuthSettingsValue
+    dw_timeout: TimeoutSettingsValue
+    scheduler: SchedulerSettingsValue
+    new_episode_schedule: TrackNewEpisodeScheduleValue
+    episode_status_timing: EpisodeStatusTimingValue
+    download_settings: DownloadSettingsValue
+    file_watcher: FileWatcherSettingsValue
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _normalize_log_level(cls, value: Any):
+        return str(value).upper()
+
+    @field_validator("timezone")
+    @classmethod
+    def _validate_timezone(cls, value: str):
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("Enter a valid IANA timezone, such as Europe/Amsterdam") from exc
+        return value
+
+    @classmethod
+    def from_app_settings(cls, settings: AppSettings) -> "SettingsValues":
+        return cls(
+            log_level=settings.log_level,
+            timezone=settings.timezone,
+            crypto=CryptoFileSettingsValue.model_validate(settings.crypto),
+            login_session=SessionSettingsValue.model_validate(settings.login_session),
+            dw_api=DailyWireAPISettingsValue.model_validate(settings.dw_api),
+            dw_oauth=OAuthSettingsValue.model_validate(settings.dw_oauth),
+            dw_timeout=TimeoutSettingsValue.model_validate(settings.dw_timeout),
+            scheduler=SchedulerSettingsValue.model_validate(settings.scheduler),
+            new_episode_schedule=TrackNewEpisodeScheduleValue.model_validate(settings.new_episode_schedule),
+            episode_status_timing=EpisodeStatusTimingValue.model_validate(settings.episode_status_timing),
+            download_settings=DownloadSettingsValue.model_validate(settings.download_settings),
+            file_watcher=FileWatcherSettingsValue.model_validate(settings.file_watcher),
+        )
+
+    def to_config_document(self) -> dict[str, Any]:
+        return self.model_dump(mode="json", by_alias=True)
+
+
+class SettingsAPIUpdate(RequestBase):
+    values: SettingsValues
+    changed_fields: list[SettingFieldPath] = Field(min_length=1)
+
+    @field_validator("changed_fields")
+    @classmethod
+    def _changed_fields_must_be_unique(cls, values: list[SettingFieldPath]):
+        if len(values) != len(set(values)):
+            raise ValueError("changedFields must not contain duplicates")
+        return values
+
+
+class SettingsAPIRead(ResponseBase):
+    values: SettingsValues
+    configured_fields: list[SettingFieldPath]
+    environment_overrides: dict[str, str]
+    updated_at: datetime | None = None

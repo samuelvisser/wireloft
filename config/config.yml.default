@@ -7,6 +7,11 @@
 # of a block below keeps its application default (see
 # server/config/src/config/settings/settings.py) -- pydantic-settings merges
 # this file's nested blocks with the built-in defaults field-by-field.
+#
+# The Settings screen writes changes directly into this same file. It only
+# inserts or updates fields that were actually changed in the UI; opening or
+# saving Settings does not populate config.yml with every application default.
+# WL_* environment variables and .env values take precedence over this file.
 
 crypto:
   # Fallback location for the auto-generated session-signing key, used when
