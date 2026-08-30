@@ -15,9 +15,10 @@ export type PodcastDownloadProfileProps = {
     onBack: () => void
     onContinue: () => void
     onCancel: () => void
+    continueLabel?: string
 }
 
-export default function PodcastDownloadProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel}: PodcastDownloadProfileProps) {
+export default function PodcastDownloadProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, continueLabel = 'Continue'}: PodcastDownloadProfileProps) {
     const form = useForm<DownloadProfileUnifiedCreateIn>({
         resolver: zodResolver(DownloadProfileUnifiedCreateSchema),
         mode: 'onBlur',
@@ -55,7 +56,7 @@ export default function PodcastDownloadProfileStep({value, onChange, onSubmit: o
 
             <div className="actions">
                 <button type="button" className="btn" onClick={onBack}>Back</button>
-                <input type="submit" className="btn btn-primary" value="Continue" />
+                <input type="submit" className="btn btn-primary" value={continueLabel} />
                 <button type="button" className="btn" onClick={onCancel}>Cancel</button>
             </div>
         </form>

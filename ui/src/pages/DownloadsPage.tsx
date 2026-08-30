@@ -53,11 +53,19 @@ function rowTimestamp(row: MediaDownloadViewRead): Date | null {
 }
 
 function rowTitle(row: MediaDownloadViewRead): string {
-    return row.movieTitle ?? row.episodeTitle ?? 'Unknown media'
+    return row.mediaTitle ?? row.movieTitle ?? row.episodeTitle ?? 'Unknown media'
+}
+
+function mediaTypeLabel(type: string): string {
+    if (type === 'movie') return 'Movie'
+    if (type === 'trailer') return 'Trailer'
+    if (type === 'episode') return 'Episode'
+    return type ? type.replace(/_/g, ' ').replace(/^./, (char) => char.toUpperCase()) : 'Media'
 }
 
 function rowContext(row: MediaDownloadViewRead): string {
-    return row.movieTitle ? 'Movie' : row.showTitle ?? 'Unknown show'
+    if (row.type === 'movie' || row.type === 'trailer') return mediaTypeLabel(row.type)
+    return row.showTitle ?? mediaTypeLabel(String(row.type))
 }
 
 function setsEqual(a: Set<string>, b: Set<string>): boolean {
@@ -224,7 +232,7 @@ export default function DownloadsPage() {
                 <h1 id="downloads-title">Downloads</h1>
                 <PageSubtitle summary={<>All media downloads: running, finished and failed.</>}>
                     <p>
-                        Every episode and movie download shows up here, one row per Local Media Profile.
+                        Every episode, movie and trailer download shows up here, one row per Local Media Profile.
                         Running downloads report live progress and can be cancelled or restarted.
                         Deleting a running row also cancels it and removes partial files; completed files remain on disk.
                     </p>

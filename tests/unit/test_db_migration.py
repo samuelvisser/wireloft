@@ -39,7 +39,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     current, head = get_database_status()
     assert current == (head,)
-    assert head == "04f8d3fbc17a"
+    assert head == "d2c4a7318b90"
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -51,6 +51,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "trailers",
         "media_downloads",
         "media_downloads_movie",
+        "media_downloads_trailer",
         "local_media_profiles_show",
         "local_media_profiles_movie",
         "task_schedules",
@@ -315,4 +316,4 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 def test_migration_history_has_exactly_one_head():
     from backend.db.migrations import get_head_revisions
 
-    assert get_head_revisions() == ("04f8d3fbc17a",)
+    assert get_head_revisions() == ("d2c4a7318b90",)

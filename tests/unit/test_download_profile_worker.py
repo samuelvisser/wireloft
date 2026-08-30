@@ -135,6 +135,19 @@ def db_session(monkeypatch, tmp_path):
 
 # ---------- get_download_profile_episodes ----------
 
+def test_download_profile_worker_runs_after_show_indexing():
+    from task_manager.tasks.workers.download_profile_worker import download_profile_worker
+
+    event_names = {
+        trigger.event_name
+        for trigger in download_profile_worker._task_meta.triggers
+        if trigger.trigger_type == "event"
+    }
+
+    assert "show.indexed" in event_names
+    assert "show.added" not in event_names
+
+
 def test_podcast_profile_filters_by_type_status_and_countdown(db_session):
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 

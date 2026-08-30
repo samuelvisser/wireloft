@@ -11,12 +11,13 @@ from backend.api.helpers import update_database_fields
 from backend.api.models.media_download import *
 from backend.api.models.movie import MovieAPICreate
 from backend.api.models.trailer import TrailerAPICreate
-from backend.db.models import Episode, LocalMediaProfileBase, Movie, Show
+from backend.db.models import Episode, LocalMediaProfileBase, Movie, Show, Trailer
 from backend.db.models.media_download import (
     EpisodeMediaDownload,
     MediaDownloadAttempt,
     MediaDownloadBase,
     MovieMediaDownload,
+    TrailerMediaDownload,
 )
 from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
@@ -25,7 +26,6 @@ from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
 
-# Statuses that are safe to restart or replace: nothing is actively running
 _RESTARTABLE_STATUSES = {
     MediaDownloadStatus.PENDING.value,
     MediaDownloadStatus.CANCELLED.value,
@@ -44,11 +44,7 @@ _USER_RESTART_MESSAGE = "Cancelled by the user and restarted"
 
 
 def get_media_downloads_list(s: Session) -> list[MediaDownloadAPIRead]:
-    items = (
-        s.query(MediaDownloadBase)
-        .order_by(MediaDownloadBase.id)
-        .all()
-    )
+    items = s.query(MediaDownloadBase).order_by(MediaDownloadBase.id).all()
     return [MediaDownloadAPIRead.model_validate(it) for it in items]
 
 
@@ -73,7 +69,8 @@ def get_media_downloads_view(
     for download, profile in s.execute(stmt):
         media = download.media
         episode = media if isinstance(media, Episode) else None
-        movie = media if isinstance(media, Movie) else None
+        trailer = media if isinstance(media, Trailer) else None
+        movie = media if isinstance(media, Movie) else (trailer.movie if trailer else None)
         if episode_slug is not None and (episode is None or episode.slug != episode_slug):
             continue
         if movie_slug is not None and (movie is None or movie.slug != movie_slug):
@@ -82,6 +79,8 @@ def get_media_downloads_view(
         base = MediaDownloadAPIRead.model_validate(download)
         views.append(MediaDownloadAPIReadView(
             **base.model_dump(by_alias=False),
+            media_slug=getattr(media, "slug", None),
+            media_title=getattr(media, "title", None),
             episode_slug=episode.slug if episode else None,
             episode_title=episode.title if episode else None,
             episode_identifier=episode.episode_identifier if episode else None,
@@ -100,10 +99,8 @@ def get_media_downloads_view(
 
 
 def get_media_download_attempts(s: Session, media_download_id: int) -> list[MediaDownloadAttemptAPIRead]:
-    """A download's full attempt ledger, newest first."""
     if s.get(MediaDownloadBase, media_download_id) is None:
         raise HTTPException(status_code=404, detail="Media download not found")
-
     items = (
         s.query(MediaDownloadAttempt)
         .filter_by(media_download_id=media_download_id)
@@ -114,37 +111,20 @@ def get_media_download_attempts(s: Session, media_download_id: int) -> list[Medi
 
 
 def get_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRead:
-    item = (
-        s.query(MediaDownloadBase)
-        .filter_by(id=media_download_id)
-        .one_or_none()
-    )
+    item = s.query(MediaDownloadBase).filter_by(id=media_download_id).one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Media download not found")
-
     return MediaDownloadAPIRead.model_validate(item)
 
 
 def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownloadAPICreate) -> EpisodeMediaDownload:
-    """Create the download row for (episode, local media profile).
-
-    Only one download per profile is allowed for an episode. An existing
-    pending/errored row is reused (restarted); an active or finished one is a conflict.
-    """
-    episode: Optional[Episode] = (
-        s.query(Episode).filter(Episode.slug == episode_slug).one_or_none()
-    )
+    episode: Optional[Episode] = s.query(Episode).filter(Episode.slug == episode_slug).one_or_none()
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
     if episode.is_no_show_today:
         raise HTTPException(status_code=422, detail="This is not a downloadable episode")
 
-    profile: Optional[LocalMediaProfileBase] = s.get(LocalMediaProfileBase, body.local_media_profile_id)
-    if profile is None:
-        raise HTTPException(status_code=404, detail="Local media profile not found")
-    if profile.type != LocalMediaProfileType.SHOW.value:
-        raise HTTPException(status_code=422, detail="Episodes require a Show Local Media Profile")
-
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
     existing: Optional[EpisodeMediaDownload] = (
         s.query(EpisodeMediaDownload)
         .filter(
@@ -155,10 +135,7 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
     )
     if existing is not None:
         if existing.download_status not in _RESTARTABLE_STATUSES:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Episode already has a download for profile '{profile.name}'",
-            )
+            raise HTTPException(status_code=409, detail=f"Episode already has a download for profile '{profile.name}'")
         _reset_download(existing)
         s.flush()
         return existing
@@ -181,30 +158,11 @@ def create_movie_download(
     movie_data: DwMovieRecord,
     body: MovieDownloadAPICreate,
 ) -> MovieMediaDownload:
-    """Persist a new browsed movie through its API service and queue a download."""
-    profile: Optional[LocalMediaProfileBase] = s.get(LocalMediaProfileBase, body.local_media_profile_id)
-    if profile is None:
-        raise HTTPException(status_code=404, detail="Local media profile not found")
-    if profile.type != LocalMediaProfileType.MOVIE.value:
-        raise HTTPException(status_code=422, detail="Movies require a Movie Local Media Profile")
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE)
     if not movie_data.is_downloadable:
         raise HTTPException(status_code=422, detail="Daily Wire marks this movie as unavailable for download")
 
-    movie: Optional[Movie] = (
-        s.query(Movie)
-        .filter(Movie.slug == movie_data.slug)
-        .one_or_none()
-    )
-    if movie is None:
-        # Imported lazily because endpoint package initializers expose routers,
-        # and the Movies router also depends on this download service.
-        from backend.api.endpoints.movies.service import create_movie
-
-        created = create_movie(s, _movie_create_from_dailywire(movie_data))
-        movie = s.get(Movie, created.id)
-        if movie is None:
-            raise RuntimeError("Movie creation did not produce a persisted Movie record")
-
+    movie = _get_or_create_movie(s, movie_data)
     existing: Optional[MovieMediaDownload] = (
         s.query(MovieMediaDownload)
         .filter(
@@ -225,12 +183,90 @@ def create_movie_download(
         media_item_id=movie.id,
         local_media_profile_id=profile.id,
         download_status=MediaDownloadStatus.PENDING.value,
-        file_path=str(resolve_movie_output_path(profile.output_template, movie=movie)),
+        file_path=str(resolve_movie_output_path(
+            profile.output_template,
+            movie=movie,
+            append_media_type_to_filename=profile.append_media_type_to_filename,
+        )),
         progress=0,
     )
     s.add(download)
     s.flush()
     return download
+
+
+def create_trailer_download(
+    s: Session,
+    movie_data: DwMovieRecord,
+    trailer_slug: str,
+    body: MovieDownloadAPICreate,
+) -> TrailerMediaDownload:
+    """Persist a browsed movie/trailer and queue the trailer with a Movie profile."""
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE)
+    if movie_data.trailer is None or movie_data.trailer.slug != trailer_slug:
+        raise HTTPException(status_code=404, detail="Trailer not found for this movie")
+
+    movie = _get_or_create_movie(s, movie_data)
+    trailer: Optional[Trailer] = (
+        s.query(Trailer)
+        .filter(Trailer.movie_id == movie.id, Trailer.slug == trailer_slug)
+        .one_or_none()
+    )
+    if trailer is None:
+        raise HTTPException(status_code=404, detail="Trailer could not be persisted for this movie")
+
+    existing: Optional[TrailerMediaDownload] = (
+        s.query(TrailerMediaDownload)
+        .filter(
+            TrailerMediaDownload.media_item_id == trailer.id,
+            TrailerMediaDownload.local_media_profile_id == profile.id,
+        )
+        .one_or_none()
+    )
+    if existing is not None:
+        if existing.download_status not in _RESTARTABLE_STATUSES:
+            raise HTTPException(status_code=409, detail=f"Trailer already has a download for profile '{profile.name}'")
+        _reset_download(existing)
+        s.flush()
+        return existing
+
+    download = TrailerMediaDownload(
+        type=MediaType.TRAILER.value,
+        media_item_id=trailer.id,
+        local_media_profile_id=profile.id,
+        download_status=MediaDownloadStatus.PENDING.value,
+        file_path=str(resolve_movie_output_path(
+            profile.output_template,
+            movie=movie,
+            media_item=trailer,
+            append_media_type_to_filename=profile.append_media_type_to_filename,
+        )),
+        progress=0,
+    )
+    s.add(download)
+    s.flush()
+    return download
+
+
+def _get_profile(s: Session, profile_id: int, expected_type: LocalMediaProfileType) -> LocalMediaProfileBase:
+    profile: Optional[LocalMediaProfileBase] = s.get(LocalMediaProfileBase, profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Local media profile not found")
+    if profile.type != expected_type.value:
+        label = "Movies and trailers" if expected_type == LocalMediaProfileType.MOVIE else "Episodes"
+        raise HTTPException(status_code=422, detail=f"{label} require a {expected_type.value.title()} Local Media Profile")
+    return profile
+
+
+def _get_or_create_movie(s: Session, movie_data: DwMovieRecord) -> Movie:
+    movie: Optional[Movie] = s.query(Movie).filter(Movie.slug == movie_data.slug).one_or_none()
+    if movie is None:
+        from backend.api.endpoints.movies.service import create_movie
+        created = create_movie(s, _movie_create_from_dailywire(movie_data))
+        movie = s.get(Movie, created.id)
+        if movie is None:
+            raise RuntimeError("Movie creation did not produce a persisted Movie record")
+    return movie
 
 
 def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
@@ -268,7 +304,6 @@ def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
 
 
 def retry_media_download(s: Session, media_download_id: int) -> MediaDownloadBase:
-    """Cancel any active attempt and arm a fresh generation for download."""
     download: Optional[MediaDownloadBase] = s.get(MediaDownloadBase, media_download_id)
     if download is None:
         raise HTTPException(status_code=404, detail="Media download not found")
@@ -330,28 +365,18 @@ def _reset_download(download: MediaDownloadBase) -> None:
 
 
 def update_media_download(s: Session, media_download_id: int, body: MediaDownloadAPIUpdate) -> MediaDownloadAPIRead:
-    item: Optional[MediaDownloadBase] = (
-        s.query(MediaDownloadBase)
-        .filter_by(id=media_download_id)
-        .one_or_none()
-    )
+    item: Optional[MediaDownloadBase] = s.query(MediaDownloadBase).filter_by(id=media_download_id).one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Media download not found")
-
     update_database_fields(item, body)
     s.flush()
     return MediaDownloadAPIRead.model_validate(item)
 
 
 def delete_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRead:
-    item = (
-        s.query(MediaDownloadBase)
-        .filter_by(id=media_download_id)
-        .one_or_none()
-    )
+    item = s.query(MediaDownloadBase).filter_by(id=media_download_id).one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Media download not found")
-
     payload = MediaDownloadAPIRead.model_validate(item)
     if item.download_status in _CANCELLABLE_STATUSES:
         # Removing the row invalidates every queued/running generation. Cleanup

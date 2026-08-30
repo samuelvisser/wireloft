@@ -10,9 +10,18 @@ from backend.types.local_media_profile_types import LocalMediaProfileType, Prefe
 from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
     SHOW_OUTPUT_TEMPLATE_FIELDS,
+    movie_template_has_media_item_field,
     validate_output_template_fields,
 )
 from backend.utils.helpers import slugify
+
+
+_TRAILER_COLLISION_MESSAGE = (
+    "Movie and trailer downloads could resolve to the same file. Either enable "
+    "'Append media type to filename' (recommended), or include at least one placeholder "
+    "that describes the actual downloaded item, such as {title}, {dw_id}, "
+    "{duration_seconds}, or {media_type}."
+)
 
 
 # ---------- Strict input (create/update) ----------
@@ -22,6 +31,7 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
     name: str = Field(min_length=1)
     output_template: str = Field(min_length=16)
     preferred_format: PreferredFormat
+    append_media_type_to_filename: bool = True
 
     @computed_field(return_type=str)
     @property
@@ -56,18 +66,20 @@ class _TypedLocalMediaProfileAPIBaseIn(_LocalMediaProfileAPIBaseIn):
             allowed_fields=allowed_fields,
         )
 
-        if (
-            self.type == LocalMediaProfileType.MOVIE
-            and self.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY
-        ):
-            raise ValueError("Movie Local Media Profiles require a video format")
+        if self.type == LocalMediaProfileType.MOVIE:
+            if self.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY:
+                raise ValueError("Movie Local Media Profiles require a video format")
+            if (
+                not self.append_media_type_to_filename
+                and not movie_template_has_media_item_field(self.output_template)
+            ):
+                raise ValueError(_TRAILER_COLLISION_MESSAGE)
         return self
 
 
 class LocalMediaProfileAPICreate(_TypedLocalMediaProfileAPIBaseIn):
     """Request body for creating a media profile. Slug derived from name."""
 
-    # Existing clients created show profiles before this discriminator existed.
     type: LocalMediaProfileType = LocalMediaProfileType.SHOW
 
 
@@ -86,6 +98,7 @@ class _LocalMediaProfileAPIBaseOut(ResponseBase):
     name: str
     output_template: str
     preferred_format: Union[PreferredFormat, str]
+    append_media_type_to_filename: bool
 
 
 class LocalMediaProfileAPIRead(_LocalMediaProfileAPIBaseOut):

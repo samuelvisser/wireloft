@@ -51,7 +51,6 @@ def get_local_media_profiles_list(s: Session) -> list[LocalMediaProfileAPIRead]:
         .order_by(LocalMediaProfileBase.id)
         .all()
     )
-    
     return [LocalMediaProfileAPIRead.model_validate(mp) for mp in local_media_profiles]
 
 
@@ -63,7 +62,6 @@ def get_local_media_profile(s: Session, local_media_profile_slug: str) -> LocalM
     )
     if local_media_profile is None:
         raise HTTPException(status_code=404, detail="Media profile not found")
-
     return LocalMediaProfileAPIRead.model_validate(local_media_profile)
 
 

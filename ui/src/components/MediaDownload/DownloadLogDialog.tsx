@@ -24,6 +24,17 @@ function attemptLabel(isRedownload: boolean | null | undefined): string | null {
     return null
 }
 
+function mediaTypeLabel(type: string): string {
+    if (type === 'movie') return 'Movie'
+    if (type === 'trailer') return 'Trailer'
+    if (type === 'episode') return 'Episode'
+    return type ? type.replace(/_/g, ' ').replace(/^./, (char) => char.toUpperCase()) : 'Media'
+}
+
+function mediaTitle(row: MediaDownloadViewRead): string {
+    return row.mediaTitle ?? row.movieTitle ?? row.episodeTitle ?? 'Download log'
+}
+
 /** Full detail view for one download row: current state plus its permanent attempt ledger. */
 export default function DownloadLogDialog({row, onClose}: Props) {
     // Called unconditionally (Rules of Hooks): disabled via `enabled` while row is null.
@@ -51,13 +62,14 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                         <FontAwesomeIcon icon={['fas', 'file-lines']}/>
                     </div>
                     <h2 id="download-log-title" className="modal-title">
-                        {row.movieTitle ?? row.episodeTitle ?? 'Download log'}
+                        {mediaTitle(row)}
                     </h2>
                 </div>
 
                 <dl className="log-meta">
-                    <div><dt>Media type</dt><dd>{row.movieTitle ? 'Movie' : 'Episode'}</dd></div>
-                    {!row.movieTitle && <div><dt>Show</dt><dd>{row.showTitle ?? '—'}</dd></div>}
+                    <div><dt>Media type</dt><dd>{mediaTypeLabel(String(row.type))}</dd></div>
+                    {row.type === 'trailer' && <div><dt>Movie</dt><dd>{row.movieTitle ?? '—'}</dd></div>}
+                    {row.type === 'episode' && <div><dt>Show</dt><dd>{row.showTitle ?? '—'}</dd></div>}
                     <div><dt>Profile</dt><dd>{row.localMediaProfileName ?? '—'}</dd></div>
                     <div>
                         <dt>Current status</dt>

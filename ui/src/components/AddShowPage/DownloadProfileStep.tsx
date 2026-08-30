@@ -27,9 +27,10 @@ type Props = {
     showSlug?: string
     showType?: ShowTypeValue | ''
     seasons: SeasonDetachedOut[]
+    continueLabel?: string
 }
 
-export default function DownloadProfileStep({value, onChange, onSubmit, onBack, onContinue, onCancel, showSlug, showType, seasons}: Props) {
+export default function DownloadProfileStep({value, onChange, onSubmit, onBack, onContinue, onCancel, showSlug, showType, seasons, continueLabel}: Props) {
     // Return the appropriate step component based on the show type
     return (
         <div className="wizard-with-aside">
@@ -42,6 +43,7 @@ export default function DownloadProfileStep({value, onChange, onSubmit, onBack, 
                         onBack={onBack}
                         onContinue={onContinue}
                         onCancel={onCancel}
+                        continueLabel={continueLabel}
                     />
                 ) : (
                     <SeriesDownloadProfileStep
@@ -52,6 +54,7 @@ export default function DownloadProfileStep({value, onChange, onSubmit, onBack, 
                         onBack={onBack}
                         onContinue={onContinue}
                         onCancel={onCancel}
+                        continueLabel={continueLabel}
                     />
                 )}
             </div>

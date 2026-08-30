@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import ShowIndexingProgress from '../../components/ShowIndexingProgress/ShowIndexingProgress'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import './ShowPage.css'
 
@@ -20,6 +21,8 @@ function preferredFormatLabel(value?: string | null) {
   return label === 'Audio Only' ? 'Audio' : label
 }
 
+const EPISODE_SKELETON_COUNT = 12
+
 export default function ShowPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -27,7 +30,7 @@ export default function ShowPage() {
   const PAGE_SIZE = 25
 
   const { data: show, isLoading, error } = useShow(id)
-  const { data: episodesData } = useEpisodes(id)
+  const { data: episodesData, isLoading: episodesLoading } = useEpisodes(id)
   const episodes: any[] = episodesData ?? []
   const { data: downloads } = useMediaDownloadsView()
   const { data: downloadProfiles } = useDownloadProfilesView()
@@ -146,14 +149,15 @@ export default function ShowPage() {
       // Keep the confirm modal open so the user can retry or cancel
       return
     }
-    // Success: close modal, invalidate relevant queries, and navigate home
+    // Success: close modal, invalidate relevant queries, and return to the shows library.
     setConfirm(false)
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['shows'] }),
+      qc.invalidateQueries({ queryKey: ['showsView'] }),
       qc.invalidateQueries({ queryKey: ['show', id] }),
       qc.invalidateQueries({ queryKey: ['episodes', id] }),
     ])
-    navigate('/')
+    navigate('/library?type=shows')
   }
 
   return (
@@ -195,6 +199,13 @@ export default function ShowPage() {
               ]}
             />
           </div>
+
+          <ShowIndexingProgress
+            showId={show.id}
+            showSlug={show.slug}
+            pollForStart={episodes.length === 0}
+            className="show-page-indexing"
+          />
 
           {(attachedDownloadProfiles.length > 0 || attachedStreamProfiles.length > 0) && (
             <div className="show-profile-summary" aria-label="Profiles attached to this show">
@@ -264,13 +275,25 @@ export default function ShowPage() {
           )}
         </header>
 
-        <div className="episodes-grid" role="list" aria-label={`${show.title} episodes`}>
-          {visibleItems.map((ep: any) => (
-            <EpisodeCard key={ep.id} ep={ep} showSlug={id} downloads={downloadsBySlug.get(ep.slug)}/>
-          ))}
-        </div>
+        {episodesLoading && episodes.length === 0 ? (
+          <div className="episodes-grid" role="status" aria-label="Loading episodes" aria-busy="true">
+            {Array.from({length: EPISODE_SKELETON_COUNT}, (_, index) => (
+              <div className="episode-card episode-card-skeleton" key={index} aria-hidden="true">
+                <div className="episode-skeleton-cover"/>
+                <div className="episode-skeleton-title"/>
+                <div className="episode-skeleton-title episode-skeleton-title-short"/>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="episodes-grid" role="list" aria-label={`${show.title} episodes`}>
+            {visibleItems.map((ep: any) => (
+              <EpisodeCard key={ep.id} ep={ep} showSlug={id} downloads={downloadsBySlug.get(ep.slug)}/>
+            ))}
+          </div>
+        )}
 
-        {hasMore && (
+        {hasMore && !episodesLoading && (
           <div ref={sentinelRef} className="episodes-load-more" aria-hidden>
             Loading more episodes…
           </div>

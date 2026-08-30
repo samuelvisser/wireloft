@@ -1,6 +1,6 @@
 import './ShowActionStep.css'
 
-export type ShowAction = 'index' | 'stream' | 'download-stream'
+export type ShowAction = 'index' | 'stream' | 'download' | 'download-stream'
 
 type Props = {
     value?: ShowAction
@@ -28,6 +28,12 @@ const OPTIONS: Array<{
         eyebrow: 'Index + Stream',
         title: 'Index and stream this show',
         description: 'Index the show and open a stream you can use with any podcast app to listen to or view episodes externally.',
+    },
+    {
+        value: 'download',
+        eyebrow: 'Index + Download',
+        title: 'Index and download this show',
+        description: 'Index the show and automatically download new episodes to your server using a local media profile.',
     },
     {
         value: 'download-stream',

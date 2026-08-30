@@ -3,7 +3,7 @@ import {Controller, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
 
 type FormatRegistry = {
-    options: readonly {value: string; label: string}[]
+    options: readonly { value: string; label: string }[]
 }
 
 type Props = {
@@ -14,34 +14,15 @@ type Props = {
 }
 
 export default function LocalMediaProfileTypeFields({
-    form,
-    pathPlaceholder,
-    formatRegistry,
-    templateHelp,
-}: Props) {
+                                                        form,
+                                                        pathPlaceholder,
+                                                        formatRegistry,
+                                                        templateHelp,
+                                                    }: Props) {
     const {register, control, formState: {errors}} = form
 
     return (
         <>
-            <div className="form-row">
-                <label htmlFor="mp-path">Output path template</label>
-                <input
-                    id="mp-path"
-                    className="input"
-                    type="text"
-                    placeholder={pathPlaceholder}
-                    {...register('outputTemplate')}
-                    aria-invalid={!!errors.outputTemplate}
-                    aria-describedby={errors.outputTemplate ? 'mp-path-error' : 'mp-path-help'}
-                />
-                {errors.outputTemplate && (
-                    <div id="mp-path-error" className="error" role="alert" aria-live="polite">
-                        {String(errors.outputTemplate.message)}
-                    </div>
-                )}
-                <div className="help" id="mp-path-help">{templateHelp}</div>
-            </div>
-
             <div className="form-row">
                 <label htmlFor="mp-format">Preferred format</label>
                 <Controller
@@ -66,6 +47,26 @@ export default function LocalMediaProfileTypeFields({
                         {String(errors.preferredFormat.message)}
                     </div>
                 )}
+            </div>
+
+
+            <div className="form-row">
+                <label htmlFor="mp-path">Output path template</label>
+                <input
+                    id="mp-path"
+                    className="input"
+                    type="text"
+                    placeholder={pathPlaceholder}
+                    {...register('outputTemplate')}
+                    aria-invalid={!!errors.outputTemplate}
+                    aria-describedby={errors.outputTemplate ? 'mp-path-error' : 'mp-path-help'}
+                />
+                {errors.outputTemplate && (
+                    <div id="mp-path-error" className="error" role="alert" aria-live="polite">
+                        {String(errors.outputTemplate.message)}
+                    </div>
+                )}
+                <div className="help" id="mp-path-help">{templateHelp}</div>
             </div>
         </>
     )

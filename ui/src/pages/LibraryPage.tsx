@@ -1,8 +1,9 @@
-import {useEffect, useMemo, useState} from 'react'
+import {useMemo} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
+import ShowIndexingProgress from '../components/ShowIndexingProgress/ShowIndexingProgress'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import {useDailywireCatalog, useMediaDownloadsView, useMovies, useShowsView} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
@@ -24,17 +25,13 @@ export default function LibraryPage() {
     )
     const hasShows = !!shows?.length
     const hasMovies = !!movies?.length
-    const requested = params.get('type') as MediaType | null
-    const initialType: MediaType = requested === 'movies' ? 'movies' : 'shows'
-    const [activeType, setActiveType] = useState<MediaType>(initialType)
 
-    useEffect(() => {
-        if (hasShows && !hasMovies && activeType !== 'shows') setActiveType('shows')
-        if (hasMovies && !hasShows && activeType !== 'movies') setActiveType('movies')
-    }, [activeType, hasMovies, hasShows])
+    // The URL is the single source of truth for the selected library type, just
+    // like on the Browse page. Never switch away from an explicitly requested
+    // type based on which query happens to finish first.
+    const activeType: MediaType = params.get('type') === 'movies' ? 'movies' : 'shows'
 
     const chooseType = (type: MediaType) => {
-        setActiveType(type)
         setParams({type}, {replace: true})
     }
 
@@ -87,12 +84,18 @@ export default function LibraryPage() {
                                 <span className="show-summary-art">
                                     {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={['fas', 'podcast']}/></span>}
                                 </span>
-                                <span className="show-summary-copy">
+                                <div className="show-summary-copy">
                                     <span className="show-summary-title">{show.title}</span>
                                     <span className="show-summary-author">{show.authorName || 'Daily Wire'}</span>
                                     <span className="show-summary-meta">{show.episodeCount} episodes{show.years ? ` • ${show.years}` : ''}</span>
                                     {show.description && <span className="show-summary-description">{show.description}</span>}
-                                </span>
+                                    <ShowIndexingProgress
+                                        showId={show.id}
+                                        showSlug={show.slug}
+                                        pollForStart={show.episodeCount === 0}
+                                        className="library-show-indexing"
+                                    />
+                                </div>
                                 <FontAwesomeIcon icon={['fas', 'chevron-right']} aria-hidden="true"/>
                             </Link>
                         )

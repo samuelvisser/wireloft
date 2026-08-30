@@ -22,6 +22,9 @@ from ...types.general import RecordOrder
 from ..monitor_episode_worker.scheduling import MONITOR_REQUESTED_EVENT
 
 
+SHOW_INDEXED_EVENT = "show.indexed"
+
+
 async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, show_slug: Optional[str] = None, dry_run: bool = False, progress=None) -> None:
     print("Starting fetch_new_episodes" + (" (dry run: nothing will be saved)" if dry_run else ""))
 
@@ -140,6 +143,7 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
         upper = upper + 1
         if total == 0:
             _queue_monitor_requests(s, monitor_requests.values())
+            _queue_show_indexed(s, show=show, indexed_count=0)
             s.commit()
             update_progress(
                 progress,
@@ -189,6 +193,7 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
             update_progress(progress, scaled_pct,f"Indexed {processed}/{total} episodes (season {season.index}: {season.name})")
 
         _queue_monitor_requests(s, monitor_requests.values())
+        _queue_show_indexed(s, show=show, indexed_count=total)
         s.commit()
         update_progress(progress, 100, _completion_message(total, len(monitor_requests)))
 
@@ -243,6 +248,16 @@ def _monitor_request_for_db_episode(show: Show, episode: Episode) -> dict:
 def _queue_monitor_requests(s: Session, requests) -> None:
     for request in requests:
         queue_event(s, MONITOR_REQUESTED_EVENT, request)
+
+
+def _queue_show_indexed(s: Session, *, show: Show, indexed_count: int) -> None:
+    """Announce a completed index only after its database commit succeeds."""
+    queue_event(s, SHOW_INDEXED_EVENT, {
+        "resource_id": show.id,
+        "id": show.id,
+        "slug": show.slug,
+        "indexed_count": indexed_count,
+    })
 
 
 def _completion_message(indexed_count: int, monitor_count: int) -> str:
