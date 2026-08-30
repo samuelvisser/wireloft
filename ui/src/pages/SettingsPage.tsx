@@ -7,9 +7,14 @@ import DailyWireSettingsTab from '../components/Settings/DailyWireSettingsTab'
 import DownloadsSettingsTab from '../components/Settings/DownloadsSettingsTab'
 import GeneralSettingsTab from '../components/Settings/GeneralSettingsTab'
 import {SettingsLoading} from '../components/Settings/SettingsControls'
-import {useResetSettings, useSaveSettings, useSettings} from '../lib/settings'
-import type {SettingsValues} from '../types/schemas/settings'
+import {useSaveSettings, useSettings} from '../lib/settings'
+import {
+    SETTINGS_FIELD_PATHS,
+    type SettingsFieldPath,
+    type SettingsValues,
+} from '../types/schemas/settings'
 import './SettingsPage.css'
+import './SettingsEnvironmentOverrides.css'
 
 
 type SettingsTab = 'general' | 'downloads' | 'automation' | 'dailywire' | 'advanced'
@@ -25,17 +30,25 @@ const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'downloads', label: 'Downloads', description: 'Storage, naming, processing and verification'},
     {id: 'automation', label: 'Automation', description: 'Scheduler and episode monitoring'},
     {id: 'dailywire', label: 'DailyWire', description: 'Account and integration details'},
-    {id: 'advanced', label: 'Advanced', description: 'Encryption files and override management'},
+    {id: 'advanced', label: 'Advanced', description: 'Encryption files and configuration details'},
 ]
 
 function cloneSettings(values: SettingsValues): SettingsValues {
     return JSON.parse(JSON.stringify(values)) as SettingsValues
 }
 
+function valueAtPath(values: SettingsValues, path: SettingsFieldPath): unknown {
+    let current: unknown = values
+    for (const segment of path.split('.')) {
+        if (current === null || typeof current !== 'object') return undefined
+        current = (current as Record<string, unknown>)[segment]
+    }
+    return current
+}
+
 export default function SettingsPage() {
     const settingsQuery = useSettings()
     const saveSettings = useSaveSettings()
-    const resetSettings = useResetSettings()
     const [activeTab, setActiveTab] = useState<SettingsTab>('general')
     const [draft, setDraft] = useState<SettingsValues | null>(null)
     const [baseline, setBaseline] = useState<SettingsValues | null>(null)
@@ -55,10 +68,13 @@ export default function SettingsPage() {
         })
     }, [])
 
-    const isDirty = useMemo(() => {
-        if (!draft || !baseline) return false
-        return JSON.stringify(draft) !== JSON.stringify(baseline)
+    const dirtyFields = useMemo<SettingsFieldPath[]>(() => {
+        if (!draft || !baseline) return []
+        return SETTINGS_FIELD_PATHS.filter(
+            (path) => valueAtPath(draft, path) !== valueAtPath(baseline, path),
+        )
     }, [draft, baseline])
+    const isDirty = dirtyFields.length > 0
 
     useEffect(() => {
         if (!isDirty) return
@@ -71,11 +87,15 @@ export default function SettingsPage() {
         return () => window.removeEventListener('beforeunload', warnBeforeUnload)
     }, [isDirty])
 
+    const environmentVariableFor = useCallback((path: SettingsFieldPath): string | undefined => {
+        return settingsQuery.data?.environmentOverrides[path]
+    }, [settingsQuery.data?.environmentOverrides])
+
     const submit = async () => {
         if (!draft || !isDirty) return
         try {
-            await saveSettings.mutateAsync(draft)
-            toast.success('Settings saved')
+            await saveSettings.mutateAsync({values: draft, changedFields: dirtyFields})
+            toast.success('Settings saved to config.yml')
         } catch (error: any) {
             toast.error(error?.message || 'Failed to save settings')
         }
@@ -83,20 +103,6 @@ export default function SettingsPage() {
 
     const discardChanges = () => {
         if (baseline) setDraft(cloneSettings(baseline))
-    }
-
-    const resetOverrides = async () => {
-        const confirmed = window.confirm(
-            'Remove all settings saved in the WireLoft UI and fall back to config.yml and built-in defaults?'
-        )
-        if (!confirmed) return
-
-        try {
-            await resetSettings.mutateAsync()
-            toast.success('UI overrides removed')
-        } catch (error: any) {
-            toast.error(error?.message || 'Failed to reset settings')
-        }
     }
 
     if (settingsQuery.isError) {
@@ -123,7 +129,7 @@ export default function SettingsPage() {
     }
 
     const updatedAt = settingsQuery.data?.updatedAt
-    const tabProps = {draft, updateDraft}
+    const tabProps = {draft, updateDraft, environmentVariableFor}
 
     return (
         <section className="view settings-page" aria-labelledby="settings-title">
@@ -133,16 +139,9 @@ export default function SettingsPage() {
                     <p>Configure how WireLoft downloads, monitors and serves your media.</p>
                 </div>
                 <div className="settings-source-status" aria-live="polite">
-                    <span className={`settings-source-badge${settingsQuery.data?.hasOverrides ? ' is-active' : ''}`}>
-                        {settingsQuery.data?.hasOverrides ? 'UI overrides active' : 'Using config.yml'}
-                    </span>
-                    {updatedAt ? <small>Saved {updatedAt.toLocaleString()}</small> : null}
+                    <span className="settings-source-badge is-active">config.yml</span>
+                    {updatedAt ? <small>Modified {updatedAt.toLocaleString()}</small> : null}
                 </div>
-            </div>
-
-            <div className="settings-precedence-note">
-                Values saved here override <code>config.yml</code>. Environment variables remain the highest-priority deployment setting.
-                Already-created schedules, timezone and encryption-file changes are fully applied after WireLoft restarts.
             </div>
 
             <div>
@@ -174,20 +173,17 @@ export default function SettingsPage() {
                     {activeTab === 'downloads' ? <DownloadsSettingsTab {...tabProps} /> : null}
                     {activeTab === 'automation' ? <AutomationSettingsTab {...tabProps} /> : null}
                     {activeTab === 'dailywire' ? <DailyWireSettingsTab {...tabProps} /> : null}
-                    {activeTab === 'advanced' ? (
-                        <AdvancedSettingsTab
-                            {...tabProps}
-                            hasOverrides={Boolean(settingsQuery.data?.hasOverrides)}
-                            isResetting={resetSettings.isPending}
-                            onReset={() => void resetOverrides()}
-                        />
-                    ) : null}
+                    {activeTab === 'advanced' ? <AdvancedSettingsTab {...tabProps} /> : null}
                 </div>
 
                 <div className={`settings-actions${isDirty ? ' is-dirty' : ''}`}>
                     <div>
                         <strong>{isDirty ? 'Unsaved changes' : 'All changes saved'}</strong>
-                        <span>{isDirty ? 'Review other tabs or save your settings.' : 'The values shown match the active configuration.'}</span>
+                        <span>
+                            {isDirty
+                                ? `${dirtyFields.length} ${dirtyFields.length === 1 ? 'setting' : 'settings'} will be written to config.yml.`
+                                : 'The values shown match the active configuration.'}
+                        </span>
                     </div>
                     <div className="settings-actions__buttons">
                         <button

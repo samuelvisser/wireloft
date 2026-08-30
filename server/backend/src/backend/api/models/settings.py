@@ -14,6 +14,81 @@ from backend.api.models.base import RequestBase, ResponseBase
 from config.settings.settings import AppSettings
 
 
+SettingFieldPath = Literal[
+    "logLevel",
+    "timezone",
+    "crypto.secretKeyFile",
+    "crypto.defaultSecretFile",
+    "loginSession.ttlSeconds",
+    "dwApi.middlewareApi",
+    "dwApi.streamApi",
+    "dwOauth.issuer",
+    "dwOauth.audience",
+    "dwOauth.clientId",
+    "dwOauth.scope",
+    "dwTimeout.minFastRequestMs",
+    "dwTimeout.maxFastRequests",
+    "dwTimeout.minSlowRequestMs",
+    "scheduler.enabled",
+    "scheduler.maxWorkers",
+    "scheduler.defaultMaxRetries",
+    "scheduler.retryBackoffSeconds",
+    "newEpisodeSchedule.findEpisodesCron",
+    "newEpisodeSchedule.monitorEpisodeCron",
+    "newEpisodeSchedule.checkNoShowTodayCron",
+    "episodeStatusTiming.publishedCountdownAfterMinutes",
+    "episodeStatusTiming.publishedFinalAfterMinutes",
+    "downloadSettings.verifyDownloadsCron",
+    "downloadSettings.maxConcurrentDownloads",
+    "downloadSettings.maxDownloadAttempts",
+    "downloadSettings.downloadTimeoutSeconds",
+    "downloadSettings.downloadRoot",
+    "downloadSettings.asciiOnlyFilenames",
+    "downloadSettings.remuxVideoToMp4",
+    "downloadSettings.ffmpegPath",
+    "fileWatcher.enabled",
+    "fileWatcher.scanCron",
+    "fileWatcher.verifyFileSize",
+]
+
+UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
+    "logLevel",
+    "timezone",
+    "crypto.secretKeyFile",
+    "crypto.defaultSecretFile",
+    "loginSession.ttlSeconds",
+    "dwApi.middlewareApi",
+    "dwApi.streamApi",
+    "dwOauth.issuer",
+    "dwOauth.audience",
+    "dwOauth.clientId",
+    "dwOauth.scope",
+    "dwTimeout.minFastRequestMs",
+    "dwTimeout.maxFastRequests",
+    "dwTimeout.minSlowRequestMs",
+    "scheduler.enabled",
+    "scheduler.maxWorkers",
+    "scheduler.defaultMaxRetries",
+    "scheduler.retryBackoffSeconds",
+    "newEpisodeSchedule.findEpisodesCron",
+    "newEpisodeSchedule.monitorEpisodeCron",
+    "newEpisodeSchedule.checkNoShowTodayCron",
+    "episodeStatusTiming.publishedCountdownAfterMinutes",
+    "episodeStatusTiming.publishedFinalAfterMinutes",
+    "downloadSettings.verifyDownloadsCron",
+    "downloadSettings.maxConcurrentDownloads",
+    "downloadSettings.maxDownloadAttempts",
+    "downloadSettings.downloadTimeoutSeconds",
+    "downloadSettings.downloadRoot",
+    "downloadSettings.asciiOnlyFilenames",
+    "downloadSettings.remuxVideoToMp4",
+    "downloadSettings.ffmpegPath",
+    "fileWatcher.enabled",
+    "fileWatcher.scanCron",
+    "fileWatcher.verifyFileSize",
+)
+
+
 class _SettingsValueModel(BaseModel):
     """Strict, camelCase API model for settings that may be changed in the UI."""
 
@@ -146,10 +221,8 @@ class FileWatcherSettingsValue(_SettingsValueModel):
 class SettingsValues(_SettingsValueModel):
     """Every application setting intentionally exposed by the Settings UI.
 
-    Notably absent are admin authentication, database location, application
-    version, and literal crypto secret material. Because this model is also
-    used when writing the override file, those values cannot accidentally be
-    persisted by a broad ``AppSettings.model_dump()`` call.
+    Admin authentication, database location, application version, and literal
+    crypto secret material are deliberately absent from this contract.
     """
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -196,15 +269,24 @@ class SettingsValues(_SettingsValueModel):
             file_watcher=FileWatcherSettingsValue.model_validate(settings.file_watcher),
         )
 
-    def to_ui_override_document(self) -> dict[str, Any]:
+    def to_config_document(self) -> dict[str, Any]:
         return self.model_dump(mode="json", by_alias=True)
 
 
 class SettingsAPIUpdate(RequestBase):
     values: SettingsValues
+    changed_fields: list[SettingFieldPath] = Field(min_length=1)
+
+    @field_validator("changed_fields")
+    @classmethod
+    def _changed_fields_must_be_unique(cls, values: list[SettingFieldPath]):
+        if len(values) != len(set(values)):
+            raise ValueError("changedFields must not contain duplicates")
+        return values
 
 
 class SettingsAPIRead(ResponseBase):
     values: SettingsValues
-    has_overrides: bool
+    configured_fields: list[SettingFieldPath]
+    environment_overrides: dict[str, str]
     updated_at: datetime | None = None

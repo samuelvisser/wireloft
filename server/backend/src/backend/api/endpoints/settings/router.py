@@ -2,9 +2,9 @@ from fastapi import APIRouter, HTTPException
 
 from backend.api.models.settings import SettingsAPIRead, SettingsAPIUpdate
 from .service import (
+    SettingsManagedByEnvironmentError,
     SettingsPersistenceError,
     get_ui_settings,
-    reset_ui_settings,
     save_ui_settings,
 )
 
@@ -20,17 +20,10 @@ def settings_get():
 
 @router.put("", response_model=SettingsAPIRead)
 def settings_update(body: SettingsAPIUpdate):
-    """Replace the Settings UI override document with validated values."""
+    """Persist only explicitly changed UI fields into config.yml."""
     try:
         return save_ui_settings(body)
-    except SettingsPersistenceError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@router.delete("", response_model=SettingsAPIRead)
-def settings_reset():
-    """Remove every UI override and fall back to config.yml/default values."""
-    try:
-        return reset_ui_settings()
+    except SettingsManagedByEnvironmentError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SettingsPersistenceError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

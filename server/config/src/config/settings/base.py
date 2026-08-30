@@ -9,21 +9,11 @@ from pydantic_settings import SettingsConfigDict, BaseSettings
 from dailywire_api.config import PROJECT_ROOT
 
 
-def get_ui_config_path() -> Path:
-    """Return the YAML file managed exclusively by the Settings UI.
-
-    By default the file lives beside config.yml so both files are retained by
-    the same persistent /config volume in container deployments. An explicit
-    path can be supplied for unusual installations with WL_UI_CONFIG_FILE.
-    """
-    explicit_path = getenv("WL_UI_CONFIG_FILE")
-    if explicit_path:
-        return Path(explicit_path).expanduser()
-
-    config_path = Path(
+def get_config_path() -> Path:
+    """Return the single YAML configuration file used by WireLoft."""
+    return Path(
         getenv("WL_CONFIG_FILE", str(PROJECT_ROOT / "config" / "config.yml"))
     ).expanduser()
-    return config_path.with_name("ui-settings.yml")
 
 
 def _nested_settings_model(annotation: Any) -> type[BaseModel] | None:
@@ -41,14 +31,13 @@ def normalize_settings_source_keys(
     data: dict[str, Any],
     model_type: type[BaseModel],
 ) -> dict[str, Any]:
-    """Normalize every settings source to the model's camelCase aliases.
+    """Normalize settings source keys to the model's camelCase aliases.
 
     pydantic-settings merges source dictionaries before model validation. An
     environment source uses Python field names (``log_level``), while YAML
     commonly uses aliases (``logLevel``). Without normalization both keys can
-    survive the merge and Pydantic then prefers the alias regardless of source
-    order, allowing a lower-priority YAML value to beat an environment value.
-    Canonical keys make the declared source order authoritative.
+    survive the merge and Pydantic may then prefer an alias from a lower
+    priority source. Canonical keys make source order authoritative.
     """
     fields_by_input_key: dict[str, tuple[str, Any]] = {}
     for field_name, field in model_type.model_fields.items():
@@ -76,11 +65,11 @@ class SubmodelBase(BaseModel):
 class SettingsBase(BaseSettings):
     model_config = SettingsConfigDict(
         alias_generator=to_camel,
-        populate_by_name=True,  # <- accept either alias or field name on input
+        populate_by_name=True,
         env_prefix="WL_",
         env_nested_delimiter="__",
         env_file=getenv("WL_ENV_FILE", PROJECT_ROOT / ".env"),
-        yaml_file=getenv("WL_CONFIG_FILE", PROJECT_ROOT / "config" / "config.yml"),
+        yaml_file=get_config_path(),
         extra="ignore",
         nested_model_default_partial_update=True,
     )

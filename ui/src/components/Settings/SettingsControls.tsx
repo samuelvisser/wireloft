@@ -61,24 +61,35 @@ export function SettingsDisclosure({
     )
 }
 
+function EnvironmentManagedNote({variable}: {variable: string}) {
+    return (
+        <div className="settings-field__environment-note">
+            Managed by environment variable <code>{variable}</code>. Change or remove that environment override and restart WireLoft to edit this setting here.
+        </div>
+    )
+}
+
 function FieldShell({
     label,
     htmlFor,
     help,
     wide,
+    environmentVariable,
     children,
 }: {
     label: string
     htmlFor: string
     help?: ReactNode
     wide?: boolean
+    environmentVariable?: string
     children: ReactNode
 }) {
     return (
-        <div className={`settings-field${wide ? ' settings-field--wide' : ''}`}>
+        <div className={`settings-field${wide ? ' settings-field--wide' : ''}${environmentVariable ? ' is-environment-managed' : ''}`}>
             <label htmlFor={htmlFor}>{label}</label>
             {children}
             {help ? <div className="settings-field__help">{help}</div> : null}
+            {environmentVariable ? <EnvironmentManagedNote variable={environmentVariable} /> : null}
         </div>
     )
 }
@@ -91,6 +102,7 @@ export function TextField({
     help,
     placeholder,
     wide,
+    environmentVariable,
 }: {
     id: string
     label: string
@@ -99,15 +111,17 @@ export function TextField({
     help?: ReactNode
     placeholder?: string
     wide?: boolean
+    environmentVariable?: string
 }) {
     return (
-        <FieldShell label={label} htmlFor={id} help={help} wide={wide}>
+        <FieldShell label={label} htmlFor={id} help={help} wide={wide} environmentVariable={environmentVariable}>
             <input
                 id={id}
                 className="input settings-input"
                 type="text"
                 value={value}
                 placeholder={placeholder}
+                disabled={Boolean(environmentVariable)}
                 onChange={(event) => onChange(event.target.value)}
             />
         </FieldShell>
@@ -123,6 +137,7 @@ export function NumberField({
     min = 0,
     step = 1,
     unit,
+    environmentVariable,
 }: {
     id: string
     label: string
@@ -132,9 +147,10 @@ export function NumberField({
     min?: number
     step?: number
     unit?: string
+    environmentVariable?: string
 }) {
     return (
-        <FieldShell label={label} htmlFor={id} help={help}>
+        <FieldShell label={label} htmlFor={id} help={help} environmentVariable={environmentVariable}>
             <div className="settings-number-input">
                 <input
                     id={id}
@@ -143,6 +159,7 @@ export function NumberField({
                     value={value}
                     min={min}
                     step={step}
+                    disabled={Boolean(environmentVariable)}
                     onChange={(event) => {
                         const nextValue = event.currentTarget.valueAsNumber
                         if (!Number.isNaN(nextValue)) onChange(nextValue)
@@ -161,6 +178,7 @@ export function SelectField({
     options,
     onChange,
     help,
+    environmentVariable,
 }: {
     id: string
     label: string
@@ -168,13 +186,15 @@ export function SelectField({
     options: readonly string[]
     onChange: (value: string) => void
     help?: ReactNode
+    environmentVariable?: string
 }) {
     return (
-        <FieldShell label={label} htmlFor={id} help={help}>
+        <FieldShell label={label} htmlFor={id} help={help} environmentVariable={environmentVariable}>
             <select
                 id={id}
                 className="input settings-input settings-select"
                 value={value}
+                disabled={Boolean(environmentVariable)}
                 onChange={(event) => onChange(event.target.value)}
             >
                 {options.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -190,6 +210,7 @@ export function ToggleField({
     onChange,
     help,
     wide,
+    environmentVariable,
 }: {
     id: string
     label: string
@@ -197,18 +218,21 @@ export function ToggleField({
     onChange: (checked: boolean) => void
     help?: ReactNode
     wide?: boolean
+    environmentVariable?: string
 }) {
     const labelId = `${id}-label`
     return (
-        <div className={`settings-field settings-toggle-field${wide ? ' settings-field--wide' : ''}`}>
+        <div className={`settings-field settings-toggle-field${wide ? ' settings-field--wide' : ''}${environmentVariable ? ' is-environment-managed' : ''}`}>
             <div className="settings-toggle-field__control">
                 <div>
                     <label id={labelId} htmlFor={id}>{label}</label>
                     {help ? <div className="settings-field__help">{help}</div> : null}
+                    {environmentVariable ? <EnvironmentManagedNote variable={environmentVariable} /> : null}
                 </div>
                 <Switch
                     id={id}
                     checked={checked}
+                    disabled={Boolean(environmentVariable)}
                     onChange={onChange}
                     onColor="#0ea5e9"
                     offColor="#94a3b8"

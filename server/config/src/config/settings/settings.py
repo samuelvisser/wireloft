@@ -7,11 +7,7 @@ from pydantic import Field, computed_field
 from pydantic_settings import YamlConfigSettingsSource
 
 from config.config import PROJECT_ROOT
-from config.settings.base import (
-    SettingsBase,
-    get_ui_config_path,
-    normalize_settings_source_keys,
-)
+from config.settings.base import SettingsBase, normalize_settings_source_keys
 from config.settings.submodels import *
 
 
@@ -38,7 +34,7 @@ class AppSettings(SettingsBase):
         default_secret_file=PROJECT_ROOT / "data" / "wl_secret.key"
     ))
     login_session: SessionSettings = Field(default=SessionSettings(
-        ttl_seconds=60 * 60 * 24 * 30                   # 30 days
+        ttl_seconds=60 * 60 * 24 * 30
     ))
     admin_auth: AdminAuthSettings = Field(default_factory=AdminAuthSettings)
     dw_api: DailyWireAPISettings = Field(default=DailyWireAPISettings(
@@ -54,7 +50,7 @@ class AppSettings(SettingsBase):
     dw_timeout: TimeoutSettings = Field(default=TimeoutSettings(
         min_fast_request_ms=100,
         max_fast_requests=350,
-        min_slow_request_ms=int(1.000 * 60 * 2),        # 2 minutes
+        min_slow_request_ms=int(1.000 * 60 * 2),
     ))
     scheduler: SchedulerSettings = Field(default=SchedulerSettings(
         enabled=True,
@@ -96,12 +92,7 @@ class AppSettings(SettingsBase):
         dotenv_settings,
         file_secret_settings,
     ):
-        # kwargs > env > .env > Settings UI > config.yml > file secrets > defaults
-        ui_yaml_source = _AliasNormalizingYamlSource(
-            settings_cls,
-            yaml_file=get_ui_config_path(),
-            yaml_file_encoding="utf-8",
-        )
+        # kwargs > environment > .env > config.yml > file secrets > defaults
         yaml_source = _AliasNormalizingYamlSource(settings_cls)
 
         def normalized(source):
@@ -111,7 +102,6 @@ class AppSettings(SettingsBase):
             normalized(init_settings),
             normalized(env_settings),
             normalized(dotenv_settings),
-            ui_yaml_source,
             yaml_source,
             normalized(file_secret_settings),
         )

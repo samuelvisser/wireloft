@@ -7,7 +7,7 @@ import {
     ToggleField,
 } from './SettingsControls'
 
-export default function DownloadsSettingsTab({draft, updateDraft}: SettingsTabProps) {
+export default function DownloadsSettingsTab({draft, updateDraft, environmentVariableFor}: SettingsTabProps) {
     return (
         <>
             <SettingsSection
@@ -18,6 +18,7 @@ export default function DownloadsSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-download-root"
                     label="Download root"
                     value={draft.downloadSettings.downloadRoot}
+                    environmentVariable={environmentVariableFor('downloadSettings.downloadRoot')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.downloadRoot = value
                     })}
@@ -28,6 +29,7 @@ export default function DownloadsSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-ascii-filenames"
                     label="Use ASCII-only filenames"
                     checked={draft.downloadSettings.asciiOnlyFilenames}
+                    environmentVariable={environmentVariableFor('downloadSettings.asciiOnlyFilenames')}
                     onChange={(checked) => updateDraft((next) => {
                         next.downloadSettings.asciiOnlyFilenames = checked
                     })}
@@ -45,6 +47,7 @@ export default function DownloadsSettingsTab({draft, updateDraft}: SettingsTabPr
                     label="Concurrent downloads"
                     value={draft.downloadSettings.maxConcurrentDownloads}
                     min={1}
+                    environmentVariable={environmentVariableFor('downloadSettings.maxConcurrentDownloads')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.maxConcurrentDownloads = value
                     })}
@@ -55,6 +58,7 @@ export default function DownloadsSettingsTab({draft, updateDraft}: SettingsTabPr
                     label="Maximum attempts"
                     value={draft.downloadSettings.maxDownloadAttempts}
                     min={1}
+                    environmentVariable={environmentVariableFor('downloadSettings.maxDownloadAttempts')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.maxDownloadAttempts = value
                     })}
@@ -66,6 +70,7 @@ export default function DownloadsSettingsTab({draft, updateDraft}: SettingsTabPr
                     value={draft.downloadSettings.downloadTimeoutSeconds}
                     min={1}
                     unit="seconds"
+                    environmentVariable={environmentVariableFor('downloadSettings.downloadTimeoutSeconds')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.downloadTimeoutSeconds = value
                     })}
@@ -81,6 +86,7 @@ export default function DownloadsSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-remux-mp4"
                     label="Remux downloaded video to MP4"
                     checked={draft.downloadSettings.remuxVideoToMp4}
+                    environmentVariable={environmentVariableFor('downloadSettings.remuxVideoToMp4')}
                     onChange={(checked) => updateDraft((next) => {
                         next.downloadSettings.remuxVideoToMp4 = checked
                     })}
@@ -91,6 +97,7 @@ export default function DownloadsSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-ffmpeg-path"
                     label="FFmpeg executable"
                     value={draft.downloadSettings.ffmpegPath}
+                    environmentVariable={environmentVariableFor('downloadSettings.ffmpegPath')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.ffmpegPath = value
                     })}
@@ -107,6 +114,7 @@ export default function DownloadsSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-verify-downloads-cron"
                     label="Verify downloads schedule"
                     value={draft.downloadSettings.verifyDownloadsCron}
+                    environmentVariable={environmentVariableFor('downloadSettings.verifyDownloadsCron')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.verifyDownloadsCron = value
                     })}
@@ -116,6 +124,7 @@ export default function DownloadsSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-file-watcher-enabled"
                     label="Enable file watcher"
                     checked={draft.fileWatcher.enabled}
+                    environmentVariable={environmentVariableFor('fileWatcher.enabled')}
                     onChange={(checked) => updateDraft((next) => {
                         next.fileWatcher.enabled = checked
                     })}
@@ -125,6 +134,7 @@ export default function DownloadsSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-file-watcher-cron"
                     label="File watcher schedule"
                     value={draft.fileWatcher.scanCron}
+                    environmentVariable={environmentVariableFor('fileWatcher.scanCron')}
                     onChange={(value) => updateDraft((next) => {
                         next.fileWatcher.scanCron = value
                     })}
@@ -134,6 +144,7 @@ export default function DownloadsSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-file-size-verification"
                     label="Verify file size"
                     checked={draft.fileWatcher.verifyFileSize}
+                    environmentVariable={environmentVariableFor('fileWatcher.verifyFileSize')}
                     onChange={(checked) => updateDraft((next) => {
                         next.fileWatcher.verifyFileSize = checked
                     })}

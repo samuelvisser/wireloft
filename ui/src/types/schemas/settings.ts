@@ -79,14 +79,56 @@ export const SettingsValuesSchema = z.object({
 })
 export type SettingsValues = z.infer<typeof SettingsValuesSchema>
 
+export const SETTINGS_FIELD_PATHS = [
+    'logLevel',
+    'timezone',
+    'crypto.secretKeyFile',
+    'crypto.defaultSecretFile',
+    'loginSession.ttlSeconds',
+    'dwApi.middlewareApi',
+    'dwApi.streamApi',
+    'dwOauth.issuer',
+    'dwOauth.audience',
+    'dwOauth.clientId',
+    'dwOauth.scope',
+    'dwTimeout.minFastRequestMs',
+    'dwTimeout.maxFastRequests',
+    'dwTimeout.minSlowRequestMs',
+    'scheduler.enabled',
+    'scheduler.maxWorkers',
+    'scheduler.defaultMaxRetries',
+    'scheduler.retryBackoffSeconds',
+    'newEpisodeSchedule.findEpisodesCron',
+    'newEpisodeSchedule.monitorEpisodeCron',
+    'newEpisodeSchedule.checkNoShowTodayCron',
+    'episodeStatusTiming.publishedCountdownAfterMinutes',
+    'episodeStatusTiming.publishedFinalAfterMinutes',
+    'downloadSettings.verifyDownloadsCron',
+    'downloadSettings.maxConcurrentDownloads',
+    'downloadSettings.maxDownloadAttempts',
+    'downloadSettings.downloadTimeoutSeconds',
+    'downloadSettings.downloadRoot',
+    'downloadSettings.asciiOnlyFilenames',
+    'downloadSettings.remuxVideoToMp4',
+    'downloadSettings.ffmpegPath',
+    'fileWatcher.enabled',
+    'fileWatcher.scanCron',
+    'fileWatcher.verifyFileSize',
+] as const
+
+export const SettingsFieldPathSchema = z.enum(SETTINGS_FIELD_PATHS)
+export type SettingsFieldPath = z.infer<typeof SettingsFieldPathSchema>
+
 export const SettingsUpdateSchema = z.object({
     values: SettingsValuesSchema,
+    changedFields: z.array(SettingsFieldPathSchema).min(1),
 })
 export type SettingsUpdate = z.infer<typeof SettingsUpdateSchema>
 
 export const SettingsReadSchema = z.object({
     values: SettingsValuesSchema,
-    hasOverrides: z.boolean(),
+    configuredFields: z.array(SettingsFieldPathSchema),
+    environmentOverrides: z.record(z.string(), z.string()),
     updatedAt: z.iso.datetime().nullable().transform((value) => value ? new Date(value) : null),
 })
 export type SettingsRead = z.infer<typeof SettingsReadSchema>

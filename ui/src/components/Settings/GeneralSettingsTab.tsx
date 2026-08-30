@@ -8,7 +8,7 @@ import {
     TextField,
 } from './SettingsControls'
 
-export default function GeneralSettingsTab({draft, updateDraft}: SettingsTabProps) {
+export default function GeneralSettingsTab({draft, updateDraft, environmentVariableFor}: SettingsTabProps) {
     return (
         <>
             <SettingsSection
@@ -19,6 +19,7 @@ export default function GeneralSettingsTab({draft, updateDraft}: SettingsTabProp
                     id="settings-timezone"
                     label="Timezone"
                     value={draft.timezone}
+                    environmentVariable={environmentVariableFor('timezone')}
                     onChange={(value) => updateDraft((next) => { next.timezone = value })}
                     help={<>Use an IANA timezone such as <code>Europe/Amsterdam</code>.</>}
                 />
@@ -27,6 +28,7 @@ export default function GeneralSettingsTab({draft, updateDraft}: SettingsTabProp
                     label="Log level"
                     value={draft.logLevel}
                     options={['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']}
+                    environmentVariable={environmentVariableFor('logLevel')}
                     onChange={(value) => updateDraft((next) => {
                         next.logLevel = value as SettingsValues['logLevel']
                     })}
@@ -44,6 +46,7 @@ export default function GeneralSettingsTab({draft, updateDraft}: SettingsTabProp
                     value={draft.loginSession.ttlSeconds}
                     min={60}
                     unit="seconds"
+                    environmentVariable={environmentVariableFor('loginSession.ttlSeconds')}
                     onChange={(value) => updateDraft((next) => {
                         next.loginSession.ttlSeconds = value
                     })}

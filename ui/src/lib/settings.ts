@@ -1,5 +1,6 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query'
 import {
+    SettingsFieldPath,
     SettingsRead,
     SettingsReadSchema,
     SettingsUpdateSchema,
@@ -44,8 +45,14 @@ export function useSettings() {
 export function useSaveSettings() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: async (values: SettingsValues) => {
-            const body = SettingsUpdateSchema.parse({values})
+        mutationFn: async ({
+            values,
+            changedFields,
+        }: {
+            values: SettingsValues
+            changedFields: SettingsFieldPath[]
+        }) => {
+            const body = SettingsUpdateSchema.parse({values, changedFields})
             const response = await fetch(settingsUrl(), {
                 method: 'PUT',
                 credentials: 'include',
@@ -53,22 +60,6 @@ export function useSaveSettings() {
                 body: JSON.stringify(body),
             })
             return readSettings(response, 'Failed to save settings')
-        },
-        onSuccess: (settings) => {
-            queryClient.setQueryData(['settings'], settings)
-        },
-    })
-}
-
-export function useResetSettings() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: async () => {
-            const response = await fetch(settingsUrl(), {
-                method: 'DELETE',
-                credentials: 'include',
-            })
-            return readSettings(response, 'Failed to reset settings')
         },
         onSuccess: (settings) => {
             queryClient.setQueryData(['settings'], settings)

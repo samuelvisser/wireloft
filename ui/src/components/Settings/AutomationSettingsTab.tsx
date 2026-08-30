@@ -7,7 +7,7 @@ import {
     ToggleField,
 } from './SettingsControls'
 
-export default function AutomationSettingsTab({draft, updateDraft}: SettingsTabProps) {
+export default function AutomationSettingsTab({draft, updateDraft, environmentVariableFor}: SettingsTabProps) {
     return (
         <>
             <SettingsSection
@@ -18,6 +18,7 @@ export default function AutomationSettingsTab({draft, updateDraft}: SettingsTabP
                     id="settings-scheduler-enabled"
                     label="Enable background scheduler"
                     checked={draft.scheduler.enabled}
+                    environmentVariable={environmentVariableFor('scheduler.enabled')}
                     onChange={(checked) => updateDraft((next) => {
                         next.scheduler.enabled = checked
                     })}
@@ -29,6 +30,7 @@ export default function AutomationSettingsTab({draft, updateDraft}: SettingsTabP
                     label="Maximum workers"
                     value={draft.scheduler.maxWorkers}
                     min={1}
+                    environmentVariable={environmentVariableFor('scheduler.maxWorkers')}
                     onChange={(value) => updateDraft((next) => {
                         next.scheduler.maxWorkers = value
                     })}
@@ -39,6 +41,7 @@ export default function AutomationSettingsTab({draft, updateDraft}: SettingsTabP
                     label="Default retries"
                     value={draft.scheduler.defaultMaxRetries}
                     min={0}
+                    environmentVariable={environmentVariableFor('scheduler.defaultMaxRetries')}
                     onChange={(value) => updateDraft((next) => {
                         next.scheduler.defaultMaxRetries = value
                     })}
@@ -51,6 +54,7 @@ export default function AutomationSettingsTab({draft, updateDraft}: SettingsTabP
                     min={0}
                     step={0.5}
                     unit="seconds"
+                    environmentVariable={environmentVariableFor('scheduler.retryBackoffSeconds')}
                     onChange={(value) => updateDraft((next) => {
                         next.scheduler.retryBackoffSeconds = value
                     })}
@@ -66,6 +70,7 @@ export default function AutomationSettingsTab({draft, updateDraft}: SettingsTabP
                     id="settings-find-episodes-cron"
                     label="Find new episodes"
                     value={draft.newEpisodeSchedule.findEpisodesCron}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.findEpisodesCron')}
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.findEpisodesCron = value
                     })}
@@ -75,6 +80,7 @@ export default function AutomationSettingsTab({draft, updateDraft}: SettingsTabP
                     id="settings-monitor-episode-cron"
                     label="Monitor pending episodes"
                     value={draft.newEpisodeSchedule.monitorEpisodeCron}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.monitorEpisodeCron')}
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.monitorEpisodeCron = value
                     })}
@@ -84,6 +90,7 @@ export default function AutomationSettingsTab({draft, updateDraft}: SettingsTabP
                     id="settings-no-show-today-cron"
                     label="Check no-show-today episodes"
                     value={draft.newEpisodeSchedule.checkNoShowTodayCron}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.checkNoShowTodayCron')}
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.checkNoShowTodayCron = value
                     })}
@@ -101,6 +108,7 @@ export default function AutomationSettingsTab({draft, updateDraft}: SettingsTabP
                     value={draft.episodeStatusTiming.publishedCountdownAfterMinutes}
                     min={0}
                     unit="minutes"
+                    environmentVariable={environmentVariableFor('episodeStatusTiming.publishedCountdownAfterMinutes')}
                     onChange={(value) => updateDraft((next) => {
                         next.episodeStatusTiming.publishedCountdownAfterMinutes = value
                     })}
@@ -112,6 +120,7 @@ export default function AutomationSettingsTab({draft, updateDraft}: SettingsTabP
                     value={draft.episodeStatusTiming.publishedFinalAfterMinutes}
                     min={0}
                     unit="minutes"
+                    environmentVariable={environmentVariableFor('episodeStatusTiming.publishedFinalAfterMinutes')}
                     onChange={(value) => updateDraft((next) => {
                         next.episodeStatusTiming.publishedFinalAfterMinutes = value
                     })}

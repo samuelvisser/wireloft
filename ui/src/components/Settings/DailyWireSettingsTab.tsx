@@ -2,7 +2,7 @@ import DailywireAuthCard from '../DailywireAuth/DailywireAuthCard'
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {NumberField, SettingsDisclosure, TextField} from './SettingsControls'
 
-export default function DailyWireSettingsTab({draft, updateDraft}: SettingsTabProps) {
+export default function DailyWireSettingsTab({draft, updateDraft, environmentVariableFor}: SettingsTabProps) {
     return (
         <>
             <DailywireAuthCard />
@@ -15,6 +15,7 @@ export default function DailyWireSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-dw-middleware-api"
                     label="Middleware API"
                     value={draft.dwApi.middlewareApi}
+                    environmentVariable={environmentVariableFor('dwApi.middlewareApi')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwApi.middlewareApi = value
                     })}
@@ -24,6 +25,7 @@ export default function DailyWireSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-dw-stream-api"
                     label="Stream API"
                     value={draft.dwApi.streamApi}
+                    environmentVariable={environmentVariableFor('dwApi.streamApi')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwApi.streamApi = value
                     })}
@@ -39,6 +41,7 @@ export default function DailyWireSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-oauth-issuer"
                     label="Issuer"
                     value={draft.dwOauth.issuer}
+                    environmentVariable={environmentVariableFor('dwOauth.issuer')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwOauth.issuer = value
                     })}
@@ -48,6 +51,7 @@ export default function DailyWireSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-oauth-audience"
                     label="Audience"
                     value={draft.dwOauth.audience}
+                    environmentVariable={environmentVariableFor('dwOauth.audience')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwOauth.audience = value
                     })}
@@ -57,6 +61,7 @@ export default function DailyWireSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-oauth-client-id"
                     label="Client ID"
                     value={draft.dwOauth.clientId}
+                    environmentVariable={environmentVariableFor('dwOauth.clientId')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwOauth.clientId = value
                     })}
@@ -66,6 +71,7 @@ export default function DailyWireSettingsTab({draft, updateDraft}: SettingsTabPr
                     id="settings-oauth-scope"
                     label="Scope"
                     value={draft.dwOauth.scope}
+                    environmentVariable={environmentVariableFor('dwOauth.scope')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwOauth.scope = value
                     })}
@@ -83,6 +89,7 @@ export default function DailyWireSettingsTab({draft, updateDraft}: SettingsTabPr
                     value={draft.dwTimeout.minFastRequestMs}
                     min={0}
                     unit="ms"
+                    environmentVariable={environmentVariableFor('dwTimeout.minFastRequestMs')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwTimeout.minFastRequestMs = value
                     })}
@@ -92,6 +99,7 @@ export default function DailyWireSettingsTab({draft, updateDraft}: SettingsTabPr
                     label="Fast requests before slowdown"
                     value={draft.dwTimeout.maxFastRequests}
                     min={1}
+                    environmentVariable={environmentVariableFor('dwTimeout.maxFastRequests')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwTimeout.maxFastRequests = value
                     })}
@@ -102,6 +110,7 @@ export default function DailyWireSettingsTab({draft, updateDraft}: SettingsTabPr
                     value={draft.dwTimeout.minSlowRequestMs}
                     min={0}
                     unit="ms"
+                    environmentVariable={environmentVariableFor('dwTimeout.minSlowRequestMs')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwTimeout.minSlowRequestMs = value
                     })}

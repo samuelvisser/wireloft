@@ -1,19 +1,7 @@
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {SettingsDisclosure, TextField} from './SettingsControls'
 
-type AdvancedSettingsTabProps = SettingsTabProps & {
-    hasOverrides: boolean
-    isResetting: boolean
-    onReset: () => void
-}
-
-export default function AdvancedSettingsTab({
-    draft,
-    updateDraft,
-    hasOverrides,
-    isResetting,
-    onReset,
-}: AdvancedSettingsTabProps) {
+export default function AdvancedSettingsTab({draft, updateDraft, environmentVariableFor}: SettingsTabProps) {
     return (
         <>
             <SettingsDisclosure
@@ -24,6 +12,7 @@ export default function AdvancedSettingsTab({
                     id="settings-secret-key-file"
                     label="Secret key file override"
                     value={draft.crypto.secretKeyFile ?? ''}
+                    environmentVariable={environmentVariableFor('crypto.secretKeyFile')}
                     onChange={(value) => updateDraft((next) => {
                         next.crypto.secretKeyFile = value || null
                     })}
@@ -35,6 +24,7 @@ export default function AdvancedSettingsTab({
                     id="settings-default-secret-file"
                     label="Default generated key file"
                     value={draft.crypto.defaultSecretFile}
+                    environmentVariable={environmentVariableFor('crypto.defaultSecretFile')}
                     onChange={(value) => updateDraft((next) => {
                         next.crypto.defaultSecretFile = value
                     })}
@@ -49,31 +39,10 @@ export default function AdvancedSettingsTab({
                     <p>WireLoft resolves a setting from the highest available source.</p>
                 </div>
                 <ol className="settings-precedence-list">
-                    <li><strong>Environment variables</strong><span>Deployment-enforced values</span></li>
-                    <li><strong>Settings UI</strong><span>Values saved on this page</span></li>
-                    <li><strong>config.yml</strong><span>Your file-managed base configuration</span></li>
-                    <li><strong>Built-in defaults</strong><span>WireLoft defaults for unspecified values</span></li>
+                    <li><strong>Environment variables</strong><span>Deployment-enforced values; affected UI controls are disabled</span></li>
+                    <li><strong>config.yml</strong><span>Manual configuration and settings saved on this page</span></li>
+                    <li><strong>Built-in defaults</strong><span>Used only when a setting is not otherwise configured</span></li>
                 </ol>
-                <p className="settings-bootstrap-note">
-                    Database location, application version and literal encryption key material remain file-managed bootstrap settings.
-                </p>
-            </section>
-
-            <section className="settings-section settings-section--danger">
-                <div className="settings-danger-row">
-                    <div>
-                        <h2>Reset UI overrides</h2>
-                        <p>Delete the UI-managed settings file and immediately return to config.yml, environment and default values.</p>
-                    </div>
-                    <button
-                        className="btn btn-danger"
-                        type="button"
-                        disabled={!hasOverrides || isResetting}
-                        onClick={onReset}
-                    >
-                        {isResetting ? 'Resetting…' : 'Reset all UI settings'}
-                    </button>
-                </div>
             </section>
         </>
     )
