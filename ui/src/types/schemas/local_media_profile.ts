@@ -25,16 +25,22 @@ const outputTemplateSchema = (allowedFields: readonly string[]) => z.string()
         }
     })
 
+const DATE_OUTPUT_TEMPLATE_FIELDS = [
+    'date', 'time', 'datetime', 'year', 'month', 'day', 'hour', 'minute', 'second',
+] as const
+
 export const SHOW_OUTPUT_TEMPLATE_FIELDS = [
     'show', 'show_title', 'season', 'season_name', 'episode', 'episode_title', 'title',
-    'episode_type', 'episode_number', 'ep_id', 'episode_published_date', 'date',
-    'episode_published_time', 'time', 'episode_published_datetime', 'datetime',
+    'episode_type', 'episode_number', 'ep_id', 'episode_published_date',
+    'episode_published_time', 'episode_published_datetime',
+    ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const
 
 export const MOVIE_OUTPUT_TEMPLATE_FIELDS = [
     'movie', 'movie_slug', 'movie_title', 'title', 'movie_extended_title', 'extended_title',
     'movie_dw_id', 'dw_id', 'movie_author', 'author', 'movie_mature_rating', 'mature_rating',
     'rating', 'movie_duration_seconds', 'duration_seconds', 'media_type',
+    ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const
 
 const MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS = new Set([

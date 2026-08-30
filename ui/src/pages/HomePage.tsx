@@ -25,8 +25,14 @@ export default function HomePage() {
     const {data: downloads, isLoading, error} = useMediaDownloadsView()
     const active = downloads?.filter((download) => ACTIVE_DOWNLOAD_STATUSES.has(String(download.downloadStatus))) || []
     const problems = downloads?.filter((download) => PROBLEMS.has(String(download.downloadStatus))) || []
+    const metadataProblems = movies?.filter((movie) => movie.releaseDateLookupStatus === 'error') || []
     const complete = downloads?.filter((download) => COMPLETE.has(String(download.downloadStatus))).slice(0, 4) || []
-    const hasAttention = problems.length > 0 || profiles?.length === 0
+    const hasAttention = problems.length > 0 || metadataProblems.length > 0 || profiles?.length === 0
+    const attentionSummary = [
+        problems.length ? `${problems.length} download problem${problems.length === 1 ? '' : 's'}` : null,
+        metadataProblems.length ? `${metadataProblems.length} movie metadata problem${metadataProblems.length === 1 ? '' : 's'}` : null,
+        profiles?.length === 0 ? 'No Local Media Profiles' : null,
+    ].filter(Boolean).join(' • ')
 
     const openDownload = (download: MediaDownloadViewRead) => {
         if (download.movieSlug) navigate(`/movie/${download.movieSlug}`)
@@ -50,7 +56,7 @@ export default function HomePage() {
                 <FontAwesomeIcon icon={['fas', hasAttention ? 'triangle-exclamation' : 'circle-check']}/>
                 <div>
                     <strong>{hasAttention ? 'WireLoft needs attention' : 'WireLoft is running normally'}</strong>
-                    <small>{hasAttention ? `${problems.length} download problem${problems.length === 1 ? '' : 's'}${profiles?.length === 0 ? ' • No Local Media Profiles' : ''}` : 'No download or profile problems detected'}</small>
+                    <small>{hasAttention ? attentionSummary : 'No download, metadata or profile problems detected'}</small>
                 </div>
             </div>
 
@@ -82,6 +88,11 @@ export default function HomePage() {
                             <FontAwesomeIcon icon={['fas', 'folder-plus']}/><span><strong>No Local Media Profile</strong><small>Create one before downloading episodes or movies.</small></span><span>Fix</span>
                         </button>
                     )}
+                    {metadataProblems.slice(0, 3).map((movie) => (
+                        <button className="operation-alert" type="button" key={`movie-metadata-${movie.id}`} onClick={() => navigate(`/movie/${movie.slug}`)}>
+                            <FontAwesomeIcon icon={['fas', 'triangle-exclamation']}/><span><strong>{movie.title} metadata</strong><small>{movie.releaseDateLookupError || 'TMDB release-date lookup failed. Open the movie to retry.'}</small></span><span>View</span>
+                        </button>
+                    ))}
                     {problems.slice(0, 3).map((download) => (
                         <button className="operation-alert" type="button" key={download.id} onClick={() => openDownload(download)}>
                             <FontAwesomeIcon icon={['fas', 'triangle-exclamation']}/><span><strong>{mediaTitle(download)}</strong><small>{download.errorMessage || `Download is ${download.downloadStatus}`}</small></span><span>View</span>

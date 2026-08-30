@@ -36,6 +36,7 @@ export default function MoviePage() {
     const [submitting, setSubmitting] = useState<'movie' | 'trailer' | null>(null)
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [deleting, setDeleting] = useState(false)
+    const [retryingMetadata, setRetryingMetadata] = useState(false)
 
     useEffect(() => {
         if (!profileId && videoProfiles[0]) setProfileId(String(videoProfiles[0].id))
@@ -57,6 +58,7 @@ export default function MoviePage() {
             })
             if (!response.ok) {
                 const {error: message} = await getErrorMessageFromResponse(response)
+                await queryClient.invalidateQueries({queryKey: ['movies']})
                 toast.error(message || `Could not start the ${mediaType} download`)
                 return
             }
@@ -70,6 +72,38 @@ export default function MoviePage() {
             toast.error(`Could not start the ${mediaType} download`)
         } finally {
             setSubmitting(null)
+        }
+    }
+
+    const retryReleaseMetadata = async () => {
+        if (!slug || !localMovie || retryingMetadata) return
+        setRetryingMetadata(true)
+        try {
+            const response = await fetch(
+                `${(window as any).appConfig.API_URL}/movies/${encodeURIComponent(slug)}/release-metadata/retry`,
+                {method: 'POST', credentials: 'include'},
+            )
+            if (!response.ok) {
+                const {error: message} = await getErrorMessageFromResponse(response)
+                toast.error(message || 'Could not retry the TMDB lookup')
+                return
+            }
+
+            const result = await response.json()
+            await queryClient.invalidateQueries({queryKey: ['movies']})
+            if (result.releaseDateLookupStatus === 'matched') {
+                toast.success('Movie release date found')
+            } else if (result.releaseDateLookupStatus === 'error') {
+                toast.error(result.releaseDateLookupError || 'TMDB lookup failed again')
+            } else if (result.releaseDateLookupStatus === 'ambiguous') {
+                toast.error('TMDB found multiple possible matches and could not choose one safely')
+            } else {
+                toast.error('TMDB could not find a confident match for this movie')
+            }
+        } catch {
+            toast.error('Could not retry the TMDB lookup')
+        } finally {
+            setRetryingMetadata(false)
         }
     }
 
@@ -126,6 +160,12 @@ export default function MoviePage() {
                     <a className="btn" href={movie.sharingUrl} target="_blank" rel="noreferrer">
                         <FontAwesomeIcon icon={['fas', 'arrow-up-right-from-square']}/> Open on Daily Wire
                     </a>
+                )}
+                {localMovie?.releaseDateLookupStatus === 'error' && (
+                    <button type="button" className="btn" onClick={() => void retryReleaseMetadata()} disabled={retryingMetadata}>
+                        <FontAwesomeIcon icon={['fas', 'rotate']}/>
+                        {retryingMetadata ? 'Retrying TMDB…' : 'Retry TMDB lookup'}
+                    </button>
                 )}
                 {localMovie && (
                     <button type="button" className="btn btn-danger" onClick={() => setConfirmDelete(true)}>

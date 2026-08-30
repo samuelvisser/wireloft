@@ -7,6 +7,7 @@ from ..dailywire.movies.service import get_movie as get_dailywire_movie
 from ..media_downloads.router import _trigger_download_task
 from ..media_downloads.service import create_movie_download, create_trailer_download
 from backend.app import db_session
+from backend.utils.output_template import MovieReleaseDateUnavailableError
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
 
@@ -25,6 +26,12 @@ def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
             movie_id = download.media_item_id
             attempt_generation = download.attempt_generation
             s.commit()
+        except MovieReleaseDateUnavailableError as exc:
+            # The profile cannot be resolved, but retaining the movie and the
+            # terminal lookup result makes the external lookup truly one-time.
+            # No download row has been added at the point this error is raised.
+            s.commit()
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception:
             s.rollback()
             raise
@@ -56,6 +63,11 @@ def trailer_download_create(movie_slug: str, trailer_slug: str, body: MovieDownl
             trailer_id = download.media_item_id
             attempt_generation = download.attempt_generation
             s.commit()
+        except MovieReleaseDateUnavailableError as exc:
+            # Keep the parent movie, trailer and lookup result even though this
+            # particular profile cannot create a safe release-dated path.
+            s.commit()
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception:
             s.rollback()
             raise
@@ -82,6 +94,19 @@ def movie_create(body: MovieAPICreate):
     with db_session() as s:
         try:
             result = create_movie(s, body)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post("/{movie_slug}/release-metadata/retry", response_model=MovieAPIRead)
+def movie_release_metadata_retry(movie_slug: str):
+    """Retry a TMDB release-date lookup that previously failed with an error."""
+    with db_session() as s:
+        try:
+            result = retry_movie_release_metadata(s, movie_slug)
             s.commit()
             return result
         except Exception:

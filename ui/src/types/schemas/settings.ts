@@ -15,6 +15,16 @@ const DailyWireAPISettingsSchema = z.object({
     streamApi: z.string(),
 })
 
+const MovieMetadataSettingsSchema = z.object({
+    // The API never returns the stored secret. This is a write-only replacement value.
+    tmdbReadAccessToken: z.string(),
+    tmdbReadAccessTokenConfigured: z.boolean(),
+    tmdbApiBaseUrl: z.string(),
+    language: z.string(),
+    requestTimeoutSeconds: z.number(),
+    maxRetries: z.number(),
+})
+
 const OAuthSettingsSchema = z.object({
     issuer: z.string(),
     audience: z.string(),
@@ -69,6 +79,7 @@ export const SettingsValuesSchema = z.object({
     crypto: CryptoFileSettingsSchema,
     loginSession: SessionSettingsSchema,
     dwApi: DailyWireAPISettingsSchema,
+    movieMetadata: MovieMetadataSettingsSchema,
     dwOauth: OAuthSettingsSchema,
     dwTimeout: TimeoutSettingsSchema,
     scheduler: SchedulerSettingsSchema,
@@ -87,6 +98,11 @@ export const SETTINGS_FIELD_PATHS = [
     'loginSession.ttlSeconds',
     'dwApi.middlewareApi',
     'dwApi.streamApi',
+    'movieMetadata.tmdbReadAccessToken',
+    'movieMetadata.tmdbApiBaseUrl',
+    'movieMetadata.language',
+    'movieMetadata.requestTimeoutSeconds',
+    'movieMetadata.maxRetries',
     'dwOauth.issuer',
     'dwOauth.audience',
     'dwOauth.clientId',

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, JSON
+from sqlalchemy import Date, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.types.media_types import MediaType
@@ -34,6 +35,23 @@ class Movie(MediaItemBase):
         server_default="[]",
         nullable=False,
     )
+
+    # Canonical release metadata is looked up once when a Daily Wire movie is
+    # first persisted through a movie or trailer download. Keeping both the
+    # result and its lookup state prevents future downloads from querying TMDB.
+    release_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    release_date_source: Mapped[Optional[str]]
+    release_date_source_id: Mapped[Optional[str]]
+    release_date_lookup_status: Mapped[str] = mapped_column(
+        default="pending",
+        server_default="pending",
+        nullable=False,
+    )
+    release_date_lookup_attempted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    release_date_lookup_error: Mapped[Optional[str]]
 
     # A collection from the outset, even though Daily Wire currently exposes
     # at most one trailer through this flow.

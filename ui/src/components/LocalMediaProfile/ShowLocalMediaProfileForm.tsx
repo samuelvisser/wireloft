@@ -8,7 +8,7 @@ export default function ShowLocalMediaProfileForm({form}: {form: UseFormReturn<a
     return (
         <LocalMediaProfileTypeFields
             form={form}
-            pathPlaceholder="/downloads/shows/{show}/{episode_title}.ext"
+            pathPlaceholder="/downloads/shows/{show}/{year}/{episode_title}.ext"
             formatRegistry={PreferredFormatReg}
             templateHelp={(
                 <ReadMore summary={<span>Output path where Wireloft will download show episodes</span>}>
@@ -24,9 +24,11 @@ export default function ShowLocalMediaProfileForm({form}: {form: UseFormReturn<a
                             Supported types are: 'ep', 'ep-extra', 'auxiliary', 'trailer'</li>
                         <li><b>{'{episode_number}'}</b>: The episode number</li>
                         <li><b>{'{ep_id}'}</b>: The full episode identifier</li>
-                        <li><b>{'{episode_published_date}'}</b> or <b>{'{date}'}</b>: The published date of the episode (Y-m-d)</li>
-                        <li><b>{'{episode_published_time}'}</b> or <b>{'{time}'}</b>: The published time of the episode (H:M:S)</li>
-                        <li><b>{'{episode_published_datetime}'}</b> or <b>{'{datetime}'}</b>: The published date and time of the episode (Y-m-d H:M:S)</li>
+                        <li><b>{'{episode_published_date}'}</b> or <b>{'{date}'}</b>: The published date of the episode (YYYY-MM-DD)</li>
+                        <li><b>{'{episode_published_time}'}</b> or <b>{'{time}'}</b>: The published time of the episode (HH:MM:SS)</li>
+                        <li><b>{'{episode_published_datetime}'}</b> or <b>{'{datetime}'}</b>: The published date and time of the episode</li>
+                        <li><b>{'{year}'}</b>, <b>{'{month}'}</b>, <b>{'{day}'}</b>: Components of the episode's published date</li>
+                        <li><b>{'{hour}'}</b>, <b>{'{minute}'}</b>, <b>{'{second}'}</b>: Components of the episode's published time</li>
                     </ul>
                 </ReadMore>
             )}

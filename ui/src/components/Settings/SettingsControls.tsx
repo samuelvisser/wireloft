@@ -107,6 +107,8 @@ export function TextField({
     placeholder,
     wide,
     environmentVariable,
+    inputType = 'text',
+    autoComplete,
 }: {
     id: string
     label: string
@@ -116,15 +118,18 @@ export function TextField({
     placeholder?: string
     wide?: boolean
     environmentVariable?: string
+    inputType?: 'text' | 'password'
+    autoComplete?: string
 }) {
     return (
         <FieldShell label={label} htmlFor={id} help={help} wide={wide} environmentVariable={environmentVariable}>
             <input
                 id={id}
                 className="input settings-input"
-                type="text"
+                type={inputType}
                 value={value}
                 placeholder={placeholder}
+                autoComplete={autoComplete}
                 disabled={Boolean(environmentVariable)}
                 onChange={(event) => onChange(event.target.value)}
             />
