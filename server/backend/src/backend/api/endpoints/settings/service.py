@@ -20,9 +20,13 @@ from backend.api.models.settings import (
     SettingsValues,
     UI_SETTING_PATHS,
 )
-from config import get_settings, reload_settings
-from config.settings.base import get_config_path, normalize_settings_source_keys
-from config.settings.settings import AppSettings
+from config import reload_settings
+from config.settings.base import get_config_path
+from config.settings.settings import (
+    AppSettings,
+    TIMEZONE_ENVIRONMENT_VARIABLE,
+    environment_settings_source_data,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -91,23 +95,26 @@ def _configured_fields(document: dict[str, Any]) -> list[str]:
 
 
 def _environment_variable_name(path: str) -> str:
+    if path == "timezone":
+        return TIMEZONE_ENVIRONMENT_VARIABLE
     return "WL_" + "__".join(to_snake(segment).upper() for segment in path.split("."))
 
 
 def _source_document(source) -> dict[str, Any]:
     try:
-        raw = source()
+        return environment_settings_source_data(source, AppSettings)
     except Exception:
         logger.exception("Failed to inspect a settings environment source")
         return {}
-    return normalize_settings_source_keys(raw, AppSettings)
 
 
 def _environment_overrides() -> dict[str, str]:
     """Return UI paths whose effective values are controlled above config.yml.
 
     Both process environment variables and WireLoft's configured .env file are
-    included because neither can be overridden by editing config.yml.
+    included because neither can be overridden by editing config.yml. All app
+    settings use WL_* names except timezone, which is managed by the standard
+    container-level TZ variable.
     """
     source_documents = [
         _source_document(EnvSettingsSource(AppSettings)),
@@ -120,6 +127,10 @@ def _environment_overrides() -> dict[str, str]:
             continue
 
         canonical_name = _environment_variable_name(path)
+        if path == "timezone":
+            managed[path] = canonical_name
+            continue
+
         parent_name = "WL_" + to_snake(path.split(".", 1)[0]).upper()
         actual_name = next(
             (
@@ -266,8 +277,15 @@ def _reload_after_file_change() -> None:
 def _response() -> SettingsAPIRead:
     path = get_config_path()
     _text, document = _load_config_document(path)
+
+    # Build a fresh source-resolved model for the response. The application
+    # registry is intentionally cached, but the Settings API must never show a
+    # lower-priority config.yml value for a field currently supplied by an
+    # environment variable.
+    effective_settings = AppSettings()
+
     return SettingsAPIRead(
-        values=SettingsValues.from_app_settings(get_settings()),
+        values=SettingsValues.from_app_settings(effective_settings),
         configured_fields=_configured_fields(document),
         environment_overrides=_environment_overrides(),
         updated_at=_file_timestamp(path),

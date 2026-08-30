@@ -99,7 +99,7 @@ def test_settings_service_updates_existing_scalar_without_removing_inline_commen
     assert "logLevel: \"DEBUG\"  # keep this explanation" in text
 
 
-def test_environment_overrides_are_reported_and_cannot_be_saved(tmp_path, monkeypatch):
+def test_environment_overrides_show_effective_values_and_cannot_be_saved(tmp_path, monkeypatch):
     from backend.api.endpoints.settings.service import (
         SettingsManagedByEnvironmentError,
         get_ui_settings,
@@ -108,9 +108,19 @@ def test_environment_overrides_are_reported_and_cannot_be_saved(tmp_path, monkey
     from backend.api.models.settings import SettingsAPIUpdate
 
     config_path = tmp_path / "config.yml"
-    config_path.write_text("downloadSettings:\n  downloadRoot: /downloads\n", encoding="utf-8")
-    monkeypatch.setenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", "8")
+    config_path.write_text(
+        "downloadSettings:\n"
+        "  downloadRoot: /downloads\n"
+        "  maxConcurrentDownloads: 3\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", raising=False)
+
+    # Prime the process-wide registry with the config.yml value, then add the
+    # deployment override. The Settings response must still show the effective
+    # environment value rather than the cached/configured value.
     _point_settings_at(config_path, monkeypatch)
+    monkeypatch.setenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", "8")
 
     current = get_ui_settings()
     path = "downloadSettings.maxConcurrentDownloads"
@@ -123,7 +133,42 @@ def test_environment_overrides_are_reported_and_cannot_be_saved(tmp_path, monkey
         save_ui_settings(SettingsAPIUpdate(values=values, changed_fields=[path]))
 
     document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    assert "maxConcurrentDownloads" not in document["downloadSettings"]
+    assert document["downloadSettings"]["maxConcurrentDownloads"] == 3
 
-    # Leave the process-wide registry source-derived for tests that follow.
+    monkeypatch.delenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", raising=False)
+    reload_settings()
+
+
+def test_timezone_is_managed_by_tz_and_not_wl_timezone(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import (
+        SettingsManagedByEnvironmentError,
+        get_ui_settings,
+        save_ui_settings,
+    )
+    from backend.api.models.settings import SettingsAPIUpdate
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text("timezone: America/Nome\n", encoding="utf-8")
+    monkeypatch.delenv("TZ", raising=False)
+    monkeypatch.setenv("WL_TIMEZONE", "Asia/Tokyo")
+    _point_settings_at(config_path, monkeypatch)
+
+    without_tz = get_ui_settings()
+    assert without_tz.values.timezone == "America/Nome"
+    assert "timezone" not in without_tz.environment_overrides
+
+    monkeypatch.setenv("TZ", "Europe/Amsterdam")
+    with_tz = get_ui_settings()
+    assert with_tz.values.timezone == "Europe/Amsterdam"
+    assert with_tz.environment_overrides["timezone"] == "TZ"
+
+    values = with_tz.values.model_copy(deep=True)
+    values.timezone = "Asia/Tokyo"
+    with pytest.raises(SettingsManagedByEnvironmentError, match="TZ"):
+        save_ui_settings(SettingsAPIUpdate(values=values, changed_fields=["timezone"]))
+
+    assert yaml.safe_load(config_path.read_text(encoding="utf-8"))["timezone"] == "America/Nome"
+
+    monkeypatch.delenv("TZ", raising=False)
+    monkeypatch.delenv("WL_TIMEZONE", raising=False)
     reload_settings()

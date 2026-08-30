@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field, computed_field
 from pydantic_settings import YamlConfigSettingsSource
@@ -11,9 +11,44 @@ from config.settings.base import SettingsBase, normalize_settings_source_keys
 from config.settings.submodels import *
 
 
+TIMEZONE_ENVIRONMENT_VARIABLE = "TZ"
+_ENVIRONMENT_VALUE_MISSING = object()
+
+
 class _AliasNormalizingYamlSource(YamlConfigSettingsSource):
     def __call__(self):
         return normalize_settings_source_keys(super().__call__(), self.settings_cls)
+
+
+def _environment_value(source, name: str) -> Any:
+    """Read one variable from an environment or dotenv settings source."""
+    for key, value in getattr(source, "env_vars", {}).items():
+        if str(key).casefold() == name.casefold():
+            return value
+    return _ENVIRONMENT_VALUE_MISSING
+
+
+def environment_settings_source_data(source, settings_cls) -> dict[str, Any]:
+    """Return normalized environment settings with WireLoft's TZ exception.
+
+    Most application settings use the normal ``WL_`` prefix. Timezone is the
+    exception because ``TZ`` configures both WireLoft and the surrounding Linux
+    container. Explicitly remove ``WL_TIMEZONE`` from the normal source output
+    and map only ``TZ`` onto the application ``timezone`` field.
+    """
+    data = normalize_settings_source_keys(source(), settings_cls)
+
+    # EnvSettingsSource exposes WL_TIMEZONE as ``timezone``. DotEnvSettingsSource
+    # can additionally pass an unrecognised TZ key through as ``tz``/``TZ``.
+    # Neither should survive before the canonical TZ value is inserted below.
+    for key in ("timezone", "tz", "TZ"):
+        data.pop(key, None)
+
+    timezone = _environment_value(source, TIMEZONE_ENVIRONMENT_VARIABLE)
+    if timezone is not _ENVIRONMENT_VALUE_MISSING:
+        data["timezone"] = timezone
+
+    return data
 
 
 class AppSettings(SettingsBase):
@@ -28,7 +63,7 @@ class AppSettings(SettingsBase):
         return f"sqlite:///{self.database_path.as_posix()}"
 
     log_level: str = "INFO"
-    timezone: str = Field(default=os.environ.get("TZ", "UTC"), description="Application timezone")
+    timezone: str = Field(default="UTC", description="Application timezone")
 
     crypto: CryptoSettings = Field(default=CryptoSettings(
         default_secret_file=PROJECT_ROOT / "data" / "wl_secret.key"
@@ -92,16 +127,19 @@ class AppSettings(SettingsBase):
         dotenv_settings,
         file_secret_settings,
     ):
-        # kwargs > environment > .env > config.yml > file secrets > defaults
+        # kwargs > environment (WL_* plus TZ) > .env > config.yml > file secrets > defaults
         yaml_source = _AliasNormalizingYamlSource(settings_cls)
 
         def normalized(source):
             return lambda: normalize_settings_source_keys(source(), settings_cls)
 
+        def normalized_environment(source):
+            return lambda: environment_settings_source_data(source, settings_cls)
+
         return (
             normalized(init_settings),
-            normalized(env_settings),
-            normalized(dotenv_settings),
+            normalized_environment(env_settings),
+            normalized_environment(dotenv_settings),
             yaml_source,
             normalized(file_secret_settings),
         )
