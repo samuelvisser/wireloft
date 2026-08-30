@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
@@ -16,17 +17,21 @@ _DOWNLOADS_PREFIX = "/downloads/"
 _UNSAFE_COMPONENT_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _PLACEHOLDER = re.compile(r"\{([^{}]+)}")
 
+DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
+    "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second",
+})
+
 SHOW_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "show", "show_title", "season", "season_name", "episode", "episode_title", "title",
-    "episode_type", "episode_number", "ep_id", "episode_published_date", "date",
-    "episode_published_time", "time", "episode_published_datetime", "datetime",
-})
+    "episode_type", "episode_number", "ep_id", "episode_published_date",
+    "episode_published_time", "episode_published_datetime",
+}) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "movie", "movie_slug", "movie_title", "title", "movie_extended_title", "extended_title",
     "movie_dw_id", "dw_id", "movie_author", "author", "movie_mature_rating", "mature_rating",
     "rating", "movie_duration_seconds", "duration_seconds", "media_type",
-})
+}) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 # These placeholders describe the actual downloaded item rather than always describing
 # the owning movie. At least one is required when the automatic trailer suffix is off.
@@ -34,6 +39,10 @@ MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "title", "extended_title", "dw_id", "author", "mature_rating", "rating",
     "duration_seconds", "media_type",
 })
+
+
+class MovieReleaseDateUnavailableError(ValueError):
+    """Raised when a movie template needs release metadata that is unavailable."""
 
 
 def _to_ascii(value: str) -> str:
@@ -64,6 +73,11 @@ def movie_template_has_media_item_field(output_template: str) -> bool:
     return bool(set(_PLACEHOLDER.findall(output_template)) & MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS)
 
 
+def movie_template_uses_release_date(output_template: str) -> bool:
+    """Whether a movie template needs the parent movie's canonical release date."""
+    return bool(set(_PLACEHOLDER.findall(output_template)) & DATE_OUTPUT_TEMPLATE_FIELDS)
+
+
 def resolve_episode_output_path(
         output_template: str,
         *,
@@ -75,6 +89,7 @@ def resolve_episode_output_path(
     ep_info = episode_type_info(episode.episode_identifier)
     ep_type = ep_info["type"]
     ep_number = ep_info["number"]
+    published_at = episode.published_date
     substitutions = {
         "show": episode.show.slug,
         "show_title": episode.show.title,
@@ -86,14 +101,13 @@ def resolve_episode_output_path(
         "episode_type": ep_type,
         "episode_number": ep_number,
         "ep_id": episode.episode_identifier or "",
-        "episode_published_date": episode.published_date.strftime("%Y-%m-%d") if episode.published_date else "",
-        "date": episode.published_date.strftime("%Y-%m-%d") if episode.published_date else "",
-        "episode_published_time": episode.published_date.strftime("%H:%M:%S") if episode.published_date else "",
-        "time": episode.published_date.strftime("%H:%M:%S") if episode.published_date else "",
-        "episode_published_datetime": episode.published_date.strftime("%Y-%m-%d %H:%M:%S") if episode.published_date else "",
-        "datetime": episode.published_date.strftime("%Y-%m-%d %H:%M:%S") if episode.published_date else "",
+        "episode_published_date": published_at.strftime("%Y-%m-%d") if published_at else "",
+        "episode_published_time": published_at.strftime("%H:%M:%S") if published_at else "",
+        "episode_published_datetime": published_at.strftime("%Y-%m-%d %H:%M:%S") if published_at else "",
+        **_date_substitutions(published_at),
     }
     return _resolve_output_path(output_template, substitutions, extension=extension)
+
 
 def resolve_movie_output_path(
     output_template: str,
@@ -107,10 +121,25 @@ def resolve_movie_output_path(
 
     ``movie_*`` placeholders always describe ``movie``. Their generic aliases describe
     the actual downloaded media item, so for a trailer ``{title}``, ``{dw_id}``, and
-    ``{duration_seconds}`` come from the trailer. ``{media_type}`` is ``movie`` or
+    ``{duration_seconds}`` come from the trailer. Date/time placeholders always describe
+    the parent movie's canonical release date. TMDB supplies a date rather than a time,
+    so movie time components resolve to midnight. ``{media_type}`` is ``movie`` or
     ``trailer``. When requested, trailers also receive a ``-trailer`` filename suffix.
     """
     validate_output_template_fields(output_template, allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS)
+
+    if movie_template_uses_release_date(output_template) and movie.release_date is None:
+        status = getattr(movie, "release_date_lookup_status", None) or "pending"
+        lookup_error = getattr(movie, "release_date_lookup_error", None)
+        detail = f" Lookup status: {status}."
+        if lookup_error:
+            detail += f" {lookup_error}"
+        raise MovieReleaseDateUnavailableError(
+            "This Movie Local Media Profile uses release-date placeholders, but WireLoft "
+            f"has no canonical release date stored for '{movie.title}'.{detail} "
+            "Configure a TMDB API Read Access Token before first adding the movie, or use "
+            "an output template without date/time placeholders."
+        )
 
     item = media_item or movie
     is_trailer = getattr(item, "type", None) == "trailer"
@@ -151,6 +180,7 @@ def resolve_movie_output_path(
         "movie_duration_seconds": movie_duration_seconds,
         "duration_seconds": item_duration_seconds,
         "media_type": media_type,
+        **_date_substitutions(movie.release_date),
     }
 
     ascii_only = get_settings().download_settings.ascii_only_filenames
@@ -168,6 +198,26 @@ def resolve_movie_output_path(
         resolved = _append_filename_suffix(resolved, "-trailer")
 
     return _finish_output_path(resolved, extension=extension)
+
+
+def _date_substitutions(value: Optional[date | datetime]) -> dict[str, str]:
+    if value is None:
+        return {field: "" for field in DATE_OUTPUT_TEMPLATE_FIELDS}
+    if isinstance(value, datetime):
+        value_datetime = value
+    else:
+        value_datetime = datetime.combine(value, time.min)
+    return {
+        "date": value_datetime.strftime("%Y-%m-%d"),
+        "time": value_datetime.strftime("%H:%M:%S"),
+        "datetime": value_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+        "year": value_datetime.strftime("%Y"),
+        "month": value_datetime.strftime("%m"),
+        "day": value_datetime.strftime("%d"),
+        "hour": value_datetime.strftime("%H"),
+        "minute": value_datetime.strftime("%M"),
+        "second": value_datetime.strftime("%S"),
+    }
 
 
 def _resolve_output_path(output_template: str, substitutions: dict[str, object], *, extension: Optional[str]) -> Path:
@@ -197,7 +247,3 @@ def _finish_output_path(resolved: str, *, extension: Optional[str]) -> Path:
         resolved = _to_ascii(resolved)
 
     return (Path(get_settings().download_settings.download_root) / resolved).resolve()
-
-
-
-
