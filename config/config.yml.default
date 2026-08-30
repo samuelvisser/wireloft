@@ -17,3 +17,6 @@ crypto:
 downloadSettings:
   # Directory the '/downloads/' prefix of output templates maps to.
   downloadRoot: /downloads
+
+  # Restrict generated download file and directory names to ASCII characters.
+  asciiOnlyFilenames: true
