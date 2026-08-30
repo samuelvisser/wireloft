@@ -262,9 +262,10 @@ def _get_or_create_movie(s: Session, movie_data: DwMovieRecord) -> Movie:
         movie = s.get(Movie, created.id)
         if movie is None:
             raise RuntimeError("Movie creation did not produce a persisted Movie record")
-    elif movie.release_date_lookup_attempted_at is None:
-        # A movie may have been added before TMDB was configured. Treat the
-        # first later movie/trailer download as its one configured lookup.
+
+    if movie.release_date_lookup_attempted_at is None:
+        # A new movie, or one added before TMDB was configured, receives one
+        # configured lookup at the first movie/trailer download request.
         from backend.api.endpoints.movies.service import ensure_movie_release_metadata
         ensure_movie_release_metadata(s, movie)
     return movie
