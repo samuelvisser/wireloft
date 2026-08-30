@@ -28,6 +28,7 @@ class Movie(MediaItemBase):
     author_slug: Mapped[Optional[str]]
     logo_image_path: Mapped[Optional[str]]
     mature_rating: Mapped[Optional[str]]
+
     is_downloadable: Mapped[Optional[bool]]
     available_for: Mapped[list[str]] = mapped_column(
         JSON,
@@ -36,9 +37,6 @@ class Movie(MediaItemBase):
         nullable=False,
     )
 
-    # Canonical release metadata is looked up once when a Daily Wire movie is
-    # first persisted through a movie or movie-extra download. Keeping both the
-    # result and its lookup state prevents future downloads from querying TMDB.
     release_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     release_date_source: Mapped[Optional[str]]
     release_date_source_id: Mapped[Optional[str]]
