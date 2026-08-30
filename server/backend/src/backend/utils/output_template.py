@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
@@ -53,8 +54,16 @@ MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
 })
 
 
-def sanitize_path_component(value: str) -> str:
+def _to_ascii(value: str) -> str:
+    """Transliterate decomposable Unicode characters and drop remaining non-ASCII characters."""
+    normalized = unicodedata.normalize("NFKD", value)
+    return normalized.encode("ascii", "ignore").decode("ascii")
+
+
+def sanitize_path_component(value: str, *, ascii_only: bool = False) -> str:
     """Make a template substitution safe to use as one path component."""
+    if ascii_only:
+        value = _to_ascii(value)
     cleaned = _UNSAFE_COMPONENT_CHARS.sub("_", value).strip(" .")
     return cleaned or "_"
 
@@ -108,9 +117,18 @@ def resolve_episode_output_path(
         "datetime": episode.published_date.strftime("%Y-%m-%d %H:%M:%S") if episode.published_date else "",
     }
 
+    ascii_only = get_settings().download_settings.ascii_only_filenames
     resolved = output_template
     for key, value in substitutions.items():
-        resolved = resolved.replace("{" + key + "}", sanitize_path_component(str(value)))
+        resolved = resolved.replace(
+            "{" + key + "}",
+            sanitize_path_component(str(value), ascii_only=ascii_only),
+        )
+
+    # Also normalize literal text in the template so the entire generated path
+    # is ASCII-only rather than only metadata substitutions.
+    if ascii_only:
+        resolved = _to_ascii(resolved)
 
     if resolved.startswith(_DOWNLOADS_PREFIX):
         resolved = resolved[len(_DOWNLOADS_PREFIX):]
@@ -152,9 +170,16 @@ def resolve_movie_output_path(
         "duration_seconds": duration_seconds,
     }
 
+    ascii_only = get_settings().download_settings.ascii_only_filenames
     resolved = output_template
     for key, value in substitutions.items():
-        resolved = resolved.replace("{" + key + "}", sanitize_path_component(str(value)))
+        resolved = resolved.replace(
+            "{" + key + "}",
+            sanitize_path_component(str(value), ascii_only=ascii_only),
+        )
+
+    if ascii_only:
+        resolved = _to_ascii(resolved)
 
     if resolved.startswith(_DOWNLOADS_PREFIX):
         resolved = resolved[len(_DOWNLOADS_PREFIX):]
