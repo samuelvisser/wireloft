@@ -187,7 +187,6 @@ def create_movie_download(
         file_path=str(resolve_movie_output_path(
             profile.output_template,
             movie=movie,
-            append_media_type_to_filename=profile.append_media_type_to_filename,
         )),
         progress=0,
     )
@@ -244,7 +243,6 @@ def create_movie_extra_download(
             profile.output_template,
             movie=movie,
             media_item=movie_extra,
-            append_media_type_to_filename=profile.append_media_type_to_filename,
         )),
         progress=0,
     )

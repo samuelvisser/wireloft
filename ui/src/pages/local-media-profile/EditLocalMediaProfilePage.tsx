@@ -1,4 +1,4 @@
-import {useCallback, useEffect} from 'react'
+import {useCallback, useEffect, useRef, useState} from 'react'
 import {useNavigate, useParams} from 'react-router-dom'
 import LocalMediaProfileForm from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
@@ -8,11 +8,19 @@ import {LocalMediaProfileUpdateIn, LocalMediaProfileUpdateOut, LocalMediaProfile
 import {WithRoot} from '../../types/form'
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import {LocalMediaProfileTypeReg} from '../../types/local_media_profile'
+import {
+    clearLocalMediaProfileDraft,
+    editLocalMediaProfileDraftKey,
+    loadLocalMediaProfileDraft,
+    saveLocalMediaProfileDraft,
+} from '../../components/LocalMediaProfile/localMediaProfileDraft'
 
 export default function EditLocalMediaProfilePage() {
     const navigate = useNavigate()
     const {slug} = useParams<{ slug: string }>()
     const qc = useQueryClient()
+    const initializedSlug = useRef<string | undefined>(undefined)
+    const [draftReady, setDraftReady] = useState(false)
 
     // Fetch the latest profile by slug
     const {data: profile, isLoading, error} = useQuery<LocalMediaProfileUpdateIn | undefined>({
@@ -34,14 +42,36 @@ export default function EditLocalMediaProfilePage() {
         defaultValues: profile,
     })
 
-    // When the profile loads, reset the form with fetched values
+    // Restore a versioned browser draft once the canonical profile type and
+    // values have loaded. The slug keeps drafts isolated per profile.
     useEffect(() => {
-        if (profile) {
-            form.reset(profile)
-        }
-    }, [profile, form])
+        if (!profile || !slug || initializedSlug.current === slug) return
+        const draftKey = editLocalMediaProfileDraftKey(slug)
+        const draft = loadLocalMediaProfileDraft<LocalMediaProfileUpdateIn>(draftKey)
+        const values = draft?.mode === profile.type
+            ? {...profile, ...draft.values, type: profile.type, id: profile.id, slug: profile.slug}
+            : profile
+        form.reset(values as WithRoot<LocalMediaProfileUpdateIn>)
+        initializedSlug.current = slug
+        setDraftReady(true)
+    }, [profile, slug, form])
 
-    const onCancel = useCallback(() => navigate('/local-media-profiles'), [navigate])
+    useEffect(() => {
+        if (!draftReady || !profile || !slug) return
+        const draftKey = editLocalMediaProfileDraftKey(slug)
+        const subscription = form.watch((values) => {
+            saveLocalMediaProfileDraft<LocalMediaProfileUpdateIn>(draftKey, {
+                mode: profile.type,
+                values: values as Partial<LocalMediaProfileUpdateIn>,
+            })
+        })
+        return () => subscription.unsubscribe()
+    }, [draftReady, form, profile, slug])
+
+    const onCancel = useCallback(() => {
+        if (slug) clearLocalMediaProfileDraft(editLocalMediaProfileDraftKey(slug))
+        navigate('/local-media-profiles')
+    }, [navigate, slug])
 
     if (isLoading) {
         return (
@@ -80,6 +110,7 @@ export default function EditLocalMediaProfilePage() {
     const onSuccess = async () => {
         await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
         await qc.invalidateQueries({queryKey: ['localMediaProfile', slug]})
+        clearLocalMediaProfileDraft(editLocalMediaProfileDraftKey(slug))
         navigate('/local-media-profiles')
     }
 

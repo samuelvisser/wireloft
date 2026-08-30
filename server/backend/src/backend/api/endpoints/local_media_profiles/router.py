@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from .service import *
 from ...models.local_media_profile import *
@@ -33,6 +33,34 @@ def local_media_profiles_create(body: LocalMediaProfileAPICreate):
         except Exception:
             s.rollback()
             raise
+
+
+@router.get("/template-sources", response_model=LocalMediaProfileTemplateSources)
+def local_media_profile_template_sources(
+    type: LocalMediaProfileType = Query(...),
+):
+    """Return up to ten recent media items for testing an output path template."""
+    with db_session() as s:
+        try:
+            return get_output_template_sources(s, type)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/template-preview", response_model=LocalMediaProfileTemplatePreviewResult)
+def local_media_profile_template_preview(body: LocalMediaProfileTemplatePreview):
+    """Render an unsaved output path template against editable example values."""
+    try:
+        return preview_output_template(body)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=[{
+                "loc": ["body", "outputTemplate"],
+                "msg": str(exc),
+                "type": "value_error",
+            }],
+        ) from exc
 
 
 @router.get("/{local_media_profile_slug}", response_model=LocalMediaProfileAPIRead)

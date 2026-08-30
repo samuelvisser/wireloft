@@ -39,7 +39,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     current, head = get_database_status()
     assert current == (head,)
-    assert head == "b84c2d9e0f31"
+    assert head == "c91e4a6f72d0"
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -63,6 +63,11 @@ def test_fresh_database_upgrades_to_head(migration_database):
     }
     assert "type" in profile_columns
     assert "append_media_type_to_filename" in profile_columns
+    append_column = next(
+        column for column in inspector.get_columns("local_media_profiles")
+        if column["name"] == "append_media_type_to_filename"
+    )
+    assert str(append_column["default"]).strip("()'") in {"0", "false"}
     profile_indexes = {
         index["name"]: index
         for index in inspector.get_indexes("local_media_profiles")
@@ -119,6 +124,38 @@ def test_fresh_database_upgrades_to_head(migration_database):
         column["name"] for column in inspector.get_columns("media_downloads")
     }
     assert "attempt_generation" in media_download_columns
+
+
+def test_jinja_migration_preserves_profiles_and_replaces_movie_suffix_option(migration_database):
+    _database_path, engine = migration_database
+
+    from backend.db.migrations import get_alembic_config, upgrade_database
+
+    command.upgrade(get_alembic_config(), "b84c2d9e0f31")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO local_media_profiles "
+            "(id, type, slug, name, output_template, preferred_format, append_media_type_to_filename) VALUES "
+            "(1, 'show', 'shows', 'Shows', '/downloads/{show}/{episode_title}.ext', 'format_1080p', 1), "
+            "(2, 'movie', 'movies', 'Movies', '/downloads/{movie_title}/{title}.ext', 'format_1080p', 1)"
+        ))
+        connection.execute(text("INSERT INTO local_media_profiles_show (id) VALUES (1)"))
+        connection.execute(text("INSERT INTO local_media_profiles_movie (id) VALUES (2)"))
+
+    upgrade_database()
+
+    with engine.connect() as connection:
+        profiles = connection.execute(text(
+            "SELECT type, output_template, append_media_type_to_filename "
+            "FROM local_media_profiles ORDER BY id"
+        )).mappings().all()
+    assert profiles[0]["output_template"] == "/downloads/{{ show }}/{{ episode_title }}.ext"
+    assert profiles[0]["append_media_type_to_filename"] == 0
+    assert profiles[1]["output_template"] == (
+        "/downloads/{{ movie_title }}/{{ title }}"
+        "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
+    )
+    assert profiles[1]["append_media_type_to_filename"] == 0
 
 
 def test_movie_extra_migration_preserves_legacy_movie_trailer_metadata(migration_database):
@@ -333,4 +370,4 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 def test_migration_history_has_exactly_one_head():
     from backend.db.migrations import get_head_revisions
 
-    assert get_head_revisions() == ("b84c2d9e0f31",)
+    assert get_head_revisions() == ("c91e4a6f72d0",)

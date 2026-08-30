@@ -1,0 +1,204 @@
+.output-template-code-editor {
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 9px;
+    background: var(--bg);
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.output-template-code-editor:hover {
+    border-color: #60a5fa;
+}
+
+.output-template-code-editor:focus-within {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25);
+}
+
+.output-template-code-editor[aria-invalid="true"] {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.output-template-code-editor .cm-editor,
+.output-template-code-editor .cm-gutters {
+    background: var(--bg);
+    color: var(--text);
+}
+
+.output-template-code-editor .cm-scroller {
+    min-height: 96px;
+}
+
+.output-template-code-editor .cm-focused {
+    outline: none;
+}
+
+.output-template-code-editor .cm-placeholder {
+    color: var(--muted);
+}
+
+.output-template-code-editor .cm-tooltip-autocomplete {
+    max-width: min(420px, calc(100vw - 32px));
+}
+
+.template-playground {
+    display: grid;
+    gap: 14px;
+    margin-top: 4px;
+    padding: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.34);
+    border-radius: 12px;
+    background: rgba(148, 163, 184, 0.06);
+}
+
+.template-playground h3,
+.template-playground h4,
+.template-playground p {
+    margin: 0;
+}
+
+.template-playground h3 {
+    font-size: 16px;
+}
+
+.template-playground h4 {
+    font-size: 14px;
+}
+
+.template-playground-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.template-playground-heading > div:first-child {
+    display: grid;
+    gap: 4px;
+}
+
+.template-playground-heading p,
+.template-preview-status {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.template-source-label {
+    display: grid;
+    flex: 0 1 280px;
+    gap: 5px;
+    min-width: 190px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.template-source-label .input {
+    width: 100%;
+    min-width: 0;
+}
+
+.template-preview-output {
+    display: grid;
+    gap: 5px;
+    padding: 12px;
+    border: 1px solid rgba(59, 130, 246, 0.28);
+    border-radius: 9px;
+    background: rgba(59, 130, 246, 0.07);
+}
+
+.template-preview-output.has-error {
+    border-color: rgba(239, 68, 68, 0.38);
+    background: rgba(239, 68, 68, 0.06);
+}
+
+.template-preview-output-label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.template-preview-output code {
+    overflow-wrap: anywhere;
+    color: var(--text);
+    font-size: 13px;
+}
+
+.template-test-values {
+    display: grid;
+    gap: 10px;
+}
+
+.template-test-values-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.template-test-values-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.template-test-values-grid label {
+    display: grid;
+    min-width: 0;
+    gap: 5px;
+}
+
+.template-test-values-grid label > span {
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
+    gap: 6px;
+}
+
+.template-test-values-grid small {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-small {
+    padding: 5px 8px;
+    font-size: 12px;
+}
+
+@media (max-width: 600px) {
+    .template-playground {
+        padding: 12px;
+    }
+
+    .template-playground-heading {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .template-source-label {
+        flex-basis: auto;
+        min-width: 0;
+    }
+
+    .template-test-values-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    .output-template-code-editor .cm-selectionBackground,
+    .output-template-code-editor .cm-content ::selection {
+        background: rgba(96, 165, 250, 0.3) !important;
+    }
+
+    .template-playground {
+        background: rgba(255, 255, 255, 0.035);
+        border-color: rgba(148, 163, 184, 0.22);
+    }
+}

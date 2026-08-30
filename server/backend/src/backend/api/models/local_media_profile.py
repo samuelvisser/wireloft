@@ -11,16 +11,16 @@ from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
     SHOW_OUTPUT_TEMPLATE_FIELDS,
     movie_template_has_media_item_field,
+    upgrade_legacy_output_template,
     validate_output_template_fields,
 )
 from backend.utils.helpers import slugify
 
 
 _MOVIE_EXTRA_COLLISION_MESSAGE = (
-    "Movie and movie-extra downloads could resolve to the same file. Either enable "
-    "'Append media type to filename' (recommended), or include at least one placeholder "
-    "that describes the actual downloaded item, such as {title}, {dw_id}, "
-    "{duration_seconds}, or {media_type}."
+    "Movie and movie-extra downloads could resolve to the same file. Include at least "
+    "one variable that describes the downloaded item, such as {{ title }}, {{ dw_id }}, "
+    "{{ duration_seconds }}, or {{ media_type }}."
 )
 
 
@@ -29,9 +29,8 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
     """Fields for requests: validate hard here."""
 
     name: str = Field(min_length=1)
-    output_template: str = Field(min_length=16)
+    output_template: str = Field(min_length=16, max_length=4096)
     preferred_format: PreferredFormat
-    append_media_type_to_filename: bool = True
 
     @computed_field(return_type=str)
     @property
@@ -41,6 +40,7 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
     @field_validator("output_template")
     @classmethod
     def _validate_output_template(cls, v: str) -> str:
+        v = upgrade_legacy_output_template(v)
         if not v.endswith(".ext"):
             raise ValueError("Output template must end with '.ext'")
         if not v.startswith("/downloads/"):
@@ -69,10 +69,7 @@ class _TypedLocalMediaProfileAPIBaseIn(_LocalMediaProfileAPIBaseIn):
         if self.type == LocalMediaProfileType.MOVIE:
             if self.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY:
                 raise ValueError("Movie Local Media Profiles require a video format")
-            if (
-                not self.append_media_type_to_filename
-                and not movie_template_has_media_item_field(self.output_template)
-            ):
+            if not movie_template_has_media_item_field(self.output_template):
                 raise ValueError(_MOVIE_EXTRA_COLLISION_MESSAGE)
         return self
 
@@ -106,3 +103,25 @@ class LocalMediaProfileAPIRead(_LocalMediaProfileAPIBaseOut):
 
     created_at: datetime
     updated_at: datetime
+
+
+class LocalMediaProfileTemplateSource(ResponseBase):
+    id: str
+    label: str
+    values: dict[str, str]
+    fallback: bool = False
+
+
+class LocalMediaProfileTemplateSources(ResponseBase):
+    sources: list[LocalMediaProfileTemplateSource]
+
+
+class LocalMediaProfileTemplatePreview(RequestBase):
+    type: LocalMediaProfileType
+    output_template: str = Field(min_length=1, max_length=4096)
+    values: dict[str, str] = Field(default_factory=dict)
+
+
+class LocalMediaProfileTemplatePreviewResult(ResponseBase):
+    output_path: str
+    used_variables: list[str]

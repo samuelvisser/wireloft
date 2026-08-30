@@ -8,7 +8,6 @@ from ..media_downloads.router import _trigger_download_task
 from ..media_downloads.service import create_movie_download, create_movie_extra_download
 from backend.app import db_session
 from backend.db.models import Movie
-from backend.utils.output_template import MovieReleaseDateUnavailableError
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
 
@@ -27,12 +26,6 @@ def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
             movie_id = download.media_item_id
             attempt_generation = download.attempt_generation
             s.commit()
-        except MovieReleaseDateUnavailableError as exc:
-            # The profile cannot be resolved, but retaining the movie and the
-            # terminal lookup result makes the external lookup truly one-time.
-            # No download row has been added at the point this error is raised.
-            s.commit()
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception:
             s.rollback()
             raise
@@ -64,11 +57,6 @@ def movie_extra_download_create(movie_slug: str, movie_extra_slug: str, body: Mo
             movie_extra_id = download.media_item_id
             attempt_generation = download.attempt_generation
             s.commit()
-        except MovieReleaseDateUnavailableError as exc:
-            # Keep the parent movie, extra and lookup result even though this
-            # particular profile cannot create a safe release-dated path.
-            s.commit()
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception:
             s.rollback()
             raise

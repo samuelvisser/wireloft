@@ -5,84 +5,37 @@ import ReadMore from '../../utils/ReadMore'
 import LocalMediaProfileTypeFields from './LocalMediaProfileTypeFields'
 
 export default function MovieLocalMediaProfileForm({form}: { form: UseFormReturn<any> }) {
-    const {register, formState: {errors}} = form
-
     return (
-        <>
-            <LocalMediaProfileTypeFields
-                form={form}
-                pathPlaceholder="/downloads/movies/{movie_title} ({year})/{title}.ext"
-                formatRegistry={MoviePreferredFormatReg}
-                templateHelp={(
-                    <ReadMore summary={<span>Output path where WireLoft will download movies and their extras</span>}>
-                        <p>
-                            Placeholders beginning with <b>movie</b> always describe the movie a media item belongs to.
-                            The alternatives without <b>movie</b> describe the item being downloaded, so for an extra
-                            <b> {'{title}'}</b>, <b>{'{dw_id}'}</b> and <b>{'{duration_seconds}'}</b> describe the extra itself.
-                        </p>
-                        <p>Supported placeholders:</p>
-                        <ul>
-                            <li><b>{'{movie}'}</b> or <b>{'{movie_slug}'}</b>: The movie slug used in its Daily Wire URL</li>
-                            <li><b>{'{movie_title}'}</b>: The movie title</li>
-                            <li><b>{'{title}'}</b>: The downloaded item's title</li>
-                            <li><b>{'{movie_extended_title}'}</b>: The full movie title supplied by Daily Wire</li>
-                            <li><b>{'{extended_title}'}</b>: The downloaded item's full title; extras use their own title</li>
-                            <li><b>{'{movie_dw_id}'}</b>: The movie's Daily Wire ID</li>
-                            <li><b>{'{dw_id}'}</b>: The downloaded item's Daily Wire ID</li>
-                            <li><b>{'{movie_author}'}</b>: The movie author or host</li>
-                            <li><b>{'{author}'}</b>: The downloaded item's author when available</li>
-                            <li><b>{'{movie_mature_rating}'}</b>: The movie rating</li>
-                            <li><b>{'{mature_rating}'}</b> or <b>{'{rating}'}</b>: The downloaded item's rating when available</li>
-                            <li><b>{'{movie_duration_seconds}'}</b>: The movie runtime in seconds</li>
-                            <li><b>{'{duration_seconds}'}</b>: The downloaded item's runtime in seconds</li>
-                            <li><b>{'{media_type}'}</b>: <b>movie</b>, <b>trailer</b>, <b>interview</b>, <b>behindthescenes</b>, or another extra type</li>
-                            <li><b>{'{date}'}</b>: The parent movie's canonical release date (YYYY-MM-DD)</li>
-                            <li><b>{'{year}'}</b>, <b>{'{month}'}</b>, <b>{'{day}'}</b>: Components of the parent movie's release date</li>
-                            <li><b>{'{time}'}</b> or <b>{'{datetime}'}</b>: The release time or date and time</li>
-                            <li><b>{'{hour}'}</b>, <b>{'{minute}'}</b>, <b>{'{second}'}</b>: Components of the release time</li>
-                        </ul>
-                        <p>
-                            WireLoft obtains the canonical release date from TMDB once, when the movie is first added by
-                            starting a movie or movie-extra download, and saves it in the local database. TMDB provides a date
-                            without a release time, so movie time placeholders resolve to midnight. The same parent movie
-                            release date is used for a movie and all of its extras.
-                        </p>
-                        <p>
-                            To prevent an extra from overwriting its movie, keep <b>Append media type to filename</b> enabled.
-                            If you disable it, the path must contain at least one placeholder that describes the actual downloaded
-                            item, such as <b>{'{title}'}</b>, <b>{'{duration_seconds}'}</b>, or <b>{'{media_type}'}</b>.
-                        </p>
-                    </ReadMore>
-                )}
-            />
-
-            <div className="form-row">
-                <label className="checkbox-label" htmlFor="mp-append-media-type">
-                    <input
-                        id="mp-append-media-type"
-                        type="checkbox"
-                        {...register('appendMediaTypeToFilename')}
-                        aria-invalid={!!errors.appendMediaTypeToFilename}
-                        aria-describedby={errors.appendMediaTypeToFilename ? 'append-type-error' : 'append-type-help'}
-                    />
-                    <span>Append media type to filename with a dash</span>
-                </label>
-                {errors.appendMediaTypeToFilename && (
-                    <div id="append-type-error" className="error" role="alert" aria-live="polite">
-                        {String(errors.appendMediaTypeToFilename.message)}
-                    </div>
-                )}
-                <div id="append-type-help" className="help">
-                    <ReadMore summary={<span>Appends any non-movie media types to the file name, e.g. adds "<code>-trailer</code>" before the file extension</span>}>
-                        <p>Recommended for use with self-hosted media servers. Extras get their type appended immediately
-                        before the file extension, such as <b>-trailer</b> or <b>-interview</b>; a movie gets no suffix.</p>
-
-                        <p>For example, the movie would be downloaded as "<code>Run Hide Fight.mp4</code>" and
-                            its trailer as "<code>Run Hide Fight-trailer.mp4</code>". Media servers often require this for
-                        proper organization and playback, and it prevents an extra from overwriting the movie download.</p>
-                    </ReadMore>
-                </div>
-            </div>
-        </>
+        <LocalMediaProfileTypeFields
+            form={form}
+            mode="movie"
+            pathPlaceholder={'/downloads/movies/{{ movie_title }}{% if year %} ({{ year }}){% endif %}/{{ title }}.ext'}
+            formatRegistry={MoviePreferredFormatReg}
+            templateHelp={(
+                <ReadMore summary={<span>Use Jinja to organize movies and extras. Type <code>{'{{'}</code> to choose a variable.</span>}>
+                    <p>
+                        Variables beginning with <b>movie_</b> always describe the parent movie. Variables such as
+                        <b> {'{{ title }}'}</b>, <b> {'{{ dw_id }}'}</b>, and <b> {'{{ media_type }}'}</b> describe the
+                        item being downloaded, which may be the movie or one of its extras.
+                    </p>
+                    <p>
+                        Conditional year example:<br/>
+                        <code>{"{{ movie_title }}{% if year %} ({{ year }}){% endif %}"}</code>
+                    </p>
+                    <p>
+                        Add an extra type without changing movie filenames:<br/>
+                        <code>{"{{ title }}{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"}</code>
+                    </p>
+                    <p>
+                        Date variables describe the parent movie's canonical release date. If WireLoft does not have a
+                        release date, those values are empty so a Jinja conditional can omit the surrounding text.
+                    </p>
+                    <p>
+                        The filename should reference an item-specific variable such as <b>{'{{ title }}'}</b> or
+                        <b> {'{{ media_type }}'}</b> so an extra cannot overwrite its movie.
+                    </p>
+                </ReadMore>
+            )}
+        />
     )
 }

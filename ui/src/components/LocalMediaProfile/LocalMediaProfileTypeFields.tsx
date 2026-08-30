@@ -1,6 +1,8 @@
 import type {ReactNode} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
+import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
+import OutputTemplateEditor from './OutputTemplateEditor'
 
 type FormatRegistry = {
     options: readonly { value: string; label: string }[]
@@ -8,6 +10,7 @@ type FormatRegistry = {
 
 type Props = {
     form: UseFormReturn<any>
+    mode: LocalMediaProfileMode
     pathPlaceholder: string
     formatRegistry: FormatRegistry
     templateHelp: ReactNode
@@ -15,11 +18,12 @@ type Props = {
 
 export default function LocalMediaProfileTypeFields({
                                                         form,
+                                                        mode,
                                                         pathPlaceholder,
                                                         formatRegistry,
                                                         templateHelp,
                                                     }: Props) {
-    const {register, control, formState: {errors}} = form
+    const {control, formState: {errors}} = form
 
     return (
         <>
@@ -48,26 +52,12 @@ export default function LocalMediaProfileTypeFields({
                     </div>
                 )}
             </div>
-
-
-            <div className="form-row">
-                <label htmlFor="mp-path">Output path template</label>
-                <input
-                    id="mp-path"
-                    className="input"
-                    type="text"
-                    placeholder={pathPlaceholder}
-                    {...register('outputTemplate')}
-                    aria-invalid={!!errors.outputTemplate}
-                    aria-describedby={errors.outputTemplate ? 'mp-path-error' : 'mp-path-help'}
-                />
-                {errors.outputTemplate && (
-                    <div id="mp-path-error" className="error" role="alert" aria-live="polite">
-                        {String(errors.outputTemplate.message)}
-                    </div>
-                )}
-                <div className="help" id="mp-path-help">{templateHelp}</div>
-            </div>
+            <OutputTemplateEditor
+                form={form}
+                mode={mode}
+                placeholder={pathPlaceholder}
+                help={templateHelp}
+            />
         </>
     )
 }

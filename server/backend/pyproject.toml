@@ -17,6 +17,7 @@ dependencies = [
     "dailywire-authorisation",
     "task-manager",
     "controller",
+    "jinja2>=3.1,<4",
 ]
 
 [project.scripts]

@@ -177,9 +177,12 @@ def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, 
     profile = MovieLocalMediaProfile(
         slug="plex-movies",
         name="Plex movies",
-        output_template="/downloads/{movie_title} ({year})/{title}.ext",
+        output_template=(
+            "/downloads/{{ movie_title }} ({{ year }})/{{ title }}"
+            "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
+        ),
         preferred_format="format_1080p",
-        append_media_type_to_filename=True,
+        append_media_type_to_filename=False,
     )
     session.add(profile)
     session.commit()
@@ -233,13 +236,10 @@ def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, 
     engine.dispose()
 
 
-def test_movie_release_date_placeholders_fail_clearly_without_metadata(tmp_path, monkeypatch):
+def test_movie_release_date_condition_omits_unknown_metadata(tmp_path, monkeypatch):
     from backend.db.models import Movie
     from backend.types.media_types import MediaType
-    from backend.utils.output_template import (
-        MovieReleaseDateUnavailableError,
-        resolve_movie_output_path,
-    )
+    from backend.utils.output_template import resolve_movie_output_path
     from config import get_settings
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
@@ -255,11 +255,12 @@ def test_movie_release_date_placeholders_fail_clearly_without_metadata(tmp_path,
         release_date_lookup_error="TMDB returned two equally likely matches",
     )
 
-    with pytest.raises(MovieReleaseDateUnavailableError, match="no canonical release date"):
-        resolve_movie_output_path(
-            "/downloads/{movie_title} ({year})/{movie}.ext",
-            movie=movie,
-        )
+    result = resolve_movie_output_path(
+        "/downloads/{{ movie_title }}{% if year %} ({{ year }}){% endif %}/{{ movie }}.ext",
+        movie=movie,
+    )
+
+    assert result == (tmp_path / "A Movie" / "a-movie.ext").resolve()
 
 
 def test_show_date_component_placeholders_use_episode_publish_datetime(tmp_path, monkeypatch):

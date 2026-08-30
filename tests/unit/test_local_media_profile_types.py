@@ -62,10 +62,11 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
     movie = LocalMediaProfileAPICreate(
         type="movie",
         name="Movie 1080p",
-        output_template="/downloads/movies/{movie_extended_title}.ext",
+        output_template="/downloads/movies/{{ movie_extended_title }}/{{ title }}.ext",
         preferred_format="format_1080p",
     )
     assert movie.type == "movie"
+    assert movie.output_template == "/downloads/movies/{{ movie_extended_title }}/{{ title }}.ext"
 
     with pytest.raises(ValidationError, match="require a video format"):
         LocalMediaProfileAPICreate(
@@ -75,7 +76,7 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
             preferred_format="format_audio_only",
         )
 
-    with pytest.raises(ValidationError, match=r"\{episode\}"):
+    with pytest.raises(ValidationError, match="episode"):
         LocalMediaProfileAPICreate(
             type="movie",
             name="Wrong movie template",
@@ -83,7 +84,7 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
             preferred_format="format_720p",
         )
 
-    with pytest.raises(ValidationError, match=r"\{movie\}"):
+    with pytest.raises(ValidationError, match="movie"):
         LocalMediaProfileAPICreate(
             type="show",
             name="Wrong show template",

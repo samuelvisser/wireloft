@@ -6,6 +6,10 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
+from jinja2 import StrictUndefined, meta
+from jinja2.exceptions import SecurityError, TemplateError, TemplateSyntaxError, UndefinedError
+from jinja2.sandbox import ImmutableSandboxedEnvironment
+
 from .episode import episode_type_info
 from config import get_settings
 
@@ -13,9 +17,11 @@ if TYPE_CHECKING:
     from backend.db.models import Episode, Movie, MovieExtra
 
 _DOWNLOADS_PREFIX = "/downloads/"
-# Characters that may not appear in a single path component
+_MAX_RENDERED_PATH_LENGTH = 4096
+# Characters that may not appear in a single path component.
 _UNSAFE_COMPONENT_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
-_PLACEHOLDER = re.compile(r"\{([^{}]+)}")
+# Matches WireLoft's original single-brace syntax, without touching Jinja tags.
+_LEGACY_PLACEHOLDER = re.compile(r"(?<!\{)\{([A-Za-z_][A-Za-z0-9_]*)\}(?!\})")
 
 DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second",
@@ -33,8 +39,8 @@ MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "rating", "movie_duration_seconds", "duration_seconds", "media_type",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
-# These placeholders describe the actual downloaded item rather than always describing
-# the owning movie. At least one is required when the automatic extra suffix is off.
+# These values describe the actual downloaded item rather than always describing
+# its owning movie. They are useful when making movie and extra paths distinct.
 MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "title", "extended_title", "dw_id", "author", "mature_rating", "rating",
     "duration_seconds", "media_type",
@@ -42,7 +48,36 @@ MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS = frozenset({
 
 
 class MovieReleaseDateUnavailableError(ValueError):
-    """Raised when a movie template needs release metadata that is unavailable."""
+    """Deprecated: missing movie dates now render as empty values for Jinja conditions."""
+
+
+def _jinja_environment() -> ImmutableSandboxedEnvironment:
+    environment = ImmutableSandboxedEnvironment(
+        autoescape=False,
+        undefined=StrictUndefined,
+        keep_trailing_newline=True,
+    )
+    # Path templates only need the explicitly supplied media values. Removing
+    # globals also keeps helpers such as range() unavailable to user templates.
+    environment.globals.clear()
+    return environment
+
+
+def upgrade_legacy_output_template(output_template: str) -> str:
+    """Convert WireLoft's original ``{field}`` tokens to Jinja expressions."""
+    return _LEGACY_PLACEHOLDER.sub(lambda match: "{{ " + match.group(1) + " }}", output_template)
+
+
+def output_template_fields(output_template: str) -> frozenset[str]:
+    """Return all context variables referenced by a Jinja path template."""
+    normalized = upgrade_legacy_output_template(output_template)
+    environment = _jinja_environment()
+    try:
+        parsed = environment.parse(normalized)
+    except TemplateSyntaxError as exc:
+        location = f" on line {exc.lineno}" if exc.lineno else ""
+        raise ValueError(f"Invalid Jinja template{location}: {exc.message}") from exc
+    return frozenset(meta.find_undeclared_variables(parsed))
 
 
 def _to_ascii(value: str) -> str:
@@ -59,38 +94,41 @@ def sanitize_path_component(value: str, *, ascii_only: bool = False) -> str:
     return cleaned or "_"
 
 
+def _sanitize_template_value(value: object, *, ascii_only: bool) -> str:
+    # Empty values must stay falsey so Jinja conditionals can omit their
+    # surrounding punctuation. A completely empty path component is handled
+    # after rendering instead.
+    text = str(value) if value is not None else ""
+    if not text:
+        return ""
+    return sanitize_path_component(text, ascii_only=ascii_only)
+
+
 def validate_output_template_fields(output_template: str, *, allowed_fields: frozenset[str]) -> str:
-    """Reject placeholders that cannot be resolved for a profile's media type."""
-    unsupported = sorted(set(_PLACEHOLDER.findall(output_template)) - allowed_fields)
+    """Validate Jinja syntax and reject variables unavailable for this media type."""
+    normalized = upgrade_legacy_output_template(output_template)
+    unsupported = sorted(output_template_fields(normalized) - allowed_fields)
     if unsupported:
-        fields = ", ".join("{" + field + "}" for field in unsupported)
-        raise ValueError(f"Unsupported output template placeholder(s): {fields}")
-    return output_template
+        fields = ", ".join("{{ " + field + " }}" for field in unsupported)
+        raise ValueError(f"Unsupported output template variable(s): {fields}")
+    return normalized
 
 
 def movie_template_has_media_item_field(output_template: str) -> bool:
-    """Whether a movie template contains a field that varies with the downloaded item."""
-    return bool(set(_PLACEHOLDER.findall(output_template)) & MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS)
+    """Whether a movie template references a value that varies by downloaded item."""
+    return bool(output_template_fields(output_template) & MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS)
 
 
 def movie_template_uses_release_date(output_template: str) -> bool:
-    """Whether a movie template needs the parent movie's canonical release date."""
-    return bool(set(_PLACEHOLDER.findall(output_template)) & DATE_OUTPUT_TEMPLATE_FIELDS)
+    """Whether a movie template references the parent movie's release date."""
+    return bool(output_template_fields(output_template) & DATE_OUTPUT_TEMPLATE_FIELDS)
 
 
-def resolve_episode_output_path(
-        output_template: str,
-        *,
-        episode: "Episode",
-        extension: Optional[str] = None,
-) -> Path:
-    validate_output_template_fields(output_template, allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS)
-
+def episode_output_template_values(episode: "Episode") -> dict[str, str]:
+    """Build the complete Show-profile context for an episode."""
     ep_info = episode_type_info(episode.episode_identifier)
-    ep_type = ep_info["type"]
-    ep_number = ep_info["number"]
     published_at = episode.published_date
-    substitutions = {
+    return {
         "show": episode.show.slug,
         "show_title": episode.show.title,
         "season": episode.season.slug if episode.season else "",
@@ -98,58 +136,21 @@ def resolve_episode_output_path(
         "episode": episode.slug,
         "episode_title": episode.title,
         "title": episode.title,
-        "episode_type": ep_type,
-        "episode_number": ep_number,
+        "episode_type": ep_info["type"],
+        "episode_number": ep_info["number"],
         "ep_id": episode.episode_identifier or "",
         "episode_published_date": published_at.strftime("%Y-%m-%d") if published_at else "",
         "episode_published_time": published_at.strftime("%H:%M:%S") if published_at else "",
         "episode_published_datetime": published_at.strftime("%Y-%m-%d %H:%M:%S") if published_at else "",
         **_date_substitutions(published_at),
     }
-    return _resolve_output_path(output_template, substitutions, extension=extension)
 
 
-def resolve_movie_output_path(
-    output_template: str,
-    *,
+def movie_output_template_values(
     movie: "Movie",
     media_item: "Movie | MovieExtra | None" = None,
-    append_media_type_to_filename: bool = True,
-    extension: Optional[str] = None,
-) -> Path:
-    """Resolve a Movie Local Media Profile for a movie or one of its extras.
-
-    ``movie_*`` placeholders always describe ``movie``. Their generic aliases describe
-    the actual downloaded media item, so for an extra ``{title}``, ``{dw_id}``, and
-    ``{duration_seconds}`` come from the extra. Date/time placeholders always describe
-    the parent movie's canonical release date. TMDB supplies a date rather than a time,
-    so movie time components resolve to midnight. ``{media_type}`` is ``movie`` or
-    the extra's ``movie_extra_type``. When requested, extras also receive a matching
-    filename suffix such as ``-trailer`` or ``-interview``.
-    """
-    validate_output_template_fields(output_template, allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS)
-
-    if movie_template_uses_release_date(output_template) and movie.release_date is None:
-        status = getattr(movie, "release_date_lookup_status", None) or "pending"
-        lookup_error = getattr(movie, "release_date_lookup_error", None)
-        detail = f" Lookup status: {status}."
-        if lookup_error:
-            detail += f" {lookup_error}"
-        if status == "pending":
-            guidance = (
-                "Configure a TMDB API Read Access Token, restart WireLoft so the setting is "
-                "reloaded, and try this movie or movie-extra download again."
-            )
-        else:
-            guidance = (
-                "The one-time lookup has already completed. Use an output template without "
-                "date/time placeholders for this movie, or correct its stored release metadata."
-            )
-        raise MovieReleaseDateUnavailableError(
-            "This Movie Local Media Profile uses release-date placeholders, but WireLoft "
-            f"has no canonical release date stored for '{movie.title}'.{detail} {guidance}"
-        )
-
+) -> dict[str, str]:
+    """Build the complete Movie-profile context for a movie or one of its extras."""
     item = media_item or movie
     is_movie_extra = getattr(item, "type", None) == "movie_extra"
     media_type = getattr(item, "movie_extra_type", "other") if is_movie_extra else "movie"
@@ -172,7 +173,7 @@ def resolve_movie_output_path(
         item_rating = movie.mature_rating or ""
         item_duration_seconds = movie_duration_seconds
 
-    substitutions = {
+    return {
         "movie": movie.slug,
         "movie_slug": movie.slug,
         "movie_title": movie.title,
@@ -192,21 +193,73 @@ def resolve_movie_output_path(
         **_date_substitutions(getattr(movie, "release_date", None)),
     }
 
+
+def render_output_template(
+    output_template: str,
+    values: dict[str, object],
+    *,
+    allowed_fields: frozenset[str],
+) -> str:
+    """Render a path template using the same sandbox and sanitization as downloads."""
+    normalized = validate_output_template_fields(output_template, allowed_fields=allowed_fields)
     ascii_only = get_settings().download_settings.ascii_only_filenames
-    resolved = output_template
-    for key, value in substitutions.items():
-        resolved = resolved.replace(
-            "{" + key + "}",
-            sanitize_path_component(str(value), ascii_only=ascii_only),
-        )
+    context = {
+        field: _sanitize_template_value(values.get(field, ""), ascii_only=ascii_only)
+        for field in allowed_fields
+    }
+    environment = _jinja_environment()
+    try:
+        rendered = environment.from_string(normalized).render(context)
+    except (SecurityError, UndefinedError, TemplateError) as exc:
+        raise ValueError(f"Could not render Jinja template: {exc}") from exc
 
-    if ascii_only:
-        resolved = _to_ascii(resolved)
+    if "\n" in rendered or "\r" in rendered:
+        raise ValueError("Rendered output path must be a single line")
+    if len(rendered) > _MAX_RENDERED_PATH_LENGTH:
+        raise ValueError("Rendered output path is too long")
+    if not rendered.startswith(_DOWNLOADS_PREFIX):
+        raise ValueError("Rendered output path must start with '/downloads/'")
+    if not rendered.endswith(".ext"):
+        raise ValueError("Rendered output path must end with '.ext'")
+    return rendered
 
-    if is_movie_extra and append_media_type_to_filename:
-        resolved = _append_filename_suffix(resolved, f"-{media_type}")
 
-    return _finish_output_path(resolved, extension=extension)
+def resolve_episode_output_path(
+    output_template: str,
+    *,
+    episode: "Episode",
+    extension: Optional[str] = None,
+) -> Path:
+    rendered = render_output_template(
+        output_template,
+        episode_output_template_values(episode),
+        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+    )
+    return _finish_output_path(rendered, extension=extension)
+
+
+def resolve_movie_output_path(
+    output_template: str,
+    *,
+    movie: "Movie",
+    media_item: "Movie | MovieExtra | None" = None,
+    append_media_type_to_filename: bool = False,
+    extension: Optional[str] = None,
+) -> Path:
+    """Resolve a Movie Local Media Profile for a movie or one of its extras.
+
+    The deprecated ``append_media_type_to_filename`` argument remains for API
+    compatibility. New profiles express that behavior directly in Jinja.
+    """
+    values = movie_output_template_values(movie, media_item)
+    rendered = render_output_template(
+        output_template,
+        values,
+        allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
+    )
+    if append_media_type_to_filename and values["media_type"] != "movie":
+        rendered = _append_filename_suffix(rendered, f"-{values['media_type']}")
+    return _finish_output_path(rendered, extension=extension)
 
 
 def _date_substitutions(value: Optional[date | datetime]) -> dict[str, str]:
@@ -229,17 +282,6 @@ def _date_substitutions(value: Optional[date | datetime]) -> dict[str, str]:
     }
 
 
-def _resolve_output_path(output_template: str, substitutions: dict[str, object], *, extension: Optional[str]) -> Path:
-    ascii_only = get_settings().download_settings.ascii_only_filenames
-    resolved = output_template
-    for key, value in substitutions.items():
-        resolved = resolved.replace(
-            "{" + key + "}",
-            sanitize_path_component(str(value), ascii_only=ascii_only),
-        )
-    return _finish_output_path(resolved, extension=extension)
-
-
 def _append_filename_suffix(path: str, suffix: str) -> str:
     if path.endswith(".ext"):
         return path[:-4] + suffix + ".ext"
@@ -252,11 +294,14 @@ def _finish_output_path(resolved: str, *, extension: Optional[str]) -> Path:
         resolved = resolved[len(_DOWNLOADS_PREFIX):]
     resolved = resolved.lstrip("/")
     if extension is not None and resolved.endswith(".ext"):
-        resolved = resolved[: -len("ext")] + extension.lstrip(".")
+        resolved = resolved[:-len("ext")] + extension.lstrip(".")
 
-    # Handle ASCII-only
     ascii_only = get_settings().download_settings.ascii_only_filenames
     if ascii_only:
         resolved = _to_ascii(resolved)
 
-    return (Path(get_settings().download_settings.download_root) / resolved).resolve()
+    download_root = Path(get_settings().download_settings.download_root).resolve()
+    output_path = (download_root / resolved).resolve()
+    if not output_path.is_relative_to(download_root):
+        raise ValueError("Rendered output path must stay inside the downloads directory")
+    return output_path

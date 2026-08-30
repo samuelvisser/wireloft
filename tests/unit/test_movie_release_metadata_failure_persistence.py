@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 
-def test_failed_lookup_can_be_persisted_without_creating_a_download(tmp_path, monkeypatch):
+def test_failed_lookup_uses_conditional_path_and_creates_download(tmp_path, monkeypatch):
     from backend.api.endpoints.media_downloads.service import create_movie_download
     from backend.api.endpoints.movies import service as movie_service
     from backend.api.models.media_download import MovieDownloadAPICreate
@@ -15,7 +14,6 @@ def test_failed_lookup_can_be_persisted_without_creating_a_download(tmp_path, mo
     from backend.db.models import Movie, MovieLocalMediaProfile
     from backend.db.models.media_download import MediaDownloadBase
     from backend.integrations.tmdb import MovieReleaseLookupResult
-    from backend.utils.output_template import MovieReleaseDateUnavailableError
     from config import get_settings
     from dailywire_api.records import DwMovieRecord
 
@@ -36,9 +34,11 @@ def test_failed_lookup_can_be_persisted_without_creating_a_download(tmp_path, mo
     profile = MovieLocalMediaProfile(
         slug="plex-movies",
         name="Plex movies",
-        output_template="/downloads/{movie_title} ({year})/{title}.ext",
+        output_template=(
+            "/downloads/{{ movie_title }}{% if year %} ({{ year }}){% endif %}/{{ title }}.ext"
+        ),
         preferred_format="format_1080p",
-        append_media_type_to_filename=True,
+        append_media_type_to_filename=False,
     )
     session.add(profile)
     session.commit()
@@ -52,15 +52,11 @@ def test_failed_lookup_can_be_persisted_without_creating_a_download(tmp_path, mo
         is_downloadable=True,
     )
 
-    with pytest.raises(MovieReleaseDateUnavailableError, match="no canonical release date"):
-        create_movie_download(
-            session,
-            movie_data,
-            MovieDownloadAPICreate(local_media_profile_id=profile.id),
-        )
-
-    # This mirrors the movie router's intentional commit-on-template-error path:
-    # retain the newly added movie and terminal lookup result, but no download.
+    download = create_movie_download(
+        session,
+        movie_data,
+        MovieDownloadAPICreate(local_media_profile_id=profile.id),
+    )
     session.commit()
 
     movie = session.query(Movie).one()
@@ -68,7 +64,8 @@ def test_failed_lookup_can_be_persisted_without_creating_a_download(tmp_path, mo
     assert movie.release_date_lookup_status == "not_found"
     assert movie.release_date_lookup_attempted_at is not None
     assert movie.release_date_lookup_error == "No confident TMDB movie match was found"
-    assert session.query(MediaDownloadBase).count() == 0
+    assert session.query(MediaDownloadBase).count() == 1
+    assert download.file_path == str(tmp_path / "Unknown Movie" / "Unknown Movie.ext")
 
     session.close()
     engine.dispose()

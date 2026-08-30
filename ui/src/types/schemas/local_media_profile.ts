@@ -10,20 +10,11 @@ export const LocalMediaProfileServerErrors = createServerErrorMapper({
     },
 });
 
-const outputTemplateSchema = (allowedFields: readonly string[]) => z.string()
+const outputTemplateSchema = z.string()
     .regex(/^\/downloads\//, "Output template must start with '/downloads/'")
     .regex(/\.ext$/, "Output template must end with '.ext'")
     .min(16)
-    .superRefine((value, ctx) => {
-        const placeholders = [...value.matchAll(/\{([^{}]+)}/g)].map((match) => match[1])
-        const unsupported = [...new Set(placeholders.filter((field) => !allowedFields.includes(field)))].sort()
-        if (unsupported.length) {
-            ctx.addIssue({
-                code: 'custom',
-                message: `Unsupported placeholder(s): ${unsupported.map((field) => `{${field}}`).join(', ')}`,
-            })
-        }
-    })
+    .max(4096)
 
 const DATE_OUTPUT_TEMPLATE_FIELDS = [
     'date', 'time', 'datetime', 'year', 'month', 'day', 'hour', 'minute', 'second',
@@ -43,48 +34,23 @@ export const MOVIE_OUTPUT_TEMPLATE_FIELDS = [
     ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const
 
-const MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS = new Set([
-    'title', 'extended_title', 'dw_id', 'author', 'mature_rating', 'rating',
-    'duration_seconds', 'media_type',
-])
-
-const MOVIE_EXTRA_COLLISION_MESSAGE =
-    "Movie and movie-extra downloads could resolve to the same file. Enable 'Append media type to filename' (recommended), or include at least one placeholder that describes the actual downloaded item, such as {title}, {dw_id}, {duration_seconds}, or {media_type}."
-
 const LocalMediaProfileCommonSchema = z.object({
     name: z.string().min(1, "Name is required"),
 })
 
 export const ShowLocalMediaProfileCreateSchema = LocalMediaProfileCommonSchema.extend({
     type: z.literal('show'),
-    outputTemplate: outputTemplateSchema(SHOW_OUTPUT_TEMPLATE_FIELDS),
+    outputTemplate: outputTemplateSchema,
     preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
-    appendMediaTypeToFilename: z.boolean().default(true),
 })
 
 const MovieLocalMediaProfileBaseSchema = LocalMediaProfileCommonSchema.extend({
     type: z.literal('movie'),
-    outputTemplate: outputTemplateSchema(MOVIE_OUTPUT_TEMPLATE_FIELDS),
+    outputTemplate: outputTemplateSchema,
     preferredFormat: z.enum(MoviePreferredFormatReg.values).default('format_1080p'),
-    appendMediaTypeToFilename: z.boolean().default(true),
 })
 
-function validateMovieFilenameSafety(
-    value: {outputTemplate: string; appendMediaTypeToFilename: boolean},
-    ctx: z.RefinementCtx,
-) {
-    if (value.appendMediaTypeToFilename) return
-    const placeholders = [...value.outputTemplate.matchAll(/\{([^{}]+)}/g)].map((match) => match[1])
-    if (!placeholders.some((field) => MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS.has(field))) {
-        ctx.addIssue({
-            code: 'custom',
-            path: ['outputTemplate'],
-            message: MOVIE_EXTRA_COLLISION_MESSAGE,
-        })
-    }
-}
-
-export const MovieLocalMediaProfileCreateSchema = MovieLocalMediaProfileBaseSchema.superRefine(validateMovieFilenameSafety)
+export const MovieLocalMediaProfileCreateSchema = MovieLocalMediaProfileBaseSchema
 
 export const LocalMediaProfileCreateSchema = z.discriminatedUnion('type', [
     ShowLocalMediaProfileCreateSchema,
@@ -101,7 +67,7 @@ export const ShowLocalMediaProfileUpdateSchema = ShowLocalMediaProfileCreateSche
 export const MovieLocalMediaProfileUpdateSchema = MovieLocalMediaProfileBaseSchema.extend({
     id: z.int(),
     slug: z.string(),
-}).superRefine(validateMovieFilenameSafety)
+})
 
 export const LocalMediaProfileUpdateSchema = z.discriminatedUnion('type', [
     ShowLocalMediaProfileUpdateSchema,
@@ -118,7 +84,7 @@ export const LocalMediaProfileReadSchema = z.looseObject({
     name: z.string(),
     outputTemplate: z.string(),
     preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
-    appendMediaTypeToFilename: z.boolean().default(true),
+    appendMediaTypeToFilename: z.boolean().optional().default(false),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })

@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def test_movie_profile_requires_item_placeholder_when_suffix_disabled() -> None:
+def test_movie_profile_requires_an_item_specific_variable() -> None:
     from backend.api.models.local_media_profile import LocalMediaProfileAPICreate
 
     with pytest.raises(ValidationError, match="Movie and movie-extra downloads could resolve to the same file"):
@@ -17,7 +17,6 @@ def test_movie_profile_requires_item_placeholder_when_suffix_disabled() -> None:
             name="Unsafe",
             output_template="/downloads/movies/{movie_title}/{movie_title}.ext",
             preferred_format="format_1080p",
-            append_media_type_to_filename=False,
         )
 
     profile = LocalMediaProfileAPICreate(
@@ -25,9 +24,8 @@ def test_movie_profile_requires_item_placeholder_when_suffix_disabled() -> None:
         name="Safe",
         output_template="/downloads/movies/{movie_title}/{title}.ext",
         preferred_format="format_1080p",
-        append_media_type_to_filename=False,
     )
-    assert profile.append_media_type_to_filename is False
+    assert profile.output_template.endswith("{{ title }}.ext")
 
 
 def test_movie_profile_accepts_media_type_placeholder_without_suffix() -> None:
@@ -38,9 +36,8 @@ def test_movie_profile_accepts_media_type_placeholder_without_suffix() -> None:
         name="Typed",
         output_template="/downloads/movies/{movie_title}/{movie_title}-{media_type}.ext",
         preferred_format="format_1080p",
-        append_media_type_to_filename=False,
     )
-    assert profile.output_template.endswith("{media_type}.ext")
+    assert profile.output_template.endswith("{{ media_type }}.ext")
 
 
 def test_movie_extra_output_uses_parent_movie_and_actual_media_fields(tmp_path: Path, monkeypatch) -> None:

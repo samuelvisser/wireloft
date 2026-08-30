@@ -207,7 +207,6 @@ def _download_movie_media(
         download.local_media_profile.output_template,
         movie=movie,
         media_item=media,
-        append_media_type_to_filename=download.local_media_profile.append_media_type_to_filename,
         extension=extension,
     )
     attempt_guard.update_current(session, file_path=str(destination))

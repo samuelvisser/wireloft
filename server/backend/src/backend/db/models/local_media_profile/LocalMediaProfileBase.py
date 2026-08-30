@@ -42,8 +42,8 @@ class LocalMediaProfileBase(Base):
     preferred_format: Mapped[str]
     append_media_type_to_filename: Mapped[bool] = mapped_column(
         Boolean,
-        default=True,
-        server_default="1",
+        default=False,
+        server_default="0",
         nullable=False,
     )
 

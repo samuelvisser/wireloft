@@ -8,28 +8,23 @@ export default function ShowLocalMediaProfileForm({form}: {form: UseFormReturn<a
     return (
         <LocalMediaProfileTypeFields
             form={form}
-            pathPlaceholder="/downloads/shows/{show}/{year}/{episode_title}.ext"
+            mode="show"
+            pathPlaceholder={'/downloads/shows/{{ show }}/{{ episode_title }}.ext'}
             formatRegistry={PreferredFormatReg}
             templateHelp={(
-                <ReadMore summary={<span>Output path where Wireloft will download show episodes</span>}>
-                    <p>This path can be dynamically generated based on placeholders. Supported placeholders:</p>
-                    <ul>
-                        <li><b>{'{show}'}</b>: The slug of the show (the show's name in the URL)</li>
-                        <li><b>{'{show_title}'}</b>: The title of the show</li>
-                        <li><b>{'{season}'}</b>: The slug of the season (the season's name in the URL)</li>
-                        <li><b>{'{season_name}'}</b>: The name of the season</li>
-                        <li><b>{'{episode}'}</b>: The slug of the episode (the episode's name in the URL)</li>
-                        <li><b>{'{episode_title}'}</b> or <b>{'{title}'}</b>: The title of the episode</li>
-                        <li><b>{'{episode_type}'}</b>: The episode type as categorized by Wireloft<br/>
-                            Supported types are: 'ep', 'ep-extra', 'auxiliary', 'trailer'</li>
-                        <li><b>{'{episode_number}'}</b>: The episode number</li>
-                        <li><b>{'{ep_id}'}</b>: The full episode identifier</li>
-                        <li><b>{'{episode_published_date}'}</b> or <b>{'{date}'}</b>: The published date of the episode (YYYY-MM-DD)</li>
-                        <li><b>{'{episode_published_time}'}</b> or <b>{'{time}'}</b>: The published time of the episode (HH:MM:SS)</li>
-                        <li><b>{'{episode_published_datetime}'}</b> or <b>{'{datetime}'}</b>: The published date and time of the episode</li>
-                        <li><b>{'{year}'}</b>, <b>{'{month}'}</b>, <b>{'{day}'}</b>: Components of the episode's published date</li>
-                        <li><b>{'{hour}'}</b>, <b>{'{minute}'}</b>, <b>{'{second}'}</b>: Components of the episode's published time</li>
-                    </ul>
+                <ReadMore summary={<span>Use Jinja to organize show episodes. Type <code>{'{{'}</code> to choose a variable.</span>}>
+                    <p>
+                        Show, season, episode, and publication-date values are available. The editor's variable menu
+                        lists every supported value and explains what it represents.
+                    </p>
+                    <p>
+                        Conditional year example:<br/>
+                        <code>{"{{ episode_title }}{% if year %} ({{ year }}){% endif %}.ext"}</code>
+                    </p>
+                    <p>
+                        If a date, season, or another optional value is not known, it is an empty string. Use an
+                        <b> if</b> block to omit any punctuation or folders that belong with it.
+                    </p>
                 </ReadMore>
             )}
         />
