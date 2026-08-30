@@ -2,7 +2,7 @@ from config.security.passwords import hash_password_scrypt, derive_admin_passwor
 from config.settings.base import SubmodelBase
 
 from typing import Optional
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 
 import os
 from pathlib import Path
@@ -34,6 +34,35 @@ class SessionSettings(SubmodelBase):
 class DailyWireAPISettings(SubmodelBase):
     middleware_api: str = Field(..., description="Middleware API base URL")
     stream_api: str = Field(..., description="Stream API base URL")
+
+
+class MovieMetadataSettings(SubmodelBase):
+    tmdb_read_access_token: Optional[SecretStr] = Field(
+        default=None,
+        repr=False,
+        description=(
+            "TMDB API Read Access Token used for the one-time lookup of a movie's "
+            "canonical release date when it is first added to WireLoft"
+        ),
+    )
+    tmdb_api_base_url: str = Field(
+        default="https://api.themoviedb.org/3",
+        description="TMDB API base URL",
+    )
+    language: str = Field(
+        default="en-US",
+        description="TMDB metadata language used while matching movies",
+    )
+    request_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        description="Timeout in seconds for each TMDB request",
+    )
+    max_retries: int = Field(
+        default=2,
+        ge=0,
+        description="Number of retries for transient TMDB request failures",
+    )
 
 
 class AdminAuthSettings(SubmodelBase):
