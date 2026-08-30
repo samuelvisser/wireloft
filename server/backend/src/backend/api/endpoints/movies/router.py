@@ -7,6 +7,7 @@ from ..dailywire.movies.service import get_movie as get_dailywire_movie
 from ..media_downloads.router import _trigger_download_task
 from ..media_downloads.service import create_movie_download, create_trailer_download
 from backend.app import db_session
+from backend.utils.output_template import MovieReleaseDateUnavailableError
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
 
@@ -25,6 +26,9 @@ def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
             movie_id = download.media_item_id
             attempt_generation = download.attempt_generation
             s.commit()
+        except MovieReleaseDateUnavailableError as exc:
+            s.rollback()
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception:
             s.rollback()
             raise
@@ -56,6 +60,9 @@ def trailer_download_create(movie_slug: str, trailer_slug: str, body: MovieDownl
             trailer_id = download.media_item_id
             attempt_generation = download.attempt_generation
             s.commit()
+        except MovieReleaseDateUnavailableError as exc:
+            s.rollback()
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception:
             s.rollback()
             raise
