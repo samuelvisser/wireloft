@@ -31,6 +31,31 @@ def get_movie(s: Session, movie_slug: str) -> MovieAPIRead:
     return MovieAPIRead.model_validate(item)
 
 
+def ensure_movie_release_metadata(s: Session, item: Movie) -> None:
+    """Run at most one configured release-date lookup for a persisted movie."""
+    if item.release_date_lookup_attempted_at is not None:
+        return
+
+    lookup = lookup_movie_release_metadata(
+        title=item.title,
+        description=item.description,
+        duration_seconds=item.duration,
+    )
+    # A missing token is not counted as an attempt. This lets a movie that was
+    # added before TMDB was configured receive its one lookup on the next movie
+    # or trailer download request.
+    if lookup is None:
+        return
+
+    item.release_date = lookup.release_date
+    item.release_date_source = lookup.source
+    item.release_date_source_id = lookup.source_id
+    item.release_date_lookup_status = lookup.status
+    item.release_date_lookup_attempted_at = lookup.attempted_at
+    item.release_date_lookup_error = lookup.error
+    s.flush()
+
+
 def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
     data = body.model_dump(by_alias=True, exclude={"trailers"})
     item = Movie(**data)
@@ -42,19 +67,7 @@ def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
     # both the result and the terminal lookup state on the movie row. Movie and
     # trailer download entry points both reach this service through the same
     # _get_or_create_movie flow.
-    lookup = lookup_movie_release_metadata(
-        title=item.title,
-        description=item.description,
-        duration_seconds=item.duration,
-    )
-    if lookup is not None:
-        item.release_date = lookup.release_date
-        item.release_date_source = lookup.source
-        item.release_date_source_id = lookup.source_id
-        item.release_date_lookup_status = lookup.status
-        item.release_date_lookup_attempted_at = lookup.attempted_at
-        item.release_date_lookup_error = lookup.error
-        s.flush()
+    ensure_movie_release_metadata(s, item)
 
     for trailer in body.trailers:
         create_trailer(s, item.id, trailer)
