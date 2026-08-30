@@ -1,0 +1,35 @@
+.settings-field.is-environment-managed .settings-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.settings-field.is-environment-managed .react-switch-bg,
+.settings-field.is-environment-managed .react-switch-handle {
+  cursor: not-allowed !important;
+}
+
+.settings-field__environment-note {
+  margin-top: 7px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(14, 165, 233, 0.08);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-field__environment-note code {
+  font-weight: 700;
+  color: inherit;
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-field.is-environment-managed .settings-input:disabled {
+    background: rgba(148, 163, 184, 0.08);
+  }
+
+  .settings-field__environment-note {
+    background: rgba(14, 165, 233, 0.12);
+  }
+}

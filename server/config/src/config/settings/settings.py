@@ -1,11 +1,48 @@
 from __future__ import annotations
 
-from pydantic import computed_field
+from pathlib import Path
+from typing import Any
+
+from pydantic import Field, computed_field
 from pydantic_settings import YamlConfigSettingsSource
 
 from config.config import PROJECT_ROOT
-from config.settings.base import SettingsBase
+from config.settings.base import SettingsBase, normalize_settings_source_keys
 from config.settings.submodels import *
+
+
+TIMEZONE_ENVIRONMENT_VARIABLE = "TZ"
+_ENVIRONMENT_VALUE_MISSING = object()
+
+
+class _AliasNormalizingYamlSource(YamlConfigSettingsSource):
+    def __call__(self):
+        return normalize_settings_source_keys(super().__call__(), self.settings_cls)
+
+
+def _environment_value(source, name: str) -> Any:
+    """Read one variable from an environment or dotenv settings source."""
+    for key, value in getattr(source, "env_vars", {}).items():
+        if str(key).casefold() == name.casefold():
+            return value
+    return _ENVIRONMENT_VALUE_MISSING
+
+
+def environment_settings_source_data(source, settings_cls) -> dict[str, Any]:
+    """Return normalized environment settings with WireLoft's TZ exception."""
+    data = normalize_settings_source_keys(source(), settings_cls)
+
+    # EnvSettingsSource exposes WL_TIMEZONE as ``timezone``. DotEnvSettingsSource
+    # can additionally pass an unrecognised TZ key through as ``tz``/``TZ``.
+    # Neither should survive before the canonical TZ value is inserted below.
+    for key in ("timezone", "tz", "TZ"):
+        data.pop(key, None)
+
+    timezone = _environment_value(source, TIMEZONE_ENVIRONMENT_VARIABLE)
+    if timezone is not _ENVIRONMENT_VALUE_MISSING:
+        data["timezone"] = timezone
+
+    return data
 
 
 class AppSettings(SettingsBase):
@@ -13,25 +50,26 @@ class AppSettings(SettingsBase):
     app_version: str = Field(default="0.1.0", frozen=True)
 
     database_path: Path = PROJECT_ROOT / "config" / "wireloft.db"
+
     @computed_field
     @property
     def database_url(self) -> str:
         return f"sqlite:///{self.database_path.as_posix()}"
+
     log_level: str = "INFO"
-    timezone: str = Field(default=os.environ.get("TZ", "UTC"), description="Application timezone")
+    timezone: str = Field(default="UTC", description="Application timezone")
 
     crypto: CryptoSettings = Field(default=CryptoSettings(
         default_secret_file=PROJECT_ROOT / "data" / "wl_secret.key"
     ))
     login_session: SessionSettings = Field(default=SessionSettings(
-        ttl_seconds=60 * 60 * 24 * 30                   # 30 days
+        ttl_seconds=60 * 60 * 24 * 30
     ))
     admin_auth: AdminAuthSettings = Field(default_factory=AdminAuthSettings)
     dw_api: DailyWireAPISettings = Field(default=DailyWireAPISettings(
         middleware_api="https://middleware-prod.dailywire.com/middleware",
         stream_api="https://stream.media.dailywire.com",
     ))
-    movie_metadata: MovieMetadataSettings = Field(default_factory=MovieMetadataSettings)
     dw_oauth: OAuthSettings = Field(default=OAuthSettings(
         issuer="https://authorize.dailywire.com",
         audience="https://api.dailywire.com/",
@@ -41,7 +79,7 @@ class AppSettings(SettingsBase):
     dw_timeout: TimeoutSettings = Field(default=TimeoutSettings(
         min_fast_request_ms=100,
         max_fast_requests=350,
-        min_slow_request_ms=int(1.000 * 60 * 2),        # 2 minutes
+        min_slow_request_ms=int(1.000 * 60 * 2),
     ))
     scheduler: SchedulerSettings = Field(default=SchedulerSettings(
         enabled=True,
@@ -73,14 +111,29 @@ class AppSettings(SettingsBase):
         scan_cron="*/10 * * * *",
         verify_file_size=True,
     ))
+
     @classmethod
-    def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):
-        # kwargs > env > .env > YAML > file secrets > defaults
-        yaml_source = YamlConfigSettingsSource(settings_cls)
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        # kwargs > environment (WL_* plus TZ) > .env > config.yml > file secrets > defaults
+        yaml_source = _AliasNormalizingYamlSource(settings_cls)
+
+        def normalized(source):
+            return lambda: normalize_settings_source_keys(source(), settings_cls)
+
+        def normalized_environment(source):
+            return lambda: environment_settings_source_data(source, settings_cls)
+
         return (
-            init_settings,
-            env_settings,
-            dotenv_settings,
+            normalized(init_settings),
+            normalized_environment(env_settings),
+            normalized_environment(dotenv_settings),
             yaml_source,
-            file_secret_settings,
+            normalized(file_secret_settings),
         )
