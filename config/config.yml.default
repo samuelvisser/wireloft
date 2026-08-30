@@ -11,8 +11,7 @@
 # The Settings screen writes changes directly into this same file. It only
 # inserts or updates fields that were actually changed in the UI; opening or
 # saving Settings does not populate config.yml with every application default.
-# WL_* environment variables, TZ for the application/container timezone, and
-# .env values take precedence over this file.
+# WL_* environment variables and .env values take precedence over this file.
 
 crypto:
   # Fallback location for the auto-generated session-signing key, used when

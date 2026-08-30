@@ -29,13 +29,7 @@ def _environment_value(source, name: str) -> Any:
 
 
 def environment_settings_source_data(source, settings_cls) -> dict[str, Any]:
-    """Return normalized environment settings with WireLoft's TZ exception.
-
-    Most application settings use the normal ``WL_`` prefix. Timezone is the
-    exception because ``TZ`` configures both WireLoft and the surrounding Linux
-    container. Explicitly remove ``WL_TIMEZONE`` from the normal source output
-    and map only ``TZ`` onto the application ``timezone`` field.
-    """
+    """Return normalized environment settings with WireLoft's TZ exception."""
     data = normalize_settings_source_keys(source(), settings_cls)
 
     # EnvSettingsSource exposes WL_TIMEZONE as ``timezone``. DotEnvSettingsSource
