@@ -27,7 +27,10 @@ def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
             attempt_generation = download.attempt_generation
             s.commit()
         except MovieReleaseDateUnavailableError as exc:
-            s.rollback()
+            # The profile cannot be resolved, but retaining the movie and the
+            # terminal lookup result makes the external lookup truly one-time.
+            # No download row has been added at the point this error is raised.
+            s.commit()
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception:
             s.rollback()
@@ -61,7 +64,9 @@ def trailer_download_create(movie_slug: str, trailer_slug: str, body: MovieDownl
             attempt_generation = download.attempt_generation
             s.commit()
         except MovieReleaseDateUnavailableError as exc:
-            s.rollback()
+            # Keep the parent movie, trailer and lookup result even though this
+            # particular profile cannot create a safe release-dated path.
+            s.commit()
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception:
             s.rollback()
