@@ -1,0 +1,499 @@
+.onboarding-shell {
+    --bg: #07111f;
+    --text: #eef4ff;
+    --muted: #94a3b8;
+    color-scheme: dark;
+    position: relative;
+    min-height: 100vh;
+    overflow-x: hidden;
+    color: var(--text);
+    background:
+        radial-gradient(circle at 14% 12%, rgba(79, 132, 255, .24), transparent 34rem),
+        radial-gradient(circle at 84% 18%, rgba(124, 83, 255, .18), transparent 30rem),
+        linear-gradient(145deg, #07111f 0%, #0a1829 48%, #081321 100%);
+    isolation: isolate;
+}
+
+.onboarding-shell .view,
+.onboarding-shell .form,
+.onboarding-shell .card,
+.onboarding-shell label,
+.onboarding-shell h1,
+.onboarding-shell h2,
+.onboarding-shell h3,
+.onboarding-shell strong {
+    color: var(--text);
+}
+
+.onboarding-shell .view p,
+.onboarding-shell .help,
+.onboarding-shell .card-sub,
+.onboarding-shell .card-meta,
+.onboarding-shell .divider-label {
+    color: var(--muted);
+}
+
+.onboarding-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: .62;
+    background-image:
+        linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, .025) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: linear-gradient(to bottom, black, transparent 86%);
+    mask-image: linear-gradient(to bottom, black, transparent 86%);
+}
+
+.onboarding-backdrop::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent 58%, rgba(3, 9, 17, .78));
+}
+
+.onboarding-welcome {
+    position: relative;
+    min-height: 100vh;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: clamp(22px, 4vw, 42px);
+    padding: 36px;
+    text-align: center;
+}
+
+.onboarding-welcome-glow {
+    position: absolute;
+    width: min(78vw, 900px);
+    aspect-ratio: 2.4;
+    border-radius: 50%;
+    background: rgba(66, 128, 255, .16);
+    filter: blur(72px);
+    transform: translateY(-12%);
+    z-index: -1;
+}
+
+.onboarding-welcome-logo {
+    width: min(82vw, 920px);
+    max-height: 38vh;
+    object-fit: contain;
+    filter: drop-shadow(0 22px 65px rgba(0, 0, 0, .38));
+}
+
+.onboarding-welcome p {
+    margin: -12px 0 0;
+    font-size: clamp(1.05rem, 2vw, 1.35rem);
+    color: rgba(232, 241, 255, .72);
+    letter-spacing: .02em;
+}
+
+.onboarding-primary-action {
+    min-width: 190px;
+    min-height: 50px;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    font-size: 1rem;
+    box-shadow: 0 16px 38px rgba(38, 101, 234, .34);
+}
+
+.onboarding-topbar {
+    min-height: 84px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
+    padding: 16px clamp(20px, 4vw, 58px);
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+    background: rgba(5, 13, 24, .7);
+    backdrop-filter: blur(20px);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+
+.onboarding-topbar > img {
+    width: clamp(145px, 18vw, 220px);
+    max-height: 46px;
+    object-fit: contain;
+}
+
+.onboarding-progress {
+    list-style: none;
+    display: flex;
+    align-items: flex-start;
+    gap: clamp(12px, 2.5vw, 34px);
+    margin: 0;
+    padding: 0;
+}
+
+.onboarding-progress li {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    min-width: 62px;
+    color: rgba(227, 237, 250, .46);
+}
+
+.onboarding-progress li:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 14px;
+    left: calc(50% + 20px);
+    width: calc(100% - 4px + clamp(12px, 2.5vw, 34px));
+    height: 1px;
+    background: rgba(255, 255, 255, .12);
+}
+
+.onboarding-progress li > span {
+    width: 29px;
+    height: 29px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, .18);
+    background: rgba(8, 21, 37, .92);
+    font-size: .78rem;
+    font-weight: 700;
+    position: relative;
+    z-index: 1;
+}
+
+.onboarding-progress li.is-active,
+.onboarding-progress li.is-complete {
+    color: #f4f8ff;
+}
+
+.onboarding-progress li.is-active > span {
+    border-color: rgba(104, 158, 255, .88);
+    box-shadow: 0 0 0 5px rgba(67, 126, 244, .14);
+}
+
+.onboarding-progress li.is-complete > span {
+    border-color: rgba(85, 202, 152, .72);
+    background: rgba(30, 124, 83, .42);
+}
+
+.onboarding-progress small {
+    font-size: .7rem;
+    white-space: nowrap;
+}
+
+.onboarding-stage {
+    width: min(100% - 32px, 980px);
+    margin: 0 auto;
+    padding: clamp(38px, 6vw, 78px) 0 72px;
+}
+
+.onboarding-stage-narrow {
+    width: min(100% - 32px, 760px);
+}
+
+.onboarding-stage-wide {
+    width: min(100% - 32px, 1500px);
+}
+
+.onboarding-stage-movie {
+    width: min(100% - 32px, 1500px);
+    padding-top: 26px;
+}
+
+.onboarding-section-heading {
+    margin: 0 0 30px;
+}
+
+.onboarding-section-heading h1 {
+    margin: 7px 0 12px;
+    font-size: clamp(2rem, 5vw, 3.35rem);
+    line-height: 1.05;
+    letter-spacing: -.035em;
+}
+
+.onboarding-section-heading p {
+    max-width: 760px;
+    margin: 0;
+    color: rgba(226, 236, 250, .7);
+    font-size: 1.02rem;
+    line-height: 1.65;
+}
+
+.onboarding-eyebrow {
+    color: #84adff;
+    font-size: .78rem;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+}
+
+.onboarding-stage .card,
+.onboarding-security-card,
+.onboarding-env-example,
+.onboarding-profile-form {
+    border-color: rgba(255, 255, 255, .1);
+    background: rgba(10, 24, 41, .78);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .2);
+    backdrop-filter: blur(18px);
+}
+
+.onboarding-stage-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-top: 26px;
+}
+
+.onboarding-security-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+    padding: 22px;
+    border: 1px solid rgba(255, 183, 77, .28);
+    border-radius: 14px;
+}
+
+.onboarding-security-card.is-configured {
+    border-color: rgba(78, 210, 146, .32);
+}
+
+.onboarding-security-card strong {
+    display: block;
+    margin-bottom: 7px;
+    font-size: 1.02rem;
+}
+
+.onboarding-security-card p {
+    margin: 0;
+    color: rgba(230, 239, 252, .66);
+    line-height: 1.55;
+}
+
+.onboarding-security-icon {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    color: #ffc86a;
+    background: rgba(255, 180, 57, .12);
+}
+
+.onboarding-security-card.is-configured .onboarding-security-icon {
+    color: #63dfa5;
+    background: rgba(65, 201, 137, .12);
+}
+
+.onboarding-env-example {
+    margin-top: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: 14px;
+}
+
+.onboarding-env-example > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+
+.onboarding-env-example span {
+    color: rgba(228, 238, 251, .58);
+    font-size: .82rem;
+}
+
+.onboarding-env-example code {
+    color: #a9c4ff;
+}
+
+.onboarding-env-example pre {
+    margin: 0;
+    padding: 20px;
+    overflow-x: auto;
+    background: rgba(2, 8, 15, .48);
+    line-height: 1.55;
+}
+
+.onboarding-security-note {
+    color: rgba(229, 238, 251, .6);
+    font-size: .9rem;
+    line-height: 1.55;
+}
+
+.onboarding-profile-form {
+    padding: clamp(18px, 3vw, 30px);
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: 16px;
+}
+
+.onboarding-profile-list-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.onboarding-profile-list-heading label {
+    margin: 0;
+}
+
+.onboarding-nested-heading h1 {
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+}
+
+.onboarding-wizard-stage > div:last-child {
+    padding: clamp(18px, 3vw, 30px);
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: 16px;
+    background: rgba(10, 24, 41, .72);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .2);
+}
+
+.onboarding-stage .browse-view,
+.onboarding-stage .movie-detail-view {
+    max-width: none;
+    margin: 0;
+}
+
+.onboarding-stage .browse-view {
+    padding-top: 0;
+}
+
+.onboarding-stage .movie-detail-view {
+    padding-top: 0;
+}
+
+.onboarding-stage-movie .movie-detail-view::before {
+    content: 'Queue a movie or extra download to add this title and finish setup.';
+    display: block;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    border: 1px solid rgba(98, 151, 255, .24);
+    border-radius: 11px;
+    color: rgba(230, 239, 252, .78);
+    background: rgba(41, 89, 175, .14);
+}
+
+.onboarding-movie-back {
+    margin-bottom: 14px;
+}
+
+.onboarding-global-error {
+    position: fixed;
+    z-index: 40;
+    top: 98px;
+    left: 50%;
+    width: min(calc(100% - 32px), 720px);
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .32);
+}
+
+.onboarding-global-error .btn {
+    flex: 0 0 auto;
+}
+
+.onboarding-completing {
+    position: fixed;
+    z-index: 45;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 700;
+    background: rgba(3, 9, 17, .72);
+    backdrop-filter: blur(8px);
+}
+
+.onboarding-bootstrap {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    text-align: center;
+    color: #edf4ff;
+    background:
+        radial-gradient(circle at 50% 28%, rgba(68, 123, 238, .23), transparent 34rem),
+        #07111f;
+}
+
+.onboarding-bootstrap > div {
+    width: min(100%, 520px);
+}
+
+.onboarding-bootstrap img {
+    width: min(72vw, 360px);
+    margin-bottom: 24px;
+}
+
+.onboarding-bootstrap p {
+    color: rgba(228, 238, 252, .68);
+}
+
+@media (max-width: 760px) {
+    .onboarding-topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 12px;
+        padding-block: 13px;
+    }
+
+    .onboarding-topbar > img {
+        width: 145px;
+    }
+
+    .onboarding-progress {
+        width: 100%;
+        justify-content: space-between;
+        gap: 5px;
+    }
+
+    .onboarding-progress li {
+        min-width: 42px;
+        flex: 1;
+    }
+
+    .onboarding-progress small {
+        display: none;
+    }
+
+    .onboarding-progress li:not(:last-child)::after {
+        left: calc(50% + 17px);
+        width: calc(100% - 28px);
+    }
+
+    .onboarding-stage {
+        padding-top: 34px;
+    }
+
+    .onboarding-stage-actions,
+    .onboarding-profile-list-heading,
+    .onboarding-env-example > div {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .onboarding-stage-actions .btn,
+    .onboarding-profile-list-heading .btn {
+        width: 100%;
+    }
+
+    .onboarding-security-card,
+    .onboarding-global-error {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}

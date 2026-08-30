@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import Sidebar from './components/Sidebar'
 import Footer from './components/Sidebar/Footer'
+import OnboardingFlow from './components/Onboarding/OnboardingFlow'
 import HomePage from './pages/HomePage'
 import LocalMediaProfilesPage from './pages/LocalMediaProfilesPage'
 import SettingsPage from './pages/SettingsPage'
@@ -23,10 +25,17 @@ import LibraryPage from './pages/LibraryPage'
 import BrowsePage from './pages/BrowsePage'
 import MoviePage from './pages/movie/MoviePage'
 
+type OnboardingStatus = {
+  completed: boolean
+  adminPasswordConfigured: boolean
+}
+
 export default function App() {
   const navigate = useNavigate()
 
   const [authState, setAuthState] = useState<'checking' | 'ok' | 'no'>('checking')
+  const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null)
+  const [onboardingError, setOnboardingError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -45,18 +54,76 @@ export default function App() {
     }
   }, [])
 
+  const loadOnboardingStatus = useCallback(async () => {
+    setOnboardingError(null)
+    try {
+      const base = (window as any).appConfig?.API_URL || '/api'
+      const response = await fetch(`${base}/onboarding/status`, { credentials: 'include' })
+      if (response.status === 401) {
+        setAuthState('no')
+        return
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      setOnboardingStatus(await response.json())
+    } catch {
+      setOnboardingError('WireLoft could not determine whether first-run setup is complete.')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (authState !== 'ok') return
+    void loadOnboardingStatus()
+  }, [authState, loadOnboardingStatus])
+
   const cancelAddShow = useCallback(() => navigate('/library'), [navigate])
 
   if (authState === 'checking') {
     return (
-      <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
-        <div>Loading…</div>
+      <div className="onboarding-bootstrap">
+        <div>
+          <img src="/logo-wide-full.png" alt="WireLoft" />
+          <p>Loading WireLoft…</p>
+        </div>
       </div>
     )
   }
 
   if (authState === 'no') {
     return <LoginPage />
+  }
+
+  if (!onboardingStatus) {
+    return (
+      <div className="onboarding-bootstrap">
+        <div>
+          <img src="/logo-wide-full.png" alt="WireLoft" />
+          {onboardingError ? (
+            <>
+              <p role="alert">{onboardingError}</p>
+              <button className="btn btn-primary" type="button" onClick={() => void loadOnboardingStatus()}>
+                Try again
+              </button>
+            </>
+          ) : <p>Preparing WireLoft…</p>}
+        </div>
+      </div>
+    )
+  }
+
+  if (!onboardingStatus.completed) {
+    return (
+      <OnboardingFlow
+        adminPasswordConfigured={onboardingStatus.adminPasswordConfigured}
+        onComplete={() => {
+          setOnboardingStatus((current) => current ? { ...current, completed: true } : current)
+          navigate('/', { replace: true })
+          toast.success(
+            'WireLoft is setup. Look around a little and explore your very own media manager for all things Daily Wire. Enjoy!',
+            { duration: 8000 },
+          )
+        }}
+      />
+    )
   }
 
   return (
