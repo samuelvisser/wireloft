@@ -2,7 +2,7 @@ from config.security.passwords import hash_password_scrypt, derive_admin_passwor
 from config.settings.base import SubmodelBase
 
 from typing import Optional
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 
 import os
 from pathlib import Path
@@ -34,6 +34,43 @@ class SessionSettings(SubmodelBase):
 class DailyWireAPISettings(SubmodelBase):
     middleware_api: str = Field(..., description="Middleware API base URL")
     stream_api: str = Field(..., description="Stream API base URL")
+
+
+class MovieMetadataSettings(SubmodelBase):
+    """Third-party metadata settings used to enrich movies when first added."""
+
+    tmdb_read_access_token: Optional[SecretStr] = Field(
+        default=None,
+        description="TMDB API Read Access Token used for one-time movie release-date lookups",
+    )
+    tmdb_api_base_url: str = Field(
+        default="https://api.themoviedb.org/3",
+        description="TMDB API base URL",
+    )
+    language: str = Field(default="en-US", description="TMDB metadata language")
+    request_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        description="Timeout for TMDB API requests",
+    )
+    max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Maximum retries for transient TMDB API failures",
+    )
+
+    @field_validator("tmdb_read_access_token", mode="before")
+    @classmethod
+    def _normalize_tmdb_token(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, SecretStr):
+            return value
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
 
 
 class AdminAuthSettings(SubmodelBase):
