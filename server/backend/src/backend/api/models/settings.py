@@ -22,6 +22,11 @@ SettingFieldPath = Literal[
     "loginSession.ttlSeconds",
     "dwApi.middlewareApi",
     "dwApi.streamApi",
+    "movieMetadata.tmdbReadAccessToken",
+    "movieMetadata.tmdbApiBaseUrl",
+    "movieMetadata.language",
+    "movieMetadata.requestTimeoutSeconds",
+    "movieMetadata.maxRetries",
     "dwOauth.issuer",
     "dwOauth.audience",
     "dwOauth.clientId",
@@ -59,6 +64,11 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "loginSession.ttlSeconds",
     "dwApi.middlewareApi",
     "dwApi.streamApi",
+    "movieMetadata.tmdbReadAccessToken",
+    "movieMetadata.tmdbApiBaseUrl",
+    "movieMetadata.language",
+    "movieMetadata.requestTimeoutSeconds",
+    "movieMetadata.maxRetries",
     "dwOauth.issuer",
     "dwOauth.audience",
     "dwOauth.clientId",
@@ -148,6 +158,19 @@ class DailyWireAPISettingsValue(_SettingsValueModel):
     _validate_stream_api = field_validator("stream_api")(_validate_http_url)
 
 
+class MovieMetadataSettingsValue(_SettingsValueModel):
+    """TMDB settings with the token represented as a write-only replacement value."""
+
+    tmdb_read_access_token: str = ""
+    tmdb_read_access_token_configured: bool = False
+    tmdb_api_base_url: str = Field(min_length=1)
+    language: str = Field(min_length=1)
+    request_timeout_seconds: float = Field(gt=0)
+    max_retries: int = Field(ge=0, le=5)
+
+    _validate_tmdb_api_base_url = field_validator("tmdb_api_base_url")(_validate_http_url)
+
+
 class OAuthSettingsValue(_SettingsValueModel):
     issuer: str = Field(min_length=1)
     audience: str = Field(min_length=1)
@@ -221,8 +244,9 @@ class FileWatcherSettingsValue(_SettingsValueModel):
 class SettingsValues(_SettingsValueModel):
     """Every application setting intentionally exposed by the Settings UI.
 
-    Admin authentication, database location, application version, and literal
-    crypto secret material are deliberately absent from this contract.
+    Literal crypto secret material and the stored TMDB token are deliberately
+    absent from responses. The TMDB token field is always blank when reading
+    settings and acts only as a replacement value when saving.
     """
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -230,6 +254,7 @@ class SettingsValues(_SettingsValueModel):
     crypto: CryptoFileSettingsValue
     login_session: SessionSettingsValue
     dw_api: DailyWireAPISettingsValue
+    movie_metadata: MovieMetadataSettingsValue
     dw_oauth: OAuthSettingsValue
     dw_timeout: TimeoutSettingsValue
     scheduler: SchedulerSettingsValue
@@ -254,12 +279,23 @@ class SettingsValues(_SettingsValueModel):
 
     @classmethod
     def from_app_settings(cls, settings: AppSettings) -> "SettingsValues":
+        tmdb_token = settings.movie_metadata.tmdb_read_access_token
         return cls(
             log_level=settings.log_level,
             timezone=settings.timezone,
             crypto=CryptoFileSettingsValue.model_validate(settings.crypto),
             login_session=SessionSettingsValue.model_validate(settings.login_session),
             dw_api=DailyWireAPISettingsValue.model_validate(settings.dw_api),
+            movie_metadata=MovieMetadataSettingsValue(
+                tmdb_read_access_token="",
+                tmdb_read_access_token_configured=bool(
+                    tmdb_token and tmdb_token.get_secret_value().strip()
+                ),
+                tmdb_api_base_url=settings.movie_metadata.tmdb_api_base_url,
+                language=settings.movie_metadata.language,
+                request_timeout_seconds=settings.movie_metadata.request_timeout_seconds,
+                max_retries=settings.movie_metadata.max_retries,
+            ),
             dw_oauth=OAuthSettingsValue.model_validate(settings.dw_oauth),
             dw_timeout=TimeoutSettingsValue.model_validate(settings.dw_timeout),
             scheduler=SchedulerSettingsValue.model_validate(settings.scheduler),
