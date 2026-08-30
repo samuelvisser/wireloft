@@ -232,9 +232,9 @@ export default function DownloadsPage() {
                 <h1 id="downloads-title">Downloads</h1>
                 <PageSubtitle summary={<>All media downloads: running, finished and failed.</>}>
                     <p>
-                        Every episode, movie and trailer download shows up here, one row per Local Media Profile.
-                        Running downloads report live progress and can be cancelled or restarted.
-                        Deleting a running row also cancels it and removes partial files; completed files remain on disk.
+                        Every episode and movie download shows up here, one row per Local Media Profile.
+                        Running downloads report live progress; failed ones show the error and can be retried.
+                        Deleting a row only removes the record, never the downloaded file unless the download had never fully finished.
                     </p>
                 </PageSubtitle>
             </div>
@@ -325,7 +325,7 @@ export default function DownloadsPage() {
                         if (ACTIVE_DOWNLOAD_STATUSES.has(String(row.downloadStatus))) {
                             actions.push({
                                 onClick: () => void cancel(row),
-                                icon: ['fas', 'stop'],
+                                icon: ['fas', 'ban'],
                                 text: 'Cancel',
                                 classes: 'btn',
                             })
