@@ -1,5 +1,5 @@
 import type {SettingsTabProps} from './SettingsTabTypes'
-import {SettingsDisclosure, TextField} from './SettingsControls'
+import {SettingsDisclosure, SettingsSection, TextField} from './SettingsControls'
 
 export default function AdvancedSettingsTab({draft, updateDraft, environmentVariableFor}: SettingsTabProps) {
     return (
@@ -33,17 +33,17 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                 />
             </SettingsDisclosure>
 
-            <section className="settings-section settings-section--informational">
-                <div className="settings-section__header">
-                    <h2>Configuration precedence</h2>
-                    <p>WireLoft resolves a setting from the highest available source.</p>
-                </div>
-                <ol className="settings-precedence-list">
+            <SettingsSection
+                title="Configuration precedence"
+                description="WireLoft resolves a setting from the highest available source."
+                className="settings-section--informational"
+            >
+                <ol className="settings-precedence-list settings-field--wide">
                     <li><strong>Environment variables</strong><span>Deployment-enforced values; affected UI controls are disabled</span></li>
                     <li><strong>config.yml</strong><span>Manual configuration and settings saved on this page</span></li>
                     <li><strong>Built-in defaults</strong><span>Used only when a setting is not otherwise configured</span></li>
                 </ol>
-            </section>
+            </SettingsSection>
         </>
     )
 }
