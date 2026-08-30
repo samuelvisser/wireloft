@@ -5,9 +5,19 @@ import {useNavigate, useSearchParams} from 'react-router-dom'
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import {useDailywireMovieCatalog, useDailywireShowCatalog, useShows} from '../lib/queries'
-import {DailywireCatalogShowRead} from '../types/schemas/dailywire_catalog'
+import {
+    DailywireCatalogMovieRead,
+    DailywireCatalogShowRead,
+} from '../types/schemas/dailywire_catalog'
 
 type ShowGrouping = 'alphabetical' | 'host'
+
+type BrowsePageProps = {
+    onboarding?: boolean
+    onShowSelect?: (show: DailywireCatalogShowRead) => void
+    onMovieSelect?: (movie: DailywireCatalogMovieRead) => void
+    onSkip?: () => void
+}
 
 function groupShows(shows: DailywireCatalogShowRead[], grouping: ShowGrouping) {
     const groups = new Map<string, DailywireCatalogShowRead[]>()
@@ -20,7 +30,7 @@ function groupShows(shows: DailywireCatalogShowRead[], grouping: ShowGrouping) {
     return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right))
 }
 
-export default function BrowsePage() {
+export default function BrowsePage({onboarding = false, onShowSelect, onMovieSelect, onSkip}: BrowsePageProps = {}) {
     const navigate = useNavigate()
     const [params, setParams] = useSearchParams()
     const initialType = params.get('type') === 'movies' ? 'movies' : 'shows'
@@ -67,17 +77,38 @@ export default function BrowsePage() {
     }
 
     const chooseShow = (show: DailywireCatalogShowRead) => {
+        if (onShowSelect) {
+            onShowSelect(show)
+            return
+        }
         const url = `https://www.dailywire.com/show/${show.slug}`
         navigate(`/add-show?url=${encodeURIComponent(url)}`)
     }
 
+    const chooseMovie = (movie: DailywireCatalogMovieRead) => {
+        if (onMovieSelect) {
+            onMovieSelect(movie)
+            return
+        }
+        navigate(`/movie/${movie.slug}`)
+    }
+
     return (
-        <section className="view browse-view" aria-labelledby="browse-title">
+        <section className={`view browse-view${onboarding ? ' browse-view--onboarding' : ''}`} aria-labelledby="browse-title">
             <div className="view-header">
                 <div>
-                    <h1 id="browse-title">Browse Daily Wire</h1>
-                    <p className="view-description">Choose a show to add, or a movie to view and download manually.</p>
+                    <h1 id="browse-title">{onboarding ? 'Add your first media' : 'Browse Daily Wire'}</h1>
+                    <p className="view-description">
+                        {onboarding
+                            ? 'Choose a show or movie. WireLoft will let you confirm its download location before anything is saved.'
+                            : 'Choose a show to add, or a movie to view and download manually.'}
+                    </p>
                 </div>
+                {onSkip && (
+                    <button className="btn" type="button" onClick={onSkip}>
+                        Skip for now
+                    </button>
+                )}
             </div>
             <MediaTypeTabs activeType={activeType} onChange={chooseType} ariaLabel="Browse media type"/>
             <div className="browse-toolbar">
@@ -133,7 +164,7 @@ export default function BrowsePage() {
                     {movies.map((movie) => {
                         const image = toImageUrl(movie.thumbnailPortraitPath || movie.thumbnailLandscapePath || movie.backgroundImagePath)
                         return (
-                            <button className="movie-poster-card" type="button" key={movie.slug} role="listitem" onClick={() => navigate(`/movie/${movie.slug}`)}>
+                            <button className="movie-poster-card" type="button" key={movie.slug} role="listitem" onClick={() => chooseMovie(movie)}>
                                 <span className="movie-poster-art">
                                     {image
                                         ? <img src={image} alt="" loading="lazy" decoding="async"/>
