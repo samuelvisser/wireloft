@@ -8,7 +8,7 @@ import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import {MediaDownloadStatusReg} from '../../types/media_download'
-import {PUBLISH_STATUS_LABELS} from '../../types/episode'
+import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
@@ -231,7 +231,12 @@ export default function EpisodePage() {
         )
     }
 
-    const statusLabel = PUBLISH_STATUS_LABELS[String(episode.publishStatus)] ?? String(episode.publishStatus)
+    const publishStatus = String(episode.publishStatus)
+    const statusLabel = PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus
+    const isLive = publishStatus === 'live' || publishStatus === EpisodePublishStatus.live
+    const isDownloadable = !episode.isNoShowToday && (
+        publishStatus === 'published_final' || publishStatus === EpisodePublishStatus.publishedFinal
+    )
 
     // Placeholder cover image
     const coverUrl: string = episode.thumbnailPortraitPath || `https://placehold.co/640x360/png?text=Episode+%23${episode.index}`
@@ -255,6 +260,9 @@ export default function EpisodePage() {
                 <div className="episode-content">
                     <div className="episode-cover">
                         <img src={coverUrl} alt="Episode cover"/>
+                        {isLive && (
+                            <span className="episode-live-badge" aria-label="Episode is live">Live</span>
+                        )}
                     </div>
                     <div className="episode-meta">
                         <table className="meta-table">
@@ -280,40 +288,39 @@ export default function EpisodePage() {
                     </div>
                 </div>
 
-                <div className="episode-downloads" aria-labelledby="episode-downloads-title">
-                    <h2 id="episode-downloads-title">Downloads</h2>
-                    {episode.isNoShowToday ? (
-                        <p>This is not a downloadable episode.</p>
-                    ) : (
-                        <>
-                            {!showProfiles?.length && (
-                                <p>
-                                    No Local Media Profiles configured yet.{' '}
-                                    <Link to="/add-local-media-profile">Add one</Link> to download this episode.
-                                </p>
-                            )}
-                            {!!showProfiles?.length && (
-                                <div role="list" aria-label="Available downloads per Local Media Profile">
-                                    {showProfiles.map((profile) => (
-                                        <ProfileDownloadRow
-                                            key={profile.id}
-                                            profile={profile}
-                                            download={downloadByProfileId.get(profile.id)}
-                                            episodeSlug={episode.slug}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
+                {isDownloadable && (
+                    <div className="episode-downloads" aria-labelledby="episode-downloads-title">
+                        <h2 id="episode-downloads-title">Downloads</h2>
+                        {!showProfiles?.length && (
+                            <p>
+                                No Local Media Profiles configured yet.{' '}
+                                <Link to="/add-local-media-profile">Add one</Link> to download this episode.
+                            </p>
+                        )}
+                        {!!showProfiles?.length && (
+                            <div role="list" aria-label="Available downloads per Local Media Profile">
+                                {showProfiles.map((profile) => (
+                                    <ProfileDownloadRow
+                                        key={profile.id}
+                                        profile={profile}
+                                        download={downloadByProfileId.get(profile.id)}
+                                        episodeSlug={episode.slug}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
             </article>
 
             <style>{`
         .episode-header { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
         .episode-title-text { font-size: 1.1rem; font-weight: 600; }
         .episode-content { display: grid; grid-template-columns: minmax(280px, 480px) 1fr; gap: 16px; align-items: start; }
-        .episode-cover img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--border-color, #ddd); }
+        .episode-cover { position: relative; }
+        .episode-cover img { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--border-color, #ddd); }
+        .episode-live-badge { position: absolute; top: 14px; right: 14px; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: var(--error, #d64545); color: #fff; box-shadow: 0 2px 8px rgb(0 0 0 / 30%); font-size: 1rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+        .episode-live-badge::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
         .meta-table { width: 100%; border-collapse: collapse; }
         .meta-table th, .meta-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-color, #e2e2e2); vertical-align: top; }
         .meta-table th { width: 180px; color: var(--muted-fg, #555); font-weight: 500; }
