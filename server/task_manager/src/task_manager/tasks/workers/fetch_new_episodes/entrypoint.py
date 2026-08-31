@@ -68,19 +68,39 @@ async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optiona
     """
     with db_session() as s:
         tracked_shows = _get_tracked_shows(s, resource_id=resource_id, slug=slug)
-        episode_counts_before = _episode_counts(s, tracked_shows)
-
-        await run_fetch_new_episodes(s, show_id=resource_id, show_slug=slug, dry_run=dry_run, progress=progress)
 
         if dry_run:
+            await run_fetch_new_episodes(s, show_id=resource_id, show_slug=slug, dry_run=True, progress=progress)
             return
 
-        episode_counts_after = _episode_counts(s, tracked_shows)
-        synced_at = datetime.now(timezone.utc).isoformat()
-        for show in tracked_shows:
-            found = max(0, episode_counts_after.get(show.id, 0) - episode_counts_before.get(show.id, 0))
-            _append_sync_log(show, synced_at=synced_at, episodes_found=found)
-        s.commit()
+        for tracked_show in tracked_shows:
+            show_id = tracked_show.id
+            before = _episode_count(s, show_id)
+            try:
+                await run_fetch_new_episodes(s, show_id=show_id, dry_run=False, progress=progress)
+            except Exception:
+                s.rollback()
+                show = s.get(Show, show_id)
+                if show is not None:
+                    _append_sync_log(
+                        show,
+                        synced_at=datetime.now(timezone.utc).isoformat(),
+                        episodes_found=0,
+                        status="failed",
+                    )
+                    s.commit()
+                raise
+
+            after = _episode_count(s, show_id)
+            show = s.get(Show, show_id)
+            if show is not None:
+                _append_sync_log(
+                    show,
+                    synced_at=datetime.now(timezone.utc).isoformat(),
+                    episodes_found=max(0, after - before),
+                    status="completed",
+                )
+                s.commit()
 
 
 def _get_tracked_shows(s, *, resource_id: Optional[int], slug: Optional[str]) -> list[Show]:
@@ -93,20 +113,15 @@ def _get_tracked_shows(s, *, resource_id: Optional[int], slug: Optional[str]) ->
     return list(s.execute(select(Show)).scalars().all())
 
 
-def _episode_counts(s, shows: list[Show]) -> dict[int, int]:
-    if not shows:
-        return {}
-    show_ids = [show.id for show in shows]
-    rows = s.execute(
-        select(Episode.show_id, func.count(Episode.id))
-        .where(Episode.show_id.in_(show_ids))
-        .group_by(Episode.show_id)
-    ).all()
-    counts = {show_id: count for show_id, count in rows}
-    return {show_id: counts.get(show_id, 0) for show_id in show_ids}
+def _episode_count(s, show_id: int) -> int:
+    return int(
+        s.execute(
+            select(func.count(Episode.id)).where(Episode.show_id == show_id)
+        ).scalar_one()
+    )
 
 
-def _append_sync_log(show: Show, *, synced_at: str, episodes_found: int) -> None:
+def _append_sync_log(show: Show, *, synced_at: str, episodes_found: int, status: str) -> None:
     raw = show.get_meta(SYNC_LOG_META_KEY)
     try:
         history = json.loads(raw) if raw else []
@@ -118,5 +133,6 @@ def _append_sync_log(show: Show, *, synced_at: str, episodes_found: int) -> None
     history.insert(0, {
         "synced_at": synced_at,
         "episodes_found": episodes_found,
+        "status": status,
     })
     show.set_meta(SYNC_LOG_META_KEY, json.dumps(history[:SYNC_LOG_LIMIT]))
