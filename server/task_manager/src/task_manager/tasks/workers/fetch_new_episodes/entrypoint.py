@@ -135,6 +135,8 @@ def _episode_count(s, show_id: int) -> int:
 
 def _will_retry(progress) -> bool:
     run = getattr(progress, "run", None)
+    if run is None:
+        return False
     attempt_count = int(getattr(run, "attempt_count", 0) or 0)
     max_retries = int(getattr(run, "max_retries", 0) or 0)
     return attempt_count <= max_retries
