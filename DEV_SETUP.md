@@ -6,8 +6,7 @@
 
 ## Building it yourself
 The included Docker setup builds the React UI and the FastAPI backend into a
-single image. Normal development and Docker builds use Font Awesome Free and
-do not require any private npm credentials.
+single image.
 
 ```bash
 docker compose up -d --build
