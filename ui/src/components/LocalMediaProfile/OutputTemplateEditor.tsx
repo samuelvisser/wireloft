@@ -73,6 +73,7 @@ function responseErrorMessage(payload: any): string {
 export default function OutputTemplateEditor({form, mode, placeholder, help}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
+    const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
     const variables = useMemo(() => getOutputTemplateVariables(mode), [mode])
     const usedVariables = useMemo(
         () => findUsedOutputTemplateVariables(template, variables),
@@ -170,6 +171,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const [previewError, setPreviewError] = useState('')
     const [previewLoading, setPreviewLoading] = useState(false)
     const previewValuesKey = JSON.stringify(testValues)
+    const exampleOutputPath = useMemo(
+        () => previewPath.replace(/\.ext$/, preferredFormat === 'format_audio_only' ? '.m4a' : '.mp4'),
+        [preferredFormat, previewPath],
+    )
 
     useEffect(() => {
         if (!selectedSource || !template) return
@@ -293,33 +298,46 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                     <span className="template-preview-output-label">Path</span>
                     {previewError
                         ? <span className="error">{previewError}</span>
-                        : <code>{previewPath || (previewLoading ? 'Rendering…' : 'Add a variable to preview this path.')}</code>
+                        : <code>{exampleOutputPath || (previewLoading ? 'Rendering…' : 'Add a variable to preview this path.')}</code>
                     }
                 </div>
 
                 <div className="template-test-values">
-                    <button
-                        type="button"
-                        className="btn btn-small template-test-values-toggle"
-                        aria-expanded={testValuesExpanded}
-                        aria-controls="template-test-values-fields"
-                        onClick={() => setTestValuesExpanded((expanded) => !expanded)}
-                    >
-                        {testValuesExpanded ? 'Hide test values' : 'Test different values'}
-                    </button>
+                    {!testValuesExpanded && (
+                        <button
+                            type="button"
+                            className="btn btn-small template-test-values-toggle"
+                            aria-expanded={false}
+                            aria-controls="template-test-values-fields"
+                            onClick={() => setTestValuesExpanded(true)}
+                        >
+                            Test different values
+                        </button>
+                    )}
                     {testValuesExpanded && (
                         <div id="template-test-values-fields" className="template-test-values-content">
                             <div className="template-test-values-heading">
                                 <h4>Test values</h4>
-                                {selectedSource && usedVariables.length > 0 && (
+                                <div className="template-test-values-actions">
+                                    {selectedSource && usedVariables.length > 0 && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-small"
+                                            onClick={() => setTestValues({...selectedSource.values})}
+                                        >
+                                            Reset values
+                                        </button>
+                                    )}
                                     <button
                                         type="button"
                                         className="btn btn-small"
-                                        onClick={() => setTestValues({...selectedSource.values})}
+                                        aria-expanded={true}
+                                        aria-controls="template-test-values-fields"
+                                        onClick={() => setTestValuesExpanded(false)}
                                     >
-                                        Reset values
+                                        Hide test values
                                     </button>
-                                )}
+                                </div>
                             </div>
                             {usedVariables.length === 0 ? (
                                 <p className="template-preview-status">Variables you add to the template will appear here automatically.</p>
