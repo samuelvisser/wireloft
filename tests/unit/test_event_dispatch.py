@@ -27,7 +27,7 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
         title="Test event target",
         allowed_resource_types=("show",),
     )
-    async def target(*, resource_id=None, slug=None, show_id=None, progress=None):
+    async def target(*, resource_id=None, slug=None, show_id=None, manual_request_id=None, progress=None):
         return None
 
     trigger_now = Mock()
@@ -44,6 +44,7 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
         "id": 99,
         "slug": "stable-slug",
         "show_id": 7,
+        "manual_request_id": "manual-sync-123",
         "ignored": "not accepted by the worker",
     })
     wait_for_events()
@@ -54,4 +55,5 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
         resource_id=0,
         slug="stable-slug",
         show_id=7,
+        manual_request_id="manual-sync-123",
     )
