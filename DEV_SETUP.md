@@ -31,17 +31,20 @@ docker run -d \
 ### Font Awesome Pro builds
 
 The normal `npm run build` path deliberately uses Font Awesome Free. The same
-build can be requested explicitly with `npm run build:free-icons`.
+build can be requested explicitly with `npm run build:free-icons`. The Free
+Font Awesome packages are pinned to the same Font Awesome 6 generation as the
+paid WireLoft kit, so icons available in both sets use matching artwork.
 
 For a credential-free checkout, install UI dependencies from the public npm
-registry while omitting the optional Pro kit:
+registry:
 
 ```bash
-npm --prefix ui install --omit=optional --package-lock=false --registry=https://registry.npmjs.org
+npm --prefix ui ci --registry=https://registry.npmjs.org
 ```
 
-The explicit public registry avoids historical Font Awesome registry URLs in
-the current lockfile.
+The paid kit is an optional dependency, so unavailable private credentials do
+not prevent the normal install. Other optional packages are still installed,
+including platform-specific dependencies required by Vite and Rollup.
 
 To validate the real paid icon set, create `ui/.npmrc` (never committed, see
 `ui/.gitignore`) with your Font Awesome npm authentication, for example:
@@ -51,10 +54,10 @@ To validate the real paid icon set, create `ui/.npmrc` (never committed, see
 //npm.fontawesome.com/:_authToken=<your token>
 ```
 
-Then install dependencies normally and run:
+Then install dependencies including the paid kit and run:
 
 ```bash
-npm --prefix ui install --include=optional --package-lock=false
+npm --prefix ui ci --include=optional
 npm run build:pro-icons
 ```
 
@@ -92,7 +95,7 @@ A web UI is included for navigation and demonstration purposes. It now uses a pr
 ### Develop (recommended)
 Bash:
 ```bash
-npm --prefix ui install --omit=optional --package-lock=false --registry=https://registry.npmjs.org
+npm --prefix ui ci --registry=https://registry.npmjs.org
 cd <PROJECT_DIR>\wireloft\ui
 npm run dev
 ```
