@@ -10,6 +10,7 @@ import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ShowIndexingProgress from '../../components/ShowIndexingProgress/ShowIndexingProgress'
 import {PreferredFormatReg} from '../../types/local_media_profile'
+import {loadEpisodesFromStorage, removeEpisodesFromStorage, saveEpisodesToStorage} from '../../lib/cache'
 import './ShowPage.css'
 
 // Ensure icons from the kit are registered (idempotent)
@@ -30,14 +31,28 @@ export default function ShowPage() {
   const PAGE_SIZE = 25
 
   const { data: show, isLoading, error } = useShow(id)
-  const { data: episodesData, isLoading: episodesLoading } = useEpisodes(id)
-  const episodes: any[] = episodesData ?? []
+  const {
+    data: episodesData,
+    isLoading: episodesLoading,
+    isPlaceholderData: episodesPlaceholder,
+  } = useEpisodes(id)
+  const cachedEpisodes = useMemo(() => loadEpisodesFromStorage(id), [id])
+  const hasCachedEpisodes = cachedEpisodes !== undefined
+  const episodes: any[] = episodesPlaceholder
+    ? (cachedEpisodes ?? [])
+    : (episodesData ?? cachedEpisodes ?? [])
+  const episodesInitialLoading = !hasCachedEpisodes && (episodesLoading || episodesPlaceholder)
   const { data: downloads } = useMediaDownloadsView()
   const { data: downloadProfiles } = useDownloadProfilesView()
   const { data: streamProfiles } = useStreamProfilesView()
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
   const [confirm, setConfirm] = useState(false)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!id || episodesPlaceholder || episodesData === undefined) return
+    saveEpisodesToStorage(id, episodesData)
+  }, [episodesData, episodesPlaceholder, id])
 
   const attachedDownloadProfiles = useMemo(
     () => (downloadProfiles ?? []).filter((profile) => profile.showSlug === id),
@@ -149,7 +164,8 @@ export default function ShowPage() {
       // Keep the confirm modal open so the user can retry or cancel
       return
     }
-    // Success: close modal, invalidate relevant queries, and return to the shows library.
+    // Success: close modal, invalidate relevant queries, clear persisted episode data, and return to the shows library.
+    removeEpisodesFromStorage(id)
     setConfirm(false)
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['shows'] }),
@@ -275,7 +291,7 @@ export default function ShowPage() {
           )}
         </header>
 
-        {episodesLoading && episodes.length === 0 ? (
+        {episodesInitialLoading && episodes.length === 0 ? (
           <div className="episodes-grid" role="status" aria-label="Loading episodes" aria-busy="true">
             {Array.from({length: EPISODE_SKELETON_COUNT}, (_, index) => (
               <div className="episode-card episode-card-skeleton" key={index} aria-hidden="true">
@@ -293,7 +309,7 @@ export default function ShowPage() {
           </div>
         )}
 
-        {hasMore && !episodesLoading && (
+        {hasMore && !episodesInitialLoading && (
           <div ref={sentinelRef} className="episodes-load-more" aria-hidden>
             Loading more episodes…
           </div>
