@@ -7,6 +7,7 @@ import {LocalMediaProfileTypeReg, PreferredFormatReg} from "../types/local_media
 import DataTable, { Column } from '../components/DataTable/DataTable';
 import ConfirmDeleteDialog, { ConfirmDeleteDialogRef } from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import PageSubtitle from "../components/common/PageSubtitle";
+import './LocalMediaProfilesPage.css'
 
 export default function LocalMediaProfilesPage() {
     const navigate = useNavigate()
@@ -20,19 +21,28 @@ export default function LocalMediaProfilesPage() {
         {
             header: 'Name',
             accessor: (p) => p.name,
+            width: 180,
+            headerStyle: {whiteSpace: 'nowrap'},
+            cellStyle: {whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'},
             mobileHidden: true,
         },
         {
             header: 'Output Path Template',
-            cell: (p) => <span className="mono truncate">{p.outputTemplate}</span>,
+            cell: (p) => (
+                <span className="mono local-media-profile-output-template" title={p.outputTemplate}>
+                    {p.outputTemplate}
+                </span>
+            ),
         },
         {
             header: 'Type',
             accessor: (p) => LocalMediaProfileTypeReg.getLabelLoose(p.type),
+            width: 90,
         },
         {
             header: 'Preferred Format',
             accessor: (p) => PreferredFormatReg.getLabelLoose(p.preferredFormat),
+            width: 130,
         }
     ]
 
@@ -59,6 +69,8 @@ export default function LocalMediaProfilesPage() {
                     error={error}
                     rowKey={(p) => p.id}
                     rowAriaLabel={(p) => p.name}
+                    className="table local-media-profiles-table"
+                    wrapperClassName="table-wrapper local-media-profiles-table-wrapper"
                     mobileSummary={(p) => (
                         <>
                             <span className="mobile-summary-title">{p.name}</span>
@@ -92,7 +104,7 @@ export default function LocalMediaProfilesPage() {
                 subjectProp="name"
                 deleteRequest={(p) => {
                     const path = `local-media-profiles/${p.slug}`
-                    return fetch(`(window as any).appConfig?.API_URL/${path}`, { method: 'DELETE', credentials: 'include' })
+                    return fetch(`${(window as any).appConfig.API_URL}/${path}`, { method: 'DELETE', credentials: 'include' })
                 }}
                 invalidateQueries={[["localMediaProfiles"]]}
                 inUseMessage="This media profile is in use, it cannot be deleted"

@@ -1,0 +1,17 @@
+@media (min-width: 641px) {
+  .local-media-profiles-table-wrapper {
+    overflow-x: hidden;
+  }
+
+  .local-media-profiles-table {
+    table-layout: fixed;
+  }
+
+  .local-media-profile-output-template {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
