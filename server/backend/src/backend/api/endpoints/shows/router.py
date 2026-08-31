@@ -2,7 +2,15 @@ from fastapi import APIRouter, status
 
 from .as_bundle import show_as_bundle_router
 from .as_view import show_view_router
-from .service import get_shows_list, create_show, get_show, update_show, delete_show
+from .service import (
+    get_shows_list,
+    create_show,
+    get_show,
+    update_show,
+    delete_show,
+    request_show_sync,
+    get_show_sync_log,
+)
 from ...models.show import ShowAPIRead, ShowAPICreate, ShowAPIUpdate
 from backend.app import db_session
 
@@ -39,6 +47,26 @@ def show_create(body: ShowAPICreate) -> ShowAPIRead:
         except Exception:
             s.rollback()
             raise
+
+
+@router.post("/{show_slug}/sync", status_code=status.HTTP_202_ACCEPTED)
+def show_sync(show_slug: str):
+    """Queue an immediate new-episode sync for one show."""
+    with db_session() as s:
+        try:
+            result = request_show_sync(s, show_slug)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.get("/{show_slug}/sync-log", response_model=list[dict])
+def show_sync_log(show_slug: str):
+    """Return the ten most recent completed episode syncs for one show."""
+    with db_session() as s:
+        return get_show_sync_log(s, show_slug)
 
 
 @router.get("/{show_slug}", response_model=ShowAPIRead)
