@@ -163,6 +163,7 @@ def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
             slug=extra.slug,
             title=extra.title,
             movie_extra_type=extra.movie_extra_type,
+            published_date=extra.published_date,
             description=extra.description,
             sharing_url=extra.sharing_url,
             duration=extra.duration,
