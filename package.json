@@ -2,7 +2,10 @@
   "private": true,
   "scripts": {
     "dev": "npm --prefix ui run dev",
+    "dev:pro-icons": "npm --prefix ui run dev:pro-icons",
     "build": "npm --prefix ui run build",
+    "build:free-icons": "npm --prefix ui run build:free-icons",
+    "build:pro-icons": "npm --prefix ui run build:pro-icons",
     "preview": "npm --prefix ui run preview",
     "format": "npm --prefix ui run format"
   }

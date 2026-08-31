@@ -6,13 +6,26 @@
 FROM node:22-alpine AS ui-build
 WORKDIR /ui
 
+ARG WIRELOFT_PRO_ICONS=false
+
 COPY ui/package.json ui/package-lock.json ./
-# Make sure we can build npm including premium Font Awesome
-RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=true \
-    npm ci
+
+# Support both free and pro Font Awesome icons. The paid kit is optional, so
+# credential-free installs can ignore it while still installing platform
+# optional dependencies required by Vite/Rollup.
+RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
+    if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
+        npm ci --include=optional; \
+    else \
+        npm ci --registry=https://registry.npmjs.org; \
+    fi
 
 COPY ui/ ./
-RUN npm run build
+RUN if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
+        npm run build:pro-icons; \
+    else \
+        npm run build; \
+    fi
 
 ########################################
 # 2) Backend + runtime image

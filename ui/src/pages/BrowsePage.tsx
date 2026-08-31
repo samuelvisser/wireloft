@@ -101,7 +101,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                     <p className="view-description">
                         {onboarding
                             ? 'Choose a show or movie. WireLoft will let you confirm its download location before anything is saved.'
-                            : 'Choose a show to add, or a movie to view and download manually.'}
+                            : 'Choose a show or movie to add, view, or download.'}
                     </p>
                 </div>
                 {onSkip && (

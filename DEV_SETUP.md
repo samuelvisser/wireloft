@@ -8,23 +8,6 @@
 The included Docker setup builds the React UI and the FastAPI backend into a
 single image.
 
-Building the UI needs your own Font Awesome Pro credentials: create
-`ui/.npmrc` (never committed, see `ui/.gitignore`) with the same npm auth
-token you use for local development, e.g.:
-
-```
-@awesome.me:registry=https://npm.fontawesome.com/
-//npm.fontawesome.com/:_authToken=<your token>
-```
-
-The build reads it as a [BuildKit secret](https://docs.docker.com/build/building/secrets/)
-mounted only into the `npm ci` step -- it's never copied into the build
-context or baked into any image layer, so the published image stays safe to
-make public.
-
-Using Docker Compose (recommended -- already wired to `ui/.npmrc` as a
-build secret):
-
 ```bash
 docker compose up -d --build
 ```
@@ -34,9 +17,7 @@ Then open http://localhost:8080.
 Or with plain `docker`:
 
 ```bash
-docker build -t wireloft -f .docker/Dockerfile . \
-  --secret id=npmrc,src=ui/.npmrc
-
+docker build -t wireloft -f .docker/Dockerfile .
 docker run -d \
   -p 8080:80 \
   -v $(pwd)/config:/config \
@@ -46,10 +27,56 @@ docker run -d \
   wireloft
 ```
 
+### Font Awesome Pro builds
+
+The normal `npm run build` path deliberately uses Font Awesome Free. The same
+build can be requested explicitly with `npm run build:free-icons`. The Free
+Font Awesome packages are pinned to the same Font Awesome 6 generation as the
+paid WireLoft kit, so icons available in both sets use matching artwork.
+
+For a credential-free checkout, install UI dependencies from the public npm
+registry:
+
+```bash
+npm --prefix ui ci --registry=https://registry.npmjs.org
+```
+
+The paid kit is an optional dependency, so unavailable private credentials do
+not prevent the normal install. Other optional packages are still installed,
+including platform-specific dependencies required by Vite and Rollup.
+
+To validate the real paid icon set, create `ui/.npmrc` (never committed, see
+`ui/.gitignore`) with your Font Awesome npm authentication, for example:
+
+```
+@awesome.me:registry=https://npm.fontawesome.com/
+//npm.fontawesome.com/:_authToken=<your token>
+```
+
+Then install dependencies including the paid kit and run:
+
+```bash
+npm --prefix ui ci --include=optional
+npm run build:pro-icons
+```
+
+A Docker image with Pro icons can be built explicitly with:
+
+```bash
+docker build -t wireloft -f .docker/Dockerfile . \
+  --build-arg WIRELOFT_PRO_ICONS=true \
+  --secret id=npmrc,src=ui/.npmrc
+```
+
+The npm credentials are mounted only into the dependency-install step and are
+never copied into the image.
+
 ## Publishing a release image
-`./deploy.sh [tag]` builds the image (same as above, `ui/.npmrc` required)
-and pushes it to `ghcr.io/samuelvisser/wireloft`, tagged `latest` by default
-or with `tag` (e.g. `./deploy.sh v1.2.0`) plus `latest`.
+`./deploy.sh [tag]` intentionally builds with Font Awesome Pro icons and pushes
+the image to `ghcr.io/samuelvisser/wireloft`. Because releases use the paid
+icon set, `ui/.npmrc` is required for this command. The image is tagged
+`latest`, `develop`, or `test` according to the current branch unless an
+explicit tag is supplied.
 
 It needs a GitHub personal access token with `write:packages` scope to log
 in to ghcr.io, picked up in order from: the `GHCR_TOKEN` env var, a local
@@ -67,17 +94,22 @@ A web UI is included for navigation and demonstration purposes. It now uses a pr
 ### Develop (recommended)
 Bash:
 ```bash
+npm --prefix ui ci --registry=https://registry.npmjs.org
 cd <PROJECT_DIR>\wireloft\ui
-npm install
 npm run dev
 ```
-Open the URL shown by Vite (usually http://localhost:5173/). Edits to `.tsx` and `.css` files hot‑reload.
+Open the URL shown by Vite (usually http://localhost:5173/). Edits to `.tsx` and `.css` files hot‑reload. The normal dev server uses Font Awesome Free; use `npm run dev:pro-icons` when you specifically need to inspect the paid icon set.
 
 ### Build for production
 ```bash
 cd <PROJECT_DIR>\wireloft\ui
 npm run build
 ```
+
+`npm run build` is the credential-free Font Awesome Free build. Use
+`npm run build:free-icons` for the explicit equivalent or
+`npm run build:pro-icons` with valid Font Awesome credentials to validate the
+paid kit.
 
 ### Dev backend
 A simple backend is included and reads its data from the SQLite database.
@@ -90,10 +122,10 @@ backend-api run --debug
 
 This starts the backend API at http://127.0.0.1:5001
 
-Run the React UI (in ui/):
+Run the React UI after installing its dependencies as shown above:
 
 ```bash
-npm install
+cd ui
 npm run dev
 ```
 
@@ -158,7 +190,7 @@ backend-api run --debug
 # Start backend server (production mode)
 backend-api run
 
-# Start on custom host/port
+# Start on custom host
 backend-api run --host 0.0.0.0 --port 8000
 
 # Stop all running backend processes

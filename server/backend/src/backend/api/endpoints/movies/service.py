@@ -6,10 +6,12 @@ from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.movie import *
+from backend.api.models.movie_extra import MovieExtraAPICreate
 from backend.db.models.media_download import MediaDownloadBase
 from backend.db.models.media_item import Movie
-from backend.api.endpoints.movie_extras.service import create_movie_extra
+from backend.api.endpoints.movie_extras.service import create_movie_extra, sync_movie_extras
 from backend.integrations.tmdb import MovieReleaseLookupResult, lookup_movie_release_metadata
+from dailywire_api.records import DwMovieRecord
 
 
 def get_movies_list(s: Session) -> list[MovieAPIRead]:
@@ -53,8 +55,8 @@ def ensure_movie_release_metadata(s: Session, item: Movie) -> None:
         duration_seconds=item.duration,
     )
     # A missing token is not counted as an attempt. This lets a movie that was
-    # added before TMDB was configured receive its one lookup on the next movie
-    # or movie-extra download request.
+    # indexed before TMDB was configured receive its one lookup the next time
+    # a download path indexes it.
     if lookup is None:
         return
 
@@ -121,9 +123,78 @@ def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
 
     # Movie, extras and any calling operation remain in the caller's single
     # transaction. Services flush only; routers own commit and rollback. The
-    # Daily Wire browser download flow performs release metadata enrichment in
-    # _get_or_create_movie, not for arbitrary direct API-created movies.
+    # Daily Wire browser indexing performs release metadata enrichment in
+    # index_dailywire_movie, not for arbitrary direct API-created movies.
     return MovieAPIRead.model_validate(item)
+
+
+def index_dailywire_movie(s: Session, movie_data: DwMovieRecord) -> tuple[Movie, bool]:
+    """Persist a Daily Wire movie and all currently known extras without downloading it."""
+    item: Optional[Movie] = (
+        s.query(Movie)
+        .filter(Movie.slug == movie_data.slug)
+        .one_or_none()
+    )
+    created = item is None
+    if item is None:
+        result = create_movie(s, _movie_create_from_dailywire(movie_data))
+        item = s.get(Movie, result.id)
+        if item is None:
+            raise RuntimeError("Movie creation did not produce a persisted Movie record")
+
+    # Keep this idempotent so the explicit Add action and every direct download
+    # path also pick up extras that appeared since the movie was first indexed.
+    sync_movie_extras(
+        s,
+        movie=item,
+        extras=movie_data.movie_extras,
+        official_trailer=movie_data.trailer,
+    )
+
+    if item.release_date_lookup_attempted_at is None:
+        ensure_movie_release_metadata(s, item)
+    return item, created
+
+
+def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
+    movie_extras = [
+        MovieExtraAPICreate(
+            dw_id=extra.dw_id,
+            slug=extra.slug,
+            title=extra.title,
+            movie_extra_type=extra.movie_extra_type,
+            description=extra.description,
+            sharing_url=extra.sharing_url,
+            duration=extra.duration,
+            background_image_path=extra.background_image_path,
+            thumbnail_landscape_path=extra.thumbnail_landscape_path,
+            thumbnail_portrait_path=extra.thumbnail_portrait_path,
+            thumbnail_square_path=extra.thumbnail_square_path,
+        )
+        for extra in movie_data.movie_extras
+    ]
+
+    return MovieAPICreate(
+        dw_id=movie_data.dw_id,
+        slug=movie_data.slug,
+        title=movie_data.title,
+        extended_title=movie_data.extended_title,
+        description=movie_data.description,
+        duration=movie_data.duration,
+        background_image_path=movie_data.background_image_path,
+        thumbnail_landscape_path=movie_data.thumbnail_landscape_path,
+        thumbnail_portrait_path=movie_data.thumbnail_portrait_path,
+        thumbnail_square_path=movie_data.thumbnail_square_path,
+        sharing_url=movie_data.sharing_url,
+        author_name=movie_data.author_name,
+        author_slug=movie_data.author_slug,
+        logo_image_path=movie_data.logo_image_path,
+        mature_rating=movie_data.mature_rating,
+        is_downloadable=movie_data.is_downloadable,
+        available_for=movie_data.available_for,
+        movie_extras=movie_extras,
+        official_trailer_slug=(movie_data.trailer.slug if movie_data.trailer else None),
+    )
 
 
 def update_movie(s: Session, movie_slug: str, body: MovieAPIUpdate) -> MovieAPIRead:
