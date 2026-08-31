@@ -105,6 +105,13 @@
     font-size: 14px;
 }
 
+.template-editor-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
 .template-editor-heading > div {
     display: grid;
     gap: 4px;
@@ -123,6 +130,18 @@
     padding: 1px 5px;
     border-radius: 5px;
     background: rgba(148, 163, 184, 0.16);
+}
+
+.template-language-badge {
+    flex: 0 0 auto;
+    padding: 3px 8px;
+    border: 1px solid #c8d3e3;
+    border-radius: 999px;
+    background: #e8eff9;
+    color: #315f9f;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
 }
 
 .template-workbench-divider {
@@ -421,5 +440,11 @@
         border-color: #43516a;
         background: #223047;
         color: #eef4ff;
+    }
+
+    .template-language-badge {
+        border-color: #43516a;
+        background: #223047;
+        color: #9ec3ff;
     }
 }

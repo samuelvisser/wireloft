@@ -57,19 +57,3 @@ const MOVIE_VARIABLES: readonly OutputTemplateVariable[] = [
 export function getOutputTemplateVariables(mode: LocalMediaProfileMode): readonly OutputTemplateVariable[] {
     return mode === 'movie' ? MOVIE_VARIABLES : SHOW_VARIABLES
 }
-
-export function findUsedOutputTemplateVariables(
-    template: string,
-    variables: readonly OutputTemplateVariable[],
-): OutputTemplateVariable[] {
-    const allowed = new Set(variables.map(({name}) => name))
-    const used = new Set<string>()
-    // The end-of-string alternative makes a newly typed, not-yet-closed Jinja
-    // expression appear in the playground immediately.
-    for (const block of template.matchAll(/(?:\{\{|\{%)([\s\S]*?)(?:(?:\}\}|%\})|$)/g)) {
-        for (const identifier of block[1].matchAll(/[A-Za-z_][A-Za-z0-9_]*/g)) {
-            if (allowed.has(identifier[0])) used.add(identifier[0])
-        }
-    }
-    return variables.filter(({name}) => used.has(name))
-}
