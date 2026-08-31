@@ -13,17 +13,17 @@ type Props = {
   showSlug: string
   showTitle: string
   open: boolean
+  syncing: boolean
   onClose: () => void
-  onSyncCompleted?: () => void
+  onSyncNow: () => void | Promise<void>
 }
 
 const POLL_INTERVAL_MS = 2000
 
-export default function ShowSyncLogModal({ showSlug, showTitle, open, onClose, onSyncCompleted }: Props) {
+export default function ShowSyncLogModal({ showSlug, showTitle, open, syncing, onClose, onSyncNow }: Props) {
   const [entries, setEntries] = useState<SyncLogEntry[]>([])
   const [loading, setLoading] = useState(false)
-  const [syncing, setSyncing] = useState(false)
-  const previousLatestRef = useRef<string | null>(null)
+  const wasSyncingRef = useRef(false)
 
   const apiBase = (window as any).appConfig?.API_URL || '/api'
 
@@ -41,9 +41,6 @@ export default function ShowSyncLogModal({ showSlug, showTitle, open, onClose, o
     if (!open) return
     setLoading(true)
     loadLog()
-      .then((data) => {
-        previousLatestRef.current = data[0]?.synced_at ?? null
-      })
       .catch(() => toast.error('Could not load sync history'))
       .finally(() => setLoading(false))
   }, [loadLog, open])
@@ -51,38 +48,22 @@ export default function ShowSyncLogModal({ showSlug, showTitle, open, onClose, o
   useEffect(() => {
     if (!open || !syncing) return
     const timer = window.setInterval(() => {
-      loadLog()
-        .then((data) => {
-          const latest = data[0]?.synced_at ?? null
-          if (latest && latest !== previousLatestRef.current) {
-            previousLatestRef.current = latest
-            setSyncing(false)
-            if (data[0]?.status === 'failed') {
-              toast.error(`Sync failed for ${showTitle}`)
-            } else {
-              onSyncCompleted?.()
-            }
-          }
-        })
-        .catch(() => undefined)
+      loadLog().catch(() => undefined)
     }, POLL_INTERVAL_MS)
     return () => window.clearInterval(timer)
-  }, [loadLog, onSyncCompleted, open, showTitle, syncing])
+  }, [loadLog, open, syncing])
 
-  const syncNow = async () => {
-    try {
-      const response = await fetch(`${apiBase}/shows/${encodeURIComponent(showSlug)}/sync`, {
-        method: 'POST',
-        credentials: 'include',
-      })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      previousLatestRef.current = entries[0]?.synced_at ?? null
-      setSyncing(true)
-      toast.success(`Sync started for ${showTitle}`)
-    } catch {
-      toast.error(`Could not start sync for ${showTitle}`)
+  useEffect(() => {
+    if (!open) {
+      wasSyncingRef.current = syncing
+      return
     }
-  }
+
+    if (wasSyncingRef.current && !syncing) {
+      loadLog().catch(() => undefined)
+    }
+    wasSyncingRef.current = syncing
+  }, [loadLog, open, syncing])
 
   if (!open) return null
 
@@ -130,7 +111,7 @@ export default function ShowSyncLogModal({ showSlug, showTitle, open, onClose, o
 
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onClose}>Close</button>
-          <button type="button" className="btn btn-primary" onClick={syncNow} disabled={syncing}>
+          <button type="button" className="btn btn-primary" onClick={() => void onSyncNow()} disabled={syncing}>
             <FontAwesomeIcon icon={['fas', syncing ? 'spinner' : 'arrows-rotate']} spin={syncing} aria-hidden="true" />
             <span>{syncing ? 'Syncing...' : 'Sync now'}</span>
           </button>
