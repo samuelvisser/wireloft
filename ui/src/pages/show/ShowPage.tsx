@@ -9,6 +9,7 @@ import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ShowIndexingProgress from '../../components/ShowIndexingProgress/ShowIndexingProgress'
+import ShowSyncLogModal from '../../components/ShowSyncLogModal/ShowSyncLogModal'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import {loadEpisodesFromStorage, removeEpisodesFromStorage, saveEpisodesToStorage} from '../../lib/cache'
 import './ShowPage.css'
@@ -47,6 +48,7 @@ export default function ShowPage() {
   const { data: streamProfiles } = useStreamProfilesView()
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
   const [confirm, setConfirm] = useState(false)
+  const [syncLogOpen, setSyncLogOpen] = useState(false)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -127,6 +129,24 @@ export default function ShowPage() {
     navigate(`/edit-show/${id}`)
   }
 
+  const syncNow = async () => {
+    try {
+      const base = (window as any).appConfig?.API_URL || '/api'
+      const response = await fetch(`${base}/shows/${encodeURIComponent(id)}/sync`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      toast.success(`Sync started for ${show.title}`)
+    } catch {
+      toast.error(`Could not start sync for ${show.title}`)
+    }
+  }
+
+  const onSyncCompleted = () => {
+    void qc.invalidateQueries({ queryKey: ['episodes', id] })
+  }
+
   const copyFeedUrl = async (profileId: number, feedUrl?: string) => {
     if (!feedUrl) return
     try {
@@ -202,6 +222,16 @@ export default function ShowPage() {
             </button>
             <ActionMenu
               items={[
+                {
+                  label: 'Sync now',
+                  icon: ['fas', 'arrows-rotate'],
+                  onSelect: () => void syncNow(),
+                },
+                {
+                  label: 'Sync log',
+                  icon: ['fas', 'clock-rotate-left'],
+                  onSelect: () => setSyncLogOpen(true),
+                },
                 {
                   label: 'Create download profile',
                   icon: ['fas', 'download'],
@@ -315,6 +345,14 @@ export default function ShowPage() {
           </div>
         )}
       </article>
+
+      <ShowSyncLogModal
+        showSlug={id}
+        showTitle={show.title}
+        open={syncLogOpen}
+        onClose={() => setSyncLogOpen(false)}
+        onSyncCompleted={onSyncCompleted}
+      />
 
       {confirm && (
         <div className="modal-overlay" role="presentation" onClick={closeConfirm}>
