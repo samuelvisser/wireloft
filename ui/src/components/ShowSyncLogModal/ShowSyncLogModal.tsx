@@ -6,6 +6,7 @@ import './ShowSyncLogModal.css'
 type SyncLogEntry = {
   synced_at: string
   episodes_found: number
+  status?: 'completed' | 'failed'
 }
 
 type Props = {
@@ -56,13 +57,17 @@ export default function ShowSyncLogModal({ showSlug, showTitle, open, onClose, o
           if (latest && latest !== previousLatestRef.current) {
             previousLatestRef.current = latest
             setSyncing(false)
-            onSyncCompleted?.()
+            if (data[0]?.status === 'failed') {
+              toast.error(`Sync failed for ${showTitle}`)
+            } else {
+              onSyncCompleted?.()
+            }
           }
         })
         .catch(() => undefined)
     }, POLL_INTERVAL_MS)
     return () => window.clearInterval(timer)
-  }, [loadLog, onSyncCompleted, open, syncing])
+  }, [loadLog, onSyncCompleted, open, showTitle, syncing])
 
   const syncNow = async () => {
     try {
@@ -104,7 +109,7 @@ export default function ShowSyncLogModal({ showSlug, showTitle, open, onClose, o
           {loading ? (
             <p className="modal-text">Loading sync history...</p>
           ) : entries.length === 0 ? (
-            <p className="modal-text">No completed syncs have been recorded yet.</p>
+            <p className="modal-text">No syncs have been recorded yet.</p>
           ) : (
             <div className="show-sync-log-table" role="table" aria-label="Recent syncs">
               <div className="show-sync-log-row show-sync-log-row-header" role="row">
@@ -114,7 +119,9 @@ export default function ShowSyncLogModal({ showSlug, showTitle, open, onClose, o
               {entries.map((entry) => (
                 <div className="show-sync-log-row" role="row" key={entry.synced_at}>
                   <span role="cell">{new Date(entry.synced_at).toLocaleString()}</span>
-                  <span role="cell">{entry.episodes_found}</span>
+                  <span role="cell" className={entry.status === 'failed' ? 'show-sync-log-failed' : undefined}>
+                    {entry.status === 'failed' ? 'Failed' : entry.episodes_found}
+                  </span>
                 </div>
               ))}
             </div>
