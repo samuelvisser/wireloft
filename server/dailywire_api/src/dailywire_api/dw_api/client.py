@@ -215,6 +215,7 @@ class MiddlewareClient:
                         movie_extra_type=self._movie_extra_type(extra),
                         description=extra.get('description') or None,
                         sharing_url=extra.get('sharingURL') or None,
+                        published_date=extra.get('publishedAt') or None,
                         duration=float(extra.get('duration') or 0),
                         background_image_path=extra.get('backgroundImage') or None,
                         thumbnail_landscape_path=thumbnails.get('land') or None,

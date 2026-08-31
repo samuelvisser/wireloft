@@ -39,7 +39,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     current, head = get_database_status()
     assert current == (head,)
-    assert head == "c4ab8e7d1f20"
+    assert head == "e5b7c9d1f3a2"
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -96,25 +96,34 @@ def test_fresh_database_upgrades_to_head(migration_database):
                 "type": "movie",
                 "slug": "wireloft-movies",
                 "name": "WireLoft Movies",
-                "output_template": "/downloads/movies/{movie_title}/{title}.ext",
+                "output_template": (
+                    "/downloads/movies/{{ movie_title }}/{{ title }}"
+                    "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
+                ),
                 "preferred_format": "format_1080p",
-                "append_media_type_to_filename": True,
+                "append_media_type_to_filename": False,
             },
             {
                 "type": "show",
                 "slug": "wireloft-shows-audio",
                 "name": "WireLoft Shows (Audio)",
-                "output_template": "/downloads/podcasts/{show_title}/{episode_published_date} - {episode_title}.ext",
+                "output_template": (
+                    "/downloads/podcasts/{{ show_title }}/"
+                    "{{ episode_published_date }} - {{ episode_title }}.ext"
+                ),
                 "preferred_format": "format_audio_only",
-                "append_media_type_to_filename": True,
+                "append_media_type_to_filename": False,
             },
             {
                 "type": "show",
                 "slug": "wireloft-shows-video",
                 "name": "WireLoft Shows (Video)",
-                "output_template": "/downloads/shows/{show_title}/{season_name}/{episode_title}.ext",
+                "output_template": (
+                    "/downloads/shows/{{ show_title }}/{{ season_name }}/"
+                    "{{ episode_title }}.ext"
+                ),
                 "preferred_format": "format_1080p",
-                "append_media_type_to_filename": True,
+                "append_media_type_to_filename": False,
             },
         ]
         assert connection.execute(text(
@@ -156,6 +165,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "dw_id",
         "slug",
         "sharing_url",
+        "published_date",
     }
 
     movie_indexes = {index["name"]: index for index in inspector.get_indexes("movies")}
@@ -240,6 +250,41 @@ def test_movie_extra_migration_preserves_legacy_movie_trailer_metadata(migration
         assert connection.execute(text(
             "SELECT COUNT(*) FROM media_items WHERE type = 'trailer'"
         )).scalar_one() == 0
+
+
+def test_movie_template_context_migration_preserves_existing_parent_values(migration_database):
+    _database_path, engine = migration_database
+
+    from backend.db.migrations import get_alembic_config, upgrade_database
+
+    command.upgrade(get_alembic_config(), "c91e4a6f72d0")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "UPDATE local_media_profiles SET output_template = :template "
+            "WHERE slug = 'wireloft-movies'"
+        ), {
+            "template": (
+                "/downloads/{{ movie }}/{{ movie_title }}"
+                "{% if year %} ({{ year }}){% endif %}/"
+                "{{ title }}-{{ 'year' }}.ext"
+            ),
+        })
+
+    upgrade_database()
+
+    with engine.connect() as connection:
+        template = connection.execute(text(
+            "SELECT output_template FROM local_media_profiles "
+            "WHERE slug = 'wireloft-movies'"
+        )).scalar_one()
+    assert template == (
+        "/downloads/{{ movie_slug }}/{{ movie_title }}"
+        "{% if movie_year %} ({{ movie_year }}){% endif %}/"
+        "{{ title }}-{{ 'year' }}.ext"
+    )
+    assert "published_date" in {
+        column["name"] for column in inspect(engine).get_columns("movie_extras")
+    }
 
 
 def test_upgrade_from_0001_migrates_existing_profiles_to_show_type(migration_database):
@@ -384,4 +429,4 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 def test_migration_history_has_exactly_one_head():
     from backend.db.migrations import get_head_revisions
 
-    assert get_head_revisions() == ("c4ab8e7d1f20",)
+    assert get_head_revisions() == ("e5b7c9d1f3a2",)

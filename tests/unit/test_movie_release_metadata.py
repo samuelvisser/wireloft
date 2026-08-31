@@ -178,7 +178,7 @@ def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, 
         slug="plex-movies",
         name="Plex movies",
         output_template=(
-            "/downloads/{{ movie_title }} ({{ year }})/{{ title }}"
+            "/downloads/{{ movie_title }} ({{ movie_year }})/{{ title }}"
             "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
         ),
         preferred_format="format_1080p",
@@ -256,7 +256,8 @@ def test_movie_release_date_condition_omits_unknown_metadata(tmp_path, monkeypat
     )
 
     result = resolve_movie_output_path(
-        "/downloads/{{ movie_title }}{% if year %} ({{ year }}){% endif %}/{{ movie }}.ext",
+        "/downloads/{{ movie_title }}{% if movie_year %} ({{ movie_year }}){% endif %}/"
+        "{{ movie_slug }}.ext",
         movie=movie,
     )
 

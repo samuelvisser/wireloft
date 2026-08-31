@@ -28,9 +28,12 @@ export const SHOW_OUTPUT_TEMPLATE_FIELDS = [
 ] as const
 
 export const MOVIE_OUTPUT_TEMPLATE_FIELDS = [
-    'movie', 'movie_slug', 'movie_title', 'title', 'movie_extended_title', 'extended_title',
-    'movie_dw_id', 'dw_id', 'movie_author', 'author', 'movie_mature_rating', 'mature_rating',
-    'rating', 'movie_duration_seconds', 'duration_seconds', 'media_type',
+    'movie_slug', 'movie_title', 'movie_extended_title', 'movie_dw_id', 'movie_author',
+    'movie_mature_rating', 'movie_duration_seconds',
+    'movie_date', 'movie_time', 'movie_datetime', 'movie_year', 'movie_month', 'movie_day',
+    'movie_hour', 'movie_minute', 'movie_second',
+    'slug', 'title', 'extended_title', 'dw_id', 'author', 'mature_rating', 'rating',
+    'duration_seconds', 'media_type',
     ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const
 

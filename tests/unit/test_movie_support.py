@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import create_engine
@@ -159,6 +160,7 @@ def test_dailywire_movie_page_exposes_and_classifies_all_extras(monkeypatch):
                                     "slug": "a-movie-trailer",
                                     "title": "A Movie | Official Trailer",
                                     "sharingURL": "https://www.dailywire.com/clips/a-movie-trailer",
+                                    "publishedAt": "2026-08-30T12:34:56Z",
                                     "duration": 90,
                                     "images": {"thumbnail": {"land": "trailer.jpg"}},
                                 }
@@ -202,6 +204,9 @@ def test_dailywire_movie_page_exposes_and_classifies_all_extras(monkeypatch):
         "behindthescenes",
         "interview",
     ]
+    assert movie.movie_extras[0].published_date == datetime(
+        2026, 8, 30, 12, 34, 56, tzinfo=timezone.utc,
+    )
 
 
 def test_dailywire_movie_playback_resolves_secure_url_with_api_authorization(monkeypatch):
@@ -339,7 +344,7 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     profile = MovieLocalMediaProfile(
         slug="movies",
         name="Movies",
-        output_template="/downloads/{movie_title}/{movie}.ext",
+        output_template="/downloads/{movie_title}/{movie_slug}.ext",
         preferred_format="format_1080p",
     )
     session.add(profile)
@@ -514,7 +519,7 @@ def test_movie_download_rolls_back_movie_and_extras_together(tmp_path, monkeypat
     profile = MovieLocalMediaProfile(
         slug="movies",
         name="Movies",
-        output_template="/downloads/{movie}.ext",
+        output_template="/downloads/{movie_slug}.ext",
         preferred_format="format_1080p",
     )
     session.add(profile)

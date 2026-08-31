@@ -297,6 +297,7 @@ def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
             movie_extra_type=extra.movie_extra_type,
             description=extra.description,
             sharing_url=extra.sharing_url,
+            published_date=extra.published_date,
             duration=extra.duration,
             background_image_path=extra.background_image_path,
             thumbnail_landscape_path=extra.thumbnail_landscape_path,
