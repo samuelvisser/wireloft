@@ -11,7 +11,6 @@ import {zodResolver} from "@hookform/resolvers/zod";
 import {WithRoot} from "../../types/form";
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions'
-import ReadMore from '../../utils/ReadMore'
 import {
     addLocalMediaProfileDraftKey,
     clearLocalMediaProfileDraft,
@@ -133,22 +132,12 @@ export default function AddLocalMediaProfilePage() {
                             {
                                 value: 'show',
                                 label: 'Show',
-                                description: (
-                                    <ReadMore summary={<span>Store downloaded show episodes.</span>}>
-                                        <p>Show profiles support episode, season, show, and publication-date placeholders.</p>
-                                        <p>They can use either video formats or audio-only output.</p>
-                                    </ReadMore>
-                                ),
+                                description: 'Store downloaded show episodes',
                             },
                             {
                                 value: 'movie',
                                 label: 'Movie',
-                                description: (
-                                    <ReadMore summary={<span>Store manually downloaded movies and their extras.</span>}>
-                                        <p>Movie profiles can keep parent-movie metadata for folders while using each extra's metadata for its filename.</p>
-                                        <p>Movies and movie extras are always downloaded as video.</p>
-                                    </ReadMore>
-                                ),
+                                description: 'Store manually downloaded movies and their extras',
                             },
                         ]}
                     />
