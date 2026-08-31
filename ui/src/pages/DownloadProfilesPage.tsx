@@ -42,9 +42,11 @@ export default function DownloadProfilesPage() {
             <div className="view-header">
                 <h1 id="profiles-title">Download Profiles</h1>
                 <PageSubtitle summary={<>Create rules for how each show is downloaded.</>}>
-                    <p>A Download Profile tells WireLoft what to download and where to put it, including quality, file
-                        naming, and grouping. Each show can contain multiple download profiles, allowing you to
+                    <p>A Download Profile tells WireLoft what to download and how long to retain your downloads.
+                        Each show can contain multiple download profiles, allowing you to
                         download both audio and video versions of episodes for example.</p>
+                    <p>Download Profiles are always connected to a Local Media Profile, which defines where your
+                        downloads will be stored and what their file name should be.</p>
                 </PageSubtitle>
                 <button className="btn btn-primary" onClick={onAdd}>Add download profile</button>
             </div>
