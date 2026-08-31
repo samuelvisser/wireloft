@@ -240,10 +240,7 @@ def start_controller() -> None:
             from task_manager.scheduler.registry import sync_registry_to_db
             from task_manager.scheduler.scheduler import start_scheduler
 
-            # No task can survive a backend process restart because task
-            # execution and scheduler jobs are in-process. Reconcile persisted
-            # RUNNING rows before starting any new scheduler work so stale runs
-            # can never be confused with runs created during this startup.
+            # Make sure interrupted tasks don't remain forever
             clear_interrupted_task_runs()
 
             if get_settings().scheduler.enabled:
