@@ -78,14 +78,7 @@ export default function App() {
   const cancelAddShow = useCallback(() => navigate('/library'), [navigate])
 
   if (authState === 'checking') {
-    return (
-      <div className="onboarding-bootstrap">
-        <div>
-          <img src="/logo-wide-full.png" alt="WireLoft" />
-          <p>Loading WireLoft…</p>
-        </div>
-      </div>
-    )
+    return null
   }
 
   if (authState === 'no') {
@@ -93,18 +86,14 @@ export default function App() {
   }
 
   if (!onboardingStatus) {
+    if (!onboardingError) return null
     return (
       <div className="onboarding-bootstrap">
         <div>
-          <img src="/logo-wide-full.png" alt="WireLoft" />
-          {onboardingError ? (
-            <>
-              <p role="alert">{onboardingError}</p>
-              <button className="btn btn-primary" type="button" onClick={() => void loadOnboardingStatus()}>
-                Try again
-              </button>
-            </>
-          ) : <p>Preparing WireLoft…</p>}
+          <p role="alert">{onboardingError}</p>
+          <button className="btn btn-primary" type="button" onClick={() => void loadOnboardingStatus()}>
+            Try again
+          </button>
         </div>
       </div>
     )
