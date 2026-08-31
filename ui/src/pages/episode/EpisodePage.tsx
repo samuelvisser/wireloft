@@ -22,12 +22,13 @@ function formatDate(value: Date | string | null | undefined) {
     if (!value) return '—'
     const d = value instanceof Date ? value : new Date(value)
     try {
-        const year = d.getFullYear()
-        const month = String(d.getMonth() + 1).padStart(2, '0')
-        const day = String(d.getDate()).padStart(2, '0')
-        const hours = String(d.getHours()).padStart(2, '0')
-        const minutes = String(d.getMinutes()).padStart(2, '0')
-        return `${year}-${month}-${day} ${hours}:${minutes}`
+        return new Intl.DateTimeFormat(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        }).format(d)
     } catch {
         return d?.toString() ?? ''
     }
@@ -238,8 +239,10 @@ export default function EpisodePage() {
         publishStatus === 'published_final' || publishStatus === EpisodePublishStatus.publishedFinal
     )
 
-    // Placeholder cover image
-    const coverUrl: string = episode.thumbnailPortraitPath || `https://placehold.co/640x360/png?text=Episode+%23${episode.index}`
+    const coverUrl: string = episode.thumbnailLandscapePath
+        || episode.backgroundImagePath
+        || episode.thumbnailPortraitPath
+        || `https://placehold.co/960x540/png?text=Episode+%23${episode.index}`
 
     const downloadByProfileId = new Map<number, MediaDownloadViewRead>(
         (downloads ?? []).map((d) => [d.localMediaProfileId, d]),
@@ -247,46 +250,50 @@ export default function EpisodePage() {
 
     return (
         <section className="view episode-view" aria-labelledby="episode-title">
-            <div className="view-header">
-                <h1 id="episode-title">Episode</h1>
-            </div>
-
             <article className="episode-details" aria-label="Episode details">
-                <header className="episode-header">
-                    <div className="episode-show"><Link to={`/show/${showId}`}>{show.title}</Link></div>
-                    <div className="episode-title-text">{episode.title}</div>
-                </header>
+                <nav className="episode-breadcrumb" aria-label="Breadcrumb">
+                    <Link to="/library">Library</Link>
+                    <FontAwesomeIcon icon={['fas', 'chevron-right']} aria-hidden="true"/>
+                    <Link to={`/show/${showId}`}>{show.title}</Link>
+                </nav>
 
-                <div className="episode-content">
-                    <div className="episode-cover">
-                        <img src={coverUrl} alt="Episode cover"/>
-                        {isLive && (
-                            <span className="episode-live-badge" aria-label="Episode is live">Live</span>
+                <div className="episode-cover">
+                    <img src={coverUrl} alt="Episode cover"/>
+                    {isLive && (
+                        <span className="episode-live-badge" aria-label="Episode is live">Live</span>
+                    )}
+                </div>
+
+                <header className="episode-header">
+                    <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
+                    <div className="episode-summary" aria-label="Episode metadata">
+                        <span className={`episode-status${isLive ? ' is-live' : ''}`}>
+                            {isLive && <span className="episode-status-dot" aria-hidden="true"/>}
+                            {statusLabel}
+                        </span>
+                        <span className="episode-summary-separator" aria-hidden="true"/>
+                        <span className="episode-summary-item">
+                            <FontAwesomeIcon icon={['fas', 'calendar']} aria-hidden="true"/>
+                            <span>Released {formatDate(episode.publishedDate)}</span>
+                        </span>
+                        {episode.downloadedDate && (
+                            <>
+                                <span className="episode-summary-separator" aria-hidden="true"/>
+                                <span className="episode-summary-item">
+                                    <FontAwesomeIcon icon={['fas', 'circle-down']} aria-hidden="true"/>
+                                    <span>Downloaded {formatDate(episode.downloadedDate)}</span>
+                                </span>
+                            </>
                         )}
                     </div>
-                    <div className="episode-meta">
-                        <table className="meta-table">
-                            <tbody>
-                            <tr>
-                                <th scope="row">Title</th>
-                                <td>{episode.title}</td>
-                            </tr>
-                            <tr>
-                                <th scope="row">Status</th>
-                                <td>{statusLabel}</td>
-                            </tr>
-                            <tr>
-                                <th scope="row">Release date</th>
-                                <td>{formatDate(episode.publishedDate)}</td>
-                            </tr>
-                            <tr>
-                                <th scope="row">Download date</th>
-                                <td>{formatDate(episode.downloadedDate)}</td>
-                            </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                </header>
+
+                {!!episode.description?.trim() && (
+                    <section className="episode-description" aria-labelledby="episode-description-title">
+                        <h2 id="episode-description-title">Episode Description</h2>
+                        <p>{episode.description}</p>
+                    </section>
+                )}
 
                 {isDownloadable && (
                     <div className="episode-downloads" aria-labelledby="episode-downloads-title">
@@ -314,18 +321,28 @@ export default function EpisodePage() {
             </article>
 
             <style>{`
-        .episode-header { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
-        .episode-title-text { font-size: 1.1rem; font-weight: 600; }
-        .episode-content { display: grid; grid-template-columns: minmax(280px, 480px) 1fr; gap: 16px; align-items: start; }
-        .episode-cover { position: relative; }
-        .episode-cover img { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--border-color, #ddd); }
-        .episode-live-badge { position: absolute; top: 14px; right: 14px; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: var(--error, #d64545); color: #fff; box-shadow: 0 2px 8px rgb(0 0 0 / 30%); font-size: 1rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
-        .episode-live-badge::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
-        .meta-table { width: 100%; border-collapse: collapse; }
-        .meta-table th, .meta-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-color, #e2e2e2); vertical-align: top; }
-        .meta-table th { width: 180px; color: var(--muted-fg, #555); font-weight: 500; }
-        .episode-downloads { margin-top: 24px; }
-        .episode-downloads h2 { font-size: 1.05rem; margin-bottom: 8px; }
+        .episode-view { padding-top: 0; }
+        .episode-details { width: min(100%, 980px); margin: 0 auto; }
+        .episode-breadcrumb { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; color: var(--muted, #777); font-size: 0.9rem; }
+        .episode-breadcrumb a { color: inherit; text-decoration: none; }
+        .episode-breadcrumb a:hover { color: var(--link-color, #66267a); text-decoration: underline; }
+        .episode-breadcrumb svg { width: 9px; opacity: 0.6; }
+        .episode-cover { position: relative; overflow: hidden; border-radius: 10px; background: #111827; }
+        .episode-cover img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+        .episode-live-badge { position: absolute; top: 18px; right: 18px; display: inline-flex; align-items: center; gap: 8px; padding: 9px 15px; border-radius: 999px; background: var(--error, #d64545); color: #fff; box-shadow: 0 2px 10px rgb(0 0 0 / 30%); font-size: 0.95rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+        .episode-live-badge::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+        .episode-header { margin-top: 20px; }
+        .episode-title-text { margin: 0; font-size: clamp(1.5rem, 3vw, 2.15rem); line-height: 1.18; letter-spacing: -0.025em; }
+        .episode-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; color: var(--muted, #6b7280); font-size: 0.9rem; }
+        .episode-status, .episode-summary-item { display: inline-flex; align-items: center; gap: 7px; }
+        .episode-status.is-live { color: var(--error, #d64545); font-weight: 600; text-transform: uppercase; }
+        .episode-status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+        .episode-summary-separator { width: 1px; height: 18px; background: var(--border-color, #d9d9d9); }
+        .episode-description { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-color, #e2e2e2); }
+        .episode-description h2 { margin: 0 0 8px; font-size: 1.05rem; }
+        .episode-description p { margin: 0; max-width: 850px; line-height: 1.55; white-space: pre-line; }
+        .episode-downloads { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-color, #e2e2e2); }
+        .episode-downloads h2 { font-size: 1.05rem; margin: 0 0 8px; }
         .download-row { display: flex; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--divider, #e2e2e2); }
         .download-row-info { min-width: 200px; }
         .download-row-name { font-weight: 600; }
@@ -339,7 +356,17 @@ export default function EpisodePage() {
         .download-state-ok { color: #2fa84f; }
         .download-state-error { color: var(--error, #d64545); }
         @media (max-width: 720px) {
-          .episode-content { grid-template-columns: 1fr; }
+          .episode-details { width: 100%; }
+          .episode-breadcrumb { margin-bottom: 12px; font-size: 0.82rem; }
+          .episode-cover { border-radius: 8px; }
+          .episode-live-badge { top: 10px; right: 10px; padding: 7px 11px; font-size: 0.8rem; }
+          .episode-header { margin-top: 14px; }
+          .episode-title-text { font-size: 1.4rem; }
+          .episode-summary { gap: 9px; margin-top: 10px; font-size: 0.8rem; }
+          .episode-summary-separator { height: 16px; }
+          .episode-description { margin-top: 18px; padding-top: 16px; }
+          .episode-description p { font-size: 0.95rem; }
+          .episode-downloads { margin-top: 18px; padding-top: 16px; }
           .download-row { flex-direction: column; align-items: flex-start; gap: 8px; }
         }
       `}</style>
