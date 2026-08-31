@@ -41,7 +41,7 @@ export default function DownloadProfilesPage() {
         <section className="view" aria-labelledby="profiles-title">
             <div className="view-header">
                 <h1 id="profiles-title">Download Profiles</h1>
-                <PageSubtitle summary={<>Create rules for how each show is downloaded and organized on disk.</>}>
+                <PageSubtitle summary={<>Create rules for how each show is downloaded.</>}>
                     <p>A Download Profile tells WireLoft what to download and where to put it, including quality, file
                         naming, and grouping. Each show can contain multiple download profiles, allowing you to
                         download both audio and video versions of episodes for example.</p>
