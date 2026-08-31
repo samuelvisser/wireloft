@@ -1,0 +1,13 @@
+@media (max-width: 900px) {
+  /* Let the brand area scroll out of view before the existing sticky sidebar stops. */
+  .app > .sidebar {
+    --mobile-brand-height: 84px;
+    top: calc(-1 * var(--mobile-brand-height));
+  }
+
+  .app > .sidebar > .sidebar-header {
+    height: var(--mobile-brand-height);
+    flex: 0 0 var(--mobile-brand-height);
+    overflow: hidden;
+  }
+}
