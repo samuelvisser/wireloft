@@ -186,6 +186,15 @@
     gap: 10px;
 }
 
+.template-test-values-toggle {
+    justify-self: end;
+}
+
+.template-test-values-content {
+    display: grid;
+    gap: 10px;
+}
+
 .template-test-values-heading {
     display: flex;
     align-items: center;
@@ -288,6 +297,10 @@
 
     .template-test-values-grid {
         grid-template-columns: minmax(0, 1fr);
+    }
+
+    .template-test-values-toggle {
+        justify-self: stretch;
     }
 
     .output-template-variable-reference {

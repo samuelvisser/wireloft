@@ -141,6 +141,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const sources = sourceData?.sources ?? []
     const [selectedSourceId, setSelectedSourceId] = useState('')
     const [testValues, setTestValues] = useState<Record<string, string>>({})
+    const [testValuesExpanded, setTestValuesExpanded] = useState(false)
     const selectedSource = sources.find(({id}) => id === selectedSourceId) ?? sources[0]
 
     useEffect(() => {
@@ -231,7 +232,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                             id="mp-path"
                             className="output-template-code-editor"
                             value={field.value ?? ''}
-                            height="96px"
+                            minHeight="96px"
                             placeholder={placeholder}
                             extensions={editorExtensions}
                             basicSetup={{
@@ -297,36 +298,49 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 </div>
 
                 <div className="template-test-values">
-                    <div className="template-test-values-heading">
-                        <h4>Test values</h4>
-                        {selectedSource && usedVariables.length > 0 && (
-                            <button
-                                type="button"
-                                className="btn btn-small"
-                                onClick={() => setTestValues({...selectedSource.values})}
-                            >
-                                Reset values
-                            </button>
-                        )}
-                    </div>
-                    {usedVariables.length === 0 ? (
-                        <p className="template-preview-status">Variables you add to the template will appear here automatically.</p>
-                    ) : (
-                        <div className="template-test-values-grid">
-                            {usedVariables.map((variable) => (
-                                <label key={variable.name}>
-                                    <span><code>{variable.name}</code> <small>{variable.description}</small></span>
-                                    <input
-                                        className="input"
-                                        type="text"
-                                        value={testValues[variable.name] ?? ''}
-                                        onChange={(event) => setTestValues((current) => ({
-                                            ...current,
-                                            [variable.name]: event.target.value,
-                                        }))}
-                                    />
-                                </label>
-                            ))}
+                    <button
+                        type="button"
+                        className="btn btn-small template-test-values-toggle"
+                        aria-expanded={testValuesExpanded}
+                        aria-controls="template-test-values-fields"
+                        onClick={() => setTestValuesExpanded((expanded) => !expanded)}
+                    >
+                        {testValuesExpanded ? 'Hide test values' : 'Test different values'}
+                    </button>
+                    {testValuesExpanded && (
+                        <div id="template-test-values-fields" className="template-test-values-content">
+                            <div className="template-test-values-heading">
+                                <h4>Test values</h4>
+                                {selectedSource && usedVariables.length > 0 && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-small"
+                                        onClick={() => setTestValues({...selectedSource.values})}
+                                    >
+                                        Reset values
+                                    </button>
+                                )}
+                            </div>
+                            {usedVariables.length === 0 ? (
+                                <p className="template-preview-status">Variables you add to the template will appear here automatically.</p>
+                            ) : (
+                                <div className="template-test-values-grid">
+                                    {usedVariables.map((variable) => (
+                                        <label key={variable.name}>
+                                            <span><code>{variable.name}</code> <small>{variable.description}</small></span>
+                                            <input
+                                                className="input"
+                                                type="text"
+                                                value={testValues[variable.name] ?? ''}
+                                                onChange={(event) => setTestValues((current) => ({
+                                                    ...current,
+                                                    [variable.name]: event.target.value,
+                                                }))}
+                                            />
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
