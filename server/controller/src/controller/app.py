@@ -5,6 +5,7 @@ import logging
 import os
 import tempfile
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -25,6 +26,44 @@ def db_session():
         yield session
     finally:
         session.close()
+
+
+def clear_interrupted_task_runs() -> int:
+    """Close task runs that could not have survived a backend process restart.
+
+    Task execution lives inside the WireLoft backend process and APScheduler uses
+    an in-memory job store. A run still marked RUNNING when a new controller
+    starts therefore belongs to the previous process and can no longer make
+    progress. Marking it canceled prevents stale progress indicators from being
+    shown forever while preserving the last recorded progress for task history.
+    """
+    from sqlalchemy import select
+    from task_manager.scheduler.db import TaskRun
+    from task_manager.scheduler.types import TaskStatus
+
+    with db_session() as session:
+        interrupted_runs = list(
+            session.scalars(
+                select(TaskRun).where(TaskRun.status == TaskStatus.RUNNING)
+            )
+        )
+        if not interrupted_runs:
+            return 0
+
+        finished_at = datetime.now(timezone.utc)
+        for run in interrupted_runs:
+            run.status = TaskStatus.CANCELED
+            run.message = "Interrupted by WireLoft restart"
+            run.finished_at = finished_at
+            run.next_retry_at = None
+
+        session.commit()
+
+    logger.warning(
+        "Canceled %s task run(s) left RUNNING by a previous WireLoft process",
+        len(interrupted_runs),
+    )
+    return len(interrupted_runs)
 
 
 def _task_event_kwargs(task_key: str, event_data: dict[str, Any]) -> dict[str, Any]:
@@ -200,6 +239,12 @@ def start_controller() -> None:
             import task_manager.tasks  # noqa: F401
             from task_manager.scheduler.registry import sync_registry_to_db
             from task_manager.scheduler.scheduler import start_scheduler
+
+            # No task can survive a backend process restart because task
+            # execution and scheduler jobs are in-process. Reconcile persisted
+            # RUNNING rows before starting any new scheduler work so stale runs
+            # can never be confused with runs created during this startup.
+            clear_interrupted_task_runs()
 
             if get_settings().scheduler.enabled:
                 sync_registry_to_db()
