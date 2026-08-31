@@ -20,12 +20,13 @@ type Props = {
     onContinue: (profile: LocalMediaProfileRead) => void
 }
 
-const NEW_PROFILE_DEFAULTS: LocalMediaProfileCreateIn = {
+type MovieLocalMediaProfileCreateIn = Extract<LocalMediaProfileCreateIn, {type: 'movie'}>
+
+const NEW_PROFILE_DEFAULTS: MovieLocalMediaProfileCreateIn = {
     type: 'movie',
     name: 'My Movies',
     outputTemplate: '/downloads/movies/{movie_title}/{title}.ext',
     preferredFormat: 'format_1080p',
-    appendMediaTypeToFilename: true,
 }
 
 export default function OnboardingMovieProfileStep({movieTitle, onBack, onContinue}: Props) {
@@ -34,7 +35,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
     const initialized = useRef(false)
     const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
 
-    const form = useForm<LocalMediaProfileCreateIn>({
+    const form = useForm<MovieLocalMediaProfileCreateIn>({
         resolver: zodResolver(MovieLocalMediaProfileCreateSchema) as any,
         mode: 'onBlur',
         shouldFocusError: true,
@@ -52,8 +53,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
             type: 'movie',
             name: profile.name,
             outputTemplate: profile.outputTemplate,
-            preferredFormat: profile.preferredFormat as LocalMediaProfileCreateIn['preferredFormat'],
-            appendMediaTypeToFilename: profile.appendMediaTypeToFilename,
+            preferredFormat: profile.preferredFormat as MovieLocalMediaProfileCreateIn['preferredFormat'],
         })
     }, [form])
 
