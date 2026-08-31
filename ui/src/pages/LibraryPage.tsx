@@ -35,6 +35,7 @@ export default function LibraryPage() {
         setParams({type}, {replace: true})
     }
 
+    const browseUrl = `/browse?type=${activeType}`
     const loading = showsLoading || moviesLoading
     const error = showsError || moviesError
     const showTabs = hasShows && hasMovies
@@ -46,7 +47,7 @@ export default function LibraryPage() {
                     <h1 id="library-title">Library</h1>
                     <p className="view-description">Shows and movies indexed by WireLoft.</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => navigate('/browse')}>
+                <button className="btn btn-primary" onClick={() => navigate(browseUrl)}>
                     <FontAwesomeIcon icon={['fas', 'compass']}/>
                     Browse Daily Wire
                 </button>
@@ -71,7 +72,7 @@ export default function LibraryPage() {
                     <FontAwesomeIcon icon={['fas', 'book-open']}/>
                     <h2>Your library is empty</h2>
                     <p>Browse Daily Wire to add a show or movie.</p>
-                    <button className="btn btn-primary" onClick={() => navigate('/browse')}>Browse Daily Wire</button>
+                    <button className="btn btn-primary" onClick={() => navigate(browseUrl)}>Browse Daily Wire</button>
                 </div>
             ) : activeType === 'shows' && hasShows ? (
                 <div className="library-show-list" role="list" aria-label="Shows">
