@@ -43,7 +43,14 @@ SYNC_LOG_LIMIT = 10
     default_max_retries=5,
     tracks_progress=False,
 )
-async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optional[str] = None, dry_run: bool = False, progress=None) -> None:
+async def fetch_new_episodes(
+    *,
+    resource_id: Optional[int] = None,
+    slug: Optional[str] = None,
+    manual_request_id: Optional[str] = None,
+    dry_run: bool = False,
+    progress=None,
+) -> None:
     """
     Finds new episodes in all shows.
 
@@ -55,6 +62,8 @@ async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optiona
         The ID of a specific show if the task needs to focus on one.
     slug : Optional[str]
         The slug of a specific show if the task needs to focus on one.
+    manual_request_id : Optional[str]
+        Correlation ID set only when a user manually requested this sync.
     dry_run : bool
         When True, run the full detection flow but persist nothing to the
         database: computed episode identifiers are printed and all changes are
@@ -87,6 +96,7 @@ async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optiona
                         synced_at=datetime.now(timezone.utc).isoformat(),
                         episodes_found=0,
                         status="failed",
+                        manual_request_id=manual_request_id,
                     )
                     s.commit()
                 raise
@@ -99,6 +109,7 @@ async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optiona
                     synced_at=datetime.now(timezone.utc).isoformat(),
                     episodes_found=max(0, after - before),
                     status="completed",
+                    manual_request_id=manual_request_id,
                 )
                 s.commit()
 
@@ -121,7 +132,14 @@ def _episode_count(s, show_id: int) -> int:
     )
 
 
-def _append_sync_log(show: Show, *, synced_at: str, episodes_found: int, status: str) -> None:
+def _append_sync_log(
+    show: Show,
+    *,
+    synced_at: str,
+    episodes_found: int,
+    status: str,
+    manual_request_id: Optional[str] = None,
+) -> None:
     raw = show.get_meta(SYNC_LOG_META_KEY)
     try:
         history = json.loads(raw) if raw else []
@@ -130,9 +148,13 @@ def _append_sync_log(show: Show, *, synced_at: str, episodes_found: int, status:
     if not isinstance(history, list):
         history = []
 
-    history.insert(0, {
+    entry = {
         "synced_at": synced_at,
         "episodes_found": episodes_found,
         "status": status,
-    })
+    }
+    if manual_request_id is not None:
+        entry["manual_request_id"] = manual_request_id
+
+    history.insert(0, entry)
     show.set_meta(SYNC_LOG_META_KEY, json.dumps(history[:SYNC_LOG_LIMIT]))
