@@ -92,6 +92,7 @@ export default function ShowPage() {
             : 0
           toast.success(
             `Sync finished for ${show?.title ?? id}: ${episodesFound} new ${episodesFound === 1 ? 'episode' : 'episodes'} found`,
+            { duration: 5000 },
           )
           void qc.invalidateQueries({ queryKey: ['episodes', id] })
           return
