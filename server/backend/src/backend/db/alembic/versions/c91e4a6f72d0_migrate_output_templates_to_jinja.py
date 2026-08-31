@@ -1,7 +1,7 @@
 """Migrate Local Media Profile output paths to Jinja.
 
 Revision ID: c91e4a6f72d0
-Revises: b84c2d9e0f31
+Revises: c4ab8e7d1f20
 Create Date: 2026-08-30
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 
 revision: str = "c91e4a6f72d0"
-down_revision: Union[str, None] = "b84c2d9e0f31"
+down_revision: Union[str, None] = "c4ab8e7d1f20"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
