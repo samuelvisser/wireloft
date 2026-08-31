@@ -97,6 +97,7 @@ async def fetch_new_episodes(
                         episodes_found=0,
                         status="failed",
                         manual_request_id=manual_request_id,
+                        will_retry=_will_retry(progress),
                     )
                     s.commit()
                 raise
@@ -132,6 +133,13 @@ def _episode_count(s, show_id: int) -> int:
     )
 
 
+def _will_retry(progress) -> bool:
+    run = getattr(progress, "run", None)
+    attempt_count = int(getattr(run, "attempt_count", 0) or 0)
+    max_retries = int(getattr(run, "max_retries", 0) or 0)
+    return attempt_count <= max_retries
+
+
 def _append_sync_log(
     show: Show,
     *,
@@ -139,6 +147,7 @@ def _append_sync_log(
     episodes_found: int,
     status: str,
     manual_request_id: Optional[str] = None,
+    will_retry: Optional[bool] = None,
 ) -> None:
     raw = show.get_meta(SYNC_LOG_META_KEY)
     try:
@@ -155,6 +164,8 @@ def _append_sync_log(
     }
     if manual_request_id is not None:
         entry["manual_request_id"] = manual_request_id
+    if will_retry is not None:
+        entry["will_retry"] = will_retry
 
     history.insert(0, entry)
     show.set_meta(SYNC_LOG_META_KEY, json.dumps(history[:SYNC_LOG_LIMIT]))
