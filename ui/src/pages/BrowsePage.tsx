@@ -4,7 +4,7 @@ import {useNavigate, useSearchParams} from 'react-router-dom'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
-import {useDailywireMovieCatalog, useDailywireShowCatalog, useShows} from '../lib/queries'
+import {useDailywireMovieCatalog, useDailywireShowCatalog, useMovies, useShows} from '../lib/queries'
 import {
     DailywireCatalogMovieRead,
     DailywireCatalogShowRead,
@@ -46,7 +46,15 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
     const showCatalog = useDailywireShowCatalog(debouncedSearch, grouping, activeType === 'shows')
     const movieCatalog = useDailywireMovieCatalog(debouncedSearch, activeType === 'movies')
     const {data: localShows} = useShows()
-    const localSlugs = useMemo(() => new Set(localShows?.map((show) => show.slug)), [localShows])
+    const {data: localMovies} = useMovies()
+    const localShowsBySlug = useMemo(
+        () => new Map(localShows?.map((show) => [show.slug, show]) ?? []),
+        [localShows],
+    )
+    const localMovieSlugs = useMemo(
+        () => new Set(localMovies?.map((movie) => movie.slug) ?? []),
+        [localMovies],
+    )
 
     const shows = useMemo(
         () => showCatalog.data?.pages.flatMap((page) => page.items) || [],
@@ -79,6 +87,11 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
     const chooseShow = (show: DailywireCatalogShowRead) => {
         if (onShowSelect) {
             onShowSelect(show)
+            return
+        }
+        const localShow = localShowsBySlug.get(show.slug)
+        if (localShow) {
+            navigate(`/show/${localShow.slug}`)
             return
         }
         const url = `https://www.dailywire.com/show/${show.slug}`
@@ -140,7 +153,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                             <div className="catalog-show-grid">
                                 {items.map((show) => {
                                     const image = toImageUrl(show.thumbnailPortraitPath || show.thumbnailLandscapePath || show.backgroundImagePath)
-                                    const added = localSlugs.has(show.slug)
+                                    const added = localShowsBySlug.has(show.slug)
                                     return (
                                         <button className="show-summary-card catalog-show-card" type="button" key={show.slug} onClick={() => chooseShow(show)}>
                                             <span className="show-summary-art">
@@ -163,6 +176,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                 <div className="movie-poster-grid catalog-movie-grid" role="list" aria-label="Daily Wire movies">
                     {movies.map((movie) => {
                         const image = toImageUrl(movie.thumbnailPortraitPath || movie.thumbnailLandscapePath || movie.backgroundImagePath)
+                        const added = localMovieSlugs.has(movie.slug)
                         return (
                             <button className="movie-poster-card" type="button" key={movie.slug} role="listitem" onClick={() => chooseMovie(movie)}>
                                 <span className="movie-poster-art">
@@ -170,6 +184,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                                         ? <img src={image} alt="" loading="lazy" decoding="async"/>
                                         : <FontAwesomeIcon icon={['fas', 'clapperboard']}/>
                                     }
+                                    {added && <span className="badge" style={{top: 8, bottom: 'auto'}}>In library</span>}
                                 </span>
                                 <span className="movie-poster-title">{movie.title}</span>
                                 <span className="movie-poster-meta">{movie.authorName || 'Daily Wire'}</span>
