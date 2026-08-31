@@ -28,6 +28,7 @@ type ManualSyncLogEntry = {
   episodes_found: number
   status?: 'completed' | 'failed'
   manual_request_id?: string
+  will_retry?: boolean
 }
 
 const EPISODE_SKELETON_COUNT = 12
@@ -80,23 +81,29 @@ export default function ShowPage() {
         if (!response.ok) return
 
         const entries: ManualSyncLogEntry[] = await response.json()
-        const completedEntry = entries.find((entry) => entry.manual_request_id === manualSyncRequestId)
-        if (!completedEntry || cancelled) return
+        const requestEntries = entries.filter((entry) => entry.manual_request_id === manualSyncRequestId)
+        if (cancelled) return
 
-        setManualSyncRequestId(null)
-        const title = show?.title ?? id
-        if (completedEntry.status === 'failed') {
-          toast.error(`Sync failed for ${title}`)
+        const completedEntry = requestEntries.find((entry) => entry.status === 'completed')
+        if (completedEntry) {
+          setManualSyncRequestId(null)
+          const episodesFound = Number.isFinite(completedEntry.episodes_found)
+            ? completedEntry.episodes_found
+            : 0
+          toast.success(
+            `Sync finished for ${show?.title ?? id}: ${episodesFound} new ${episodesFound === 1 ? 'episode' : 'episodes'} found`,
+          )
+          void qc.invalidateQueries({ queryKey: ['episodes', id] })
           return
         }
 
-        const episodesFound = Number.isFinite(completedEntry.episodes_found)
-          ? completedEntry.episodes_found
-          : 0
-        toast.success(
-          `Sync finished for ${title}: ${episodesFound} new ${episodesFound === 1 ? 'episode' : 'episodes'} found`,
+        const terminalFailure = requestEntries.find(
+          (entry) => entry.status === 'failed' && entry.will_retry === false,
         )
-        void qc.invalidateQueries({ queryKey: ['episodes', id] })
+        if (terminalFailure) {
+          setManualSyncRequestId(null)
+          toast.error(`Sync failed for ${show?.title ?? id}`)
+        }
       } catch {
         // Keep polling through transient errors; the completion entry is durable in the sync log.
       }
