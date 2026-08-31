@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from backend.api.helpers import update_database_fields
 from backend.api.models.show import *
@@ -8,6 +11,10 @@ from fastapi import HTTPException
 
 from backend.db.models import Show
 from task_manager.events.transactional import queue_event
+
+
+SYNC_LOG_META_KEY = "episode_sync_log"
+SYNC_LOG_LIMIT = 10
 
 
 def get_shows_list(s: Session) -> list[ShowAPIRead]:
@@ -93,3 +100,43 @@ def delete_show(s: Session, show_slug: str) -> ShowAPIRead:
     s.flush()
 
     return payload
+
+
+def request_show_sync(s: Session, show_slug: str) -> dict[str, bool]:
+    show = (
+        s.query(Show)
+        .filter_by(slug=show_slug)
+        .one_or_none()
+    )
+    if show is None:
+        raise HTTPException(status_code=404, detail="Show not found")
+
+    queue_event(s, "show.sync_requested", {
+        "resource_id": show.id,
+        "id": show.id,
+        "slug": show.slug,
+    })
+    return {"queued": True}
+
+
+def get_show_sync_log(s: Session, show_slug: str) -> list[dict]:
+    show = (
+        s.query(Show)
+        .filter_by(slug=show_slug)
+        .one_or_none()
+    )
+    if show is None:
+        raise HTTPException(status_code=404, detail="Show not found")
+
+    raw = show.get_meta(SYNC_LOG_META_KEY)
+    if not raw:
+        return []
+
+    try:
+        history = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+
+    if not isinstance(history, list):
+        return []
+    return history[:SYNC_LOG_LIMIT]
