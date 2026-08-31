@@ -265,102 +265,107 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 )}
 
                 <div className="template-workbench-divider"/>
-                <div className="template-playground-heading">
-                    <div>
-                        <h3 id="template-preview-heading">Example output</h3>
-                        <p>Try different values here. Your profile is not changed.</p>
+                <div className="template-preview-area">
+                    <div className="template-playground-heading">
+                        <div>
+                            <h3 id="template-preview-heading">Example output</h3>
+                            <p>Try different values here. Your profile is not changed.</p>
+                        </div>
+                        {sources.length > 0 && (
+                            <label className="template-source-label">
+                                <span>Example source</span>
+                                <select
+                                    className="input"
+                                    value={selectedSource?.id ?? ''}
+                                    onChange={(event) => chooseSource(event.target.value)}
+                                >
+                                    {sources.map((source) => (
+                                        <option key={source.id} value={source.id}>{source.label}</option>
+                                    ))}
+                                </select>
+                            </label>
+                        )}
                     </div>
-                    {sources.length > 0 && (
-                        <label className="template-source-label">
-                            <span>Example source</span>
-                            <select
-                                className="input"
-                                value={selectedSource?.id ?? ''}
-                                onChange={(event) => chooseSource(event.target.value)}
-                            >
-                                {sources.map((source) => (
-                                    <option key={source.id} value={source.id}>{source.label}</option>
-                                ))}
-                            </select>
-                        </label>
+
+                    {sourcesLoading && <p className="template-preview-status">Loading an example…</p>}
+                    {sourcesFailed && (
+                        <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
                     )}
-                </div>
-
-                {sourcesLoading && <p className="template-preview-status">Loading an example…</p>}
-                {sourcesFailed && (
-                    <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
-                )}
-                {selectedSource?.fallback && (
-                    <p className="template-preview-status">No {mode === 'movie' ? 'movies' : 'episodes'} found yet, so example values are being used.</p>
-                )}
-
-                <div className={`template-preview-output${previewError ? ' has-error' : ''}`} aria-live="polite">
-                    <span className="template-preview-output-label">Path</span>
-                    {previewError
-                        ? <span className="error">{previewError}</span>
-                        : <code>{exampleOutputPath || (previewLoading ? 'Rendering…' : 'Add a variable to preview this path.')}</code>
-                    }
-                </div>
-
-                <div className="template-test-values">
-                    {!testValuesExpanded && (
-                        <button
-                            type="button"
-                            className="btn btn-small template-test-values-toggle"
-                            aria-expanded={false}
-                            aria-controls="template-test-values-fields"
-                            onClick={() => setTestValuesExpanded(true)}
-                        >
-                            Test different values
-                        </button>
+                    {selectedSource?.fallback && (
+                        <p className="template-preview-status">No {mode === 'movie' ? 'movies' : 'episodes'} found yet, so example values are being used.</p>
                     )}
-                    {testValuesExpanded && (
-                        <div id="template-test-values-fields" className="template-test-values-content">
-                            <div className="template-test-values-heading">
-                                <h4>Test values</h4>
-                                <div className="template-test-values-actions">
-                                    {selectedSource && usedVariables.length > 0 && (
+
+                    <div className={`template-preview-output${previewError ? ' has-error' : ''}`} aria-live="polite">
+                        <span className="template-preview-output-label">Path</span>
+                        {previewError
+                            ? <span className="error">{previewError}</span>
+                            : <code>{exampleOutputPath || (previewLoading ? 'Rendering…' : 'Add a variable to preview this path.')}</code>
+                        }
+                    </div>
+
+                    <div className="template-test-values">
+                        {!testValuesExpanded && (
+                            <>
+                                <span className="template-preview-live-note">Preview updates as you type</span>
+                                <button
+                                    type="button"
+                                    className="btn btn-small template-test-values-toggle"
+                                    aria-expanded={false}
+                                    aria-controls="template-test-values-fields"
+                                    onClick={() => setTestValuesExpanded(true)}
+                                >
+                                    Test different values
+                                </button>
+                            </>
+                        )}
+                        {testValuesExpanded && (
+                            <div id="template-test-values-fields" className="template-test-values-content">
+                                <div className="template-test-values-heading">
+                                    <h4>Test values</h4>
+                                    <div className="template-test-values-actions">
+                                        {selectedSource && usedVariables.length > 0 && (
+                                            <button
+                                                type="button"
+                                                className="btn btn-small"
+                                                onClick={() => setTestValues({...selectedSource.values})}
+                                            >
+                                                Reset values
+                                            </button>
+                                        )}
                                         <button
                                             type="button"
                                             className="btn btn-small"
-                                            onClick={() => setTestValues({...selectedSource.values})}
+                                            aria-expanded={true}
+                                            aria-controls="template-test-values-fields"
+                                            onClick={() => setTestValuesExpanded(false)}
                                         >
-                                            Reset values
+                                            Hide test values
                                         </button>
-                                    )}
-                                    <button
-                                        type="button"
-                                        className="btn btn-small"
-                                        aria-expanded={true}
-                                        aria-controls="template-test-values-fields"
-                                        onClick={() => setTestValuesExpanded(false)}
-                                    >
-                                        Hide test values
-                                    </button>
+                                    </div>
                                 </div>
+                                {usedVariables.length === 0 ? (
+                                    <p className="template-preview-status">Variables you add to the template will appear here automatically.</p>
+                                ) : (
+                                    <div className="template-test-values-grid">
+                                        {usedVariables.map((variable) => (
+                                            <label key={variable.name}>
+                                                <span><code>{variable.name}</code> <small>{variable.description}</small></span>
+                                                <input
+                                                    className="input"
+                                                    type="text"
+                                                    value={testValues[variable.name] ?? ''}
+                                                    onChange={(event) => setTestValues((current) => ({
+                                                        ...current,
+                                                        [variable.name]: event.target.value,
+                                                    }))}
+                                                />
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                            {usedVariables.length === 0 ? (
-                                <p className="template-preview-status">Variables you add to the template will appear here automatically.</p>
-                            ) : (
-                                <div className="template-test-values-grid">
-                                    {usedVariables.map((variable) => (
-                                        <label key={variable.name}>
-                                            <span><code>{variable.name}</code> <small>{variable.description}</small></span>
-                                            <input
-                                                className="input"
-                                                type="text"
-                                                value={testValues[variable.name] ?? ''}
-                                                onChange={(event) => setTestValues((current) => ({
-                                                    ...current,
-                                                    [variable.name]: event.target.value,
-                                                }))}
-                                            />
-                                        </label>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             </section>
 

@@ -1,8 +1,9 @@
 .output-template-code-editor {
     overflow: hidden;
-    border: 1px solid rgba(148, 163, 184, 0.4);
-    border-radius: 9px;
-    background: var(--bg);
+    border: 1px solid #c8d3e3;
+    border-radius: 11px;
+    background: #fbfdff;
+    box-shadow: 0 8px 24px rgba(35, 71, 123, 0.08);
     transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
@@ -12,7 +13,7 @@
 
 .output-template-code-editor:focus-within {
     border-color: #60a5fa;
-    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25);
+    box-shadow: 0 8px 24px rgba(35, 71, 123, 0.1), 0 0 0 3px rgba(14, 165, 233, 0.2);
 }
 
 .output-template-code-editor[aria-invalid="true"] {
@@ -22,8 +23,17 @@
 
 .output-template-code-editor .cm-editor,
 .output-template-code-editor .cm-gutters {
-    background: var(--bg);
+    background: #fbfdff;
     color: var(--text);
+}
+
+.output-template-code-editor .cm-content {
+    padding: 10px 0;
+    line-height: 1.65;
+}
+
+.output-template-code-editor .cm-line {
+    padding: 0 14px;
 }
 
 .output-template-code-editor .cm-scroller {
@@ -74,11 +84,11 @@
 
 .template-workbench {
     display: grid;
-    gap: 14px;
-    padding: 18px;
-    border: 1px solid rgba(148, 163, 184, 0.34);
-    border-radius: 12px;
-    background: rgba(148, 163, 184, 0.06);
+    gap: 12px;
+    padding: 20px;
+    border: 1px solid #d8e1ee;
+    border-radius: 16px;
+    background: #f3f7fc;
 }
 
 .template-workbench h3,
@@ -117,8 +127,13 @@
 
 .template-workbench-divider {
     height: 1px;
-    margin: 2px 0;
-    background: rgba(148, 163, 184, 0.28);
+    margin: 5px 0 3px;
+    background: #d8e1ee;
+}
+
+.template-preview-area {
+    display: grid;
+    gap: 12px;
 }
 
 .template-playground-heading {
@@ -151,15 +166,17 @@
 .template-source-label .input {
     width: 100%;
     min-width: 0;
+    border-color: #cbd5e3;
+    background: #ffffff;
 }
 
 .template-preview-output {
     display: grid;
     gap: 5px;
-    padding: 12px;
-    border: 1px solid rgba(59, 130, 246, 0.28);
-    border-radius: 9px;
-    background: rgba(59, 130, 246, 0.07);
+    padding: 13px 15px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: #edf4ff;
 }
 
 .template-preview-output.has-error {
@@ -183,6 +200,8 @@
 
 .template-test-values {
     display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
     gap: 10px;
 }
 
@@ -190,8 +209,14 @@
     justify-self: end;
 }
 
+.template-preview-live-note {
+    color: var(--muted);
+    font-size: 12px;
+}
+
 .template-test-values-content {
     display: grid;
+    grid-column: 1 / -1;
     gap: 10px;
 }
 
@@ -241,6 +266,12 @@
     font-size: 12px;
 }
 
+.template-workbench .btn-small {
+    border-color: #cbd5e3;
+    background: #ffffff;
+    color: #142039;
+}
+
 .output-template-help {
     margin-top: 2px;
 }
@@ -288,7 +319,7 @@
 
 @media (max-width: 600px) {
     .template-workbench {
-        padding: 12px;
+        padding: 14px;
     }
 
     .template-playground-heading {
@@ -308,6 +339,10 @@
 
     .template-test-values-toggle {
         justify-self: stretch;
+    }
+
+    .template-test-values {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .output-template-variable-reference {
@@ -354,7 +389,37 @@
     }
 
     .template-workbench {
-        background: rgba(255, 255, 255, 0.035);
-        border-color: rgba(148, 163, 184, 0.22);
+        border-color: #33435b;
+        background: #152034;
+    }
+
+    .output-template-code-editor,
+    .output-template-code-editor .cm-editor,
+    .output-template-code-editor .cm-gutters {
+        border-color: #40506a;
+        background: #111b2c;
+    }
+
+    .output-template-code-editor {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    }
+
+    .template-workbench-divider {
+        background: #34445c;
+    }
+
+    .template-source-label .input {
+        border-color: #43516a;
+        background: #172235;
+    }
+
+    .template-preview-output {
+        background: #1d3152;
+    }
+
+    .template-workbench .btn-small {
+        border-color: #43516a;
+        background: #223047;
+        color: #eef4ff;
     }
 }
