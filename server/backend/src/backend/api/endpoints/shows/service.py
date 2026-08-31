@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import Optional
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 from backend.api.helpers import update_database_fields
@@ -102,7 +103,7 @@ def delete_show(s: Session, show_slug: str) -> ShowAPIRead:
     return payload
 
 
-def request_show_sync(s: Session, show_slug: str) -> dict[str, bool]:
+def request_show_sync(s: Session, show_slug: str) -> dict[str, bool | str]:
     show = (
         s.query(Show)
         .filter_by(slug=show_slug)
@@ -111,12 +112,14 @@ def request_show_sync(s: Session, show_slug: str) -> dict[str, bool]:
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
+    request_id = str(uuid4())
     queue_event(s, "show.sync_requested", {
         "resource_id": show.id,
         "id": show.id,
         "slug": show.slug,
+        "manual_request_id": request_id,
     })
-    return {"queued": True}
+    return {"queued": True, "request_id": request_id}
 
 
 def get_show_sync_log(s: Session, show_slug: str) -> list[dict]:
