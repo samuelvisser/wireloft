@@ -9,10 +9,8 @@ WORKDIR /ui
 ARG WIRELOFT_PRO_ICONS=false
 
 COPY ui/package.json ui/package-lock.json ./
-# The historical lockfile contains Font Awesome registry URLs. Free builds
-# deliberately install from package.json against the public npm registry and
-# omit the optional paid kit, so no Font Awesome credentials are required.
-# Pro builds receive ui/.npmrc as a BuildKit secret and may install the kit.
+
+# Support both free and pro Font Awesome icons
 RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
     if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
         npm install --include=optional --package-lock=false; \
