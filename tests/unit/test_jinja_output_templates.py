@@ -149,10 +149,12 @@ def test_preview_uses_edited_values_and_returns_referenced_variables():
     result = preview_output_template(LocalMediaProfileTemplatePreview(
         type="movie",
         output_template=(
-            "/downloads/{{ movie_title }}{% if year %} ({{ year }}){% endif %}/{{ title }}.ext"
+            "/downloads/{{ movie_title }}/{{ title }}"
+            "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
         ),
-        values={"movie_title": "Lady Ballers", "title": "Lady Ballers", "year": ""},
+        values={"movie_title": "Lady Ballers", "title": "Lady Ballers", "media_type": "movie"},
     ))
 
     assert result.output_path == "/downloads/Lady Ballers/Lady Ballers.ext"
-    assert result.used_variables == ["movie_title", "title", "year"]
+    assert result.used_variables == ["media_type", "movie_title", "title"]
+    assert "movie" not in result.used_variables

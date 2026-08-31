@@ -15,10 +15,7 @@ import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import ReadMore from '../../utils/ReadMore'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
-import {
-    findUsedOutputTemplateVariables,
-    getOutputTemplateVariables,
-} from './outputTemplateVariables'
+import {getOutputTemplateVariables} from './outputTemplateVariables'
 import './OutputTemplateEditor.css'
 
 type TemplateSource = {
@@ -75,9 +72,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
     const variables = useMemo(() => getOutputTemplateVariables(mode), [mode])
+    const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
     const usedVariables = useMemo(
-        () => findUsedOutputTemplateVariables(template, variables),
-        [template, variables],
+        () => {
+            const used = new Set(usedVariableNames)
+            return variables.filter(({name}) => used.has(name))
+        },
+        [usedVariableNames, variables],
     )
     const usedVariablesKey = usedVariables.map(({name}) => name).join('|')
 
@@ -177,7 +178,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     )
 
     useEffect(() => {
-        if (!selectedSource || !template) return
+        if (!template) {
+            setUsedVariableNames([])
+            setPreviewPath('')
+            setPreviewError('')
+            return
+        }
+        if (!selectedSource) return
         const controller = new AbortController()
         const timer = window.setTimeout(async () => {
             setPreviewLoading(true)
@@ -199,6 +206,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 }
                 const result = payload as TemplatePreviewResponse
                 setPreviewPath(result.outputPath)
+                setUsedVariableNames(result.usedVariables)
                 setPreviewError('')
             } catch (error) {
                 if ((error as Error).name !== 'AbortError') {
@@ -228,6 +236,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                         <label id="template-editor-heading" htmlFor="mp-path">Output path template</label>
                         <p>Type <code>{'{{'}</code> to insert an available variable.</p>
                     </div>
+                    <span className="template-language-badge">Jinja</span>
                 </div>
                 <Controller
                     control={control}
