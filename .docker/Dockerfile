@@ -10,12 +10,14 @@ ARG WIRELOFT_PRO_ICONS=false
 
 COPY ui/package.json ui/package-lock.json ./
 
-# Support both free and pro Font Awesome icons
+# Support both free and pro Font Awesome icons. The paid kit is optional, so
+# credential-free installs can ignore it while still installing platform
+# optional dependencies required by Vite/Rollup.
 RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
     if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
-        npm install --include=optional --package-lock=false; \
+        npm ci --include=optional; \
     else \
-        npm install --omit=optional --package-lock=false --registry=https://registry.npmjs.org; \
+        npm ci --registry=https://registry.npmjs.org; \
     fi
 
 COPY ui/ ./
