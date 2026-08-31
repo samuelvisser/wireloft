@@ -9,6 +9,34 @@ import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 // instead of letting icons overflow the thumbnail.
 const MAX_VISIBLE_DOWNLOAD_ICONS = 4
 
+const LIVE_BADGE_STYLE: React.CSSProperties = {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 2,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 5,
+    padding: '4px 8px',
+    borderRadius: 999,
+    background: 'var(--error, #d64545)',
+    color: '#fff',
+    boxShadow: '0 1px 4px rgb(0 0 0 / 30%)',
+    fontSize: '0.68rem',
+    fontWeight: 800,
+    letterSpacing: '0.04em',
+    lineHeight: 1,
+    textTransform: 'uppercase',
+}
+
+const LIVE_BADGE_DOT_STYLE: React.CSSProperties = {
+    width: 6,
+    height: 6,
+    flex: '0 0 auto',
+    borderRadius: '50%',
+    background: 'currentColor',
+}
+
 export function toImageUrl(path?: string | null): string | undefined {
     if (!path) return undefined
     // If already an absolute URL, return as-is
@@ -103,6 +131,7 @@ export default function EpisodeCard({ep, showSlug, downloads}: Props) {
     const portraitPath = (ep.thumbnailPortraitPath && ep.thumbnailPortraitPath.trim() !== '') ? ep.thumbnailPortraitPath : undefined
     const imageUrl = portraitPath ? toImageUrl(portraitPath) : `https://placehold.co/640x360/png?text=Episode+%23${ep.index}`
     const style = imageUrl ? {backgroundImage: `url(${imageUrl})`} : undefined
+    const isLive = String(ep.publishStatus).toLowerCase() === 'live'
 
     const {type, number} = episodeTypeInfo(ep.episodeIdentifier)
     // Bottom-right badge: the episode number for regular/extra episodes (color-coded
@@ -125,6 +154,12 @@ export default function EpisodeCard({ep, showSlug, downloads}: Props) {
         <div className="episode-card" role="listitem" aria-label={ep.title} tabIndex={0} onKeyDown={onKeyDown}>
             <div className="cover" style={style} onClick={goToEpisode}>
                 <DownloadStatusIcons downloads={downloads ?? []}/>
+                {isLive && (
+                    <span style={LIVE_BADGE_STYLE} aria-label="Episode is live">
+                        <span style={LIVE_BADGE_DOT_STYLE} aria-hidden/>
+                        Live
+                    </span>
+                )}
                 {/* Show initials only if we are using the placeholder (i.e., no real thumbnail) */}
                 {!portraitPath && (
                     <span className="cover-text" aria-hidden>
