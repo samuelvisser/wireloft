@@ -9,7 +9,6 @@ For a clean checkout without Font Awesome credentials, install UI dependencies w
 From the repository root:
 
 - `npm run build` uses Font Awesome Free and is the normal validation path.
-- `npm run build:free-icons` explicitly runs the same Free-icon build.
 - `npm run build:pro-icons` uses the paid Font Awesome kit and requires valid Font Awesome npm credentials plus access to the WireLoft kit.
 
 Do not replace or remove an intended Pro icon merely because the paid kit is unavailable in your environment. Free builds deliberately use the centralized registry in `ui/src/icons/fontAwesome.ts` and the mappings in `ui/src/icons/freeIconFallbacks.json`.
