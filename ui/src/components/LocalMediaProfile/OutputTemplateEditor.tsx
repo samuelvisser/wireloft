@@ -1,11 +1,19 @@
 import {useEffect, useMemo, useState, type ReactNode} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import CodeMirror from '@uiw/react-codemirror'
-import {startCompletion, type Completion} from '@codemirror/autocomplete'
+import {
+    autocompletion,
+    startCompletion,
+    type Completion,
+    type CompletionContext,
+} from '@codemirror/autocomplete'
 import {jinja} from '@codemirror/lang-jinja'
+import {HighlightStyle, syntaxHighlighting} from '@codemirror/language'
 import {EditorView} from '@codemirror/view'
+import {tags} from '@lezer/highlight'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
+import ReadMore from '../../utils/ReadMore'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import {
     findUsedOutputTemplateVariables,
@@ -36,6 +44,25 @@ type Props = {
     help: ReactNode
 }
 
+const jinjaHighlightStyle = HighlightStyle.define([
+    {tag: tags.brace, class: 'cm-jinja-brace'},
+    {
+        tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.operatorKeyword],
+        class: 'cm-jinja-keyword',
+    },
+    {
+        tag: [tags.variableName, tags.propertyName, tags.special(tags.variableName)],
+        class: 'cm-jinja-variable',
+    },
+    {tag: tags.string, class: 'cm-jinja-string'},
+    {tag: [tags.number, tags.bool], class: 'cm-jinja-literal'},
+    {
+        tag: [tags.operator, tags.arithmeticOperator, tags.logicOperator, tags.compareOperator],
+        class: 'cm-jinja-operator',
+    },
+    {tag: [tags.comment, tags.blockComment], class: 'cm-jinja-comment'},
+])
+
 function responseErrorMessage(payload: any): string {
     const detail = payload?.detail
     if (Array.isArray(detail) && detail.length) return detail[0]?.msg ?? 'The template could not be rendered.'
@@ -63,6 +90,22 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         [variables],
     )
     const editorExtensions = useMemo(() => {
+        const variableCompletionSource = (context: CompletionContext) => {
+            const beforeCursor = context.state.sliceDoc(0, context.pos)
+            const variableStart = beforeCursor.lastIndexOf('{{')
+            const variableEnd = beforeCursor.lastIndexOf('}}')
+            if (variableStart <= variableEnd) return null
+
+            const expression = beforeCursor.slice(variableStart + 2)
+            if (!/^\s*[A-Za-z_]*$/.test(expression)) return null
+            const currentWord = expression.match(/[A-Za-z_]*$/)?.[0] ?? ''
+
+            return {
+                from: context.pos - currentWord.length,
+                options: completionOptions,
+                validFor: /^[A-Za-z_]*$/,
+            }
+        }
         const openVariablesAfterDoubleBrace = EditorView.updateListener.of((update) => {
             if (!update.docChanged || !update.state.selection.main.empty) return
             const cursor = update.state.selection.main.head
@@ -71,7 +114,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             }
         })
         return [
-            jinja({variables: completionOptions}),
+            jinja(),
+            autocompletion({override: [variableCompletionSource]}),
+            syntaxHighlighting(jinjaHighlightStyle),
             EditorView.lineWrapping,
             openVariablesAfterDoubleBrace,
             EditorView.theme({
@@ -171,43 +216,49 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
 
     return (
         <div className="form-row output-template-field">
-            <label htmlFor="mp-path">Output path template</label>
-            <Controller
-                control={control}
-                name="outputTemplate"
-                render={({field}) => (
-                    <CodeMirror
-                        id="mp-path"
-                        className="output-template-code-editor"
-                        value={field.value ?? ''}
-                        height="96px"
-                        placeholder={placeholder}
-                        extensions={editorExtensions}
-                        basicSetup={{
-                            lineNumbers: false,
-                            foldGutter: false,
-                            highlightActiveLine: false,
-                            highlightActiveLineGutter: false,
-                        }}
-                        onChange={(value) => {
-                            field.onChange(value)
-                            form.clearErrors('outputTemplate')
-                        }}
-                        onBlur={field.onBlur}
-                        aria-label="Output path template"
-                        aria-invalid={!!errors.outputTemplate}
-                        aria-describedby={errors.outputTemplate ? 'mp-path-error' : 'mp-path-help'}
-                    />
-                )}
-            />
-            {errors.outputTemplate && (
-                <div id="mp-path-error" className="error" role="alert" aria-live="polite">
-                    {String(errors.outputTemplate.message)}
+            <section className="template-workbench" aria-labelledby="template-editor-heading">
+                <div className="template-editor-heading">
+                    <div>
+                        <label id="template-editor-heading" htmlFor="mp-path">Output path template</label>
+                        <p>Type <code>{'{{'}</code> to insert an available variable.</p>
+                    </div>
                 </div>
-            )}
-            <div className="help" id="mp-path-help">{help}</div>
+                <Controller
+                    control={control}
+                    name="outputTemplate"
+                    render={({field}) => (
+                        <CodeMirror
+                            id="mp-path"
+                            className="output-template-code-editor"
+                            value={field.value ?? ''}
+                            height="96px"
+                            placeholder={placeholder}
+                            extensions={editorExtensions}
+                            basicSetup={{
+                                lineNumbers: false,
+                                foldGutter: false,
+                                highlightActiveLine: false,
+                                highlightActiveLineGutter: false,
+                                autocompletion: false,
+                            }}
+                            onChange={(value) => {
+                                field.onChange(value)
+                                form.clearErrors('outputTemplate')
+                            }}
+                            onBlur={field.onBlur}
+                            aria-label="Output path template"
+                            aria-invalid={!!errors.outputTemplate}
+                            aria-describedby={errors.outputTemplate ? 'mp-path-error' : 'mp-path-help'}
+                        />
+                    )}
+                />
+                {errors.outputTemplate && (
+                    <div id="mp-path-error" className="error" role="alert" aria-live="polite">
+                        {String(errors.outputTemplate.message)}
+                    </div>
+                )}
 
-            <section className="template-playground" aria-labelledby="template-preview-heading">
+                <div className="template-workbench-divider"/>
                 <div className="template-playground-heading">
                     <div>
                         <h3 id="template-preview-heading">Example output</h3>
@@ -280,6 +331,21 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                     )}
                 </div>
             </section>
+
+            <div className="help output-template-help" id="mp-path-help">
+                <ReadMore summary="Jinja syntax and all available variables.">
+                    <div className="output-template-guidance">{help}</div>
+                    <h4>Available variables</h4>
+                    <dl className="output-template-variable-reference">
+                        {variables.map((variable) => (
+                            <div key={variable.name}>
+                                <dt><code>{`{{ ${variable.name} }}`}</code></dt>
+                                <dd>{variable.description}</dd>
+                            </div>
+                        ))}
+                    </dl>
+                </ReadMore>
+            </div>
         </div>
     )
 }

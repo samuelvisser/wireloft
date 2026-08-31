@@ -38,32 +38,87 @@
     color: var(--muted);
 }
 
+.output-template-code-editor .cm-jinja-brace {
+    color: #be185d;
+}
+
+.output-template-code-editor .cm-jinja-keyword {
+    color: #7c3aed;
+    font-weight: 600;
+}
+
+.output-template-code-editor .cm-jinja-variable {
+    color: #0369a1;
+}
+
+.output-template-code-editor .cm-jinja-string {
+    color: #9a5b00;
+}
+
+.output-template-code-editor .cm-jinja-literal {
+    color: #b45309;
+}
+
+.output-template-code-editor .cm-jinja-operator {
+    color: #334155;
+}
+
+.output-template-code-editor .cm-jinja-comment {
+    color: #64748b;
+    font-style: italic;
+}
+
 .output-template-code-editor .cm-tooltip-autocomplete {
     max-width: min(420px, calc(100vw - 32px));
 }
 
-.template-playground {
+.template-workbench {
     display: grid;
     gap: 14px;
-    margin-top: 4px;
-    padding: 16px;
+    padding: 18px;
     border: 1px solid rgba(148, 163, 184, 0.34);
     border-radius: 12px;
     background: rgba(148, 163, 184, 0.06);
 }
 
-.template-playground h3,
-.template-playground h4,
-.template-playground p {
+.template-workbench h3,
+.template-workbench h4,
+.template-workbench p {
     margin: 0;
 }
 
-.template-playground h3 {
+.template-workbench h3 {
     font-size: 16px;
 }
 
-.template-playground h4 {
+.template-workbench h4 {
     font-size: 14px;
+}
+
+.template-editor-heading > div {
+    display: grid;
+    gap: 4px;
+}
+
+.template-editor-heading label {
+    font-weight: 600;
+}
+
+.template-editor-heading p {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.template-editor-heading code {
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: rgba(148, 163, 184, 0.16);
+}
+
+.template-workbench-divider {
+    height: 1px;
+    margin: 2px 0;
+    background: rgba(148, 163, 184, 0.28);
 }
 
 .template-playground-heading {
@@ -170,8 +225,53 @@
     font-size: 12px;
 }
 
+.output-template-help {
+    margin-top: 2px;
+}
+
+.output-template-help .read-more-content {
+    display: grid;
+    gap: 12px;
+}
+
+.output-template-help h4,
+.output-template-help p,
+.output-template-variable-reference {
+    margin: 0;
+}
+
+.output-template-guidance {
+    display: grid;
+    gap: 10px;
+}
+
+.output-template-variable-reference {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px 18px;
+}
+
+.output-template-variable-reference > div {
+    display: grid;
+    grid-template-columns: minmax(130px, auto) 1fr;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.output-template-variable-reference dt,
+.output-template-variable-reference dd {
+    min-width: 0;
+    margin: 0;
+}
+
+.output-template-variable-reference code {
+    overflow-wrap: anywhere;
+    color: var(--text);
+}
+
 @media (max-width: 600px) {
-    .template-playground {
+    .template-workbench {
         padding: 12px;
     }
 
@@ -189,6 +289,14 @@
     .template-test-values-grid {
         grid-template-columns: minmax(0, 1fr);
     }
+
+    .output-template-variable-reference {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .output-template-variable-reference > div {
+        grid-template-columns: minmax(120px, auto) 1fr;
+    }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -197,7 +305,35 @@
         background: rgba(96, 165, 250, 0.3) !important;
     }
 
-    .template-playground {
+    .output-template-code-editor .cm-jinja-brace {
+        color: #f472b6;
+    }
+
+    .output-template-code-editor .cm-jinja-keyword {
+        color: #c4b5fd;
+    }
+
+    .output-template-code-editor .cm-jinja-variable {
+        color: #7dd3fc;
+    }
+
+    .output-template-code-editor .cm-jinja-string {
+        color: #fbbf24;
+    }
+
+    .output-template-code-editor .cm-jinja-literal {
+        color: #fb923c;
+    }
+
+    .output-template-code-editor .cm-jinja-operator {
+        color: #cbd5e1;
+    }
+
+    .output-template-code-editor .cm-jinja-comment {
+        color: #94a3b8;
+    }
+
+    .template-workbench {
         background: rgba(255, 255, 255, 0.035);
         border-color: rgba(148, 163, 184, 0.22);
     }

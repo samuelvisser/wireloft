@@ -1,7 +1,6 @@
 import {UseFormReturn} from 'react-hook-form'
 
 import {MoviePreferredFormatReg} from '../../types/local_media_profile'
-import ReadMore from '../../utils/ReadMore'
 import LocalMediaProfileTypeFields from './LocalMediaProfileTypeFields'
 
 export default function MovieLocalMediaProfileForm({form}: { form: UseFormReturn<any> }) {
@@ -12,7 +11,7 @@ export default function MovieLocalMediaProfileForm({form}: { form: UseFormReturn
             pathPlaceholder={'/downloads/movies/{{ movie_title }}{% if year %} ({{ year }}){% endif %}/{{ title }}.ext'}
             formatRegistry={MoviePreferredFormatReg}
             templateHelp={(
-                <ReadMore summary={<span>Use Jinja to organize movies and extras. Type <code>{'{{'}</code> to choose a variable.</span>}>
+                <>
                     <p>
                         Variables beginning with <b>movie_</b> always describe the parent movie. Variables such as
                         <b> {'{{ title }}'}</b>, <b> {'{{ dw_id }}'}</b>, and <b> {'{{ media_type }}'}</b> describe the
@@ -34,7 +33,7 @@ export default function MovieLocalMediaProfileForm({form}: { form: UseFormReturn
                         The filename should reference an item-specific variable such as <b>{'{{ title }}'}</b> or
                         <b> {'{{ media_type }}'}</b> so an extra cannot overwrite its movie.
                     </p>
-                </ReadMore>
+                </>
             )}
         />
     )
