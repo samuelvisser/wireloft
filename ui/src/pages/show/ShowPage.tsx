@@ -23,7 +23,15 @@ function preferredFormatLabel(value?: string | null) {
   return label === 'Audio Only' ? 'Audio' : label
 }
 
+type ManualSyncLogEntry = {
+  synced_at: string
+  episodes_found: number
+  status?: 'completed' | 'failed'
+  manual_request_id?: string
+}
+
 const EPISODE_SKELETON_COUNT = 12
+const MANUAL_SYNC_POLL_INTERVAL_MS = 2000
 
 export default function ShowPage() {
   const { id } = useParams()
@@ -49,12 +57,61 @@ export default function ShowPage() {
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
   const [confirm, setConfirm] = useState(false)
   const [syncLogOpen, setSyncLogOpen] = useState(false)
+  const [manualSyncRequestId, setManualSyncRequestId] = useState<string | null>(null)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
+  const manualSyncing = manualSyncRequestId !== null
 
   useEffect(() => {
     if (!id || episodesPlaceholder || episodesData === undefined) return
     saveEpisodesToStorage(id, episodesData)
   }, [episodesData, episodesPlaceholder, id])
+
+  useEffect(() => {
+    if (!id || !manualSyncRequestId) return
+
+    let cancelled = false
+    const apiBase = (window as any).appConfig?.API_URL || '/api'
+
+    const pollForCompletion = async () => {
+      try {
+        const response = await fetch(`${apiBase}/shows/${encodeURIComponent(id)}/sync-log`, {
+          credentials: 'include',
+        })
+        if (!response.ok) return
+
+        const entries: ManualSyncLogEntry[] = await response.json()
+        const completedEntry = entries.find((entry) => entry.manual_request_id === manualSyncRequestId)
+        if (!completedEntry || cancelled) return
+
+        setManualSyncRequestId(null)
+        const title = show?.title ?? id
+        if (completedEntry.status === 'failed') {
+          toast.error(`Sync failed for ${title}`)
+          return
+        }
+
+        const episodesFound = Number.isFinite(completedEntry.episodes_found)
+          ? completedEntry.episodes_found
+          : 0
+        toast.success(
+          `Sync finished for ${title}: ${episodesFound} new ${episodesFound === 1 ? 'episode' : 'episodes'} found`,
+        )
+        void qc.invalidateQueries({ queryKey: ['episodes', id] })
+      } catch {
+        // Keep polling through transient errors; the completion entry is durable in the sync log.
+      }
+    }
+
+    void pollForCompletion()
+    const timer = window.setInterval(() => {
+      void pollForCompletion()
+    }, MANUAL_SYNC_POLL_INTERVAL_MS)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [id, manualSyncRequestId, qc, show?.title])
 
   const attachedDownloadProfiles = useMemo(
     () => (downloadProfiles ?? []).filter((profile) => profile.showSlug === id),
@@ -130,6 +187,11 @@ export default function ShowPage() {
   }
 
   const syncNow = async () => {
+    if (manualSyncRequestId) {
+      toast(`A sync is already in progress for ${show.title}`)
+      return
+    }
+
     try {
       const base = (window as any).appConfig?.API_URL || '/api'
       const response = await fetch(`${base}/shows/${encodeURIComponent(id)}/sync`, {
@@ -137,14 +199,17 @@ export default function ShowPage() {
         credentials: 'include',
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+      const result = await response.json()
+      if (typeof result?.request_id !== 'string' || !result.request_id) {
+        throw new Error('Sync request did not return a request ID')
+      }
+
+      setManualSyncRequestId(result.request_id)
       toast.success(`Sync started for ${show.title}`)
     } catch {
       toast.error(`Could not start sync for ${show.title}`)
     }
-  }
-
-  const onSyncCompleted = () => {
-    void qc.invalidateQueries({ queryKey: ['episodes', id] })
   }
 
   const copyFeedUrl = async (profileId: number, feedUrl?: string) => {
@@ -350,8 +415,9 @@ export default function ShowPage() {
         showSlug={id}
         showTitle={show.title}
         open={syncLogOpen}
+        syncing={manualSyncing}
         onClose={() => setSyncLogOpen(false)}
-        onSyncCompleted={onSyncCompleted}
+        onSyncNow={syncNow}
       />
 
       {confirm && (
