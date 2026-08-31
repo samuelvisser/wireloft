@@ -44,7 +44,7 @@ export default function LibraryPage() {
             <div className="view-header">
                 <div>
                     <h1 id="library-title">Library</h1>
-                    <p className="view-description">Shows indexed by WireLoft and movies you have downloaded or queued.</p>
+                    <p className="view-description">Shows and movies indexed by WireLoft.</p>
                 </div>
                 <button className="btn btn-primary" onClick={() => navigate('/browse')}>
                     <FontAwesomeIcon icon={['fas', 'compass']}/>
@@ -70,7 +70,7 @@ export default function LibraryPage() {
                 <div className="library-empty">
                     <FontAwesomeIcon icon={['fas', 'book-open']}/>
                     <h2>Your library is empty</h2>
-                    <p>Browse Daily Wire to add a show or manually download a movie.</p>
+                    <p>Browse Daily Wire to add a show or movie.</p>
                     <button className="btn btn-primary" onClick={() => navigate('/browse')}>Browse Daily Wire</button>
                 </div>
             ) : activeType === 'shows' && hasShows ? (

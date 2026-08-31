@@ -13,6 +13,25 @@ from backend.utils.output_template import MovieReleaseDateUnavailableError
 router = APIRouter(prefix="/movies", tags=["Movies"])
 
 
+@router.post("/{movie_slug}/index", response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)
+def movie_index(movie_slug: str):
+    """Index a browsed Daily Wire movie and its extras without downloading anything."""
+    try:
+        movie_data = get_dailywire_movie(movie_slug)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    with db_session() as s:
+        try:
+            movie, _ = index_dailywire_movie(s, movie_data)
+            payload = MovieAPIRead.model_validate(movie)
+            s.commit()
+            return payload
+        except Exception:
+            s.rollback()
+            raise
+
+
 @router.post("/{movie_slug}/downloads", response_model=MediaDownloadAPIRead, status_code=status.HTTP_201_CREATED)
 def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
     """Persist a browsed Daily Wire movie and start its manual download."""

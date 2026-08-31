@@ -42,10 +42,10 @@ export default function MovieLocalMediaProfileForm({form}: { form: UseFormReturn
                             <li><b>{'{hour}'}</b>, <b>{'{minute}'}</b>, <b>{'{second}'}</b>: Components of the release time</li>
                         </ul>
                         <p>
-                            WireLoft obtains the canonical release date from TMDB once, when the movie is first added by
-                            starting a movie or movie-extra download, and saves it in the local database. TMDB provides a date
-                            without a release time, so movie time placeholders resolve to midnight. The same parent movie
-                            release date is used for a movie and all of its extras.
+                            WireLoft obtains the canonical release date from TMDB once, when the movie is first indexed by
+                            adding or downloading it, and saves it in the local database. TMDB provides a date without a release
+                            time, so movie time placeholders resolve to midnight. The same parent movie release date is used for
+                            a movie and all of its extras.
                         </p>
                         <p>
                             To prevent an extra from overwriting its movie, keep <b>Append media type to filename</b> enabled.

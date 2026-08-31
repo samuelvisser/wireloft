@@ -51,6 +51,7 @@ export default function MoviePage() {
     )
     const [profileId, setProfileId] = useState('')
     const [submitting, setSubmitting] = useState<string | null>(null)
+    const [addingMovie, setAddingMovie] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [retryingMetadata, setRetryingMetadata] = useState(false)
@@ -61,11 +62,12 @@ export default function MoviePage() {
     }, [profileId, videoProfiles])
 
     const startMovieDownload = async () => {
-        if (!slug || !profileId) return
+        if (!slug || !profileId || !movie) return
         await startDownloadRequest({
             key: 'movie',
             path: `/movies/${encodeURIComponent(slug)}/downloads`,
             label: 'Movie',
+            successMessage: `Started downloading movie: ${movie.title}`,
         })
     }
 
@@ -75,10 +77,13 @@ export default function MoviePage() {
             key: `extra:${extra.slug}`,
             path: `/movies/${encodeURIComponent(slug)}/extras/${encodeURIComponent(extra.slug)}/downloads`,
             label: movieExtraTypeLabel(extra.movieExtraType),
+            successMessage: `Started downloading movie extra: ${extra.title}`,
         })
     }
 
-    const startDownloadRequest = async ({key, path, label}: {key: string; path: string; label: string}) => {
+    const startDownloadRequest = async ({key, path, label, successMessage}: {key: string; path: string; label: string; successMessage: string}) => {
+        if (!movie) return
+        const movieWasAlreadyIndexed = Boolean(localMovie)
         setSubmitting(key)
         try {
             const response = await fetch(`${(window as any).appConfig.API_URL}${path}`, {
@@ -93,7 +98,8 @@ export default function MoviePage() {
                 toast.error(message || `Could not start the ${label.toLocaleLowerCase()} download`)
                 return
             }
-            toast.success(`${label} download queued`)
+            if (!movieWasAlreadyIndexed) toast.success(`${movie.title} added to WireLoft`)
+            toast.success(successMessage)
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['movies']}),
                 queryClient.invalidateQueries({queryKey: ['movieDownloads', slug]}),
@@ -103,6 +109,30 @@ export default function MoviePage() {
             toast.error(`Could not start the ${label.toLocaleLowerCase()} download`)
         } finally {
             setSubmitting(null)
+        }
+    }
+
+    const addMovie = async () => {
+        if (!slug || !movie || addingMovie) return
+        setAddingMovie(true)
+        try {
+            const response = await fetch(
+                `${(window as any).appConfig.API_URL}/movies/${encodeURIComponent(slug)}/index`,
+                {method: 'POST', credentials: 'include'},
+            )
+            if (!response.ok) {
+                const {error: message} = await getErrorMessageFromResponse(response)
+                toast.error(message || `Could not add ${movie.title} to WireLoft`)
+                return
+            }
+
+            toast.success(`${movie.title} added to WireLoft`)
+            await queryClient.invalidateQueries({queryKey: ['movies']})
+            navigate(`/movie/${encodeURIComponent(slug)}`, {replace: true})
+        } catch {
+            toast.error(`Could not add ${movie.title} to WireLoft`)
+        } finally {
+            setAddingMovie(false)
         }
     }
 
@@ -249,6 +279,12 @@ export default function MoviePage() {
                         <FontAwesomeIcon icon={['fas', 'arrow-up-right-from-square']}/> Open on Daily Wire
                     </a>
                 )}
+                {localMovies && !localMovie && (
+                    <button type="button" className="btn btn-primary" onClick={() => void addMovie()} disabled={addingMovie || submitting !== null}>
+                        <FontAwesomeIcon icon={['fas', 'plus']}/>
+                        {addingMovie ? 'Adding to WireLoft…' : 'Add to WireLoft'}
+                    </button>
+                )}
                 {localMovie && (
                     <button type="button" className="btn" onClick={() => void refreshMovieExtras()} disabled={refreshingExtras}>
                         <FontAwesomeIcon icon={['fas', 'rotate']} spin={refreshingExtras}/>
@@ -283,12 +319,12 @@ export default function MoviePage() {
                             <select id="movie-profile" className="input" value={profileId} onChange={(event) => setProfileId(event.target.value)}>
                                 {videoProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
                             </select>
-                            <button className="btn btn-primary movie-download-button" type="button" onClick={() => void startMovieDownload()} disabled={submitting !== null || !movie.isDownloadable}>
+                            <button className="btn btn-primary movie-download-button" type="button" onClick={() => void startMovieDownload()} disabled={submitting !== null || addingMovie || !movie.isDownloadable}>
                                 <FontAwesomeIcon icon={['fas', 'download']}/>
                                 {submitting === 'movie' ? 'Queuing…' : 'Download movie'}
                             </button>
                             {officialTrailer && (
-                                <button className="btn movie-download-button" type="button" onClick={() => void startExtraDownload(officialTrailer)} disabled={submitting !== null}>
+                                <button className="btn movie-download-button" type="button" onClick={() => void startExtraDownload(officialTrailer)} disabled={submitting !== null || addingMovie}>
                                     <FontAwesomeIcon icon={['fas', 'download']}/>
                                     {submitting === `extra:${officialTrailer.slug}` ? 'Queuing…' : 'Download trailer'}
                                 </button>
@@ -342,7 +378,7 @@ export default function MoviePage() {
                                                 className="btn btn-primary"
                                                 type="button"
                                                 onClick={() => void startExtraDownload(extra)}
-                                                disabled={submitting !== null || !profileId}
+                                                disabled={submitting !== null || addingMovie || !profileId}
                                             >
                                                 <FontAwesomeIcon icon={['fas', 'download']}/>
                                                 {submitting === `extra:${extra.slug}` ? 'Queuing…' : 'Download'}
