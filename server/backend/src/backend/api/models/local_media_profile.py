@@ -119,6 +119,7 @@ class LocalMediaProfileTemplateSources(ResponseBase):
 class LocalMediaProfileTemplatePreview(RequestBase):
     type: LocalMediaProfileType
     output_template: str = Field(min_length=1, max_length=4096)
+    preferred_format: PreferredFormat
     values: dict[str, str] = Field(default_factory=dict)
 
 

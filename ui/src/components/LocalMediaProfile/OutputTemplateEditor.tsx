@@ -172,11 +172,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const [previewError, setPreviewError] = useState('')
     const [previewLoading, setPreviewLoading] = useState(false)
     const previewValuesKey = JSON.stringify(testValues)
-    const exampleOutputPath = useMemo(
-        () => previewPath.replace(/\.ext$/, preferredFormat === 'format_audio_only' ? '.m4a' : '.mp4'),
-        [preferredFormat, previewPath],
-    )
-
     useEffect(() => {
         if (!template) {
             setUsedVariableNames([])
@@ -196,7 +191,12 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                         headers: {'Content-Type': 'application/json'},
                         credentials: 'include',
                         signal: controller.signal,
-                        body: JSON.stringify({type: mode, outputTemplate: template, values: testValues}),
+                        body: JSON.stringify({
+                            type: mode,
+                            outputTemplate: template,
+                            preferredFormat,
+                            values: testValues,
+                        }),
                     },
                 )
                 const payload = await response.json()
@@ -220,7 +220,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             window.clearTimeout(timer)
             controller.abort()
         }
-    }, [mode, previewValuesKey, selectedSource, template])
+    }, [mode, preferredFormat, previewValuesKey, selectedSource, template])
 
     function chooseSource(sourceId: string) {
         const source = sources.find(({id}) => id === sourceId)
@@ -308,7 +308,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                         <span className="template-preview-output-label">Path</span>
                         {previewError
                             ? <span className="error">{previewError}</span>
-                            : <code>{exampleOutputPath || (previewLoading ? 'Rendering…' : 'Add a variable to preview this path.')}</code>
+                            : <code>{previewPath || (previewLoading ? 'Rendering…' : 'Add a variable to preview this path.')}</code>
                         }
                     </div>
 

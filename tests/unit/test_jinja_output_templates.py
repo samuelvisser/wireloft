@@ -148,6 +148,7 @@ def test_preview_uses_edited_values_and_returns_referenced_variables():
 
     result = preview_output_template(LocalMediaProfileTemplatePreview(
         type="movie",
+        preferred_format="format_1080p",
         output_template=(
             "/downloads/{{ movie_title }}/{{ title }}"
             "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
@@ -155,6 +156,20 @@ def test_preview_uses_edited_values_and_returns_referenced_variables():
         values={"movie_title": "Lady Ballers", "title": "Lady Ballers", "media_type": "movie"},
     ))
 
-    assert result.output_path == "/downloads/Lady Ballers/Lady Ballers.ext"
+    assert result.output_path == "/downloads/Lady Ballers/Lady Ballers.mp4"
     assert result.used_variables == ["media_type", "movie_title", "title"]
     assert "movie" not in result.used_variables
+
+
+def test_preview_resolves_audio_extension_in_backend():
+    from backend.api.endpoints.local_media_profiles.service import preview_output_template
+    from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
+
+    result = preview_output_template(LocalMediaProfileTemplatePreview(
+        type="show",
+        preferred_format="format_audio_only",
+        output_template="/downloads/{{ show_title }}/{{ episode_title }}.ext",
+        values={"show_title": "Example Show", "episode_title": "Episode One"},
+    ))
+
+    assert result.output_path == "/downloads/Example Show/Episode One.m4a"

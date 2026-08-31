@@ -289,12 +289,18 @@ def _append_filename_suffix(path: str, suffix: str) -> str:
     return str(file_path.with_name(file_path.stem + suffix + file_path.suffix))
 
 
+def replace_output_extension(resolved: str, extension: Optional[str]) -> str:
+    """Replace WireLoft's .ext marker with a concrete media extension."""
+    if extension is not None and resolved.endswith(".ext"):
+        return resolved[:-len("ext")] + extension.lstrip(".")
+    return resolved
+
+
 def _finish_output_path(resolved: str, *, extension: Optional[str]) -> Path:
+    resolved = replace_output_extension(resolved, extension)
     if resolved.startswith(_DOWNLOADS_PREFIX):
         resolved = resolved[len(_DOWNLOADS_PREFIX):]
     resolved = resolved.lstrip("/")
-    if extension is not None and resolved.endswith(".ext"):
-        resolved = resolved[:-len("ext")] + extension.lstrip(".")
 
     ascii_only = get_settings().download_settings.ascii_only_filenames
     if ascii_only:

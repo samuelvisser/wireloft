@@ -14,13 +14,14 @@ from backend.db.models import (
     MovieLocalMediaProfile,
     ShowLocalMediaProfile,
 )
-from backend.types.local_media_profile_types import LocalMediaProfileType
+from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
     SHOW_OUTPUT_TEMPLATE_FIELDS,
     episode_output_template_values,
     movie_output_template_values,
     output_template_fields,
+    replace_output_extension,
     render_output_template,
 )
 
@@ -238,7 +239,8 @@ def preview_output_template(
         body.values,
         allowed_fields=allowed_fields,
     )
+    extension = "m4a" if body.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY else "mp4"
     return LocalMediaProfileTemplatePreviewResult(
-        output_path=output_path,
+        output_path=replace_output_extension(output_path, extension),
         used_variables=sorted(output_template_fields(body.output_template)),
     )
