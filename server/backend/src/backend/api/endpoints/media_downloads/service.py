@@ -9,8 +9,6 @@ from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.media_download import *
-from backend.api.models.movie import MovieAPICreate
-from backend.api.models.movie_extra import MovieExtraAPICreate
 from backend.db.models import Episode, LocalMediaProfileBase, Movie, MovieExtra, Show
 from backend.db.models.media_download import (
     EpisodeMediaDownload,
@@ -262,71 +260,9 @@ def _get_profile(s: Session, profile_id: int, expected_type: LocalMediaProfileTy
 
 
 def _get_or_create_movie(s: Session, movie_data: DwMovieRecord) -> Movie:
-    movie: Optional[Movie] = s.query(Movie).filter(Movie.slug == movie_data.slug).one_or_none()
-    if movie is None:
-        from backend.api.endpoints.movies.service import create_movie
-        created = create_movie(s, _movie_create_from_dailywire(movie_data))
-        movie = s.get(Movie, created.id)
-        if movie is None:
-            raise RuntimeError("Movie creation did not produce a persisted Movie record")
-
-    # A movie-extra download can be requested from the live Daily Wire page
-    # before the explicit refresh action has indexed that row locally.
-    from backend.api.endpoints.movie_extras.service import sync_movie_extras
-    sync_movie_extras(
-        s,
-        movie=movie,
-        extras=movie_data.movie_extras,
-        official_trailer=movie_data.trailer,
-    )
-
-    if movie.release_date_lookup_attempted_at is None:
-        # A new movie, or one added before TMDB was configured, receives one
-        # configured lookup at the first movie/movie-extra download request.
-        from backend.api.endpoints.movies.service import ensure_movie_release_metadata
-        ensure_movie_release_metadata(s, movie)
+    from backend.api.endpoints.movies.service import index_dailywire_movie
+    movie, _ = index_dailywire_movie(s, movie_data)
     return movie
-
-
-def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
-    movie_extras = [
-        MovieExtraAPICreate(
-            dw_id=extra.dw_id,
-            slug=extra.slug,
-            title=extra.title,
-            movie_extra_type=extra.movie_extra_type,
-            description=extra.description,
-            sharing_url=extra.sharing_url,
-            duration=extra.duration,
-            background_image_path=extra.background_image_path,
-            thumbnail_landscape_path=extra.thumbnail_landscape_path,
-            thumbnail_portrait_path=extra.thumbnail_portrait_path,
-            thumbnail_square_path=extra.thumbnail_square_path,
-        )
-        for extra in movie_data.movie_extras
-    ]
-
-    return MovieAPICreate(
-        dw_id=movie_data.dw_id,
-        slug=movie_data.slug,
-        title=movie_data.title,
-        extended_title=movie_data.extended_title,
-        description=movie_data.description,
-        duration=movie_data.duration,
-        background_image_path=movie_data.background_image_path,
-        thumbnail_landscape_path=movie_data.thumbnail_landscape_path,
-        thumbnail_portrait_path=movie_data.thumbnail_portrait_path,
-        thumbnail_square_path=movie_data.thumbnail_square_path,
-        sharing_url=movie_data.sharing_url,
-        author_name=movie_data.author_name,
-        author_slug=movie_data.author_slug,
-        logo_image_path=movie_data.logo_image_path,
-        mature_rating=movie_data.mature_rating,
-        is_downloadable=movie_data.is_downloadable,
-        available_for=movie_data.available_for,
-        movie_extras=movie_extras,
-        official_trailer_slug=(movie_data.trailer.slug if movie_data.trailer else None),
-    )
 
 
 def retry_media_download(s: Session, media_download_id: int) -> MediaDownloadBase:

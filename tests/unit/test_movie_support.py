@@ -470,6 +470,65 @@ def test_create_movie_supports_multiple_extras_in_one_transaction():
     engine.dispose()
 
 
+def test_index_dailywire_movie_persists_movie_and_extras_without_downloads(monkeypatch):
+    from backend.api.endpoints.movies import service
+    from backend.db.core import Base
+    from backend.db.models import Movie, MovieExtra
+    from backend.db.models.media_download import MediaDownloadBase
+    from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+    monkeypatch.setattr(service, "ensure_movie_release_metadata", lambda _session, _movie: None)
+
+    trailer = DwMovieExtraRecord(
+        dw_id="trailer-1",
+        slug="a-movie-trailer",
+        title="A Movie | Official Trailer",
+        movie_extra_type="trailer",
+    )
+    interview = DwMovieExtraRecord(
+        dw_id="interview-1",
+        slug="cast-interview",
+        title="Cast Interview",
+        movie_extra_type="interview",
+    )
+    movie_data = DwMovieRecord(
+        dw_id="movie-1",
+        slug="a-movie",
+        title="A Movie",
+        sharing_url="https://example.test/a-movie",
+        movie_extras=[trailer, interview],
+        trailer=trailer,
+    )
+
+    movie, created = service.index_dailywire_movie(session, movie_data)
+    session.commit()
+
+    assert created is True
+    assert movie == session.query(Movie).one()
+    assert [extra.slug for extra in movie.movie_extras] == [
+        "a-movie-trailer",
+        "cast-interview",
+    ]
+    assert movie.official_trailer == movie.movie_extras[0]
+    assert session.query(MovieExtra).count() == 2
+    assert session.query(MediaDownloadBase).count() == 0
+
+    same_movie, created_again = service.index_dailywire_movie(session, movie_data)
+    session.commit()
+
+    assert created_again is False
+    assert same_movie.id == movie.id
+    assert session.query(Movie).count() == 1
+    assert session.query(MovieExtra).count() == 2
+    assert session.query(MediaDownloadBase).count() == 0
+
+    session.close()
+    engine.dispose()
+
+
 def test_create_movie_extra_requires_an_existing_movie():
     from fastapi import HTTPException
 
