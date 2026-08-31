@@ -11,13 +11,18 @@ from sqlalchemy.orm import Session
 def test_movie_profile_requires_an_item_specific_variable() -> None:
     from backend.api.models.local_media_profile import LocalMediaProfileAPICreate
 
-    with pytest.raises(ValidationError, match="Movie and movie-extra downloads could resolve to the same file"):
-        LocalMediaProfileAPICreate(
-            type="movie",
-            name="Unsafe",
-            output_template="/downloads/movies/{movie_title}/{movie_title}.ext",
-            preferred_format="format_1080p",
-        )
+    with pytest.raises(
+        ValidationError,
+        match="Movie and movie-extra downloads could resolve to the same file",
+    ) as exc_info:
+        LocalMediaProfileAPICreate.model_validate({
+            "type": "movie",
+            "name": "Unsafe",
+            "outputTemplate": "/downloads/movies/{movie_title}/{movie_title}.ext",
+            "preferredFormat": "format_1080p",
+        })
+
+    assert exc_info.value.errors(include_url=False)[0]["loc"] == ("outputTemplate",)
 
     profile = LocalMediaProfileAPICreate(
         type="movie",
