@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy import func, select
+
+from backend.db.models import Episode, Show
 from config import get_settings
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import task, on_cron, on_event
 from .service import run_fetch_new_episodes
+
+
+SYNC_LOG_META_KEY = "episode_sync_log"
+SYNC_LOG_LIMIT = 10
 
 
 @on_event(
@@ -14,6 +23,10 @@ from .service import run_fetch_new_episodes
 )
 @on_event(
     event_name="show.added",
+    resource_type="show",
+)
+@on_event(
+    event_name="show.sync_requested",
     resource_type="show",
 )
 @on_cron(
@@ -54,4 +67,56 @@ async def fetch_new_episodes(*, resource_id: Optional[int] = None, slug: Optiona
         or async tasks.
     """
     with db_session() as s:
+        tracked_shows = _get_tracked_shows(s, resource_id=resource_id, slug=slug)
+        episode_counts_before = _episode_counts(s, tracked_shows)
+
         await run_fetch_new_episodes(s, show_id=resource_id, show_slug=slug, dry_run=dry_run, progress=progress)
+
+        if dry_run:
+            return
+
+        episode_counts_after = _episode_counts(s, tracked_shows)
+        synced_at = datetime.now(timezone.utc).isoformat()
+        for show in tracked_shows:
+            found = max(0, episode_counts_after.get(show.id, 0) - episode_counts_before.get(show.id, 0))
+            _append_sync_log(show, synced_at=synced_at, episodes_found=found)
+        s.commit()
+
+
+def _get_tracked_shows(s, *, resource_id: Optional[int], slug: Optional[str]) -> list[Show]:
+    if slug:
+        show = s.execute(select(Show).where(Show.slug == slug)).scalar_one_or_none()
+        return [show] if show is not None else []
+    if resource_id not in (None, 0):
+        show = s.get(Show, resource_id)
+        return [show] if show is not None else []
+    return list(s.execute(select(Show)).scalars().all())
+
+
+def _episode_counts(s, shows: list[Show]) -> dict[int, int]:
+    if not shows:
+        return {}
+    show_ids = [show.id for show in shows]
+    rows = s.execute(
+        select(Episode.show_id, func.count(Episode.id))
+        .where(Episode.show_id.in_(show_ids))
+        .group_by(Episode.show_id)
+    ).all()
+    counts = {show_id: count for show_id, count in rows}
+    return {show_id: counts.get(show_id, 0) for show_id in show_ids}
+
+
+def _append_sync_log(show: Show, *, synced_at: str, episodes_found: int) -> None:
+    raw = show.get_meta(SYNC_LOG_META_KEY)
+    try:
+        history = json.loads(raw) if raw else []
+    except (TypeError, ValueError):
+        history = []
+    if not isinstance(history, list):
+        history = []
+
+    history.insert(0, {
+        "synced_at": synced_at,
+        "episodes_found": episodes_found,
+    })
+    show.set_meta(SYNC_LOG_META_KEY, json.dumps(history[:SYNC_LOG_LIMIT]))
