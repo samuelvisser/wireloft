@@ -73,16 +73,17 @@ resolve_token() {
 }
 
 if [ ! -f "$NPMRC" ]; then
-    echo "Missing $NPMRC (Font Awesome Pro credentials needed to build the UI)." >&2
-    echo "See the 'Running with Docker' section in README.md." >&2
+    echo "Missing $NPMRC (Font Awesome Pro credentials are required for release builds)." >&2
+    echo "Normal local and Docker builds do not require this file." >&2
     exit 1
 fi
 
 resolve_token
 
-echo "Building $FULL_IMAGE:$TAG ..."
+echo "Building $FULL_IMAGE:$TAG with Font Awesome Pro icons ..."
 docker build \
     -f .docker/Dockerfile \
+    --build-arg WIRELOFT_PRO_ICONS=true \
     --secret id=npmrc,src="$NPMRC" \
     -t "$IMAGE_NAME" \
     .

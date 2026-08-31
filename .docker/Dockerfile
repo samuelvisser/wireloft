@@ -6,13 +6,26 @@
 FROM node:22-alpine AS ui-build
 WORKDIR /ui
 
+ARG WIRELOFT_PRO_ICONS=false
+
 COPY ui/package.json ui/package-lock.json ./
-# Make sure we can build npm including premium Font Awesome
-RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=true \
-    npm ci
+# The historical lockfile contains Font Awesome registry URLs. Free builds
+# deliberately install from package.json against the public npm registry and
+# omit the optional paid kit, so no Font Awesome credentials are required.
+# Pro builds receive ui/.npmrc as a BuildKit secret and may install the kit.
+RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
+    if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
+        npm install --include=optional --package-lock=false; \
+    else \
+        npm install --omit=optional --package-lock=false --registry=https://registry.npmjs.org; \
+    fi
 
 COPY ui/ ./
-RUN npm run build
+RUN if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
+        npm run build:pro-icons; \
+    else \
+        npm run build; \
+    fi
 
 ########################################
 # 2) Backend + runtime image

@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "dev:pro-icons": "vite --mode pro-icons",
+    "build": "npm run build:free-icons",
+    "validate:free-icons": "node scripts/validate-free-icon-fallbacks.mjs",
+    "build:free-icons": "npm run validate:free-icons && tsc --noEmit && vite build --mode free-icons",
+    "build:pro-icons": "npm run validate:free-icons && tsc --noEmit && vite build --mode pro-icons",
     "preview": "vite preview",
     "format": "prettier --write ."
   },
   "dependencies": {
-    "@awesome.me/kit-83fa1ac5a9": "^1.0.4",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/lang-jinja": "^6.0.1",
     "@codemirror/language": "^6.12.4",
@@ -18,6 +21,7 @@
     "@lezer/highlight": "^1.2.3",
     "@fortawesome/fontawesome-svg-core": "^7.0.0",
     "@fortawesome/free-brands-svg-icons": "^7.0.0",
+    "@fortawesome/free-solid-svg-icons": "^7.0.0",
     "@fortawesome/react-fontawesome": "^0.2.6",
     "@hookform/resolvers": "^5.2.1",
     "@tanstack/react-query": "^5.51.1",
@@ -31,6 +35,9 @@
     "react-select": "^5.10.2",
     "react-switch": "^7.1.0",
     "zod": "^4.1.8"
+  },
+  "optionalDependencies": {
+    "@awesome.me/kit-83fa1ac5a9": "^1.0.4"
   },
   "devDependencies": {
     "@types/react": "^19.0.3",
