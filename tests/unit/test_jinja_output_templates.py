@@ -142,6 +142,65 @@ def test_template_sources_use_only_ten_latest_episodes_and_fallback_for_empty_mo
     engine.dispose()
 
 
+def test_movie_template_sources_include_local_extras_parent_first_and_limit_to_twenty():
+    from backend.api.endpoints.local_media_profiles.service import get_output_template_sources
+    from backend.db.models import Movie, MovieExtra
+    from backend.types.local_media_profile_types import LocalMediaProfileType
+
+    session, engine = _new_session()
+    movies = []
+    for index in range(11):
+        movie = Movie(
+            uuid=f"movie-{index}",
+            type="movie",
+            slug=f"movie-{index}",
+            title=f"Movie {index}",
+            description=None,
+            downloaded_date=None,
+            duration=6000,
+        )
+        movie.movie_extras.extend([
+            MovieExtra(
+                uuid=f"movie-{index}-trailer",
+                type="movie_extra",
+                movie_extra_type="trailer",
+                slug=f"movie-{index}-trailer",
+                title=f"Movie {index} Trailer",
+                description=None,
+                downloaded_date=None,
+                duration=120,
+            ),
+            MovieExtra(
+                uuid=f"movie-{index}-interview",
+                type="movie_extra",
+                movie_extra_type="interview",
+                slug=f"movie-{index}-interview",
+                title=f"Movie {index} Interview",
+                description=None,
+                downloaded_date=None,
+                duration=300,
+            ),
+        ])
+        movies.append(movie)
+    session.add_all(movies)
+    session.commit()
+
+    sources = get_output_template_sources(session, LocalMediaProfileType.MOVIE).sources
+
+    assert len(sources) == 20
+    assert sources[0].id.startswith("movie:")
+    assert sources[1].id.startswith("movie-extra:")
+    assert sources[2].id.startswith("movie-extra:")
+    assert sources[1].label.startswith("\u00a0\u00a0↳ ")
+    assert sources[1].values["movie_title"] == sources[0].values["movie_title"]
+    assert sources[1].values["title"] != sources[0].values["title"]
+    assert sources[1].values["media_type"] == "trailer"
+    assert all(source.fallback is False for source in sources)
+
+    session.close()
+    engine.dispose()
+
+
 def test_preview_uses_edited_values_and_returns_referenced_variables():
     from backend.api.endpoints.local_media_profiles.service import preview_output_template
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview

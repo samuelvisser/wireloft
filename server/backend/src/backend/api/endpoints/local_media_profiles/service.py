@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy.orm import joinedload, Session
+from sqlalchemy.orm import joinedload, selectinload, Session
 from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
@@ -175,7 +175,7 @@ def get_output_template_sources(
     s: Session,
     profile_type: LocalMediaProfileType,
 ) -> LocalMediaProfileTemplateSources:
-    """Return at most ten recent real examples, or one complete fallback example."""
+    """Return recent locally stored examples, or one complete fallback example."""
     if profile_type == LocalMediaProfileType.SHOW:
         episodes = (
             s.query(Episode)
@@ -197,18 +197,28 @@ def get_output_template_sources(
     elif profile_type == LocalMediaProfileType.MOVIE:
         movies = (
             s.query(Movie)
+            .options(selectinload(Movie.movie_extras))
             .order_by(Movie.created_at.desc(), Movie.id.desc())
-            .limit(10)
+            .limit(20)
             .all()
         )
-        sources = [
-            LocalMediaProfileTemplateSource(
+        sources = []
+        for movie in movies:
+            if len(sources) >= 20:
+                break
+            sources.append(LocalMediaProfileTemplateSource(
                 id=f"movie:{movie.id}",
                 label=movie.title,
                 values=movie_output_template_values(movie),
-            )
-            for movie in movies
-        ]
+            ))
+            for movie_extra in movie.movie_extras:
+                if len(sources) >= 20:
+                    break
+                sources.append(LocalMediaProfileTemplateSource(
+                    id=f"movie-extra:{movie_extra.id}",
+                    label=f"\u00a0\u00a0↳ {movie_extra.title}",
+                    values=movie_output_template_values(movie, movie_extra),
+                ))
         fallback_values = _EXAMPLE_MOVIE_VALUES
         fallback_label = "Example movie"
     else:
