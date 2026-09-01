@@ -45,6 +45,14 @@ _HLS_MIME_TYPE = "application/x-mpegURL"
 _BARE_HTML_AMPERSAND_RE = re.compile(
     r"&(?!(?:#\d+|#x[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);)"
 )
+_CACHED_MP4_METHODS = {
+    RssDwVideoMethod.CACHED_MP4.value,
+    RssDwVideoMethod.PODCASTING_2_0_CACHED_MP4.value,
+}
+_HLS_ALTERNATE_METHODS = {
+    RssDwVideoMethod.PODCASTING_2_0.value,
+    RssDwVideoMethod.PODCASTING_2_0_CACHED_MP4.value,
+}
 
 
 def get_rss_stream_profile_by_token(s: Session, token: str) -> RssStreamProfile:
@@ -351,7 +359,7 @@ def _append_item(
         length = 0
         mime_type = "audio/mpeg"
         enclosure_url = media_url
-    elif dw_video_method == RssDwVideoMethod.CACHED_MP4.value:
+    elif dw_video_method in _CACHED_MP4_METHODS:
         length = get_cached_mp4_size(episode.uuid) or 0
         mime_type = "video/mp4"
         enclosure_url = f"{media_url}/video.mp4"
@@ -374,7 +382,7 @@ def _append_item(
     if (
         download is None
         and not wants_audio
-        and dw_video_method == RssDwVideoMethod.PODCASTING_2_0.value
+        and dw_video_method in _HLS_ALTERNATE_METHODS
         and dw_video_url
     ):
         _append_hls_alternate(
@@ -469,7 +477,7 @@ def render_rss_feed(
             download is None
             and profile.preferred_format
             != PreferredFormat.FORMAT_AUDIO_ONLY.value
-            and dw_video_method == RssDwVideoMethod.PODCASTING_2_0.value
+            and dw_video_method in _HLS_ALTERNATE_METHODS
         ):
             client = client or MiddlewareClient()
             try:
