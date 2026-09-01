@@ -6,7 +6,12 @@ from typing import Optional
 from pydantic import Field
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.types.download_profile_types import EpIdType
 from backend.types.stream_profile_types import RssDwVideoMethod
+
+
+def _default_episode_types() -> list[EpIdType]:
+    return [EpIdType.EP, EpIdType.AUX]
 
 
 # ---------- Strict input (create/update) ----------
@@ -18,6 +23,7 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     use_dw_stream: bool
     preferred_format: str = Field(min_length=1)
     require_exact_match: bool
+    ep_id_type_list: list[EpIdType] = Field(default_factory=_default_episode_types)
     dw_video_method: RssDwVideoMethod = RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value
     max_items: int = Field(default=0, ge=0)
 
@@ -51,6 +57,7 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
     use_dw_stream: bool
     preferred_format: str
     require_exact_match: bool
+    ep_id_type_list: list[str]
     dw_video_method: str
     max_items: int
     feed_url: str

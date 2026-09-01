@@ -1,4 +1,5 @@
 import {z} from 'zod'
+import {EpisodeTypeReg} from '../episode'
 import {RssStreamProfileReadSchema} from './rss_stream_profile'
 
 export const StreamProfileReadSchema = z.looseObject({
@@ -9,6 +10,7 @@ export const StreamProfileReadSchema = z.looseObject({
     useDwStream: z.boolean(),
     preferredFormat: z.string(),
     requireExactMatch: z.boolean(),
+    epIdTypeList: z.array(z.union([z.enum(EpisodeTypeReg.values), z.string()])),
     type: z.enum(['rss']),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),

@@ -113,6 +113,14 @@ def _select_best_download(
     )
 
 
+def _episode_type_prefix(episode: Episode) -> str:
+    return episode.episode_identifier.split(".", 1)[0]
+
+
+def _profile_allows_episode(profile: RssStreamProfile, episode: Episode) -> bool:
+    return _episode_type_prefix(episode) in set(profile.ep_id_type_list or [])
+
+
 def get_feed_items(
         s: Session,
         profile: RssStreamProfile,
@@ -148,6 +156,9 @@ def get_feed_items(
 
     items: list[tuple[Episode, Optional[EpisodeMediaDownload]]] = []
     for episode in episodes:
+        if not _profile_allows_episode(profile, episode):
+            continue
+
         best = None
         if profile.use_downloads:
             best = _select_best_download(
@@ -186,6 +197,8 @@ def get_media_for_episode(
     )
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
+    if not _profile_allows_episode(profile, episode):
+        raise HTTPException(status_code=404, detail="Episode not included in this feed")
 
     best = None
     if profile.use_downloads:

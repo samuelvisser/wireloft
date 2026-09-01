@@ -40,7 +40,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     current, head = get_database_status()
     assert current == (head,)
-    assert head == "f4c2b7d91a6e"
+    assert head == "9c6e2a4b7f31"
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -84,6 +84,11 @@ def test_fresh_database_upgrades_to_head(migration_database):
         column["name"] for column in inspector.get_columns("settings")
     }
     assert "onboarding_completed" in settings_columns
+
+    stream_profile_columns = {
+        column["name"] for column in inspector.get_columns("stream_profiles")
+    }
+    assert "ep_id_type_list" in stream_profile_columns
 
     rss_profile_columns = {
         column["name"] for column in inspector.get_columns("stream_profiles_rss")
@@ -464,4 +469,4 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 def test_migration_history_has_exactly_one_head():
     from backend.db.migrations import get_head_revisions
 
-    assert get_head_revisions() == ("f4c2b7d91a6e",)
+    assert get_head_revisions() == ("9c6e2a4b7f31",)

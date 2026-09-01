@@ -1,8 +1,9 @@
-import {useCallback, useEffect, useState} from 'react'
+import {useCallback, useEffect, useMemo, useState} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
+import {useDownloadProfilesView} from '../../lib/queries'
 import {StreamProfileReadView} from '../../types/schemas/stream_profile_base'
 import StreamProfileForm from '../../components/StreamProfile/StreamProfileForm'
 import {RssStreamProfileUpdateIn, RssStreamProfileUpdateSchema} from '../../types/schemas/rss_stream_profile'
@@ -17,8 +18,8 @@ export default function EditStreamProfilePage() {
     const qc = useQueryClient()
 
     const profileId = id ? Number(id) : undefined
+    const {data: downloadProfiles} = useDownloadProfilesView()
 
-    // Fetch the latest profile by id (as-view)
     const {data: streamProfile, isLoading, error} = useQuery<StreamProfileReadView | undefined>({
         queryKey: ['streamProfile', id],
         enabled: !!id,
@@ -30,6 +31,18 @@ export default function EditStreamProfilePage() {
         },
     })
 
+    const downloadProfileDefaults = useMemo(() => {
+        if (!downloadProfiles) return undefined
+        if (!streamProfile) return []
+        return downloadProfiles
+            .filter((profile) => profile.showSlug === streamProfile.showSlug)
+            .map((profile) => ({
+                preferredFormat: profile.localMediaProfilePreferredFormat,
+                episodeTypes: profile.downloadProfileImpl.epIdTypeList,
+                enabled: profile.enableProfile,
+            }))
+    }, [downloadProfiles, streamProfile?.showSlug])
+
     const form = useForm<RssStreamProfileUpdateIn>({
         resolver: zodResolver(RssStreamProfileUpdateSchema),
         mode: 'onBlur',
@@ -37,7 +50,6 @@ export default function EditStreamProfilePage() {
     })
     const {formState: {errors, isSubmitting}} = form
 
-    // Populate form with existing data once it’s loaded
     useEffect(() => {
         if (!streamProfile) return
         form.reset(RssStreamProfileUpdateSchema.parse(streamProfile.streamProfileImpl))
@@ -130,13 +142,13 @@ export default function EditStreamProfilePage() {
                         </div>
                     )}
 
-                    {/* Stream Profile Form (common + variant-specific fields) */}
                     <StreamProfileForm
                         form={form as any}
                         mode="rss"
                         showRoot={false}
                         onRegenerateToken={onRegenerateToken}
                         regeneratingToken={regenerating}
+                        downloadProfileDefaults={downloadProfileDefaults}
                     />
 
                     <div className="actions">

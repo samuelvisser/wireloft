@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import {getCurrentAppVersion, getErrorMessageFromResponse} from '../../utils/helpers'
 import ChooseShowStep from './ChooseShowStep'
 import ShowActionStep, {ShowAction} from './ShowActionStep'
@@ -57,6 +57,7 @@ type WizardState = {
     streamProfile: {
         input: Partial<RssStreamProfileBundleIn>,
         submit: RssStreamProfileBundleOut | undefined,
+        episodeTypesManuallyChanged?: boolean,
     }
     seasons: SeasonDetachedOut[] | undefined,
     globalMessage?: WizardMessage | null
@@ -108,11 +109,10 @@ const defaultStreamProfile = (action?: ShowAction): Partial<RssStreamProfileBund
     useDwStream: action === 'stream',
     preferredFormat: 'format_1080p',
     requireExactMatch: false,
+    epIdTypeList: ['ep', 'aux'],
 })
 
 export default function AddShowPage({onCancel, initialUrl}: Props) {
-    // A catalog choice is an explicit new-show intent. Ignore a half-finished
-    // persisted wizard so the selected Daily Wire URL is reliably pre-filled.
     const persisted = initialUrl ? null : loadWizardState()
     const [globalMessage, setGlobalMessage] = useState<WizardMessage | null>(() => persisted?.globalMessage ?? null)
     const [isFinishing, setIsFinishing] = useState(false)
@@ -146,12 +146,30 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
         () => persisted?.streamProfile?.input ?? defaultStreamProfile(persisted?.action))
     const [streamProfileSubmit, setStreamProfileSubmit] = useState<RssStreamProfileBundleOut | undefined>(
         () => persisted?.streamProfile?.submit)
+    const [streamEpisodeTypesManuallyChanged, setStreamEpisodeTypesManuallyChanged] = useState(
+        () => persisted?.streamProfile?.episodeTypesManuallyChanged ?? false
+    )
 
     const [seasonsSubmit, setSeasonsSubmit] = useState<SeasonDetachedOut[] | undefined>(() => persisted?.seasons ?? [])
 
     const downloadProfilePodcastSubmitRef = useRef(downloadProfilePodcastSubmit)
     const downloadProfileSeriesSubmitRef = useRef(downloadProfileSeriesSubmit)
     const streamProfileSubmitRef = useRef(streamProfileSubmit)
+
+    const selectedDownloadProfileSubmit = showSubmit?.type === ShowTypeReg.Enum.podcast
+        ? downloadProfilePodcastSubmit
+        : showSubmit?.type === ShowTypeReg.Enum.series
+            ? downloadProfileSeriesSubmit
+            : undefined
+
+    const wizardDownloadProfileDefaults = useMemo(() => {
+        if (!localMediaProfileSubmit || !selectedDownloadProfileSubmit) return []
+        return [{
+            preferredFormat: localMediaProfileSubmit.preferredFormat,
+            episodeTypes: selectedDownloadProfileSubmit.epIdTypeList,
+            enabled: selectedDownloadProfileSubmit.enableProfile,
+        }]
+    }, [localMediaProfileSubmit, selectedDownloadProfileSubmit])
 
     useEffect(() => {
         saveWizardState({
@@ -163,13 +181,18 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                 podcast: {input: downloadProfilePodcastInput, submit: downloadProfilePodcastSubmit},
                 series: {input: downloadProfileSeriesInput, submit: downloadProfileSeriesSubmit},
             },
-            streamProfile: {input: streamProfileInput, submit: streamProfileSubmit},
+            streamProfile: {
+                input: streamProfileInput,
+                submit: streamProfileSubmit,
+                episodeTypesManuallyChanged: streamEpisodeTypesManuallyChanged,
+            },
             seasons: seasonsSubmit,
             globalMessage,
         })
     }, [step, showAction, showInput, showSubmit, localMediaProfileInput, localMediaProfileSubmit,
         downloadProfilePodcastInput, downloadProfilePodcastSubmit, downloadProfileSeriesInput,
-        downloadProfileSeriesSubmit, streamProfileInput, streamProfileSubmit, seasonsSubmit, globalMessage])
+        downloadProfileSeriesSubmit, streamProfileInput, streamProfileSubmit, streamEpisodeTypesManuallyChanged,
+        seasonsSubmit, globalMessage])
 
     function handleCancel() {
         clearWizardState()
@@ -334,6 +357,9 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                     onFinish={() => handleFinish('stream')}
                     onCancel={handleCancel}
                     showSlug={showSubmit?.slug}
+                    downloadProfileDefaults={[]}
+                    episodeTypesManuallyChanged={streamEpisodeTypesManuallyChanged}
+                    onEpisodeTypesManuallyChanged={() => setStreamEpisodeTypesManuallyChanged(true)}
                 />
             )}
 
@@ -399,6 +425,9 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                     onFinish={() => handleFinish('download-stream')}
                     onCancel={handleCancel}
                     showSlug={showSubmit?.slug}
+                    downloadProfileDefaults={wizardDownloadProfileDefaults}
+                    episodeTypesManuallyChanged={streamEpisodeTypesManuallyChanged}
+                    onEpisodeTypesManuallyChanged={() => setStreamEpisodeTypesManuallyChanged(true)}
                 />
             )}
         </div>

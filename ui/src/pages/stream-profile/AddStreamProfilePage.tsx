@@ -1,8 +1,8 @@
-import {useCallback, useEffect, useRef, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useSearchParams} from 'react-router-dom'
-import {useShows} from '../../lib/queries'
+import {useDownloadProfilesView, useShows} from '../../lib/queries'
 import {buildShowSelectRegistry} from '../../types/show'
 import {SelectRegistry} from '../../utils/selectRegistry'
 import Select from 'react-select'
@@ -22,6 +22,7 @@ export default function AddStreamProfilePage() {
     const [mode, setMode] = useState<StreamProfileMode>('rss')
 
     const {data: shows} = useShows()
+    const {data: downloadProfiles} = useDownloadProfilesView()
     const showReg: SelectRegistry = buildShowSelectRegistry(shows)
 
     const form = useForm<RssStreamProfileCreateIn>({
@@ -33,6 +34,21 @@ export default function AddStreamProfilePage() {
     const {watch, formState: {errors, isSubmitting}} = form
     const prefillApplied = useRef(false)
     const requestedShowSlug = searchParams.get('show')
+    const selectedShowId = watch('showId')
+    const useDownloads = watch('useDownloads')
+    const selectedShow = shows?.find((show) => show.id === selectedShowId)
+
+    const downloadProfileDefaults = useMemo(() => {
+        if (!downloadProfiles) return undefined
+        if (!selectedShow) return []
+        return downloadProfiles
+            .filter((profile) => profile.showSlug === selectedShow.slug)
+            .map((profile) => ({
+                preferredFormat: profile.localMediaProfilePreferredFormat,
+                episodeTypes: profile.downloadProfileImpl.epIdTypeList,
+                enabled: profile.enableProfile,
+            }))
+    }, [downloadProfiles, selectedShow?.slug])
 
     useEffect(() => {
         if (prefillApplied.current || !requestedShowSlug || !Array.isArray(shows)) return
@@ -57,8 +73,6 @@ export default function AddStreamProfilePage() {
     const onSuccess = async (result: {id: number}) => {
         await qc.invalidateQueries({queryKey: ['rssStreamProfiles']})
         await qc.invalidateQueries({queryKey: ['streamProfilesView']})
-        // Land on the edit page so the user immediately sees (and can copy)
-        // the feed URL WireLoft just generated for this profile.
         navigate(`/edit-stream-profile/rss/${result.id}`)
     }
 
@@ -66,6 +80,7 @@ export default function AddStreamProfilePage() {
         onSuccess,
         successStatuses: [201],
     })
+    const waitingForDownloadProfileDefaults = !!selectedShowId && useDownloads && downloadProfiles === undefined
 
     return (
         <section className="view" aria-labelledby="add-stream-profile-title">
@@ -80,7 +95,6 @@ export default function AddStreamProfilePage() {
                     </div>
                 )}
 
-                {/* Show select */}
                 <div className="form-row">
                     <label htmlFor="show-id">Show</label>
                     <Controller
@@ -109,7 +123,6 @@ export default function AddStreamProfilePage() {
                     )}
                 </div>
 
-                {/* Mode selection (only RSS for now) */}
                 <div className="form-row">
                     <label>Profile type</label>
                     <SegmentedOptions
@@ -133,12 +146,22 @@ export default function AddStreamProfilePage() {
                     />
                 </div>
 
-                {/* Stream Profile Form (common + variant-specific fields) */}
-                <StreamProfileForm form={form as any} mode={mode} showRoot={false} isCreating />
+                <StreamProfileForm
+                    form={form as any}
+                    mode={mode}
+                    showRoot={false}
+                    isCreating
+                    downloadProfileDefaults={downloadProfileDefaults}
+                />
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>
-                    <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting || !watch('showId')}/>
+                    <input
+                        type="submit"
+                        className="btn btn-primary"
+                        value="Create profile"
+                        disabled={isSubmitting || !selectedShowId || waitingForDownloadProfileDefaults}
+                    />
                 </div>
             </form>
         </section>

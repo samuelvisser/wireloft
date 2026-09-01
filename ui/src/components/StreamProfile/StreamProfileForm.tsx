@@ -1,7 +1,9 @@
+import {useEffect, useMemo, useRef} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import Select from 'react-select'
 import ReadMore from '../../utils/ReadMore'
+import {EpisodeTypeReg} from '../../types/episode'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import RssStreamProfileForm from './RssStreamProfileForm'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
@@ -9,27 +11,134 @@ import {MediaTypeReg} from "../../types/stream_profile";
 
 export type StreamProfileMode = 'rss' | 'base'
 
+export type StreamDownloadProfileDefault = {
+    preferredFormat: string
+    episodeTypes: string[]
+    enabled?: boolean
+}
+
+type UIOption = { value: string; label: string }
+
+const DEFAULT_STREAM_EPISODE_TYPES = ['ep', 'aux']
+
+function sameEpisodeTypes(a: readonly string[], b: readonly string[]) {
+    return a.length === b.length && a.every((value) => b.includes(value))
+}
+
 type Props = {
     form: UseFormReturn<any>
     mode: StreamProfileMode
     showRoot?: boolean
-    // Passed through to RssStreamProfileForm; see its own props for details.
     isCreating?: boolean
     onRegenerateToken?: () => void | Promise<void>
     regeneratingToken?: boolean
+    downloadProfileDefaults?: StreamDownloadProfileDefault[]
+    episodeTypesManuallyChanged?: boolean
+    onEpisodeTypesManuallyChanged?: () => void
 }
 
-export default function StreamProfileForm({form, mode, showRoot, isCreating, onRegenerateToken, regeneratingToken}: Props) {
-    const {control, formState: {errors}, setValue, watch} = form
+export default function StreamProfileForm({
+    form,
+    mode,
+    showRoot,
+    isCreating,
+    onRegenerateToken,
+    regeneratingToken,
+    downloadProfileDefaults,
+    episodeTypesManuallyChanged,
+    onEpisodeTypesManuallyChanged,
+}: Props) {
+    const {control, formState: {errors}, getValues, setValue, watch} = form
     showRoot ??= true
 
-    // Map booleans to/from segmented multi-select
     const useDownloads = watch('useDownloads')
     const useDwStream = watch('useDwStream')
+    const preferredFormat = watch('preferredFormat')
+    const selectedEpisodeTypes: string[] = watch('epIdTypeList') || []
+    const internalEpisodeTypesManuallyChanged = useRef(false)
+    const episodeTypeDefaultsInitialized = useRef(false)
+
     const selectedSources = [
         ...(useDownloads ? ['downloads'] as const : []),
         ...(useDwStream ? ['dw'] as const : []),
     ]
+
+    const episodeTypeSelectValue: UIOption[] = useMemo(() => (
+        selectedEpisodeTypes.map((value) => ({
+            value,
+            label: EpisodeTypeReg.getLabelLoose(value),
+        }))
+    ), [selectedEpisodeTypes])
+
+    const automaticEpisodeTypes = useMemo(() => {
+        if (useDownloads && preferredFormat && downloadProfileDefaults) {
+            const matchingProfile = [...downloadProfileDefaults]
+                .sort((a, b) => Number(Boolean(b.enabled)) - Number(Boolean(a.enabled)))
+                .find((profile) => profile.preferredFormat === preferredFormat)
+            if (matchingProfile) return [...matchingProfile.episodeTypes]
+        }
+        return [...DEFAULT_STREAM_EPISODE_TYPES]
+    }, [downloadProfileDefaults, preferredFormat, useDownloads])
+
+    const episodeTypeDefaultsReady = !useDownloads || downloadProfileDefaults !== undefined
+
+    useEffect(() => {
+        if (!episodeTypeDefaultsReady || !preferredFormat) return
+
+        const current = (getValues('epIdTypeList') || []) as string[]
+        const manuallyChanged = episodeTypesManuallyChanged === true
+            || internalEpisodeTypesManuallyChanged.current
+
+        if (!episodeTypeDefaultsInitialized.current) {
+            episodeTypeDefaultsInitialized.current = true
+            if (!isCreating && !manuallyChanged && !sameEpisodeTypes(current, automaticEpisodeTypes)) {
+                internalEpisodeTypesManuallyChanged.current = true
+                return
+            }
+        }
+
+        if (
+            episodeTypesManuallyChanged !== true
+            && !internalEpisodeTypesManuallyChanged.current
+            && !sameEpisodeTypes(current, automaticEpisodeTypes)
+        ) {
+            setValue('epIdTypeList', automaticEpisodeTypes, {
+                shouldDirty: false,
+                shouldValidate: true,
+            })
+        }
+    }, [
+        automaticEpisodeTypes,
+        episodeTypeDefaultsReady,
+        episodeTypesManuallyChanged,
+        getValues,
+        isCreating,
+        preferredFormat,
+        setValue,
+    ])
+
+    const markEpisodeTypesManuallyChanged = () => {
+        internalEpisodeTypesManuallyChanged.current = true
+        if (episodeTypesManuallyChanged !== true) {
+            onEpisodeTypesManuallyChanged?.()
+        }
+    }
+
+    const handleEpisodeTypeChange = (options: readonly UIOption[] | null) => {
+        const values = (Array.isArray(options) ? options : []).map((option) => option.value)
+        if (!sameEpisodeTypes(values, selectedEpisodeTypes)) {
+            markEpisodeTypesManuallyChanged()
+        }
+        setValue('epIdTypeList', values, {shouldDirty: true, shouldValidate: true})
+    }
+
+    const handleSelectAllEpisodeTypes = () => {
+        const values = [...EpisodeTypeReg.values]
+        if (!sameEpisodeTypes(values, selectedEpisodeTypes)) {
+            markEpisodeTypesManuallyChanged()
+        }
+        setValue('epIdTypeList', values, {shouldDirty: true, shouldValidate: true})
+    }
 
     return (
         <>
@@ -39,7 +148,6 @@ export default function StreamProfileForm({form, mode, showRoot, isCreating, onR
                 </div>
             )}
 
-            {/* Streaming sources */}
             <div className="form-row">
                 <label id="stream-sources-label">Streaming sources</label>
                 <SegmentedOptions
@@ -78,14 +186,12 @@ export default function StreamProfileForm({form, mode, showRoot, isCreating, onR
                         const arr = Array.isArray(vals) ? vals : [vals]
                         const nextUseDownloads = arr.includes('downloads')
                         const nextUseDwStream = arr.includes('dw')
-                        // Update both booleans; enforce at least one remains selected already handled by component
                         setValue('useDownloads', nextUseDownloads, {shouldDirty: true, shouldValidate: true})
                         setValue('useDwStream', nextUseDwStream, {shouldDirty: true, shouldValidate: true})
                     }}
                 />
             </div>
 
-            {/* Enable streaming */}
             <div className="form-row">
                 <label htmlFor="enable-profile">Enable streaming</label>
                 <Controller
@@ -119,8 +225,7 @@ export default function StreamProfileForm({form, mode, showRoot, isCreating, onR
                 </div>
             </div>
 
-            {/* Preferred format */}
-            {watch("useDownloads") && (
+            {useDownloads ? (
                 <div className="form-row">
                     <label htmlFor="sp-preferred-format">Preferred format</label>
                     <Controller
@@ -152,7 +257,7 @@ export default function StreamProfileForm({form, mode, showRoot, isCreating, onR
                         </ReadMore>
                     </div>
                 </div>
-            ) || (
+            ) : (
                 <div className="form-row">
                     <label htmlFor="sp-preferred-format">Media Type</label>
                     <Controller
@@ -188,8 +293,49 @@ export default function StreamProfileForm({form, mode, showRoot, isCreating, onR
                 </div>
             )}
 
-            {/* Require exact match */}
-            {watch("useDownloads") && watch("useDwStream") && watch("preferredFormat") !== 'format_audio_only' && (
+            <div className="form-row">
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                    <label htmlFor="sp-episode-types">Episode types</label>
+                    <button type="button" className="btn btn-link" onClick={handleSelectAllEpisodeTypes}>
+                        Select all
+                    </button>
+                </div>
+                <Controller
+                    control={control}
+                    name="epIdTypeList"
+                    render={() => (
+                        <Select
+                            inputId="sp-episode-types"
+                            isMulti
+                            options={EpisodeTypeReg.options}
+                            value={episodeTypeSelectValue}
+                            onChange={handleEpisodeTypeChange as any}
+                            closeMenuOnSelect={false}
+                            getOptionValue={(option: UIOption) => option.value}
+                            getOptionLabel={(option: UIOption) => option.label}
+                            aria-invalid={!!errors.epIdTypeList}
+                            aria-describedby={errors.epIdTypeList ? 'sp-episode-types-error' : 'sp-episode-types-help'}
+                        />
+                    )}
+                />
+                {errors.epIdTypeList && (
+                    <div id="sp-episode-types-error" className="error" role="alert" aria-live="polite">
+                        {String(errors.epIdTypeList.message)}
+                    </div>
+                )}
+                <div className="help" id="sp-episode-types-help">
+                    <ReadMore summary={<span>What episode types to stream</span>}>
+                        <p>Select all episode types you want this profile to stream.</p>
+                        <p><b>Episode</b> is a normal episode in the show.</p>
+                        <p><b>Ep. Extra</b> is auxiliary content for a specific episode.</p>
+                        <p><b>Trailer</b> is a trailer for the show or auxiliary content.</p>
+                        <p><b>Auxiliary</b> is auxiliary content for the show.</p>
+                        <p>Until you change this selection manually, WireLoft uses Episode and Auxiliary by default. When Use Downloads is enabled and a Download Profile for the same show has the selected Preferred format, its episode types are used as the default instead.</p>
+                    </ReadMore>
+                </div>
+            </div>
+
+            {useDownloads && useDwStream && preferredFormat !== 'format_audio_only' && (
                 <div className="form-row">
                     <label htmlFor="require-exact-match">Require Exact Match for Video Downloads</label>
                     <Controller
@@ -212,11 +358,9 @@ export default function StreamProfileForm({form, mode, showRoot, isCreating, onR
                         <ReadMore summary={<span>Match downloaded episodes using strict rules.</span>}>
                             <p>
                                 When this setting is <strong>enabled</strong>, if say, you have a 720p version downloaded but your preferred format is
-                                1080p, instead of
-                                using the 720p version, WireLoft will stream from DW directly (in whatever format it happens to provide).<br/>
+                                1080p, instead of using the 720p version, WireLoft will stream from DW directly (in whatever format it happens to provide).<br/>
                                 When the setting is <strong>disabled</strong>, it tries to match your preferred format but will stream other video
-                                formats from your
-                                downloaded files if they are the only ones available locally.
+                                formats from your downloaded files if they are the only ones available locally.
                             </p>
                             <p>
                                 No matter what this setting is set to, as long as your Preferred Format is any video type WireLoft will always ignore
@@ -232,7 +376,6 @@ export default function StreamProfileForm({form, mode, showRoot, isCreating, onR
                 </div>
             )}
 
-            {/* Variant-specific fields */}
             {mode === 'rss' ? (
                 <RssStreamProfileForm
                     form={form}

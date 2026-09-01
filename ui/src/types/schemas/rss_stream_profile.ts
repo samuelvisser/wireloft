@@ -1,4 +1,5 @@
 import {z} from 'zod'
+import {EpisodeTypeReg} from "../episode";
 import {PreferredFormatReg} from "../local_media_profile";
 import {RssDwVideoMethodReg} from "../stream_profile";
 
@@ -9,6 +10,7 @@ const RssStreamProfileBaseSchema = z.object({
     useDwStream: z.boolean().default(true),
     preferredFormat: z.enum(PreferredFormatReg.values),
     requireExactMatch: z.boolean().default(false),
+    epIdTypeList: z.array(z.enum(EpisodeTypeReg.values)).default(['ep', 'aux']),
     dwVideoMethod: z.enum(RssDwVideoMethodReg.values).default('stream_hls_download_m4a'),
     maxItems: z.int().nonnegative().default(0),
 })
@@ -37,6 +39,7 @@ export const RssStreamProfileReadSchema = z.looseObject({
     useDwStream: z.boolean(),
     preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
     requireExactMatch: z.boolean(),
+    epIdTypeList: z.array(z.union([z.enum(EpisodeTypeReg.values), z.string()])),
     dwVideoMethod: z.union([z.enum(RssDwVideoMethodReg.values), z.string()]),
     maxItems: z.number(),
     feedUrl: z.string(),

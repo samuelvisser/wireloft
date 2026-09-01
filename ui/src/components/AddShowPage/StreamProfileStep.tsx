@@ -2,7 +2,7 @@ import {useEffect} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import DailywireShowCard from './DailywireShowCard'
-import StreamProfileForm from '../StreamProfile/StreamProfileForm'
+import StreamProfileForm, {StreamDownloadProfileDefault} from '../StreamProfile/StreamProfileForm'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {
     RssStreamProfileBundleIn,
@@ -18,9 +18,23 @@ type Props = {
     onFinish: () => void
     onCancel: () => void
     showSlug?: string
+    downloadProfileDefaults?: StreamDownloadProfileDefault[]
+    episodeTypesManuallyChanged?: boolean
+    onEpisodeTypesManuallyChanged?: () => void
 }
 
-export default function StreamProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onFinish, onCancel, showSlug}: Props) {
+export default function StreamProfileStep({
+    value,
+    onChange,
+    onSubmit: onSubmitParent,
+    onBack,
+    onFinish,
+    onCancel,
+    showSlug,
+    downloadProfileDefaults,
+    episodeTypesManuallyChanged,
+    onEpisodeTypesManuallyChanged,
+}: Props) {
     const form = useForm<RssStreamProfileBundleIn>({
         resolver: zodResolver(RssStreamProfileBundleSchema),
         mode: 'onBlur',
@@ -46,7 +60,15 @@ export default function StreamProfileStep({value, onChange, onSubmit: onSubmitPa
         <div className="wizard-with-aside">
             <div className="wizard-main">
                 <form className="form form-fluid" onSubmit={onSubmit} noValidate>
-                    <StreamProfileForm form={form as any} mode="rss" showRoot isCreating />
+                    <StreamProfileForm
+                        form={form as any}
+                        mode="rss"
+                        showRoot
+                        isCreating
+                        downloadProfileDefaults={downloadProfileDefaults}
+                        episodeTypesManuallyChanged={episodeTypesManuallyChanged}
+                        onEpisodeTypesManuallyChanged={onEpisodeTypesManuallyChanged}
+                    />
                     <div className="actions">
                         <button type="button" className="btn" onClick={onBack}>Back</button>
                         <input type="submit" className="btn btn-primary" value="Save show" disabled={isSubmitting}/>

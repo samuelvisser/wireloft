@@ -1,14 +1,20 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, func, ForeignKey, UniqueConstraint
+from sqlalchemy import DateTime, func, ForeignKey, JSON
+from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
+from backend.types.download_profile_types import EpIdType
 from backend.types.stream_profile_types import StreamProfileType
 from backend.utils.helpers import generate_stream_profile_token
 
 if TYPE_CHECKING:
     from backend.db.models import Show
+
+
+def _default_episode_types() -> list[str]:
+    return [EpIdType.EP.value, EpIdType.AUX.value]
 
 
 class StreamProfileBase(Base):
@@ -36,6 +42,12 @@ class StreamProfileBase(Base):
     preferred_format: Mapped[str] = mapped_column(comment="Preferred format for stream, used when choosing the correct downloaded file "
                                                           "or whether to stream audio or video from DW")
     require_exact_match: Mapped[bool] = mapped_column(comment="When allowing downloads, only allow exact matches for preferred format")
+    ep_id_type_list: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON),
+        default=_default_episode_types,
+        server_default='["ep", "aux"]',
+        nullable=False,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
