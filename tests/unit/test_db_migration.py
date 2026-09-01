@@ -39,7 +39,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     current, head = get_database_status()
     assert current == (head,)
-    assert head == "c4ab8e7d1f20"
+    assert head == "e6f1a4c9d2b7"
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -96,25 +96,25 @@ def test_fresh_database_upgrades_to_head(migration_database):
                 "type": "movie",
                 "slug": "wireloft-movies",
                 "name": "WireLoft Movies",
-                "output_template": "/downloads/movies/{movie_title}/{title}.ext",
+                "output_template": "/downloads/movies/{{ movie_title }}/{{ title }}{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext",
                 "preferred_format": "format_1080p",
-                "append_media_type_to_filename": True,
+                "append_media_type_to_filename": False,
             },
             {
                 "type": "show",
                 "slug": "wireloft-shows-audio",
                 "name": "WireLoft Shows (Audio)",
-                "output_template": "/downloads/podcasts/{show_title}/{episode_published_date} - {episode_title}.ext",
+                "output_template": "/downloads/podcasts/{{ show_title }}/{{ episode_published_date }} - {{ episode_title }}.ext",
                 "preferred_format": "format_audio_only",
-                "append_media_type_to_filename": True,
+                "append_media_type_to_filename": False,
             },
             {
                 "type": "show",
                 "slug": "wireloft-shows-video",
                 "name": "WireLoft Shows (Video)",
-                "output_template": "/downloads/shows/{show_title}/{season_name}/{episode_title}.ext",
+                "output_template": "/downloads/shows/{{ show_title }}/{{ season_name }}/{{ episode_title }}.ext",
                 "preferred_format": "format_1080p",
-                "append_media_type_to_filename": True,
+                "append_media_type_to_filename": False,
             },
         ]
         assert connection.execute(text(
@@ -166,6 +166,11 @@ def test_fresh_database_upgrades_to_head(migration_database):
         column["name"] for column in inspector.get_columns("media_downloads")
     }
     assert "attempt_generation" in media_download_columns
+
+    podcast_profile_columns = {
+        column["name"] for column in inspector.get_columns("download_profiles_podcast")
+    }
+    assert "download_episode_count" in podcast_profile_columns
 
 
 def test_movie_extra_migration_preserves_legacy_movie_trailer_metadata(migration_database):
@@ -384,4 +389,4 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 def test_migration_history_has_exactly_one_head():
     from backend.db.migrations import get_head_revisions
 
-    assert get_head_revisions() == ("c4ab8e7d1f20",)
+    assert get_head_revisions() == ("e6f1a4c9d2b7",)
