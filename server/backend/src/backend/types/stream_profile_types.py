@@ -9,9 +9,9 @@ class StreamProfileType(Enum):
 
 
 class RssDwVideoMethod(str, Enum):
-    PODCASTING_2_0 = "podcasting_2_0"
-    CACHED_MP4 = "cached_mp4"
-    PODCASTING_2_0_CACHED_MP4 = "podcasting_2_0_cached_mp4"
+    STREAM_HLS_DOWNLOAD_M4A = "stream_hls_download_m4a"
+    STREAM_DOWNLOAD_MP4 = "stream_download_mp4"
+    STREAM_HLS_DOWNLOAD_MP4 = "stream_hls_download_mp4"
 
 
-DEFAULT_RSS_DW_VIDEO_METHOD = RssDwVideoMethod.PODCASTING_2_0.value
+DEFAULT_RSS_DW_VIDEO_METHOD = RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value
