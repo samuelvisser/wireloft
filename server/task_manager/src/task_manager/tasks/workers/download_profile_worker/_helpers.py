@@ -86,6 +86,11 @@ def _episode_type_prefix(episode: Episode) -> str:
     return episode.episode_identifier.split(".", 1)[0]
 
 
+def _episode_recency_key(episode: Episode) -> tuple[datetime, int]:
+    """Sort podcast episodes newest-first with a deterministic id tie-breaker."""
+    return episode.published_date or episode.went_live_date or datetime.min, episode.id or 0
+
+
 def _utc_now_naive() -> datetime:
     """Now in UTC without tzinfo.
 
@@ -106,10 +111,17 @@ def get_download_profile_episodes(
     """Episodes a Download Profile currently wants downloaded.
 
     Applies the filters shared by every profile type (episode type, publish
-    status) plus the type-specific scope: a recency window for podcasts, a
-    season selection for series.
+    status) plus the type-specific scope: a recency window or latest-episode
+    count for podcasts, and a season selection for series.
     """
-    if only_episode is not None:
+    is_podcast = isinstance(profile, PodcastDownloadProfile)
+    needs_global_podcast_scope = is_podcast and profile.download_episode_count > 0
+
+    # An episode-count limit is relative to every eligible episode in the show.
+    # Even an event-triggered single-episode run therefore has to calculate the
+    # global top N first and only then decide whether the triggering episode is
+    # inside that set.
+    if only_episode is not None and not needs_global_podcast_scope:
         candidates: list[Episode] = [only_episode]
     else:
         candidates = list(
@@ -117,7 +129,6 @@ def get_download_profile_episodes(
         )
 
     allowed_types = set(profile.ep_id_type_list)
-    is_podcast = isinstance(profile, PodcastDownloadProfile)
 
     cutoff: Optional[datetime] = None
     if is_podcast and profile.download_days_in_past > 0:
@@ -170,6 +181,13 @@ def get_download_profile_episodes(
                     continue
 
         eligible.append(episode)
+
+    if is_podcast and profile.download_episode_count > 0:
+        eligible.sort(key=_episode_recency_key, reverse=True)
+        eligible = eligible[:profile.download_episode_count]
+
+    if only_episode is not None:
+        eligible = [episode for episode in eligible if episode.id == only_episode.id]
 
     return eligible
 
@@ -335,24 +353,39 @@ def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) 
 
 
 def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
-    """Delete downloads (file + row) that fell outside the profile's recency window."""
-    if not profile.delete_older_episodes or profile.download_days_in_past <= 0:
+    """Delete profile downloads that fell outside its configured podcast limit."""
+    if not profile.delete_older_episodes:
         return 0
 
-    cutoff = _utc_now_naive() - timedelta(days=profile.download_days_in_past)
-    stmt = (
-        select(EpisodeMediaDownload)
-        .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
-        .where(
+    if profile.download_episode_count > 0:
+        kept_episode_ids = {episode.id for episode in get_download_profile_episodes(s, profile)}
+        removable_statuses = _TRIGGERABLE_STATUSES | _COMPLETED_STATUSES
+        stmt = select(EpisodeMediaDownload).where(
             EpisodeMediaDownload.download_profile_id == profile.id,
-            EpisodeMediaDownload.download_status.in_(_COMPLETED_STATUSES),
-            Episode.published_date.is_not(None),
-            Episode.published_date < cutoff,
+            EpisodeMediaDownload.download_status.in_(removable_statuses),
         )
-    )
-    rows = list(s.execute(stmt).scalars())
+        if kept_episode_ids:
+            stmt = stmt.where(EpisodeMediaDownload.media_item_id.notin_(kept_episode_ids))
+        rows = list(s.execute(stmt).scalars())
+    elif profile.download_days_in_past > 0:
+        cutoff = _utc_now_naive() - timedelta(days=profile.download_days_in_past)
+        stmt = (
+            select(EpisodeMediaDownload)
+            .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+            .where(
+                EpisodeMediaDownload.download_profile_id == profile.id,
+                EpisodeMediaDownload.download_status.in_(_COMPLETED_STATUSES),
+                Episode.published_date.is_not(None),
+                Episode.published_date < cutoff,
+            )
+        )
+        rows = list(s.execute(stmt).scalars())
+    else:
+        return 0
+
     for row in rows:
-        _delete_download_file(row.file_path)
+        if row.download_status in _COMPLETED_STATUSES:
+            _delete_download_file(row.file_path)
         s.delete(row)
     if rows:
         s.flush()
