@@ -1,0 +1,24 @@
+/* Shared React Select multi-value styling. */
+div[class$="-multiValue"] > * {
+  color: var(--text) !important;
+}
+
+div[class$="-multiValue"] svg {
+  color: currentColor !important;
+  fill: currentColor !important;
+}
+
+div[class$="-multiValue"] > [role="button"]:hover {
+  background: rgba(14, 165, 233, 0.25) !important;
+  color: var(--text) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  div[class$="-multiValue"] {
+    background: rgba(56, 189, 248, 0.22) !important;
+  }
+
+  div[class$="-multiValue"] > [role="button"]:hover {
+    background: rgba(56, 189, 248, 0.34) !important;
+  }
+}
