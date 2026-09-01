@@ -63,13 +63,15 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
                     <div className="help" id="rss-dw-video-method-help">
                         <ReadMore summary={<span>Choose how Daily Wire video is exposed to podcast apps.</span>}>
                             <p>
-                                <strong>Podcasting 2.0 direct stream with audio fallback</strong> acts as a true stream. In a podcast player that supports it, video starts playing immediately. Podcasting 2.0 video support is not available everywhere, and podcast apps usually download the audio fallback when auto-download is enabled.
+                                <strong>Podcasting 2.0 direct stream with audio fallback</strong> acts as a true stream. In a podcast player that supports it, video starts playing immediately.
+                                This is the <a href="https://github.com/Podcast-Standards-Project/hls-video">official</a> Podcasting 2.0 method for handling HLS steams.
+                                However, not every podcast client implements it well, making it in some cases even impossible to watch video if it downloaded audio in the backend.
                             </p>
                             <p>
                                 <strong>Serve as locally cached mp4</strong> works whenever the podcast app supports video and never serves audio for Daily Wire video. WireLoft must prepare the complete file before it can be served, which can take a while for long episodes.
                             </p>
                             <p>
-                                <strong>Podcasting 2.0 direct stream with cached mp4 fallback</strong> combines both approaches. Compatible podcast apps can start the HLS video immediately, while downloads and apps without Podcasting 2.0 support receive a locally cached MP4 instead of audio. Preparing that MP4 can still take a while for long episodes.
+                                <strong>Direct stream with cached mp4 fallback</strong> combines both approaches. Compatible podcast apps can start the HLS video immediately, while downloads and apps without Podcasting 2.0 support receive a locally cached MP4 instead of audio. Preparing that MP4 can still take a while for long episodes.
                             </p>
                             <p>
                                 Downloaded files are always served directly and are not affected by this setting.

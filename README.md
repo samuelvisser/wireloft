@@ -1,48 +1,39 @@
-> Wireloft is currently in active development. It works and basic functionality is tested, but its very early days still.
-> Absolutely use at your own risk, especially if you are using it behind a reverse proxy!
-
 # WireLoft
 
 ## What it does
 WireLoft is a self-hosted app for managing (premium) shows from The Daily Wire.  
 
-It is built as the perfect solution for self-hosting nerds that do not want to settle for only being able to enjoy premium shows from The Daily Wire through their website. 
+It is built as the perfect solution for self-hosting nerds that do not want to be limited to only being able to enjoy premium shows from The Daily Wire website. 
 WireLoft allows you to download individual show episodes to your server, or just stream audio or video episodes straight to your RSS podcast client without first
 having to download anything server-side. You can also automatically download audio for every item in a show, and download video only for full episodes. Or the other
-way around. Whatever you want.  
+way around. Whatever you want. 
 
-WireLoft is highly customizable to fit your exact needs. It is easy to install and use. Just launch the docker container, open the Web-UI and add any Daily Wire show. 
+WireLoft works for movies hosted by The Daily Wire as well, download any that you have access to and enjoy them
+with your local media server (Jellyfin, Plex, ect), or just enjoy the content locally.  
+
+WireLoft is highly customizable to fit your exact needs. It is easy to install and use. Just launch the docker container, open the Web-UI, and add any Daily Wire show or movie. 
 You can then choose to simply index that show, stream its contents straight from The Daily Wire server to your favorite podcast app, or download every single episode
-(or, ofc, a subset). Anything is possible.  
-
-Additionally, it supports downloading the premium version of shows behind the paywall, 
-as long as you have a premium subscription with The Daily Wire. WireLoft is perfect for those who want to consume Daily Wire content 
-through their media server (Plex, Jellyfin, Audiobookshelf) or who just want the content available locally.  
+(or a subset). Anything is possible.
 
 This project was inspired by [Pinchflat](https://github.com/kieraneglin/pinchflat).
 Pinchflat is an awesome project that allows you to automatically download videos from YouTube channels or playlists.
-WireLoft takes that concept to The Daily Wire and expands on it greatly. Additionally, WireLoft allows downloading individual episodes and movies (coming soon!), 
+WireLoft takes that concept to The Daily Wire and expands on it greatly. Additionally, WireLoft allows downloading individual episodes and movies, 
 making it truly a one-stop-shop for all things The Daily Wire.  
 
 WireLoft is not meant to be used for consuming the content, it just downloads or streams it. For consuming the downloaded content 
-use a self-hosted media server like Plex or Jellyfin for series, or Audiobookshelf for podcasts. Streaming should work with most podcast apps.  
+use a self-hosted media server like Plex or Jellyfin for series, or Audiobookshelf for podcasts. Streaming should work with most podcast apps and
+does not require a media server.
 
 ## Features
 
-- Fully-featured easy-to-use web UI for navigation and configuration
-- Downloads series and podcasts with configurable parameters for each
-- Download multiple versions of the same episode, automatically. For example, download both a video and audio version of the episode
-- Download the premium version of episodes using your account credentials
-- Supports audio-only mode for a podcast-like experience
-- Intelligently helps you avoid downloading the countdown timer shown in live versions of show episodes
-- Optionally automatically delete old show content from your server
-- Open a private RSS feed for a show's downloaded episodes for use in any podcast app
-
-## Planned
-
-- Support for downloading movies (coming soon!)
-- Maybe: support for Bentkey - feasibility not yet known (if anyone knows how their API works, please let me know!)
-- Maybe: support for browsing series- and movies not yet downloaded inside WireLoft (add them to WireLoft without a URL)
+- Fully-featured easy-to-use web UI for navigation and configuration.
+- Downloads series, podcasts, and movies with configurable parameters for each.
+- Download multiple versions of the same episode, automatically. For example, download both a video and audio version of episodes.
+- Download the premium version of episodes and movies using your The Daily Wire subscription.
+- Supports audio-only mode for a podcast-like experience.
+- Intelligently helps you avoid downloading the countdown timer shown in live versions of show episodes.
+- Optionally automatically delete old show content from your server.
+- Open a private RSS feed for a show's downloaded episodes for use in any podcast app.
 
 ## Running with Docker
 
