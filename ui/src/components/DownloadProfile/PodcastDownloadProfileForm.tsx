@@ -8,18 +8,53 @@ type Props = {
 }
 
 export default function PodcastDownloadProfileForm({form}: Props) {
-    const {control, register, watch, formState: {errors}} = form
+    const {control, register, watch, setValue, formState: {errors}} = form
 
     // If countdown is disabled, redownload final becomes irrelevant and is hidden
     const withCountdown = watch('downloadWithCountdown')
 
-    const watchedDays = watch('downloadDaysInPast') ?? 0
+    const watchedDaysRaw = watch('downloadDaysInPast') ?? 0
+    const watchedEpisodeCountRaw = watch('downloadEpisodeCount') ?? 0
+    const watchedDays = Number.isFinite(watchedDaysRaw) ? watchedDaysRaw : 0
+    const watchedEpisodeCount = Number.isFinite(watchedEpisodeCountRaw) ? watchedEpisodeCountRaw : 0
+    const daysInputInvalid = typeof watchedDaysRaw === 'number' && Number.isNaN(watchedDaysRaw)
+    const episodeCountInputInvalid = typeof watchedEpisodeCountRaw === 'number' && Number.isNaN(watchedEpisodeCountRaw)
+    const limitEnabled = watchedDays > 0 || watchedEpisodeCount > 0 || daysInputInvalid || episodeCountInputInvalid
+    const limitMode: 'date' | 'episodes' = watchedEpisodeCount > 0 || episodeCountInputInvalid ? 'episodes' : 'date'
+
+    const updateLimitEnabled = (enabled: boolean) => {
+        if (!enabled) {
+            setValue('downloadDaysInPast', 0, {shouldDirty: true, shouldValidate: true})
+            setValue('downloadEpisodeCount', 0, {shouldDirty: true, shouldValidate: true})
+            return
+        }
+
+        if (!limitEnabled) {
+            // Preserve the existing default when a user first enables limiting.
+            setValue('downloadDaysInPast', 180, {shouldDirty: true, shouldValidate: true})
+            setValue('downloadEpisodeCount', 0, {shouldDirty: true, shouldValidate: true})
+        }
+    }
+
+    const updateLimitMode = (mode: 'date' | 'episodes') => {
+        if (mode === 'date') {
+            setValue('downloadEpisodeCount', 0, {shouldDirty: true, shouldValidate: true})
+            setValue('downloadDaysInPast', watchedDays > 0 ? watchedDays : 180, {shouldDirty: true, shouldValidate: true})
+            return
+        }
+
+        setValue('downloadDaysInPast', 0, {shouldDirty: true, shouldValidate: true})
+        setValue('downloadEpisodeCount', watchedEpisodeCount > 0 ? watchedEpisodeCount : 5, {
+            shouldDirty: true,
+            shouldValidate: true,
+        })
+    }
+
     const oldestDateText = (() => {
-        const days = Number.isFinite(watchedDays) ? watchedDays : 0
-        if (!days || days <= 0) return null
+        if (limitMode !== 'date' || !watchedDays || watchedDays <= 0) return null
         const d = new Date()
         d.setHours(0, 0, 0, 0)
-        d.setDate(d.getDate() - days)
+        d.setDate(d.getDate() - watchedDays)
         const yyyy = d.getFullYear()
         const mm = String(d.getMonth() + 1).padStart(2, '0')
         const dd = String(d.getDate()).padStart(2, '0')
@@ -91,34 +126,96 @@ export default function PodcastDownloadProfileForm({form}: Props) {
             )}
 
             <div className="form-row">
-                <label htmlFor="days-in-past">Download days in past</label>
-                <input
-                    id="days-in-past"
-                    className="input"
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1}
-                    {...register('downloadDaysInPast', {valueAsNumber: true})}
-                    aria-invalid={!!errors.downloadDaysInPast}
-                    aria-describedby={errors.downloadDaysInPast ? 'days-in-past-errors' : 'days-in-past-help'}
+                <label htmlFor="limit-downloads">Limit downloads</label>
+                <Switch
+                    id="limit-downloads"
+                    checked={limitEnabled}
+                    onChange={updateLimitEnabled}
+                    onColor="#0ea5e9"
+                    offColor="#d1d5db"
+                    uncheckedIcon={false}
+                    checkedIcon={false}
+                    aria-describedby="limit-downloads-help"
                 />
-                {errors.downloadDaysInPast && (
-                    <div id="days-in-past-errors" className="error" role="alert" aria-live="polite">
-                        {errors.downloadDaysInPast.message as string}
-                    </div>
-                )}
-                <div className="help" id="days-in-past-help">
-                    Amount of days in the past the show should be downloaded.
-                    {oldestDateText ? (
-                        <>
-                            {' '}Earliest date that will be downloaded: <strong>{oldestDateText}</strong>
-                        </>
-                    ) : null}
+                <div className="help" id="limit-downloads-help">
+                    Limit which podcast episodes this profile is allowed to download. Leave disabled to allow all eligible episodes.
                 </div>
             </div>
 
-            {(watchedDays ?? 0) > 0 && (
+            {limitEnabled && (
+                <div className="form-row">
+                    <label htmlFor="download-limit-mode">Limit by</label>
+                    <select
+                        id="download-limit-mode"
+                        className="input"
+                        value={limitMode}
+                        onChange={(event) => updateLimitMode(event.target.value as 'date' | 'episodes')}
+                    >
+                        <option value="date">Date</option>
+                        <option value="episodes">Number of episodes</option>
+                    </select>
+                    <div className="help">
+                        Choose whether to keep a rolling date window or only the latest number of episodes.
+                    </div>
+                </div>
+            )}
+
+            {limitEnabled && limitMode === 'date' && (
+                <div className="form-row">
+                    <label htmlFor="days-in-past">Download days in past</label>
+                    <input
+                        id="days-in-past"
+                        className="input"
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        step={1}
+                        {...register('downloadDaysInPast', {valueAsNumber: true})}
+                        aria-invalid={!!errors.downloadDaysInPast}
+                        aria-describedby={errors.downloadDaysInPast ? 'days-in-past-errors' : 'days-in-past-help'}
+                    />
+                    {errors.downloadDaysInPast && (
+                        <div id="days-in-past-errors" className="error" role="alert" aria-live="polite">
+                            {errors.downloadDaysInPast.message as string}
+                        </div>
+                    )}
+                    <div className="help" id="days-in-past-help">
+                        Amount of days in the past the show should be downloaded.
+                        {oldestDateText ? (
+                            <>
+                                {' '}Earliest date that will be downloaded: <strong>{oldestDateText}</strong>
+                            </>
+                        ) : null}
+                    </div>
+                </div>
+            )}
+
+            {limitEnabled && limitMode === 'episodes' && (
+                <div className="form-row">
+                    <label htmlFor="episode-count">Latest episodes to download</label>
+                    <input
+                        id="episode-count"
+                        className="input"
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        step={1}
+                        {...register('downloadEpisodeCount', {valueAsNumber: true})}
+                        aria-invalid={!!errors.downloadEpisodeCount}
+                        aria-describedby={errors.downloadEpisodeCount ? 'episode-count-errors' : 'episode-count-help'}
+                    />
+                    {errors.downloadEpisodeCount && (
+                        <div id="episode-count-errors" className="error" role="alert" aria-live="polite">
+                            {errors.downloadEpisodeCount.message as string}
+                        </div>
+                    )}
+                    <div className="help" id="episode-count-help">
+                        Only the latest number of eligible episodes will be downloaded by this profile.
+                    </div>
+                </div>
+            )}
+
+            {limitEnabled && (
                 <div className="form-row">
                     <label htmlFor="delete-older">Delete older episodes</label>
                     <Controller
@@ -144,8 +241,10 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                         </div>
                     )}
                     <div className="help" id="delete-older-help">
-                        <ReadMore summary={<span>Whether to delete older episodes</span>}>
-                            If enabled, downloaded episodes older than the date shown above will be automatically removed from disk
+                        <ReadMore summary={<span>Whether to delete episodes outside the selected limit</span>}>
+                            {limitMode === 'date'
+                                ? 'If enabled, downloaded episodes older than the date shown above will be automatically removed from disk.'
+                                : `If enabled, downloaded episodes outside the latest ${watchedEpisodeCount || 'selected number of'} eligible episodes will be automatically removed from disk.`}
                         </ReadMore>
                     </div>
                 </div>
