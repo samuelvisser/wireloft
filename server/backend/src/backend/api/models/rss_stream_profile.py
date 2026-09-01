@@ -6,6 +6,7 @@ from typing import Optional
 from pydantic import Field
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.types.stream_profile_types import RssDwVideoMethod
 
 
 # ---------- Strict input (create/update) ----------
@@ -17,6 +18,7 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     use_dw_stream: bool
     preferred_format: str = Field(min_length=1)
     require_exact_match: bool
+    dw_video_method: RssDwVideoMethod = RssDwVideoMethod.PODCASTING_2_0
 
 
 class RssStreamProfileAPICreate(_RssStreamProfileAPIBaseIn):
@@ -48,6 +50,7 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
     use_dw_stream: bool
     preferred_format: str
     require_exact_match: bool
+    dw_video_method: str
     feed_url: str
 
 
