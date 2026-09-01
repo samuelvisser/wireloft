@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from alembic import command
@@ -39,7 +40,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     current, head = get_database_status()
     assert current == (head,)
-    assert head == "c4ab8e7d1f20"
+    assert head == "e8a1f4c2d7b9"
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -54,6 +55,8 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "media_downloads_movie_extra",
         "local_media_profiles_show",
         "local_media_profiles_movie",
+        "stream_profiles",
+        "stream_profiles_rss",
         "task_schedules",
         "task_runs",
     } <= tables
@@ -82,6 +85,11 @@ def test_fresh_database_upgrades_to_head(migration_database):
     }
     assert "onboarding_completed" in settings_columns
 
+    rss_profile_columns = {
+        column["name"] for column in inspector.get_columns("stream_profiles_rss")
+    }
+    assert "dw_video_method" in rss_profile_columns
+
     with engine.connect() as connection:
         assert not bool(connection.execute(text(
             "SELECT onboarding_completed FROM settings"
@@ -96,25 +104,34 @@ def test_fresh_database_upgrades_to_head(migration_database):
                 "type": "movie",
                 "slug": "wireloft-movies",
                 "name": "WireLoft Movies",
-                "output_template": "/downloads/movies/{movie_title}/{title}.ext",
+                "output_template": (
+                    "/downloads/movies/{{ movie_title }}/{{ title }}"
+                    "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
+                ),
                 "preferred_format": "format_1080p",
-                "append_media_type_to_filename": True,
+                "append_media_type_to_filename": False,
             },
             {
                 "type": "show",
                 "slug": "wireloft-shows-audio",
                 "name": "WireLoft Shows (Audio)",
-                "output_template": "/downloads/podcasts/{show_title}/{episode_published_date} - {episode_title}.ext",
+                "output_template": (
+                    "/downloads/podcasts/{{ show_title }}/"
+                    "{{ episode_published_date }} - {{ episode_title }}.ext"
+                ),
                 "preferred_format": "format_audio_only",
-                "append_media_type_to_filename": True,
+                "append_media_type_to_filename": False,
             },
             {
                 "type": "show",
                 "slug": "wireloft-shows-video",
                 "name": "WireLoft Shows (Video)",
-                "output_template": "/downloads/shows/{show_title}/{season_name}/{episode_title}.ext",
+                "output_template": (
+                    "/downloads/shows/{{ show_title }}/{{ season_name }}/"
+                    "{{ episode_title }}.ext"
+                ),
                 "preferred_format": "format_1080p",
-                "append_media_type_to_filename": True,
+                "append_media_type_to_filename": False,
             },
         ]
         assert connection.execute(text(
@@ -166,6 +183,66 @@ def test_fresh_database_upgrades_to_head(migration_database):
         column["name"] for column in inspector.get_columns("media_downloads")
     }
     assert "attempt_generation" in media_download_columns
+
+
+def test_rss_video_method_migration_backfills_feed_urls(migration_database):
+    _database_path, engine = migration_database
+
+    from backend.db.migrations import get_alembic_config, upgrade_database
+
+    command.upgrade(get_alembic_config(), "c91e4a6f72d0")
+    with engine.begin() as connection:
+        show_id = connection.execute(text(
+            "INSERT INTO shows "
+            "(uuid, slug, title, description, sharing_url, membership_level, "
+            "type, episode_identifier, author_name, author_slug) VALUES "
+            "('show-uuid', 'show', 'Show', 'Description', "
+            "'https://example.test/show', 'FREE', 'podcast', 'numbered', "
+            "'Host', 'host')"
+        )).lastrowid
+
+        dw_profile_id = connection.execute(text(
+            "INSERT INTO stream_profiles "
+            "(type, show_id, enable_profile, token, use_downloads, use_dw_stream, "
+            "preferred_format, require_exact_match) VALUES "
+            "('rss', :show_id, 1, 'dw-token', 0, 1, 'format_1080p', 0)"
+        ), {"show_id": show_id}).lastrowid
+        local_profile_id = connection.execute(text(
+            "INSERT INTO stream_profiles "
+            "(type, show_id, enable_profile, token, use_downloads, use_dw_stream, "
+            "preferred_format, require_exact_match) VALUES "
+            "('rss', :show_id, 1, 'local-token', 1, 0, 'format_1080p', 0)"
+        ), {"show_id": show_id}).lastrowid
+
+        connection.execute(text(
+            "INSERT INTO stream_profiles_rss (id, feed_url) VALUES "
+            "(:id, 'https://wireloft.test/dw.xml?custom=value')"
+        ), {"id": dw_profile_id})
+        connection.execute(text(
+            "INSERT INTO stream_profiles_rss (id, feed_url) VALUES "
+            "(:id, 'https://wireloft.test/local.xml?dwVideoMethod=cached_mp4&custom=value')"
+        ), {"id": local_profile_id})
+
+    upgrade_database()
+
+    with engine.connect() as connection:
+        profiles = connection.execute(text(
+            "SELECT base.token, rss.feed_url, rss.dw_video_method "
+            "FROM stream_profiles AS base "
+            "JOIN stream_profiles_rss AS rss ON rss.id = base.id "
+            "ORDER BY base.token"
+        )).mappings().all()
+
+    profiles_by_token = {profile["token"]: profile for profile in profiles}
+    assert profiles_by_token["dw-token"]["dw_video_method"] == "podcasting_2_0"
+    assert parse_qs(urlsplit(profiles_by_token["dw-token"]["feed_url"]).query) == {
+        "custom": ["value"],
+        "dwVideoMethod": ["podcasting_2_0"],
+    }
+    assert profiles_by_token["local-token"]["dw_video_method"] == "podcasting_2_0"
+    assert parse_qs(urlsplit(profiles_by_token["local-token"]["feed_url"]).query) == {
+        "custom": ["value"],
+    }
 
 
 def test_movie_extra_migration_preserves_legacy_movie_trailer_metadata(migration_database):
@@ -384,4 +461,4 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 def test_migration_history_has_exactly_one_head():
     from backend.db.migrations import get_head_revisions
 
-    assert get_head_revisions() == ("c4ab8e7d1f20",)
+    assert get_head_revisions() == ("e8a1f4c2d7b9",)
