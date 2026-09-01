@@ -9,7 +9,8 @@ const RssStreamProfileBaseSchema = z.object({
     useDwStream: z.boolean().default(true),
     preferredFormat: z.enum(PreferredFormatReg.values),
     requireExactMatch: z.boolean().default(false),
-    dwVideoMethod: z.enum(RssDwVideoMethodReg.values).default('podcasting_2_0'),
+    dwVideoMethod: z.enum(RssDwVideoMethodReg.values).default('stream_hls_download_m4a'),
+    maxItems: z.int().nonnegative().default(0),
 })
 
 // On create, feedUrl is optional: leave it blank to have WireLoft generate
@@ -37,6 +38,7 @@ export const RssStreamProfileReadSchema = z.looseObject({
     preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
     requireExactMatch: z.boolean(),
     dwVideoMethod: z.union([z.enum(RssDwVideoMethodReg.values), z.string()]),
+    maxItems: z.number(),
     feedUrl: z.string(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
