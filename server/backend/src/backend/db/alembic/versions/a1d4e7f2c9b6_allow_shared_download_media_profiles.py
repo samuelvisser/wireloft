@@ -1,7 +1,7 @@
 """Allow Download Profiles to share a Local Media Profile.
 
 Revision ID: a1d4e7f2c9b6
-Revises: 9c6e2a4b7f31
+Revises: e5b7c9d1f3a2
 Create Date: 2026-09-01
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 
 revision: str = "a1d4e7f2c9b6"
-down_revision: Union[str, None] = "9c6e2a4b7f31"
+down_revision: Union[str, None] = "e5b7c9d1f3a2"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
