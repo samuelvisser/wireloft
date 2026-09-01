@@ -4,6 +4,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
+from backend.api.endpoints.download_profiles.service import require_unique_download_profile_episode_types
 from backend.api.helpers import create_database_fields, update_database_fields
 from backend.api.models.series_download_profile import *
 from backend.db.models.download_profile import SeriesDownloadProfile
@@ -81,6 +82,12 @@ def _resolve_or_create_seasons_for_show(s: Session, show_id: int, seasons_req: l
 
 def create_download_profile_series(s: Session, body: SeriesDownloadProfileAPICreate) -> SeriesDownloadProfileAPIRead:
     require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
+    require_unique_download_profile_episode_types(
+        s,
+        show_id=body.show_id,
+        local_media_profile_id=body.local_media_profile_id,
+        episode_types=body.ep_id_type_list,
+    )
     # Create the profile without directly assigning seasons
     data = body.model_dump(by_alias=True, exclude={"seasons"}, exclude_none=True, exclude_unset=True)
     item = SeriesDownloadProfile(**data)
@@ -112,6 +119,13 @@ def update_download_profile_series(s: Session, download_profile_series_id: int, 
         raise HTTPException(status_code=404, detail="Download profile for series not found")
 
     require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
+    require_unique_download_profile_episode_types(
+        s,
+        show_id=item.show_id,
+        local_media_profile_id=body.local_media_profile_id,
+        episode_types=body.ep_id_type_list,
+        exclude_profile_id=item.id,
+    )
     # Update scalar fields but do not assign seasons directly from body
     update_database_fields(item, body, exclude_fields={"seasons"})
 
