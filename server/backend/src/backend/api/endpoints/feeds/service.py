@@ -40,6 +40,7 @@ _VIDEO_HEIGHTS = {
 
 _ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd"
 _PODCAST_NS = "https://podcastindex.org/namespace/1.0"
+_ATOM_NS = "http://www.w3.org/2005/Atom"
 _HLS_MIME_TYPE = "application/x-mpegURL"
 _BARE_HTML_AMPERSAND_RE = re.compile(
     r"&(?!(?:#\d+|#x[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);)"
@@ -302,7 +303,7 @@ def _append_item(
         episode: Episode,
         download: Optional[EpisodeMediaDownload],
         preferred_format: str,
-        dw_video_method: str,
+        dw_video_method: str = DEFAULT_RSS_DW_VIDEO_METHOD,
         dw_video_url: str | None = None,
 ) -> None:
     item = SubElement(channel, "item")
@@ -417,6 +418,7 @@ def render_rss_feed(
             "version": "2.0",
             "xmlns:itunes": _ITUNES_NS,
             "xmlns:podcast": _PODCAST_NS,
+            "xmlns:atom": _ATOM_NS,
         },
     )
     channel = SubElement(rss, "channel")
@@ -431,6 +433,15 @@ def render_rss_feed(
     _sub_text(channel, "generator", "WireLoft")
     _sub_text(channel, "itunes:author", show.author_name)
     _sub_text(channel, "itunes:explicit", "false")
+    SubElement(
+        channel,
+        "atom:link",
+        {
+            "href": profile.feed_url,
+            "rel": "self",
+            "type": "application/rss+xml",
+        },
+    )
     _sub_text(
         channel,
         "podcast:medium",
