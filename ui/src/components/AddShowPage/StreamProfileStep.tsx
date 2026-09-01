@@ -44,7 +44,7 @@ export default function StreamProfileStep({
     const {watch, formState: {isSubmitting}} = form
 
     useEffect(() => {
-        const subscription = watch((values) => onChange(values))
+        const subscription = watch((values) => onChange(values as Partial<RssStreamProfileBundleIn>))
         return () => subscription.unsubscribe()
     }, [watch, onChange])
 
