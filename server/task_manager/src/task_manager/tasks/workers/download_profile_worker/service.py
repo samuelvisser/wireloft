@@ -26,8 +26,8 @@ async def run_download_profile_worker(
     countdown-published) only checks that episode against its show's profiles; a
     freshly indexed show, a manual "run this show/profile" trigger, or the periodic
     verification cron/app-startup sweep all fall through to a full re-check of the
-    profile(s) in scope, which also runs the podcast "delete older episodes"
-    cleanup.
+    profile(s) in scope. Podcast profiles also reconcile downloads that fell outside
+    their configured date or latest-episode limit.
     """
     print("Starting download_profile_worker" + (f" ({resource_type}={resource_id})" if resource_type else ""))
 
@@ -72,12 +72,16 @@ async def run_download_profile_worker(
             budget -= 1
             triggered += 1
 
-        # Cleanup is a profile-wide reconciliation step; skip it for single-episode
-        # runs so a burst of publish events doesn't repeatedly re-scan the show.
-        if only_episode is None and isinstance(profile, PodcastDownloadProfile):
-            removed = cleanup_older_episodes(s, profile)
-            if removed:
-                s.commit()
+        if isinstance(profile, PodcastDownloadProfile):
+            # Date-based cleanup remains a profile-wide reconciliation step and is
+            # skipped for individual publish events. Latest-N profiles must also
+            # reconcile on publish events, because the new episode can immediately
+            # push the previous Nth episode outside the configured set.
+            should_cleanup = only_episode is None or profile.download_episode_count > 0
+            if should_cleanup:
+                removed = cleanup_older_episodes(s, profile)
+                if removed:
+                    s.commit()
 
         update_progress(
             progress,
