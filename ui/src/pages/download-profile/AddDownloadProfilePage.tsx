@@ -60,11 +60,11 @@ export default function AddDownloadProfilePage() {
     const limitPrefillApplied = useRef(false)
     const requestedShowSlug = searchParams.get('show')
     const requestedDownloadEpisodeCountRaw = searchParams.get('downloadEpisodeCount')
-    const parsedDownloadEpisodeCount = requestedDownloadEpisodeCountRaw === null
-        ? undefined
-        : Number(requestedDownloadEpisodeCountRaw)
-    const requestedDownloadEpisodeCount = Number.isInteger(parsedDownloadEpisodeCount) && Number(parsedDownloadEpisodeCount) > 0
-        ? Number(parsedDownloadEpisodeCount)
+    const parsedDownloadEpisodeCount = Number(requestedDownloadEpisodeCountRaw)
+    const requestedDownloadEpisodeCount = requestedDownloadEpisodeCountRaw !== null
+        && Number.isInteger(parsedDownloadEpisodeCount)
+        && parsedDownloadEpisodeCount > 0
+        ? parsedDownloadEpisodeCount
         : undefined
 
     useEffect(() => {
