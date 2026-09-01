@@ -19,6 +19,8 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
 
     const feedUrl: string | undefined = watch('feedUrl')
     const useDwStream: boolean = watch('useDwStream')
+    const preferredFormat: string | undefined = watch('preferredFormat')
+    const usesDwVideo = useDwStream && preferredFormat !== 'format_audio_only'
 
     const onCopy = async () => {
         if (!feedUrl) return
@@ -33,7 +35,7 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
 
     return (
         <>
-            {useDwStream && (
+            {usesDwVideo && (
                 <div className="form-row">
                     <label htmlFor="rss-dw-video-method">Stream DW video method</label>
                     <Controller
