@@ -106,38 +106,42 @@ def prepare_cached_mp4(source_url: str, *, episode_uuid: str) -> Path:
         _cleanup_expired_files(target.parent)
         temporary = target.with_name(f".{target.stem}.{uuid4().hex}.part")
         try:
-            completed = subprocess.run(
-                _ffmpeg_command(source_url, temporary),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            )
-        except FileNotFoundError as exc:
-            raise HTTPException(
-                status_code=503,
-                detail="ffmpeg is required to prepare cached RSS video",
-            ) from exc
-        except OSError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail="Could not prepare Daily Wire video",
-            ) from exc
+            try:
+                completed = subprocess.run(
+                    _ffmpeg_command(source_url, temporary),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False,
+                )
+            except FileNotFoundError as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="ffmpeg is required to prepare cached RSS video",
+                ) from exc
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail="Could not prepare Daily Wire video",
+                ) from exc
 
-        if completed.returncode != 0 or not temporary.is_file() or temporary.stat().st_size == 0:
-            logger.error(
-                "ffmpeg failed to prepare cached RSS video (exit %s): %s",
-                completed.returncode,
-                completed.stderr[-4000:],
-            )
-            raise HTTPException(
-                status_code=502,
-                detail="Daily Wire video could not be prepared as MP4",
-            )
+            try:
+                prepared = temporary.is_file() and temporary.stat().st_size > 0
+            except OSError:
+                prepared = False
 
-        os.replace(temporary, target)
-        return target
+            if completed.returncode != 0 or not prepared:
+                logger.error(
+                    "ffmpeg failed to prepare cached RSS video (exit %s): %s",
+                    completed.returncode,
+                    completed.stderr[-4000:],
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail="Daily Wire video could not be prepared as MP4",
+                )
 
-    # The temporary file is normally moved into place. This path is only
-    # reached when an exception interrupts preparation.
-    temporary.unlink(missing_ok=True)
+            os.replace(temporary, target)
+            return target
+        finally:
+            temporary.unlink(missing_ok=True)
