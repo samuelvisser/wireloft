@@ -25,6 +25,11 @@ _NO_CACHE_HEADERS = {
     "Expires": "0",
 }
 
+_CACHED_MP4_METHODS = {
+    RssDwVideoMethod.CACHED_MP4.value,
+    RssDwVideoMethod.PODCASTING_2_0_CACHED_MP4.value,
+}
+
 
 def _temporary_stream_redirect(url: str, *, head_only: bool = False) -> Response:
     headers = {"Location": url, **_NO_CACHE_HEADERS}
@@ -115,7 +120,7 @@ def rss_feed_episode_video_mp4(token: str, episode_slug: str, request: Request):
         if (
             not profile.use_dw_stream
             or profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
-            or profile.dw_video_method != RssDwVideoMethod.CACHED_MP4.value
+            or profile.dw_video_method not in _CACHED_MP4_METHODS
         ):
             raise HTTPException(status_code=404, detail="Cached video is not enabled for this feed")
 
