@@ -74,6 +74,29 @@ def _make_download_profile(session: Session, show, local_media_profile, episode_
     return profile
 
 
+def _make_episode(session: Session, show):
+    from backend.db.models import Episode, Season
+
+    season = Season(show=show, index=1, slug="season-1", name="Season 1")
+    episode = Episode(
+        uuid="episode-uuid",
+        type="episode",
+        show=show,
+        season=season,
+        index=1,
+        episode_identifier="ep.1",
+        slug="episode-1",
+        title="Episode 1",
+        duration=100,
+        publish_status="published_final",
+        sharing_url="https://example.test/episode-1",
+        is_no_show_today=False,
+    )
+    session.add_all([season, episode])
+    session.flush()
+    return episode
+
+
 def test_same_show_and_media_profile_allows_non_overlapping_episode_types(db_session: Session):
     show = _make_show(db_session)
     local_media_profile = _make_local_media_profile(db_session, "video")
@@ -133,3 +156,33 @@ def test_profile_update_does_not_conflict_with_its_own_episode_types(db_session:
         episode_types=["ep", "aux"],
         exclude_profile_id=profile.id,
     )
+
+
+def test_existing_download_moves_to_profile_that_now_owns_episode_type(db_session: Session):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.types.download_profile_types import MediaDownloadStatus
+    from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
+
+    show = _make_show(db_session)
+    local_media_profile = _make_local_media_profile(db_session, "video")
+    previous_profile = _make_download_profile(db_session, show, local_media_profile, ["aux"])
+    current_profile = _make_download_profile(db_session, show, local_media_profile, ["ep"])
+    episode = _make_episode(db_session, show)
+
+    download = EpisodeMediaDownload(
+        type="episode",
+        media_item_id=episode.id,
+        local_media_profile_id=local_media_profile.id,
+        download_profile_id=previous_profile.id,
+        download_status=MediaDownloadStatus.DOWNLOADED.value,
+        file_path="/downloads/episode.mp4",
+        progress=100,
+        downloaded_publish_status="published_final",
+    )
+    db_session.add(download)
+    db_session.flush()
+
+    action = ensure_episode_download(db_session, current_profile, episode)
+
+    assert action.needs_trigger is False
+    assert download.download_profile_id == current_profile.id
