@@ -242,18 +242,25 @@ def test_episode_count_cleanup_keeps_completed_files_when_delete_older_is_off(db
     season = _make_season(db_session, show)
     local_media_profile = _make_local_media_profile(db_session)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    old_episode = _make_episode(
+    completed_episode = _make_episode(
         db_session,
         show,
         season,
         index=1,
-        published_at=now - timedelta(days=1),
+        published_at=now - timedelta(days=2),
     )
-    newest_episode = _make_episode(
+    pending_episode = _make_episode(
         db_session,
         show,
         season,
         index=2,
+        published_at=now - timedelta(days=1),
+    )
+    _make_episode(
+        db_session,
+        show,
+        season,
+        index=3,
         published_at=now,
     )
     profile = _make_podcast_profile(
@@ -268,7 +275,7 @@ def test_episode_count_cleanup_keeps_completed_files_when_delete_older_is_off(db
     completed_file.write_bytes(b"data")
     completed = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
-        media_item_id=old_episode.id,
+        media_item_id=completed_episode.id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
         download_status=MediaDownloadStatus.DOWNLOADED.value,
@@ -277,8 +284,8 @@ def test_episode_count_cleanup_keeps_completed_files_when_delete_older_is_off(db
     )
     pending = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
-        media_item_id=old_episode.id,
-        local_media_profile_id=local_media_profile.id + 1,
+        media_item_id=pending_episode.id,
+        local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
         download_status=MediaDownloadStatus.PENDING.value,
         file_path=str(tmp_path / "stale-pending.m4a"),
@@ -294,6 +301,5 @@ def test_episode_count_cleanup_keeps_completed_files_when_delete_older_is_off(db
     assert completed_file.exists()
     rows = db_session.query(EpisodeMediaDownload).all()
     assert len(rows) == 1
-    assert rows[0].media_item_id == old_episode.id
+    assert rows[0].media_item_id == completed_episode.id
     assert rows[0].download_status == MediaDownloadStatus.DOWNLOADED.value
-    assert newest_episode.id != old_episode.id
