@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
@@ -47,7 +47,7 @@ def require_unique_download_profile_episode_types(
         *,
         show_id: int,
         local_media_profile_id: int,
-        episode_types: list[str],
+        episode_types: Sequence[str],
         exclude_profile_id: int | None = None,
 ) -> None:
     requested_types = set(episode_types)
