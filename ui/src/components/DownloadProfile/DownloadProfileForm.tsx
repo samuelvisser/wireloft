@@ -5,7 +5,7 @@ import PodcastDownloadProfileForm from './PodcastDownloadProfileForm'
 import SeriesDownloadProfileForm, {SeasonItem} from './SeriesDownloadProfileForm'
 import Select from "react-select";
 import {EpisodeTypeReg} from "../../types/episode";
-import {useMemo} from "react";
+import {useEffect, useMemo} from "react";
 
 export type DownloadProfileMode = 'podcast' | 'series' | 'base'
 
@@ -15,20 +15,30 @@ type Props = {
     seasons?: SeasonItem[]
     profileMode?: 'create' | 'update'
     showRoot?: boolean
+    disabledEpisodeTypes?: ReadonlySet<string>
 }
 
 // Simple option model for react-select
 type UIOption = { value: string; label: string }
 
-export default function DownloadProfileForm({form, mode, seasons, showRoot}: Props) {
+export default function DownloadProfileForm({form, mode, seasons, showRoot, disabledEpisodeTypes}: Props) {
     const {control, watch, setValue, formState: {errors}} = form
     showRoot ??= true
+
+    const unavailableEpisodeTypes = disabledEpisodeTypes ?? new Set<string>()
 
     // Episode types multiselect wiring
     const selectedTypes: string[] = watch('epIdTypeList') || []
     const selectValue: UIOption[] = useMemo(() => (
         (selectedTypes || []).map((v) => ({ value: v, label: EpisodeTypeReg.getLabelLoose(v) }))
     ), [selectedTypes])
+
+    useEffect(() => {
+        const availableTypes = selectedTypes.filter((type) => !unavailableEpisodeTypes.has(type))
+        if (availableTypes.length !== selectedTypes.length) {
+            setValue('epIdTypeList', availableTypes, {shouldDirty: true, shouldValidate: true})
+        }
+    }, [selectedTypes, setValue, unavailableEpisodeTypes])
 
     const handleSelectChange = (opts: readonly UIOption[] | null) => {
         const arr = Array.isArray(opts) ? opts : []
@@ -37,7 +47,8 @@ export default function DownloadProfileForm({form, mode, seasons, showRoot}: Pro
     }
 
     const handleSelectAll = () => {
-        setValue('epIdTypeList', [...EpisodeTypeReg.values], {shouldDirty: true, shouldValidate: true})
+        const availableTypes = EpisodeTypeReg.values.filter((type) => !unavailableEpisodeTypes.has(type))
+        setValue('epIdTypeList', availableTypes, {shouldDirty: true, shouldValidate: true})
     }
 
     return (
@@ -104,6 +115,7 @@ export default function DownloadProfileForm({form, mode, seasons, showRoot}: Pro
                             closeMenuOnSelect={false}
                             getOptionValue={(o: UIOption) => o.value}
                             getOptionLabel={(o: UIOption) => o.label}
+                            isOptionDisabled={(option: UIOption) => unavailableEpisodeTypes.has(option.value)}
                             aria-invalid={!!errors.epIdTypeList}
                             aria-describedby={errors.epIdTypeList ? 'ep-id-type-errors' : 'ep-id-type-help'}
                         />
@@ -122,6 +134,9 @@ export default function DownloadProfileForm({form, mode, seasons, showRoot}: Pro
                         <p><b>Ep. Extra</b> is auxiliary content for a specific episode.</p>
                         <p><b>Trailer</b> is trailer for show or auxiliary content.</p>
                         <p><b>Auxiliary</b> is auxiliary content for the show.</p>
+                        {unavailableEpisodeTypes.size > 0 && (
+                            <p>Episode types already used by another Download Profile with this Local Media Profile cannot be selected.</p>
+                        )}
                     </ReadMore>
                 </div>
             </div>
