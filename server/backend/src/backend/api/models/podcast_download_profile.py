@@ -15,7 +15,7 @@ class _PodcastDownloadProfileAPIBaseIn(DownloadProfileAPIBaseIn):
     download_with_countdown: bool
     redownload_final: bool
     download_days_in_past: int = Field(ge=0)
-    download_episode_count: int = Field(ge=0)
+    download_episode_count: int = Field(default=0, ge=0)
     delete_older_episodes: bool
 
     @model_validator(mode="after")
