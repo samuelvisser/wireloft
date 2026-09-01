@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import Field
+from pydantic import AwareDatetime, Field
 
 from .BaseRecord import BaseRecord
 
@@ -41,6 +41,7 @@ class DwMovieExtraRecord(BaseRecord):
     movie_extra_type: MovieExtraTypeValue
     description: Optional[str] = None
     sharing_url: Optional[str] = None
+    published_date: Optional[AwareDatetime] = Field(validation_alias="publishedAt", default=None)
     duration: float = 0
     background_image_path: Optional[str] = None
     thumbnail_landscape_path: Optional[str] = None

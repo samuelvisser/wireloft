@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Union
 
-from pydantic import computed_field, Field, field_validator, model_validator
+from pydantic import Field, ValidationInfo, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
@@ -29,8 +29,9 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
     """Fields for requests: validate hard here."""
 
     name: str = Field(min_length=1)
-    output_template: str = Field(min_length=16, max_length=4096)
+    type: LocalMediaProfileType
     preferred_format: PreferredFormat
+    output_template: str = Field(min_length=16, max_length=4096)
 
     @computed_field(return_type=str)
     @property
@@ -39,39 +40,58 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
 
     @field_validator("output_template")
     @classmethod
-    def _validate_output_template(cls, v: str) -> str:
+    def _validate_output_template(cls, v: str, info: ValidationInfo) -> str:
         v = upgrade_legacy_output_template(v)
         if not v.endswith(".ext"):
             raise ValueError("Output template must end with '.ext'")
         if not v.startswith("/downloads/"):
             raise ValueError("Output template must start with '/downloads/'")
+
+        profile_type = info.data.get("type")
+        if profile_type is None:
+            return v
+
+        allowed_fields = (
+            MOVIE_OUTPUT_TEMPLATE_FIELDS
+            if profile_type == LocalMediaProfileType.MOVIE
+            else SHOW_OUTPUT_TEMPLATE_FIELDS
+        )
+        validate_output_template_fields(
+            v,
+            allowed_fields=allowed_fields,
+        )
+
+        if (
+            profile_type == LocalMediaProfileType.MOVIE
+            and not movie_template_has_media_item_field(v)
+        ):
+            raise ValueError(_MOVIE_EXTRA_COLLISION_MESSAGE)
+        return v
+
+    @field_validator("type")
+    @classmethod
+    def _validate_type(cls, v: LocalMediaProfileType) -> LocalMediaProfileType:
+        if v == LocalMediaProfileType.BASE:
+            raise ValueError("A Local Media Profile must be for shows or movies")
+        return v
+
+    @field_validator("preferred_format")
+    @classmethod
+    def _validate_preferred_format(
+        cls,
+        v: PreferredFormat,
+        info: ValidationInfo,
+    ) -> PreferredFormat:
+        if (
+            info.data.get("type") == LocalMediaProfileType.MOVIE
+            and v == PreferredFormat.FORMAT_AUDIO_ONLY
+        ):
+            raise ValueError("Movie Local Media Profiles require a video format")
         return v
 
 
 class _TypedLocalMediaProfileAPIBaseIn(_LocalMediaProfileAPIBaseIn):
-    type: LocalMediaProfileType
-
-    @model_validator(mode="after")
-    def _validate_type_specific_fields(self):
-        if self.type == LocalMediaProfileType.BASE:
-            raise ValueError("A Local Media Profile must be for shows or movies")
-
-        allowed_fields = (
-            MOVIE_OUTPUT_TEMPLATE_FIELDS
-            if self.type == LocalMediaProfileType.MOVIE
-            else SHOW_OUTPUT_TEMPLATE_FIELDS
-        )
-        validate_output_template_fields(
-            self.output_template,
-            allowed_fields=allowed_fields,
-        )
-
-        if self.type == LocalMediaProfileType.MOVIE:
-            if self.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY:
-                raise ValueError("Movie Local Media Profiles require a video format")
-            if not movie_template_has_media_item_field(self.output_template):
-                raise ValueError(_MOVIE_EXTRA_COLLISION_MESSAGE)
-        return self
+    pass
 
 
 class LocalMediaProfileAPICreate(_TypedLocalMediaProfileAPIBaseIn):

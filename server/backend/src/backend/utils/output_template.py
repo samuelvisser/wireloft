@@ -26,6 +26,9 @@ _LEGACY_PLACEHOLDER = re.compile(r"(?<!\{)\{([A-Za-z_][A-Za-z0-9_]*)\}(?!\})")
 DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second",
 })
+MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
+    f"movie_{field}" for field in DATE_OUTPUT_TEMPLATE_FIELDS
+})
 
 SHOW_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "show", "show_title", "season", "season_name", "episode", "episode_title", "title",
@@ -34,17 +37,18 @@ SHOW_OUTPUT_TEMPLATE_FIELDS = frozenset({
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "movie", "movie_slug", "movie_title", "title", "movie_extended_title", "extended_title",
-    "movie_dw_id", "dw_id", "movie_author", "author", "movie_mature_rating", "mature_rating",
-    "rating", "movie_duration_seconds", "duration_seconds", "media_type",
-}) | DATE_OUTPUT_TEMPLATE_FIELDS
+    "movie_slug", "movie_title", "movie_extended_title", "movie_dw_id", "movie_author",
+    "movie_mature_rating", "movie_duration_seconds",
+    "slug", "title", "extended_title",
+    "dw_id", "author", "mature_rating", "rating", "duration_seconds", "media_type",
+}) | DATE_OUTPUT_TEMPLATE_FIELDS | MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS
 
 # These values describe the actual downloaded item rather than always describing
 # its owning movie. They are useful when making movie and extra paths distinct.
 MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "title", "extended_title", "dw_id", "author", "mature_rating", "rating",
+    "slug", "title", "extended_title", "dw_id", "author", "mature_rating", "rating",
     "duration_seconds", "media_type",
-})
+}) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 
 class MovieReleaseDateUnavailableError(ValueError):
@@ -121,7 +125,10 @@ def movie_template_has_media_item_field(output_template: str) -> bool:
 
 def movie_template_uses_release_date(output_template: str) -> bool:
     """Whether a movie template references the parent movie's release date."""
-    return bool(output_template_fields(output_template) & DATE_OUTPUT_TEMPLATE_FIELDS)
+    return bool(
+        output_template_fields(output_template)
+        & (DATE_OUTPUT_TEMPLATE_FIELDS | MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS)
+    )
 
 
 def episode_output_template_values(episode: "Episode") -> dict[str, str]:
@@ -159,38 +166,48 @@ def movie_output_template_values(
     movie_duration_seconds = str(round(movie.duration or 0))
 
     if is_movie_extra:
+        item_slug = item.slug
         item_title = item.title
         item_extended_title = item.title
         item_dw_id = getattr(item, "dw_id", None) or ""
         item_author = ""
         item_rating = ""
         item_duration_seconds = str(round(item.duration or 0))
+        item_date = getattr(item, "published_date", None)
     else:
+        item_slug = movie.slug
         item_title = movie.title
         item_extended_title = movie_extended_title
         item_dw_id = movie.dw_id or ""
         item_author = movie.author_name or ""
         item_rating = movie.mature_rating or ""
         item_duration_seconds = movie_duration_seconds
+        item_date = getattr(movie, "release_date", None)
+
+    movie_dates = {
+        f"movie_{field}": value
+        for field, value in _date_substitutions(getattr(movie, "release_date", None)).items()
+    }
 
     return {
-        "movie": movie.slug,
         "movie_slug": movie.slug,
         "movie_title": movie.title,
-        "title": item_title,
         "movie_extended_title": movie_extended_title,
-        "extended_title": item_extended_title,
         "movie_dw_id": movie.dw_id or "",
-        "dw_id": item_dw_id,
         "movie_author": movie.author_name or "",
-        "author": item_author,
         "movie_mature_rating": movie.mature_rating or "",
+        "movie_duration_seconds": movie_duration_seconds,
+        **movie_dates,
+        "slug": item_slug,
+        "title": item_title,
+        "extended_title": item_extended_title,
+        "dw_id": item_dw_id,
+        "author": item_author,
         "mature_rating": item_rating,
         "rating": item_rating,
-        "movie_duration_seconds": movie_duration_seconds,
         "duration_seconds": item_duration_seconds,
         "media_type": media_type,
-        **_date_substitutions(getattr(movie, "release_date", None)),
+        **_date_substitutions(item_date),
     }
 
 

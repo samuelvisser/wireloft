@@ -72,7 +72,7 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
         LocalMediaProfileAPICreate(
             type="movie",
             name="Movie audio",
-            output_template="/downloads/movies/{movie}.ext",
+            output_template="/downloads/movies/{movie_slug}.ext",
             preferred_format="format_audio_only",
         )
 
@@ -88,7 +88,7 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
         LocalMediaProfileAPICreate(
             type="show",
             name="Wrong show template",
-            output_template="/downloads/shows/{movie}.ext",
+            output_template="/downloads/shows/{movie_slug}.ext",
             preferred_format="format_audio_only",
         )
 
@@ -189,7 +189,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
     movie_profile = MovieLocalMediaProfile(
         slug="movies",
         name="Movies",
-        output_template="/downloads/movies/{movie}.ext",
+        output_template="/downloads/movies/{movie_slug}.ext",
         preferred_format="format_1080p",
     )
     show = Show(

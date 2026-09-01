@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine
@@ -31,6 +31,7 @@ def test_jinja_conditionals_omit_missing_year_and_suffix_movie_extras(tmp_path, 
         description=None,
         downloaded_date=None,
         duration=6000,
+        release_date=date(2020, 5, 4),
     )
     trailer = MovieExtra(
         uuid="trailer-uuid",
@@ -42,17 +43,87 @@ def test_jinja_conditionals_omit_missing_year_and_suffix_movie_extras(tmp_path, 
         description=None,
         downloaded_date=None,
         duration=120,
+        published_date=datetime(2021, 6, 7, 8, 9, 10),
     )
     template = (
-        "/downloads/{{ movie_title }}{% if year %} ({{ year }}){% endif %}/{{ title }}"
+        "/downloads/{{ movie_title }}{% if movie_year %} ({{ movie_year }}){% endif %}/"
+        "{{ title }}{% if year %} ({{ year }}){% endif %}"
         "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
     )
 
     movie_path = resolve_movie_output_path(template, movie=movie)
     trailer_path = resolve_movie_output_path(template, movie=movie, media_item=trailer)
 
-    assert movie_path == (tmp_path / "Example Movie" / "Example Movie.ext").resolve()
-    assert trailer_path == (tmp_path / "Example Movie" / "Official Trailer-trailer.ext").resolve()
+    assert movie_path == (tmp_path / "Example Movie (2020)" / "Example Movie (2020).ext").resolve()
+    assert trailer_path == (
+        tmp_path / "Example Movie (2020)" / "Official Trailer (2021)-trailer.ext"
+    ).resolve()
+
+
+def test_movie_variables_separate_parent_movie_from_current_media() -> None:
+    from backend.db.models import Movie, MovieExtra
+    from backend.types.media_types import MediaType
+    from backend.utils.output_template import (
+        MOVIE_OUTPUT_TEMPLATE_FIELDS,
+        movie_output_template_values,
+    )
+
+    movie = Movie(
+        uuid="movie-context",
+        type=MediaType.MOVIE.value,
+        slug="parent-movie",
+        title="Parent Movie",
+        extended_title="Parent Movie | Extended",
+        dw_id="movie-123",
+        author_name="Movie Author",
+        mature_rating="PG-13",
+        description=None,
+        downloaded_date=None,
+        duration=6000.4,
+        release_date=date(2020, 5, 4),
+    )
+    extra = MovieExtra(
+        uuid="extra-context",
+        type=MediaType.MOVIE_EXTRA.value,
+        movie=movie,
+        movie_extra_type="trailer",
+        slug="official-trailer",
+        title="Official Trailer",
+        dw_id="extra-456",
+        description=None,
+        downloaded_date=None,
+        duration=120.6,
+        published_date=datetime(2021, 6, 7, 8, 9, 10),
+    )
+
+    movie_values = movie_output_template_values(movie)
+    extra_values = movie_output_template_values(movie, extra)
+
+    assert movie_values.keys() == extra_values.keys() == MOVIE_OUTPUT_TEMPLATE_FIELDS
+    assert "movie" not in movie_values
+    assert movie_values["movie_slug"] == movie_values["slug"] == "parent-movie"
+    assert movie_values["movie_title"] == movie_values["title"] == "Parent Movie"
+    assert movie_values["movie_year"] == movie_values["year"] == "2020"
+
+    assert extra_values["movie_slug"] == "parent-movie"
+    assert extra_values["slug"] == "official-trailer"
+    assert extra_values["movie_title"] == "Parent Movie"
+    assert extra_values["title"] == "Official Trailer"
+    assert extra_values["movie_extended_title"] == "Parent Movie | Extended"
+    assert extra_values["extended_title"] == "Official Trailer"
+    assert extra_values["movie_dw_id"] == "movie-123"
+    assert extra_values["dw_id"] == "extra-456"
+    assert extra_values["movie_author"] == "Movie Author"
+    assert extra_values["author"] == ""
+    assert extra_values["movie_mature_rating"] == "PG-13"
+    assert extra_values["mature_rating"] == extra_values["rating"] == ""
+    assert extra_values["movie_duration_seconds"] == "6000"
+    assert extra_values["duration_seconds"] == "121"
+    assert extra_values["media_type"] == "trailer"
+    assert extra_values["movie_datetime"] == "2020-05-04 00:00:00"
+    assert extra_values["movie_year"] == "2020"
+    assert extra_values["datetime"] == "2021-06-07 08:09:10"
+    assert extra_values["year"] == "2021"
 
 
 def test_jinja_validation_reports_syntax_and_unknown_variables():
@@ -158,6 +229,7 @@ def test_movie_template_sources_include_local_extras_parent_first_and_limit_to_t
             description=None,
             downloaded_date=None,
             duration=6000,
+            release_date=date(2020 + index, 1, 2),
         )
         movie.movie_extras.extend([
             MovieExtra(
@@ -169,6 +241,7 @@ def test_movie_template_sources_include_local_extras_parent_first_and_limit_to_t
                 description=None,
                 downloaded_date=None,
                 duration=120,
+                published_date=datetime(2021 + index, 3, 4, 5, 6, 7),
             ),
             MovieExtra(
                 uuid=f"movie-{index}-interview",
@@ -179,6 +252,7 @@ def test_movie_template_sources_include_local_extras_parent_first_and_limit_to_t
                 description=None,
                 downloaded_date=None,
                 duration=300,
+                published_date=datetime(2021 + index, 4, 5, 6, 7, 8),
             ),
         ])
         movies.append(movie)
@@ -195,6 +269,8 @@ def test_movie_template_sources_include_local_extras_parent_first_and_limit_to_t
     assert sources[1].values["movie_title"] == sources[0].values["movie_title"]
     assert sources[1].values["title"] != sources[0].values["title"]
     assert sources[1].values["media_type"] == "trailer"
+    assert sources[1].values["movie_year"] == sources[0].values["year"]
+    assert sources[1].values["year"] != sources[1].values["movie_year"]
     assert all(source.fallback is False for source in sources)
 
     session.close()

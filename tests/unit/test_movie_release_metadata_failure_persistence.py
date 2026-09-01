@@ -35,7 +35,8 @@ def test_failed_lookup_uses_conditional_path_and_creates_download(tmp_path, monk
         slug="plex-movies",
         name="Plex movies",
         output_template=(
-            "/downloads/{{ movie_title }}{% if year %} ({{ year }}){% endif %}/{{ title }}.ext"
+            "/downloads/{{ movie_title }}{% if movie_year %} ({{ movie_year }}){% endif %}/"
+            "{{ title }}.ext"
         ),
         preferred_format="format_1080p",
         append_media_type_to_filename=False,

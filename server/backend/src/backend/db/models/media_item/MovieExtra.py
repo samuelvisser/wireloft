@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import ForeignKey
@@ -34,6 +35,7 @@ class MovieExtra(MediaItemBase):
     dw_id: Mapped[Optional[str]] = mapped_column(index=True, unique=True)
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     sharing_url: Mapped[Optional[str]]
+    published_date: Mapped[Optional[datetime]]
 
     movie: Mapped["Movie"] = relationship(
         back_populates="movie_extras",

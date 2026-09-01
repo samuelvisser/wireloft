@@ -53,6 +53,7 @@ export const DailywireMovieExtraReadSchema = z.looseObject({
     movieExtraType: MovieExtraTypeSchema,
     description: nullableString,
     sharingUrl: nullableString,
+    publishedDate: z.iso.datetime().nullable(),
     duration: z.number(),
     backgroundImagePath: nullableString,
     thumbnailLandscapePath: nullableString,

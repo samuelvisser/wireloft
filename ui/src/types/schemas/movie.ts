@@ -15,6 +15,7 @@ export const MovieExtraCreateSchema = z.object({
     thumbnailPortraitPath: z.string().nullable().optional(),
     thumbnailSquarePath: z.string().nullable().optional(),
     sharingUrl: z.string().nullable().optional(),
+    publishedDate: z.date().nullable().optional(),
 })
 export type MovieExtraCreateIn = z.input<typeof MovieExtraCreateSchema>;
 export type MovieExtraCreateOut = z.output<typeof MovieExtraCreateSchema>;
@@ -36,6 +37,7 @@ export const MovieExtraReadSchema = z.looseObject({
     thumbnailPortraitPath: z.string().nullable(),
     thumbnailSquarePath: z.string().nullable(),
     sharingUrl: z.string().nullable(),
+    publishedDate: z.iso.datetime().transform((s) => new Date(s)).nullable(),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })

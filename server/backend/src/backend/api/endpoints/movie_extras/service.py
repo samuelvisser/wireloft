@@ -67,6 +67,7 @@ def sync_movie_extras(
                 dw_id=record.dw_id,
                 slug=record.slug,
                 sharing_url=record.sharing_url,
+                published_date=record.published_date,
             )
             s.add(item)
             existing.append(item)
@@ -83,6 +84,7 @@ def sync_movie_extras(
             item.dw_id = record.dw_id
             item.slug = record.slug
             item.sharing_url = record.sharing_url
+            item.published_date = record.published_date
 
         by_slug[item.slug] = item
         if item.dw_id:

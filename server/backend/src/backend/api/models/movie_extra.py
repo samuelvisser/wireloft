@@ -23,6 +23,7 @@ class _MovieExtraAPIBaseIn(RequestBase):
     dw_id: Optional[str] = None
     slug: str
     sharing_url: Optional[str] = None
+    published_date: Optional[datetime] = None
 
 
 class MovieExtraAPICreate(_MovieExtraAPIBaseIn):
@@ -54,5 +55,6 @@ class MovieExtraAPIRead(ResponseBase):
     dw_id: Optional[str]
     slug: str
     sharing_url: Optional[str]
+    published_date: Optional[datetime]
     created_at: datetime
     updated_at: datetime
