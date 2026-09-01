@@ -14,4 +14,8 @@ export const RssDwVideoMethodReg = createSelectRegistry("RssDwVideoMethod", {
     label: "Serve as locally cached mp4 (full compatibility)",
     help: "Prepare and serve a conventional MP4 video file",
   },
+  'podcasting_2_0_cached_mp4': {
+    label: "Podcasting 2.0 direct stream with cached mp4 fallback",
+    help: "Stream immediately with Podcasting 2.0 and use cached MP4 for downloads and fallback",
+  },
 });
