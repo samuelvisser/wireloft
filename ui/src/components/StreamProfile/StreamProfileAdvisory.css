@@ -1,0 +1,37 @@
+.stream-download-advisory {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #f59e0b66;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #78350f;
+}
+
+.stream-download-advisory-title {
+  font-weight: 700;
+}
+
+.stream-download-advisory p,
+.stream-download-advisory .help {
+  color: inherit;
+}
+
+.stream-download-advisory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stream-download-advisory-actions .btn {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .stream-download-advisory {
+    border-color: rgba(245, 158, 11, 0.38);
+    background: rgba(245, 158, 11, 0.10);
+    color: #fde68a;
+  }
+}
