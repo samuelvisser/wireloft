@@ -40,3 +40,38 @@ def get_download_profile(s: Session, download_profile_id: int) -> DownloadProfil
         raise HTTPException(status_code=404, detail="Download profile not found")
 
     return DownloadProfileAPIRead.model_validate(item)
+
+
+def require_unique_download_profile_episode_types(
+        s: Session,
+        *,
+        show_id: int,
+        local_media_profile_id: int,
+        episode_types: list[str],
+        exclude_profile_id: int | None = None,
+) -> None:
+    requested_types = set(episode_types)
+    if not requested_types:
+        return
+
+    query = s.query(DownloadProfileBase).filter(
+        DownloadProfileBase.show_id == show_id,
+        DownloadProfileBase.local_media_profile_id == local_media_profile_id,
+    )
+    if exclude_profile_id is not None:
+        query = query.filter(DownloadProfileBase.id != exclude_profile_id)
+
+    conflicts = sorted({
+        episode_type
+        for profile in query.all()
+        for episode_type in profile.ep_id_type_list
+        if episode_type in requested_types
+    })
+    if conflicts:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Episode types already used by another Download Profile for this show and Local Media Profile: "
+                + ", ".join(conflicts)
+            ),
+        )
