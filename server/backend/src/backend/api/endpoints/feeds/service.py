@@ -47,10 +47,14 @@ _BARE_HTML_AMPERSAND_RE = re.compile(
 _CACHED_MP4_METHODS = {
     RssDwVideoMethod.STREAM_DOWNLOAD_MP4.value,
     RssDwVideoMethod.STREAM_HLS_DOWNLOAD_MP4.value,
+    "cached_mp4",
+    "podcasting_2_0_cached_mp4",
 }
 _HLS_ALTERNATE_METHODS = {
     RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value,
     RssDwVideoMethod.STREAM_HLS_DOWNLOAD_MP4.value,
+    "podcasting_2_0",
+    "podcasting_2_0_cached_mp4",
 }
 
 
