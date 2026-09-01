@@ -267,7 +267,9 @@ class SettingsValues(_SettingsValueModel):
     new_episode_schedule: TrackNewEpisodeScheduleValue
     episode_status_timing: EpisodeStatusTimingValue
     download_settings: DownloadSettingsValue
-    rss: RssSettingsValue
+    rss: RssSettingsValue = Field(
+        default_factory=lambda: RssSettingsValue(max_items=100)
+    )
     file_watcher: FileWatcherSettingsValue
 
     @field_validator("log_level", mode="before")
