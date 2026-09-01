@@ -8,6 +8,7 @@ import {
 import {RssStreamProfileCreateSchema} from "./rss_stream_profile";
 import {z} from "zod";
 import {SeasonDetachedSchema} from "./season";
+import {EpisodeTypeReg} from "../episode";
 
 
 export const PodcastDownloadProfileBundleSchema = PodcastDownloadProfileCreateSchema.omit({
@@ -15,6 +16,7 @@ export const PodcastDownloadProfileBundleSchema = PodcastDownloadProfileCreateSc
     localMediaProfileId: true,
 }).extend({
     op: z.literal('podcast').default('podcast'),
+    epIdTypeList: z.array(z.enum(EpisodeTypeReg.values)).default(['ep', 'aux']),
 })
 export type PodcastDownloadProfileBundleIn = z.input<typeof PodcastDownloadProfileBundleSchema>
 export type PodcastDownloadProfileBundleOut = z.output<typeof PodcastDownloadProfileBundleSchema>
@@ -25,6 +27,11 @@ export const SeriesDownloadProfileBundleSchema = SeriesDownloadProfileCreateSche
     localMediaProfileId: true,
 }).safeExtend({
     op: z.literal('series').default('series'),
+    epIdTypeList: z.array(z.enum(EpisodeTypeReg.values)).default(['ep']),
+    // The add-show wizard supplies the latest available season dynamically.
+    // Keep this required here so getZodDefaults can distinguish an untouched
+    // wizard profile from one where the user deliberately cleared all seasons.
+    seasons: z.array(SeasonDetachedSchema),
 })
 export type SeriesDownloadProfileBundleIn = z.input<typeof SeriesDownloadProfileBundleSchema>
 export type SeriesDownloadProfileBundleOut = z.output<typeof SeriesDownloadProfileBundleSchema>
