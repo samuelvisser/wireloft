@@ -107,7 +107,6 @@ class AppSettings(SettingsBase):
         remux_video_to_mp4=True,
         ffmpeg_path="ffmpeg",
     ))
-    rss: RssSettings = Field(default_factory=RssSettings)
     file_watcher: FileWatcherSettings = Field(default=FileWatcherSettings(
         enabled=True,
         scan_cron="*/10 * * * *",
