@@ -5,6 +5,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
+from backend.api.endpoints.download_profiles.service import require_unique_download_profile_episode_types
 from backend.api.helpers import update_database_fields
 from backend.api.models.podcast_download_profile import *
 from backend.db.models.download_profile import PodcastDownloadProfile
@@ -36,6 +37,12 @@ def get_download_profile_podcast(s: Session, download_profile_id: int) -> Podcas
 
 def create_download_profile_podcast(s: Session, body: PodcastDownloadProfileAPICreate) -> PodcastDownloadProfileAPIRead:
     require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
+    require_unique_download_profile_episode_types(
+        s,
+        show_id=body.show_id,
+        local_media_profile_id=body.local_media_profile_id,
+        episode_types=body.ep_id_type_list,
+    )
     data = body.model_dump(by_alias=True)
     item = PodcastDownloadProfile(**data)
     s.add(item)
@@ -61,6 +68,13 @@ def update_download_profile_podcast(s: Session, download_profile_id: int, body: 
         raise HTTPException(status_code=404, detail="Download profile not found")
 
     require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
+    require_unique_download_profile_episode_types(
+        s,
+        show_id=item.show_id,
+        local_media_profile_id=body.local_media_profile_id,
+        episode_types=body.ep_id_type_list,
+        exclude_profile_id=item.id,
+    )
     update_database_fields(item, body)
     s.flush()
 
