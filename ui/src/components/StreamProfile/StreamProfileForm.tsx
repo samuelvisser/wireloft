@@ -185,7 +185,7 @@ export default function StreamProfileForm({
     )
 
     const createDownloadProfileHref = showSlug
-        ? `/add-download-profile?show=${encodeURIComponent(showSlug)}`
+        ? `/add-download-profile?show=${encodeURIComponent(showSlug)}&downloadEpisodeCount=5`
         : undefined
     const editDownloadProfileHref = bestMatchingDownloadProfile?.id && bestMatchingDownloadProfile.type
         ? `/edit-download-profile/${bestMatchingDownloadProfile.type}/${bestMatchingDownloadProfile.id}`
