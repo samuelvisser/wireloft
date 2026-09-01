@@ -161,14 +161,6 @@ class DownloadSettings(SubmodelBase):
     ffmpeg_path: str = Field(default="ffmpeg", description="Path to the ffmpeg binary used for remuxing video to mp4")
 
 
-class RssSettings(SubmodelBase):
-    max_items: int = Field(
-        default=100,
-        ge=0,
-        description="Maximum number of newest episodes included in each RSS feed; 0 disables the limit",
-    )
-
-
 class FileWatcherSettings(SubmodelBase):
     enabled: bool = Field(..., description="Enable the file watcher that keeps downloaded episode files in sync with the database")
     scan_cron: str = Field(..., description="Cron schedule for the periodic file watcher scan")

@@ -18,7 +18,8 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     use_dw_stream: bool
     preferred_format: str = Field(min_length=1)
     require_exact_match: bool
-    dw_video_method: RssDwVideoMethod = RssDwVideoMethod.PODCASTING_2_0.value
+    dw_video_method: RssDwVideoMethod = RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value
+    max_items: int = Field(default=0, ge=0)
 
 
 class RssStreamProfileAPICreate(_RssStreamProfileAPIBaseIn):
@@ -51,6 +52,7 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
     preferred_format: str
     require_exact_match: bool
     dw_video_method: str
+    max_items: int
     feed_url: str
 
 

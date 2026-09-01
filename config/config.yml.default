@@ -25,8 +25,3 @@ downloadSettings:
 
   # Restrict generated download file and directory names to ASCII characters.
   asciiOnlyFilenames: true
-
-rss:
-  # Maximum number of newest episodes included in each RSS feed. Set to 0 to
-  # expose the complete episode history.
-  maxItems: 100

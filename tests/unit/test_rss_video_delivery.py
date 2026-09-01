@@ -35,7 +35,7 @@ def test_direct_stream_uses_audio_enclosure_and_signed_hls_alternate():
         episode=_episode(),
         download=None,
         preferred_format="format_1080p",
-        dw_video_method="podcasting_2_0",
+        dw_video_method="stream_hls_download_m4a",
         dw_video_url="https://stream.dailywire.test/master.m3u8?token=fresh",
     )
 
@@ -46,7 +46,7 @@ def test_direct_stream_uses_audio_enclosure_and_signed_hls_alternate():
     ) in xml
     assert 'type="application/x-mpegURL"' in xml
     assert 'uri="https://stream.dailywire.test/master.m3u8?token=fresh"' in xml.replace("&amp;", "&")
-    assert "episode-uuid:podcasting_2_0" in xml
+    assert "episode-uuid:stream_hls_download_m4a" in xml
 
 
 def test_cached_mp4_uses_video_enclosure_without_audio_fallback(monkeypatch):
@@ -60,7 +60,7 @@ def test_cached_mp4_uses_video_enclosure_without_audio_fallback(monkeypatch):
         episode=_episode(),
         download=None,
         preferred_format="format_1080p",
-        dw_video_method="cached_mp4",
+        dw_video_method="stream_download_mp4",
     )
 
     xml = tostring(channel, encoding="unicode")
@@ -70,7 +70,7 @@ def test_cached_mp4_uses_video_enclosure_without_audio_fallback(monkeypatch):
     ) in xml
     assert "/audio" not in xml
     assert "podcast:alternateEnclosure" not in xml
-    assert "episode-uuid:cached_mp4" in xml
+    assert "episode-uuid:stream_download_mp4" in xml
 
 
 def test_downloaded_video_keeps_the_standard_download_enclosure(tmp_path):
@@ -91,7 +91,7 @@ def test_downloaded_video_keeps_the_standard_download_enclosure(tmp_path):
         episode=_episode(),
         download=download,
         preferred_format="format_1080p",
-        dw_video_method="cached_mp4",
+        dw_video_method="stream_download_mp4",
     )
 
     xml = tostring(channel, encoding="unicode")
@@ -101,22 +101,22 @@ def test_downloaded_video_keeps_the_standard_download_enclosure(tmp_path):
     ) in xml
     assert "/video.mp4" not in xml
     assert "podcast:alternateEnclosure" not in xml
-    assert "episode-uuid:cached_mp4" not in xml
+    assert "episode-uuid:stream_download_mp4" not in xml
 
 
 def test_feed_url_method_is_replaced_without_losing_other_query_parameters():
     from backend.utils.feed_urls import set_rss_feed_dw_video_method
 
     updated = set_rss_feed_dw_video_method(
-        "https://wireloft.test/feed.xml?custom=value&dwVideoMethod=podcasting_2_0",
+        "https://wireloft.test/feed.xml?custom=value&dwVideoMethod=stream_hls_download_m4a",
         use_dw_stream=True,
-        dw_video_method="cached_mp4",
+        dw_video_method="stream_download_mp4",
     )
 
     query = parse_qs(urlsplit(updated).query)
     assert query == {
         "custom": ["value"],
-        "dwVideoMethod": ["cached_mp4"],
+        "dwVideoMethod": ["stream_download_mp4"],
     }
 
 
@@ -124,9 +124,9 @@ def test_feed_url_method_is_removed_when_dailywire_streaming_is_disabled():
     from backend.utils.feed_urls import set_rss_feed_dw_video_method
 
     updated = set_rss_feed_dw_video_method(
-        "https://wireloft.test/feed.xml?dwVideoMethod=cached_mp4&custom=value",
+        "https://wireloft.test/feed.xml?dwVideoMethod=stream_download_mp4&custom=value",
         use_dw_stream=False,
-        dw_video_method="cached_mp4",
+        dw_video_method="stream_download_mp4",
     )
 
     assert parse_qs(urlsplit(updated).query) == {"custom": ["value"]}

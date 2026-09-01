@@ -8,9 +8,9 @@ from xml.etree.ElementTree import Element
 import pytest
 
 
-PODCASTING_2_0 = "podcasting_2_0"
-CACHED_MP4 = "cached_mp4"
-HYBRID = "podcasting_2_0_cached_mp4"
+PODCASTING_2_0 = "stream_hls_download_m4a"
+CACHED_MP4 = "stream_download_mp4"
+HYBRID = "stream_hls_download_mp4"
 
 
 def _episode(*, slug: str = "episode-1", uuid: str = "episode-uuid"):
@@ -186,9 +186,9 @@ def test_remote_video_guid_changes_with_delivery_method():
         values.append(channel.find("item/guid").text)
 
     assert values == [
-        "episode-uuid:podcasting_2_0",
-        "episode-uuid:cached_mp4",
-        "episode-uuid:podcasting_2_0_cached_mp4",
+        "episode-uuid:stream_hls_download_m4a",
+        "episode-uuid:stream_download_mp4",
+        "episode-uuid:stream_hls_download_mp4",
     ]
 
 
@@ -219,14 +219,15 @@ def test_feed_url_method_is_added_replaced_and_removed():
 
     assert direct == (
         "https://wireloft.example/feed.xml?custom=value&"
-        "dwVideoMethod=podcasting_2_0"
+        "dwVideoMethod=stream_hls_download_m4a"
     )
     assert cached == (
-        "https://wireloft.example/feed.xml?custom=value&dwVideoMethod=cached_mp4"
+        "https://wireloft.example/feed.xml?custom=value&"
+        "dwVideoMethod=stream_download_mp4"
     )
     assert hybrid == (
         "https://wireloft.example/feed.xml?custom=value&"
-        "dwVideoMethod=podcasting_2_0_cached_mp4"
+        "dwVideoMethod=stream_hls_download_mp4"
     )
     assert disabled == original
 
@@ -243,7 +244,7 @@ def test_build_feed_url_includes_selected_method():
         dw_video_method=HYBRID,
     ) == (
         "https://wireloft.example/feeds/rss/token/test-show.xml?"
-        "dwVideoMethod=podcasting_2_0_cached_mp4"
+        "dwVideoMethod=stream_hls_download_mp4"
     )
 
 

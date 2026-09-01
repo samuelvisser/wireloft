@@ -67,10 +67,6 @@ const DownloadSettingsSchema = z.object({
     ffmpegPath: z.string(),
 })
 
-const RssSettingsSchema = z.object({
-    maxItems: z.number(),
-})
-
 const FileWatcherSettingsSchema = z.object({
     enabled: z.boolean(),
     scanCron: z.string(),
@@ -90,7 +86,6 @@ export const SettingsValuesSchema = z.object({
     newEpisodeSchedule: TrackNewEpisodeScheduleSchema,
     episodeStatusTiming: EpisodeStatusTimingSchema,
     downloadSettings: DownloadSettingsSchema,
-    rss: RssSettingsSchema,
     fileWatcher: FileWatcherSettingsSchema,
 })
 export type SettingsValues = z.infer<typeof SettingsValuesSchema>
@@ -132,7 +127,6 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadSettings.asciiOnlyFilenames',
     'downloadSettings.remuxVideoToMp4',
     'downloadSettings.ffmpegPath',
-    'rss.maxItems',
     'fileWatcher.enabled',
     'fileWatcher.scanCron',
     'fileWatcher.verifyFileSize',

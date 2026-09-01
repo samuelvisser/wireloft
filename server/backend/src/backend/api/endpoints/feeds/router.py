@@ -26,8 +26,8 @@ _NO_CACHE_HEADERS = {
 }
 
 _CACHED_MP4_METHODS = {
-    RssDwVideoMethod.CACHED_MP4.value,
-    RssDwVideoMethod.PODCASTING_2_0_CACHED_MP4.value,
+    RssDwVideoMethod.STREAM_DOWNLOAD_MP4.value,
+    RssDwVideoMethod.STREAM_HLS_DOWNLOAD_MP4.value,
 }
 
 

@@ -16,10 +16,12 @@ class RssStreamProfile(StreamProfileBase):
     id: Mapped[int] = mapped_column(ForeignKey("stream_profiles.id", ondelete="CASCADE"), primary_key=True)
     feed_url: Mapped[str]
     dw_video_method: Mapped[str] = mapped_column(default=DEFAULT_RSS_DW_VIDEO_METHOD)
+    max_items: Mapped[int] = mapped_column(default=0)
 
     def __repr__(self) -> str:
         return (
             f"<RssStreamProfile(id={self.id}, feed_url={self.feed_url}, "
-            f"dw_video_method={self.dw_video_method}, enable_profile={self.enable_profile}, "
-            f"created_at={self.created_at}, updated_at={self.updated_at})>"
+            f"dw_video_method={self.dw_video_method}, max_items={self.max_items}, "
+            f"enable_profile={self.enable_profile}, created_at={self.created_at}, "
+            f"updated_at={self.updated_at})>"
         )
