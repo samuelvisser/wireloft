@@ -1,7 +1,7 @@
 """Move RSS limits to profiles and rename Daily Wire video method keys.
 
 Revision ID: f4c2b7d91a6e
-Revises: e8a1f4c2d7b9
+Revises: e6f1a4c9d2b7
 Create Date: 2026-09-01
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 
 revision: str = "f4c2b7d91a6e"
-down_revision: Union[str, None] = "e8a1f4c2d7b9"
+down_revision: Union[str, None] = "e6f1a4c9d2b7"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
