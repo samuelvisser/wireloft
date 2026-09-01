@@ -379,6 +379,11 @@
         background: rgba(96, 165, 250, 0.3) !important;
     }
 
+    .output-template-code-editor .cm-cursor,
+    .output-template-code-editor .cm-dropCursor {
+        border-left-color: #f8fafc;
+    }
+
     .output-template-code-editor .cm-jinja-brace {
         color: #f472b6;
     }
