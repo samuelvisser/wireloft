@@ -40,7 +40,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     current, head = get_database_status()
     assert current == (head,)
-    assert head == "e8a1f4c2d7b9"
+    assert head == "f4c2b7d91a6e"
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -89,6 +89,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         column["name"] for column in inspector.get_columns("stream_profiles_rss")
     }
     assert "dw_video_method" in rss_profile_columns
+    assert "max_items" in rss_profile_columns
 
     with engine.connect() as connection:
         assert not bool(connection.execute(text(
@@ -227,19 +228,21 @@ def test_rss_video_method_migration_backfills_feed_urls(migration_database):
 
     with engine.connect() as connection:
         profiles = connection.execute(text(
-            "SELECT base.token, rss.feed_url, rss.dw_video_method "
+            "SELECT base.token, rss.feed_url, rss.dw_video_method, rss.max_items "
             "FROM stream_profiles AS base "
             "JOIN stream_profiles_rss AS rss ON rss.id = base.id "
             "ORDER BY base.token"
         )).mappings().all()
 
     profiles_by_token = {profile["token"]: profile for profile in profiles}
-    assert profiles_by_token["dw-token"]["dw_video_method"] == "podcasting_2_0"
+    assert profiles_by_token["dw-token"]["dw_video_method"] == "stream_hls_download_m4a"
+    assert profiles_by_token["dw-token"]["max_items"] == 0
     assert parse_qs(urlsplit(profiles_by_token["dw-token"]["feed_url"]).query) == {
         "custom": ["value"],
-        "dwVideoMethod": ["podcasting_2_0"],
+        "dwVideoMethod": ["stream_hls_download_m4a"],
     }
-    assert profiles_by_token["local-token"]["dw_video_method"] == "podcasting_2_0"
+    assert profiles_by_token["local-token"]["dw_video_method"] == "stream_hls_download_m4a"
+    assert profiles_by_token["local-token"]["max_items"] == 0
     assert parse_qs(urlsplit(profiles_by_token["local-token"]["feed_url"]).query) == {
         "custom": ["value"],
     }
@@ -461,4 +464,4 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 def test_migration_history_has_exactly_one_head():
     from backend.db.migrations import get_head_revisions
 
-    assert get_head_revisions() == ("e8a1f4c2d7b9",)
+    assert get_head_revisions() == ("f4c2b7d91a6e",)
