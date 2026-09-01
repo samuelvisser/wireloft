@@ -27,11 +27,19 @@ export default function SeriesDownloadProfileStep({
                                                       value, onChange, onSubmit: onSubmitParent, seasons, onBack,
                                                       onContinue, onCancel, continueLabel = 'Continue'
                                                   }: SeriesDownloadProfileProps) {
+    const latestSeason = seasons.length > 0 ? seasons[seasons.length - 1] : undefined
+    const defaultValues: Partial<DownloadProfileUnifiedCreateIn> = {
+        ...value,
+        seasons: value.seasons === undefined
+            ? (latestSeason ? [latestSeason] : [])
+            : value.seasons,
+    }
+
     const form = useForm<DownloadProfileUnifiedCreateIn>({
         resolver: zodResolver(DownloadProfileUnifiedCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: value,
+        defaultValues,
     })
     const {watch} = form
 
