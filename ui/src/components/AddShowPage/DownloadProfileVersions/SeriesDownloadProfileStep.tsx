@@ -28,12 +28,13 @@ export default function SeriesDownloadProfileStep({
                                                       onContinue, onCancel, continueLabel = 'Continue'
                                                   }: SeriesDownloadProfileProps) {
     const latestSeason = seasons.length > 0 ? seasons[seasons.length - 1] : undefined
+    const selectedSeasons = (value as {seasons?: SeasonItem[]}).seasons
     const defaultValues: Partial<DownloadProfileUnifiedCreateIn> = {
         ...value,
-        seasons: value.seasons === undefined
+        seasons: selectedSeasons === undefined
             ? (latestSeason ? [latestSeason] : [])
-            : value.seasons,
-    }
+            : selectedSeasons,
+    } as Partial<DownloadProfileUnifiedCreateIn>
 
     const form = useForm<DownloadProfileUnifiedCreateIn>({
         resolver: zodResolver(DownloadProfileUnifiedCreateSchema),
