@@ -10,6 +10,7 @@ import pytest
 
 PODCASTING_2_0 = "podcasting_2_0"
 CACHED_MP4 = "cached_mp4"
+HYBRID = "podcasting_2_0_cached_mp4"
 
 
 def _episode(*, slug: str = "episode-1", uuid: str = "episode-uuid"):
@@ -93,7 +94,41 @@ def test_cached_mp4_uses_video_enclosure_without_audio(monkeypatch):
     assert not _children(item, "podcast:alternateEnclosure")
 
 
-@pytest.mark.parametrize("method", [PODCASTING_2_0, CACHED_MP4])
+def test_hybrid_uses_direct_hls_with_cached_mp4_fallback(monkeypatch):
+    import backend.api.endpoints.feeds.service as feed_service
+
+    monkeypatch.setattr(feed_service, "get_cached_mp4_size", lambda _uuid: 123456)
+    signed_url = "https://stream.example/video.m3u8?token=abc&expires=123"
+
+    channel = Element("channel")
+    feed_service._append_item(
+        channel,
+        media_base_url="https://wireloft.example/feeds/rss/token",
+        episode=_episode(),
+        download=None,
+        preferred_format="format_1080p",
+        dw_video_method=HYBRID,
+        dw_video_url=signed_url,
+    )
+
+    item = channel.find("item")
+    assert item is not None
+    enclosure = item.find("enclosure")
+    assert enclosure is not None
+    assert enclosure.attrib == {
+        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1/video.mp4",
+        "length": "123456",
+        "type": "video/mp4",
+    }
+
+    alternates = _children(item, "podcast:alternateEnclosure")
+    assert len(alternates) == 1
+    sources = _children(alternates[0], "podcast:source")
+    assert len(sources) == 1
+    assert sources[0].attrib["uri"] == signed_url
+
+
+@pytest.mark.parametrize("method", [PODCASTING_2_0, CACHED_MP4, HYBRID])
 def test_local_download_keeps_download_only_feed_behavior(tmp_path, monkeypatch, method):
     import backend.api.endpoints.feeds.service as feed_service
 
@@ -137,7 +172,7 @@ def test_remote_video_guid_changes_with_delivery_method():
     from backend.api.endpoints.feeds.service import _append_item
 
     values = []
-    for method in (PODCASTING_2_0, CACHED_MP4):
+    for method in (PODCASTING_2_0, CACHED_MP4, HYBRID):
         channel = Element("channel")
         _append_item(
             channel,
@@ -153,6 +188,7 @@ def test_remote_video_guid_changes_with_delivery_method():
     assert values == [
         "episode-uuid:podcasting_2_0",
         "episode-uuid:cached_mp4",
+        "episode-uuid:podcasting_2_0_cached_mp4",
     ]
 
 
@@ -170,10 +206,15 @@ def test_feed_url_method_is_added_replaced_and_removed():
         use_dw_stream=True,
         dw_video_method=CACHED_MP4,
     )
-    disabled = set_rss_feed_video_method(
+    hybrid = set_rss_feed_video_method(
         cached,
+        use_dw_stream=True,
+        dw_video_method=HYBRID,
+    )
+    disabled = set_rss_feed_video_method(
+        hybrid,
         use_dw_stream=False,
-        dw_video_method=CACHED_MP4,
+        dw_video_method=HYBRID,
     )
 
     assert direct == (
@@ -182,6 +223,10 @@ def test_feed_url_method_is_added_replaced_and_removed():
     )
     assert cached == (
         "https://wireloft.example/feed.xml?custom=value&dwVideoMethod=cached_mp4"
+    )
+    assert hybrid == (
+        "https://wireloft.example/feed.xml?custom=value&"
+        "dwVideoMethod=podcasting_2_0_cached_mp4"
     )
     assert disabled == original
 
@@ -195,10 +240,10 @@ def test_build_feed_url_includes_selected_method():
         token="token",
         show_slug="test-show",
         use_dw_stream=True,
-        dw_video_method=CACHED_MP4,
+        dw_video_method=HYBRID,
     ) == (
         "https://wireloft.example/feeds/rss/token/test-show.xml?"
-        "dwVideoMethod=cached_mp4"
+        "dwVideoMethod=podcasting_2_0_cached_mp4"
     )
 
 
@@ -262,7 +307,8 @@ def test_feed_and_media_head_responses_have_matching_headers():
     assert "content-length" not in uncached.headers
     assert uncached.headers["accept-ranges"] == "bytes"
 
-    cached = _cached_mp4_head_response(321, filename="episode.mp4")
+    cached_file = SimpleNamespace(stat=lambda: SimpleNamespace(st_size=321))
+    cached = _cached_mp4_head_response(cached_file, filename="episode.mp4")
     assert cached.headers["content-length"] == "321"
 
 
