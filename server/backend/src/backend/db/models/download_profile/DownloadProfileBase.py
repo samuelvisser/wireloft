@@ -2,7 +2,7 @@ from datetime import datetime
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, UniqueConstraint, DateTime, func, JSON
+from sqlalchemy import ForeignKey, DateTime, func, JSON
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
@@ -14,9 +14,6 @@ if TYPE_CHECKING:
 
 class DownloadProfileBase(Base):
     __tablename__ = "download_profiles"
-    __table_args__ = (
-        UniqueConstraint("show_id", "local_media_profile_id", name="uq_unique_media_profile_per_show"),
-    )
     __mapper_args__ = {
         "polymorphic_on": "type",
         "polymorphic_identity": DownloadProfileType.BASE.value,
