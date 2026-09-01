@@ -51,6 +51,7 @@ SettingFieldPath = Literal[
     "downloadSettings.asciiOnlyFilenames",
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
+    "rss.maxItems",
     "fileWatcher.enabled",
     "fileWatcher.scanCron",
     "fileWatcher.verifyFileSize",
@@ -93,6 +94,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.asciiOnlyFilenames",
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
+    "rss.maxItems",
     "fileWatcher.enabled",
     "fileWatcher.scanCron",
     "fileWatcher.verifyFileSize",
@@ -233,6 +235,10 @@ class DownloadSettingsValue(_SettingsValueModel):
     )(_validate_non_empty_path)
 
 
+class RssSettingsValue(_SettingsValueModel):
+    max_items: int = Field(ge=0)
+
+
 class FileWatcherSettingsValue(_SettingsValueModel):
     enabled: bool
     scan_cron: str = Field(min_length=1)
@@ -261,6 +267,7 @@ class SettingsValues(_SettingsValueModel):
     new_episode_schedule: TrackNewEpisodeScheduleValue
     episode_status_timing: EpisodeStatusTimingValue
     download_settings: DownloadSettingsValue
+    rss: RssSettingsValue
     file_watcher: FileWatcherSettingsValue
 
     @field_validator("log_level", mode="before")
@@ -302,6 +309,7 @@ class SettingsValues(_SettingsValueModel):
             new_episode_schedule=TrackNewEpisodeScheduleValue.model_validate(settings.new_episode_schedule),
             episode_status_timing=EpisodeStatusTimingValue.model_validate(settings.episode_status_timing),
             download_settings=DownloadSettingsValue.model_validate(settings.download_settings),
+            rss=RssSettingsValue.model_validate(settings.rss),
             file_watcher=FileWatcherSettingsValue.model_validate(settings.file_watcher),
         )
 
