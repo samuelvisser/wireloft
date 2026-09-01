@@ -93,7 +93,13 @@ def _ffmpeg_command(source_url: str, output_path: Path) -> list[str]:
 
 def prepare_cached_mp4(source_url: str, *, episode_uuid: str) -> Path:
     target = _cache_path(episode_uuid)
-    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="RSS video cache is not writable",
+        ) from exc
 
     with _lock_for(target):
         if _is_current(target):
@@ -134,14 +140,23 @@ def prepare_cached_mp4(source_url: str, *, episode_uuid: str) -> Path:
                 logger.error(
                     "ffmpeg failed to prepare cached RSS video (exit %s): %s",
                     completed.returncode,
-                    completed.stderr[-4000:],
+                    (completed.stderr or "")[-4000:],
                 )
                 raise HTTPException(
                     status_code=502,
                     detail="Daily Wire video could not be prepared as MP4",
                 )
 
-            os.replace(temporary, target)
+            try:
+                os.replace(temporary, target)
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Could not store the prepared RSS video",
+                ) from exc
             return target
         finally:
-            temporary.unlink(missing_ok=True)
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
