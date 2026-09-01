@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from backend.api.models.download_profile import DownloadProfileAPIBaseIn, DownloadProfileAPICreate, DownloadProfileAPIUpdate, \
     DownloadProfileAPIBaseOut
@@ -15,7 +15,14 @@ class _PodcastDownloadProfileAPIBaseIn(DownloadProfileAPIBaseIn):
     download_with_countdown: bool
     redownload_final: bool
     download_days_in_past: int = Field(ge=0)
+    download_episode_count: int = Field(ge=0)
     delete_older_episodes: bool
+
+    @model_validator(mode="after")
+    def _validate_download_limit(self):
+        if self.download_days_in_past > 0 and self.download_episode_count > 0:
+            raise ValueError("Choose either a date limit or an episode-count limit, not both")
+        return self
 
 
 class PodcastDownloadProfileAPICreateBundle(_PodcastDownloadProfileAPIBaseIn):
@@ -40,6 +47,7 @@ class _PodcastDownloadProfileAPIBaseOut(DownloadProfileAPIBaseOut):
     download_with_countdown: bool
     redownload_final: bool
     download_days_in_past: int
+    download_episode_count: int
     delete_older_episodes: bool
 
 
