@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -20,8 +18,9 @@ class _FakeURL:
 
 
 class _FakeRequest:
-    def __init__(self, base_url: str = "http://localhost:5001/"):
+    def __init__(self, base_url: str = "http://localhost:5001/", method: str = "GET"):
         self.base_url = _FakeURL(base_url)
+        self.method = method
 
 
 def _make_show(session, *, slug="test-show"):
@@ -83,7 +82,8 @@ def _make_local_media_profile(session, *, slug, preferred_format):
     from backend.db.models import LocalMediaProfile
 
     profile = LocalMediaProfile(
-        slug=slug, name=slug,
+        slug=slug,
+        name=slug,
         output_template="/downloads/{show}/{episode}.ext",
         preferred_format=preferred_format,
     )
@@ -110,14 +110,30 @@ def _make_download(session, episode, profile, *, status, file_path=None, finishe
     return download
 
 
-def _make_rss_profile(session, show, *, preferred_format="format_1080p", require_exact_match=False,
-                       use_downloads=True, use_dw_stream=False, enable_profile=True, token="tok"):
+def _make_rss_profile(
+        session,
+        show,
+        *,
+        preferred_format="format_1080p",
+        require_exact_match=False,
+        use_downloads=True,
+        use_dw_stream=False,
+        enable_profile=True,
+        token="tok",
+        dw_video_method="podcasting_2_0",
+):
     from backend.db.models.stream_profile import RssStreamProfile
 
     profile = RssStreamProfile(
-        show=show, enable_profile=enable_profile, use_downloads=use_downloads, use_dw_stream=use_dw_stream,
-        preferred_format=preferred_format, require_exact_match=require_exact_match,
-        token=token, feed_url=f"http://localhost:5001/feeds/rss/{token}/{show.slug}.xml",
+        show=show,
+        enable_profile=enable_profile,
+        use_downloads=use_downloads,
+        use_dw_stream=use_dw_stream,
+        preferred_format=preferred_format,
+        require_exact_match=require_exact_match,
+        token=token,
+        feed_url=f"http://localhost:5001/feeds/rss/{token}/{show.slug}.xml",
+        dw_video_method=dw_video_method,
     )
     session.add(profile)
     session.flush()
@@ -125,13 +141,13 @@ def _make_rss_profile(session, show, *, preferred_format="format_1080p", require
 
 
 @pytest.fixture
-def db_session(tmp_path):
+def db_session():
     import backend.db.models  # noqa: F401 (registers all mappers before create_all)
     from backend.db import Base
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
-    Base.metadata.create_all(engine)
     session = Session(engine)
+    Base.metadata.create_all(engine)
     yield session
     session.close()
     engine.dispose()
@@ -175,11 +191,9 @@ def test_select_best_download_falls_back_when_not_exact(db_session, real_file):
 
     d720 = _make_download(db_session, ep, lmp_720, status="downloaded", file_path=real_file("a.mp4"))
 
-    # Wanted 1080p, only 720p downloaded: falls back when exact match isn't required.
     best = _select_best_download([d720], preferred_format="format_1080p", require_exact_match=False)
     assert best.id == d720.id
 
-    # ... but not when an exact match is required.
     best_strict = _select_best_download([d720], preferred_format="format_1080p", require_exact_match=True)
     assert best_strict is None
 
@@ -194,7 +208,6 @@ def test_select_best_download_never_mixes_audio_and_video(db_session, real_file)
 
     d_audio = _make_download(db_session, ep, lmp_audio, status="downloaded", file_path=real_file("a.m4a"))
 
-    # Preferred format is video: an audio-only download is never substituted, exact match or not.
     assert _select_best_download([d_audio], preferred_format="format_1080p", require_exact_match=False) is None
     assert _select_best_download([d_audio], preferred_format="format_1080p", require_exact_match=True) is None
 
@@ -204,7 +217,14 @@ def test_select_best_download_ignores_unavailable_statuses(db_session, real_file
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-    ep = _make_episode(db_session, show, season, slug="ep-1", index=1, published_at=datetime.now(timezone.utc).replace(tzinfo=None))
+    ep = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="ep-1",
+        index=1,
+        published_at=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
     lmp = _make_local_media_profile(db_session, slug="audio", preferred_format="format_audio_only")
 
     _make_download(db_session, ep, lmp, status="missing", file_path=real_file("a.m4a"))
@@ -336,7 +356,7 @@ def test_get_rss_stream_profile_by_token_404s_for_unknown_or_disabled(db_session
         get_rss_stream_profile_by_token(db_session, "known")
 
 
-def test_get_download_for_episode_404s_when_nothing_matches(db_session, real_file):
+def test_get_download_for_episode_404s_when_nothing_matches(db_session):
     from fastapi import HTTPException
     from backend.api.endpoints.feeds.service import get_download_for_episode
 
@@ -354,7 +374,7 @@ def test_get_download_for_episode_404s_when_nothing_matches(db_session, real_fil
     assert exc2.value.status_code == 404
 
 
-def test_get_media_for_episode_uses_dailywire_only_as_fallback(db_session, real_file):
+def test_get_media_for_episode_uses_dailywire_only_as_fallback(db_session):
     from backend.api.endpoints.feeds.service import get_media_for_episode
 
     show = _make_show(db_session)
@@ -421,7 +441,14 @@ def test_render_rss_feed_includes_enclosure_and_metadata(db_session, real_file):
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-    ep = _make_episode(db_session, show, season, slug="ep-1", index=1, published_at=datetime.now(timezone.utc).replace(tzinfo=None))
+    ep = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="ep-1",
+        index=1,
+        published_at=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
     lmp = _make_local_media_profile(db_session, slug="audio", preferred_format="format_audio_only")
     _make_download(db_session, ep, lmp, status="downloaded", file_path=real_file("ep-1.mp3", size=4096))
 
@@ -437,9 +464,6 @@ def test_render_rss_feed_includes_enclosure_and_metadata(db_session, real_file):
 
 
 def test_render_rss_feed_handles_missing_file_gracefully(db_session, tmp_path):
-    """A download row can outlive its file between file-watcher runs; the
-    enclosure should still be produced (length falls back to downloaded_bytes)
-    rather than crashing the feed."""
     from backend.api.endpoints.feeds.service import render_rss_feed
 
     show = _make_show(db_session)
@@ -454,14 +478,7 @@ def test_render_rss_feed_handles_missing_file_gracefully(db_session, tmp_path):
     assert 'length="0"' in xml
 
 
-@pytest.mark.parametrize(
-    ("preferred_format", "expected_mime_type"),
-    [
-        ("format_audio_only", "audio/mpeg"),
-        ("format_1080p", "application/vnd.apple.mpegurl"),
-    ],
-)
-def test_render_rss_feed_includes_dailywire_only_items(db_session, preferred_format, expected_mime_type):
+def test_render_rss_feed_includes_dailywire_audio_item(db_session):
     from backend.api.endpoints.feeds.service import render_rss_feed
 
     show = _make_show(db_session)
@@ -470,7 +487,7 @@ def test_render_rss_feed_includes_dailywire_only_items(db_session, preferred_for
     profile = _make_rss_profile(
         db_session,
         show,
-        preferred_format=preferred_format,
+        preferred_format="format_audio_only",
         use_downloads=False,
         use_dw_stream=True,
         token="dw-only",
@@ -478,10 +495,39 @@ def test_render_rss_feed_includes_dailywire_only_items(db_session, preferred_for
 
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode("utf-8")
 
-    assert "<title>Episode 1</title>" in xml
-    assert "http://localhost:5001/feeds/rss/dw-only/episodes/ep-1" in xml
-    assert 'length="0"' in xml
-    assert f'type="{expected_mime_type}"' in xml
+    assert '<enclosure url="http://localhost:5001/feeds/rss/dw-only/episodes/ep-1" length="0" type="audio/mpeg"' in xml
+    assert "podcast:alternateEnclosure" not in xml
+
+
+def test_render_rss_feed_includes_direct_dailywire_video_with_audio_fallback(db_session, monkeypatch):
+    import backend.api.endpoints.feeds.service as feed_service
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(db_session, show, season, slug="ep-1", index=1)
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        preferred_format="format_1080p",
+        use_downloads=False,
+        use_dw_stream=True,
+        token="dw-only",
+    )
+
+    class FakeClient:
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            return SimpleNamespace(
+                audio_url="https://media.example/audio.mp3",
+                video_url="https://media.example/video.m3u8?token=fresh",
+            )
+
+    monkeypatch.setattr(feed_service, "MiddlewareClient", FakeClient)
+
+    xml = feed_service.render_rss_feed(db_session, _FakeRequest(), profile).decode("utf-8")
+
+    assert '<enclosure url="http://localhost:5001/feeds/rss/dw-only/episodes/ep-1/audio" length="0" type="audio/mpeg"' in xml
+    assert 'type="application/x-mpegURL"' in xml
+    assert 'uri="https://media.example/video.m3u8?token=fresh"' in xml.replace("&amp;", "&")
 
 
 def test_episode_media_route_redirects_dailywire_fallback(db_session, monkeypatch):
@@ -511,10 +557,11 @@ def test_episode_media_route_redirects_dailywire_fallback(db_session, monkeypatc
         lambda _profile, _episode: "https://media.example/audio.mp3",
     )
 
-    response = feed_router.rss_feed_episode_media(profile.token, episode.slug)
+    response = feed_router.rss_feed_episode_media(profile.token, episode.slug, _FakeRequest())
 
-    assert response.status_code == 307
+    assert response.status_code == 302
     assert response.headers["location"] == "https://media.example/audio.mp3"
+    assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate"
 
 
 # ---------- create / regenerate (rss_stream_profiles service) ----------
@@ -525,8 +572,12 @@ def test_create_stream_profile_rss_autogenerates_feed_url(db_session):
 
     show = _make_show(db_session)
     body = RssStreamProfileAPICreate(
-        show_id=show.id, enable_profile=True, use_downloads=True, use_dw_stream=False,
-        preferred_format="format_1080p", require_exact_match=False,
+        show_id=show.id,
+        enable_profile=True,
+        use_downloads=True,
+        use_dw_stream=False,
+        preferred_format="format_1080p",
+        require_exact_match=False,
     )
     created = create_stream_profile_rss(db_session, _FakeRequest(), body)
 
@@ -540,8 +591,12 @@ def test_create_stream_profile_rss_respects_explicit_feed_url(db_session):
 
     show = _make_show(db_session)
     body = RssStreamProfileAPICreate(
-        show_id=show.id, enable_profile=True, use_downloads=True, use_dw_stream=False,
-        preferred_format="format_1080p", require_exact_match=False,
+        show_id=show.id,
+        enable_profile=True,
+        use_downloads=True,
+        use_dw_stream=False,
+        preferred_format="format_1080p",
+        require_exact_match=False,
         feed_url="https://my.custom.domain/feed.xml",
     )
     created = create_stream_profile_rss(db_session, _FakeRequest(), body)
@@ -549,18 +604,23 @@ def test_create_stream_profile_rss_respects_explicit_feed_url(db_session):
 
 
 def test_regenerate_token_rotates_url_and_invalidates_old_token(db_session):
+    from fastapi import HTTPException
+
+    from backend.api.endpoints.feeds.service import get_rss_stream_profile_by_token
     from backend.api.endpoints.rss_stream_profiles.service import (
         create_stream_profile_rss,
         regenerate_stream_profile_rss_token,
     )
-    from backend.api.endpoints.feeds.service import get_rss_stream_profile_by_token
     from backend.api.models.rss_stream_profile import RssStreamProfileAPICreate
-    from fastapi import HTTPException
 
     show = _make_show(db_session)
     body = RssStreamProfileAPICreate(
-        show_id=show.id, enable_profile=True, use_downloads=True, use_dw_stream=False,
-        preferred_format="format_1080p", require_exact_match=False,
+        show_id=show.id,
+        enable_profile=True,
+        use_downloads=True,
+        use_dw_stream=False,
+        preferred_format="format_1080p",
+        require_exact_match=False,
     )
     created = create_stream_profile_rss(db_session, _FakeRequest(), body)
     old_url = created.feed_url
@@ -570,7 +630,6 @@ def test_regenerate_token_rotates_url_and_invalidates_old_token(db_session):
     assert regenerated.feed_url != old_url
     assert regenerated.feed_url.startswith("http://localhost:5001/feeds/rss/")
 
-    # The old token no longer resolves to anything.
     old_token = old_url.split("/feeds/rss/")[1].split("/")[0]
     with pytest.raises(HTTPException):
         get_rss_stream_profile_by_token(db_session, old_token)

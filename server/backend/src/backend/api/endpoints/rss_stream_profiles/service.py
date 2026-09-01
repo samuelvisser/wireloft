@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy.orm import Session
 from fastapi import HTTPException, Request
+from sqlalchemy.orm import Session
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.rss_stream_profile import *
 from backend.db.models import Show
 from backend.db.models.stream_profile import RssStreamProfile
-from backend.utils.feed_urls import build_rss_feed_url
+from backend.utils.feed_urls import (
+    build_rss_feed_url,
+    set_rss_feed_dw_video_method,
+)
 from backend.utils.helpers import generate_stream_profile_token
 
 
@@ -41,14 +44,27 @@ def create_stream_profile_rss(s: Session, request: Request, body: RssStreamProfi
 
     data = body.model_dump(by_alias=True)
     feed_url = (data.pop("feed_url", None) or "").strip()
-    # Generated up front (rather than left to the column default) so it's
-    # known in time to build the auto-generated feed_url below.
     token = generate_stream_profile_token()
+
+    if feed_url:
+        feed_url = set_rss_feed_dw_video_method(
+            feed_url,
+            use_dw_stream=data["use_dw_stream"],
+            dw_video_method=data["dw_video_method"],
+        )
+    else:
+        feed_url = build_rss_feed_url(
+            request,
+            token=token,
+            show_slug=show.slug,
+            use_dw_stream=data["use_dw_stream"],
+            dw_video_method=data["dw_video_method"],
+        )
 
     item = RssStreamProfile(
         **data,
         token=token,
-        feed_url=feed_url or build_rss_feed_url(request, token=token, show_slug=show.slug),
+        feed_url=feed_url,
     )
     s.add(item)
     s.flush()
@@ -64,19 +80,20 @@ def update_stream_profile_rss(s: Session, stream_profile_id: int, body: RssStrea
     if item is None:
         raise HTTPException(status_code=404, detail="Stream profile not found")
 
-    update_database_fields(item, body)
+    feed_url = body.feed_url.strip()
+    update_database_fields(item, body, exclude_fields={"feed_url"})
+    item.feed_url = set_rss_feed_dw_video_method(
+        feed_url,
+        use_dw_stream=item.use_dw_stream,
+        dw_video_method=item.dw_video_method,
+    )
+
     s.flush()
     return RssStreamProfileAPIRead.model_validate(item)
 
 
 def regenerate_stream_profile_rss_token(s: Session, request: Request, stream_profile_id: int) -> RssStreamProfileAPIRead:
-    """Rotate a profile's secret token, invalidating its previous feed/media URLs.
-
-    Useful if a feed URL has leaked. The displayed feed_url is regenerated to
-    match unless it was already edited away from the WireLoft-generated form,
-    in which case only its token segment is swapped so a custom hostname the
-    user set survives the rotation.
-    """
+    """Rotate a profile's secret token and invalidate its previous feed URLs."""
     item: Optional[RssStreamProfile] = (
         s.query(RssStreamProfile)
         .filter_by(id=stream_profile_id)
@@ -88,9 +105,21 @@ def regenerate_stream_profile_rss_token(s: Session, request: Request, stream_pro
     old_token = item.token
     item.token = generate_stream_profile_token()
     if old_token in item.feed_url:
-        item.feed_url = item.feed_url.replace(old_token, item.token)
+        feed_url = item.feed_url.replace(old_token, item.token)
     else:
-        item.feed_url = build_rss_feed_url(request, token=item.token, show_slug=item.show.slug)
+        feed_url = build_rss_feed_url(
+            request,
+            token=item.token,
+            show_slug=item.show.slug,
+            use_dw_stream=item.use_dw_stream,
+            dw_video_method=item.dw_video_method,
+        )
+
+    item.feed_url = set_rss_feed_dw_video_method(
+        feed_url,
+        use_dw_stream=item.use_dw_stream,
+        dw_video_method=item.dw_video_method,
+    )
     s.flush()
     return RssStreamProfileAPIRead.model_validate(item)
 
