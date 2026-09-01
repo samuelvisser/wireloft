@@ -57,7 +57,15 @@ export default function AddDownloadProfilePage() {
     const form: AnyForm = mode === 'series' ? formSeries : formPodcast
     const {formState: {errors}} = form
     const prefillApplied = useRef(false)
+    const limitPrefillApplied = useRef(false)
     const requestedShowSlug = searchParams.get('show')
+    const requestedDownloadEpisodeCountRaw = searchParams.get('downloadEpisodeCount')
+    const parsedDownloadEpisodeCount = requestedDownloadEpisodeCountRaw === null
+        ? undefined
+        : Number(requestedDownloadEpisodeCountRaw)
+    const requestedDownloadEpisodeCount = Number.isInteger(parsedDownloadEpisodeCount) && Number(parsedDownloadEpisodeCount) > 0
+        ? Number(parsedDownloadEpisodeCount)
+        : undefined
 
     useEffect(() => {
         if (prefillApplied.current || !requestedShowSlug || !Array.isArray(shows)) return
@@ -71,6 +79,17 @@ export default function AddDownloadProfilePage() {
         else setMode('base')
         prefillApplied.current = true
     }, [formPodcast, formSeries, requestedShowSlug, shows])
+
+    useEffect(() => {
+        if (limitPrefillApplied.current || requestedDownloadEpisodeCount === undefined) return
+
+        formPodcast.setValue('downloadDaysInPast', 0, {shouldDirty: false, shouldValidate: true})
+        formPodcast.setValue('downloadEpisodeCount', requestedDownloadEpisodeCount, {
+            shouldDirty: false,
+            shouldValidate: true,
+        })
+        limitPrefillApplied.current = true
+    }, [formPodcast, requestedDownloadEpisodeCount])
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
