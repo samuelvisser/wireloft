@@ -236,9 +236,7 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
             needs_trigger=True,
         )
 
-    # A manual download may already occupy this (episode, local media profile)
-    # pairing without attribution; adopt it so it counts towards this profile.
-    if existing.download_profile_id is None:
+    if existing.download_profile_id != profile.id:
         existing.download_profile_id = profile.id
 
     if existing.download_status in _TRIGGERABLE_STATUSES:
