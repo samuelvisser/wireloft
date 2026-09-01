@@ -35,6 +35,29 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
 
     return (
         <>
+            <div className="form-row">
+                <label htmlFor="rss-max-items">Maximum episodes in RSS feed</label>
+                <input
+                    id="rss-max-items"
+                    className="input"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    {...register('maxItems', {valueAsNumber: true})}
+                    aria-invalid={!!errors.maxItems}
+                    aria-describedby={errors.maxItems ? 'rss-max-items-error' : 'rss-max-items-help'}
+                />
+                {errors.maxItems && (
+                    <div id="rss-max-items-error" className="error" role="alert" aria-live="polite">
+                        {String(errors.maxItems.message)}
+                    </div>
+                )}
+                <div className="help" id="rss-max-items-help">
+                    Only the newest episodes are included. Set to 0 to expose the complete episode history.
+                </div>
+            </div>
+
             {usesDwVideo && (
                 <div className="form-row">
                     <label htmlFor="rss-dw-video-method">Stream DW video method</label>
