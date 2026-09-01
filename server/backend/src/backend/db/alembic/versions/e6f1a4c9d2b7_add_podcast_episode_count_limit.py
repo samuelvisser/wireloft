@@ -1,7 +1,7 @@
 """Add podcast episode count download limit
 
 Revision ID: e6f1a4c9d2b7
-Revises: c91e4a6f72d0
+Revises: e8a1f4c2d7b9
 Create Date: 2026-09-01 17:45:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 revision: str = "e6f1a4c9d2b7"
-down_revision: Union[str, None] = "c91e4a6f72d0"
+down_revision: Union[str, None] = "e8a1f4c2d7b9"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

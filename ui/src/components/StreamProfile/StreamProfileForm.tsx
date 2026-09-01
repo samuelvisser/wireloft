@@ -52,7 +52,7 @@ export default function StreamProfileForm({form, mode, showRoot, isCreating, onR
                             label: 'Use Downloads',
                             description: (
                                 <ReadMore summary={<span>Stream downloaded media when available.</span>}>
-                                    <p>When enabled, downloaded media within WireLoft will be used when streaming.</p>
+                                    <p>If enabled, downloaded media within WireLoft can be used when streaming.</p>
                                     <p>Streaming downloaded media usually improves the stability of the stream
                                         and ensures a consistent experience.</p>
                                 </ReadMore>
@@ -63,9 +63,12 @@ export default function StreamProfileForm({form, mode, showRoot, isCreating, onR
                             label: 'Use DailyWire stream',
                             description: (
                                 <ReadMore summary={<span>Stream directly from The Daily Wire.</span>}>
-                                    <p>If enabled, streamed media will come directly from The Daily Wire's own servers.</p>
+                                    <p>If enabled, streamed media can come directly from The Daily Wire's own servers.</p>
                                     <p>If Use Downloads is enabled too, WireLoft will prefer downloaded media,
-                                        but stream directly when no downloaded media exists.</p>
+                                        but stream directly when no downloaded media exists.
+                                    </p>
+                                    <p>This could come in handy if you only intend to download a few of the latest episodes,
+                                    but still want to retain the ability to stream many more.</p>
                                 </ReadMore>
                             ),
                         },
