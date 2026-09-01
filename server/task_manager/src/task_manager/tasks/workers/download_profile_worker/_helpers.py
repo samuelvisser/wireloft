@@ -353,13 +353,19 @@ def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) 
 
 
 def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
-    """Delete profile downloads that fell outside its configured podcast limit."""
-    if not profile.delete_older_episodes:
-        return 0
-
+    """Reconcile queued/completed downloads that fell outside a podcast limit."""
     if profile.download_episode_count > 0:
         kept_episode_ids = {episode.id for episode in get_download_profile_episodes(s, profile)}
-        removable_statuses = _TRIGGERABLE_STATUSES | _COMPLETED_STATUSES
+
+        # A pending row outside latest-N must be removed even when the user wants
+        # to keep already-downloaded older files; otherwise queue draining could
+        # still start an episode the profile no longer wants. Other stale rows
+        # are removed only when file retention is enabled, matching the existing
+        # delete-older behavior for completed downloads.
+        removable_statuses = {MediaDownloadStatus.PENDING.value}
+        if profile.delete_older_episodes:
+            removable_statuses |= _TRIGGERABLE_STATUSES | _COMPLETED_STATUSES
+
         stmt = select(EpisodeMediaDownload).where(
             EpisodeMediaDownload.download_profile_id == profile.id,
             EpisodeMediaDownload.download_status.in_(removable_statuses),
@@ -368,6 +374,8 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
             stmt = stmt.where(EpisodeMediaDownload.media_item_id.notin_(kept_episode_ids))
         rows = list(s.execute(stmt).scalars())
     elif profile.download_days_in_past > 0:
+        if not profile.delete_older_episodes:
+            return 0
         cutoff = _utc_now_naive() - timedelta(days=profile.download_days_in_past)
         stmt = (
             select(EpisodeMediaDownload)
