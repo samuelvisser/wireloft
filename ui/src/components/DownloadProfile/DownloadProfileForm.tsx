@@ -21,11 +21,13 @@ type Props = {
 // Simple option model for react-select
 type UIOption = { value: string; label: string }
 
+const NO_DISABLED_EPISODE_TYPES = new Set<string>()
+
 export default function DownloadProfileForm({form, mode, seasons, showRoot, disabledEpisodeTypes}: Props) {
     const {control, watch, setValue, formState: {errors}} = form
     showRoot ??= true
 
-    const unavailableEpisodeTypes = disabledEpisodeTypes ?? new Set<string>()
+    const unavailableEpisodeTypes = disabledEpisodeTypes ?? NO_DISABLED_EPISODE_TYPES
 
     // Episode types multiselect wiring
     const selectedTypes: string[] = watch('epIdTypeList') || []
