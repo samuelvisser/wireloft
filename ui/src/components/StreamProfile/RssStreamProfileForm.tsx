@@ -69,6 +69,9 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
                                 <strong>Serve as locally cached mp4</strong> works whenever the podcast app supports video and never serves audio for Daily Wire video. WireLoft must prepare the complete file before it can be served, which can take a while for long episodes.
                             </p>
                             <p>
+                                <strong>Podcasting 2.0 direct stream with cached mp4 fallback</strong> combines both approaches. Compatible podcast apps can start the HLS video immediately, while downloads and apps without Podcasting 2.0 support receive a locally cached MP4 instead of audio. Preparing that MP4 can still take a while for long episodes.
+                            </p>
+                            <p>
                                 Downloaded files are always served directly and are not affected by this setting.
                             </p>
                         </ReadMore>
