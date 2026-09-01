@@ -6,6 +6,8 @@ import ReadMore from '../../utils/ReadMore'
 import {RssDwVideoMethodReg} from '../../types/stream_profile'
 
 
+const VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p'])
+
 type Props = {
     form: UseFormReturn<any>
     isCreating?: boolean
@@ -21,7 +23,7 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
     const feedUrl: string | undefined = watch('feedUrl')
     const useDwStream: boolean = watch('useDwStream')
     const preferredFormat: string | undefined = watch('preferredFormat')
-    const usesDwVideo = useDwStream && preferredFormat !== 'format_audio_only'
+    const usesDwVideo = useDwStream && VIDEO_FORMATS.has(preferredFormat ?? '')
 
     const onCopy = async () => {
         if (!feedUrl) return
@@ -105,7 +107,7 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
                 </div>
             )}
 
-            {videoMethodAdvisory}
+            {usesDwVideo ? videoMethodAdvisory : null}
 
             {!isCreating && (
                 <div className="form-row">
