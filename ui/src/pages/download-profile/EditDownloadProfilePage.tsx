@@ -73,20 +73,20 @@ export default function EditDownloadProfilePage() {
         }
     }, [downloadProfile, form])
 
-
     const mediaProfileReg = useLocalMediaProfileSelectRegistry(mediaProfiles, 'show')
+    const selectedLocalMediaProfileId = form.watch('localMediaProfileId')
 
-    // Compute which local media profiles are already used by this show and must be disabled,
-    // but allow the current profile's own media profile to remain selectable.
-    const disabledLocalMediaProfileIds = useMemo(() => {
-        const ids = (showProfiles ?? [])
-            .map((p) => p.localMediaProfileId)
-            .filter((v): v is number => typeof v === 'number')
-        const set = new Set<number>(ids)
-        const currentId = downloadProfile?.localMediaProfileId
-        if (typeof currentId === 'number') set.delete(currentId)
-        return set
-    }, [showProfiles, downloadProfile?.localMediaProfileId])
+    const disabledEpisodeTypes = useMemo(() => {
+        if (typeof selectedLocalMediaProfileId !== 'number') return new Set<string>()
+        return new Set<string>(
+            (showProfiles ?? [])
+                .filter((profile) => (
+                    profile.id !== profileId
+                    && profile.localMediaProfileId === selectedLocalMediaProfileId
+                ))
+                .flatMap((profile) => profile.epIdTypeList)
+        )
+    }, [profileId, selectedLocalMediaProfileId, showProfiles])
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
@@ -150,7 +150,6 @@ export default function EditDownloadProfilePage() {
                         </div>
                     )}
 
-
                     <div className="form-row">
                         <label>Profile type</label>
                         <div style={{padding: '6px 0'}}>{mode === 'podcast' ? 'Podcast' : 'Series'}</div>
@@ -175,7 +174,6 @@ export default function EditDownloadProfilePage() {
                                     onChange={(opt) => field.onChange((opt as any) ? Number((opt as any).value) : null)}
                                     onBlur={field.onBlur}
                                     isDisabled={mediaProfileReg.options.length === 0}
-                                    isOptionDisabled={(opt) => disabledLocalMediaProfileIds.has(Number((opt as any).value))}
                                     placeholder={!mediaProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
                                     aria-invalid={!!errors.localMediaProfileId}
                                     aria-describedby={errors.localMediaProfileId ? 'local-media-profile-errors' : 'local-media-profile-help'}
@@ -191,13 +189,18 @@ export default function EditDownloadProfilePage() {
                             <ReadMore summary={<span>The Local Media Profile defines the type and output path of downloaded media.</span>}>
                                 <p>When changing the Local Media Profile for an existing Download Profile, new episodes will be downloaded to the new
                                     location in the new format. Old episodes will be left in their original location.</p>
-                                <p><strong>NOTE:</strong> Only one Download Profile can use any specific Local Media Profile per show. Media Profiles
-                                    that are already in use by another Download Profile in this show are disabled here.</p>
+                                <p>The same Local Media Profile can be used by multiple Download Profiles for a show, but each episode type can belong to only one of those profiles.</p>
                             </ReadMore>
                         </div>
                     </div>
 
-                    <DownloadProfileForm form={form as any} mode={mode} seasons={seasonsData} showRoot={false}/>
+                    <DownloadProfileForm
+                        form={form as any}
+                        mode={mode}
+                        seasons={seasonsData}
+                        showRoot={false}
+                        disabledEpisodeTypes={disabledEpisodeTypes}
+                    />
 
                     <div className="actions">
                         <button type="button" className="btn" onClick={onCancel}>Cancel</button>
