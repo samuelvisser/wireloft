@@ -2,16 +2,20 @@ import {useEffect, useMemo, useRef} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import Select from 'react-select'
+import {Link} from 'react-router-dom'
 import ReadMore from '../../utils/ReadMore'
 import {EpisodeTypeReg} from '../../types/episode'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import RssStreamProfileForm from './RssStreamProfileForm'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
 import {MediaTypeReg} from "../../types/stream_profile";
+import './StreamProfileAdvisory.css'
 
 export type StreamProfileMode = 'rss' | 'base'
 
 export type StreamDownloadProfileDefault = {
+    id?: number
+    type?: 'podcast' | 'series'
     preferredFormat: string
     episodeTypes: string[]
     enabled?: boolean
@@ -20,6 +24,10 @@ export type StreamDownloadProfileDefault = {
 type UIOption = { value: string; label: string }
 
 const DEFAULT_STREAM_EPISODE_TYPES = ['ep', 'aux']
+const MP4_DW_VIDEO_METHODS = new Set([
+    'stream_download_mp4',
+    'stream_hls_download_mp4',
+])
 
 function sameEpisodeTypes(a: readonly string[], b: readonly string[]) {
     return a.length === b.length && a.every((value) => b.includes(value))
@@ -35,6 +43,8 @@ type Props = {
     downloadProfileDefaults?: StreamDownloadProfileDefault[]
     episodeTypesManuallyChanged?: boolean
     onEpisodeTypesManuallyChanged?: () => void
+    showSlug?: string
+    canOpenDownloadProfiles?: boolean
 }
 
 export default function StreamProfileForm({
@@ -47,6 +57,8 @@ export default function StreamProfileForm({
     downloadProfileDefaults,
     episodeTypesManuallyChanged,
     onEpisodeTypesManuallyChanged,
+    showSlug,
+    canOpenDownloadProfiles = true,
 }: Props) {
     const {control, formState: {errors}, getValues, setValue, watch} = form
     showRoot ??= true
@@ -54,6 +66,7 @@ export default function StreamProfileForm({
     const useDownloads = watch('useDownloads')
     const useDwStream = watch('useDwStream')
     const preferredFormat = watch('preferredFormat')
+    const dwVideoMethod = watch('dwVideoMethod')
     const selectedEpisodeTypes: string[] = watch('epIdTypeList') || []
     const internalEpisodeTypesManuallyChanged = useRef(false)
     const episodeTypeDefaultsInitialized = useRef(false)
@@ -139,6 +152,111 @@ export default function StreamProfileForm({
         }
         setValue('epIdTypeList', values, {shouldDirty: true, shouldValidate: true})
     }
+
+    const matchingDownloadProfiles = useMemo(() => {
+        if (!downloadProfileDefaults || !preferredFormat) return []
+        return downloadProfileDefaults.filter((profile) => (
+            profile.enabled !== false && profile.preferredFormat === preferredFormat
+        ))
+    }, [downloadProfileDefaults, preferredFormat])
+
+    const coveredEpisodeTypes = useMemo(() => new Set(
+        matchingDownloadProfiles.flatMap((profile) => profile.episodeTypes)
+    ), [matchingDownloadProfiles])
+
+    const uncoveredEpisodeTypes = selectedEpisodeTypes.filter(
+        (episodeType) => !coveredEpisodeTypes.has(episodeType)
+    )
+
+    const bestMatchingDownloadProfile = useMemo(() => {
+        return [...matchingDownloadProfiles].sort((a, b) => {
+            const aCoverage = selectedEpisodeTypes.filter((type) => a.episodeTypes.includes(type)).length
+            const bCoverage = selectedEpisodeTypes.filter((type) => b.episodeTypes.includes(type)).length
+            return bCoverage - aCoverage
+        })[0]
+    }, [matchingDownloadProfiles, selectedEpisodeTypes])
+
+    const showMp4DownloadAdvisory = (
+        mode === 'rss'
+        && useDwStream
+        && preferredFormat !== 'format_audio_only'
+        && MP4_DW_VIDEO_METHODS.has(dwVideoMethod)
+        && downloadProfileDefaults !== undefined
+    )
+
+    const createDownloadProfileHref = showSlug
+        ? `/add-download-profile?show=${encodeURIComponent(showSlug)}`
+        : undefined
+    const editDownloadProfileHref = bestMatchingDownloadProfile?.id && bestMatchingDownloadProfile.type
+        ? `/edit-download-profile/${bestMatchingDownloadProfile.type}/${bestMatchingDownloadProfile.id}`
+        : undefined
+
+    const mp4DownloadAdvisory = showMp4DownloadAdvisory ? (
+        matchingDownloadProfiles.length === 0 ? (
+            <div className="stream-download-advisory" role="status">
+                <div className="stream-download-advisory-title">Recommended: keep the latest 5 video episodes downloaded</div>
+                <div>
+                    MP4 delivery is fastest when recent episodes already exist locally in WireLoft.
+                </div>
+                <div className="help">
+                    <ReadMore summary={<span>Why downloading recent episodes is recommended</span>}>
+                        <p>
+                            When WireLoft has to serve an MP4 directly from Daily Wire, it must first prepare the complete file before a podcast app can receive it. For long episodes, that can create a noticeable wait before playback or an automatic download begins.
+                        </p>
+                        <p>
+                            Keeping only the latest 5 episodes downloaded gives recent episodes immediate, reliable MP4 delivery without retaining the full archive. Older episodes can still be prepared from Daily Wire when needed.
+                        </p>
+                        {!useDownloads && (
+                            <p>
+                                Enable <strong>Use Downloads</strong> on this Stream Profile as well if you want it to serve those local files directly.
+                            </p>
+                        )}
+                    </ReadMore>
+                </div>
+                {canOpenDownloadProfiles && createDownloadProfileHref && (
+                    <div className="stream-download-advisory-actions">
+                        <Link className="btn btn-primary" to={createDownloadProfileHref} target="_blank" rel="noreferrer">
+                            Create download profile
+                        </Link>
+                    </div>
+                )}
+            </div>
+        ) : uncoveredEpisodeTypes.length > 0 ? (
+            <div className="stream-download-advisory" role="status">
+                <div className="stream-download-advisory-title">Your matching download profile does not cover every streamed episode type</div>
+                <div>
+                    This Stream Profile can also stream {uncoveredEpisodeTypes.map((type) => EpisodeTypeReg.getLabelLoose(type)).join(', ')}. Those items may still need MP4 preparation on demand.
+                </div>
+                <div className="help">
+                    <ReadMore summary={<span>How to improve local MP4 coverage</span>}>
+                        <p>
+                            You can expand the existing Download Profile so it includes the same episode types as this Stream Profile.
+                        </p>
+                        <p>
+                            Alternatively, keep the existing profile focused on the content you want to retain for longer and create another video Download Profile with broader episode-type coverage and a much shorter retention window, such as only the latest 5 episodes.
+                        </p>
+                        <p>
+                            Either approach lets WireLoft serve recent MP4 episodes immediately instead of preparing the complete file when the podcast app requests it.
+                        </p>
+                    </ReadMore>
+                </div>
+                {canOpenDownloadProfiles && showSlug && (
+                    <div className="stream-download-advisory-actions">
+                        {editDownloadProfileHref && (
+                            <Link className="btn" to={editDownloadProfileHref} target="_blank" rel="noreferrer">
+                                Edit download profile
+                            </Link>
+                        )}
+                        {createDownloadProfileHref && (
+                            <Link className="btn btn-primary" to={createDownloadProfileHref} target="_blank" rel="noreferrer">
+                                Create another profile
+                            </Link>
+                        )}
+                    </div>
+                )}
+            </div>
+        ) : null
+    ) : null
 
     return (
         <>
@@ -382,6 +500,7 @@ export default function StreamProfileForm({
                     isCreating={isCreating}
                     onRegenerateToken={onRegenerateToken}
                     regeneratingToken={regeneratingToken}
+                    videoMethodAdvisory={mp4DownloadAdvisory}
                 />
             ) : undefined}
         </>

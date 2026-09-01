@@ -37,6 +37,8 @@ export default function EditStreamProfilePage() {
         return downloadProfiles
             .filter((profile) => profile.showSlug === streamProfile.showSlug)
             .map((profile) => ({
+                id: profile.id,
+                type: profile.type,
                 preferredFormat: profile.localMediaProfilePreferredFormat,
                 episodeTypes: profile.downloadProfileImpl.epIdTypeList,
                 enabled: profile.enableProfile,
@@ -149,6 +151,7 @@ export default function EditStreamProfilePage() {
                         onRegenerateToken={onRegenerateToken}
                         regeneratingToken={regenerating}
                         downloadProfileDefaults={downloadProfileDefaults}
+                        showSlug={streamProfile?.showSlug}
                     />
 
                     <div className="actions">

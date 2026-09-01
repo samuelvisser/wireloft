@@ -44,6 +44,8 @@ export default function AddStreamProfilePage() {
         return downloadProfiles
             .filter((profile) => profile.showSlug === selectedShow.slug)
             .map((profile) => ({
+                id: profile.id,
+                type: profile.type,
                 preferredFormat: profile.localMediaProfilePreferredFormat,
                 episodeTypes: profile.downloadProfileImpl.epIdTypeList,
                 enabled: profile.enableProfile,
@@ -152,6 +154,7 @@ export default function AddStreamProfilePage() {
                     showRoot={false}
                     isCreating
                     downloadProfileDefaults={downloadProfileDefaults}
+                    showSlug={selectedShow?.slug}
                 />
 
                 <div className="actions">

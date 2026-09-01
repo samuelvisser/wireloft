@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {ReactNode, useState} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
@@ -11,9 +11,10 @@ type Props = {
     isCreating?: boolean
     onRegenerateToken?: () => void | Promise<void>
     regeneratingToken?: boolean
+    videoMethodAdvisory?: ReactNode
 }
 
-export default function RssStreamProfileForm({form, isCreating, onRegenerateToken, regeneratingToken}: Props) {
+export default function RssStreamProfileForm({form, isCreating, onRegenerateToken, regeneratingToken, videoMethodAdvisory}: Props) {
     const {control, formState: {errors}, register, watch} = form
     const [copied, setCopied] = useState(false)
 
@@ -103,6 +104,8 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
                     </div>
                 </div>
             )}
+
+            {videoMethodAdvisory}
 
             {!isCreating && (
                 <div className="form-row">
