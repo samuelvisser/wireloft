@@ -68,6 +68,8 @@ export default function StreamProfileStep({
                         downloadProfileDefaults={downloadProfileDefaults}
                         episodeTypesManuallyChanged={episodeTypesManuallyChanged}
                         onEpisodeTypesManuallyChanged={onEpisodeTypesManuallyChanged}
+                        showSlug={showSlug}
+                        canOpenDownloadProfiles={false}
                     />
                     <div className="actions">
                         <button type="button" className="btn" onClick={onBack}>Back</button>
