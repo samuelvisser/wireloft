@@ -1,7 +1,7 @@
 """Standardize parent-movie and current-item template variables.
 
 Revision ID: e5b7c9d1f3a2
-Revises: c91e4a6f72d0
+Revises: 9c6e2a4b7f31
 Create Date: 2026-08-31
 
 """
@@ -13,7 +13,7 @@ from jinja2 import Environment
 
 
 revision: str = "e5b7c9d1f3a2"
-down_revision: Union[str, None] = "c91e4a6f72d0"
+down_revision: Union[str, None] = "9c6e2a4b7f31"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
