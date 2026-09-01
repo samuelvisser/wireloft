@@ -12,6 +12,7 @@ const PodcastDownloadProfileBaseSchema = DownloadProfileSchemaRequest.extend({
     downloadWithCountdown: z.boolean().default(false),
     redownloadFinal: z.boolean().default(true),
     downloadDaysInPast: z.int().min(0).default(180),
+    downloadEpisodeCount: z.int().min(0).default(0),
     deleteOlderEpisodes: z.boolean().default(true),
 })
 
@@ -35,6 +36,7 @@ export const PodcastDownloadProfileReadSchema = DownloadProfileSchemaResponse.sa
     downloadWithCountdown: z.boolean(),
     redownloadFinal: z.boolean(),
     downloadDaysInPast: z.int(),
+    downloadEpisodeCount: z.int(),
     deleteOlderEpisodes: z.boolean(),
 })
 export type PodcastDownloadProfileRead = z.infer<typeof PodcastDownloadProfileReadSchema>
