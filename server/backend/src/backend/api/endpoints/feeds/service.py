@@ -22,7 +22,6 @@ from backend.types.stream_profile_types import (
     DEFAULT_RSS_DW_VIDEO_METHOD,
     RssDwVideoMethod,
 )
-from config import get_settings
 from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 
 
@@ -46,12 +45,12 @@ _BARE_HTML_AMPERSAND_RE = re.compile(
     r"&(?!(?:#\d+|#x[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);)"
 )
 _CACHED_MP4_METHODS = {
-    RssDwVideoMethod.CACHED_MP4.value,
-    RssDwVideoMethod.PODCASTING_2_0_CACHED_MP4.value,
+    RssDwVideoMethod.STREAM_DOWNLOAD_MP4.value,
+    RssDwVideoMethod.STREAM_HLS_DOWNLOAD_MP4.value,
 }
 _HLS_ALTERNATE_METHODS = {
-    RssDwVideoMethod.PODCASTING_2_0.value,
-    RssDwVideoMethod.PODCASTING_2_0_CACHED_MP4.value,
+    RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value,
+    RssDwVideoMethod.STREAM_HLS_DOWNLOAD_MP4.value,
 }
 
 
@@ -167,8 +166,7 @@ def get_feed_items(
         return value
 
     items.sort(key=sort_key, reverse=True)
-    max_items = get_settings().rss.max_items
-    return items[:max_items] if max_items > 0 else items
+    return items[:profile.max_items] if profile.max_items > 0 else items
 
 
 def get_media_for_episode(
