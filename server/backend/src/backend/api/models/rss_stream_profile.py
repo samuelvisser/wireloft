@@ -18,7 +18,7 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     use_dw_stream: bool
     preferred_format: str = Field(min_length=1)
     require_exact_match: bool
-    dw_video_method: RssDwVideoMethod = RssDwVideoMethod.PODCASTING_2_0
+    dw_video_method: RssDwVideoMethod = RssDwVideoMethod.PODCASTING_2_0.value
 
 
 class RssStreamProfileAPICreate(_RssStreamProfileAPIBaseIn):
