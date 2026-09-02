@@ -1,4 +1,5 @@
 import {zodResolver} from '@hookform/resolvers/zod'
+import {useQueryClient} from '@tanstack/react-query'
 import {useCallback, useEffect, useMemo, useState} from 'react'
 import {type FieldErrors, type FieldPath, useForm} from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -9,13 +10,16 @@ import DailyWireSettingsTab from '../components/Settings/DailyWireSettingsTab'
 import DownloadsSettingsTab from '../components/Settings/DownloadsSettingsTab'
 import GeneralSettingsTab from '../components/Settings/GeneralSettingsTab'
 import {SettingsLoading} from '../components/Settings/SettingsControls'
-import {useSaveSettings, useSettings} from '../lib/settings'
+import {saveSettingsRequest, useSettings} from '../lib/settings'
 import {
     SETTINGS_FIELD_PATHS,
     SettingsFormSchema,
     type SettingsFieldPath,
+    type SettingsRead,
+    SettingsReadSchema,
     type SettingsValues,
 } from '../types/schemas/settings'
+import {buildServerAwareSubmit} from '../utils/buildServerAwareSubmit'
 import './SettingsPage.css'
 import './SettingsEnvironmentOverrides.css'
 import './SettingsSaveState.css'
@@ -36,6 +40,10 @@ const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'dailywire', label: 'DailyWire', description: 'Account and integration details'},
     {id: 'advanced', label: 'Advanced', description: 'Encryption files and configuration details'},
 ]
+
+const SETTINGS_SERVER_FIELD_ALIASES: Record<string, string> = Object.fromEntries(
+    SETTINGS_FIELD_PATHS.map((path) => [`values.${path}`, path]),
+)
 
 function cloneSettings(values: SettingsValues): SettingsValues {
     return structuredClone(values)
@@ -64,7 +72,7 @@ function errorAtPath(errors: FieldErrors<SettingsValues>, path: SettingsFieldPat
 
 export default function SettingsPage() {
     const settingsQuery = useSettings()
-    const saveSettings = useSaveSettings()
+    const queryClient = useQueryClient()
     const [activeTab, setActiveTab] = useState<SettingsTab>('general')
     const [baseline, setBaseline] = useState<SettingsValues | null>(null)
     const [hasSavedChanges, setHasSavedChanges] = useState(false)
@@ -76,9 +84,8 @@ export default function SettingsPage() {
         shouldFocusError: true,
     })
     const {
-        formState: {errors, isSubmitted},
+        formState: {errors, isSubmitted, isSubmitting},
         getValues,
-        handleSubmit,
         reset,
         setValue,
         watch,
@@ -137,16 +144,21 @@ export default function SettingsPage() {
         return errorAtPath(errors, path)
     }, [errors])
 
-    const submit = handleSubmit(async (values) => {
-        if (!isDirty) return
-        try {
-            await saveSettings.mutateAsync({values, changedFields: dirtyFields})
-            setHasSavedChanges(true)
-            toast.success('Settings saved to config.yml')
-        } catch (error: any) {
-            toast.error(error?.message || 'Failed to save settings')
-        }
-    })
+    const submit = buildServerAwareSubmit<SettingsValues, SettingsValues, SettingsRead>(
+        form,
+        (values) => saveSettingsRequest({values, changedFields: dirtyFields}),
+        {
+            successStatuses: [200],
+            parseSuccess: async (response) => SettingsReadSchema.parse(await response.json()),
+            fieldAlias: {...SETTINGS_SERVER_FIELD_ALIASES},
+            rootOnFieldErrors: true,
+            onSuccess: (settings) => {
+                queryClient.setQueryData(['settings'], settings)
+                setHasSavedChanges(true)
+                toast.success('Settings saved to config.yml')
+            },
+        },
+    )
 
     const discardChanges = () => {
         setHasSavedChanges(false)
@@ -193,6 +205,12 @@ export default function SettingsPage() {
             </div>
 
             <div>
+                {errors.root?.message ? (
+                    <div className="form-error-card" role="alert" aria-live="polite">
+                        {String(errors.root.message)}
+                    </div>
+                ) : null}
+
                 <div className="settings-tabs" role="tablist" aria-label="Settings categories">
                     {SETTINGS_TABS.map((tab) => (
                         <button
@@ -238,7 +256,7 @@ export default function SettingsPage() {
                             <button
                                 className="btn"
                                 type="button"
-                                disabled={!isDirty || saveSettings.isPending}
+                                disabled={!isDirty || isSubmitting}
                                 onClick={discardChanges}
                             >
                                 Discard
@@ -246,10 +264,10 @@ export default function SettingsPage() {
                             <button
                                 className="btn btn-primary"
                                 type="button"
-                                disabled={!isDirty || saveSettings.isPending}
+                                disabled={!isDirty || isSubmitting}
                                 onClick={() => void submit()}
                             >
-                                {saveSettings.isPending ? 'Saving…' : 'Save settings'}
+                                {isSubmitting ? 'Saving…' : 'Save settings'}
                             </button>
                         </div>
                     </div>
