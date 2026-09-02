@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import on_event, task
-from task_manager.tasks.helpers.episodes.metadata import METADATA_REFRESH_REQUESTED_EVENT
-from task_manager.tasks.workers.monitor_episode_worker.scheduling import MONITOR_COMPLETED_EVENT
 from .service import run_refresh_episode_metadata_worker
 
 
 @on_event("app.startup", resource_type="episode")
-@on_event(METADATA_REFRESH_REQUESTED_EVENT, resource_type="episode")
-@on_event(MONITOR_COMPLETED_EVENT, resource_type="episode")
+@on_event("episode.metadata_refresh_requested", resource_type="episode")
+@on_event("episode.monitor_completed", resource_type="episode")
 @task(
     key="refresh_episode_metadata_worker",
     title="Refresh episode metadata",
