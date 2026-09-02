@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
 import { useDownloadProfilesView, useEpisodes, useMediaDownloadsView, useShow, useStreamProfilesView } from '../../lib/queries'
+import { waitForMetadataRefreshCompletion } from '../../lib/metadataRefresh'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
@@ -236,15 +237,29 @@ export default function ShowPage() {
 
       const result = await response.json()
       const count = typeof result?.episodes_queued === 'number' ? result.episodes_queued : total
-      setMetadataRefreshConfirm(false)
-      void qc.invalidateQueries({ queryKey: ['episodes', id] })
+      if (typeof result?.request_id !== 'string' || !result.request_id) {
+        throw new Error('Metadata refresh request did not return a request ID')
+      }
 
+      setMetadataRefreshConfirm(false)
       if (count === 0) {
         toast(`There are no episodes to refresh for ${show.title}`)
-      } else {
+        return
+      }
+
+      toast.success(
+        `Metadata refresh started for ${count} ${count === 1 ? 'episode' : 'episodes'} in ${show.title}`,
+      )
+
+      try {
+        await waitForMetadataRefreshCompletion(result.request_id, count)
         toast.success(
-          `Metadata refresh started for ${count} ${count === 1 ? 'episode' : 'episodes'} in ${show.title}`,
+          `Metadata refresh completed for ${count} ${count === 1 ? 'episode' : 'episodes'} in ${show.title}`,
+          { duration: 5000 },
         )
+        await qc.invalidateQueries({ queryKey: ['episodes', id] })
+      } catch {
+        toast.error(`Metadata refresh failed for ${show.title}`)
       }
     } catch {
       toast.error(`Could not start metadata refresh for ${show.title}`)

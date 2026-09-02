@@ -6,6 +6,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
+import {waitForMetadataRefreshCompletion} from '../../lib/metadataRefresh'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import {MediaDownloadStatusReg} from '../../types/media_download'
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
@@ -267,8 +268,22 @@ export default function EpisodePage() {
                 return
             }
 
+            const result = await response.json()
+            if (typeof result?.request_id !== 'string' || !result.request_id) {
+                throw new Error('Metadata refresh request did not return a request ID')
+            }
+
             toast.success('Metadata refresh started')
-            void qc.invalidateQueries({queryKey: ['episode', episodeId]})
+            try {
+                await waitForMetadataRefreshCompletion(result.request_id, 1)
+                toast.success('Metadata refresh completed', {duration: 5000})
+                await Promise.all([
+                    qc.invalidateQueries({queryKey: ['episode', episodeId]}),
+                    qc.invalidateQueries({queryKey: ['episodes', showId]}),
+                ])
+            } catch {
+                toast.error('Metadata refresh failed')
+            }
         } catch {
             toast.error('Could not start metadata refresh')
         } finally {

@@ -1,4 +1,5 @@
 from typing import Optional, Sequence
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -8,6 +9,7 @@ from fastapi import HTTPException
 from backend.api.helpers import update_database_fields
 from backend.api.models.episode import *
 from backend.db.models.media_item import Episode
+from backend.utils.episode import add_pending_manual_metadata_refresh_request
 from task_manager.events.transactional import queue_event
 
 
@@ -40,22 +42,31 @@ def get_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
     return EpisodeAPIRead.model_validate(episode)
 
 
-def queue_episode_metadata_refresh(s: Session, episode: Episode) -> None:
+def queue_episode_metadata_refresh(
+        s: Session,
+        episode: Episode,
+        *,
+        manual_request_id: str | None = None,
+) -> None:
     """Persist unfinished metadata state and queue the normal refresh worker."""
     episode.metadata_is_final = False
-    queue_event(s, METADATA_REFRESH_REQUESTED_EVENT, {
+    event_data = {
         "resource_id": episode.id,
         "id": episode.id,
         "slug": episode.slug,
         "show_id": episode.show_id,
         "refresh": True,
-    })
+    }
+    if manual_request_id is not None:
+        add_pending_manual_metadata_refresh_request(episode, manual_request_id)
+        event_data["manual_request_id"] = manual_request_id
+    queue_event(s, METADATA_REFRESH_REQUESTED_EVENT, event_data)
 
 
 def request_episode_metadata_refresh(
         s: Session,
         episode_slug: str,
-) -> dict[str, bool | int]:
+) -> dict[str, bool | int | str]:
     episode = (
         s.query(Episode)
         .filter_by(slug=episode_slug)
@@ -64,9 +75,18 @@ def request_episode_metadata_refresh(
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
 
-    queue_episode_metadata_refresh(s, episode)
+    request_id = str(uuid4())
+    queue_episode_metadata_refresh(
+        s,
+        episode,
+        manual_request_id=request_id,
+    )
     s.flush()
-    return {"queued": True, "episode_id": episode.id}
+    return {
+        "queued": True,
+        "episode_id": episode.id,
+        "request_id": request_id,
+    }
 
 
 def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:

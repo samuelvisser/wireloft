@@ -126,7 +126,7 @@ def request_show_sync(s: Session, show_slug: str) -> dict[str, bool | str]:
 def request_show_metadata_refresh(
         s: Session,
         show_slug: str,
-) -> dict[str, bool | int]:
+) -> dict[str, bool | int | str]:
     """Queue the normal metadata refresh flow for every episode in one show."""
     show = (
         s.query(Show)
@@ -141,11 +141,20 @@ def request_show_metadata_refresh(
         .filter_by(show_id=show.id)
         .all()
     )
+    request_id = str(uuid4())
     for episode in episodes:
-        queue_episode_metadata_refresh(s, episode)
+        queue_episode_metadata_refresh(
+            s,
+            episode,
+            manual_request_id=request_id,
+        )
 
     s.flush()
-    return {"queued": True, "episodes_queued": len(episodes)}
+    return {
+        "queued": True,
+        "episodes_queued": len(episodes),
+        "request_id": request_id,
+    }
 
 
 def get_show_sync_log(s: Session, show_slug: str) -> list[dict]:
