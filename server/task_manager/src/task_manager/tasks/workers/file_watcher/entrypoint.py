@@ -4,10 +4,14 @@ from typing import Optional
 
 from config import get_settings
 from controller.db_utils import db_session
-from task_manager.scheduler.registry import task, on_cron
+from task_manager.scheduler.registry import task, on_cron, on_event
 from .service import run_file_watcher
 
 
+@on_event(
+    event_name="app.startup",
+    resource_type="show",
+)
 @on_cron(
     cron=get_settings().file_watcher.scan_cron,
     resource_type="show",
