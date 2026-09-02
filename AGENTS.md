@@ -1,5 +1,20 @@
 # AI agent and contributor guidance
 
+## Git usage
+When I ask you to implement a new feature, please follow these guidelines:
+- Create a new branch from develop. If your are an OpenAI product create it inside
+codex/, if you are a Anthropic product, place it inside claude/. If you are anything
+else, make up your a name to identify yourself by in git.
+- If I ask you to do follow-up work on that same feature, please continue to use the
+same branch. Only base a new branch on develop again if you are implementing a new feature.
+- When you are done, please squash your commits into a single commit and push to your branch.
+
+## Database migrations
+If you need to do any database migrations to implement the feature, please follow these guidelines:
+- Create a new alembic migration script in server/backend/src/backend/db/alembic/versions/
+- Run `backend db history` to verify the new migration is the current head, and no multiple
+migration heads exist.
+
 ## Frontend icon builds
 
 WireLoft uses a paid Font Awesome kit for its full icon set, but access to that kit is never required for normal development, automated agents, CI, or public contributors.
