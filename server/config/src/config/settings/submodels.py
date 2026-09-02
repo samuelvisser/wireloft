@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
-from pydantic import Field, SecretStr, ValidationInfo, field_validator
+from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
 
 from config.security.passwords import derive_admin_password_client_value, hash_password_scrypt
 from config.settings.base import SubmodelBase
@@ -147,29 +147,18 @@ class AdminAuthSettings(SubmodelBase):
             return None
         return v
 
-    @field_validator("password_hash", mode="before")
-    @classmethod
-    def _normalize_password_hash(cls, value: Optional[str]):
-        if value is None:
-            return None
-        return value.strip() or None
-
-    @field_validator("password", mode="after")
-    @classmethod
-    def _finalize_password(cls, value: Optional[str], info: ValidationInfo):
-        # Password hashing remains finalized by the model validator below in existing
-        # deployments. This validator only keeps Pydantic's field lifecycle explicit.
-        return value
-
-    def model_post_init(self, __context) -> None:
-        # If admin_password_hash already set to a scrypt hash string, keep it.
+    @model_validator(mode="after")
+    def _finalize_password(self):
+        # If admin_password_hash already set to a scrypt hash string, keep it
         if self.password_hash and self.password_hash.startswith("scrypt$"):
             pass
         else:
+            # Check env-provided precomputed hash
             env_hash = os.environ.get("WL_ADMIN_AUTH__PASSWORD_HASH")
             if isinstance(env_hash, str) and env_hash.startswith("scrypt$"):
                 self.password_hash = env_hash
             else:
+                # Compute from plaintext sources
                 plain = self.password or self._normalize_password(os.environ.get("WL_ADMIN_AUTH__PASSWORD"))
                 if plain:
                     client_val = derive_admin_password_client_value(plain)
@@ -178,8 +167,11 @@ class AdminAuthSettings(SubmodelBase):
                 else:
                     self.password_hash = None
 
+        # scrub plaintext from memory and environment
         self.password = None
         os.environ.pop("WL_ADMIN_AUTH__PASSWORD", None)
+
+        return self
 
 
 class SchedulerSettings(SubmodelBase):
