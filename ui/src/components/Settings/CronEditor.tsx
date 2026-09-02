@@ -77,7 +77,7 @@ function describeWeekdays(value: string): string {
     if (!labels.length) return 'selected weekdays'
     if (labels.length === 1) return labels[0]
     if (labels.length === 2) return `${labels[0]} and ${labels[1]}`
-    return `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}`
+    return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
 }
 
 function inferMode(value: string): CronMode {
