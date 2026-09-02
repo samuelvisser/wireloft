@@ -28,6 +28,22 @@ async function readSettings(response: Response, fallback: string): Promise<Setti
     return SettingsReadSchema.parse(await response.json())
 }
 
+export async function saveSettingsRequest({
+    values,
+    changedFields,
+}: {
+    values: SettingsValues
+    changedFields: SettingsFieldPath[]
+}): Promise<Response> {
+    const body = SettingsUpdateSchema.parse({values, changedFields})
+    return fetch(settingsUrl(), {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+    })
+}
+
 export function useSettings() {
     return useQuery({
         queryKey: ['settings'] as const,
@@ -52,13 +68,7 @@ export function useSaveSettings() {
             values: SettingsValues
             changedFields: SettingsFieldPath[]
         }) => {
-            const body = SettingsUpdateSchema.parse({values, changedFields})
-            const response = await fetch(settingsUrl(), {
-                method: 'PUT',
-                credentials: 'include',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(body),
-            })
+            const response = await saveSettingsRequest({values, changedFields})
             return readSettings(response, 'Failed to save settings')
         },
         onSuccess: (settings) => {
