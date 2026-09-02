@@ -26,6 +26,12 @@ type SettingsTabDefinition = {
     description: string
 }
 
+type NumberFieldConstraint = {
+    label: string
+    min?: number
+    max?: number
+}
+
 const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'general', label: 'General', description: 'Application behaviour and sessions'},
     {id: 'downloads', label: 'Downloads', description: 'Storage, naming, processing and verification'},
@@ -34,8 +40,33 @@ const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'advanced', label: 'Advanced', description: 'Encryption files and configuration details'},
 ]
 
+const NUMBER_FIELD_CONSTRAINTS: Partial<Record<SettingsFieldPath, NumberFieldConstraint>> = {
+    'loginSession.ttlSeconds': {label: 'Session lifetime', min: 60},
+    'movieMetadata.requestTimeoutSeconds': {label: 'TMDB request timeout', min: 1},
+    'movieMetadata.maxRetries': {label: 'TMDB retry attempts', min: 0, max: 5},
+    'dwTimeout.minFastRequestMs': {label: 'Minimum fast-request delay', min: 0},
+    'dwTimeout.maxFastRequests': {label: 'Fast requests before slowdown', min: 1},
+    'dwTimeout.minSlowRequestMs': {label: 'Minimum slow-request delay', min: 0},
+    'scheduler.maxWorkers': {label: 'Maximum workers', min: 1},
+    'scheduler.defaultMaxRetries': {label: 'Default retries', min: 0},
+    'scheduler.retryBackoffSeconds': {label: 'Retry backoff', min: 0},
+    'episodeStatusTiming.publishedCountdownAfterMinutes': {label: 'Countdown publication threshold', min: 0},
+    'episodeStatusTiming.publishedFinalAfterMinutes': {label: 'Final publication threshold', min: 0},
+    'downloadSettings.maxConcurrentDownloads': {label: 'Concurrent downloads', min: 1},
+    'downloadSettings.maxDownloadAttempts': {label: 'Maximum download attempts', min: 1},
+    'downloadSettings.downloadTimeoutSeconds': {label: 'Download timeout', min: 1},
+}
+
+const CRON_FIELD_PATHS = new Set<SettingsFieldPath>([
+    'newEpisodeSchedule.findEpisodesCron',
+    'newEpisodeSchedule.monitorEpisodeCron',
+    'newEpisodeSchedule.checkNoShowTodayCron',
+    'downloadSettings.verifyDownloadsCron',
+    'fileWatcher.scanCron',
+])
+
 function cloneSettings(values: SettingsValues): SettingsValues {
-    return JSON.parse(JSON.stringify(values)) as SettingsValues
+    return structuredClone(values)
 }
 
 function valueAtPath(values: SettingsValues, path: SettingsFieldPath): unknown {
@@ -45,6 +76,20 @@ function valueAtPath(values: SettingsValues, path: SettingsFieldPath): unknown {
         current = (current as Record<string, unknown>)[segment]
     }
     return current
+}
+
+function setValueAtPath(values: SettingsValues, path: SettingsFieldPath, value: number): void {
+    const segments = path.split('.')
+    let current = values as unknown as Record<string, unknown>
+
+    for (const segment of segments.slice(0, -1)) {
+        current = current[segment] as Record<string, unknown>
+    }
+    current[segments[segments.length - 1]] = value
+}
+
+function hasFiveCronFields(value: string): boolean {
+    return value.trim().split(/\s+/).filter(Boolean).length === 5
 }
 
 export default function SettingsPage() {
@@ -96,8 +141,40 @@ export default function SettingsPage() {
 
     const submit = async () => {
         if (!draft || !isDirty) return
+
+        const valuesToSave = cloneSettings(draft)
+        for (const path of dirtyFields) {
+            const numberConstraint = NUMBER_FIELD_CONSTRAINTS[path]
+            if (numberConstraint) {
+                const value = valueAtPath(valuesToSave, path)
+                if (typeof value !== 'number' || !Number.isFinite(value)) {
+                    toast.error(`Enter a number for ${numberConstraint.label} before saving.`)
+                    return
+                }
+
+                let normalizedValue = value
+                if (numberConstraint.min !== undefined) {
+                    normalizedValue = Math.max(numberConstraint.min, normalizedValue)
+                }
+                if (numberConstraint.max !== undefined) {
+                    normalizedValue = Math.min(numberConstraint.max, normalizedValue)
+                }
+                if (normalizedValue !== value) {
+                    setValueAtPath(valuesToSave, path, normalizedValue)
+                }
+            }
+
+            if (CRON_FIELD_PATHS.has(path)) {
+                const cronValue = valueAtPath(valuesToSave, path)
+                if (typeof cronValue !== 'string' || !hasFiveCronFields(cronValue)) {
+                    toast.error('Cron schedules must contain five fields before saving.')
+                    return
+                }
+            }
+        }
+
         try {
-            await saveSettings.mutateAsync({values: draft, changedFields: dirtyFields})
+            await saveSettings.mutateAsync({values: valuesToSave, changedFields: dirtyFields})
             setHasSavedChanges(true)
             toast.success('Settings saved to config.yml')
         } catch (error: any) {

@@ -72,6 +72,7 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                         next.movieMetadata.maxRetries = value
                     })}
                     min={0}
+                    max={5}
                     step={1}
                     help="Retries transient TMDB failures before recording the lookup as failed."
                 />

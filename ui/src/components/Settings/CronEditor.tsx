@@ -76,6 +76,46 @@ function clamp(value: number, min: number, max: number) {
     return Math.min(max, Math.max(min, value))
 }
 
+function CronNumberInput({
+    value,
+    min,
+    max,
+    disabled,
+    onChange,
+}: {
+    value: number
+    min: number
+    max: number
+    disabled: boolean
+    onChange: (value: number) => void
+}) {
+    const [rawValue, setRawValue] = useState(String(value))
+
+    useEffect(() => {
+        setRawValue(String(value))
+    }, [value])
+
+    return (
+        <input
+            className="input settings-input"
+            type="number"
+            min={min}
+            max={max}
+            disabled={disabled}
+            value={rawValue}
+            onChange={(event) => {
+                const nextRawValue = event.currentTarget.value
+                setRawValue(nextRawValue)
+                if (nextRawValue === '') return
+
+                const nextValue = event.currentTarget.valueAsNumber
+                if (!Number.isFinite(nextValue)) return
+                onChange(clamp(nextValue, min, max))
+            }}
+        />
+    )
+}
+
 function cronForMode(mode: StructuredCronMode, parsed: ParsedCron | null): string {
     const minute = clamp(Number(parsed?.minute) || 0, 0, 59)
     const hour = clamp(Number(parsed?.hour) || 0, 0, 23)
@@ -195,17 +235,12 @@ export default function CronEditor({
                             <label>
                                 <span>Interval</span>
                                 <div className="cron-editor__inline-input">
-                                    <input
-                                        className="input settings-input"
-                                        type="number"
+                                    <CronNumberInput
+                                        value={Number(parsed?.minute.match(/^\*\/(\d+)$/)?.[1] ?? 30)}
                                         min={1}
                                         max={59}
                                         disabled={disabled}
-                                        value={parsed?.minute.match(/^\*\/(\d+)$/)?.[1] ?? 30}
-                                        onChange={(event) => {
-                                            const every = clamp(event.currentTarget.valueAsNumber || 1, 1, 59)
-                                            onChange(`*/${every} * * * *`)
-                                        }}
+                                        onChange={(every) => onChange(`*/${every} * * * *`)}
                                     />
                                     <span>minutes</span>
                                 </div>
@@ -215,14 +250,12 @@ export default function CronEditor({
                         {mode === 'hourly' ? (
                             <label>
                                 <span>Minute past the hour</span>
-                                <input
-                                    className="input settings-input"
-                                    type="number"
+                                <CronNumberInput
+                                    value={minute}
                                     min={0}
                                     max={59}
                                     disabled={disabled}
-                                    value={minute}
-                                    onChange={(event) => updateParts({minute: String(clamp(event.currentTarget.valueAsNumber || 0, 0, 59))})}
+                                    onChange={(nextMinute) => updateParts({minute: String(nextMinute)})}
                                 />
                             </label>
                         ) : null}
@@ -262,14 +295,12 @@ export default function CronEditor({
                         {mode === 'monthly' ? (
                             <label>
                                 <span>Day of month</span>
-                                <input
-                                    className="input settings-input"
-                                    type="number"
+                                <CronNumberInput
+                                    value={clamp(Number(parsed?.dayOfMonth) || 1, 1, 31)}
                                     min={1}
                                     max={31}
                                     disabled={disabled}
-                                    value={clamp(Number(parsed?.dayOfMonth) || 1, 1, 31)}
-                                    onChange={(event) => updateParts({dayOfMonth: String(clamp(event.currentTarget.valueAsNumber || 1, 1, 31))})}
+                                    onChange={(dayOfMonth) => updateParts({dayOfMonth: String(dayOfMonth)})}
                                 />
                             </label>
                         ) : null}
