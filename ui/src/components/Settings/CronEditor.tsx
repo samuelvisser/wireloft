@@ -14,7 +14,7 @@ type CronEditorProps = {
     error?: string
 }
 
-type CronMode = 'minutes' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom'
+type CronMode = 'minutes' | 'hourly' | 'hours' | 'daily' | 'weekly' | 'monthly' | 'custom'
 type StructuredCronMode = Exclude<CronMode, 'custom'>
 
 type ParsedCron = {
@@ -42,6 +42,7 @@ type WeekdayOption = (typeof WEEKDAYS)[number]
 const MODES: ReadonlyArray<{value: CronMode; label: string}> = [
     {value: 'minutes', label: 'Every X minutes'},
     {value: 'hourly', label: 'Hourly'},
+    {value: 'hours', label: 'Every X hours'},
     {value: 'daily', label: 'Daily'},
     {value: 'weekly', label: 'Weekly'},
     {value: 'monthly', label: 'Monthly'},
@@ -89,6 +90,15 @@ function inferMode(value: string): CronMode {
     }
     if (isNumberOrEmpty(minute) && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
         return 'hourly'
+    }
+    if (
+        isNumberOrEmpty(minute)
+        && /^\*\/(?:\d+|_)$/.test(hour)
+        && dayOfMonth === '*'
+        && month === '*'
+        && dayOfWeek === '*'
+    ) {
+        return 'hours'
     }
     if (isNumberOrEmpty(minute) && isNumberOrEmpty(hour) && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
         return 'daily'
@@ -163,6 +173,10 @@ function cronForMode(mode: StructuredCronMode, parsed: ParsedCron | null): strin
         }
         case 'hourly':
             return `${minute} * * * *`
+        case 'hours': {
+            const every = parsed?.hour.match(/^\*\/(\d+)$/)?.[1] ?? '6'
+            return `${minute} */${clamp(Number(every) || 6, 1, 23)} * * *`
+        }
         case 'daily':
             return `${minute} ${hour} * * *`
         case 'weekly': {
@@ -195,6 +209,13 @@ function describeCron(value: string): string {
         }
         case 'hourly':
             return `Every hour at minute ${parsed.minute}.`
+        case 'hours': {
+            const every = parsed.hour.match(/^\*\/(\d+)$/)?.[1]
+            if (!every) return 'Recurring hour interval schedule.'
+            return Number(every) === 1
+                ? `Every hour at minute ${parsed.minute}.`
+                : `Every ${every} hours at minute ${parsed.minute}.`
+        }
         case 'daily':
             return `Every day at ${time}.`
         case 'weekly':
@@ -290,7 +311,25 @@ export default function CronEditor({
                             </label>
                         ) : null}
 
-                        {mode === 'hourly' ? (
+                        {mode === 'hours' ? (
+                            <label>
+                                <span>Interval</span>
+                                <div className="cron-editor__inline-input">
+                                    <CronNumberInput
+                                        value={numberOrEmpty(parsed?.hour.match(/^\*\/(\d+|_)$/)?.[1], 1, 23)}
+                                        min={1}
+                                        max={23}
+                                        disabled={disabled}
+                                        onChange={(every) => updateParts({
+                                            hour: `*/${every ?? EMPTY_CRON_VALUE}`,
+                                        })}
+                                    />
+                                    <span>hours</span>
+                                </div>
+                            </label>
+                        ) : null}
+
+                        {mode === 'hourly' || mode === 'hours' ? (
                             <label>
                                 <span>Minute past the hour</span>
                                 <CronNumberInput
