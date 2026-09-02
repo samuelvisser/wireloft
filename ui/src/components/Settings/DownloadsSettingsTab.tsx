@@ -1,4 +1,6 @@
 import type {FilenameRestrictionMode} from '../../types/schemas/settings'
+import ReadMore from '../../utils/ReadMore'
+import CronEditor from './CronEditor'
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {
     NumberField,
@@ -8,7 +10,6 @@ import {
     TextField,
     ToggleField,
 } from './SettingsControls'
-import ReadMore from "../../utils/ReadMore";
 
 const FILENAME_RESTRICTION_MODES = ['unrestricted', 'windows', 'restricted'] as const
 const FILENAME_RESTRICTION_LABELS = {
@@ -134,7 +135,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                 title="Verification and file watcher"
                 description="Periodic integrity checks and detection of files changed outside WireLoft."
             >
-                <TextField
+                <CronEditor
                     id="settings-verify-downloads-cron"
                     label="Verify downloads schedule"
                     value={draft.downloadSettings.verifyDownloadsCron}
@@ -142,7 +143,6 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.verifyDownloadsCron = value
                     })}
-                    help="Five-part cron expression."
                 />
                 <ToggleField
                     id="settings-file-watcher-enabled"
@@ -154,7 +154,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     })}
                     help="Scans tracked download paths for files moved, removed or otherwise changed outside WireLoft."
                 />
-                <TextField
+                <CronEditor
                     id="settings-file-watcher-cron"
                     label="File watcher schedule"
                     value={draft.fileWatcher.scanCron}
@@ -162,7 +162,6 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     onChange={(value) => updateDraft((next) => {
                         next.fileWatcher.scanCron = value
                     })}
-                    help="Five-part cron expression."
                 />
                 <ToggleField
                     id="settings-file-size-verification"

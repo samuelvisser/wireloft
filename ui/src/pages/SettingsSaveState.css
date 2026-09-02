@@ -1,0 +1,5 @@
+@media (max-width: 680px) {
+    .settings-actions.is-saved {
+        display: none;
+    }
+}

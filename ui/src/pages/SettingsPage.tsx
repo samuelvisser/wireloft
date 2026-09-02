@@ -15,6 +15,7 @@ import {
 } from '../types/schemas/settings'
 import './SettingsPage.css'
 import './SettingsEnvironmentOverrides.css'
+import './SettingsSaveState.css'
 
 
 type SettingsTab = 'general' | 'downloads' | 'automation' | 'dailywire' | 'advanced'
@@ -52,6 +53,7 @@ export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState<SettingsTab>('general')
     const [draft, setDraft] = useState<SettingsValues | null>(null)
     const [baseline, setBaseline] = useState<SettingsValues | null>(null)
+    const [hasSavedChanges, setHasSavedChanges] = useState(false)
 
     useEffect(() => {
         if (!settingsQuery.data) return
@@ -60,6 +62,7 @@ export default function SettingsPage() {
     }, [settingsQuery.data])
 
     const updateDraft = useCallback((mutator: (next: SettingsValues) => void) => {
+        setHasSavedChanges(false)
         setDraft((current) => {
             if (!current) return current
             const next = cloneSettings(current)
@@ -95,6 +98,7 @@ export default function SettingsPage() {
         if (!draft || !isDirty) return
         try {
             await saveSettings.mutateAsync({values: draft, changedFields: dirtyFields})
+            setHasSavedChanges(true)
             toast.success('Settings saved to config.yml')
         } catch (error: any) {
             toast.error(error?.message || 'Failed to save settings')
@@ -102,6 +106,7 @@ export default function SettingsPage() {
     }
 
     const discardChanges = () => {
+        setHasSavedChanges(false)
         if (baseline) setDraft(cloneSettings(baseline))
     }
 
@@ -176,34 +181,36 @@ export default function SettingsPage() {
                     {activeTab === 'advanced' ? <AdvancedSettingsTab {...tabProps} /> : null}
                 </div>
 
-                <div className={`settings-actions${isDirty ? ' is-dirty' : ''}`}>
-                    <div>
-                        <strong>{isDirty ? 'Unsaved changes' : 'All changes saved'}</strong>
-                        <span>
-                            {isDirty
-                                ? `${dirtyFields.length} ${dirtyFields.length === 1 ? 'setting' : 'settings'} will be written to config.yml.`
-                                : 'The values shown match the active configuration.'}
-                        </span>
+                {isDirty || hasSavedChanges ? (
+                    <div className={`settings-actions${isDirty ? ' is-dirty' : ' is-saved'}`}>
+                        <div>
+                            <strong>{isDirty ? 'Unsaved changes' : 'All changes saved'}</strong>
+                            <span>
+                                {isDirty
+                                    ? `${dirtyFields.length} ${dirtyFields.length === 1 ? 'setting' : 'settings'} will be written to config.yml.`
+                                    : 'The values shown match the active configuration.'}
+                            </span>
+                        </div>
+                        <div className="settings-actions__buttons">
+                            <button
+                                className="btn"
+                                type="button"
+                                disabled={!isDirty || saveSettings.isPending}
+                                onClick={discardChanges}
+                            >
+                                Discard
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                type="button"
+                                disabled={!isDirty || saveSettings.isPending}
+                                onClick={() => void submit()}
+                            >
+                                {saveSettings.isPending ? 'Saving…' : 'Save settings'}
+                            </button>
+                        </div>
                     </div>
-                    <div className="settings-actions__buttons">
-                        <button
-                            className="btn"
-                            type="button"
-                            disabled={!isDirty || saveSettings.isPending}
-                            onClick={discardChanges}
-                        >
-                            Discard
-                        </button>
-                        <button
-                            className="btn btn-primary"
-                            type="button"
-                            disabled={!isDirty || saveSettings.isPending}
-                            onClick={() => void submit()}
-                        >
-                            {saveSettings.isPending ? 'Saving…' : 'Save settings'}
-                        </button>
-                    </div>
-                </div>
+                ) : null}
             </div>
         </section>
     )

@@ -1,9 +1,9 @@
 import type {SettingsTabProps} from './SettingsTabTypes'
+import CronEditor from './CronEditor'
 import {
     NumberField,
     SettingsDisclosure,
     SettingsSection,
-    TextField,
     ToggleField,
 } from './SettingsControls'
 
@@ -66,7 +66,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                 title="Episode discovery and monitoring"
                 description="Cron schedules used to find episodes and follow their publication state."
             >
-                <TextField
+                <CronEditor
                     id="settings-find-episodes-cron"
                     label="Find new episodes"
                     value={draft.newEpisodeSchedule.findEpisodesCron}
@@ -74,9 +74,8 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.findEpisodesCron = value
                     })}
-                    help="Five-part cron expression."
                 />
-                <TextField
+                <CronEditor
                     id="settings-monitor-episode-cron"
                     label="Monitor pending episodes"
                     value={draft.newEpisodeSchedule.monitorEpisodeCron}
@@ -84,9 +83,8 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.monitorEpisodeCron = value
                     })}
-                    help="Five-part cron expression."
                 />
-                <TextField
+                <CronEditor
                     id="settings-no-show-today-cron"
                     label="Check no-show-today episodes"
                     value={draft.newEpisodeSchedule.checkNoShowTodayCron}
@@ -94,7 +92,6 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.checkNoShowTodayCron = value
                     })}
-                    help="Five-part cron expression."
                 />
             </SettingsSection>
 
