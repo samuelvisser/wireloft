@@ -8,6 +8,8 @@ else, use a relevant name to identify yourself by in git.
 - If I ask you to do follow-up work on that same feature, please continue to use the
 same branch. Only base a new branch on develop again if you are implementing a new feature.
 - When you are done, please squash your commits into a single commit and push to your branch.
+- Only squash within a single request. After you are done with a commit, I add context or ask 
+for another change, this should be its own new commit.
 
 ## Database migrations
 If you need to do any database migrations to implement the feature, please follow these guidelines:
