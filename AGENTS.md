@@ -24,7 +24,9 @@ validation should always happen in both the frontend (user-friendly) and the bac
 
 To handle backend validation errors gracefully, WireLoft provides a ServerAwareSubmit helper that
 makes sure backend validation errors still end up showing under fields that caused them, including a
-fallback field as a 'catch all'. 
+fallback field as a 'catch all'. This goes not only for Pydantic validation errors, but also errors
+thrown by the SQLAlchemy database layer. It even tries to map database field errors to the correct
+RHF form fields.
 
 Form default values, unless defined dynamically, should be defined through Zod defaults. Those should
 then be picked up by React Hook Form and used as actual default values. Only deviate from this if the
