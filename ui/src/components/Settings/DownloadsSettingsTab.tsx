@@ -8,6 +8,7 @@ import {
     TextField,
     ToggleField,
 } from './SettingsControls'
+import ReadMore from "../../utils/ReadMore";
 
 const FILENAME_RESTRICTION_MODES = ['unrestricted', 'windows', 'restricted'] as const
 const FILENAME_RESTRICTION_LABELS = {
@@ -44,7 +45,20 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.filenameRestrictionMode = value as FilenameRestrictionMode
                     })}
-                    help="Minimal restrictions preserve Unicode and ordinary punctuation while preventing path-breaking characters. Windows-compatible removes characters Windows does not allow. Restricted uses ASCII-only names without spaces or ampersands."
+                    help={
+                        <ReadMore summary={<span>Choose filename restriction mode to ensure filesystem compatibility.</span>}>
+                            <p>
+                                <strong>Minimal restrictions</strong> preserves Unicode and ordinary punctuation while preventing path-breaking characters
+                            </p>
+                            <p>
+                                <strong>Windows-compatible</strong> removes characters Windows does not allow in filenames, plus ensures reserved
+                                filenames are not used. Most unicode characters are preserved.
+                            </p>
+                            <p>
+                                <strong>Restricted</strong> uses ASCII-only names without spaces or ampersands.
+                            </p>
+                        </ReadMore>
+                    }
                 />
             </SettingsSection>
 
