@@ -29,6 +29,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     id="settings-download-root"
                     label="Download root"
                     value={draft.downloadSettings.downloadRoot}
+                    error={errorFor('downloadSettings.downloadRoot')}
                     environmentVariable={environmentVariableFor('downloadSettings.downloadRoot')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.downloadRoot = value
@@ -125,6 +126,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     id="settings-ffmpeg-path"
                     label="FFmpeg executable"
                     value={draft.downloadSettings.ffmpegPath}
+                    error={errorFor('downloadSettings.ffmpegPath')}
                     environmentVariable={environmentVariableFor('downloadSettings.ffmpegPath')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.ffmpegPath = value
