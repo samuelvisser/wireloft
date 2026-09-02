@@ -17,6 +17,23 @@ If you need to do any database migrations to implement the feature, please follo
 - Run `backend db history` to verify the new migration is the current head, and no multiple
 migration heads exist.
 
+## Forms
+WireLoft forms are configured within React Hook Form and Zod to ensure field validation in the frontend.
+However, all backend API endpoints use Pydantic models to do their own validation. In most cases,
+validation should always happen in both the frontend (user-friendly) and the backend for security.
+
+To handle backend validation errors gracefully, WireLoft provides a ServerAwareSubmit helper that
+makes sure backend validation errors still end up showing under fields that caused them, including a
+fallback field as a 'catch all'. 
+
+Form default values, unless defined dynamically, should be defined through Zod defaults. Those should
+then be picked up by React Hook Form and used as actual default values. Only deviate from this if the
+default changes dynamically based on certain conditions.
+
+Make sure to use this structure for any form adjustments and especially
+any new forms.
+
+
 ## Test your work
 Before you push your branch, please run all appropriate tests to verify your work.  
 Also be sure to launch both the backend and frontend servers and verify your work in the UI.
