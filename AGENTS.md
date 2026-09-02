@@ -15,8 +15,14 @@ If you need to do any database migrations to implement the feature, please follo
 - Run `backend db history` to verify the new migration is the current head, and no multiple
 migration heads exist.
 
-## Frontend icon builds
+## Test your work
+Before you push your branch, please run all appropriate tests to verify your work.  
+Also be sure to launch both the backend and frontend servers and verify your work in the UI.
+First, run `uv sync` and `npm install` from the repository root to install all dependencies.
+The backend is started with: `backend-api run` and the frontend is started with `npm run dev` from the repository root.
+If your environment is not able to run any of these tests, you can skip this step.
 
+### Frontend icon builds
 WireLoft uses a paid Font Awesome kit for its full icon set, but access to that kit is never required for normal development, automated agents, CI, or public contributors.
 
 For a clean checkout without Font Awesome credentials, install UI dependencies with `npm --prefix ui ci --registry=https://registry.npmjs.org`. The paid kit is an optional dependency; npm can skip it when credentials are unavailable while still installing other optional dependencies required by the frontend toolchain.
