@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useState} from 'react'
+import Select from 'react-select'
 
 import './CronEditor.css'
 
@@ -36,6 +37,8 @@ const WEEKDAYS = [
     {value: '0', label: 'Sunday'},
 ] as const
 
+type WeekdayOption = (typeof WEEKDAYS)[number]
+
 const MODES: ReadonlyArray<{value: CronMode; label: string}> = [
     {value: 'minutes', label: 'Every X minutes'},
     {value: 'hourly', label: 'Hourly'},
@@ -56,6 +59,26 @@ function isNumberOrEmpty(value: string) {
     return /^\d+$/.test(value) || value === EMPTY_CRON_VALUE
 }
 
+function isWeekdayList(value: string): boolean {
+    const values = value.split(',')
+    if (!values.length || new Set(values).size !== values.length) return false
+    return values.every((weekday) => WEEKDAYS.some((option) => option.value === weekday))
+}
+
+function selectedWeekdays(value: string | undefined): WeekdayOption[] {
+    if (!value || !isWeekdayList(value)) return []
+    const selected = new Set(value.split(','))
+    return WEEKDAYS.filter((weekday) => selected.has(weekday.value))
+}
+
+function describeWeekdays(value: string): string {
+    const labels = selectedWeekdays(value).map((weekday) => weekday.label)
+    if (!labels.length) return 'selected weekdays'
+    if (labels.length === 1) return labels[0]
+    if (labels.length === 2) return `${labels[0]} and ${labels[1]}`
+    return `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}`
+}
+
 function inferMode(value: string): CronMode {
     const parsed = parseCron(value)
     if (!parsed) return 'custom'
@@ -70,7 +93,13 @@ function inferMode(value: string): CronMode {
     if (isNumberOrEmpty(minute) && isNumberOrEmpty(hour) && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
         return 'daily'
     }
-    if (isNumberOrEmpty(minute) && isNumberOrEmpty(hour) && dayOfMonth === '*' && month === '*' && /^\d+$/.test(dayOfWeek)) {
+    if (
+        isNumberOrEmpty(minute)
+        && isNumberOrEmpty(hour)
+        && dayOfMonth === '*'
+        && month === '*'
+        && (dayOfWeek === EMPTY_CRON_VALUE || isWeekdayList(dayOfWeek))
+    ) {
         return 'weekly'
     }
     if (isNumberOrEmpty(minute) && isNumberOrEmpty(hour) && isNumberOrEmpty(dayOfMonth) && month === '*' && dayOfWeek === '*') {
@@ -137,8 +166,8 @@ function cronForMode(mode: StructuredCronMode, parsed: ParsedCron | null): strin
         case 'daily':
             return `${minute} ${hour} * * *`
         case 'weekly': {
-            const weekday = /^\d+$/.test(parsed?.dayOfWeek ?? '') ? parsed!.dayOfWeek : '1'
-            return `${minute} ${hour} * * ${weekday}`
+            const weekdays = parsed && isWeekdayList(parsed.dayOfWeek) ? parsed.dayOfWeek : '1'
+            return `${minute} ${hour} * * ${weekdays}`
         }
         case 'monthly': {
             const day = clamp(Number(parsed?.dayOfMonth) || 1, 1, 31)
@@ -168,10 +197,8 @@ function describeCron(value: string): string {
             return `Every hour at minute ${parsed.minute}.`
         case 'daily':
             return `Every day at ${time}.`
-        case 'weekly': {
-            const weekday = WEEKDAYS.find((day) => day.value === parsed.dayOfWeek)?.label ?? `weekday ${parsed.dayOfWeek}`
-            return `Every ${weekday} at ${time}.`
-        }
+        case 'weekly':
+            return `Every ${describeWeekdays(parsed.dayOfWeek)} at ${time}.`
         case 'monthly':
             return `Every month on day ${parsed.dayOfMonth} at ${time}.`
         case 'custom':
@@ -190,6 +217,7 @@ export default function CronEditor({
 }: CronEditorProps) {
     const [mode, setMode] = useState<CronMode>(() => inferMode(value))
     const parsed = useMemo(() => parseCron(value), [value])
+    const weekdayValues = useMemo(() => selectedWeekdays(parsed?.dayOfWeek), [parsed?.dayOfWeek])
     const disabled = Boolean(environmentVariable)
     const errorId = `${id}-errors`
 
@@ -297,17 +325,27 @@ export default function CronEditor({
 
                         {mode === 'weekly' ? (
                             <label>
-                                <span>Day</span>
-                                <select
-                                    className="input settings-input settings-select"
-                                    disabled={disabled}
-                                    value={parsed?.dayOfWeek ?? '1'}
-                                    onChange={(event) => updateParts({dayOfWeek: event.currentTarget.value})}
-                                >
-                                    {WEEKDAYS.map((day) => (
-                                        <option key={day.value} value={day.value}>{day.label}</option>
-                                    ))}
-                                </select>
+                                <span>Days</span>
+                                <Select<WeekdayOption, true>
+                                    inputId={`${id}-weekdays`}
+                                    className="cron-editor__weekday-select"
+                                    classNamePrefix="select"
+                                    isMulti
+                                    isDisabled={disabled}
+                                    closeMenuOnSelect={false}
+                                    hideSelectedOptions={false}
+                                    options={WEEKDAYS}
+                                    value={weekdayValues}
+                                    placeholder="Select one or more days"
+                                    getOptionValue={(option) => option.value}
+                                    getOptionLabel={(option) => option.label}
+                                    styles={{menu: (base) => ({...base, zIndex: 20})}}
+                                    onChange={(days) => updateParts({
+                                        dayOfWeek: days.length
+                                            ? days.map((day) => day.value).join(',')
+                                            : EMPTY_CRON_VALUE,
+                                    })}
+                                />
                             </label>
                         ) : null}
 

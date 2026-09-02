@@ -29,6 +29,7 @@ export default function GeneralSettingsTab({draft, updateDraft, environmentVaria
                     label="Log level"
                     value={draft.logLevel}
                     options={['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']}
+                    error={errorFor('logLevel')}
                     environmentVariable={environmentVariableFor('logLevel')}
                     onChange={(value) => updateDraft((next) => {
                         next.logLevel = value as SettingsValues['logLevel']

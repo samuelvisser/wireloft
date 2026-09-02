@@ -216,6 +216,7 @@ export function SelectField({
     optionLabels,
     onChange,
     help,
+    error,
     environmentVariable,
 }: {
     id: string
@@ -225,8 +226,10 @@ export function SelectField({
     optionLabels?: Partial<Record<string, string>>
     onChange: (value: string) => void
     help?: ReactNode
+    error?: string
     environmentVariable?: string
 }) {
+    const errorId = `${id}-errors`
     return (
         <FieldShell label={label} htmlFor={id} help={help} environmentVariable={environmentVariable}>
             <select
@@ -234,12 +237,19 @@ export function SelectField({
                 className="input settings-input settings-select"
                 value={value}
                 disabled={Boolean(environmentVariable)}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? errorId : undefined}
                 onChange={(event) => onChange(event.target.value)}
             >
                 {options.map((option) => (
                     <option key={option} value={option}>{optionLabels?.[option] ?? option}</option>
                 ))}
             </select>
+            {error ? (
+                <div id={errorId} className="error" role="alert" aria-live="polite">
+                    {error}
+                </div>
+            ) : null}
         </FieldShell>
     )
 }

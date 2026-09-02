@@ -22,7 +22,6 @@ import {
 import {buildServerAwareSubmit} from '../utils/buildServerAwareSubmit'
 import './SettingsPage.css'
 import './SettingsEnvironmentOverrides.css'
-import './SettingsSaveState.css'
 
 
 type SettingsTab = 'general' | 'downloads' | 'automation' | 'dailywire' | 'advanced'
@@ -75,7 +74,6 @@ export default function SettingsPage() {
     const queryClient = useQueryClient()
     const [activeTab, setActiveTab] = useState<SettingsTab>('general')
     const [baseline, setBaseline] = useState<SettingsValues | null>(null)
-    const [hasSavedChanges, setHasSavedChanges] = useState(false)
 
     const form = useForm<SettingsValues>({
         resolver: zodResolver(SettingsFormSchema),
@@ -100,7 +98,6 @@ export default function SettingsPage() {
     }, [reset, settingsQuery.data])
 
     const updateDraft = useCallback((mutator: (next: SettingsValues) => void) => {
-        setHasSavedChanges(false)
         const current = cloneSettings(getValues())
         const next = cloneSettings(current)
         mutator(next)
@@ -154,14 +151,12 @@ export default function SettingsPage() {
             rootOnFieldErrors: true,
             onSuccess: (settings) => {
                 queryClient.setQueryData(['settings'], settings)
-                setHasSavedChanges(true)
                 toast.success('Settings saved to config.yml')
             },
         },
     )
 
     const discardChanges = () => {
-        setHasSavedChanges(false)
         if (baseline) reset(cloneSettings(baseline))
     }
 
@@ -242,21 +237,19 @@ export default function SettingsPage() {
                     {activeTab === 'advanced' ? <AdvancedSettingsTab {...tabProps} /> : null}
                 </div>
 
-                {isDirty || hasSavedChanges ? (
-                    <div className={`settings-actions${isDirty ? ' is-dirty' : ' is-saved'}`}>
+                {isDirty ? (
+                    <div className="settings-actions is-dirty">
                         <div>
-                            <strong>{isDirty ? 'Unsaved changes' : 'All changes saved'}</strong>
+                            <strong>Unsaved changes</strong>
                             <span>
-                                {isDirty
-                                    ? `${dirtyFields.length} ${dirtyFields.length === 1 ? 'setting' : 'settings'} will be written to config.yml.`
-                                    : 'The values shown match the active configuration.'}
+                                {dirtyFields.length} {dirtyFields.length === 1 ? 'setting' : 'settings'} will be written to config.yml.
                             </span>
                         </div>
                         <div className="settings-actions__buttons">
                             <button
                                 className="btn"
                                 type="button"
-                                disabled={!isDirty || isSubmitting}
+                                disabled={isSubmitting}
                                 onClick={discardChanges}
                             >
                                 Discard
@@ -264,7 +257,7 @@ export default function SettingsPage() {
                             <button
                                 className="btn btn-primary"
                                 type="button"
-                                disabled={!isDirty || isSubmitting}
+                                disabled={isSubmitting}
                                 onClick={() => void submit()}
                             >
                                 {isSubmitting ? 'Saving…' : 'Save settings'}
