@@ -19,6 +19,7 @@ export default function GeneralSettingsTab({draft, updateDraft, environmentVaria
                     id="settings-timezone"
                     label="Timezone"
                     value={draft.timezone}
+                    error={errorFor('timezone')}
                     environmentVariable={environmentVariableFor('timezone')}
                     onChange={(value) => updateDraft((next) => { next.timezone = value })}
                     help={<>Use an IANA timezone such as <code>Europe/Amsterdam</code>.</>}
