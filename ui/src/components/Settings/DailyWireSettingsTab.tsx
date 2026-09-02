@@ -2,7 +2,7 @@ import DailywireAuthCard from '../DailywireAuth/DailywireAuthCard'
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {NumberField, SettingsDisclosure, TextField} from './SettingsControls'
 
-export default function DailyWireSettingsTab({draft, updateDraft, environmentVariableFor}: SettingsTabProps) {
+export default function DailyWireSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
     return (
         <>
             <DailywireAuthCard />
@@ -89,6 +89,7 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
                     value={draft.dwTimeout.minFastRequestMs}
                     min={0}
                     unit="ms"
+                    error={errorFor('dwTimeout.minFastRequestMs')}
                     environmentVariable={environmentVariableFor('dwTimeout.minFastRequestMs')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwTimeout.minFastRequestMs = value
@@ -99,6 +100,7 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
                     label="Fast requests before slowdown"
                     value={draft.dwTimeout.maxFastRequests}
                     min={1}
+                    error={errorFor('dwTimeout.maxFastRequests')}
                     environmentVariable={environmentVariableFor('dwTimeout.maxFastRequests')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwTimeout.maxFastRequests = value
@@ -110,6 +112,7 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
                     value={draft.dwTimeout.minSlowRequestMs}
                     min={0}
                     unit="ms"
+                    error={errorFor('dwTimeout.minSlowRequestMs')}
                     environmentVariable={environmentVariableFor('dwTimeout.minSlowRequestMs')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwTimeout.minSlowRequestMs = value

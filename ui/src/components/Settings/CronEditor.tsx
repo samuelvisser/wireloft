@@ -10,6 +10,7 @@ type CronEditorProps = {
     onChange: (value: string) => void
     environmentVariable?: string
     help?: string
+    error?: string
 }
 
 type CronMode = 'minutes' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom'
@@ -22,6 +23,8 @@ type ParsedCron = {
     month: string
     dayOfWeek: string
 }
+
+const EMPTY_CRON_VALUE = '_'
 
 const WEEKDAYS = [
     {value: '1', label: 'Monday'},
@@ -49,24 +52,28 @@ function parseCron(value: string): ParsedCron | null {
     return {minute, hour, dayOfMonth, month, dayOfWeek}
 }
 
+function isNumberOrEmpty(value: string) {
+    return /^\d+$/.test(value) || value === EMPTY_CRON_VALUE
+}
+
 function inferMode(value: string): CronMode {
     const parsed = parseCron(value)
     if (!parsed) return 'custom'
     const {minute, hour, dayOfMonth, month, dayOfWeek} = parsed
 
-    if (/^\*\/\d+$/.test(minute) && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    if (/^\*\/(?:\d+|_)$/.test(minute) && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
         return 'minutes'
     }
-    if (/^\d+$/.test(minute) && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    if (isNumberOrEmpty(minute) && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
         return 'hourly'
     }
-    if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    if (isNumberOrEmpty(minute) && isNumberOrEmpty(hour) && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
         return 'daily'
     }
-    if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && dayOfMonth === '*' && month === '*' && /^\d+$/.test(dayOfWeek)) {
+    if (isNumberOrEmpty(minute) && isNumberOrEmpty(hour) && dayOfMonth === '*' && month === '*' && /^\d+$/.test(dayOfWeek)) {
         return 'weekly'
     }
-    if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && /^\d+$/.test(dayOfMonth) && month === '*' && dayOfWeek === '*') {
+    if (isNumberOrEmpty(minute) && isNumberOrEmpty(hour) && isNumberOrEmpty(dayOfMonth) && month === '*' && dayOfWeek === '*') {
         return 'monthly'
     }
     return 'custom'
@@ -76,6 +83,11 @@ function clamp(value: number, min: number, max: number) {
     return Math.min(max, Math.max(min, value))
 }
 
+function numberOrEmpty(value: string | undefined, min: number, max: number): number | '' {
+    if (!value || !/^\d+$/.test(value)) return ''
+    return clamp(Number(value), min, max)
+}
+
 function CronNumberInput({
     value,
     min,
@@ -83,18 +95,12 @@ function CronNumberInput({
     disabled,
     onChange,
 }: {
-    value: number
+    value: number | ''
     min: number
     max: number
     disabled: boolean
-    onChange: (value: number) => void
+    onChange: (value: number | null) => void
 }) {
-    const [rawValue, setRawValue] = useState(String(value))
-
-    useEffect(() => {
-        setRawValue(String(value))
-    }, [value])
-
     return (
         <input
             className="input settings-input"
@@ -102,11 +108,12 @@ function CronNumberInput({
             min={min}
             max={max}
             disabled={disabled}
-            value={rawValue}
+            value={value}
             onChange={(event) => {
-                const nextRawValue = event.currentTarget.value
-                setRawValue(nextRawValue)
-                if (nextRawValue === '') return
+                if (event.currentTarget.value === '') {
+                    onChange(null)
+                    return
+                }
 
                 const nextValue = event.currentTarget.valueAsNumber
                 if (!Number.isFinite(nextValue)) return
@@ -143,6 +150,9 @@ function cronForMode(mode: StructuredCronMode, parsed: ParsedCron | null): strin
 function describeCron(value: string): string {
     const parsed = parseCron(value)
     if (!parsed) return 'Enter exactly five cron fields: minute, hour, day, month and weekday.'
+    if (Object.values(parsed).some((part) => part.includes(EMPTY_CRON_VALUE))) {
+        return 'Complete the schedule before saving.'
+    }
 
     const mode = inferMode(value)
     const minute = Number(parsed.minute)
@@ -176,10 +186,12 @@ export default function CronEditor({
     onChange,
     environmentVariable,
     help = 'Schedules use WireLoft’s configured timezone.',
+    error,
 }: CronEditorProps) {
     const [mode, setMode] = useState<CronMode>(() => inferMode(value))
     const parsed = useMemo(() => parseCron(value), [value])
     const disabled = Boolean(environmentVariable)
+    const errorId = `${id}-errors`
 
     useEffect(() => {
         setMode(inferMode(value))
@@ -202,8 +214,11 @@ export default function CronEditor({
         ].join(' '))
     }
 
-    const hour = clamp(Number(parsed?.hour) || 0, 0, 23)
-    const minute = clamp(Number(parsed?.minute) || 0, 0, 59)
+    const hour = numberOrEmpty(parsed?.hour, 0, 23)
+    const minute = numberOrEmpty(parsed?.minute, 0, 59)
+    const timeValue = hour === '' || minute === ''
+        ? ''
+        : `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 
     return (
         <div className={`settings-field settings-field--wide cron-editor${disabled ? ' is-environment-managed' : ''}`}>
@@ -236,11 +251,11 @@ export default function CronEditor({
                                 <span>Interval</span>
                                 <div className="cron-editor__inline-input">
                                     <CronNumberInput
-                                        value={Number(parsed?.minute.match(/^\*\/(\d+)$/)?.[1] ?? 30)}
+                                        value={numberOrEmpty(parsed?.minute.match(/^\*\/(\d+|_)$/)?.[1], 1, 59)}
                                         min={1}
                                         max={59}
                                         disabled={disabled}
-                                        onChange={(every) => onChange(`*/${every} * * * *`)}
+                                        onChange={(every) => onChange(`*/${every ?? EMPTY_CRON_VALUE} * * * *`)}
                                     />
                                     <span>minutes</span>
                                 </div>
@@ -255,7 +270,7 @@ export default function CronEditor({
                                     min={0}
                                     max={59}
                                     disabled={disabled}
-                                    onChange={(nextMinute) => updateParts({minute: String(nextMinute)})}
+                                    onChange={(nextMinute) => updateParts({minute: nextMinute === null ? EMPTY_CRON_VALUE : String(nextMinute)})}
                                 />
                             </label>
                         ) : null}
@@ -267,8 +282,12 @@ export default function CronEditor({
                                     className="input settings-input"
                                     type="time"
                                     disabled={disabled}
-                                    value={`${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`}
+                                    value={timeValue}
                                     onChange={(event) => {
+                                        if (event.currentTarget.value === '') {
+                                            updateParts({hour: EMPTY_CRON_VALUE, minute: EMPTY_CRON_VALUE})
+                                            return
+                                        }
                                         const [nextHour, nextMinute] = event.currentTarget.value.split(':')
                                         updateParts({hour: String(Number(nextHour)), minute: String(Number(nextMinute))})
                                     }}
@@ -296,18 +315,20 @@ export default function CronEditor({
                             <label>
                                 <span>Day of month</span>
                                 <CronNumberInput
-                                    value={clamp(Number(parsed?.dayOfMonth) || 1, 1, 31)}
+                                    value={numberOrEmpty(parsed?.dayOfMonth, 1, 31)}
                                     min={1}
                                     max={31}
                                     disabled={disabled}
-                                    onChange={(dayOfMonth) => updateParts({dayOfMonth: String(dayOfMonth)})}
+                                    onChange={(dayOfMonth) => updateParts({
+                                        dayOfMonth: dayOfMonth === null ? EMPTY_CRON_VALUE : String(dayOfMonth),
+                                    })}
                                 />
                             </label>
                         ) : null}
                     </div>
                 ) : null}
 
-                <div className={`cron-editor__expression${parsed ? '' : ' is-invalid'}`}>
+                <div className={`cron-editor__expression${error ? ' is-invalid' : ''}`}>
                     <label htmlFor={`${id}-expression`}>Cron expression</label>
                     <input
                         id={`${id}-expression`}
@@ -315,7 +336,8 @@ export default function CronEditor({
                         value={value}
                         disabled={disabled}
                         spellCheck={false}
-                        aria-invalid={!parsed}
+                        aria-invalid={Boolean(error)}
+                        aria-describedby={error ? errorId : undefined}
                         onChange={(event) => {
                             const nextValue = event.currentTarget.value
                             onChange(nextValue)
@@ -323,6 +345,11 @@ export default function CronEditor({
                         }}
                     />
                     <div className="cron-editor__description">{describeCron(value)}</div>
+                    {error ? (
+                        <div id={errorId} className="error" role="alert" aria-live="polite">
+                            {error}
+                        </div>
+                    ) : null}
                     <div className="settings-field__help">{help}</div>
                 </div>
             </div>

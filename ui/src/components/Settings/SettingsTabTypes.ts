@@ -7,4 +7,5 @@ export type SettingsTabProps = {
     draft: SettingsValues
     updateDraft: UpdateSettingsDraft
     environmentVariableFor: (path: SettingsFieldPath) => string | undefined
+    errorFor: (path: SettingsFieldPath) => string | undefined
 }

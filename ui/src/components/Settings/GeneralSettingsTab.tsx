@@ -8,7 +8,7 @@ import {
     TextField,
 } from './SettingsControls'
 
-export default function GeneralSettingsTab({draft, updateDraft, environmentVariableFor}: SettingsTabProps) {
+export default function GeneralSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
     return (
         <>
             <SettingsSection
@@ -46,6 +46,7 @@ export default function GeneralSettingsTab({draft, updateDraft, environmentVaria
                     value={draft.loginSession.ttlSeconds}
                     min={60}
                     unit="seconds"
+                    error={errorFor('loginSession.ttlSeconds')}
                     environmentVariable={environmentVariableFor('loginSession.ttlSeconds')}
                     onChange={(value) => updateDraft((next) => {
                         next.loginSession.ttlSeconds = value

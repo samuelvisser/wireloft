@@ -18,7 +18,7 @@ const FILENAME_RESTRICTION_LABELS = {
     restricted: 'Restricted filenames',
 } satisfies Record<FilenameRestrictionMode, string>
 
-export default function DownloadsSettingsTab({draft, updateDraft, environmentVariableFor}: SettingsTabProps) {
+export default function DownloadsSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
     return (
         <>
             <SettingsSection
@@ -72,6 +72,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     label="Concurrent downloads"
                     value={draft.downloadSettings.maxConcurrentDownloads}
                     min={1}
+                    error={errorFor('downloadSettings.maxConcurrentDownloads')}
                     environmentVariable={environmentVariableFor('downloadSettings.maxConcurrentDownloads')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.maxConcurrentDownloads = value
@@ -83,6 +84,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     label="Maximum attempts"
                     value={draft.downloadSettings.maxDownloadAttempts}
                     min={1}
+                    error={errorFor('downloadSettings.maxDownloadAttempts')}
                     environmentVariable={environmentVariableFor('downloadSettings.maxDownloadAttempts')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.maxDownloadAttempts = value
@@ -95,6 +97,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     value={draft.downloadSettings.downloadTimeoutSeconds}
                     min={1}
                     unit="seconds"
+                    error={errorFor('downloadSettings.downloadTimeoutSeconds')}
                     environmentVariable={environmentVariableFor('downloadSettings.downloadTimeoutSeconds')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.downloadTimeoutSeconds = value
@@ -139,6 +142,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     id="settings-verify-downloads-cron"
                     label="Verify downloads schedule"
                     value={draft.downloadSettings.verifyDownloadsCron}
+                    error={errorFor('downloadSettings.verifyDownloadsCron')}
                     environmentVariable={environmentVariableFor('downloadSettings.verifyDownloadsCron')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.verifyDownloadsCron = value
@@ -158,6 +162,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     id="settings-file-watcher-cron"
                     label="File watcher schedule"
                     value={draft.fileWatcher.scanCron}
+                    error={errorFor('fileWatcher.scanCron')}
                     environmentVariable={environmentVariableFor('fileWatcher.scanCron')}
                     onChange={(value) => updateDraft((next) => {
                         next.fileWatcher.scanCron = value

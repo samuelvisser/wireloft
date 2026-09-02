@@ -1,4 +1,6 @@
+import {zodResolver} from '@hookform/resolvers/zod'
 import {useCallback, useEffect, useMemo, useState} from 'react'
+import {type FieldErrors, type FieldPath, useForm} from 'react-hook-form'
 import toast from 'react-hot-toast'
 
 import AdvancedSettingsTab from '../components/Settings/AdvancedSettingsTab'
@@ -10,6 +12,7 @@ import {SettingsLoading} from '../components/Settings/SettingsControls'
 import {useSaveSettings, useSettings} from '../lib/settings'
 import {
     SETTINGS_FIELD_PATHS,
+    SettingsFormSchema,
     type SettingsFieldPath,
     type SettingsValues,
 } from '../types/schemas/settings'
@@ -26,12 +29,6 @@ type SettingsTabDefinition = {
     description: string
 }
 
-type NumberFieldConstraint = {
-    label: string
-    min?: number
-    max?: number
-}
-
 const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'general', label: 'General', description: 'Application behaviour and sessions'},
     {id: 'downloads', label: 'Downloads', description: 'Storage, naming, processing and verification'},
@@ -39,31 +36,6 @@ const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'dailywire', label: 'DailyWire', description: 'Account and integration details'},
     {id: 'advanced', label: 'Advanced', description: 'Encryption files and configuration details'},
 ]
-
-const NUMBER_FIELD_CONSTRAINTS: Partial<Record<SettingsFieldPath, NumberFieldConstraint>> = {
-    'loginSession.ttlSeconds': {label: 'Session lifetime', min: 60},
-    'movieMetadata.requestTimeoutSeconds': {label: 'TMDB request timeout', min: 1},
-    'movieMetadata.maxRetries': {label: 'TMDB retry attempts', min: 0, max: 5},
-    'dwTimeout.minFastRequestMs': {label: 'Minimum fast-request delay', min: 0},
-    'dwTimeout.maxFastRequests': {label: 'Fast requests before slowdown', min: 1},
-    'dwTimeout.minSlowRequestMs': {label: 'Minimum slow-request delay', min: 0},
-    'scheduler.maxWorkers': {label: 'Maximum workers', min: 1},
-    'scheduler.defaultMaxRetries': {label: 'Default retries', min: 0},
-    'scheduler.retryBackoffSeconds': {label: 'Retry backoff', min: 0},
-    'episodeStatusTiming.publishedCountdownAfterMinutes': {label: 'Countdown publication threshold', min: 0},
-    'episodeStatusTiming.publishedFinalAfterMinutes': {label: 'Final publication threshold', min: 0},
-    'downloadSettings.maxConcurrentDownloads': {label: 'Concurrent downloads', min: 1},
-    'downloadSettings.maxDownloadAttempts': {label: 'Maximum download attempts', min: 1},
-    'downloadSettings.downloadTimeoutSeconds': {label: 'Download timeout', min: 1},
-}
-
-const CRON_FIELD_PATHS = new Set<SettingsFieldPath>([
-    'newEpisodeSchedule.findEpisodesCron',
-    'newEpisodeSchedule.monitorEpisodeCron',
-    'newEpisodeSchedule.checkNoShowTodayCron',
-    'downloadSettings.verifyDownloadsCron',
-    'fileWatcher.scanCron',
-])
 
 function cloneSettings(values: SettingsValues): SettingsValues {
     return structuredClone(values)
@@ -78,48 +50,70 @@ function valueAtPath(values: SettingsValues, path: SettingsFieldPath): unknown {
     return current
 }
 
-function setValueAtPath(values: SettingsValues, path: SettingsFieldPath, value: number): void {
-    const segments = path.split('.')
-    let current = values as unknown as Record<string, unknown>
-
-    for (const segment of segments.slice(0, -1)) {
-        current = current[segment] as Record<string, unknown>
+function errorAtPath(errors: FieldErrors<SettingsValues>, path: SettingsFieldPath): string | undefined {
+    let current: unknown = errors
+    for (const segment of path.split('.')) {
+        if (current === null || typeof current !== 'object') return undefined
+        current = (current as Record<string, unknown>)[segment]
     }
-    current[segments[segments.length - 1]] = value
-}
 
-function hasFiveCronFields(value: string): boolean {
-    return value.trim().split(/\s+/).filter(Boolean).length === 5
+    if (current === null || typeof current !== 'object') return undefined
+    const message = (current as {message?: unknown}).message
+    return typeof message === 'string' ? message : undefined
 }
 
 export default function SettingsPage() {
     const settingsQuery = useSettings()
     const saveSettings = useSaveSettings()
     const [activeTab, setActiveTab] = useState<SettingsTab>('general')
-    const [draft, setDraft] = useState<SettingsValues | null>(null)
     const [baseline, setBaseline] = useState<SettingsValues | null>(null)
     const [hasSavedChanges, setHasSavedChanges] = useState(false)
 
+    const form = useForm<SettingsValues>({
+        resolver: zodResolver(SettingsFormSchema),
+        mode: 'onSubmit',
+        reValidateMode: 'onChange',
+        shouldFocusError: true,
+    })
+    const {
+        formState: {errors, isSubmitted},
+        getValues,
+        handleSubmit,
+        reset,
+        setValue,
+        watch,
+    } = form
+    const draft = watch()
+
     useEffect(() => {
         if (!settingsQuery.data) return
-        setDraft(cloneSettings(settingsQuery.data.values))
-        setBaseline(cloneSettings(settingsQuery.data.values))
-    }, [settingsQuery.data])
+        const values = cloneSettings(settingsQuery.data.values)
+        reset(values)
+        setBaseline(cloneSettings(values))
+    }, [reset, settingsQuery.data])
 
     const updateDraft = useCallback((mutator: (next: SettingsValues) => void) => {
         setHasSavedChanges(false)
-        setDraft((current) => {
-            if (!current) return current
-            const next = cloneSettings(current)
-            mutator(next)
-            return next
-        })
-    }, [])
+        const current = cloneSettings(getValues())
+        const next = cloneSettings(current)
+        mutator(next)
+
+        for (const path of SETTINGS_FIELD_PATHS) {
+            const currentValue = valueAtPath(current, path)
+            const nextValue = valueAtPath(next, path)
+            if (Object.is(currentValue, nextValue)) continue
+
+            setValue(path as FieldPath<SettingsValues>, nextValue as never, {
+                shouldDirty: true,
+                shouldValidate: isSubmitted,
+            })
+        }
+    }, [getValues, isSubmitted, setValue])
 
     const dirtyFields = useMemo<SettingsFieldPath[]>(() => {
-        if (!draft || !baseline) return []
+        if (!baseline) return []
         return SETTINGS_FIELD_PATHS.filter(
-            (path) => valueAtPath(draft, path) !== valueAtPath(baseline, path),
+            (path) => !Object.is(valueAtPath(draft, path), valueAtPath(baseline, path)),
         )
     }, [draft, baseline])
     const isDirty = dirtyFields.length > 0
@@ -139,52 +133,24 @@ export default function SettingsPage() {
         return settingsQuery.data?.environmentOverrides[path]
     }, [settingsQuery.data?.environmentOverrides])
 
-    const submit = async () => {
-        if (!draft || !isDirty) return
+    const errorFor = useCallback((path: SettingsFieldPath): string | undefined => {
+        return errorAtPath(errors, path)
+    }, [errors])
 
-        const valuesToSave = cloneSettings(draft)
-        for (const path of dirtyFields) {
-            const numberConstraint = NUMBER_FIELD_CONSTRAINTS[path]
-            if (numberConstraint) {
-                const value = valueAtPath(valuesToSave, path)
-                if (typeof value !== 'number' || !Number.isFinite(value)) {
-                    toast.error(`Enter a number for ${numberConstraint.label} before saving.`)
-                    return
-                }
-
-                let normalizedValue = value
-                if (numberConstraint.min !== undefined) {
-                    normalizedValue = Math.max(numberConstraint.min, normalizedValue)
-                }
-                if (numberConstraint.max !== undefined) {
-                    normalizedValue = Math.min(numberConstraint.max, normalizedValue)
-                }
-                if (normalizedValue !== value) {
-                    setValueAtPath(valuesToSave, path, normalizedValue)
-                }
-            }
-
-            if (CRON_FIELD_PATHS.has(path)) {
-                const cronValue = valueAtPath(valuesToSave, path)
-                if (typeof cronValue !== 'string' || !hasFiveCronFields(cronValue)) {
-                    toast.error('Cron schedules must contain five fields before saving.')
-                    return
-                }
-            }
-        }
-
+    const submit = handleSubmit(async (values) => {
+        if (!isDirty) return
         try {
-            await saveSettings.mutateAsync({values: valuesToSave, changedFields: dirtyFields})
+            await saveSettings.mutateAsync({values, changedFields: dirtyFields})
             setHasSavedChanges(true)
             toast.success('Settings saved to config.yml')
         } catch (error: any) {
             toast.error(error?.message || 'Failed to save settings')
         }
-    }
+    })
 
     const discardChanges = () => {
         setHasSavedChanges(false)
-        if (baseline) setDraft(cloneSettings(baseline))
+        if (baseline) reset(cloneSettings(baseline))
     }
 
     if (settingsQuery.isError) {
@@ -202,7 +168,7 @@ export default function SettingsPage() {
         )
     }
 
-    if (settingsQuery.isLoading || !draft || !baseline) {
+    if (settingsQuery.isLoading || !baseline || !settingsQuery.data) {
         return (
             <section className="view settings-page" aria-labelledby="settings-title">
                 <SettingsLoading />
@@ -210,8 +176,8 @@ export default function SettingsPage() {
         )
     }
 
-    const updatedAt = settingsQuery.data?.updatedAt
-    const tabProps = {draft, updateDraft, environmentVariableFor}
+    const updatedAt = settingsQuery.data.updatedAt
+    const tabProps = {draft, updateDraft, environmentVariableFor, errorFor}
 
     return (
         <section className="view settings-page" aria-labelledby="settings-title">

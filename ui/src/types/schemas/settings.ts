@@ -93,6 +93,50 @@ export const SettingsValuesSchema = z.object({
 })
 export type SettingsValues = z.infer<typeof SettingsValuesSchema>
 
+const requiredNumber = () => z.number({error: 'A value is required.'})
+const cronExpression = z.string().refine((value) => {
+    const fields = value.trim().split(/\s+/)
+    return fields.length === 5 && fields.every((field) => field.length > 0 && !field.includes('_'))
+}, 'Enter a complete five-part cron expression.')
+
+export const SettingsFormSchema = SettingsValuesSchema.extend({
+    loginSession: SessionSettingsSchema.extend({
+        ttlSeconds: requiredNumber().int().min(60, 'Must be at least 60.'),
+    }),
+    movieMetadata: MovieMetadataSettingsSchema.extend({
+        requestTimeoutSeconds: requiredNumber().min(1, 'Must be at least 1.'),
+        maxRetries: requiredNumber().int().min(0, 'Must be 0 or greater.').max(5, 'Must be 5 or less.'),
+    }),
+    dwTimeout: TimeoutSettingsSchema.extend({
+        minFastRequestMs: requiredNumber().int().min(0, 'Must be 0 or greater.'),
+        maxFastRequests: requiredNumber().int().min(1, 'Must be at least 1.'),
+        minSlowRequestMs: requiredNumber().int().min(0, 'Must be 0 or greater.'),
+    }),
+    scheduler: SchedulerSettingsSchema.extend({
+        maxWorkers: requiredNumber().int().min(1, 'Must be at least 1.'),
+        defaultMaxRetries: requiredNumber().int().min(0, 'Must be 0 or greater.'),
+        retryBackoffSeconds: requiredNumber().min(0, 'Must be 0 or greater.'),
+    }),
+    newEpisodeSchedule: TrackNewEpisodeScheduleSchema.extend({
+        findEpisodesCron: cronExpression,
+        monitorEpisodeCron: cronExpression,
+        checkNoShowTodayCron: cronExpression,
+    }),
+    episodeStatusTiming: EpisodeStatusTimingSchema.extend({
+        publishedCountdownAfterMinutes: requiredNumber().int().min(0, 'Must be 0 or greater.'),
+        publishedFinalAfterMinutes: requiredNumber().int().min(0, 'Must be 0 or greater.'),
+    }),
+    downloadSettings: DownloadSettingsSchema.extend({
+        verifyDownloadsCron: cronExpression,
+        maxConcurrentDownloads: requiredNumber().int().min(1, 'Must be at least 1.'),
+        maxDownloadAttempts: requiredNumber().int().min(1, 'Must be at least 1.'),
+        downloadTimeoutSeconds: requiredNumber().int().min(1, 'Must be at least 1.'),
+    }),
+    fileWatcher: FileWatcherSettingsSchema.extend({
+        scanCron: cronExpression,
+    }),
+})
+
 export const SETTINGS_FIELD_PATHS = [
     'logLevel',
     'timezone',

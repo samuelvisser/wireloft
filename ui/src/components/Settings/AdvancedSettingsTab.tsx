@@ -3,7 +3,7 @@ import {NumberField, SettingsDisclosure, SettingsSection, TextField} from './Set
 
 const TMDB_LOGO_URL = 'https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_2-d537fb228cf3ded904ef09b136fe3fec72548ebc1fea3fbbd1ad9e36364db38b.svg'
 
-export default function AdvancedSettingsTab({draft, updateDraft, environmentVariableFor}: SettingsTabProps) {
+export default function AdvancedSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
     const tokenEnvironmentVariable = environmentVariableFor('movieMetadata.tmdbReadAccessToken')
     const tokenConfigured = draft.movieMetadata.tmdbReadAccessTokenConfigured || Boolean(tokenEnvironmentVariable)
 
@@ -55,6 +55,7 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                     id="settings-tmdb-timeout"
                     label="Request timeout"
                     value={draft.movieMetadata.requestTimeoutSeconds}
+                    error={errorFor('movieMetadata.requestTimeoutSeconds')}
                     environmentVariable={environmentVariableFor('movieMetadata.requestTimeoutSeconds')}
                     onChange={(value) => updateDraft((next) => {
                         next.movieMetadata.requestTimeoutSeconds = value
@@ -67,6 +68,7 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                     id="settings-tmdb-retries"
                     label="Retry attempts"
                     value={draft.movieMetadata.maxRetries}
+                    error={errorFor('movieMetadata.maxRetries')}
                     environmentVariable={environmentVariableFor('movieMetadata.maxRetries')}
                     onChange={(value) => updateDraft((next) => {
                         next.movieMetadata.maxRetries = value

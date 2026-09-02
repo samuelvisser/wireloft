@@ -143,6 +143,7 @@ export function NumberField({
     value,
     onChange,
     help,
+    error,
     min = 0,
     max,
     step = 1,
@@ -154,6 +155,7 @@ export function NumberField({
     value: number
     onChange: (value: number) => void
     help?: ReactNode
+    error?: string
     min?: number
     max?: number
     step?: number
@@ -161,6 +163,7 @@ export function NumberField({
     environmentVariable?: string
 }) {
     const isValidNumber = Number.isFinite(value)
+    const errorId = `${id}-errors`
 
     return (
         <FieldShell label={label} htmlFor={id} help={help} environmentVariable={environmentVariable}>
@@ -174,7 +177,8 @@ export function NumberField({
                     max={max}
                     step={step}
                     disabled={Boolean(environmentVariable)}
-                    aria-invalid={!isValidNumber}
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={error ? errorId : undefined}
                     onChange={(event) => {
                         if (event.currentTarget.value === '') {
                             onChange(Number.NaN)
@@ -185,6 +189,11 @@ export function NumberField({
                 />
                 {unit ? <span>{unit}</span> : null}
             </div>
+            {error ? (
+                <div id={errorId} className="error" role="alert" aria-live="polite">
+                    {error}
+                </div>
+            ) : null}
         </FieldShell>
     )
 }
