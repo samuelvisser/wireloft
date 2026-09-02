@@ -1,4 +1,4 @@
-import {useMemo, useState} from 'react'
+import {useEffect, useMemo, useState} from 'react'
 
 import './CronEditor.css'
 
@@ -140,6 +140,10 @@ export default function CronEditor({
     const [mode, setMode] = useState<CronMode>(() => inferMode(value))
     const parsed = useMemo(() => parseCron(value), [value])
     const disabled = Boolean(environmentVariable)
+
+    useEffect(() => {
+        setMode(inferMode(value))
+    }, [value])
 
     const setStructuredMode = (nextMode: StructuredCronMode) => {
         setMode(nextMode)
