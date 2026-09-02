@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import YamlConfigSettingsSource
 
 from config.config import PROJECT_ROOT
@@ -56,8 +57,8 @@ class AppSettings(SettingsBase):
     def database_url(self) -> str:
         return f"sqlite:///{self.database_path.as_posix()}"
 
-    log_level: str = "INFO"
-    timezone: str = Field(default="UTC", description="Application timezone")
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    timezone: str = Field(default="UTC", min_length=1, description="Application timezone")
 
     crypto: CryptoSettings = Field(default=CryptoSettings(
         default_secret_file=PROJECT_ROOT / "data" / "wl_secret.key"
@@ -112,6 +113,23 @@ class AppSettings(SettingsBase):
         scan_cron="*/10 * * * *",
         verify_file_size=True,
     ))
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _normalize_log_level(cls, value: Any):
+        return str(value).upper()
+
+    @field_validator("timezone")
+    @classmethod
+    def _validate_timezone(cls, value: str):
+        value = value.strip()
+        try:
+            ZoneInfo(value)
+        except (ValueError, ZoneInfoNotFoundError) as exc:
+            raise ValueError(
+                "Must be a valid IANA timezone, such as Europe/Amsterdam"
+            ) from exc
+        return value
 
     @classmethod
     def settings_customise_sources(
