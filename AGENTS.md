@@ -30,8 +30,7 @@ Form default values, unless defined dynamically, should be defined through Zod d
 then be picked up by React Hook Form and used as actual default values. Only deviate from this if the
 default changes dynamically based on certain conditions.
 
-Make sure to use this structure for any form adjustments and especially
-any new forms.
+Make sure to use this structure for any form adjustments and especially any new forms.
 
 
 ## Test your work
