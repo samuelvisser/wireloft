@@ -12,14 +12,16 @@ from jinja2.sandbox import ImmutableSandboxedEnvironment
 
 from .episode import episode_type_info
 from config import get_settings
+from config.settings.submodels import FilenameRestrictionMode
 
 if TYPE_CHECKING:
     from backend.db.models import Episode, Movie, MovieExtra
 
 _DOWNLOADS_PREFIX = "/downloads/"
 _MAX_RENDERED_PATH_LENGTH = 4096
-# Characters that may not appear in a single path component.
-_UNSAFE_COMPONENT_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_WINDOWS_UNSAFE_COMPONENT_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
+_WINDOWS_RESERVED_COMPONENT = re.compile(r"^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$", re.IGNORECASE)
+_RESTRICTED_UNSAFE_COMPONENT_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
 # Matches WireLoft's original single-brace syntax, without touching Jinja tags.
 _LEGACY_PLACEHOLDER = re.compile(r"(?<!\{)\{([A-Za-z_][A-Za-z0-9_]*)\}(?!\})")
 
@@ -90,22 +92,62 @@ def _to_ascii(value: str) -> str:
     return normalized.encode("ascii", "ignore").decode("ascii")
 
 
-def sanitize_path_component(value: str, *, ascii_only: bool = False) -> str:
-    """Make a template substitution safe to use as one path component."""
-    if ascii_only:
-        value = _to_ascii(value)
-    cleaned = _UNSAFE_COMPONENT_CHARS.sub("_", value).strip(" .")
-    return cleaned or "_"
+def _sanitize_unrestricted_component(value: str) -> str:
+    # A substituted slash must never be allowed to create another path level.
+    # Other punctuation and Unicode are intentionally preserved in this mode.
+    value = value.replace("/", "_").replace("\\", "_").replace("\x00", "")
+    value = "".join(char for char in value if char in "\t" or ord(char) >= 32)
+    return value
 
 
-def _sanitize_template_value(value: object, *, ascii_only: bool) -> str:
+def _sanitize_windows_component(value: str) -> str:
+    cleaned = _WINDOWS_UNSAFE_COMPONENT_CHARS.sub("_", value).rstrip(" .")
+    if _WINDOWS_RESERVED_COMPONENT.match(cleaned):
+        cleaned = f"_{cleaned}"
+    return cleaned
+
+
+def _sanitize_restricted_component(value: str) -> str:
+    cleaned = _to_ascii(value)
+    cleaned = _RESTRICTED_UNSAFE_COMPONENT_CHARS.sub("_", cleaned)
+    cleaned = re.sub(r"_+", "_", cleaned).strip(" _")
+    return cleaned
+
+
+def sanitize_path_component(
+    value: str,
+    *,
+    mode: FilenameRestrictionMode = FilenameRestrictionMode.WINDOWS,
+) -> str:
+    """Make one output path component safe according to the configured mode."""
+    if mode == FilenameRestrictionMode.RESTRICTED:
+        cleaned = _sanitize_restricted_component(value)
+    elif mode == FilenameRestrictionMode.WINDOWS:
+        cleaned = _sanitize_windows_component(value)
+    else:
+        cleaned = _sanitize_unrestricted_component(value)
+
+    if cleaned in {"", ".", ".."}:
+        return "_"
+    return cleaned
+
+
+def _sanitize_template_value(value: object, *, mode: FilenameRestrictionMode) -> str:
     # Empty values must stay falsey so Jinja conditionals can omit their
     # surrounding punctuation. A completely empty path component is handled
     # after rendering instead.
     text = str(value) if value is not None else ""
     if not text:
         return ""
-    return sanitize_path_component(text, ascii_only=ascii_only)
+    return sanitize_path_component(text, mode=mode)
+
+
+def _sanitize_rendered_path(rendered: str, *, mode: FilenameRestrictionMode) -> str:
+    """Apply the filename mode to template literals as well as substitutions."""
+    relative = rendered[len(_DOWNLOADS_PREFIX):]
+    parts = relative.split("/")
+    sanitized = [sanitize_path_component(part, mode=mode) if part else "" for part in parts]
+    return _DOWNLOADS_PREFIX + "/".join(sanitized)
 
 
 def validate_output_template_fields(output_template: str, *, allowed_fields: frozenset[str]) -> str:
@@ -219,9 +261,9 @@ def render_output_template(
 ) -> str:
     """Render a path template using the same sandbox and sanitization as downloads."""
     normalized = validate_output_template_fields(output_template, allowed_fields=allowed_fields)
-    ascii_only = get_settings().download_settings.ascii_only_filenames
+    mode = get_settings().download_settings.filename_restriction_mode
     context = {
-        field: _sanitize_template_value(values.get(field, ""), ascii_only=ascii_only)
+        field: _sanitize_template_value(values.get(field, ""), mode=mode)
         for field in allowed_fields
     }
     environment = _jinja_environment()
@@ -238,7 +280,7 @@ def render_output_template(
         raise ValueError("Rendered output path must start with '/downloads/'")
     if not rendered.endswith(".ext"):
         raise ValueError("Rendered output path must end with '.ext'")
-    return rendered
+    return _sanitize_rendered_path(rendered, mode=mode)
 
 
 def resolve_episode_output_path(
@@ -318,10 +360,6 @@ def _finish_output_path(resolved: str, *, extension: Optional[str]) -> Path:
     if resolved.startswith(_DOWNLOADS_PREFIX):
         resolved = resolved[len(_DOWNLOADS_PREFIX):]
     resolved = resolved.lstrip("/")
-
-    ascii_only = get_settings().download_settings.ascii_only_filenames
-    if ascii_only:
-        resolved = _to_ascii(resolved)
 
     download_root = Path(get_settings().download_settings.download_root).resolve()
     output_path = (download_root / resolved).resolve()

@@ -1,6 +1,7 @@
 from config.security.passwords import hash_password_scrypt, derive_admin_password_client_value
 from config.settings.base import SubmodelBase
 
+from enum import StrEnum
 from typing import Optional
 from pydantic import Field, SecretStr, field_validator, model_validator
 
@@ -145,13 +146,22 @@ class EpisodeStatusTiming(SubmodelBase):
     published_final_after_minutes: int = Field(..., description="Delay in minutes after dw reports the episode as published we can safely assume it no longer contains the countdown")
 
 
+class FilenameRestrictionMode(StrEnum):
+    UNRESTRICTED = "unrestricted"
+    WINDOWS = "windows"
+    RESTRICTED = "restricted"
+
+
 class DownloadSettings(SubmodelBase):
     verify_downloads_cron: str = Field(..., description="Cron schedule for verifying downloads")
     max_concurrent_downloads: int = Field(..., description="Maximum number of concurrent downloads")
     max_download_attempts: int = Field(..., description="Maximum number of download attempts")
     download_timeout_seconds: int = Field(..., description="Timeout in seconds for each download")
     download_root: Path = Field(..., description="Directory on disk that the '/downloads/' prefix of output templates maps to")
-    ascii_only_filenames: bool = Field(..., description="Restrict generated download path names to ASCII characters")
+    filename_restriction_mode: FilenameRestrictionMode = Field(
+        default=FilenameRestrictionMode.WINDOWS,
+        description="Filename compatibility mode: minimal restrictions, Windows-compatible, or restricted ASCII",
+    )
     remux_video_to_mp4: bool = Field(
         ...,
         description="Repackage downloaded HLS video into an .mp4 file instead of leaving it as raw .ts. "

@@ -56,13 +56,16 @@ const EpisodeStatusTimingSchema = z.object({
     publishedFinalAfterMinutes: z.number(),
 })
 
+export const FilenameRestrictionModeSchema = z.enum(['unrestricted', 'windows', 'restricted'])
+export type FilenameRestrictionMode = z.infer<typeof FilenameRestrictionModeSchema>
+
 const DownloadSettingsSchema = z.object({
     verifyDownloadsCron: z.string(),
     maxConcurrentDownloads: z.number(),
     maxDownloadAttempts: z.number(),
     downloadTimeoutSeconds: z.number(),
     downloadRoot: z.string(),
-    asciiOnlyFilenames: z.boolean(),
+    filenameRestrictionMode: FilenameRestrictionModeSchema,
     remuxVideoToMp4: z.boolean(),
     ffmpegPath: z.string(),
 })
@@ -124,7 +127,7 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadSettings.maxDownloadAttempts',
     'downloadSettings.downloadTimeoutSeconds',
     'downloadSettings.downloadRoot',
-    'downloadSettings.asciiOnlyFilenames',
+    'downloadSettings.filenameRestrictionMode',
     'downloadSettings.remuxVideoToMp4',
     'downloadSettings.ffmpegPath',
     'fileWatcher.enabled',

@@ -1,11 +1,20 @@
+import type {FilenameRestrictionMode} from '../../types/schemas/settings'
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {
     NumberField,
+    SelectField,
     SettingsDisclosure,
     SettingsSection,
     TextField,
     ToggleField,
 } from './SettingsControls'
+
+const FILENAME_RESTRICTION_MODES = ['unrestricted', 'windows', 'restricted'] as const
+const FILENAME_RESTRICTION_LABELS = {
+    unrestricted: 'Minimal restrictions',
+    windows: 'Windows-compatible filenames',
+    restricted: 'Restricted filenames',
+} satisfies Record<FilenameRestrictionMode, string>
 
 export default function DownloadsSettingsTab({draft, updateDraft, environmentVariableFor}: SettingsTabProps) {
     return (
@@ -25,16 +34,17 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     help="Local Media Profile output paths are resolved from this storage location where applicable."
                     wide
                 />
-                <ToggleField
-                    id="settings-ascii-filenames"
-                    label="Use ASCII-only filenames"
-                    checked={draft.downloadSettings.asciiOnlyFilenames}
-                    environmentVariable={environmentVariableFor('downloadSettings.asciiOnlyFilenames')}
-                    onChange={(checked) => updateDraft((next) => {
-                        next.downloadSettings.asciiOnlyFilenames = checked
+                <SelectField
+                    id="settings-filename-restriction-mode"
+                    label="Filename restrictions"
+                    value={draft.downloadSettings.filenameRestrictionMode}
+                    options={FILENAME_RESTRICTION_MODES}
+                    optionLabels={FILENAME_RESTRICTION_LABELS}
+                    environmentVariable={environmentVariableFor('downloadSettings.filenameRestrictionMode')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.filenameRestrictionMode = value as FilenameRestrictionMode
                     })}
-                    help="Transliterates accented and non-Latin filename characters for broad filesystem and media-server compatibility."
-                    wide
+                    help="Minimal restrictions preserve Unicode and ordinary punctuation while preventing path-breaking characters. Windows-compatible removes characters Windows does not allow. Restricted uses ASCII-only names without spaces or ampersands."
                 />
             </SettingsSection>
 

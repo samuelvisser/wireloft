@@ -12,6 +12,7 @@ from pydantic.alias_generators import to_camel
 
 from backend.api.models.base import RequestBase, ResponseBase
 from config.settings.settings import AppSettings
+from config.settings.submodels import FilenameRestrictionMode
 
 
 SettingFieldPath = Literal[
@@ -48,7 +49,7 @@ SettingFieldPath = Literal[
     "downloadSettings.maxDownloadAttempts",
     "downloadSettings.downloadTimeoutSeconds",
     "downloadSettings.downloadRoot",
-    "downloadSettings.asciiOnlyFilenames",
+    "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
     "fileWatcher.enabled",
@@ -90,7 +91,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.maxDownloadAttempts",
     "downloadSettings.downloadTimeoutSeconds",
     "downloadSettings.downloadRoot",
-    "downloadSettings.asciiOnlyFilenames",
+    "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
     "fileWatcher.enabled",
@@ -223,7 +224,7 @@ class DownloadSettingsValue(_SettingsValueModel):
     max_download_attempts: int = Field(ge=1)
     download_timeout_seconds: int = Field(ge=1)
     download_root: Path
-    ascii_only_filenames: bool
+    filename_restriction_mode: FilenameRestrictionMode
     remux_video_to_mp4: bool
     ffmpeg_path: str = Field(min_length=1)
 

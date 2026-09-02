@@ -23,5 +23,5 @@ downloadSettings:
   # Directory the '/downloads/' prefix of output templates maps to.
   downloadRoot: /downloads
 
-  # Restrict generated download file and directory names to ASCII characters.
-  asciiOnlyFilenames: true
+  # Filename compatibility: unrestricted, windows, or restricted.
+  filenameRestrictionMode: windows

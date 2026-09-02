@@ -185,6 +185,7 @@ export function SelectField({
     label,
     value,
     options,
+    optionLabels,
     onChange,
     help,
     environmentVariable,
@@ -193,6 +194,7 @@ export function SelectField({
     label: string
     value: string
     options: readonly string[]
+    optionLabels?: Partial<Record<string, string>>
     onChange: (value: string) => void
     help?: ReactNode
     environmentVariable?: string
@@ -206,7 +208,9 @@ export function SelectField({
                 disabled={Boolean(environmentVariable)}
                 onChange={(event) => onChange(event.target.value)}
             >
-                {options.map((option) => <option key={option} value={option}>{option}</option>)}
+                {options.map((option) => (
+                    <option key={option} value={option}>{optionLabels?.[option] ?? option}</option>
+                ))}
             </select>
         </FieldShell>
     )
