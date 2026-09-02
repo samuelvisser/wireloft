@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.triggers.cron import CronTrigger
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 from pydantic.alias_generators import to_camel
 
 from backend.api.models.base import RequestBase, ResponseBase
@@ -121,7 +121,10 @@ def _validate_cron_expression(value: str) -> str:
 
 
 def _validate_http_url(value: str) -> str:
-    parsed = urlparse(value)
+    try:
+        parsed = urlparse(value)
+    except ValueError as exc:
+        raise ValueError("Enter a complete http:// or https:// URL") from exc
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("Enter a complete http:// or https:// URL")
     return value
@@ -166,7 +169,7 @@ class MovieMetadataSettingsValue(_SettingsValueModel):
     tmdb_read_access_token_configured: bool = False
     tmdb_api_base_url: str = Field(min_length=1)
     language: str = Field(min_length=1)
-    request_timeout_seconds: float = Field(gt=0)
+    request_timeout_seconds: float = Field(ge=1)
     max_retries: int = Field(ge=0, le=5)
 
     _validate_tmdb_api_base_url = field_validator("tmdb_api_base_url")(_validate_http_url)
@@ -209,13 +212,15 @@ class EpisodeStatusTimingValue(_SettingsValueModel):
     published_countdown_after_minutes: int = Field(ge=0)
     published_final_after_minutes: int = Field(ge=0)
 
-    @model_validator(mode="after")
-    def _final_must_not_precede_countdown(self):
-        if self.published_final_after_minutes < self.published_countdown_after_minutes:
+    @field_validator("published_final_after_minutes")
+    @classmethod
+    def _final_must_not_precede_countdown(cls, value: int, info: ValidationInfo):
+        countdown = info.data.get("published_countdown_after_minutes")
+        if isinstance(countdown, int) and value < countdown:
             raise ValueError(
                 "Final publication timing must be at least as long as countdown publication timing"
             )
-        return self
+        return value
 
 
 class DownloadSettingsValue(_SettingsValueModel):
@@ -274,7 +279,7 @@ class SettingsValues(_SettingsValueModel):
     def _validate_timezone(cls, value: str):
         try:
             ZoneInfo(value)
-        except ZoneInfoNotFoundError as exc:
+        except (ValueError, ZoneInfoNotFoundError) as exc:
             raise ValueError("Enter a valid IANA timezone, such as Europe/Amsterdam") from exc
         return value
 

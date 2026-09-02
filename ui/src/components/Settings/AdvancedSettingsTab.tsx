@@ -17,6 +17,7 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                     id="settings-tmdb-token"
                     label="TMDB API Read Access Token"
                     value={draft.movieMetadata.tmdbReadAccessToken}
+                    error={errorFor('movieMetadata.tmdbReadAccessToken')}
                     environmentVariable={tokenEnvironmentVariable}
                     onChange={(value) => updateDraft((next) => {
                         next.movieMetadata.tmdbReadAccessToken = value
@@ -33,6 +34,7 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                     id="settings-tmdb-api-url"
                     label="TMDB API URL"
                     value={draft.movieMetadata.tmdbApiBaseUrl}
+                    error={errorFor('movieMetadata.tmdbApiBaseUrl')}
                     environmentVariable={environmentVariableFor('movieMetadata.tmdbApiBaseUrl')}
                     onChange={(value) => updateDraft((next) => {
                         next.movieMetadata.tmdbApiBaseUrl = value
@@ -44,6 +46,7 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                     id="settings-tmdb-language"
                     label="Metadata language"
                     value={draft.movieMetadata.language}
+                    error={errorFor('movieMetadata.language')}
                     environmentVariable={environmentVariableFor('movieMetadata.language')}
                     onChange={(value) => updateDraft((next) => {
                         next.movieMetadata.language = value
@@ -96,6 +99,7 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                     id="settings-secret-key-file"
                     label="Secret key file override"
                     value={draft.crypto.secretKeyFile ?? ''}
+                    error={errorFor('crypto.secretKeyFile')}
                     environmentVariable={environmentVariableFor('crypto.secretKeyFile')}
                     onChange={(value) => updateDraft((next) => {
                         next.crypto.secretKeyFile = value || null
@@ -108,6 +112,7 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                     id="settings-default-secret-file"
                     label="Default generated key file"
                     value={draft.crypto.defaultSecretFile}
+                    error={errorFor('crypto.defaultSecretFile')}
                     environmentVariable={environmentVariableFor('crypto.defaultSecretFile')}
                     onChange={(value) => updateDraft((next) => {
                         next.crypto.defaultSecretFile = value

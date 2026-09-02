@@ -104,6 +104,7 @@ export function TextField({
     value,
     onChange,
     help,
+    error,
     placeholder,
     wide,
     environmentVariable,
@@ -115,12 +116,14 @@ export function TextField({
     value: string
     onChange: (value: string) => void
     help?: ReactNode
+    error?: string
     placeholder?: string
     wide?: boolean
     environmentVariable?: string
     inputType?: 'text' | 'password'
     autoComplete?: string
 }) {
+    const errorId = `${id}-errors`
     return (
         <FieldShell label={label} htmlFor={id} help={help} wide={wide} environmentVariable={environmentVariable}>
             <input
@@ -131,8 +134,15 @@ export function TextField({
                 placeholder={placeholder}
                 autoComplete={autoComplete}
                 disabled={Boolean(environmentVariable)}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? errorId : undefined}
                 onChange={(event) => onChange(event.target.value)}
             />
+            {error ? (
+                <div id={errorId} className="error" role="alert" aria-live="polite">
+                    {error}
+                </div>
+            ) : null}
         </FieldShell>
     )
 }

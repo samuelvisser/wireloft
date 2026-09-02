@@ -15,6 +15,7 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
                     id="settings-dw-middleware-api"
                     label="Middleware API"
                     value={draft.dwApi.middlewareApi}
+                    error={errorFor('dwApi.middlewareApi')}
                     environmentVariable={environmentVariableFor('dwApi.middlewareApi')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwApi.middlewareApi = value
@@ -25,6 +26,7 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
                     id="settings-dw-stream-api"
                     label="Stream API"
                     value={draft.dwApi.streamApi}
+                    error={errorFor('dwApi.streamApi')}
                     environmentVariable={environmentVariableFor('dwApi.streamApi')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwApi.streamApi = value
@@ -41,6 +43,7 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
                     id="settings-oauth-issuer"
                     label="Issuer"
                     value={draft.dwOauth.issuer}
+                    error={errorFor('dwOauth.issuer')}
                     environmentVariable={environmentVariableFor('dwOauth.issuer')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwOauth.issuer = value
@@ -51,6 +54,7 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
                     id="settings-oauth-audience"
                     label="Audience"
                     value={draft.dwOauth.audience}
+                    error={errorFor('dwOauth.audience')}
                     environmentVariable={environmentVariableFor('dwOauth.audience')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwOauth.audience = value
@@ -61,6 +65,7 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
                     id="settings-oauth-client-id"
                     label="Client ID"
                     value={draft.dwOauth.clientId}
+                    error={errorFor('dwOauth.clientId')}
                     environmentVariable={environmentVariableFor('dwOauth.clientId')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwOauth.clientId = value
@@ -71,6 +76,7 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
                     id="settings-oauth-scope"
                     label="Scope"
                     value={draft.dwOauth.scope}
+                    error={errorFor('dwOauth.scope')}
                     environmentVariable={environmentVariableFor('dwOauth.scope')}
                     onChange={(value) => updateDraft((next) => {
                         next.dwOauth.scope = value
