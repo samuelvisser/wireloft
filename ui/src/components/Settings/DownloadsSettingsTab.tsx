@@ -43,6 +43,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     value={draft.downloadSettings.filenameRestrictionMode}
                     options={FILENAME_RESTRICTION_MODES}
                     optionLabels={FILENAME_RESTRICTION_LABELS}
+                    error={errorFor('downloadSettings.filenameRestrictionMode')}
                     environmentVariable={environmentVariableFor('downloadSettings.filenameRestrictionMode')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.filenameRestrictionMode = value as FilenameRestrictionMode
