@@ -8,13 +8,13 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode, Show
 from backend.types.episode_types import EpisodePublishStatus
 from dailywire_api.dw_api.client import MiddlewareClient
-from dailywire_api.records import DwEpisodeDetailRecord
 from dailywire_api.types.user_info import DwMembershipLevel
 from task_manager.events.transactional import queue_event
 
 from ._helpers import save_status_metadata
 from .scheduling import MONITOR_COMPLETED_EVENT
 from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
+from ...helpers.episodes.metadata import metadata_watch_expired, update_episode_from_dailywire
 from ...helpers.episodes.status import get_publish_status_from_dw_detail
 from ...helpers.shows.get import get_show_from_params
 
@@ -80,8 +80,14 @@ async def run_monitor_episode_worker(
 
     old_status = db_episode.publish_status
 
-    _update_episode_from_dailywire(db_episode, dw_episode)
+    update_episode_from_dailywire(db_episode, dw_episode)
     db_episode.publish_status = new_status.value
+    if new_status is EpisodePublishStatus.PUBLISHED_FINAL:
+        # This poll itself is a fresh metadata check. If the entire configured
+        # settling window has already elapsed, no follow-up work is required.
+        db_episode.metadata_is_final = metadata_watch_expired(db_episode.published_date)
+    else:
+        db_episode.metadata_is_final = False
     s.flush()
 
     save_status_metadata(
@@ -159,25 +165,3 @@ def _find_episode(
         )
         .one_or_none()
     )
-
-
-def _update_episode_from_dailywire(
-        episode: Episode,
-        dw_episode: DwEpisodeDetailRecord,
-) -> None:
-    """Update remote fields without changing Wireloft identity fields."""
-    protected_fields = {
-        "id",
-        "show_id",
-        "season_id",
-        "index",
-        "episode_identifier",
-        "publish_status",
-    }
-    model_fields = set(Episode.__mapper__.attrs.keys())
-    for field, value in dw_episode.model_dump(
-            mode="python",
-            by_alias=False,
-    ).items():
-        if field in model_fields and field not in protected_fields:
-            setattr(episode, field, value)

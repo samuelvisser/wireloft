@@ -12,7 +12,10 @@ from pydantic.alias_generators import to_camel
 
 from backend.api.models.base import RequestBase, ResponseBase
 from config.settings.settings import AppSettings
-from config.settings.submodels import FilenameRestrictionMode
+from config.settings.submodels import (
+    FilenameRestrictionMode,
+    normalize_metadata_refresh_intervals,
+)
 
 
 SettingFieldPath = Literal[
@@ -42,6 +45,7 @@ SettingFieldPath = Literal[
     "newEpisodeSchedule.findEpisodesCron",
     "newEpisodeSchedule.monitorEpisodeCron",
     "newEpisodeSchedule.checkNoShowTodayCron",
+    "newEpisodeSchedule.metadataRefreshIntervals",
     "episodeStatusTiming.publishedCountdownAfterMinutes",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "downloadSettings.verifyDownloadsCron",
@@ -84,6 +88,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "newEpisodeSchedule.findEpisodesCron",
     "newEpisodeSchedule.monitorEpisodeCron",
     "newEpisodeSchedule.checkNoShowTodayCron",
+    "newEpisodeSchedule.metadataRefreshIntervals",
     "episodeStatusTiming.publishedCountdownAfterMinutes",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "downloadSettings.verifyDownloadsCron",
@@ -202,10 +207,14 @@ class TrackNewEpisodeScheduleValue(_SettingsValueModel):
     find_episodes_cron: str = Field(min_length=1)
     monitor_episode_cron: str = Field(min_length=1)
     check_no_show_today_cron: str = Field(min_length=1)
+    metadata_refresh_intervals: str = Field(min_length=1)
 
     _validate_find_episodes_cron = field_validator("find_episodes_cron")(_validate_cron_expression)
     _validate_monitor_episode_cron = field_validator("monitor_episode_cron")(_validate_cron_expression)
     _validate_check_no_show_today_cron = field_validator("check_no_show_today_cron")(_validate_cron_expression)
+    _validate_metadata_refresh_intervals = field_validator(
+        "metadata_refresh_intervals"
+    )(normalize_metadata_refresh_intervals)
 
 
 class EpisodeStatusTimingValue(_SettingsValueModel):

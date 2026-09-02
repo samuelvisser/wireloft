@@ -49,6 +49,7 @@ const TrackNewEpisodeScheduleSchema = z.object({
     findEpisodesCron: z.string(),
     monitorEpisodeCron: z.string(),
     checkNoShowTodayCron: z.string(),
+    metadataRefreshIntervals: z.string(),
 })
 
 const EpisodeStatusTimingSchema = z.object({
@@ -98,6 +99,26 @@ const cronExpression = z.string().refine((value) => {
     const fields = value.trim().split(/\s+/)
     return fields.length === 5 && fields.every((field) => field.length > 0 && !field.includes('_'))
 }, 'Enter a complete five-part cron expression.')
+const metadataRefreshIntervals = z.string().refine((value) => {
+    const unitSeconds: Record<string, number> = {
+        s: 1,
+        m: 60,
+        h: 60 * 60,
+        d: 60 * 60 * 24,
+    }
+    const tokens = value.split(',').map((token) => token.trim().toLowerCase())
+    if (tokens.length === 0 || tokens.some((token) => token.length === 0)) return false
+
+    let previous = 0
+    for (const token of tokens) {
+        const match = /^([1-9]\d*)([smhd])$/.exec(token)
+        if (!match) return false
+        const seconds = Number(match[1]) * unitSeconds[match[2]]
+        if (!Number.isFinite(seconds) || seconds <= previous) return false
+        previous = seconds
+    }
+    return true
+}, 'Use unique, increasing comma-separated offsets such as 5m,15m,30m,1h,3h,6h,24h.')
 
 export const SettingsFormSchema = SettingsValuesSchema.extend({
     loginSession: SessionSettingsSchema.extend({
@@ -121,6 +142,7 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         findEpisodesCron: cronExpression,
         monitorEpisodeCron: cronExpression,
         checkNoShowTodayCron: cronExpression,
+        metadataRefreshIntervals,
     }),
     episodeStatusTiming: EpisodeStatusTimingSchema.extend({
         publishedCountdownAfterMinutes: requiredNumber().int().min(0, 'Must be 0 or greater.'),
@@ -164,6 +186,7 @@ export const SETTINGS_FIELD_PATHS = [
     'newEpisodeSchedule.findEpisodesCron',
     'newEpisodeSchedule.monitorEpisodeCron',
     'newEpisodeSchedule.checkNoShowTodayCron',
+    'newEpisodeSchedule.metadataRefreshIntervals',
     'episodeStatusTiming.publishedCountdownAfterMinutes',
     'episodeStatusTiming.publishedFinalAfterMinutes',
     'downloadSettings.verifyDownloadsCron',

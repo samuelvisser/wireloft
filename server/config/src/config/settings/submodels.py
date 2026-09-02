@@ -1,4 +1,5 @@
 import os
+import re
 from enum import StrEnum
 from pathlib import Path
 from typing import Optional
@@ -8,6 +9,15 @@ from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_va
 
 from config.security.passwords import derive_admin_password_client_value, hash_password_scrypt
 from config.settings.base import SubmodelBase
+
+
+_METADATA_REFRESH_INTERVAL_PATTERN = re.compile(r"^(?P<amount>[1-9]\d*)(?P<unit>[smhd])$", re.IGNORECASE)
+_METADATA_REFRESH_INTERVAL_UNIT_SECONDS = {
+    "s": 1,
+    "m": 60,
+    "h": 60 * 60,
+    "d": 60 * 60 * 24,
+}
 
 
 def _validate_http_url(value: str) -> str:
@@ -25,6 +35,42 @@ def _validate_non_empty_path(value):
     if isinstance(value, str) and not value.strip():
         raise ValueError("Path cannot be empty")
     return value
+
+
+def parse_metadata_refresh_intervals(value: str) -> tuple[int, ...]:
+    """Parse increasing comma-separated metadata refresh offsets into seconds."""
+    if not isinstance(value, str):
+        raise ValueError("Metadata refresh intervals must be a comma-separated string")
+
+    tokens = [token.strip().lower() for token in value.split(",")]
+    if not tokens or any(not token for token in tokens):
+        raise ValueError(
+            "Metadata refresh intervals must be comma-separated values such as 5m,15m,1h"
+        )
+
+    offsets: list[int] = []
+    for token in tokens:
+        match = _METADATA_REFRESH_INTERVAL_PATTERN.fullmatch(token)
+        if match is None:
+            raise ValueError(
+                "Metadata refresh intervals must use positive s, m, h, or d values such as 5m,1h,1d"
+            )
+
+        offset = (
+            int(match.group("amount"))
+            * _METADATA_REFRESH_INTERVAL_UNIT_SECONDS[match.group("unit").lower()]
+        )
+        if offsets and offset <= offsets[-1]:
+            raise ValueError("Metadata refresh intervals must be unique and strictly increasing")
+        offsets.append(offset)
+
+    return tuple(offsets)
+
+
+def normalize_metadata_refresh_intervals(value: str) -> str:
+    """Validate and normalize a metadata refresh interval setting."""
+    parse_metadata_refresh_intervals(value)
+    return ",".join(token.strip().lower() for token in value.split(","))
 
 
 class OAuthSettings(SubmodelBase):
@@ -201,6 +247,16 @@ class TrackNewEpisodeSchedule(SubmodelBase):
     find_episodes_cron: str = Field(..., min_length=1, description="Cron schedule string for finding new episodes")
     monitor_episode_cron: str = Field(..., min_length=1, description="Cron schedule string for monitoring an episode that exists but is not yet fully published")
     check_no_show_today_cron: str = Field(..., min_length=1, description="Cron schedule string for checking whether 'No Show Today' placeholder episodes have been removed from Daily Wire")
+    metadata_refresh_intervals: str = Field(
+        ...,
+        min_length=1,
+        description="Comma-separated offsets after publication for refreshing finalized episode metadata",
+    )
+
+    @field_validator("metadata_refresh_intervals")
+    @classmethod
+    def _validate_metadata_refresh_intervals(cls, value: str) -> str:
+        return normalize_metadata_refresh_intervals(value)
 
 
 class EpisodeStatusTiming(SubmodelBase):

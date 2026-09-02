@@ -3,7 +3,7 @@ from typing import Optional, TYPE_CHECKING
 
 from .MediaItemBase import MediaItemBase
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, UniqueConstraint
 
 from backend.types.media_types import MediaType
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
@@ -28,6 +28,12 @@ class Episode(MediaItemBase, HasMetadataMixin):
     episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the show")
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     publish_status: Mapped[str]
+    metadata_is_final: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
     video_url: Mapped[Optional[str]]
     audio_url: Mapped[Optional[str]]
     sharing_url: Mapped[str]

@@ -4,6 +4,7 @@ import {
     NumberField,
     SettingsDisclosure,
     SettingsSection,
+    TextField,
     ToggleField,
 } from './SettingsControls'
 
@@ -98,6 +99,18 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.checkNoShowTodayCron = value
                     })}
+                />
+                <TextField
+                    id="settings-metadata-refresh-intervals"
+                    label="Metadata refresh intervals"
+                    value={draft.newEpisodeSchedule.metadataRefreshIntervals}
+                    error={errorFor('newEpisodeSchedule.metadataRefreshIntervals')}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.metadataRefreshIntervals')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.newEpisodeSchedule.metadataRefreshIntervals = value
+                    })}
+                    help="Comma-separated offsets after publication. Use s, m, h or d, for example: 5m,15m,30m,1h,3h,6h,24h."
+                    wide
                 />
             </SettingsSection>
 
