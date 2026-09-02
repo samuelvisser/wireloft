@@ -4,7 +4,7 @@
 When I ask you to implement a new feature, please follow these guidelines:
 - Create a new branch from develop. If your are an OpenAI product create it inside
 codex/, if you are a Anthropic product, place it inside claude/. If you are anything
-else, make up your a name to identify yourself by in git.
+else, use a relevant name to identify yourself by in git.
 - If I ask you to do follow-up work on that same feature, please continue to use the
 same branch. Only base a new branch on develop again if you are implementing a new feature.
 - When you are done, please squash your commits into a single commit and push to your branch.
