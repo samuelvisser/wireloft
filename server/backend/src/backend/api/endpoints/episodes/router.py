@@ -38,6 +38,7 @@ def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
     )
     return payload
 
+
 @router.get("/by-show-slug/{show_slug}", response_model=list[EpisodeAPIRead])
 def episodes_by_show_list(show_slug: str, limit: int | None = None):
     """
@@ -61,6 +62,19 @@ def episode_create(body: EpisodeAPICreate):
     with db_session() as s:
         try:
             result = create_episode(s, body)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post("/{episode_slug}/refresh-metadata", status_code=status.HTTP_202_ACCEPTED)
+def episode_metadata_refresh(episode_slug: str):
+    """Queue an immediate metadata refresh for one episode."""
+    with db_session() as s:
+        try:
+            result = request_episode_metadata_refresh(s, episode_slug)
             s.commit()
             return result
         except Exception:

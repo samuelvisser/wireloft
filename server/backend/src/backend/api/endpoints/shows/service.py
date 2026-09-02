@@ -10,8 +10,9 @@ from backend.api.models.show import *
 
 from fastapi import HTTPException
 
-from backend.db.models import Show
+from backend.db.models import Episode, Show
 from task_manager.events.transactional import queue_event
+from ..episodes.service import queue_episode_metadata_refresh
 
 
 SYNC_LOG_META_KEY = "episode_sync_log"
@@ -120,6 +121,31 @@ def request_show_sync(s: Session, show_slug: str) -> dict[str, bool | str]:
         "manual_request_id": request_id,
     })
     return {"queued": True, "request_id": request_id}
+
+
+def request_show_metadata_refresh(
+        s: Session,
+        show_slug: str,
+) -> dict[str, bool | int]:
+    """Queue the normal metadata refresh flow for every episode in one show."""
+    show = (
+        s.query(Show)
+        .filter_by(slug=show_slug)
+        .one_or_none()
+    )
+    if show is None:
+        raise HTTPException(status_code=404, detail="Show not found")
+
+    episodes = (
+        s.query(Episode)
+        .filter_by(show_id=show.id)
+        .all()
+    )
+    for episode in episodes:
+        queue_episode_metadata_refresh(s, episode)
+
+    s.flush()
+    return {"queued": True, "episodes_queued": len(episodes)}
 
 
 def get_show_sync_log(s: Session, show_slug: str) -> list[dict]:

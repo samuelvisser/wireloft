@@ -9,6 +9,7 @@ from .service import (
     update_show,
     delete_show,
     request_show_sync,
+    request_show_metadata_refresh,
     get_show_sync_log,
 )
 from ...models.show import ShowAPIRead, ShowAPICreate, ShowAPIUpdate
@@ -55,6 +56,19 @@ def show_sync(show_slug: str):
     with db_session() as s:
         try:
             result = request_show_sync(s, show_slug)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post("/{show_slug}/refresh-metadata", status_code=status.HTTP_202_ACCEPTED)
+def show_metadata_refresh(show_slug: str):
+    """Queue metadata refreshes for every episode in one show."""
+    with db_session() as s:
+        try:
+            result = request_show_metadata_refresh(s, show_slug)
             s.commit()
             return result
         except Exception:

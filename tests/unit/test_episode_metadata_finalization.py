@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -125,3 +126,154 @@ def test_metadata_worker_uses_registry_trigger_metadata():
         METADATA_REFRESH_REQUESTED_EVENT,
         MONITOR_COMPLETED_EVENT,
     }
+
+
+def test_manual_episode_metadata_refresh_marks_unfinished_and_queues_worker(monkeypatch):
+    from backend.api.endpoints.episodes import service
+
+    episode = SimpleNamespace(
+        id=17,
+        slug="test-episode",
+        show_id=3,
+        metadata_is_final=True,
+    )
+    queued: list[tuple[str, dict]] = []
+
+    class Query:
+        def filter_by(self, **kwargs):
+            assert kwargs == {"slug": episode.slug}
+            return self
+
+        def one_or_none(self):
+            return episode
+
+    class FakeSession:
+        def __init__(self):
+            self.flushes = 0
+
+        def query(self, model):
+            return Query()
+
+        def flush(self):
+            self.flushes += 1
+
+    session = FakeSession()
+    monkeypatch.setattr(
+        service,
+        "queue_event",
+        lambda _session, name, payload: queued.append((name, payload)),
+    )
+
+    result = service.request_episode_metadata_refresh(session, episode.slug)
+
+    assert result == {"queued": True, "episode_id": episode.id}
+    assert episode.metadata_is_final is False
+    assert session.flushes == 1
+    assert queued == [(
+        service.METADATA_REFRESH_REQUESTED_EVENT,
+        {
+            "resource_id": episode.id,
+            "id": episode.id,
+            "slug": episode.slug,
+            "show_id": episode.show_id,
+            "refresh": True,
+        },
+    )]
+
+
+def test_show_metadata_refresh_marks_every_episode_through_shared_helper(monkeypatch):
+    from backend.api.endpoints.shows import service
+    from backend.db.models import Episode, Show
+
+    show = SimpleNamespace(id=9, slug="test-show")
+    episodes = [
+        SimpleNamespace(id=1, metadata_is_final=True),
+        SimpleNamespace(id=2, metadata_is_final=True),
+        SimpleNamespace(id=3, metadata_is_final=False),
+    ]
+    queued_ids: list[int] = []
+
+    class Query:
+        def __init__(self, model):
+            self.model = model
+
+        def filter_by(self, **kwargs):
+            if self.model is Show:
+                assert kwargs == {"slug": show.slug}
+            elif self.model is Episode:
+                assert kwargs == {"show_id": show.id}
+            return self
+
+        def one_or_none(self):
+            assert self.model is Show
+            return show
+
+        def all(self):
+            assert self.model is Episode
+            return episodes
+
+    class FakeSession:
+        def __init__(self):
+            self.flushes = 0
+
+        def query(self, model):
+            return Query(model)
+
+        def flush(self):
+            self.flushes += 1
+
+    def queue_refresh(_session, episode):
+        episode.metadata_is_final = False
+        queued_ids.append(episode.id)
+
+    session = FakeSession()
+    monkeypatch.setattr(service, "queue_episode_metadata_refresh", queue_refresh)
+
+    result = service.request_show_metadata_refresh(session, show.slug)
+
+    assert result == {"queued": True, "episodes_queued": 3}
+    assert queued_ids == [1, 2, 3]
+    assert all(episode.metadata_is_final is False for episode in episodes)
+    assert session.flushes == 1
+
+
+def test_manual_metadata_refresh_fetches_non_final_episode(monkeypatch):
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.workers.refresh_episode_metadata_worker import service
+
+    episode = SimpleNamespace(
+        id=21,
+        metadata_is_final=False,
+        publish_status=EpisodePublishStatus.LIVE.value,
+    )
+    refreshed: list[int] = []
+
+    class FakeSession:
+        def __init__(self):
+            self.commits = 0
+
+        def get(self, model, episode_id):
+            assert episode_id == episode.id
+            return episode
+
+        def commit(self):
+            self.commits += 1
+
+    session = FakeSession()
+    monkeypatch.setattr(
+        service,
+        "_refresh_episode_from_dailywire",
+        lambda _session, item: refreshed.append(item.id),
+    )
+
+    asyncio.run(
+        service.run_refresh_episode_metadata_worker(
+            session,
+            episode_id=episode.id,
+            refresh=True,
+        )
+    )
+
+    assert refreshed == [episode.id]
+    assert episode.metadata_is_final is False
+    assert session.commits == 1

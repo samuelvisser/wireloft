@@ -57,6 +57,8 @@ export default function ShowPage() {
   const { data: streamProfiles } = useStreamProfilesView()
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
   const [confirm, setConfirm] = useState(false)
+  const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)
+  const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
   const [syncLogOpen, setSyncLogOpen] = useState(false)
   const [manualSyncRequestId, setManualSyncRequestId] = useState<string | null>(null)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
@@ -220,6 +222,37 @@ export default function ShowPage() {
     }
   }
 
+  const refreshAllMetadata = async () => {
+    if (metadataRefreshStarting) return
+
+    setMetadataRefreshStarting(true)
+    try {
+      const base = (window as any).appConfig?.API_URL || '/api'
+      const response = await fetch(`${base}/shows/${encodeURIComponent(id)}/refresh-metadata`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+      const result = await response.json()
+      const count = typeof result?.episodes_queued === 'number' ? result.episodes_queued : total
+      setMetadataRefreshConfirm(false)
+      void qc.invalidateQueries({ queryKey: ['episodes', id] })
+
+      if (count === 0) {
+        toast(`There are no episodes to refresh for ${show.title}`)
+      } else {
+        toast.success(
+          `Metadata refresh started for ${count} ${count === 1 ? 'episode' : 'episodes'} in ${show.title}`,
+        )
+      }
+    } catch {
+      toast.error(`Could not start metadata refresh for ${show.title}`)
+    } finally {
+      setMetadataRefreshStarting(false)
+    }
+  }
+
   const copyFeedUrl = async (profileId: number, feedUrl?: string) => {
     if (!feedUrl) return
     try {
@@ -306,8 +339,14 @@ export default function ShowPage() {
                   onSelect: () => setSyncLogOpen(true),
                 },
                 {
+                  label: 'Refresh all metadata',
+                  icon: ['fas', 'arrows-rotate'],
+                  onSelect: () => setMetadataRefreshConfirm(true),
+                },
+                {
                   label: 'Create download profile',
                   icon: ['fas', 'download'],
+                  separatorBefore: true,
                   onSelect: () => navigate(`/add-download-profile?show=${encodeURIComponent(id)}`),
                 },
                 {
@@ -427,6 +466,53 @@ export default function ShowPage() {
         onClose={() => setSyncLogOpen(false)}
         onSyncNow={syncNow}
       />
+
+      {metadataRefreshConfirm && (
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onClick={() => {
+            if (!metadataRefreshStarting) setMetadataRefreshConfirm(false)
+          }}
+        >
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="refresh-metadata-title"
+            aria-describedby="refresh-metadata-desc"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-icon" aria-hidden>
+                <FontAwesomeIcon icon={['fas', 'arrows-rotate']} />
+              </div>
+              <h2 id="refresh-metadata-title" className="modal-title">Refresh all metadata</h2>
+            </div>
+            <p id="refresh-metadata-desc" className="modal-text">
+              Refresh metadata for every episode in "{show.title}"? This can take a while and is usually not needed.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn"
+                disabled={metadataRefreshStarting}
+                onClick={() => setMetadataRefreshConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={metadataRefreshStarting}
+                onClick={() => void refreshAllMetadata()}
+              >
+                {metadataRefreshStarting ? 'Starting…' : 'Refresh metadata'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirm && (
         <div className="modal-overlay" role="presentation" onClick={closeConfirm}>

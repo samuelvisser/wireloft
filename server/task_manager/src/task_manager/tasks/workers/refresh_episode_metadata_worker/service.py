@@ -46,7 +46,13 @@ async def run_refresh_episode_metadata_worker(
         return
 
     if episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
-        # Live/non-final episodes are already refreshed by monitor_episode_worker.
+        # The normal monitor already keeps live/non-final metadata fresh. A manual
+        # refresh still performs one explicit detail request, but finality remains
+        # false so the ordinary post-publication flow can finish it later.
+        if refresh:
+            _refresh_episode_from_dailywire(s, episode)
+            episode.metadata_is_final = False
+            s.commit()
         return
 
     configured_offsets = metadata_refresh_offsets_seconds()

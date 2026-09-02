@@ -14,6 +14,7 @@ import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import ProgressBar from '../../components/common/ProgressBar'
 import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
+import ActionMenu from '../../components/ActionMenu/ActionMenu'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -167,6 +168,8 @@ function ProfileDownloadRow({
 
 export default function EpisodePage() {
     const {id: showId, episodeId} = useParams()
+    const qc = useQueryClient()
+    const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
 
     const {data: show, isLoading, error} = useShow(showId)
     const {data: episode, isLoading: isLoadingEpisode} = useEpisode(episodeId)
@@ -248,6 +251,31 @@ export default function EpisodePage() {
         (downloads ?? []).map((d) => [d.localMediaProfileId, d]),
     )
 
+    const refreshMetadata = async () => {
+        if (metadataRefreshStarting) return
+
+        setMetadataRefreshStarting(true)
+        try {
+            const base = (window as any).appConfig?.API_URL || '/api'
+            const response = await fetch(
+                `${base}/episodes/${encodeURIComponent(episode.slug)}/refresh-metadata`,
+                {method: 'POST', credentials: 'include'},
+            )
+            if (!response.ok) {
+                const {error: message} = await getErrorMessageFromResponse(response)
+                toast.error(message || 'Could not start metadata refresh')
+                return
+            }
+
+            toast.success('Metadata refresh started')
+            void qc.invalidateQueries({queryKey: ['episode', episodeId]})
+        } catch {
+            toast.error('Could not start metadata refresh')
+        } finally {
+            setMetadataRefreshStarting(false)
+        }
+    }
+
     return (
         <section className="view episode-view" aria-labelledby="episode-title">
             <article className="episode-details" aria-label="Episode details">
@@ -265,7 +293,19 @@ export default function EpisodePage() {
                 </div>
 
                 <header className="episode-header">
-                    <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
+                    <div className="episode-title-row">
+                        <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
+                        <ActionMenu
+                            items={[
+                                {
+                                    label: 'Refresh metadata',
+                                    icon: ['fas', 'arrows-rotate'],
+                                    disabled: metadataRefreshStarting,
+                                    onSelect: () => void refreshMetadata(),
+                                },
+                            ]}
+                        />
+                    </div>
                     <div className="episode-summary" aria-label="Episode metadata">
                         <span className={`episode-status${isLive ? ' is-live' : ''}`}>
                             {isLive && <span className="episode-status-dot" aria-hidden="true"/>}
@@ -332,7 +372,9 @@ export default function EpisodePage() {
         .episode-live-badge { position: absolute; top: 18px; right: 18px; display: inline-flex; align-items: center; gap: 8px; padding: 9px 15px; border-radius: 999px; background: var(--error, #d64545); color: #fff; box-shadow: 0 2px 10px rgb(0 0 0 / 30%); font-size: 0.95rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
         .episode-live-badge::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
         .episode-header { margin-top: 20px; }
-        .episode-title-text { margin: 0; font-size: clamp(1.5rem, 3vw, 2.15rem); line-height: 1.18; letter-spacing: -0.025em; }
+        .episode-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+        .episode-title-row .action-menu { flex: 0 0 auto; }
+        .episode-title-text { min-width: 0; margin: 0; font-size: clamp(1.5rem, 3vw, 2.15rem); line-height: 1.18; letter-spacing: -0.025em; }
         .episode-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; color: var(--muted, #6b7280); font-size: 0.9rem; }
         .episode-status, .episode-summary-item { display: inline-flex; align-items: center; gap: 7px; }
         .episode-status.is-live { color: var(--error, #d64545); font-weight: 600; text-transform: uppercase; }
@@ -361,6 +403,7 @@ export default function EpisodePage() {
           .episode-cover { border-radius: 8px; }
           .episode-live-badge { top: 10px; right: 10px; padding: 7px 11px; font-size: 0.8rem; }
           .episode-header { margin-top: 14px; }
+          .episode-title-row { gap: 10px; }
           .episode-title-text { font-size: 1.4rem; }
           .episode-summary { gap: 9px; margin-top: 10px; font-size: 0.8rem; }
           .episode-summary-separator { height: 16px; }
