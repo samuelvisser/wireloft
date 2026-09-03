@@ -108,7 +108,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                             </p>
                             <p>
                                 This worker is expected to run quite frequently. It is as lightweight as possible, should not impact performance much
-                                or annoying the Daily Wire API. Make sure to not set it to run more often than once every minute though.
+                                or annoying the Daily Wire API. Make sure to not set it to run more often than once every two minutes though.
                             </p>
                             <p>
                                 <code>Monitor pending episodes</code> never runs on episodes that are not pending.
