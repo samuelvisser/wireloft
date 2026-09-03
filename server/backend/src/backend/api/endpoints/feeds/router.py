@@ -170,7 +170,7 @@ def rss_feed_episode_download(
     methods=["GET", "HEAD"],
 )
 @router.api_route(
-    "/rss/{token}/episodes/{episode_slug}/audio.mp3",
+    "/rss/{token}/episodes/{episode_slug}/audio.m4a",
     methods=["GET", "HEAD"],
 )
 def rss_feed_episode_audio(token: str, episode_slug: str, request: Request):
