@@ -2,7 +2,7 @@
 # Build the WireLoft image and push it to GitHub Container Registry.
 #
 # Usage:
-#   ./deploy.sh [tag]        # defaults by branch: main=latest, develop=develop, other=test
+#   ./deploy.sh [tag ...]    # explicit tags, or defaults by branch when omitted
 
 set -euo pipefail
 
@@ -13,11 +13,20 @@ IMAGE_NAME="wireloft"
 REGISTRY="ghcr.io"
 GHCR_USER="${GHCR_USER:-samuelvisser}"
 CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || true)"
-MANUAL_TAG="${1:-}"
+MANUAL_TAGS=("$@")
+APP_VERSION="$(python3 - <<'PY_VERSION'
+import tomllib
+from pathlib import Path
 
-if [ -n "$MANUAL_TAG" ]; then
-    TAG="$MANUAL_TAG"
-    TAGS=("$TAG")
+with Path("pyproject.toml").open("rb") as file:
+    print(tomllib.load(file)["project"]["version"])
+PY_VERSION
+)"
+GIT_REVISION="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
+
+if [ "${#MANUAL_TAGS[@]}" -gt 0 ]; then
+    TAG="${MANUAL_TAGS[0]}"
+    TAGS=("${MANUAL_TAGS[@]}")
 else
     case "$CURRENT_BRANCH" in
         main)
@@ -84,6 +93,8 @@ echo "Building $FULL_IMAGE:$TAG with Font Awesome Pro icons ..."
 docker build \
     -f .docker/Dockerfile \
     --build-arg WIRELOFT_PRO_ICONS=true \
+    --build-arg WIRELOFT_VERSION="$APP_VERSION" \
+    --build-arg WIRELOFT_REVISION="$GIT_REVISION" \
     --secret id=npmrc,src="$NPMRC" \
     -t "$IMAGE_NAME" \
     .

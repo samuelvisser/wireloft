@@ -1,0 +1,48 @@
+name: Publish GitHub Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify tag matches WireLoft version
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          with Path("pyproject.toml").open("rb") as file:
+              version = tomllib.load(file)["project"]["version"]
+          expected = f"v{version}"
+          actual = os.environ["GITHUB_REF_NAME"]
+          if actual != expected:
+              raise SystemExit(
+                  f"Release tag {actual} does not match WireLoft version {expected}"
+              )
+          PY
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "GitHub Release $GITHUB_REF_NAME already exists."
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --generate-notes \
+            --latest \
+            --title "WireLoft ${GITHUB_REF_NAME#v}"
