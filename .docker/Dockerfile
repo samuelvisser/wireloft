@@ -32,14 +32,6 @@ RUN if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
 ########################################
 FROM python:3.13-slim AS runtime
 
-ARG WIRELOFT_VERSION=development
-ARG WIRELOFT_REVISION=unknown
-
-LABEL org.opencontainers.image.title="WireLoft" \
-      org.opencontainers.image.source="https://github.com/samuelvisser/wireloft" \
-      org.opencontainers.image.version="${WIRELOFT_VERSION}" \
-      org.opencontainers.image.revision="${WIRELOFT_REVISION}"
-
 # ffmpeg   -> remuxing downloaded video into .mp4 (downloadSettings.remuxVideoToMp4)
 # nginx    -> serves the built UI and reverse-proxies /api/* to the backend
 # tzdata   -> lets the TZ env var select a real timezone
@@ -101,6 +93,14 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHON_KEYRING_BACKEND=keyrings.alt.file.PlaintextKeyring \
     XDG_DATA_HOME=/config/keyring/data \
     XDG_CONFIG_HOME=/config/keyring/config
+
+# OpenContainers support
+ARG WIRELOFT_VERSION=development
+ARG WIRELOFT_REVISION=unknown
+LABEL org.opencontainers.image.title="WireLoft" \
+      org.opencontainers.image.source="https://github.com/samuelvisser/wireloft" \
+      org.opencontainers.image.version="${WIRELOFT_VERSION}" \
+      org.opencontainers.image.revision="${WIRELOFT_REVISION}"
 
 VOLUME ["/config", "/downloads"]
 EXPOSE 80
