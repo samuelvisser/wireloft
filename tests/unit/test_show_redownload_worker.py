@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -151,6 +152,23 @@ def test_show_redownload_request_targets_one_or_all_profiles(monkeypatch, tmp_pa
     engine.dispose()
 
 
+def test_target_episode_profiles_does_not_deduplicate(monkeypatch):
+    from task_manager.tasks.workers.redownload_show_episodes_worker import service
+
+    episode = SimpleNamespace(id=10)
+    profile_a = SimpleNamespace(id=1)
+    profile_b = SimpleNamespace(id=2)
+    monkeypatch.setattr(
+        service,
+        "get_download_profile_episodes",
+        lambda _session, _profile: [episode],
+    )
+
+    targets = service._target_episode_profiles(object(), [profile_a, profile_b])
+
+    assert targets == [(episode, profile_a), (episode, profile_b)]
+
+
 def test_redownload_worker_replaces_existing_file_and_generation(monkeypatch, tmp_path):
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadStatus
@@ -179,6 +197,61 @@ def test_redownload_worker_replaces_existing_file_and_generation(monkeypatch, tm
     assert refreshed.download_profile_id == profile.id
     assert refreshed.file_path == str((tmp_path / "test-show" / "episode-1.ext").resolve())
     assert not old_path.exists()
+
+    session.close()
+    engine.dispose()
+
+
+def test_redownload_worker_uses_cancel_workflow_for_active_download(monkeypatch, tmp_path):
+    from backend.api.endpoints.media_downloads.service import cancel_media_download as real_cancel_media_download
+    from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadAttempt
+    from backend.types.download_profile_types import MediaDownloadStatus
+    from config import get_settings
+    from task_manager.tasks.workers.redownload_show_episodes_worker import service
+
+    session, engine = _session()
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+    _show, _episode, profile, download, old_path = _library(session, tmp_path)
+    partial_path = Path(str(old_path) + ".part")
+    partial_path.write_bytes(b"partial")
+    download.download_status = MediaDownloadStatus.DOWNLOADING.value
+    download.progress = 42
+    download.started_at = datetime(2026, 9, 3, 23, 30, 0)
+    session.commit()
+    original_generation = download.attempt_generation
+
+    cancelled_ids: list[int] = []
+
+    def tracked_cancel(current_session: Session, media_download_id: int):
+        cancelled_ids.append(media_download_id)
+        return real_cancel_media_download(current_session, media_download_id)
+
+    monkeypatch.setattr(service, "cancel_media_download", tracked_cancel)
+
+    targets = service._target_episode_profiles(session, [profile])
+    prepared = service._prepare_redownloads(session, targets)
+
+    assert len(prepared) == 1
+    assert cancelled_ids == [download.id]
+    session.expire_all()
+    refreshed = session.get(EpisodeMediaDownload, download.id)
+    assert refreshed is not None
+    # cancel_media_download invalidates the active attempt, then retry_media_download
+    # creates the fresh generation that the re-download worker will queue.
+    assert refreshed.attempt_generation == original_generation + 2
+    assert refreshed.download_status == MediaDownloadStatus.PENDING.value
+    assert refreshed.progress == 0
+    assert not old_path.exists()
+    assert not partial_path.exists()
+
+    cancellation = (
+        session.query(MediaDownloadAttempt)
+        .filter_by(media_download_id=download.id)
+        .order_by(MediaDownloadAttempt.id.desc())
+        .first()
+    )
+    assert cancellation is not None
+    assert cancellation.status == MediaDownloadStatus.CANCELLED.value
 
     session.close()
     engine.dispose()

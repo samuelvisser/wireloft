@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.api.endpoints.media_downloads.service import cancel_media_download, retry_media_download
 from backend.db.models import DownloadProfileBase, Episode, Show
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadStatus
@@ -16,7 +16,6 @@ from backend.utils.output_template import resolve_episode_output_path
 from task_manager.scheduler.db import TaskDefinition, TaskRun
 from task_manager.scheduler.types import TaskStatus
 from task_manager.tasks.helpers.progress import update_progress
-from task_manager.tasks.workers.download_attempt import serialize_download_attempt
 from task_manager.tasks.workers.download_profile_worker._helpers import (
     get_download_profile_episodes,
     trigger_next_pending_downloads,
@@ -26,6 +25,11 @@ _POLL_INTERVAL_SECONDS = 0.5
 _COMPLETED_STATUSES = {
     MediaDownloadStatus.DOWNLOADED.value,
     MediaDownloadStatus.REDOWNLOADED.value,
+}
+_CANCELLABLE_STATUSES = {
+    MediaDownloadStatus.PENDING.value,
+    MediaDownloadStatus.DOWNLOADING.value,
+    MediaDownloadStatus.LOCAL_PROCESSING.value,
 }
 
 
@@ -55,12 +59,12 @@ def _target_episode_profiles(
         s: Session,
         profiles: list[DownloadProfileBase],
 ) -> list[tuple[Episode, DownloadProfileBase]]:
-    """Union profile scopes while deduplicating rows that share a Local Media Profile."""
-    targets: dict[tuple[int, int], tuple[Episode, DownloadProfileBase]] = {}
-    for profile in profiles:
-        for episode in get_download_profile_episodes(s, profile):
-            targets[(episode.id, profile.local_media_profile_id)] = (episode, profile)
-    return list(targets.values())
+    """Return every episode managed by each selected Download Profile."""
+    return [
+        (episode, profile)
+        for profile in profiles
+        for episode in get_download_profile_episodes(s, profile)
+    ]
 
 
 def _reset_existing_download(
@@ -70,26 +74,36 @@ def _reset_existing_download(
         episode: Episode,
         profile: DownloadProfileBase,
 ) -> RedownloadTarget:
-    """Cancel the old generation, remove its artifacts, and arm a fresh download."""
+    """Delete the old file and arm the same row for a fresh download."""
     old_path = download.file_path
     new_path = str(resolve_episode_output_path(profile.local_media_profile.output_template, episode=episode))
 
-    download.attempt_generation += 1
+    if download.download_status in _CANCELLABLE_STATUSES:
+        # Use the normal cancellation workflow for queued/running downloads. It
+        # invalidates the current attempt generation and removes final/partial
+        # artifacts. A running download worker will observe the generation change,
+        # stop cooperatively, and repeat cleanup once it has released its writer.
+        cancel_media_download(s, download.id)
+        s.commit()
+        download = retry_media_download(s, download.id)
+    else:
+        download.attempt_generation += 1
+        download.download_status = MediaDownloadStatus.PENDING.value
+        download.progress = 0
+        download.error_message = None
+        download.downloaded_bytes = None
+        download.format_downloaded = None
+        download.started_at = None
+        download.finished_at = None
+        remove_download_artifacts(old_path)
+
     download.download_profile_id = profile.id
-    download.download_status = MediaDownloadStatus.PENDING.value
-    download.progress = 0
-    download.error_message = None
-    download.downloaded_bytes = None
-    download.format_downloaded = None
-    download.started_at = None
-    download.finished_at = None
     download.downloaded_publish_status = None
     download.is_redownload_attempt = True
     download.file_path = new_path
     s.flush()
 
-    remove_download_artifacts(old_path)
-    if Path(new_path) != Path(old_path):
+    if new_path != old_path:
         remove_download_artifacts(new_path)
 
     return RedownloadTarget(
@@ -140,23 +154,11 @@ def _prepare_redownloads(
         )
         if existing is None:
             prepared.append(_create_download(s, episode=episode, profile=profile))
-            s.commit()
-            continue
-
-        # download_episode holds the same lock for the lifetime of an attempt.
-        # Waiting here means we never delete a file while an older worker is still
-        # writing it. The generation bump then invalidates any queued stale attempt.
+        else:
+            prepared.append(
+                _reset_existing_download(s, existing, episode=episode, profile=profile)
+            )
         s.commit()
-        with serialize_download_attempt(existing.id):
-            s.expire_all()
-            current = s.get(EpisodeMediaDownload, existing.id)
-            if current is None:
-                prepared.append(_create_download(s, episode=episode, profile=profile))
-            else:
-                prepared.append(
-                    _reset_existing_download(s, current, episode=episode, profile=profile)
-                )
-            s.commit()
     return prepared
 
 
