@@ -44,12 +44,20 @@ The show sync log records recent attempts and how many new episodes were found, 
 Default schedule:
 
 ```text
-*/1 * * * *
+*/2 * * * *
 ```
 
-Some episodes are visible before their final media is ready. WireLoft checks these not-yet-final episodes much more frequently—every minute by default.
+Some episodes are visible before their final media is ready. WireLoft checks these not-yet-final episodes every two minutes by default.
 
 This is separate from general discovery. Once WireLoft already knows an episode exists, it can monitor that small set without querying the entire library at the same frequency.
+
+## Worker cron safety
+
+Worker cron settings may not run more frequently than `dwTimeout.minSlowRequestMs`. WireLoft validates this at the Pydantic settings layer for configuration files, environment overrides, and Settings API values.
+
+With the default slow-request delay of 120,000 ms, the shortest valid worker cadence is therefore two minutes. This keeps periodic jobs from continuously filling the Daily Wire fast-request budget faster than its cooldown can clear it.
+
+The rule applies to all configurable worker cron schedules: episode discovery, pending-episode monitoring, `No Show Today` checks, download verification, and file-watcher scans.
 
 ## Countdown versus final publication
 
@@ -149,7 +157,7 @@ More frequent is not always better. Discovery and metadata jobs call external Da
 Prefer targeted workers as designed:
 
 - keep general discovery moderate;
-- use the fast monitor for already-known publishing episodes;
+- use the pending-episode monitor for already-known publishing episodes;
 - use post-publication metadata intervals for titles/thumbnails that may settle later;
 - use **Sync now** for the occasional show that you need immediately.
 
