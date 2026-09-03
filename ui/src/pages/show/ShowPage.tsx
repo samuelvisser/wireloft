@@ -5,6 +5,7 @@ import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
 import { useDownloadProfilesView, useEpisodes, useMediaDownloadsView, useShow, useStreamProfilesView } from '../../lib/queries'
 import { waitForMetadataRefreshCompletion } from '../../lib/metadataRefresh'
+import { waitForShowRedownloadCompletion } from '../../lib/showRedownload'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
@@ -60,6 +61,10 @@ export default function ShowPage() {
   const [confirm, setConfirm] = useState(false)
   const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)
   const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
+  const [redownloadConfirm, setRedownloadConfirm] = useState(false)
+  const [redownloadStarting, setRedownloadStarting] = useState(false)
+  const [redownloadProfileId, setRedownloadProfileId] = useState('')
+  const [redownloadRequestId, setRedownloadRequestId] = useState<string | null>(null)
   const [syncLogOpen, setSyncLogOpen] = useState(false)
   const [manualSyncRequestId, setManualSyncRequestId] = useState<string | null>(null)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
@@ -268,6 +273,67 @@ export default function ShowPage() {
     }
   }
 
+  const openRedownloadConfirm = () => {
+    if (!attachedDownloadProfiles.length) {
+      toast(`There are no Download Profiles attached to ${show.title}`)
+      return
+    }
+    setRedownloadProfileId(
+      attachedDownloadProfiles.length > 1 ? 'all' : String(attachedDownloadProfiles[0].id),
+    )
+    setRedownloadConfirm(true)
+  }
+
+  const redownloadAllEpisodes = async () => {
+    if (redownloadStarting || redownloadRequestId || !redownloadProfileId) return
+
+    setRedownloadStarting(true)
+    try {
+      const base = (window as any).appConfig?.API_URL || '/api'
+      const response = await fetch(`${base}/shows/${encodeURIComponent(id)}/redownload-episodes`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          downloadProfileId: redownloadProfileId === 'all' ? null : Number(redownloadProfileId),
+        }),
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+      const result = await response.json()
+      if (typeof result?.request_id !== 'string' || !result.request_id) {
+        throw new Error('Re-download request did not return a request ID')
+      }
+
+      const profileCount = typeof result?.download_profiles_queued === 'number'
+        ? result.download_profiles_queued
+        : (redownloadProfileId === 'all' ? attachedDownloadProfiles.length : 1)
+      setRedownloadConfirm(false)
+      setRedownloadRequestId(result.request_id)
+      toast.success(
+        `Re-download started for ${show.title} using ${profileCount} ${profileCount === 1 ? 'Download Profile' : 'Download Profiles'}`,
+      )
+
+      void waitForShowRedownloadCompletion(result.request_id)
+        .then(async () => {
+          setRedownloadRequestId(null)
+          toast.success(`All selected episode files for ${show.title} were re-downloaded`, {duration: 5000})
+          await Promise.all([
+            qc.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+            qc.invalidateQueries({queryKey: ['episodes', id]}),
+          ])
+        })
+        .catch(() => {
+          setRedownloadRequestId(null)
+          toast.error(`Re-download failed for ${show.title}`)
+        })
+    } catch {
+      toast.error(`Could not start re-download for ${show.title}`)
+    } finally {
+      setRedownloadStarting(false)
+    }
+  }
+
   const copyFeedUrl = async (profileId: number, feedUrl?: string) => {
     if (!feedUrl) return
     try {
@@ -357,6 +423,13 @@ export default function ShowPage() {
                   label: 'Refresh all metadata',
                   icon: ['fas', 'arrows-rotate'],
                   onSelect: () => setMetadataRefreshConfirm(true),
+                },
+                {
+                  label: 'Delete and re-download all episodes',
+                  icon: ['fas', 'arrows-rotate'],
+                  tone: 'danger',
+                  disabled: attachedDownloadProfiles.length === 0 || redownloadRequestId !== null,
+                  onSelect: openRedownloadConfirm,
                 },
                 {
                   label: 'Create download profile',
@@ -523,6 +596,72 @@ export default function ShowPage() {
                 onClick={() => void refreshAllMetadata()}
               >
                 {metadataRefreshStarting ? 'Starting…' : 'Refresh metadata'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {redownloadConfirm && (
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onClick={() => {
+            if (!redownloadStarting) setRedownloadConfirm(false)
+          }}
+        >
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="redownload-title"
+            aria-describedby="redownload-desc"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-icon danger" aria-hidden>
+                <FontAwesomeIcon icon={['fas', 'arrows-rotate']} />
+              </div>
+              <h2 id="redownload-title" className="modal-title">Delete and re-download all episodes</h2>
+            </div>
+            <p id="redownload-desc" className="modal-text">
+              This deletes the existing episode files selected below and downloads them again. This can take a long time, use significant bandwidth, and is usually not needed.
+            </p>
+            <div className="form-row">
+              <label htmlFor="redownload-profile">Download Profile</label>
+              <select
+                id="redownload-profile"
+                className="input"
+                value={redownloadProfileId}
+                disabled={redownloadStarting}
+                onChange={(event) => setRedownloadProfileId(event.target.value)}
+              >
+                {attachedDownloadProfiles.length > 1 && (
+                  <option value="all">All Download Profiles</option>
+                )}
+                {attachedDownloadProfiles.map((profile) => (
+                  <option key={profile.id} value={String(profile.id)}>
+                    {`${profile.type === 'series' ? 'Series' : 'Podcast'} · ${preferredFormatLabel(profile.localMediaProfilePreferredFormat)} · Profile #${profile.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn"
+                disabled={redownloadStarting}
+                onClick={() => setRedownloadConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={redownloadStarting || !redownloadProfileId}
+                onClick={() => void redownloadAllEpisodes()}
+              >
+                {redownloadStarting ? 'Starting…' : 'Delete and re-download'}
               </button>
             </div>
           </div>

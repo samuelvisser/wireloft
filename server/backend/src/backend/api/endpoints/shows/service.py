@@ -10,13 +10,14 @@ from backend.api.models.show import *
 
 from fastapi import HTTPException
 
-from backend.db.models import Episode, Show
+from backend.db.models import DownloadProfileBase, Episode, Show
 from task_manager.events.transactional import queue_event
 from ..episodes.service import queue_episode_metadata_refresh
 
 
 SYNC_LOG_META_KEY = "episode_sync_log"
 SYNC_LOG_LIMIT = 10
+SHOW_REDOWNLOAD_EPISODES_REQUESTED_EVENT = "show.redownload_episodes_requested"
 
 
 def get_shows_list(s: Session) -> list[ShowAPIRead]:
@@ -153,6 +154,55 @@ def request_show_metadata_refresh(
     return {
         "queued": True,
         "episodes_queued": len(episodes),
+        "request_id": request_id,
+    }
+
+
+def request_show_episode_redownload(
+        s: Session,
+        show_slug: str,
+        download_profile_id: int | None,
+) -> dict[str, bool | int | str]:
+    """Queue a destructive re-download for one or every Download Profile on a show."""
+    show = (
+        s.query(Show)
+        .filter_by(slug=show_slug)
+        .one_or_none()
+    )
+    if show is None:
+        raise HTTPException(status_code=404, detail="Show not found")
+
+    attached_profiles = (
+        s.query(DownloadProfileBase)
+        .filter_by(show_id=show.id)
+        .order_by(DownloadProfileBase.id.asc())
+        .all()
+    )
+    if not attached_profiles:
+        raise HTTPException(status_code=422, detail="This show has no Download Profiles")
+
+    if download_profile_id is None:
+        selected_profile_count = len(attached_profiles)
+    else:
+        selected_profile = next(
+            (profile for profile in attached_profiles if profile.id == download_profile_id),
+            None,
+        )
+        if selected_profile is None:
+            raise HTTPException(status_code=422, detail="Download Profile is not attached to this show")
+        selected_profile_count = 1
+
+    request_id = str(uuid4())
+    queue_event(s, SHOW_REDOWNLOAD_EPISODES_REQUESTED_EVENT, {
+        "resource_id": show.id,
+        "id": show.id,
+        "slug": show.slug,
+        "download_profile_id": download_profile_id,
+        "manual_request_id": request_id,
+    })
+    return {
+        "queued": True,
+        "download_profiles_queued": selected_profile_count,
         "request_id": request_id,
     }
 

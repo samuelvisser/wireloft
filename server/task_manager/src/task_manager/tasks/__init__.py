@@ -8,6 +8,7 @@ from .workers.download_profile_worker import download_profile_worker
 from .workers.download_series_thumbnail import download_series_thumbnail
 from .workers.monitor_episode_worker import monitor_episode_worker
 from .workers.refresh_episode_metadata_worker import refresh_episode_metadata_worker
+from .workers.redownload_show_episodes_worker import redownload_show_episodes_worker
 from .workers.fetch_new_episodes import fetch_new_episodes
 from .workers.check_no_show_today_episodes import check_no_show_today_episodes
 from .workers.file_watcher import file_watcher
@@ -23,6 +24,7 @@ __all__ = [
     "download_series_thumbnail",
     "monitor_episode_worker",
     "refresh_episode_metadata_worker",
+    "redownload_show_episodes_worker",
     "fetch_new_episodes",
     "check_no_show_today_episodes",
     "file_watcher",

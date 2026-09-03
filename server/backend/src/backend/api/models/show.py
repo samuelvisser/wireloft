@@ -48,6 +48,12 @@ class ShowAPIUpdate(_ShowAPIBaseIn):
     pass
 
 
+class ShowRedownloadEpisodesAPIRequest(RequestBase):
+    """Select one Download Profile, or every attached profile when omitted."""
+
+    download_profile_id: Optional[int] = Field(default=None, gt=0)
+
+
 # ---------- Lenient output (read) ----------
 class _ShowAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, no constraints."""

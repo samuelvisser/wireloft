@@ -10,9 +10,15 @@ from .service import (
     delete_show,
     request_show_sync,
     request_show_metadata_refresh,
+    request_show_episode_redownload,
     get_show_sync_log,
 )
-from ...models.show import ShowAPIRead, ShowAPICreate, ShowAPIUpdate
+from ...models.show import (
+    ShowAPIRead,
+    ShowAPICreate,
+    ShowAPIUpdate,
+    ShowRedownloadEpisodesAPIRequest,
+)
 from backend.app import db_session
 
 router = APIRouter(prefix="/shows", tags=["Shows"])
@@ -69,6 +75,23 @@ def show_metadata_refresh(show_slug: str):
     with db_session() as s:
         try:
             result = request_show_metadata_refresh(s, show_slug)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post("/{show_slug}/redownload-episodes", status_code=status.HTTP_202_ACCEPTED)
+def show_redownload_episodes(show_slug: str, body: ShowRedownloadEpisodesAPIRequest):
+    """Delete and re-download episodes through one or every attached Download Profile."""
+    with db_session() as s:
+        try:
+            result = request_show_episode_redownload(
+                s,
+                show_slug,
+                body.download_profile_id,
+            )
             s.commit()
             return result
         except Exception:
