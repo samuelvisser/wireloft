@@ -76,7 +76,7 @@ services:
 Literally every setting WireLoft provides can be managed by environment variables, too. However, I generally do not advise
 using environment variables for anything but the above examples. Any setting configured by environment variable cannot be changed in the WireLoft UI.
 
-Full documentation for all available settings is a work in progress. For now, just use the UI or check [settings](https://github.com/samuelvisser/wireloft/blob/main/server/config/src/config/settings/settings.py).
+See the [Settings documentation](https://github.com/samuelvisser/wireloft/wiki/Settings) for all available settings, including their `config.yml` keys, environment variables, defaults, and explanations.
 
 ## Special thanks
 
