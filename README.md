@@ -1,7 +1,7 @@
 # WireLoft
 
 ## What it does
-WireLoft is a self-hosted app for managing (premium) shows from The Daily Wire.  
+WireLoft is a self-hosted app for managing (premium) media from The Daily Wire.  
 
 It is built as the perfect solution for self-hosting nerds that do not want to be limited to only being able to enjoy premium shows from The Daily Wire website. 
 WireLoft allows you to download individual show episodes to your server, or just stream audio or video episodes straight to your RSS podcast client without first
