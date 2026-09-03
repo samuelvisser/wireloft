@@ -217,7 +217,7 @@ class MiddlewareClient:
 
                 raw_movie = item.get('video')
                 if isinstance(raw_movie, dict) and raw_movie.get('slug'):
-                    record = self._catalog_movie_from_payload(raw_movie)
+                    record = DwCatalogMovieRecord.model_validate(raw_movie)
                     movies.setdefault(record.slug, record)
 
         return DwCatalogRecord(
@@ -274,17 +274,12 @@ class MiddlewareClient:
             trailer_candidates[0] if trailer_candidates else None,
         )
 
-        summary = self._catalog_movie_from_payload(raw)
-        return DwMovieRecord(
-            **summary.model_dump(),
-            duration=float(raw.get('duration') or 0),
-            sharing_url=str(raw.get('sharingURL') or f"https://www.dailywire.com/videos/{slug}"),
-            mature_rating=raw.get('matureRating') or None,
-            is_downloadable=bool(raw.get('isDownloadable', True)),
-            available_for=[str(value) for value in raw.get('availableFor') or []],
-            movie_extras=movie_extras,
-            trailer=trailer,
-        )
+        return DwMovieRecord.model_validate({
+            **raw,
+            'sharingURL': str(raw.get('sharingURL') or f"https://www.dailywire.com/videos/{slug}"),
+            'movie_extras': movie_extras,
+            'trailer': trailer,
+        })
 
     def get_movie_playback(self, slug: str) -> DwMoviePlaybackRecord:
         """Fetch a fresh, signed playback URL for a movie download."""
@@ -543,51 +538,6 @@ class MiddlewareClient:
             thumbnail_portrait_path=thumbnails.get('port') or None,
             thumbnail_square_path=thumbnails.get('square') or None,
         )
-
-    @staticmethod
-    def _catalog_movie_from_payload(raw: dict[str, Any]) -> DwCatalogMovieRecord:
-        host = raw.get('host') or raw.get('author') or {}
-        images = raw.get('images') or {}
-        thumbnails = images.get('thumbnail') or {}
-        title = MiddlewareClient._short_catalog_movie_title(raw)
-        extended_title = str(raw.get('title') or '').strip() or title
-        return DwCatalogMovieRecord(
-            dw_id=str(raw.get('id') or ''),
-            slug=str(raw.get('slug') or ''),
-            title=title,
-            extended_title=extended_title,
-            description=raw.get('description') or None,
-            author_name=host.get('name') or None,
-            author_slug=host.get('slug') or None,
-            background_image_path=raw.get('backgroundImage') or None,
-            logo_image_path=raw.get('logoImage') or None,
-            thumbnail_landscape_path=thumbnails.get('land') or None,
-            thumbnail_portrait_path=thumbnails.get('port') or None,
-            thumbnail_square_path=thumbnails.get('square') or None,
-        )
-
-    @staticmethod
-    def _short_catalog_movie_title(raw: dict[str, Any]) -> str:
-        """Remove browse-page marketing copy from a movie title.
-
-        Daily Wire's catalog sometimes appends the full description or a
-        pipe-delimited call to action to ``title``. The video detail endpoint
-        returns the actual display title, but fetching every detail page would
-        turn one catalog request into dozens. These two forms cover the catalog
-        payloads while preserving punctuation in the real title.
-        """
-        original = str(raw.get('title') or '').strip()
-        title = original
-        description = str(raw.get('description') or '').strip()
-
-        if description and title.casefold().endswith(description.casefold()):
-            title = title[:len(title) - len(description)].rstrip()
-            title = title.rstrip('|').rstrip()
-
-        if ' | ' in title:
-            title = title.split(' | ', 1)[0].strip()
-
-        return title or original
 
     @staticmethod
     def _movie_extra_type(raw: dict[str, Any]) -> str:

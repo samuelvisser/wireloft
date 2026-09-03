@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import AwareDatetime, Field, model_validator
+from pydantic import AliasChoices, AliasPath, AwareDatetime, Field, model_validator
 
 from .BaseRecord import BaseRecord
 
@@ -33,14 +33,24 @@ class _CatalogTitleRecord(BaseRecord):
         if not isinstance(data, dict):
             return data
 
+        original_title = str(data.get("title") or "").strip()
         normalized_title = _normalize_catalog_title(
-            data.get("title"),
+            original_title,
             data.get("description"),
         )
-        if normalized_title == data.get("title"):
-            return data
+        updates: dict[str, Any] = {}
 
-        return {**data, "title": normalized_title}
+        if normalized_title != data.get("title"):
+            updates["title"] = normalized_title
+
+        if (
+            "extended_title" in cls.model_fields
+            and "extended_title" not in data
+            and "extendedTitle" not in data
+        ):
+            updates["extended_title"] = original_title or normalized_title
+
+        return {**data, **updates} if updates else data
 
 
 class DwCatalogShowRecord(_CatalogTitleRecord):
@@ -84,16 +94,54 @@ class DwMovieExtraRecord(BaseRecord):
 
 
 class DwCatalogMovieRecord(_CatalogTitleRecord):
-    dw_id: str
+    dw_id: str = Field(validation_alias=AliasChoices("id", "dwID", "dwId"))
     slug: str
     extended_title: Optional[str] = None
-    author_name: Optional[str] = None
-    author_slug: Optional[str] = None
-    background_image_path: Optional[str] = None
-    logo_image_path: Optional[str] = None
-    thumbnail_landscape_path: Optional[str] = None
-    thumbnail_portrait_path: Optional[str] = None
-    thumbnail_square_path: Optional[str] = None
+    author_name: Optional[str] = Field(
+        validation_alias=AliasChoices(
+            "authorName",
+            AliasPath("host", "name"),
+            AliasPath("author", "name"),
+        ),
+        default=None,
+    )
+    author_slug: Optional[str] = Field(
+        validation_alias=AliasChoices(
+            "authorSlug",
+            AliasPath("host", "slug"),
+            AliasPath("author", "slug"),
+        ),
+        default=None,
+    )
+    background_image_path: Optional[str] = Field(
+        validation_alias=AliasChoices("backgroundImage", "backgroundImagePath"),
+        default=None,
+    )
+    logo_image_path: Optional[str] = Field(
+        validation_alias=AliasChoices("logoImage", "logoImagePath"),
+        default=None,
+    )
+    thumbnail_landscape_path: Optional[str] = Field(
+        validation_alias=AliasChoices(
+            "thumbnailLandscapePath",
+            AliasPath("images", "thumbnail", "land"),
+        ),
+        default=None,
+    )
+    thumbnail_portrait_path: Optional[str] = Field(
+        validation_alias=AliasChoices(
+            "thumbnailPortraitPath",
+            AliasPath("images", "thumbnail", "port"),
+        ),
+        default=None,
+    )
+    thumbnail_square_path: Optional[str] = Field(
+        validation_alias=AliasChoices(
+            "thumbnailSquarePath",
+            AliasPath("images", "thumbnail", "square"),
+        ),
+        default=None,
+    )
 
 
 class DwMovieRecord(DwCatalogMovieRecord):

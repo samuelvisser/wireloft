@@ -23,6 +23,13 @@ def test_dailywire_catalog_normalizes_show_and_movie_titles(monkeypatch):
                     "slug": "sample-movie",
                     "title": f"Sample Movie | {movie_description}",
                     "description": movie_description,
+                    "host": {"name": "Movie Host", "slug": "movie-host"},
+                    "backgroundImage": "background.jpg",
+                    "images": {"thumbnail": {
+                        "land": "landscape.jpg",
+                        "port": "portrait.jpg",
+                        "square": "square.jpg",
+                    }},
                 }},
             ],
         }],
@@ -35,5 +42,13 @@ def test_dailywire_catalog_normalizes_show_and_movie_titles(monkeypatch):
 
     assert [show.title for show in catalog.shows] == ["Real History with Matt Walsh"]
     assert catalog.shows[0].description == show_description
-    assert [movie.title for movie in catalog.movies] == ["Sample Movie"]
-    assert catalog.movies[0].extended_title == f"Sample Movie | {movie_description}"
+
+    movie = catalog.movies[0]
+    assert movie.title == "Sample Movie"
+    assert movie.extended_title == f"Sample Movie | {movie_description}"
+    assert movie.author_name == "Movie Host"
+    assert movie.author_slug == "movie-host"
+    assert movie.background_image_path == "background.jpg"
+    assert movie.thumbnail_landscape_path == "landscape.jpg"
+    assert movie.thumbnail_portrait_path == "portrait.jpg"
+    assert movie.thumbnail_square_path == "square.jpg"
