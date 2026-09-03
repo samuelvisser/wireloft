@@ -33,7 +33,7 @@ MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
 })
 
 SHOW_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "show", "show_title", "season", "season_name", "episode", "episode_title", "title",
+    "show", "show_title", "season", "season_name", "season_index", "episode", "episode_title", "title",
     "episode_type", "episode_number", "ep_id", "episode_published_date",
     "episode_published_time", "episode_published_datetime",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
@@ -182,6 +182,7 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "show_title": episode.show.title,
         "season": episode.season.slug if episode.season else "",
         "season_name": episode.season.name if episode.season else "",
+        "season_index": str(episode.season.index) if episode.season else "",
         "episode": episode.slug,
         "episode_title": episode.title,
         "title": episode.title,

@@ -45,6 +45,7 @@ The `/downloads/` prefix is virtual. It maps to `downloadSettings.downloadRoot`,
 | `show_title` | Show title |
 | `season` | Season slug, or empty when unavailable |
 | `season_name` | Season name, or empty when unavailable |
+| `season_index` | WireLoft season index, or empty when unavailable |
 | `episode` | Episode slug |
 | `episode_title` | Episode title |
 | `title` | Alias for the episode title |
@@ -63,6 +64,12 @@ The `/downloads/` prefix is virtual. It maps to `downloadSettings.downloadRoot`,
 | `hour` | Hour value |
 | `minute` | Minute value |
 | `second` | Second value |
+
+`season_index` is useful for media servers that require numbered season folders even when Daily Wire gives the season a custom name. For example:
+
+```jinja
+/downloads/Video/TV Shows/{{ show_title }}/Season {{ season_index }}/{{ show_title }} - {{ date }} - {{ title }}.ext
+```
 
 Date-related values can be empty when Daily Wire does not provide the corresponding date. Jinja conditionals are therefore useful when punctuation or folders should only appear when a value exists.
 

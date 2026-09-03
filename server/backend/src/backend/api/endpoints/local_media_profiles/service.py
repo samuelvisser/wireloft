@@ -36,6 +36,7 @@ _EXAMPLE_SHOW_VALUES = {
     "show_title": "Example Show",
     "season": "season-1",
     "season_name": "Season 1",
+    "season_index": "1",
     "episode": "the-first-episode",
     "episode_title": "The First Episode",
     "title": "The First Episode",
