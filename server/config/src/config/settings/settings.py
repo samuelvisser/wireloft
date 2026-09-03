@@ -5,11 +5,12 @@ import tomllib
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, computed_field, field_validator
+from pydantic import Field, computed_field, field_validator, model_validator
 from pydantic_settings import YamlConfigSettingsSource
 
 from config.config import PROJECT_ROOT
 from config.settings.base import SettingsBase, normalize_settings_source_keys
+from config.settings.cron_validation import validate_worker_cron_settings
 from config.settings.submodels import *
 
 
@@ -105,7 +106,7 @@ class AppSettings(SettingsBase):
     ))
     new_episode_schedule: TrackNewEpisodeSchedule = Field(default=TrackNewEpisodeSchedule(
         find_episodes_cron="*/30 * * * *",
-        monitor_episode_cron="*/1 * * * *",
+        monitor_episode_cron="*/2 * * * *",
         check_no_show_today_cron="0 */6 * * *",
         metadata_refresh_intervals="5m,15m,30m,1h,3h,6h,24h",
     ))
@@ -145,6 +146,18 @@ class AppSettings(SettingsBase):
                 "Must be a valid IANA timezone, such as Europe/Amsterdam"
             ) from exc
         return value
+
+    @model_validator(mode="after")
+    def _validate_worker_cron_minimums(self):
+        validate_worker_cron_settings(
+            min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
+            find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
+            monitor_episode_cron=self.new_episode_schedule.monitor_episode_cron,
+            check_no_show_today_cron=self.new_episode_schedule.check_no_show_today_cron,
+            verify_downloads_cron=self.download_settings.verify_downloads_cron,
+            file_watcher_scan_cron=self.file_watcher.scan_cron,
+        )
+        return self
 
     @classmethod
     def settings_customise_sources(

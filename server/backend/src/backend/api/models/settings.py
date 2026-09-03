@@ -7,10 +7,11 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.triggers.cron import CronTrigger
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 
 from backend.api.models.base import RequestBase, ResponseBase
+from config.settings.cron_validation import validate_worker_cron_settings
 from config.settings.settings import AppSettings
 from config.settings.submodels import (
     FilenameRestrictionMode,
@@ -291,6 +292,18 @@ class SettingsValues(_SettingsValueModel):
         except (ValueError, ZoneInfoNotFoundError) as exc:
             raise ValueError("Enter a valid IANA timezone, such as Europe/Amsterdam") from exc
         return value
+
+    @model_validator(mode="after")
+    def _validate_worker_cron_minimums(self):
+        validate_worker_cron_settings(
+            min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
+            find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
+            monitor_episode_cron=self.new_episode_schedule.monitor_episode_cron,
+            check_no_show_today_cron=self.new_episode_schedule.check_no_show_today_cron,
+            verify_downloads_cron=self.download_settings.verify_downloads_cron,
+            file_watcher_scan_cron=self.file_watcher.scan_cron,
+        )
+        return self
 
     @classmethod
     def from_app_settings(cls, settings: AppSettings) -> "SettingsValues":
