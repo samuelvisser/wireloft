@@ -162,11 +162,20 @@ class MiddlewareClient:
     HTTP client for DailyWire Middleware API.
 
     Pass an access token if you have one; premium content typically requires it.
+    Request pacing is enabled by default. Low-volume interactive UI reads may
+    explicitly disable it so they are not blocked behind background cooldowns.
     """
 
-    def __init__(self, access_token: Optional[str] = None, request_timeout: float = 30.0, base_url: str = get_settings().dw_api.middleware_api) -> None:
+    def __init__(
+        self,
+        access_token: Optional[str] = None,
+        request_timeout: float = 30.0,
+        base_url: str = get_settings().dw_api.middleware_api,
+        pace_requests: bool = True,
+    ) -> None:
         self._req_timeout = request_timeout
         self._base_url = base_url.rstrip('/')
+        self._pace_requests = bool(pace_requests)
         headers = {
             # These are generally not required for Middleware, but harmless if present
             'Accept': 'application/json',
@@ -642,8 +651,11 @@ class MiddlewareClient:
     def _get_url(self, url: str) -> Dict[str, Any]:
         data: Optional[bytes] = None
         for attempt in range(self._TRANSIENT_RETRIES + 1):
-            # Enforce request pacing according to configuration
-            _wait_before_request()
+            # Background/bulk callers use the global pacing policy. Explicitly
+            # interactive clients bypass only this wait; retries and network
+            # timeouts remain unchanged.
+            if self._pace_requests:
+                _wait_before_request()
 
             req = Request(url, headers=self._headers, method='GET')
             try:

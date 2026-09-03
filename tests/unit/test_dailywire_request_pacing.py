@@ -99,3 +99,52 @@ def test_pacing_delay_releases_condition_lock_for_queued_callers(monkeypatch):
 
     worker.join(timeout=0.5)
     assert not worker.is_alive()
+
+
+def test_middleware_client_uses_global_pacing_by_default(monkeypatch):
+    from dailywire_api.dw_api import client
+
+    pacing_calls: list[bool] = []
+    monkeypatch.setattr(client, "_wait_before_request", lambda: pacing_calls.append(True))
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"{}"
+
+    monkeypatch.setattr(client, "urlopen", lambda request, timeout: FakeResponse())
+
+    middleware = client.MiddlewareClient(base_url="https://example.invalid")
+    assert middleware._get("v4/test") == {}
+    assert pacing_calls == [True]
+
+
+def test_interactive_middleware_client_can_bypass_global_pacing(monkeypatch):
+    from dailywire_api.dw_api import client
+
+    pacing_calls: list[bool] = []
+    monkeypatch.setattr(client, "_wait_before_request", lambda: pacing_calls.append(True))
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"{}"
+
+    monkeypatch.setattr(client, "urlopen", lambda request, timeout: FakeResponse())
+
+    middleware = client.MiddlewareClient(
+        base_url="https://example.invalid",
+        pace_requests=False,
+    )
+    assert middleware._get("v4/test") == {}
+    assert pacing_calls == []

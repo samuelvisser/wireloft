@@ -22,7 +22,10 @@ def get_show(
     tokens = DeviceAuthClient().get_token()
     access_token = tokens.access_token if tokens else None
 
-    client = MiddlewareClient(access_token=access_token)
+    client = MiddlewareClient(
+        access_token=access_token,
+        pace_requests=False,
+    )
 
     # Map the normalized ShowRecord payload into our response model
     return client.get_show_page(slug=show_slug, membership_plan=membership_plan)
