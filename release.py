@@ -388,18 +388,18 @@ def verify_publish_state() -> None:
         raise ReleaseError("Local main must exactly match origin/main before publishing a release.")
 
 
-def tags_to_publish() -> list[str]:
+def tags_to_publish() -> tuple[list[str], str]:
     _app_name, app_version = read_project(ROOT / "pyproject.toml")
     validate_new_app_version(app_version)
 
-    tags: list[str] = []
+    package_tags: list[str] = []
     for component in discover_components():
         prefix = f"{component.tag_prefix}-v"
         previous_tag = latest_tag(prefix)
         target_tag = component.tag
         if previous_tag is None:
             if not tag_exists(target_tag):
-                tags.append(target_tag)
+                package_tags.append(target_tag)
             continue
         if path_changed_since(previous_tag, component.path):
             previous_version = previous_tag.removeprefix(prefix)
@@ -410,24 +410,35 @@ def tags_to_publish() -> list[str]:
                 )
             if tag_exists(target_tag):
                 raise ReleaseError(f"Tag {target_tag} already exists.")
-            tags.append(target_tag)
+            package_tags.append(target_tag)
 
     app_release_tag = f"v{app_version}"
     if tag_exists(app_release_tag):
         raise ReleaseError(f"Tag {app_release_tag} already exists.")
-    tags.append(app_release_tag)
-    return tags
+    return package_tags, app_release_tag
+
+
+def push_release_tags(package_tags: list[str], app_release_tag: str) -> None:
+    if package_tags:
+        run("git", "push", "--atomic", "origin", *package_tags, capture_output=False)
+    run("git", "push", "origin", app_release_tag, capture_output=False)
 
 
 def publish_release(args: argparse.Namespace) -> None:
     verify_publish_state()
     _app_name, app_version = read_project(ROOT / "pyproject.toml")
-    tags = tags_to_publish()
+    package_tags, app_release_tag = tags_to_publish()
+    tags = [*package_tags, app_release_tag]
     image_tags = container_tags(app_version)
 
-    print("Git tags to publish:")
-    for tag in tags:
-        print(f"  {tag}")
+    if package_tags:
+        print("Package Git tags to publish:")
+        for tag in package_tags:
+            print(f"  {tag}")
+    else:
+        print("Package Git tags to publish: none")
+    print("Application Git tag to publish separately:")
+    print(f"  {app_release_tag}")
     if not args.skip_container:
         print("GHCR image tags to publish:")
         for tag in image_tags:
@@ -448,15 +459,15 @@ def publish_release(args: argparse.Namespace) -> None:
             message = f"WireLoft {tag.removeprefix('v')}" if tag.startswith("v") else f"Release {tag}"
             run("git", "tag", "-a", tag, "-m", message, capture_output=False)
             created.append(tag)
-        run("git", "push", "--atomic", "origin", *tags, capture_output=False)
+        push_release_tags(package_tags, app_release_tag)
     except Exception:
         for tag in created:
             run("git", "tag", "-d", tag, check=False, capture_output=False)
         raise
 
     print(
-        f"Published {len(tags)} Git tag(s). "
-        "The v* application tag will trigger the GitHub Release workflow."
+        f"Published {len(package_tags)} package Git tag(s) and application tag {app_release_tag}. "
+        "The application tag was pushed separately and will trigger the GitHub Release workflow."
     )
 
 

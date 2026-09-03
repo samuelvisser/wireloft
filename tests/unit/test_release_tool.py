@@ -52,3 +52,29 @@ def test_module_version_replacement_preserves_quote_style():
 
 def test_release_container_tags_include_semver_aliases_and_latest():
     assert release_tool.container_tags("2.3.4") == ["2.3.4", "2.3", "2", "latest"]
+
+
+def test_application_release_tag_is_pushed_separately(monkeypatch):
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(*args: str, **_kwargs):
+        calls.append(args)
+
+    monkeypatch.setattr(release_tool, "run", fake_run)
+
+    release_tool.push_release_tags(
+        ["backend-v0.2.0", "config-v0.1.1"],
+        "v1.1.0",
+    )
+
+    assert calls == [
+        (
+            "git",
+            "push",
+            "--atomic",
+            "origin",
+            "backend-v0.2.0",
+            "config-v0.1.1",
+        ),
+        ("git", "push", "origin", "v1.1.0"),
+    ]

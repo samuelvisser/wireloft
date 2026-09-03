@@ -45,9 +45,12 @@ git pull --ff-only
 2. builds the release container once and pushes `MAJOR.MINOR.PATCH`, `MAJOR.MINOR`, `MAJOR`, and `latest` aliases to GHCR;
 3. creates annotated package tags for changed packages (or an initial baseline tag for packages that have never been tagged);
 4. creates the application tag `vMAJOR.MINOR.PATCH`;
-5. pushes all Git tags atomically.
+5. pushes package tags atomically;
+6. pushes the application tag separately so GitHub always receives a dedicated `v*` tag push event.
 
-The application tag triggers `.github/workflows/release.yml`, which verifies that the tag matches the version in the root `pyproject.toml` and creates the GitHub Release with generated release notes.
+The separate application tag push triggers `.github/workflows/release.yml`. The workflow verifies that the tag matches the version in the root `pyproject.toml` and creates a draft GitHub Release with generated notes. Review and edit those notes in GitHub, then publish the Release manually when it is ready.
+
+If the tag-triggered workflow ever needs to be retried, open **Actions → Publish GitHub Release → Run workflow**, enter the existing application tag (for example `v1.0.0`), and run it. The manual workflow checks out that exact tag and performs the same version verification and draft-release creation as the automatic flow.
 
 If the container has already been published separately, use:
 
