@@ -7,6 +7,7 @@ import {
     TextField,
     ToggleField,
 } from './SettingsControls'
+import ReadMore from "../../utils/ReadMore";
 
 export default function AutomationSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
     return (
@@ -109,8 +110,20 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.metadataRefreshIntervals = value
                     })}
-                    help="Comma-separated offsets after publication. Use s, m, h or d, for example: 5m,15m,30m,1h,3h,6h,24h."
-                    wide
+                    help={
+                        <ReadMore summary={<span>Intervals to refresh episode metadata after its published.</span>}>
+                            <p>
+                                While a Daily Wire episode is live, WireLoft closely monitors it for any status updates, title changes or new thumbnails. When it is published, this metadata refresh is our next approach.
+                            </p>
+                            <p>
+                                Show episodes sometimes do not yet contain their final thumbnail even when they are fully published. Other times, their title might change a little after publication. For these cases,
+                                WireLoft automatically updates episode metadata at a couple intervals after its publication. Here, you can configure those intervals.
+                            </p>
+                            <p>
+                                Value is a list of comma-separated offsets after publication. Use s, m, h or d, for example: 120s,30m,3h,2d
+                            </p>
+                        </ReadMore>
+                    } wide
                 />
             </SettingsSection>
 
