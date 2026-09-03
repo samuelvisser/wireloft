@@ -179,7 +179,14 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     onChange={(checked) => updateDraft((next) => {
                         next.fileWatcher.verifyFileSize = checked
                     })}
-                    help="Detects truncated or externally replaced files in addition to missing files."
+                    help={
+                        <ReadMore summary="Detects truncated or externally replaced files in addition to missing files.">
+                            <p>
+                                If this setting is enabled, WireLoft will consider a file whose size is either zero
+                                or smaller than it was when it was first downloaded a corrupt file and treats it as such.
+                            </p>
+                        </ReadMore>
+                    }
                 />
             </SettingsDisclosure>
         </>
