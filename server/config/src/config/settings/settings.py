@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tomllib
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -14,6 +15,19 @@ from config.settings.submodels import *
 
 TIMEZONE_ENVIRONMENT_VARIABLE = "TZ"
 _ENVIRONMENT_VALUE_MISSING = object()
+
+
+def get_app_version() -> str:
+    manifest = PROJECT_ROOT / "pyproject.toml"
+    try:
+        with manifest.open("rb") as file:
+            version = tomllib.load(file).get("project", {}).get("version")
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise RuntimeError(f"Could not read WireLoft version from {manifest}") from exc
+
+    if not isinstance(version, str) or not version:
+        raise RuntimeError(f"WireLoft version is missing from {manifest}")
+    return version
 
 
 class _AliasNormalizingYamlSource(YamlConfigSettingsSource):
@@ -48,7 +62,7 @@ def environment_settings_source_data(source, settings_cls) -> dict[str, Any]:
 
 class AppSettings(SettingsBase):
 
-    app_version: str = Field(default="0.1.0", frozen=True)
+    app_version: str = Field(default_factory=get_app_version, frozen=True)
 
     database_path: Path = PROJECT_ROOT / "config" / "wireloft.db"
 
