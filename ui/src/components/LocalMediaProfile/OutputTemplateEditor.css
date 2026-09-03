@@ -428,6 +428,41 @@
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
     }
 
+    .output-template-code-editor .cm-tooltip-autocomplete {
+        border-color: #43516a;
+        background: #172235;
+        color: #eef4ff;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete > ul {
+        background: #172235;
+        color: #eef4ff;
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete > ul > li {
+        color: #eef4ff;
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+        background: #2563eb;
+        color: #ffffff;
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete .cm-completionDetail {
+        color: #aebbd0;
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete .cm-completionIcon {
+        color: #9ec3ff;
+        opacity: 1;
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+    .output-template-code-editor .cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionIcon {
+        color: #ffffff;
+    }
+
     .template-workbench-divider {
         background: #34445c;
     }
