@@ -81,7 +81,7 @@ class AppSettings(SettingsBase):
     dw_timeout: TimeoutSettings = Field(default=TimeoutSettings(
         min_fast_request_ms=100,
         max_fast_requests=350,
-        min_slow_request_ms=int(1.000 * 60 * 2),
+        min_slow_request_ms=int(2 * 60 * 1_000),
     ))
     scheduler: SchedulerSettings = Field(default=SchedulerSettings(
         enabled=True,

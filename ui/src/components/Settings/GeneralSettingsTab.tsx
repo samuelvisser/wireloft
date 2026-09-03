@@ -22,7 +22,7 @@ export default function GeneralSettingsTab({draft, updateDraft, environmentVaria
                     error={errorFor('timezone')}
                     environmentVariable={environmentVariableFor('timezone')}
                     onChange={(value) => updateDraft((next) => { next.timezone = value })}
-                    help={<>Use an IANA timezone such as <code>Europe/Amsterdam</code>.</>}
+                    help={<>Use an <a href="https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List">IANA</a> timezone such as <code>Europe/Amsterdam</code>.</>}
                 />
                 <SelectField
                     id="settings-log-level"

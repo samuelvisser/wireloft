@@ -80,6 +80,14 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.findEpisodesCron = value
                     })}
+                    help={
+                        <ReadMore summary={<span>Finds new episodes for every show indexed in WireLoft.</span>}>
+                            <p>
+                                This cron schedule determines how often WireLoft will search for new episodes across all shows.
+                                It is recommended to set this to a value that is not too frequent, as it can impact performance.
+                            </p>
+                        </ReadMore>
+                    }
                 />
                 <CronEditor
                     id="settings-monitor-episode-cron"
@@ -90,6 +98,23 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.monitorEpisodeCron = value
                     })}
+                    help={
+                        <ReadMore summary={<span>Monitors currently live or scheduled episodes.</span>}>
+                            <p>
+                                This cron schedule determines how often WireLoft will monitor an episode after the <code>Find new episodes</code> worker
+                                found it. As long as the episode is either scheduled or live, WireLoft checks on its status very frequently.
+                                This makes sure that any changes in it's status get picked up quickly, and the download- and stream profiles
+                                can serve you the episode as soon as possible.
+                            </p>
+                            <p>
+                                This worker is expected to run quite frequently. It is as lightweight as possible, should not impact performance much
+                                or annoying the Daily Wire API. Make sure to not set it to run more often than once every minute though.
+                            </p>
+                            <p>
+                                <code>Monitor pending episodes</code> never runs on episodes that are not pending.
+                            </p>
+                        </ReadMore>
+                    }
                 />
                 <CronEditor
                     id="settings-no-show-today-cron"
@@ -100,6 +125,15 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.checkNoShowTodayCron = value
                     })}
+                    help={
+                        <ReadMore summary={<span>How often to check for no-show-today episodes.</span>}>
+                            <p>
+                                The Daily Wire does this annoying thing where they sometimes 'publish' an episode just to tell
+                                everyone there will not be any episodes today. This cron schedule runs infrequently and checks
+                                if any of the new episodes are no-show-today episodes. It removes them from WireLoft when found.
+                            </p>
+                        </ReadMore>
+                    }
                 />
                 <TextField
                     id="settings-metadata-refresh-intervals"
@@ -113,11 +147,14 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     help={
                         <ReadMore summary={<span>Intervals to refresh episode metadata after its published.</span>}>
                             <p>
-                                While a Daily Wire episode is live, WireLoft closely monitors it for any status updates, title changes or new thumbnails. When it is published, this metadata refresh is our next approach.
+                                While a Daily Wire episode is live, WireLoft closely monitors it for any status updates, title changes or new
+                                thumbnails. When it is published, this metadata refresh is our next approach.
                             </p>
                             <p>
-                                Show episodes sometimes do not yet contain their final thumbnail even when they are fully published. Other times, their title might change a little after publication. For these cases,
-                                WireLoft automatically updates episode metadata at a couple intervals after its publication. Here, you can configure those intervals.
+                                Show episodes sometimes do not yet contain their final thumbnail even when they are fully published. Other times,
+                                their title might change a little after publication. For these cases,
+                                WireLoft automatically updates episode metadata at a couple intervals after its publication. Here, you can configure
+                                those intervals.
                             </p>
                             <p>
                                 Value is a list of comma-separated offsets after publication. Use s, m, h or d, for example: 120s,30m,3h,2d
