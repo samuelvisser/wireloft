@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, status
 from .service import *
 from ...models.movie import *
 from ...models.media_download import MediaDownloadAPIRead, MovieDownloadAPICreate
-from ..dailywire.movies.service import get_movie as get_dailywire_movie
+from ..dailywire.movies.service import get_movie_for_action as get_dailywire_movie
 from ..media_downloads.router import _trigger_download_task
 from ..media_downloads.service import create_movie_download, create_movie_extra_download
 from backend.app import db_session
