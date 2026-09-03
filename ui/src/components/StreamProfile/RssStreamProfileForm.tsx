@@ -92,7 +92,10 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
                                 The <strong>Control</strong> methods preserve the behavior already tested with Pocket Casts. Embedded HLS is known to stream video, but it writes short-lived Daily Wire URLs into the RSS and therefore has to resolve them while the feed is generated. Prepared MP4 is stable and compatible, but cannot start until the complete file has been prepared.
                             </p>
                             <p>
-                                The <strong>Experiment</strong> methods all put a stable WireLoft URL ending in <code>.m3u8</code> into the RSS. Redirect and proxy variants resolve the currently valid Daily Wire HLS URL only when the podcast player requests that episode. The filename, redirect status and MIME variants intentionally isolate the signals Pocket Casts/AVPlayer may use when classifying HLS media.
+                                Most <strong>Experiment</strong> methods put a stable WireLoft URL ending in <code>.m3u8</code> into the RSS and resolve Daily Wire only when that URL is requested. The redirect status, HEAD behavior, response headers, filename and MIME variants intentionally isolate the signals Pocket Casts may use while ingesting the feed.
+                            </p>
+                            <p>
+                                The <strong>pre-warmed</strong> experiments are intentionally different: they resolve the signed URL, and for the manifest probes also fetch the master playlist, while the RSS feed is generated. That lets Pocket Casts receive an immediate redirect or HTTP 200 from the stable URL. Keep the RSS limit very small, preferably one episode, while testing those methods.
                             </p>
                             <p>
                                 The prepared local HLS experiment creates a conventional VOD HLS package with local MPEG-TS segments. Its first request can be slow because WireLoft has to prepare the whole package. Opening that episode's <code>prepared/video.m3u8</code> once before subscribing pre-warms the test.

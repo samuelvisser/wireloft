@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -14,6 +16,12 @@ from .hls_experiments import (
     prepared_hls_resource_response,
     transparent_hls_proxy_response,
 )
+from .hls_probe_experiments import (
+    get_prefetched_hls_url,
+    prefetched_hls_manifest_response,
+    remember_prefetched_hls_url,
+    synthetic_hls_head_response,
+)
 from .service import (
     get_dailywire_stream_url,
     get_media_for_episode,
@@ -25,12 +33,17 @@ from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import RssDwVideoMethod
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/feeds", tags=["Feeds"])
 
 _NO_CACHE_HEADERS = {
     "Cache-Control": "no-store, no-cache, must-revalidate",
     "Pragma": "no-cache",
     "Expires": "0",
+}
+_HLS_REDIRECT_HEADERS = {
+    "Content-Type": HLS_X_MPEGURL,
+    "Content-Disposition": 'inline; filename="video.m3u8"',
 }
 
 _CACHED_MP4_METHODS = {
@@ -44,14 +57,17 @@ def _temporary_stream_redirect(
         *,
         head_only: bool = False,
         status_code: int = 302,
+        extra_headers: dict[str, str] | None = None,
 ) -> Response:
     headers = {"Location": url, **_NO_CACHE_HEADERS}
+    if extra_headers:
+        headers.update(extra_headers)
     if head_only:
         return Response(status_code=status_code, headers=headers)
     return RedirectResponse(
         url,
         status_code=status_code,
-        headers=_NO_CACHE_HEADERS,
+        headers=headers,
     )
 
 
@@ -103,6 +119,34 @@ def _resolve_remote_url(
             ),
             episode.uuid,
         )
+
+
+def _hls_experiment_cache_key(token: str, episode_slug: str) -> str:
+    return f"{token}:{episode_slug}"
+
+
+def _finish_hls_experiment(
+        request: Request,
+        *,
+        experiment: str,
+        started_at: float,
+        response: Response,
+        cache_hit: bool | None = None,
+) -> Response:
+    logger.info(
+        "RSS HLS experiment=%s method=%s path=%s status=%s duration_ms=%.1f "
+        "cache_hit=%s user_agent=%r accept=%r range=%r",
+        experiment,
+        request.method,
+        request.url.path,
+        response.status_code,
+        (time.monotonic() - started_at) * 1000,
+        cache_hit,
+        request.headers.get("user-agent"),
+        request.headers.get("accept"),
+        request.headers.get("range"),
+    )
+    return response
 
 
 @router.api_route("/rss/{token}/{show_slug}.xml", methods=["GET", "HEAD"])
@@ -189,16 +233,156 @@ def rss_feed_episode_audio(token: str, episode_slug: str, request: Request):
     "/rss/{token}/episodes/{episode_slug}/video.m3u8",
     methods=["GET", "HEAD"],
 )
+@router.api_route(
+    "/rss/{token}/episodes/{episode_slug}/video-https.m3u8",
+    methods=["GET", "HEAD"],
+)
 def rss_feed_episode_video_redirect_302(
         token: str,
         episode_slug: str,
         request: Request,
 ):
+    started_at = time.monotonic()
     url, _ = _resolve_remote_url(token, episode_slug, media_kind="video")
-    return _temporary_stream_redirect(
+    response = _temporary_stream_redirect(
         url,
         head_only=request.method == "HEAD",
         status_code=302,
+    )
+    return _finish_hls_experiment(
+        request,
+        experiment="redirect_302",
+        started_at=started_at,
+        response=response,
+    )
+
+
+@router.api_route(
+    "/rss/{token}/episodes/{episode_slug}/video-cached-302.m3u8",
+    methods=["GET", "HEAD"],
+)
+def rss_feed_episode_video_cached_redirect_302(
+        token: str,
+        episode_slug: str,
+        request: Request,
+):
+    started_at = time.monotonic()
+    cache_key = _hls_experiment_cache_key(token, episode_slug)
+    url = get_prefetched_hls_url(cache_key)
+    cache_hit = url is not None
+    if url is None:
+        url, _ = _resolve_remote_url(token, episode_slug, media_kind="video")
+        remember_prefetched_hls_url(cache_key, url)
+
+    response = _temporary_stream_redirect(
+        url,
+        head_only=request.method == "HEAD",
+        status_code=302,
+    )
+    return _finish_hls_experiment(
+        request,
+        experiment="cached_redirect_302",
+        started_at=started_at,
+        response=response,
+        cache_hit=cache_hit,
+    )
+
+
+@router.api_route(
+    "/rss/{token}/episodes/{episode_slug}/video-head200.m3u8",
+    methods=["GET", "HEAD"],
+)
+def rss_feed_episode_video_head_200_get_302(
+        token: str,
+        episode_slug: str,
+        request: Request,
+):
+    started_at = time.monotonic()
+    if request.method == "HEAD":
+        response = synthetic_hls_head_response(filename="video-head200.m3u8")
+    else:
+        url, _ = _resolve_remote_url(token, episode_slug, media_kind="video")
+        response = _temporary_stream_redirect(url, status_code=302)
+
+    return _finish_hls_experiment(
+        request,
+        experiment="head_200_get_302",
+        started_at=started_at,
+        response=response,
+    )
+
+
+@router.api_route(
+    "/rss/{token}/episodes/{episode_slug}/video-302-headers.m3u8",
+    methods=["GET", "HEAD"],
+)
+def rss_feed_episode_video_redirect_302_headers(
+        token: str,
+        episode_slug: str,
+        request: Request,
+):
+    started_at = time.monotonic()
+    url, _ = _resolve_remote_url(token, episode_slug, media_kind="video")
+    response = _temporary_stream_redirect(
+        url,
+        head_only=request.method == "HEAD",
+        status_code=302,
+        extra_headers=_HLS_REDIRECT_HEADERS,
+    )
+    return _finish_hls_experiment(
+        request,
+        experiment="redirect_302_headers",
+        started_at=started_at,
+        response=response,
+    )
+
+
+@router.api_route(
+    "/rss/{token}/episodes/{episode_slug}/video-prewarmed-raw.m3u8",
+    methods=["GET", "HEAD"],
+)
+def rss_feed_episode_video_prewarmed_raw(
+        token: str,
+        episode_slug: str,
+        request: Request,
+):
+    started_at = time.monotonic()
+    response = prefetched_hls_manifest_response(
+        _hls_experiment_cache_key(token, episode_slug),
+        absolute_children=False,
+        head_only=request.method == "HEAD",
+    )
+    return _finish_hls_experiment(
+        request,
+        experiment="prewarmed_raw",
+        started_at=started_at,
+        response=response,
+        cache_hit=True,
+    )
+
+
+@router.api_route(
+    "/rss/{token}/episodes/{episode_slug}/video-prewarmed-absolute.m3u8",
+    methods=["GET", "HEAD"],
+)
+def rss_feed_episode_video_prewarmed_absolute(
+        token: str,
+        episode_slug: str,
+        request: Request,
+):
+    started_at = time.monotonic()
+    response = prefetched_hls_manifest_response(
+        _hls_experiment_cache_key(token, episode_slug),
+        absolute_children=True,
+        head_only=request.method == "HEAD",
+        forced_media_type=HLS_X_MPEGURL,
+    )
+    return _finish_hls_experiment(
+        request,
+        experiment="prewarmed_absolute",
+        started_at=started_at,
+        response=response,
+        cache_hit=True,
     )
 
 
@@ -211,11 +395,18 @@ def rss_feed_episode_video_redirect_307(
         episode_slug: str,
         request: Request,
 ):
+    started_at = time.monotonic()
     url, _ = _resolve_remote_url(token, episode_slug, media_kind="video")
-    return _temporary_stream_redirect(
+    response = _temporary_stream_redirect(
         url,
         head_only=request.method == "HEAD",
         status_code=307,
+    )
+    return _finish_hls_experiment(
+        request,
+        experiment="redirect_307",
+        started_at=started_at,
+        response=response,
     )
 
 
@@ -228,11 +419,18 @@ def rss_feed_episode_video_redirect_308(
         episode_slug: str,
         request: Request,
 ):
+    started_at = time.monotonic()
     url, _ = _resolve_remote_url(token, episode_slug, media_kind="video")
-    return _temporary_stream_redirect(
+    response = _temporary_stream_redirect(
         url,
         head_only=request.method == "HEAD",
         status_code=308,
+    )
+    return _finish_hls_experiment(
+        request,
+        experiment="redirect_308",
+        started_at=started_at,
+        response=response,
     )
 
 

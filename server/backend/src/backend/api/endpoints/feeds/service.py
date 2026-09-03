@@ -18,6 +18,10 @@ from .hls_experiments import (
     HLS_GENERIC_MPEGURL,
     HLS_X_MPEGURL,
 )
+from .hls_probe_experiments import (
+    prewarm_hls_manifests,
+    remember_prefetched_hls_url,
+)
 from backend.db.models import Episode, LocalMediaProfile, RssStreamProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.dailywire_user_info import WlDwMembershipLevel
@@ -60,9 +64,48 @@ _EMBEDDED_HLS_METHODS = {
     "podcasting_2_0",
     "podcasting_2_0_cached_mp4",
 }
+_PREFETCH_URL_METHODS = {
+    RssDwVideoMethod.EXPERIMENT_HLS_CACHED_REDIRECT_302.value,
+}
+_PREFETCH_MANIFEST_METHODS = {
+    RssDwVideoMethod.EXPERIMENT_HLS_PREWARMED_RAW.value,
+    RssDwVideoMethod.EXPERIMENT_HLS_PREWARMED_ABSOLUTE.value,
+}
+_FORCE_HTTPS_HLS_METHODS = {
+    RssDwVideoMethod.EXPERIMENT_HLS_HTTPS_REDIRECT_302.value,
+}
+_FEED_RESOLVED_HLS_METHODS = (
+    _EMBEDDED_HLS_METHODS
+    | _PREFETCH_URL_METHODS
+    | _PREFETCH_MANIFEST_METHODS
+)
 _STABLE_HLS_SOURCES: dict[str, tuple[str, str]] = {
     RssDwVideoMethod.EXPERIMENT_HLS_REDIRECT_302.value: (
         "video.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_HTTPS_REDIRECT_302.value: (
+        "video-https.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_CACHED_REDIRECT_302.value: (
+        "video-cached-302.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_HEAD_200_GET_302.value: (
+        "video-head200.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_REDIRECT_302_HEADERS.value: (
+        "video-302-headers.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PREWARMED_RAW.value: (
+        "video-prewarmed-raw.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PREWARMED_ABSOLUTE.value: (
+        "video-prewarmed-absolute.m3u8",
         HLS_X_MPEGURL,
     ),
     RssDwVideoMethod.EXPERIMENT_HLS_REDIRECT_307.value: (
@@ -452,6 +495,11 @@ def _append_item(
         if stable_source is not None:
             endpoint, hls_mime_type = stable_source
             video_url = f"{media_url}/{endpoint}"
+            if (
+                dw_video_method in _FORCE_HTTPS_HLS_METHODS
+                and video_url.startswith("http://")
+            ):
+                video_url = f"https://{video_url[len('http://') :]}"
 
         if video_url:
             _append_hls_alternate(
@@ -540,9 +588,10 @@ def render_rss_feed(
         _sub_text(image, "title", show.title)
         _sub_text(image, "link", show.sharing_url)
 
-    # Only the known-working embedded-DW controls resolve signed HLS URLs
-    # while rendering the feed. Every 1.1 experiment below uses a stable
-    # WireLoft .m3u8 URL and resolves Daily Wire only when playback begins.
+    # The normal stable-URL experiments keep feed rendering free of external
+    # calls. A few diagnostic methods intentionally resolve or fetch HLS here
+    # so Pocket Casts can later probe an already-warm endpoint. Keep those
+    # methods limited to small feeds while testing.
     client: MiddlewareClient | None = None
     for episode, download in items:
         dw_video_url = None
@@ -550,7 +599,7 @@ def render_rss_feed(
             download is None
             and profile.preferred_format
             != PreferredFormat.FORMAT_AUDIO_ONLY.value
-            and dw_video_method in _EMBEDDED_HLS_METHODS
+            and dw_video_method in _FEED_RESOLVED_HLS_METHODS
         ):
             client = client or MiddlewareClient()
             try:
@@ -560,9 +609,14 @@ def render_rss_feed(
                     media_kind="video",
                     client=client,
                 )
+                cache_key = f"{profile.token}:{episode.slug}"
+                if dw_video_method in _PREFETCH_URL_METHODS:
+                    remember_prefetched_hls_url(cache_key, dw_video_url)
+                elif dw_video_method in _PREFETCH_MANIFEST_METHODS:
+                    prewarm_hls_manifests(cache_key, dw_video_url)
             except HTTPException as exc:
                 logger.warning(
-                    "Could not add Daily Wire video stream for episode '%s': %s",
+                    "Could not prepare Daily Wire video experiment for episode '%s': %s",
                     episode.slug,
                     exc.detail,
                 )
