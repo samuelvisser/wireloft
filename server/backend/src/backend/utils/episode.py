@@ -1,21 +1,32 @@
 import json
+import re
 from collections.abc import Iterable
 
 
 _MANUAL_METADATA_REFRESH_REQUESTS_META_KEY = "manual_metadata_refresh_requests"
 _MANUAL_METADATA_REFRESH_REQUEST_LIMIT = 20
+_SEASONAL_EPISODE_NUMBER = re.compile(r"^S\d+E(?P<number>\d+)(?:\.\d+)?$")
 
 
 def episode_type_info(identifier: str | None) -> dict[str, str | None]:
-    """Splits an episode_identifier like 'ep.4232' or 'ep-extra.101.2' into its type and number."""
+    """Split a WireLoft episode identifier into its type and episode number.
+
+    Seasonal identifiers store both season and episode in the number portion,
+    for example ``ep.S01E07``. Normalize those to the actual episode number so
+    consumers do not have to understand the seasonal identifier format.
+    """
     if not identifier:
         return {"type": None, "number": None}
 
     episode_type, separator, number = identifier.partition(".")
+    if not separator:
+        number = None
+    elif seasonal_match := _SEASONAL_EPISODE_NUMBER.fullmatch(number):
+        number = str(int(seasonal_match.group("number")))
 
     return {
         "type": episode_type or None,
-        "number": number if separator else None,
+        "number": number,
     }
 
 
