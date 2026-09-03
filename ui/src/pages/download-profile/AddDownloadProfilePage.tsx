@@ -133,10 +133,9 @@ export default function AddDownloadProfilePage() {
     const {data: seasonsData} = useShowSeasons(selectedShowSlug)
     const {data: showProfiles} = useDownloadProfilesByShowSlug(selectedShowSlug)
 
-    // Prepare seasons for the SeriesDownloadProfile form (detached: name, dwId, slug)
+    // Prepare seasons for the SeriesDownloadProfile form (detached: name, slug)
     const seasonsForForm: SeasonItem[] = useMemo((): SeasonItem[] => (seasonsData ?? []).map((s: SeasonRead): SeasonItem => ({
         name: s.name,
-        dwId: s.dwId,
         slug: s.slug,
     })), [seasonsData])
 
