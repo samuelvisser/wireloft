@@ -1,6 +1,6 @@
 import json
 import time
-from threading import Lock
+from threading import Condition
 
 from builtins import str
 from dataclasses import dataclass
@@ -28,22 +28,31 @@ from config import get_settings
 
 # ---------------- request pacing (global across dailywire_api) ----------------
 # We intentionally keep this module-level so that all clients share the same pacing state.
-_lock_pacing = Lock()
+# A ticketed Condition serializes request starts without holding the underlying lock while
+# a caller waits for its pacing delay. This prevents queued requests from calculating
+# delays from stale pre-lock timestamps.
+_pacing_condition = Condition()
+_pacing_next_ticket: int = 0
+_pacing_serving_ticket: int = 0
 _last_request_ns: Optional[int] = None
 _ms_since_last_request: Optional[int] = None
 _fast_requests: int = 0
 
 
 def _wait_before_request() -> None:
-    """
-    Enforce pacing rules from get_settings().dw_timeout for every request made by this package.
+    """Enforce the global Daily Wire request pacing policy.
 
-    Rules:
-    - Save ms since last request (measured at the time this function is called, before sleeping).
-    - If elapsed < min_slow_request_ms: increment fast_requests; else reset to 0.
-    - Always ensure at least min_fast_request_ms between request start times.
-    - If fast_requests > max_fast_requests: ensure total delay between requests is min_slow_request_ms instead.
+    Requests take a ticket so their starts remain serialized, but ``Condition.wait``
+    releases the pacing lock while a request is delayed. Timing is sampled only after
+    a caller reaches the front of the queue, so time spent waiting behind another
+    caller can never turn into a negative/stale elapsed interval.
+
+    A request that exceeds ``max_fast_requests`` waits for the configured slow gap and
+    then starts a fresh burst. Resetting the burst counter at that point is important:
+    otherwise every request already queued behind the cooldown would independently
+    incur another full slow delay.
     """
+    global _pacing_next_ticket, _pacing_serving_ticket
     global _last_request_ns, _ms_since_last_request, _fast_requests
 
     st = get_settings().dw_timeout
@@ -51,39 +60,57 @@ def _wait_before_request() -> None:
     min_slow_ms = int(st.min_slow_request_ms)
     max_fast = int(st.max_fast_requests)
 
-    now_ns = time.monotonic_ns()
+    with _pacing_condition:
+        ticket = _pacing_next_ticket
+        _pacing_next_ticket += 1
 
-    with _lock_pacing:
-        # Calculate elapsed since previous request start
-        if _last_request_ns is None:
-            elapsed_ms: Optional[int] = None
-        else:
-            elapsed_ms = int((now_ns - _last_request_ns) / 1_000_000)
+        while ticket != _pacing_serving_ticket:
+            _pacing_condition.wait()
 
-        # Save the raw elapsed ms since the last request (could be None for the first request)
-        _ms_since_last_request = elapsed_ms
+        try:
+            # Sample the clock only after this request owns the pacing turn. A
+            # timestamp captured before waiting in the queue can be minutes stale.
+            now_ns = time.monotonic_ns()
+            if _last_request_ns is None:
+                elapsed_ms: Optional[int] = None
+                next_fast_requests = 0
+                slow_cooldown = False
+                target_start_ns = now_ns
+            else:
+                elapsed_ns = max(0, now_ns - _last_request_ns)
+                elapsed_ms = int(elapsed_ns / 1_000_000)
 
-        # Update fast request counter based on raw elapsed (before any sleep)
-        if elapsed_ms is None or elapsed_ms >= min_slow_ms:
-            _fast_requests = 0
-        else:
-            _fast_requests += 1
+                if elapsed_ms >= min_slow_ms:
+                    next_fast_requests = 0
+                else:
+                    next_fast_requests = _fast_requests + 1
 
-        # Determine the target minimal spacing for this request
-        target_ms = min_fast_ms
-        if _fast_requests > max_fast:
-            target_ms = max(target_ms, min_slow_ms)
+                slow_cooldown = next_fast_requests > max_fast
+                target_ms = min_fast_ms
+                if slow_cooldown:
+                    target_ms = max(target_ms, min_slow_ms)
 
-        # Compute additional sleep needed to reach target_ms (if we have a previous request)
-        sleep_ms = 0
-        if elapsed_ms is not None and elapsed_ms < target_ms:
-            sleep_ms = target_ms - elapsed_ms
+                target_start_ns = max(
+                    now_ns,
+                    _last_request_ns + (target_ms * 1_000_000),
+                )
 
-        if sleep_ms > 0:
-            time.sleep(sleep_ms / 1000.0)
+            _ms_since_last_request = elapsed_ms
 
-        # Mark the start time of this request (post-sleep)
-        _last_request_ns = time.monotonic_ns()
+            # Condition.wait() releases the underlying lock. Other callers can
+            # therefore enqueue while this request is pacing, but cannot overtake
+            # it because only the serving ticket may proceed.
+            while True:
+                remaining_ns = target_start_ns - time.monotonic_ns()
+                if remaining_ns <= 0:
+                    break
+                _pacing_condition.wait(timeout=remaining_ns / 1_000_000_000)
+
+            _last_request_ns = time.monotonic_ns()
+            _fast_requests = 0 if slow_cooldown else next_fast_requests
+        finally:
+            _pacing_serving_ticket += 1
+            _pacing_condition.notify_all()
 
 
 @dataclass(frozen=True)
@@ -135,11 +162,20 @@ class MiddlewareClient:
     HTTP client for DailyWire Middleware API.
 
     Pass an access token if you have one; premium content typically requires it.
+    Request pacing is enabled by default. Low-volume interactive UI reads may
+    explicitly disable it so they are not blocked behind background cooldowns.
     """
 
-    def __init__(self, access_token: Optional[str] = None, request_timeout: float = 30.0, base_url: str = get_settings().dw_api.middleware_api) -> None:
+    def __init__(
+        self,
+        access_token: Optional[str] = None,
+        request_timeout: float = 30.0,
+        base_url: str = get_settings().dw_api.middleware_api,
+        pace_requests: bool = True,
+    ) -> None:
         self._req_timeout = request_timeout
         self._base_url = base_url.rstrip('/')
+        self._pace_requests = bool(pace_requests)
         headers = {
             # These are generally not required for Middleware, but harmless if present
             'Accept': 'application/json',
@@ -615,8 +651,11 @@ class MiddlewareClient:
     def _get_url(self, url: str) -> Dict[str, Any]:
         data: Optional[bytes] = None
         for attempt in range(self._TRANSIENT_RETRIES + 1):
-            # Enforce request pacing according to configuration
-            _wait_before_request()
+            # Background/bulk callers use the global pacing policy. Explicitly
+            # interactive clients bypass only this wait; retries and network
+            # timeouts remain unchanged.
+            if self._pace_requests:
+                _wait_before_request()
 
             req = Request(url, headers=self._headers, method='GET')
             try:

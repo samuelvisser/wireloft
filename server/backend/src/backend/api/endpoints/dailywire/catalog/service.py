@@ -27,7 +27,10 @@ def get_catalog() -> DwCatalogRecord:
             return _catalog_cache[1]
 
         tokens = DeviceAuthClient().get_token()
-        client = MiddlewareClient(access_token=tokens.access_token if tokens else None)
+        client = MiddlewareClient(
+            access_token=tokens.access_token if tokens else None,
+            pace_requests=False,
+        )
         catalog = client.get_catalog()
         _catalog_cache = (monotonic(), catalog)
         return catalog

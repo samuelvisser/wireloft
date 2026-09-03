@@ -9,5 +9,5 @@ def get_user_info() -> DwUserInfo:
     Fetch the current user's information from the DailyWire middleware API
     and normalize it into the UserInfo model.
     """
-    client = MiddlewareClient()
+    client = MiddlewareClient(pace_requests=False)
     return client.get_user_info()
