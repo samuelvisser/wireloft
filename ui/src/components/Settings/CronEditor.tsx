@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useState} from 'react'
+import type {ReactNode} from 'react'
 import Select from 'react-select'
 
 import './CronEditor.css'
@@ -10,7 +11,7 @@ type CronEditorProps = {
     value: string
     onChange: (value: string) => void
     environmentVariable?: string
-    help?: string
+    help?: ReactNode
     error?: string
 }
 
