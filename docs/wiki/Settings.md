@@ -300,7 +300,7 @@ These values control WireLoft's pacing of Daily Wire requests.
 <tr>
 <td><code>dwTimeout.minSlowRequestMs</code></td>
 <td><code>WL_DW_TIMEOUT__MIN_SLOW_REQUEST_MS</code></td>
-<td><code>120.000</code> (1 minute)</td>
+<td><code>120.000</code> (2 minutes)</td>
 </tr>
 <tr>
 <td colspan="3">Slow-request wait value in milliseconds after the fast-request threshold. Must be 0 or greater.</td>

@@ -46,7 +46,7 @@ Mount the directory wherever you want the media to live on the host. Media serve
 
 ## Timezone
 
-Set the standard `TZ` environment variable to an [IANA]([IANA](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List)) timezone:
+Set the standard `TZ` environment variable to an [IANA](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List) timezone:
 
 ```yaml
 environment:
