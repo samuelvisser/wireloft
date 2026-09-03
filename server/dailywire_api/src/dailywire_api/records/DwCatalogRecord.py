@@ -1,17 +1,51 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import AwareDatetime, Field
+from pydantic import AwareDatetime, Field, model_validator
 
 from .BaseRecord import BaseRecord
 
 
-class DwCatalogShowRecord(BaseRecord):
-    dw_id: str
-    slug: str
+def _normalize_catalog_title(title: object, description: object) -> str:
+    """Remove browse-page marketing copy from a Daily Wire catalog title."""
+    original = str(title or "").strip()
+    normalized = original
+    description_text = str(description or "").strip()
+
+    if description_text and normalized.casefold().endswith(description_text.casefold()):
+        normalized = normalized[:len(normalized) - len(description_text)].rstrip()
+        normalized = normalized.rstrip("|").rstrip()
+
+    if " | " in normalized:
+        normalized = normalized.split(" | ", 1)[0].strip()
+
+    return normalized or original
+
+
+class _CatalogTitleRecord(BaseRecord):
     title: str
     description: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_catalog_title(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        normalized_title = _normalize_catalog_title(
+            data.get("title"),
+            data.get("description"),
+        )
+        if normalized_title == data.get("title"):
+            return data
+
+        return {**data, "title": normalized_title}
+
+
+class DwCatalogShowRecord(_CatalogTitleRecord):
+    dw_id: str
+    slug: str
     author_name: Optional[str] = None
     author_slug: Optional[str] = None
     author_headshot_path: Optional[str] = None
@@ -49,12 +83,10 @@ class DwMovieExtraRecord(BaseRecord):
     thumbnail_square_path: Optional[str] = None
 
 
-class DwCatalogMovieRecord(BaseRecord):
+class DwCatalogMovieRecord(_CatalogTitleRecord):
     dw_id: str
     slug: str
-    title: str
     extended_title: Optional[str] = None
-    description: Optional[str] = None
     author_name: Optional[str] = None
     author_slug: Optional[str] = None
     background_image_path: Optional[str] = None
