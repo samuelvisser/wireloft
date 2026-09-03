@@ -89,18 +89,16 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
                     <div className="help" id="rss-dw-video-method-help">
                         <ReadMore summary={<span>Choose how Daily Wire video is exposed to podcast apps.</span>}>
                             <p>
-                                <strong>Podcasting 2.0 direct stream with audio fallback</strong> acts as a true stream. In a podcast player that supports it, video starts playing immediately.
-                                This is the <a href="https://github.com/Podcast-Standards-Project/hls-video">official</a> Podcasting 2.0 method for handling HLS steams.
-                                However, not every podcast client implements it well, making it in some cases even impossible to watch video if it downloaded audio in the backend.
+                                The <strong>Control</strong> methods preserve the behavior already tested with Pocket Casts. Embedded HLS is known to stream video, but it writes short-lived Daily Wire URLs into the RSS and therefore has to resolve them while the feed is generated. Prepared MP4 is stable and compatible, but cannot start until the complete file has been prepared.
                             </p>
                             <p>
-                                <strong>Serve as locally cached mp4</strong> works whenever the podcast app supports video and never serves audio for Daily Wire video. WireLoft must prepare the complete file before it can be served, which can take a while for long episodes.
+                                The <strong>Experiment</strong> methods all put a stable WireLoft URL ending in <code>.m3u8</code> into the RSS. Redirect and proxy variants resolve the currently valid Daily Wire HLS URL only when the podcast player requests that episode. The filename, redirect status and MIME variants intentionally isolate the signals Pocket Casts/AVPlayer may use when classifying HLS media.
                             </p>
                             <p>
-                                <strong>Direct stream with cached mp4 fallback</strong> combines both approaches. Compatible podcast apps can start the HLS video immediately, while downloads and apps without Podcasting 2.0 support receive a locally cached MP4 instead of audio. Preparing that MP4 can still take a while for long episodes.
+                                The prepared local HLS experiment creates a conventional VOD HLS package with local MPEG-TS segments. Its first request can be slow because WireLoft has to prepare the whole package. Opening that episode's <code>prepared/video.m3u8</code> once before subscribing pre-warms the test.
                             </p>
                             <p>
-                                Downloaded files are always served directly and are not affected by this setting.
+                                Experiment methods use method- and feed-specific episode GUIDs so switching methods does not silently reuse Pocket Casts' previous enclosure classification. Downloaded files are always served directly and are not affected by these HLS experiments.
                             </p>
                         </ReadMore>
                     </div>

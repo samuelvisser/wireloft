@@ -13,6 +13,11 @@ from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
 
 from .cached_video import get_cached_mp4_size
+from .hls_experiments import (
+    HLS_APPLE_MPEGURL,
+    HLS_GENERIC_MPEGURL,
+    HLS_X_MPEGURL,
+)
 from backend.db.models import Episode, LocalMediaProfile, RssStreamProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.dailywire_user_info import WlDwMembershipLevel
@@ -40,7 +45,6 @@ _VIDEO_HEIGHTS = {
 _ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd"
 _PODCAST_NS = "https://podcastindex.org/namespace/1.0"
 _ATOM_NS = "http://www.w3.org/2005/Atom"
-_HLS_MIME_TYPE = "application/x-mpegURL"
 _BARE_HTML_AMPERSAND_RE = re.compile(
     r"&(?!(?:#\d+|#x[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);)"
 )
@@ -50,12 +54,51 @@ _CACHED_MP4_METHODS = {
     "cached_mp4",
     "podcasting_2_0_cached_mp4",
 }
-_HLS_ALTERNATE_METHODS = {
+_EMBEDDED_HLS_METHODS = {
     RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value,
     RssDwVideoMethod.STREAM_HLS_DOWNLOAD_MP4.value,
     "podcasting_2_0",
     "podcasting_2_0_cached_mp4",
 }
+_STABLE_HLS_SOURCES: dict[str, tuple[str, str]] = {
+    RssDwVideoMethod.EXPERIMENT_HLS_REDIRECT_302.value: (
+        "video.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_REDIRECT_307.value: (
+        "video-307.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_REDIRECT_308.value: (
+        "video-308.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PROXY_VIDEO_X.value: (
+        "video-proxy.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PROXY_MASTER_X.value: (
+        "master.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PROXY_INDEX_X.value: (
+        "index.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PROXY_VIDEO_APPLE.value: (
+        "video-proxy-apple.m3u8",
+        HLS_APPLE_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PROXY_VIDEO_GENERIC.value: (
+        "video-proxy-generic.m3u8",
+        HLS_GENERIC_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PREPARED_TS.value: (
+        "prepared/video.m3u8",
+        HLS_X_MPEGURL,
+    ),
+}
+_HLS_ALTERNATE_METHODS = _EMBEDDED_HLS_METHODS | set(_STABLE_HLS_SOURCES)
 
 
 def get_rss_stream_profile_by_token(s: Session, token: str) -> RssStreamProfile:
@@ -302,9 +345,10 @@ def _append_hls_alternate(
         *,
         video_url: str,
         preferred_format: str,
+        hls_mime_type: str,
 ) -> None:
     attributes = {
-        "type": _HLS_MIME_TYPE,
+        "type": hls_mime_type,
         "length": "0",
         "bitrate": "2500000",
         "lang": "en",
@@ -328,6 +372,7 @@ def _append_item(
         preferred_format: str,
         dw_video_method: str = DEFAULT_RSS_DW_VIDEO_METHOD,
         dw_video_url: str | None = None,
+        experiment_guid_scope: str | None = None,
 ) -> None:
     item = SubElement(channel, "item")
     _sub_text(item, "title", episode.title)
@@ -336,6 +381,8 @@ def _append_item(
     guid_value = episode.uuid
     if download is None and not wants_audio:
         guid_value = f"{guid_value}:{dw_video_method}"
+        if dw_video_method.startswith("experiment_") and experiment_guid_scope:
+            guid_value = f"{guid_value}:{experiment_guid_scope}"
 
     guid = SubElement(item, "guid", {"isPermaLink": "false"})
     guid.text = guid_value
@@ -358,6 +405,7 @@ def _append_item(
         _sub_text(item, "pubDate", format_datetime(pub_date))
 
     media_url = f"{media_base_url}/episodes/{episode.slug}"
+    audio_url = f"{media_url}/audio.mp3"
     if download is not None:
         file_path = Path(download.file_path)
         length = (
@@ -369,11 +417,14 @@ def _append_item(
             "audio/mpeg" if _is_audio_download(download) else "video/mp4"
         )
         mime_type = mimetypes.guess_type(file_path.name)[0] or default_type
-        enclosure_url = media_url
+        suffix = file_path.suffix.lower() or (
+            ".mp3" if _is_audio_download(download) else ".mp4"
+        )
+        enclosure_url = f"{media_url}/download{suffix}"
     elif wants_audio:
         length = 0
         mime_type = "audio/mpeg"
-        enclosure_url = media_url
+        enclosure_url = audio_url
     elif dw_video_method in _CACHED_MP4_METHODS:
         length = get_cached_mp4_size(episode.uuid) or 0
         mime_type = "video/mp4"
@@ -381,7 +432,7 @@ def _append_item(
     else:
         length = 0
         mime_type = "audio/mpeg"
-        enclosure_url = f"{media_url}/audio"
+        enclosure_url = audio_url
 
     SubElement(
         item,
@@ -394,17 +445,21 @@ def _append_item(
     )
     _sub_text(item, "link", media_url)
 
-    if (
-        download is None
-        and not wants_audio
-        and dw_video_method in _HLS_ALTERNATE_METHODS
-        and dw_video_url
-    ):
-        _append_hls_alternate(
-            item,
-            video_url=dw_video_url,
-            preferred_format=preferred_format,
-        )
+    if download is None and not wants_audio and dw_video_method in _HLS_ALTERNATE_METHODS:
+        video_url = dw_video_url
+        hls_mime_type = HLS_X_MPEGURL
+        stable_source = _STABLE_HLS_SOURCES.get(dw_video_method)
+        if stable_source is not None:
+            endpoint, hls_mime_type = stable_source
+            video_url = f"{media_url}/{endpoint}"
+
+        if video_url:
+            _append_hls_alternate(
+                item,
+                video_url=video_url,
+                preferred_format=preferred_format,
+                hls_mime_type=hls_mime_type,
+            )
 
     _sub_text(
         item,
@@ -485,6 +540,9 @@ def render_rss_feed(
         _sub_text(image, "title", show.title)
         _sub_text(image, "link", show.sharing_url)
 
+    # Only the known-working embedded-DW controls resolve signed HLS URLs
+    # while rendering the feed. Every 1.1 experiment below uses a stable
+    # WireLoft .m3u8 URL and resolves Daily Wire only when playback begins.
     client: MiddlewareClient | None = None
     for episode, download in items:
         dw_video_url = None
@@ -492,7 +550,7 @@ def render_rss_feed(
             download is None
             and profile.preferred_format
             != PreferredFormat.FORMAT_AUDIO_ONLY.value
-            and dw_video_method in _HLS_ALTERNATE_METHODS
+            and dw_video_method in _EMBEDDED_HLS_METHODS
         ):
             client = client or MiddlewareClient()
             try:
@@ -517,6 +575,7 @@ def render_rss_feed(
             preferred_format=profile.preferred_format,
             dw_video_method=dw_video_method,
             dw_video_url=dw_video_url,
+            experiment_guid_scope=profile.token,
         )
 
     return tostring(rss, encoding="UTF-8", xml_declaration=True)
