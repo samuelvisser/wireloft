@@ -1,6 +1,6 @@
 # Downloads and File Integrity
 
-WireLoft's Downloads area tracks the concrete media files produced by Download Profiles and manual movie/episode actions. This is separate from the profile definitions themselves: profiles describe desired behavior, while download records describe actual work and files.
+WireLoft's Downloads area tracks the concrete media files produced by Download Profiles and manual movie/episode downloads. This is separate from the profile definitions themselves: profiles describe desired behavior, while download records describe actual work and files.
 
 ## Download lifecycle
 

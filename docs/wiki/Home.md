@@ -1,8 +1,8 @@
 # WireLoft Wiki
 
-WireLoft is a self-hosted media manager for Daily Wire shows, podcasts, series, and movies. It can index your library, download media to local storage, or expose shows as private RSS feeds that stream downloaded files and/or media directly from Daily Wire.
+WireLoft is a self-hosted media manager for Daily Wire shows, podcasts, series, and movies. It can index your library, download media to local storage, or expose shows as private RSS feeds that stream downloaded files and/or media directly from The Daily Wire.
 
-This Wiki documents the current WireLoft 1.0-era `develop` implementation.
+This Wiki documents the WireLoft 1.0-era implementation.
 
 ## Start here
 

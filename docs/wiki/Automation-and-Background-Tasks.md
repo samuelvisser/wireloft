@@ -2,7 +2,7 @@
 
 WireLoft uses an internal scheduler and task system to keep managed media current without repeatedly re-indexing everything manually.
 
-The important distinction is that several jobs solve different lifecycle stages: **discovering a new episode**, **watching an episode that exists but is not final yet**, **refreshing metadata after publication**, **downloading eligible media**, and **verifying files already on disk**.
+Several jobs solve different lifecycle stages: **discovering a new episode**, **watching an episode that exists but is not final yet**, **refreshing metadata after publication**, **downloading eligible media**, and **verifying files already on disk**.
 
 ## Scheduler
 

@@ -20,15 +20,13 @@ Podcast profiles are designed for rolling episode libraries.
 
 ### Download with countdown
 
-Some Daily Wire episodes appear before the final media is ready and initially contain the countdown used around live shows.
+Some Daily Wire episodes appear before the final media is ready and initially contain the countdown used in live shows.
 
 Enable **Download with countdown** if you want WireLoft to download that early version. If it is disabled, WireLoft waits until the episode is considered past the countdown stage.
 
 ### Redownload final version
 
 When countdown downloading is enabled, **Redownload final version** lets WireLoft replace that early file with the finalized media after the countdown is expected to have disappeared.
-
-The timing used to decide those publication stages is configurable under `episodeStatusTiming`; see [[Settings]].
 
 ### Limit downloads
 

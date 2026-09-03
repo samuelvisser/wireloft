@@ -1,6 +1,6 @@
 # Podcast RSS Feeds
 
-WireLoft can expose a managed show as a private RSS 2.0 podcast/video feed. The feed can serve downloaded media, stream directly from Daily Wire when no suitable local file exists, or combine both approaches.
+WireLoft can expose a managed show as a private RSS 2.0 podcast/video feed. The feed can serve downloaded media, stream directly from Daily Wire, or combine both approaches.
 
 > [!CAUTION]
 > **Treat the complete WireLoft RSS feed URL like a password or API key.** The URL contains a secret token that authorizes access to the feed and the media exposed through it. RSS endpoints intentionally remain reachable without the WireLoft administrator login so podcast clients can use them. Anyone who obtains the URL can use that access too, including for premium media available through your WireLoft/Daily Wire session.
@@ -35,8 +35,6 @@ WireLoft can serve completed files already stored locally. This gives the podcas
 WireLoft can request a fresh media URL from Daily Wire when the podcast client asks for an episode.
 
 When **both** options are enabled, WireLoft prefers a suitable completed local download. If none is available, it falls back to Daily Wire. This hybrid mode is useful when you keep only recent episodes locally but still want older episodes available through the feed.
-
-If neither source is enabled, the feed has no media items to expose.
 
 ### 2. Enable streaming
 
@@ -155,8 +153,6 @@ For a remote client, both the XML feed and every media URL it contains must be r
 /feeds/rss/<token>/episodes/<episode>/video.mp4
 ```
 
-You normally should not put WireLoft's UI login in front of these endpoints. The feed token is deliberately the RSS authentication mechanism.
-
 Use HTTPS whenever the feed leaves a trusted private network. HTTPS protects the secret URL from passive observation in transit.
 
 ## How WireLoft chooses an enclosure
@@ -190,12 +186,6 @@ If the URL is exposed:
 4. Remove the old URL from places where it may have been stored or shared.
 
 Regeneration creates a new secret token and immediately makes the previous token invalid.
-
-Do not rely on changing only the visible hostname or show slug to revoke access. Rotate the token.
-
-## Feed caching
-
-WireLoft sends no-cache headers for RSS responses and temporary Daily Wire redirects. Podcast clients can still maintain their own local feed/media caches according to their application behavior, so a regenerated token prevents future WireLoft requests but cannot remotely erase media a client already downloaded.
 
 ## Troubleshooting RSS
 

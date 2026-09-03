@@ -2,14 +2,14 @@
 
 WireLoft has one centralized settings model. Settings can come from `config.yml`, environment variables, a dotenv file, file secrets, or built-in defaults.
 
-This page lists **every configurable field in the current `AppSettings` model**, its YAML key, environment-variable equivalent, default, and purpose.
+This page lists every configurable setting in WireLoft, its YAML key, environment-variable equivalent, default, and purpose.
 
 ## Configuration precedence
 
 From highest to lowest priority, WireLoft uses:
 
 1. values passed directly to the settings model internally;
-2. process environment variables (`WL_*` plus the special `TZ` variable);
+2. process environment variables (usually prepended with `WL_*`);
 3. the dotenv file;
 4. `config.yml`;
 5. file-secret settings;
@@ -35,22 +35,6 @@ is equivalent to:
 ```text
 WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS=3
 ```
-
-### Timezone exception
-
-`timezone` is deliberately different:
-
-```yaml
-timezone: Europe/Amsterdam
-```
-
-is overridden with:
-
-```text
-TZ=Europe/Amsterdam
-```
-
-`WL_TIMEZONE` is intentionally ignored as an environment override. This keeps WireLoft aligned with the conventional container `TZ` variable.
 
 ## Configuration source locations
 
@@ -80,22 +64,9 @@ Where the Docker-seeded value differs from the model fallback, both are called o
 
 | `config.yml` key | Environment variable | Default | What it does |
 | --- | --- | --- | --- |
-| `appVersion` | `WL_APP_VERSION` | `0.1.0` | Internal application-version field. It is frozen after settings initialization and normally should not be overridden manually. |
 | `databasePath` | `WL_DATABASE_PATH` | `<project>/config/wireloft.db` | Path to the SQLite database. WireLoft derives `databaseUrl` from this value. |
 | `logLevel` | `WL_LOG_LEVEL` | `INFO` | Application logging level. Allowed values: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Input is normalized to uppercase. |
-| `timezone` | **`TZ`** | `UTC` | Application timezone used by date/time-aware behavior and scheduling. Must be a valid IANA zone such as `Europe/Amsterdam`. `WL_TIMEZONE` is intentionally not used. |
-
-### Computed `databaseUrl`
-
-`databaseUrl` is a computed field in the form:
-
-```text
-sqlite:///<databasePath>
-```
-
-It is not an independent `config.yml` or environment setting.
-
----
+| `timezone` | **`TZ`** | `UTC` | Application timezone used by date/time-aware behavior and scheduling. Must be a valid IANA zone such as `Europe/Amsterdam`. |
 
 ## Cryptography and application secret
 
@@ -151,11 +122,11 @@ These settings describe the Daily Wire device/OAuth client used by WireLoft. The
 
 These values control WireLoft's pacing of Daily Wire requests.
 
-| `config.yml` key | Environment variable | Default | What it does |
-| --- | --- | --- | --- |
-| `dwTimeout.minFastRequestMs` | `WL_DW_TIMEOUT__MIN_FAST_REQUEST_MS` | `100` | Minimum spacing, in milliseconds, associated with fast requests. Must be 0 or greater. |
-| `dwTimeout.maxFastRequests` | `WL_DW_TIMEOUT__MAX_FAST_REQUESTS` | `350` | Maximum number of fast requests before the slower pacing rule applies. Must be at least 1. |
-| `dwTimeout.minSlowRequestMs` | `WL_DW_TIMEOUT__MIN_SLOW_REQUEST_MS` | `120` | Slow-request wait value in milliseconds after the fast-request threshold. Must be 0 or greater. This documents the exact current code default. |
+| `config.yml` key | Environment variable | Default              | What it does |
+| --- | --- |----------------------| --- |
+| `dwTimeout.minFastRequestMs` | `WL_DW_TIMEOUT__MIN_FAST_REQUEST_MS` | `100`                | Minimum spacing, in milliseconds, associated with fast requests. Must be 0 or greater. |
+| `dwTimeout.maxFastRequests` | `WL_DW_TIMEOUT__MAX_FAST_REQUESTS` | `350`                | Maximum number of fast requests before the slower pacing rule applies. Must be at least 1. |
+| `dwTimeout.minSlowRequestMs` | `WL_DW_TIMEOUT__MIN_SLOW_REQUEST_MS` | `120.000` (1 minute) | Slow-request wait value in milliseconds after the fast-request threshold. Must be 0 or greater. |
 
 These are advanced safety/tuning settings. Raising request rates may increase the chance of remote throttling or unstable behavior.
 
@@ -201,12 +172,6 @@ All cron strings use standard five-field cron syntax (`minute hour day-of-month 
 | `newEpisodeSchedule.checkNoShowTodayCron` | `WL_NEW_EPISODE_SCHEDULE__CHECK_NO_SHOW_TODAY_CRON` | `0 */6 * * *` | Rechecks Daily Wire `No Show Today` placeholder state every six hours by default. |
 | `newEpisodeSchedule.metadataRefreshIntervals` | `WL_NEW_EPISODE_SCHEDULE__METADATA_REFRESH_INTERVALS` | `5m,15m,30m,1h,3h,6h,24h` | Offsets after publication at which finalized episode metadata is refreshed. Values must be positive `s`, `m`, `h`, or `d` tokens, comma-separated, unique, and strictly increasing. |
 
-Example custom refresh sequence:
-
-```yaml
-newEpisodeSchedule:
-  metadataRefreshIntervals: 10m,30m,2h,12h,1d
-```
 
 ---
 
@@ -214,12 +179,16 @@ newEpisodeSchedule:
 
 Daily Wire can report an episode as published before the media has fully transitioned away from a live/countdown version. WireLoft uses two timing thresholds.
 
-| `config.yml` key | Environment variable | Default | What it does |
-| --- | --- | --- | --- |
-| `episodeStatusTiming.publishedCountdownAfterMinutes` | `WL_EPISODE_STATUS_TIMING__PUBLISHED_COUNTDOWN_AFTER_MINUTES` | `20` | Minutes after Daily Wire reports publication before WireLoft may treat the episode as being in the published/countdown stage. Minimum 0. |
-| `episodeStatusTiming.publishedFinalAfterMinutes` | `WL_EPISODE_STATUS_TIMING__PUBLISHED_FINAL_AFTER_MINUTES` | `180` | Minutes after publication before WireLoft can safely treat the episode as final/past the countdown stage. Must be at least the countdown threshold. |
+| `config.yml` key | Environment variable | Default | What it does                                                                                                                                                                                                                                                                     |
+| --- | --- | --- |----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `episodeStatusTiming.publishedCountdownAfterMinutes` | `WL_EPISODE_STATUS_TIMING__PUBLISHED_COUNTDOWN_AFTER_MINUTES` | `20` | Safety fallback: usually WireLoft can very accurately determine episode status. If something seems to be hanging, this is the fallback. Minutes after Daily Wire reports publication before WireLoft may treat the episode as being in the published/countdown stage. Minimum 0. |
+| `episodeStatusTiming.publishedFinalAfterMinutes` | `WL_EPISODE_STATUS_TIMING__PUBLISHED_FINAL_AFTER_MINUTES` | `180` | Safety fallback: usually WireLoft can very accurately determine episode status. If something seems to be hanging, this is the fallback. Minutes after publication before WireLoft can safely treat the episode as final/past the countdown stage. Must be at least the countdown threshold.                                                                                                                              |
 
-These settings are particularly relevant to Podcast Download Profiles using **Download with countdown** and **Redownload final version**.
+These settings are all safety fallbacks, mostly originating from a time when The Daily Wire's API did not provide any useful information about episode publish status.
+It still doesnt, really, but it does expose when an episode is eligible to be downloaded (on The Daily Wire website itself), which happens to be true only if the episode
+is fully published. WireLoft now uses this and its very reliable. As its still a workaround though, these settings provide a fallback for if for example The Daily Wire
+ever decides to stop supporting downloads ect.
+
 
 ---
 
@@ -301,9 +270,3 @@ environment:
   - WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS=2
   - WL_FILE_WATCHER__SCAN_CRON=*/20 * * * *
 ```
-
-## Why the Settings UI may show an environment override
-
-If a field is controlled by an environment variable, changing `config.yml` cannot win because environment values have higher priority. Remove/change the environment variable if you want the YAML/UI value to take effect.
-
-This precedence is also why WireLoft should not silently copy effective environment values into `config.yml`: doing so would make it unclear which source is authoritative.

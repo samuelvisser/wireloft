@@ -53,7 +53,7 @@ Before a major upgrade, take a fresh `/config` backup.
 
 ## Configuration upgrades
 
-The default `config.yml` shipped with WireLoft is copied only when a configuration file does not already exist. An upgrade does **not** overwrite your existing file with a new full default.
+The default `config.yml` shipped with WireLoft is copied only when a configuration file does not already exist. 
 
 That behavior is intentional: settings omitted from your YAML continue to receive their current application defaults, while values you explicitly customized remain yours.
 

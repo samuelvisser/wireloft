@@ -8,7 +8,8 @@ WireLoft uses Daily Wire's **device authorization flow**. You follow the sign-in
 
 Connecting an account allows WireLoft to access content included with that membership. This is required for premium downloads and for RSS profiles that stream premium media directly from Daily Wire.
 
-You can skip this step and connect later, but features that require Daily Wire authentication will remain unavailable until you do.
+You can skip this step if you want, WireLoft will also work without a Daily Wire account attached for any content that is publicly accessible. If you can view it on The Daily Wire website without
+a login, WireLoft can use it without Daily Wire authentication.
 
 ## 2. Protect the WireLoft UI
 

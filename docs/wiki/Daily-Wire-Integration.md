@@ -13,7 +13,7 @@ During onboarding or from the Daily Wire authentication area:
 3. Daily Wire confirms authorization to WireLoft.
 4. WireLoft stores the resulting authentication state under its persistent `/config` data.
 
-Your Daily Wire password is entered only into Daily Wire's own authorization experience, not into WireLoft.
+Your Daily Wire password is entered only into Daily Wire's own authorization experience, never into WireLoft.
 
 ## Membership access
 
