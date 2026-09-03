@@ -1,0 +1,46 @@
+name: Publish GitHub Wiki
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/wiki/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-wiki
+  cancel-in-progress: true
+
+jobs:
+  publish-wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Clone GitHub Wiki
+        env:
+          WIKI_URL: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.wiki.git
+        run: git clone "$WIKI_URL" wiki
+
+      - name: Sync wiki content
+        env:
+          WIKI_URL: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.wiki.git
+        shell: bash
+        run: |
+          rsync -a --delete --exclude='.git/' docs/wiki/ wiki/
+
+          git -C wiki add -A
+          if git -C wiki diff --cached --quiet; then
+            echo "GitHub Wiki is already up to date."
+            exit 0
+          fi
+
+          git -C wiki config user.name "github-actions[bot]"
+          git -C wiki config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C wiki commit -m "Sync wiki from ${GITHUB_SHA}"
+          git -C wiki push "$WIKI_URL" HEAD
