@@ -46,7 +46,7 @@ You may also skip adding media during onboarding and configure it later from the
 For most installations:
 
 1. Persist both `/config` and `/downloads`.
-2. Set `TZ` to your local IANA timezone.
+2. Set `TZ` to your local [IANA](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List) timezone.
 3. Connect your Daily Wire account.
 4. Set `WL_ADMIN_AUTH__PASSWORD` if WireLoft is accessible outside a completely trusted LAN.
 5. Add one show without aggressive download rules first, then verify its metadata and available episode types.

@@ -66,7 +66,7 @@ Where the Docker-seeded value differs from the model fallback, both are called o
 | --- | --- | --- | --- |
 | `databasePath` | `WL_DATABASE_PATH` | `<project>/config/wireloft.db` | Path to the SQLite database. WireLoft derives `databaseUrl` from this value. |
 | `logLevel` | `WL_LOG_LEVEL` | `INFO` | Application logging level. Allowed values: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Input is normalized to uppercase. |
-| `timezone` | **`TZ`** | `UTC` | Application timezone used by date/time-aware behavior and scheduling. Must be a valid IANA zone such as `Europe/Amsterdam`. |
+| `timezone` | **`TZ`** | `UTC` | Application timezone used by date/time-aware behavior and scheduling. Must be a valid [IANA]([IANA](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List)) zone such as `Europe/Amsterdam`. |
 
 ## Cryptography and application secret
 

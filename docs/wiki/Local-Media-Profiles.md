@@ -2,7 +2,7 @@
 
 A Local Media Profile defines **what kind of file WireLoft writes and where that file goes**. Download Profiles then reference these profiles to decide which content should be downloaded.
 
-This separation lets one show have several local representations, such as audio-only and 1080p video, without duplicating all of the download-selection settings.
+This separation lets one show have several local representations, such as audio-only and 1080p video, without duplicating all the download-selection settings.
 
 ## Profile types
 
@@ -17,7 +17,7 @@ Show profiles can use:
 
 ### Movie
 
-Movie profiles can use 4K, 1080p, or 720p video. Audio-only Movie Local Media Profiles are rejected.
+Movie profiles can use 4K, 1080p, or 720p video.
 
 ## Output templates
 
@@ -25,7 +25,6 @@ Every profile has a Jinja output template. The template:
 
 - must start with `/downloads/`;
 - must end with `.ext`;
-- must be between 16 and 4096 characters;
 - may only reference variables valid for that media type.
 
 `.ext` is a WireLoft placeholder: the actual extension is selected from the media format produced by the download.
@@ -37,8 +36,6 @@ Example:
 ```
 
 The `/downloads/` prefix is virtual. It maps to `downloadSettings.downloadRoot`, which is `/downloads` in the supplied Docker configuration.
-
-WireLoft uses a sandboxed Jinja environment with only the supplied media values. Older WireLoft templates using `{field}` are automatically upgraded to `{{ field }}` syntax.
 
 ## Show template variables
 
@@ -107,7 +104,7 @@ These describe the main movie **or** the specific extra currently being download
 
 ### Movie collision protection
 
-A Movie Local Media Profile must use at least one item-specific variable. Otherwise the main movie and an extra could resolve to the same output path and overwrite each other.
+A Movie Local Media Profile must use at least one item-specific variable. Otherwise, the main movie and an extra could resolve to the same output path and overwrite each other.
 
 Good examples include `{{ title }}`, `{{ dw_id }}`, `{{ media_type }}`, or an item-specific date field.
 
