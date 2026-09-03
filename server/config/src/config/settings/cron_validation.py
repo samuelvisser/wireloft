@@ -8,6 +8,27 @@ from apscheduler.triggers.cron import CronTrigger
 _CRON_INTERVAL_SAMPLE_SIZE = 2048
 
 
+class WorkerCronIntervalError(ValueError):
+    """A worker cron can execute more often than the Daily Wire slow-request delay."""
+
+    def __init__(
+        self,
+        *,
+        setting_name: str,
+        field_path: tuple[str, str],
+        minimum_seconds: float,
+        required_seconds: float,
+    ) -> None:
+        self.setting_name = setting_name
+        self.field_path = field_path
+        self.minimum_seconds = minimum_seconds
+        self.required_seconds = required_seconds
+        super().__init__(
+            f"{setting_name} runs as often as every {minimum_seconds:g} seconds, "
+            f"but Daily Wire slow-request delay requires at least {required_seconds:g} seconds"
+        )
+
+
 def minimum_cron_interval_seconds(expression: str) -> float:
     """Return the smallest observed gap between consecutive cron fire times.
 
@@ -44,13 +65,16 @@ def validate_worker_cron_interval(
     *,
     min_interval_ms: int,
     setting_name: str,
+    field_path: tuple[str, str],
 ) -> None:
     minimum_seconds = minimum_cron_interval_seconds(expression)
     required_seconds = max(0, min_interval_ms) / 1000.0
     if minimum_seconds + 1e-9 < required_seconds:
-        raise ValueError(
-            f"{setting_name} runs as often as every {minimum_seconds:g} seconds, "
-            f"but Daily Wire slow-request delay requires at least {required_seconds:g} seconds"
+        raise WorkerCronIntervalError(
+            setting_name=setting_name,
+            field_path=field_path,
+            minimum_seconds=minimum_seconds,
+            required_seconds=required_seconds,
         )
 
 
@@ -63,15 +87,36 @@ def validate_worker_cron_settings(
     verify_downloads_cron: str,
     file_watcher_scan_cron: str,
 ) -> None:
-    for setting_name, expression in (
-        ("Find episodes", find_episodes_cron),
-        ("Monitor pending episodes", monitor_episode_cron),
-        ("Check no-show-today episodes", check_no_show_today_cron),
-        ("Verify downloads", verify_downloads_cron),
-        ("File watcher scan", file_watcher_scan_cron),
+    for setting_name, field_path, expression in (
+        (
+            "Find episodes",
+            ("new_episode_schedule", "find_episodes_cron"),
+            find_episodes_cron,
+        ),
+        (
+            "Monitor pending episodes",
+            ("new_episode_schedule", "monitor_episode_cron"),
+            monitor_episode_cron,
+        ),
+        (
+            "Check no-show-today episodes",
+            ("new_episode_schedule", "check_no_show_today_cron"),
+            check_no_show_today_cron,
+        ),
+        (
+            "Verify downloads",
+            ("download_settings", "verify_downloads_cron"),
+            verify_downloads_cron,
+        ),
+        (
+            "File watcher scan",
+            ("file_watcher", "scan_cron"),
+            file_watcher_scan_cron,
+        ),
     ):
         validate_worker_cron_interval(
             expression,
             min_interval_ms=min_slow_request_ms,
             setting_name=setting_name,
+            field_path=field_path,
         )

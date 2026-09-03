@@ -1,4 +1,5 @@
 import {z} from 'zod'
+import {createServerErrorMapper} from '../../utils/serverMessageMap'
 
 
 const CryptoFileSettingsSchema = z.object({
@@ -157,6 +158,16 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
     fileWatcher: FileWatcherSettingsSchema.extend({
         scanCron: cronExpression,
     }),
+})
+
+const WORKER_CRON_MINIMUM_MESSAGE = 'This worker runs more often than the configured DailyWire slow-request delay. Increase this cron interval, or change DailyWire → Request pacing → Minimum slow-request delay.'
+
+export const SettingsServerErrors = createServerErrorMapper({
+    'values.newEpisodeSchedule.findEpisodesCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
+    'values.newEpisodeSchedule.monitorEpisodeCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
+    'values.newEpisodeSchedule.checkNoShowTodayCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
+    'values.downloadSettings.verifyDownloadsCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
+    'values.fileWatcher.scanCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
 })
 
 export const SETTINGS_FIELD_PATHS = [

@@ -65,7 +65,7 @@ def test_worker_cron_validation_handles_non_uniform_schedules():
         )
 
 
-def test_settings_api_rejects_too_fast_worker_cron():
+def test_settings_api_rejects_too_fast_worker_cron_on_the_cron_field():
     from backend.api.models.settings import SettingsAPIUpdate, SettingsValues
 
     values = SettingsValues.from_app_settings(AppSettings(timezone="UTC")).model_dump(
@@ -74,11 +74,23 @@ def test_settings_api_rejects_too_fast_worker_cron():
     )
     values["newEpisodeSchedule"]["monitorEpisodeCron"] = "* * * * *"
 
-    with pytest.raises(ValidationError, match="requires at least 120 seconds"):
+    with pytest.raises(ValidationError, match="requires at least 120 seconds") as exc_info:
         SettingsAPIUpdate.model_validate({
             "values": values,
             "changedFields": ["newEpisodeSchedule.monitorEpisodeCron"],
         })
+
+    matching_errors = [
+        error
+        for error in exc_info.value.errors()
+        if error["loc"] == (
+            "values",
+            "newEpisodeSchedule",
+            "monitorEpisodeCron",
+        )
+    ]
+    assert len(matching_errors) == 1
+    assert matching_errors[0]["type"] == "worker_cron_interval_too_short"
 
 
 def test_settings_api_revalidates_crons_when_slow_delay_is_increased():

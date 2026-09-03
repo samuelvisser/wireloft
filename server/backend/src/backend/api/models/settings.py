@@ -7,11 +7,12 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.triggers.cron import CronTrigger
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator, model_validator
 from pydantic.alias_generators import to_camel
+from pydantic_core import PydanticCustomError
 
 from backend.api.models.base import RequestBase, ResponseBase
-from config.settings.cron_validation import validate_worker_cron_settings
+from config.settings.cron_validation import WorkerCronIntervalError, validate_worker_cron_settings
 from config.settings.settings import AppSettings
 from config.settings.submodels import (
     FilenameRestrictionMode,
@@ -295,14 +296,35 @@ class SettingsValues(_SettingsValueModel):
 
     @model_validator(mode="after")
     def _validate_worker_cron_minimums(self):
-        validate_worker_cron_settings(
-            min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
-            find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
-            monitor_episode_cron=self.new_episode_schedule.monitor_episode_cron,
-            check_no_show_today_cron=self.new_episode_schedule.check_no_show_today_cron,
-            verify_downloads_cron=self.download_settings.verify_downloads_cron,
-            file_watcher_scan_cron=self.file_watcher.scan_cron,
-        )
+        try:
+            validate_worker_cron_settings(
+                min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
+                find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
+                monitor_episode_cron=self.new_episode_schedule.monitor_episode_cron,
+                check_no_show_today_cron=self.new_episode_schedule.check_no_show_today_cron,
+                verify_downloads_cron=self.download_settings.verify_downloads_cron,
+                file_watcher_scan_cron=self.file_watcher.scan_cron,
+            )
+        except WorkerCronIntervalError as exc:
+            value: Any = self
+            for segment in exc.field_path:
+                value = getattr(value, segment)
+            alias_path = tuple(to_camel(segment) for segment in exc.field_path)
+            error_type = PydanticCustomError(
+                "worker_cron_interval_too_short",
+                "{message}",
+                {"message": str(exc)},
+            )
+            raise ValidationError.from_exception_data(
+                self.__class__.__name__,
+                [
+                    {
+                        "type": error_type,
+                        "loc": alias_path,
+                        "input": value,
+                    }
+                ],
+            ) from exc
         return self
 
     @classmethod

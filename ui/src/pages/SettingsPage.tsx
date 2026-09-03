@@ -17,6 +17,7 @@ import {
     type SettingsFieldPath,
     type SettingsRead,
     SettingsReadSchema,
+    SettingsServerErrors,
     type SettingsValues,
 } from '../types/schemas/settings'
 import {buildServerAwareSubmit} from '../utils/buildServerAwareSubmit'
@@ -148,6 +149,7 @@ export default function SettingsPage() {
             successStatuses: [200],
             parseSuccess: async (response) => SettingsReadSchema.parse(await response.json()),
             fieldAlias: {...SETTINGS_SERVER_FIELD_ALIASES},
+            mapMessage: SettingsServerErrors,
             rootOnFieldErrors: true,
             onSuccess: (settings) => {
                 queryClient.setQueryData(['settings'], settings)
