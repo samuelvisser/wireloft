@@ -73,6 +73,11 @@ services:
 * `WL_ADMIN_AUTH__PASSWORD` -- Set this to require a password to access the Web UI. Leave it unset for open access on your local network. Always set this when exposing WireLoft through a reverse proxy.
 * `API_URL` -- Override the API base URL given to the Web UI. This defaults to the relative `/api`, which works out of the box regardless of which host port you map.
 
+Literally every setting WireLoft provides can be managed by environment variables, too. However, I generally do not advise
+using environment variables for anything but the above examples. Any setting configured by environment variable cannot be changed in the WireLoft UI.
+
+Full documentation for all available settings is a work in progress. For now, just use the UI or check [settings](https://github.com/samuelvisser/wireloft/blob/main/server/config/src/config/settings/settings.py).
+
 ## Special thanks
 
 While WireLoft is built entirely from the ground up with original code, the open-source [DailyWirePodcastProxy](https://github.com/fpnewton/DailyWirePodcastProxy) project has helped tremendously in figuring out how The Daily Wire API works. 
