@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from task_manager.scheduler.operation_control import (
+    cancel_operation as cancel_task_operation,
+    restart_operation as restart_task_operation,
+)
 from task_manager.scheduler.operations import (
     get_operation as get_task_operation,
     list_operations as list_task_operations,
@@ -32,3 +36,11 @@ def get_operation(operation_id: str) -> dict | None:
 
 def mark_operation_seen(operation_id: str) -> dict | None:
     return mark_task_operation_seen(operation_id)
+
+
+def cancel_operation(operation_id: str) -> dict | None:
+    return cancel_task_operation(operation_id)
+
+
+def restart_operation(operation_id: str) -> dict | None:
+    return restart_task_operation(operation_id)

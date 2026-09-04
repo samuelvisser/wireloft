@@ -3,7 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from backend.api.models.operations import TaskOperationRead
-from .service import get_operation, list_operations, mark_operation_seen
+from .service import (
+    cancel_operation,
+    get_operation,
+    list_operations,
+    mark_operation_seen,
+    restart_operation,
+)
 
 
 router = APIRouter(prefix="/operations", tags=["Operations"])
@@ -41,6 +47,30 @@ def operation(operation_id: str):
 def operation_seen(operation_id: str):
     """Acknowledge a terminal UI operation after its notification was presented."""
     result = mark_operation_seen(operation_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Operation not found")
+    return result
+
+
+@router.post("/{operation_id}/cancel", response_model=TaskOperationRead)
+def operation_cancel(operation_id: str):
+    """Cancel a queued/running operation and stop recoverable work."""
+    try:
+        result = cancel_operation(operation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Operation not found")
+    return result
+
+
+@router.post("/{operation_id}/restart", response_model=TaskOperationRead)
+def operation_restart(operation_id: str):
+    """Restart unfinished logical targets without repeating completed work."""
+    try:
+        result = restart_operation(operation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="Operation not found")
     return result

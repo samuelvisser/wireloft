@@ -192,7 +192,7 @@ export default function OperationNotifier({children}: {children: ReactNode}) {
       const message = terminalMessage(operation)
       if (operation.status === 'SUCCEEDED') {
         toast.success(message, {duration: 5000})
-      } else if (operation.status === 'PARTIAL') {
+      } else if (operation.status === 'PARTIAL' || operation.status === 'CANCELED') {
         toast(message, {duration: 6000})
       } else {
         toast.error(message, {duration: 6000})

@@ -11,6 +11,7 @@ import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import ShowIndexingProgress from '../../components/ShowIndexingProgress/ShowIndexingProgress'
 import ShowSyncLogModal from '../../components/ShowSyncLogModal/ShowSyncLogModal'
+import {OperationControlError, type OperationControlAction, useControlOperation} from '../../lib/operations'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import {loadEpisodesFromStorage, removeEpisodesFromStorage, saveEpisodesToStorage} from '../../lib/cache'
 import './ShowPage.css'
@@ -30,6 +31,7 @@ export default function ShowPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const controlOperation = useControlOperation()
   const PAGE_SIZE = 25
 
   const { data: show, isLoading, error } = useShow(id)
@@ -72,6 +74,7 @@ export default function ShowPage() {
   const [syncLogOpen, setSyncLogOpen] = useState(false)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
+  const [operationControlBusy, setOperationControlBusy] = useState<string | null>(null)
 
   const operationResourceId = show?.id ?? null
   const syncOperation = useActiveOperation('show.sync', 'show', operationResourceId)
@@ -205,6 +208,45 @@ export default function ShowPage() {
           : attachedDownloadProfiles.length === 0
             ? `No Download Profiles are attached to ${show.title}.`
             : undefined
+
+  const controlTaskOperation = async (
+    operationId: string,
+    action: OperationControlAction,
+    label: string,
+  ) => {
+    if (operationControlBusy !== null) return
+    const busyKey = `${operationId}:${action}`
+    setOperationControlBusy(busyKey)
+    try {
+      await controlOperation(operationId, action)
+      toast.success(action === 'restart' ? `${label} restarted` : `${label} canceled`)
+    } catch (error) {
+      const detail = error instanceof OperationControlError ? error.message : undefined
+      toast.error(`Could not ${action} ${label}${detail ? `: ${detail}` : ''}`)
+    } finally {
+      setOperationControlBusy((current) => current === busyKey ? null : current)
+    }
+  }
+
+  const operationControls = (operationId: string | undefined, label: string) => {
+    if (!operationId) return undefined
+    const controlsBusy = operationControlBusy !== null
+    return [
+      {
+        label: `Restart ${label}`,
+        icon: ['fas', 'rotate-right'],
+        disabled: controlsBusy,
+        onSelect: () => void controlTaskOperation(operationId, 'restart', label),
+      },
+      {
+        label: `Cancel ${label}`,
+        icon: ['fas', 'xmark'],
+        tone: 'danger' as const,
+        disabled: controlsBusy,
+        onSelect: () => void controlTaskOperation(operationId, 'cancel', label),
+      },
+    ]
+  }
 
   const onDelete = () => setConfirm(true)
   const onEdit = () => {
@@ -408,6 +450,7 @@ export default function ShowPage() {
                   disabled: syncBusy,
                   disabledReason: syncDisabledReason,
                   progress: syncOperation ? (syncOperation.progress ?? 0) : undefined,
+                  controls: operationControls(syncOperation?.id, 'sync'),
                   onSelect: () => void syncNow(),
                 },
                 {
@@ -421,6 +464,7 @@ export default function ShowPage() {
                   disabled: metadataRefreshBusy,
                   disabledReason: metadataRefreshDisabledReason,
                   progress: metadataRefreshOperation ? (metadataRefreshOperation.progress ?? 0) : undefined,
+                  controls: operationControls(metadataRefreshOperation?.id, 'metadata refresh'),
                   onSelect: () => setMetadataRefreshConfirm(true),
                 },
                 {
@@ -430,6 +474,7 @@ export default function ShowPage() {
                   disabled: redownloadDisabledReason !== undefined,
                   disabledReason: redownloadDisabledReason,
                   progress: redownloadOperation ? (redownloadOperation.progress ?? 0) : undefined,
+                  controls: operationControls(redownloadOperation?.id, 're-download'),
                   onSelect: openRedownloadConfirm,
                 },
                 {

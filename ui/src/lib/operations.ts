@@ -6,12 +6,24 @@ export type OperationAccepted = {
     [key: string]: unknown
 }
 
+export type OperationControlAction = 'cancel' | 'restart'
+
 export class OperationStartError extends Error {
     readonly status: number
 
     constructor(message: string, status: number) {
         super(message)
         this.name = 'OperationStartError'
+        this.status = status
+    }
+}
+
+export class OperationControlError extends Error {
+    readonly status: number
+
+    constructor(message: string, status: number) {
+        super(message)
+        this.name = 'OperationControlError'
         this.status = status
     }
 }
@@ -61,5 +73,26 @@ export function useStartOperation() {
         // for the idle discovery heartbeat.
         await queryClient.invalidateQueries({queryKey: ['operations']})
         return result
+    }, [queryClient])
+}
+
+/** Cancel or restart an existing durable TaskOperation. */
+export function useControlOperation() {
+    const queryClient = useQueryClient()
+
+    return useCallback(async (
+        operationId: string,
+        action: OperationControlAction,
+    ): Promise<void> => {
+        const base = (window as any).appConfig?.API_URL || '/api'
+        const response = await fetch(
+            `${base}/operations/${encodeURIComponent(operationId)}/${action}`,
+            {method: 'POST', credentials: 'include'},
+        )
+        if (!response.ok) {
+            throw new OperationControlError(await responseError(response), response.status)
+        }
+
+        await queryClient.invalidateQueries({queryKey: ['operations']})
     }, [queryClient])
 }

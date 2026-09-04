@@ -2,6 +2,14 @@ import {useEffect, useId, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import './ActionMenu.css'
 
+export type ActionMenuControl = {
+    label: string
+    icon: any
+    onSelect: () => void
+    disabled?: boolean
+    tone?: 'default' | 'danger'
+}
+
 export type ActionMenuItem = {
     label: string
     icon?: any
@@ -9,6 +17,7 @@ export type ActionMenuItem = {
     disabled?: boolean
     disabledReason?: string
     progress?: number
+    controls?: ActionMenuControl[]
     tone?: 'default' | 'danger'
     separatorBefore?: boolean
 }
@@ -58,6 +67,12 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
         item.onSelect()
     }
 
+    const selectControl = (control: ActionMenuControl) => {
+        if (control.disabled) return
+        setOpen(false)
+        control.onSelect()
+    }
+
     return (
         <div ref={rootRef} className={`action-menu${open ? ' is-open' : ''}${className ? ` ${className}` : ''}`}>
             <button
@@ -89,14 +104,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                                     className={`action-menu-entry${tooltipId ? ' has-disabled-reason' : ''}`}
                                 >
                                     {item.separatorBefore && <div className="action-menu-separator" role="separator"/>}
-                                    <button
-                                        type="button"
-                                        role="menuitem"
-                                        className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}${item.disabled ? ' is-disabled' : ''}`}
-                                        aria-disabled={item.disabled || undefined}
-                                        aria-describedby={tooltipId}
-                                        onClick={() => selectItem(item)}
-                                    >
+                                    <div className="action-menu-item-row">
                                         {progress !== undefined && (
                                             <span
                                                 className="action-menu-item-progress"
@@ -104,11 +112,37 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                                                 aria-hidden="true"
                                             />
                                         )}
-                                        {item.icon && (
-                                            <FontAwesomeIcon className="action-menu-item-icon" icon={item.icon} aria-hidden="true"/>
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}${item.disabled ? ' is-disabled' : ''}`}
+                                            aria-disabled={item.disabled || undefined}
+                                            aria-describedby={tooltipId}
+                                            onClick={() => selectItem(item)}
+                                        >
+                                            {item.icon && (
+                                                <FontAwesomeIcon className="action-menu-item-icon" icon={item.icon} aria-hidden="true"/>
+                                            )}
+                                            <span>{item.label}</span>
+                                        </button>
+                                        {!!item.controls?.length && (
+                                            <div className="action-menu-item-controls" aria-label={`${item.label} task controls`}>
+                                                {item.controls.map((control) => (
+                                                    <button
+                                                        key={control.label}
+                                                        type="button"
+                                                        className={`action-menu-item-control${control.tone === 'danger' ? ' is-danger' : ''}`}
+                                                        aria-label={control.label}
+                                                        title={control.label}
+                                                        disabled={control.disabled}
+                                                        onClick={() => selectControl(control)}
+                                                    >
+                                                        <FontAwesomeIcon icon={control.icon} aria-hidden="true"/>
+                                                    </button>
+                                                ))}
+                                            </div>
                                         )}
-                                        <span>{item.label}</span>
-                                    </button>
+                                    </div>
                                     {tooltipId && (
                                         <span id={tooltipId} role="tooltip" className="action-menu-disabled-tooltip">
                                             {item.disabledReason}

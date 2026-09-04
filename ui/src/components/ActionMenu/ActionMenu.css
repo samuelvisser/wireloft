@@ -22,7 +22,7 @@
     top: calc(100% + 8px);
     width: max-content;
     min-width: 230px;
-    max-width: min(320px, calc(100vw - 24px));
+    max-width: min(340px, calc(100vw - 24px));
     padding: 6px;
     border: 1px solid rgba(148, 163, 184, 0.32);
     border-radius: 12px;
@@ -35,13 +35,22 @@
     position: relative;
 }
 
+.action-menu-item-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    isolation: isolate;
+    border-radius: 8px;
+}
+
 .action-menu-item {
     appearance: none;
     border: 0;
     position: relative;
-    overflow: hidden;
-    isolation: isolate;
-    width: 100%;
+    z-index: 1;
+    flex: 1 1 auto;
+    min-width: 0;
     background: transparent;
     color: var(--text);
     display: flex;
@@ -56,11 +65,6 @@
     cursor: pointer;
 }
 
-.action-menu-item > :not(.action-menu-item-progress) {
-    position: relative;
-    z-index: 1;
-}
-
 .action-menu-item:hover,
 .action-menu-item:focus-visible {
     background: rgba(148, 163, 184, 0.14);
@@ -72,7 +76,7 @@
 }
 
 .action-menu-item.is-disabled {
-    opacity: 0.55;
+    opacity: 0.58;
     cursor: not-allowed;
 }
 
@@ -82,7 +86,7 @@
     inset: 0 auto 0 0;
     width: 0;
     border-radius: inherit;
-    background: rgba(59, 130, 246, 0.12);
+    background: rgba(59, 130, 246, 0.18);
     pointer-events: none;
     transition: width 220ms ease;
 }
@@ -99,6 +103,50 @@
 
 .action-menu-item.is-danger .action-menu-item-icon {
     color: currentColor;
+}
+
+.action-menu-item-controls {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding-right: 6px;
+}
+
+.action-menu-item-control {
+    appearance: none;
+    border: 0;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.56);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.action-menu-item-control:hover,
+.action-menu-item-control:focus-visible {
+    background: rgba(148, 163, 184, 0.22);
+    color: var(--text);
+    outline: none;
+}
+
+.action-menu-item-control:focus-visible {
+    box-shadow: inset 0 0 0 2px #3b82f6;
+}
+
+.action-menu-item-control.is-danger {
+    color: #dc2626;
+}
+
+.action-menu-item-control:disabled {
+    opacity: 0.45;
+    cursor: wait;
 }
 
 .action-menu-disabled-tooltip {
@@ -149,7 +197,16 @@
     }
 
     .action-menu-item-progress {
-        background: rgba(96, 165, 250, 0.14);
+        background: rgba(96, 165, 250, 0.22);
+    }
+
+    .action-menu-item-control {
+        background: rgba(15, 23, 42, 0.3);
+    }
+
+    .action-menu-item-control:hover,
+    .action-menu-item-control:focus-visible {
+        background: rgba(148, 163, 184, 0.2);
     }
 
     .action-menu-disabled-tooltip {
@@ -191,11 +248,21 @@
         animation: action-menu-sheet-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
+    .action-menu-item-row {
+        border-radius: 10px;
+    }
+
     .action-menu-item {
         min-height: 48px;
         padding: 12px;
         font-size: 15px;
         border-radius: 10px;
+    }
+
+    .action-menu-item-control {
+        width: 34px;
+        height: 34px;
+        font-size: 13px;
     }
 
     .action-menu-disabled-tooltip {

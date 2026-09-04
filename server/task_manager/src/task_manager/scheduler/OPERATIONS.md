@@ -47,7 +47,7 @@ Workers and worker services continue to use the normal progress updater:
 progress.set(50, "Refreshing episode 10/20")
 ```
 
-A progress update emitted anywhere inside the worker call stack is persisted on the `TaskRun` and is marked as worker-reported progress. `TaskOperation` prefers this worker-reported percentage while the linked worker is active. This preserves purpose-built progress trackers such as the granular `fetch_new_episodes` mapper/indexing progress instead of replacing them with a coarse operation-level estimate.
+A progress update emitted anywhere inside the worker call stack is persisted on the `TaskRun`. Active TaskRuns start at zero and scheduler infrastructure does not increment their percentage, so a non-zero active percentage means the worker/service itself supplied granular progress. `TaskOperation` prefers that percentage. This preserves purpose-built progress trackers such as the granular `fetch_new_episodes` mapper/indexing progress instead of replacing them with a coarse operation-level estimate.
 
 When none of an operation's active workers reports progress, `TaskOperation` falls back to logical target completion. For example, a 200-episode metadata refresh whose individual workers do not publish percentages advances as targets finish. Terminal targets count as complete and the operation reaches 100% when every target is terminal.
 
@@ -75,13 +75,17 @@ Operation IDs are held in an internal execution `ContextVar`. `trigger_now()` in
 
 A child task only becomes part of completion accounting when the operation has a matching logical target. A master worker can alternatively aggregate its child work itself and expose one target, as the show re-download worker does.
 
-## Retries and restarts
+## Retries, restarts and cancellation
 
 Retries reuse the same TaskRun, so their target association survives automatically.
 
 Logical targets are durable. On backend restart, in-process `RUNNING` and `RETRY_SCHEDULED` executions from the previous process are marked interrupted and detached from their operation targets. Recoverable incomplete targets are then requeued from their persisted task key, resource and worker inputs.
 
-This is why recovery state must live on TaskOperationTarget rather than in React state or worker-specific metadata.
+A user-requested operation restart uses the same durable targets. Targets already satisfied by a successful TaskRun remain satisfied; only unfinished targets are detached and requeued. This means restarting a large fan-out action does not repeat work that already completed.
+
+Cancellation immediately marks the TaskOperation canceled and removes exclusively owned queued/retry jobs. APScheduler cannot safely terminate an arbitrary Python function that is already executing in a worker thread, so running work is canceled cooperatively: `ProgressUpdater.set()` is a cancellation checkpoint, and the executor checks again before accepting a worker result or scheduling a retry. A TaskRun that is still needed by another active TaskOperation is not canceled.
+
+This is why recovery and control state must live in scheduler infrastructure rather than in React state or worker-specific request IDs.
 
 ## Frontend ownership
 
