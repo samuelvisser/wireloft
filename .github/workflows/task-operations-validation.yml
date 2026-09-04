@@ -1,0 +1,27 @@
+name: Task operations validation
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Sync Python dependencies
+        run: uv sync
+      - name: Run unit tests
+        run: uv run pytest tests/unit
+      - name: Verify Alembic history
+        run: uv run backend db history
+      - name: Install UI dependencies
+        run: npm --prefix ui ci --registry=https://registry.npmjs.org
+      - name: Build UI
+        run: npm run build
