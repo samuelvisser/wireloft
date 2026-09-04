@@ -11,6 +11,7 @@ import './mobileHeaderScroll.css'
 import './icons/fontAwesome'
 import { queryClient } from './lib/queryClient'
 import { prefetchCoreData } from './lib/queries'
+import FrontendPuller from './lib/puller'
 import { loadShowsFromStorage, loadProfilesFromStorage } from './lib/cache'
 import { loadAppConfig } from './general_utils.js'
 import { loadPublicConfig } from './lib/publicConfig'
@@ -40,11 +41,13 @@ async function bootstrap() {
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
         <Toaster position="top-right" />
-        <OperationNotifier>
-          <BrowserRouter>
-            <App />
-          </BrowserRouter>
-        </OperationNotifier>
+        <FrontendPuller>
+          <OperationNotifier>
+            <BrowserRouter>
+              <App />
+            </BrowserRouter>
+          </OperationNotifier>
+        </FrontendPuller>
       </QueryClientProvider>
     </React.StrictMode>,
   )

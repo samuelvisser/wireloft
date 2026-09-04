@@ -6,7 +6,9 @@ import toast from 'react-hot-toast'
 
 import ProgressBar from '../../components/common/ProgressBar'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
+import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import {useDailywireMovie, useLocalMediaProfiles, useMovieDownloads, useMovies} from '../../lib/queries'
+import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {MovieExtraType} from '../../types/schemas/dailywire_catalog'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
@@ -29,14 +31,11 @@ function formatDuration(seconds: number) {
     return hours ? `${hours}h ${minutes}m` : `${minutes}m`
 }
 
-function sleep(milliseconds: number) {
-    return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
-}
-
 export default function MoviePage() {
     const {slug} = useParams()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
+    const startOperation = useStartOperation()
     const {data: movie, error} = useDailywireMovie(slug)
     const {data: localMovies} = useMovies()
     const {data: profiles} = useLocalMediaProfiles()
@@ -44,6 +43,11 @@ export default function MoviePage() {
     const localMovie = useMemo(
         () => localMovies?.find((item) => item.slug === slug),
         [localMovies, slug],
+    )
+    const refreshExtrasOperation = useActiveOperation(
+        'movie.refresh_extras',
+        'movie',
+        localMovie?.id ?? null,
     )
     const videoProfiles = useMemo(
         () => profiles?.filter((profile) => profile.type === 'movie') || [],
@@ -55,7 +59,8 @@ export default function MoviePage() {
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [retryingMetadata, setRetryingMetadata] = useState(false)
-    const [refreshingExtras, setRefreshingExtras] = useState(false)
+    const [refreshingExtrasStarting, setRefreshingExtrasStarting] = useState(false)
+    const refreshingExtras = refreshingExtrasStarting || refreshExtrasOperation !== undefined
 
     useEffect(() => {
         if (!profileId && videoProfiles[0]) setProfileId(String(videoProfiles[0].id))
@@ -138,56 +143,19 @@ export default function MoviePage() {
 
     const refreshMovieExtras = async () => {
         if (!slug || !localMovie || refreshingExtras) return
-        setRefreshingExtras(true)
-        const requestedAt = Date.now() - 2_000
+        setRefreshingExtrasStarting(true)
         try {
             const base = (window as any).appConfig.API_URL
-            const response = await fetch(
+            await startOperation(
                 `${base}/movies/${encodeURIComponent(slug)}/extras/refresh`,
-                {method: 'POST', credentials: 'include'},
+                {method: 'POST'},
             )
-            if (!response.ok) {
-                const {error: message} = await getErrorMessageFromResponse(response)
-                toast.error(message || 'Could not start the movie-extra refresh')
-                return
-            }
-
             toast.success('Movie-extra refresh started')
-            for (let attempt = 0; attempt < 60; attempt += 1) {
-                await sleep(1_000)
-                const params = new URLSearchParams({
-                    resource_type: 'movie',
-                    resource_id: String(localMovie.id),
-                    definition_key: 'refresh_movie_extras',
-                })
-                const runResponse = await fetch(`${base}/tasks/runs?${params}`, {credentials: 'include'})
-                if (!runResponse.ok) continue
-                const runs = await runResponse.json()
-                const run = Array.isArray(runs)
-                    ? runs.find((candidate) => {
-                        const startedAt = candidate?.startedAt ? Date.parse(candidate.startedAt) : 0
-                        return startedAt >= requestedAt
-                    })
-                    : null
-                if (!run) continue
-                if (run.status === 'SUCCEEDED') {
-                    await Promise.all([
-                        queryClient.invalidateQueries({queryKey: ['movies']}),
-                        queryClient.invalidateQueries({queryKey: ['dailywireMovie', slug]}),
-                    ])
-                    toast.success(run.message && run.message !== 'OK' ? run.message : 'Movie extras refreshed')
-                    return
-                }
-                if (run.status === 'FAILED' || run.status === 'CANCELED') {
-                    toast.error(run.lastError || run.message || 'Movie-extra refresh failed')
-                    return
-                }
-            }
-            toast.success('The refresh is still running in the background')
-        } catch {
-            toast.error('Could not refresh movie extras')
+        } catch (error) {
+            const detail = error instanceof OperationStartError ? error.message : undefined
+            toast.error(detail ? `Could not refresh movie extras: ${detail}` : 'Could not refresh movie extras')
         } finally {
-            setRefreshingExtras(false)
+            setRefreshingExtrasStarting(false)
         }
     }
 

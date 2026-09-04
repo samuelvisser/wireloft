@@ -9,6 +9,7 @@ from .local_media_profiles import local_media_profile_router
 from .movies import movie_router
 from .onboarding import onboarding_router
 from .operations import operation_router
+from .puller import puller_router
 from .settings import setting_router
 from .shows import show_router
 from .config import config_router

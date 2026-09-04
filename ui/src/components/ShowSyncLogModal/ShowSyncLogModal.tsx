@@ -18,8 +18,6 @@ type Props = {
   onSyncNow: () => void | Promise<void>
 }
 
-const POLL_INTERVAL_MS = 2000
-
 export default function ShowSyncLogModal({ showSlug, showTitle, open, syncing, onClose, onSyncNow }: Props) {
   const [entries, setEntries] = useState<SyncLogEntry[]>([])
   const [loading, setLoading] = useState(false)
@@ -46,19 +44,14 @@ export default function ShowSyncLogModal({ showSlug, showTitle, open, syncing, o
   }, [loadLog, open])
 
   useEffect(() => {
-    if (!open || !syncing) return
-    const timer = window.setInterval(() => {
-      loadLog().catch(() => undefined)
-    }, POLL_INTERVAL_MS)
-    return () => window.clearInterval(timer)
-  }, [loadLog, open, syncing])
-
-  useEffect(() => {
     if (!open) {
       wasSyncingRef.current = syncing
       return
     }
 
+    // The shared frontend puller owns the live sync state. Refresh the historical
+    // log once when that operation becomes terminal instead of polling the log
+    // independently while the operation runs.
     if (wasSyncingRef.current && !syncing) {
       loadLog().catch(() => undefined)
     }

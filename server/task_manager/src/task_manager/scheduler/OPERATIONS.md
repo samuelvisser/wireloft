@@ -15,7 +15,7 @@ Keeping those concepts separate is what allows one UI action to fan out over man
 2. For work owned directly by the operation, call `queue_operation_target_dispatch()` for each target. It schedules the target only after the API transaction commits and skips targets already satisfied by compatible work. A domain event can still be used when the action genuinely represents a domain event; use `operation_target_needs_dispatch()` to avoid duplicate work in that case.
 3. Return an API response containing `operation_id`. Do not create a separate manual request/correlation ID.
 4. Have the worker report ordinary progress through its `progress` object and return a `TaskResult` with structured facts when it completes.
-5. In the frontend, start the request through the generic operation helper and let `OperationNotifier` own polling, final notifications and cache refreshes. Components that need live status can use `useActiveOperation()`.
+5. In the frontend, start the request through the generic operation helper. `FrontendPuller` owns discovery/progress polling, while `OperationNotifier` owns final notifications and operation-driven cache refreshes. Components that need live status can use `useActiveOperation()`.
 
 Workers must not accept `operation_id`, `manual_request_id`, or similar UI-only parameters. Operation correlation belongs to the scheduler infrastructure.
 
@@ -107,13 +107,15 @@ Watchdog observations are process-local and reset on backend restart. The durabl
 
 ## Frontend ownership
 
-`OperationNotifier` is mounted once above the router. It is responsible for:
+`FrontendPuller` is mounted once above the router and is the single recurring polling transport for UI background-work state. Its `/api/pull` request carries UI-relevant TaskOperations and media-download state together. The backend marks each response `slow` or `fast`; any queued/running UI operation or active download selects the fast cadence, otherwise the client uses the slow discovery cadence.
 
-- discovering UI operations;
-- polling more frequently while work is active;
+The puller distributes each snapshot into the appropriate React Query caches. Existing mutation code can invalidate the operation/download keys to request an immediate pull without creating another polling loop. One-off detail reads, such as opening a download-attempt log, remain ordinary REST requests rather than recurring polling.
+
+`OperationNotifier` consumes the puller's operation snapshot. It is responsible for:
+
 - exposing active operation status/progress to the rest of the UI;
 - showing exactly one final notification per acknowledged operation;
-- refreshing relevant React Query data after completion;
+- refreshing relevant non-polling React Query data after completion;
 - acknowledging the durable notification only after it has been presented.
 
-A page may disappear, the route may change, or the browser may reload while the worker runs. None of those should affect operation tracking.
+A page may disappear, the route may change, or the browser may reload while the worker runs. None of those should affect operation tracking. New background-state polling features should join `FrontendPuller` instead of adding their own interval.

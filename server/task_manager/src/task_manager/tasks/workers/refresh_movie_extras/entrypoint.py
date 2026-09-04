@@ -4,6 +4,7 @@ from typing import Optional
 
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import task
+from task_manager.scheduler.results import TaskResult
 
 from .service import run_refresh_movie_extras
 
@@ -20,12 +21,20 @@ async def refresh_movie_extras(
     *,
     resource_id: Optional[int] = None,
     progress=None,
-) -> None:
+) -> TaskResult:
     if resource_id is None:
         raise ValueError("A movie resource ID is required")
     with db_session() as session:
-        await run_refresh_movie_extras(
+        added = await run_refresh_movie_extras(
             session,
             movie_id=resource_id,
             progress=progress,
         )
+
+    return TaskResult(
+        summary=(
+            f"Movie extras refreshed: {added} new "
+            f"{'extra' if added == 1 else 'extras'} added"
+        ),
+        data={"movie_extras_added": added},
+    )

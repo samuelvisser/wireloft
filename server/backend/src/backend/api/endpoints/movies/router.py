@@ -3,11 +3,11 @@ from fastapi import APIRouter, HTTPException, status
 from .service import *
 from ...models.movie import *
 from ...models.media_download import MediaDownloadAPIRead, MovieDownloadAPICreate
+from ...models.operations import TaskOperationAccepted
 from ..dailywire.movies.service import get_movie_for_action as get_dailywire_movie
 from ..media_downloads.router import _trigger_download_task
 from ..media_downloads.service import create_movie_download, create_movie_extra_download
 from backend.app import db_session
-from backend.db.models import Movie
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
 
@@ -89,23 +89,21 @@ def movie_extra_download_create(movie_slug: str, movie_extra_slug: str, body: Mo
     return payload
 
 
-@router.post("/{movie_slug}/extras/refresh", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{movie_slug}/extras/refresh",
+    response_model=TaskOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def movie_extras_refresh(movie_slug: str):
-    """Queue a manual refresh that indexes newly published movie extras."""
+    """Queue a UI-visible refresh that indexes newly published movie extras."""
     with db_session() as s:
-        movie = s.query(Movie).filter(Movie.slug == movie_slug).one_or_none()
-        if movie is None:
-            raise HTTPException(status_code=404, detail="Movie not found")
-        movie_id = movie.id
-
-    from task_manager.scheduler.executor import trigger_now
-
-    job_id = trigger_now(
-        def_key="refresh_movie_extras",
-        resource_type="movie",
-        resource_id=movie_id,
-    )
-    return {"jobId": job_id}
+        try:
+            result = request_movie_extras_refresh(s, movie_slug)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
 
 
 @router.get("", response_model=list[MovieAPIRead])

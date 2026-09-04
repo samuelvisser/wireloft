@@ -1,6 +1,7 @@
 import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClient} from '@tanstack/react-query'
 import {useEffect} from 'react'
 import {saveProfilesToStorage, saveShowsToStorage} from './cache'
+import {useFrontendPuller} from './puller'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
 import {PodcastDownloadProfileRead} from "../types/schemas/podcast_download_profile";
 import {SeriesDownloadProfileRead} from "../types/schemas/series_download_profile";
@@ -14,7 +15,6 @@ import {RssStreamProfileRead} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
 import {MediaDownloadAttemptRead, MediaDownloadViewRead} from "../types/schemas/media_download";
-import {ACTIVE_DOWNLOAD_STATUSES} from "../types/media_download";
 import {MovieRead} from "../types/schemas/movie";
 import {
     DailywireCatalogRead,
@@ -325,49 +325,45 @@ export function useStreamProfilesByShowSlug(showSlug?: string) {
     })
 }
 
-function hasActiveDownloads(rows: unknown): boolean {
-    return Array.isArray(rows) && rows.some((r) => ACTIVE_DOWNLOAD_STATUSES.has(String(r?.downloadStatus)))
+function usePullerBackedDownloads(
+    queryKey: readonly unknown[],
+    predicate?: (download: MediaDownloadViewRead) => boolean,
+) {
+    // Keep the historical query key registered so existing mutation code can
+    // invalidate it. FrontendPuller converts that invalidation into an immediate
+    // pull, while the actual live data always comes through the shared pipeline.
+    useQuery({
+        queryKey,
+        queryFn: async () => [] as MediaDownloadViewRead[],
+        enabled: false,
+    })
+
+    const puller = useFrontendPuller()
+    const downloads = puller.data?.mediaDownloads
+    return {
+        data: downloads && predicate ? downloads.filter(predicate) : downloads,
+        isLoading: puller.isLoading,
+        error: puller.error,
+        refetch: puller.refetch,
+    }
 }
 
 export function useEpisodeDownloads(episodeSlug?: string) {
-    return useQuery<any[], Error, MediaDownloadViewRead[], readonly ['episodeDownloads', string | undefined]>({
-        queryKey: ['episodeDownloads', episodeSlug] as const,
-        enabled: !!episodeSlug,
-        queryFn: ({signal}) => {
-            const base = (window as any).appConfig.API_URL
-            return fetchJSON<any[]>(`${base}/media-downloads/as-view?episode_slug=${encodeURIComponent(episodeSlug!)}`, signal)
-        },
-        // Poll while a download is running; starting one invalidates this key
-        refetchInterval: (q) => (hasActiveDownloads(q.state.data) ? 1500 : false),
-        placeholderData: keepPreviousData,
-        refetchOnMount: 'always',
-    })
+    return usePullerBackedDownloads(
+        ['episodeDownloads', episodeSlug] as const,
+        episodeSlug ? (download) => download.episodeSlug === episodeSlug : () => false,
+    )
 }
 
 export function useMovieDownloads(movieSlug?: string) {
-    return useQuery<any[], Error, MediaDownloadViewRead[], readonly ['movieDownloads', string | undefined]>({
-        queryKey: ['movieDownloads', movieSlug] as const,
-        enabled: !!movieSlug,
-        queryFn: ({signal}) => fetchJSON<any[]>(
-            `${(window as any).appConfig.API_URL}/media-downloads/as-view?movie_slug=${encodeURIComponent(movieSlug!)}`,
-            signal,
-        ),
-        refetchInterval: (query) => (hasActiveDownloads(query.state.data) ? 1500 : false),
-        placeholderData: keepPreviousData,
-        refetchOnMount: 'always',
-    })
+    return usePullerBackedDownloads(
+        ['movieDownloads', movieSlug] as const,
+        movieSlug ? (download) => download.movieSlug === movieSlug : () => false,
+    )
 }
 
 export function useMediaDownloadsView() {
-    return useQuery<any[], Error, MediaDownloadViewRead[], readonly ['mediaDownloadsView']>({
-        queryKey: ['mediaDownloadsView'] as const,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/media-downloads/as-view`, signal),
-        // Poll fast while anything is downloading; keep a slow heartbeat otherwise
-        // so downloads started elsewhere show up while the page stays open
-        refetchInterval: (q) => (hasActiveDownloads(q.state.data) ? 1500 : 8000),
-        placeholderData: keepPreviousData,
-        refetchOnMount: 'always',
-    })
+    return usePullerBackedDownloads(['mediaDownloadsView'] as const)
 }
 
 export function useMediaDownloadAttempts(mediaDownloadId?: number) {
@@ -376,9 +372,6 @@ export function useMediaDownloadAttempts(mediaDownloadId?: number) {
         enabled: mediaDownloadId != null,
         queryFn: ({signal}) =>
             fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/media-downloads/${mediaDownloadId}/attempts`, signal),
-        // A light poll so a ledger entry from a redownload finishing while the
-        // log dialog is open shows up without the user having to reopen it.
-        refetchInterval: 2000,
         refetchOnMount: 'always',
     })
 }

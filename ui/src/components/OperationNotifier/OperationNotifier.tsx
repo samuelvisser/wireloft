@@ -6,14 +6,13 @@ import {
   useMemo,
   useRef,
 } from 'react'
-import {useQuery, useQueryClient, type QueryClient} from '@tanstack/react-query'
+import {useQueryClient, type QueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
-import {TaskOperationReadSchema, type TaskOperationRead} from '../../types/schemas/operation'
+import {type TaskOperationRead} from '../../types/schemas/operation'
+import {refreshFrontendPuller, useFrontendPuller} from '../../lib/puller'
 
 const ACTIVE_STATUSES = new Set(['QUEUED', 'RUNNING'])
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'PARTIAL', 'FAILED', 'CANCELED'])
-const OPERATION_POLL_ACTIVE_MS = 1250
-const OPERATION_POLL_IDLE_MS = 5000
 
 type OperationContextValue = {
   operations: TaskOperationRead[]
@@ -28,15 +27,6 @@ const OperationContext = createContext<OperationContextValue>({
   operations: [],
   findActive: () => undefined,
 })
-
-async function fetchOperations(): Promise<TaskOperationRead[]> {
-  const base = (window as any).appConfig?.API_URL || '/api'
-  const response = await fetch(`${base}/operations?source=UI&relevant=true&limit=200`, {
-    credentials: 'include',
-  })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return TaskOperationReadSchema.array().parse(await response.json())
-}
 
 async function markSeen(operationId: string): Promise<void> {
   const base = (window as any).appConfig?.API_URL || '/api'
@@ -72,6 +62,8 @@ function operationLabel(operation: TaskOperationRead): string {
       return 'Metadata refresh'
     case 'show.redownload_episodes':
       return 'Re-download'
+    case 'movie.refresh_extras':
+      return 'Movie extra refresh'
     default:
       return operation.title || 'Operation'
   }
@@ -135,6 +127,7 @@ function terminalMessage(operation: TaskOperationRead): string {
 async function invalidateForOperation(queryClient: QueryClient, operation: TaskOperationRead) {
   const showSlug = contextString(operation, 'show_slug')
   const episodeSlug = contextString(operation, 'episode_slug')
+  const movieSlug = contextString(operation, 'movie_slug')
   const invalidations: Promise<unknown>[] = []
 
   if (operation.kind.startsWith('show.')) {
@@ -163,23 +156,21 @@ async function invalidateForOperation(queryClient: QueryClient, operation: TaskO
     }
   }
 
+  if (operation.kind.startsWith('movie.')) {
+    invalidations.push(queryClient.invalidateQueries({queryKey: ['movies']}))
+    if (movieSlug) {
+      invalidations.push(queryClient.invalidateQueries({queryKey: ['dailywireMovie', movieSlug]}))
+    }
+  }
+
   await Promise.all(invalidations)
 }
 
 export default function OperationNotifier({children}: {children: ReactNode}) {
   const queryClient = useQueryClient()
   const handledRef = useRef(new Set<string>())
-  const {data: operations = []} = useQuery({
-    queryKey: ['operations'],
-    queryFn: fetchOperations,
-    refetchInterval: (query) => {
-      const current = query.state.data as TaskOperationRead[] | undefined
-      return current?.some((operation) => ACTIVE_STATUSES.has(operation.status))
-        ? OPERATION_POLL_ACTIVE_MS
-        : OPERATION_POLL_IDLE_MS
-    },
-    refetchIntervalInBackground: true,
-  })
+  const {data: pullData} = useFrontendPuller()
+  const operations = pullData?.operations ?? []
 
   useEffect(() => {
     for (const operation of operations) {
@@ -205,7 +196,7 @@ export default function OperationNotifier({children}: {children: ReactNode}) {
         try {
           await invalidateForOperation(queryClient, operation)
           await markSeen(operation.id)
-          await queryClient.invalidateQueries({queryKey: ['operations']})
+          await refreshFrontendPuller(queryClient)
         } catch {
           // The notification was already shown in this browser session. Keep the
           // operation unseen server-side so a later reload can retry the durable

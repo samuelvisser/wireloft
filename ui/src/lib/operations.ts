@@ -1,5 +1,6 @@
 import {useCallback} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
+import {refreshFrontendPuller} from './puller'
 
 export type OperationAccepted = {
     operationId: string
@@ -69,9 +70,9 @@ export function useStartOperation() {
         }
 
         // The endpoint has committed the durable operation by the time it
-        // returns. Pull it into OperationNotifier immediately instead of waiting
-        // for the idle discovery heartbeat.
-        await queryClient.invalidateQueries({queryKey: ['operations']})
+        // returns. Pull it into the shared frontend pipeline immediately instead
+        // of waiting for the slow discovery heartbeat.
+        await refreshFrontendPuller(queryClient)
         return result
     }, [queryClient])
 }
@@ -93,6 +94,6 @@ export function useControlOperation() {
             throw new OperationControlError(await responseError(response), response.status)
         }
 
-        await queryClient.invalidateQueries({queryKey: ['operations']})
+        await refreshFrontendPuller(queryClient)
     }, [queryClient])
 }
