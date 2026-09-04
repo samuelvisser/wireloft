@@ -47,7 +47,7 @@ Workers and worker services continue to use the normal progress updater:
 progress.set(50, "Refreshing episode 10/20")
 ```
 
-A progress update emitted anywhere inside the worker call stack is persisted on the `TaskRun`. Active TaskRuns start at zero and scheduler infrastructure does not increment their percentage, so a non-zero active percentage means the worker/service itself supplied granular progress. `TaskOperation` prefers that percentage. This preserves purpose-built progress trackers such as the granular `fetch_new_episodes` mapper/indexing progress instead of replacing them with a coarse operation-level estimate.
+A progress update emitted anywhere inside the worker call stack is persisted on the `TaskRun` and marks that run as publishing granular worker progress. `TaskOperation` prefers that percentage while the worker is active. This preserves purpose-built progress trackers such as the granular `fetch_new_episodes` mapper/indexing progress instead of replacing them with a coarse operation-level estimate.
 
 When none of an operation's active workers reports progress, `TaskOperation` falls back to logical target completion. For example, a 200-episode metadata refresh whose individual workers do not publish percentages advances as targets finish. Terminal targets count as complete and the operation reaches 100% when every target is terminal.
 
@@ -75,6 +75,14 @@ Operation IDs are held in an internal execution `ContextVar`. `trigger_now()` in
 
 A child task only becomes part of completion accounting when the operation has a matching logical target. A master worker can alternatively aggregate its child work itself and expose one target, as the show re-download worker does.
 
+## Resource ownership and deletion
+
+Domain resources that can own scheduler work use `HasTaskResourcesMixin`. It exposes generic `task_schedules`, `task_runs`, `task_operations`, and `task_operation_targets` relationships over the scheduler's `resource_type` + `resource_id` key.
+
+Deleting a resource through SQLAlchemy therefore deletes the scheduler rows owned by that resource through normal ORM cascade semantics. Once the transaction commits, matching in-memory APScheduler jobs are removed as well. A retry whose TaskRun has already been deleted is ignored rather than recreating an orphaned run.
+
+This is intentionally generic. Show, season, episode, movie, movie-extra, and download-profile deletion should not need action-specific cleanup code.
+
 ## Retries, restarts and cancellation
 
 Retries reuse the same TaskRun, so their target association survives automatically.
@@ -86,6 +94,16 @@ A user-requested operation restart uses the same durable targets. Targets alread
 Cancellation immediately marks the TaskOperation canceled and removes exclusively owned queued/retry jobs. APScheduler cannot safely terminate an arbitrary Python function that is already executing in a worker thread, so running work is canceled cooperatively: `ProgressUpdater.set()` is a cancellation checkpoint, and the executor checks again before accepting a worker result or scheduling a retry. A TaskRun that is still needed by another active TaskOperation is not canceled.
 
 This is why recovery and control state must live in scheduler infrastructure rather than in React state or worker-specific request IDs.
+
+## Stalled-work watchdog
+
+APScheduler can limit concurrent jobs and decide how to handle late/misfired jobs, but it cannot decide whether WireLoft's application-level progress percentage has stopped changing. WireLoft installs a lightweight watchdog job for that purpose.
+
+Once per minute, the watchdog samples active TaskOperation percentages and standalone active TaskRun percentages. If a percentage remains unchanged for `scheduler.stalledTaskTimeoutMinutes` (20 minutes by default), the work is canceled with a durable reason. A progress change resets the timer. Retry backoff is not treated as stalled execution.
+
+TaskRuns attached to active operations are watched through the operation rather than independently. This preserves shared/coalesced-run behavior: an old stalled request cannot kill work that a newer active operation still needs.
+
+Watchdog observations are process-local and reset on backend restart. The durable operation-recovery mechanism handles interrupted work first, then recovered work receives a fresh watchdog window.
 
 ## Frontend ownership
 

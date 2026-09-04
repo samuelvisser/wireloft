@@ -227,6 +227,11 @@ class SchedulerSettings(SubmodelBase):
         ge=1,
         description="Max concurrent jobs in the thread pool executor",
     )
+    stalled_task_timeout_minutes: int = Field(
+        ...,
+        ge=1,
+        description="Cancel tasks and operations that make no progress for this many minutes",
+    )
     default_max_retries: int = Field(
         ...,
         ge=0,

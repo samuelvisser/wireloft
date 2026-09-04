@@ -5,6 +5,7 @@ import threading
 from datetime import datetime
 from typing import Iterable, Optional
 
+from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.schedulers.base import BaseScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -30,6 +31,19 @@ def get_trigger(name: str, args: dict):
     raise ValueError(f"Unknown trigger: {name}")
 
 
+def _new_scheduler(loop: asyncio.AbstractEventLoop | None = None) -> AsyncIOScheduler:
+    settings = get_settings()
+    kwargs = {
+        "timezone": settings.timezone,
+        "executors": {
+            "default": ThreadPoolExecutor(max_workers=settings.scheduler.max_workers),
+        },
+    }
+    if loop is not None:
+        kwargs["event_loop"] = loop
+    return AsyncIOScheduler(**kwargs)
+
+
 def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -37,13 +51,14 @@ def start_scheduler() -> AsyncIOScheduler:
 
     if not get_settings().scheduler.enabled:
         # create but don't start to simplify call sites (no-ops)
-        _scheduler = AsyncIOScheduler(timezone=get_settings().timezone)
+        _scheduler = _new_scheduler()
         return _scheduler
 
-    # Use in-memory job store (default MemoryJobStore)
-    # User-created schedules are reloaded from TaskSchedule table on startup
+    # Use in-memory job store (default MemoryJobStore). User-created schedules
+    # are reloaded from TaskSchedule on startup. Honor WireLoft's configured
+    # worker limit instead of APScheduler's independent default of ten threads.
     loop = _get_or_start_event_loop()
-    _scheduler = AsyncIOScheduler(event_loop=loop, timezone=get_settings().timezone)
+    _scheduler = _new_scheduler(loop)
     _scheduler.start(paused=False)
     return _scheduler
 
@@ -109,6 +124,63 @@ def remove_job(schedule_id: int) -> None:
         pass
 
 
+def cancel_pending_resource_jobs(resources: Iterable[tuple[str, int]]) -> int:
+    """Remove queued/recurring APScheduler jobs whose domain resource was deleted."""
+    resource_keys = {(str(resource_type), int(resource_id)) for resource_type, resource_id in resources}
+    if not resource_keys:
+        return 0
+
+    # Deleting a database resource must not start the scheduler as a side effect.
+    sch = _scheduler
+    if sch is None:
+        return 0
+
+    removed = 0
+    for job in list(sch.get_jobs()):
+        job_kwargs = dict(job.kwargs or {})
+        raw_resource_type = job_kwargs.get("resource_type")
+        resource_type = (
+            raw_resource_type.value
+            if hasattr(raw_resource_type, "value")
+            else raw_resource_type
+        )
+        resource_id = job_kwargs.get("resource_id")
+        try:
+            key = (str(resource_type), int(resource_id))
+        except (TypeError, ValueError):
+            continue
+        if key not in resource_keys:
+            continue
+        try:
+            sch.remove_job(job.id)
+            removed += 1
+        except Exception:
+            # The job may have started between get_jobs() and remove_job().
+            pass
+    return removed
+
+
+def cancel_pending_task_run_jobs(run_ids: Iterable[int]) -> int:
+    """Remove in-memory retry/dispatch jobs belonging to TaskRuns."""
+    run_id_set = {int(value) for value in run_ids}
+    if not run_id_set:
+        return 0
+
+    sch = start_scheduler()
+    removed = 0
+    for job in list(sch.get_jobs()):
+        run_id = dict(job.kwargs or {}).get("run_id")
+        if run_id not in run_id_set:
+            continue
+        try:
+            sch.remove_job(job.id)
+            removed += 1
+        except Exception:
+            # The date job may have started between get_jobs() and remove_job().
+            pass
+    return removed
+
+
 def cancel_pending_operation_jobs(
         *,
         operation_id: str,
@@ -131,7 +203,7 @@ def cancel_pending_operation_jobs(
     removed = 0
     for job in list(sch.get_jobs()):
         job_kwargs = dict(job.kwargs or {})
-        operation_ids = tuple(job_kwargs.get("operation_ids") or ())
+        operation_ids = tuple(str(value) for value in (job_kwargs.get("operation_ids") or ()))
         run_id = job_kwargs.get("run_id")
         exclusively_owned = operation_ids == (operation_id,)
         owned_retry = run_id in run_id_set
@@ -155,6 +227,9 @@ def schedule_retry(*, def_key: str, resource_type: str, resource_id: int, run_id
         kwargs=dict(def_key=def_key, resource_type=resource_type, resource_id=resource_id, schedule_id=None, run_id=run_id),
         replace_existing=False,
         id=f"retry-{run_id}-{int(run_at.timestamp())}",
+        # Retries are durable in TaskRun. A saturated worker pool must delay them,
+        # not make APScheduler discard them as a misfire.
+        misfire_grace_time=None,
     )
     return job.id
 
@@ -198,6 +273,9 @@ def trigger_now(
         trigger=DateTrigger(run_date=datetime.now(tz=sch.timezone)),
         kwargs=execution_kwargs,
         replace_existing=False,
+        # Operation fan-out can legitimately queue hundreds of immediate jobs.
+        # They should wait for a worker rather than expire while the pool is busy.
+        misfire_grace_time=None,
     )
     return job.id
 

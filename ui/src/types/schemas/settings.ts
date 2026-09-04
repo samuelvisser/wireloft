@@ -42,6 +42,7 @@ const TimeoutSettingsSchema = z.object({
 const SchedulerSettingsSchema = z.object({
     enabled: z.boolean(),
     maxWorkers: z.number(),
+    stalledTaskTimeoutMinutes: z.number(),
     defaultMaxRetries: z.number(),
     retryBackoffSeconds: z.number(),
 })
@@ -136,6 +137,7 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
     }),
     scheduler: SchedulerSettingsSchema.extend({
         maxWorkers: requiredNumber().int().min(1, 'Must be at least 1.'),
+        stalledTaskTimeoutMinutes: requiredNumber().int().min(1, 'Must be at least 1.'),
         defaultMaxRetries: requiredNumber().int().min(0, 'Must be 0 or greater.'),
         retryBackoffSeconds: requiredNumber().min(0, 'Must be 0 or greater.'),
     }),
@@ -192,6 +194,7 @@ export const SETTINGS_FIELD_PATHS = [
     'dwTimeout.minSlowRequestMs',
     'scheduler.enabled',
     'scheduler.maxWorkers',
+    'scheduler.stalledTaskTimeoutMinutes',
     'scheduler.defaultMaxRetries',
     'scheduler.retryBackoffSeconds',
     'newEpisodeSchedule.findEpisodesCron',

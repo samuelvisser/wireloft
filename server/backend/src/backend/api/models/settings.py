@@ -42,6 +42,7 @@ SettingFieldPath = Literal[
     "dwTimeout.minSlowRequestMs",
     "scheduler.enabled",
     "scheduler.maxWorkers",
+    "scheduler.stalledTaskTimeoutMinutes",
     "scheduler.defaultMaxRetries",
     "scheduler.retryBackoffSeconds",
     "newEpisodeSchedule.findEpisodesCron",
@@ -85,6 +86,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "dwTimeout.minSlowRequestMs",
     "scheduler.enabled",
     "scheduler.maxWorkers",
+    "scheduler.stalledTaskTimeoutMinutes",
     "scheduler.defaultMaxRetries",
     "scheduler.retryBackoffSeconds",
     "newEpisodeSchedule.findEpisodesCron",
@@ -201,6 +203,7 @@ class TimeoutSettingsValue(_SettingsValueModel):
 class SchedulerSettingsValue(_SettingsValueModel):
     enabled: bool
     max_workers: int = Field(ge=1)
+    stalled_task_timeout_minutes: int = Field(ge=1)
     default_max_retries: int = Field(ge=0)
     retry_backoff_seconds: float = Field(ge=0)
 

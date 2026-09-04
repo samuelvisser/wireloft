@@ -7,14 +7,16 @@ from sqlalchemy import Boolean, ForeignKey, UniqueConstraint
 
 from backend.types.media_types import MediaType
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
+from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 
 if TYPE_CHECKING:
     from backend.db.models import Show, Season
 
 
-class Episode(MediaItemBase, HasMetadataMixin):
+class Episode(MediaItemBase, HasMetadataMixin, HasTaskResourcesMixin):
     __tablename__ = "episodes"
     __mapper_args__ = {"polymorphic_identity": MediaType.EPISODE.value}
+    __task_resource_types__ = ("episode",)
     __table_args__ = (
         UniqueConstraint("show_id", "index", name="uq_episode_show_index"),
         UniqueConstraint("show_id", "episode_identifier", name="uq_unique_episode_identifier_per_show"),

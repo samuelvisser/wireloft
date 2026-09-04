@@ -257,6 +257,7 @@ def start_controller() -> None:
             from task_manager.scheduler.operations import recover_pending_operations
             from task_manager.scheduler.registry import sync_registry_to_db
             from task_manager.scheduler.scheduler import start_scheduler
+            from task_manager.scheduler.watchdog import install_stalled_work_watchdog
 
             # Make sure interrupted tasks don't remain forever.
             clear_interrupted_task_runs()
@@ -266,6 +267,7 @@ def start_controller() -> None:
                 start_scheduler()
                 reload_user_schedules()
                 setup_triggers_from_registry()
+                install_stalled_work_watchdog()
 
                 recovered_targets = recover_pending_operations()
                 if recovered_targets:

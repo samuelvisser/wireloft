@@ -13,10 +13,17 @@ from task_manager.scheduler.types import OperationStatus, TaskStatus
 
 
 RUN_CANCEL_REQUESTED_META_KEY = "_operation_cancel_requested"
+RUN_CANCEL_REASON_META_KEY = "_operation_cancel_reason"
 
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
+}
+_ACTIVE_TASK_STATUSES = {
+    TaskStatus.SCHEDULED,
+    TaskStatus.QUEUED,
+    TaskStatus.RUNNING,
+    TaskStatus.RETRY_SCHEDULED,
 }
 
 
@@ -38,7 +45,26 @@ def run_cancel_requested(run: TaskRun) -> bool:
     )
 
 
-def cancel_operation(operation_id: str) -> dict | None:
+def run_cancel_reason(run: TaskRun, default: str = "Canceled") -> str:
+    if isinstance(run.meta, dict):
+        reason = run.meta.get(RUN_CANCEL_REASON_META_KEY)
+        if isinstance(reason, str) and reason:
+            return reason
+    return default
+
+
+def cancel_operation(
+        operation_id: str,
+        *,
+        reason: str = "Canceled by user",
+        acknowledge: bool = True,
+) -> dict | None:
+    """Cancel a high-level operation and every exclusively owned pending/running run.
+
+    UI-initiated cancellation is acknowledged by the request itself. System
+    cancellation (for example the stalled-work watchdog) leaves the notification
+    unseen so OperationNotifier can explain why the work stopped.
+    """
     session = get_session()
     cancelable_run_ids: set[int] = set()
     try:
@@ -57,24 +83,26 @@ def cancel_operation(operation_id: str) -> dict | None:
                 run = link.task_run
                 if run is None:
                     continue
-                if _request_run_cancellation(session, run, operation.id):
+                if _request_run_cancellation(
+                    session,
+                    run,
+                    operation.id,
+                    reason=reason,
+                ):
                     cancelable_run_ids.add(run.id)
 
         now = datetime.now(timezone.utc)
         operation.status = OperationStatus.CANCELED.value
-        operation.message = "Canceled by user"
+        operation.message = reason
         operation.result = {
-            "summary": "Canceled by user",
+            "summary": reason,
             "data": {
                 "completed": completed,
                 "total": len(operation.targets),
             },
         }
         operation.error = None
-        # This terminal state is the direct result of an explicit UI request, so
-        # the request response itself acknowledges it. Avoid a second durable
-        # completion toast after the immediate "canceled" feedback in the menu.
-        operation.notification_seen_at = now
+        operation.notification_seen_at = now if acknowledge else None
         operation.finished_at = now
         session.commit()
     finally:
@@ -88,6 +116,44 @@ def cancel_operation(operation_id: str) -> dict | None:
     )
     from task_manager.scheduler.operations import get_operation
     return get_operation(operation_id)
+
+
+def cancel_task_run(run_id: int, *, reason: str) -> bool:
+    """Cancel one TaskRun, including an automatic run with no TaskOperation.
+
+    APScheduler cannot terminate a Python thread that is already executing, so a
+    running worker is marked terminal immediately and receives a durable
+    cooperative cancellation request. Its next progress checkpoint and executor
+    finalization both honor that request and cannot resurrect the run.
+    """
+    session = get_session()
+    try:
+        run = session.get(TaskRun, run_id)
+        if run is None or _task_status(run.status) not in _ACTIVE_TASK_STATUSES:
+            return False
+
+        meta = dict(run.meta or {})
+        meta[RUN_CANCEL_REQUESTED_META_KEY] = True
+        meta[RUN_CANCEL_REASON_META_KEY] = reason
+        run.meta = meta
+        run.status = TaskStatus.CANCELED
+        run.message = reason
+        run.last_error = None
+        run.next_retry_at = None
+        run.finished_at = datetime.now(timezone.utc)
+        session.commit()
+
+        from task_manager.scheduler.operations import refresh_operations_for_run
+
+        refresh_operations_for_run(session, run.id)
+        session.commit()
+    finally:
+        session.close()
+
+    from task_manager.scheduler.scheduler import cancel_pending_task_run_jobs
+
+    cancel_pending_task_run_jobs((run_id,))
+    return True
 
 
 def restart_operation(operation_id: str) -> dict | None:
@@ -124,7 +190,12 @@ def restart_operation(operation_id: str) -> dict | None:
                 if keep_link is not None and link is keep_link:
                     continue
                 run = link.task_run
-                if run is not None and _request_run_cancellation(session, run, operation.id):
+                if run is not None and _request_run_cancellation(
+                    session,
+                    run,
+                    operation.id,
+                    reason="Replaced by restarted operation",
+                ):
                     cancelable_run_ids.add(run.id)
                 session.delete(link)
 
@@ -172,6 +243,8 @@ def _request_run_cancellation(
         session: Session,
         run: TaskRun,
         operation_id: str,
+        *,
+        reason: str,
 ) -> bool:
     """Request cancellation when this operation exclusively owns the TaskRun."""
     if _run_shared_with_other_active_operation(session, run.id, operation_id):
@@ -179,12 +252,13 @@ def _request_run_cancellation(
 
     meta = dict(run.meta or {})
     meta[RUN_CANCEL_REQUESTED_META_KEY] = True
+    meta[RUN_CANCEL_REASON_META_KEY] = reason
     run.meta = meta
 
     status = _task_status(run.status)
     if status in {TaskStatus.SCHEDULED, TaskStatus.QUEUED, TaskStatus.RETRY_SCHEDULED}:
         run.status = TaskStatus.CANCELED
-        run.message = "Canceled by user"
+        run.message = reason
         run.next_retry_at = None
         run.finished_at = datetime.now(timezone.utc)
     return True

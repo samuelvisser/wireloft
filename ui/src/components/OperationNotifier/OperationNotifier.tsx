@@ -124,6 +124,9 @@ function terminalMessage(operation: TaskOperationRead): string {
     return `${label} partially completed for ${operation.title}: ${completed}/${total} tasks succeeded`
   }
   if (operation.status === 'CANCELED') {
+    if (operation.message && operation.message !== 'Canceled by user') {
+      return `${label} stopped for ${operation.title}: ${operation.message}`
+    }
     return `${label} was canceled for ${operation.title}`
   }
   return `${label} failed for ${operation.title}${operation.error ? `: ${operation.error}` : ''}`

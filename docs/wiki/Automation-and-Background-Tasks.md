@@ -12,10 +12,15 @@ Default global behavior:
 
 - scheduler enabled: `true`;
 - maximum workers: `5`;
+- stalled-task timeout: `20` minutes without a progress-percentage change;
 - default retries: `3`;
 - retry backoff base: `5` seconds.
 
 The retry delay uses exponential backoff so repeated transient failures do not immediately hammer the same dependency.
+
+WireLoft also watches active tasks and operations for stalled progress. Once per minute it samples their progress percentage; when the same percentage remains unchanged for `scheduler.stalledTaskTimeoutMinutes` (20 minutes by default), WireLoft cancels the stalled work and surfaces the reason in the UI. Waiting for a scheduled retry is excluded from this check because that inactivity is intentional.
+
+APScheduler manages scheduling, concurrency, misfires, and coalescing, but it does not know WireLoft's application-level progress percentage. The stalled-work timeout is therefore implemented by WireLoft's task layer rather than as an APScheduler job option.
 
 Disabling `scheduler.enabled` stops scheduled background jobs. Manual actions can still exist independently, but a disabled scheduler means WireLoft will not perform its normal periodic maintenance.
 

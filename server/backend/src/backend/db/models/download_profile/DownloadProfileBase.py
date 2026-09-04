@@ -6,18 +6,22 @@ from sqlalchemy import ForeignKey, DateTime, func, JSON
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
+from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.types.download_profile_types import DownloadProfileType
 
 if TYPE_CHECKING:
     from backend.db.models import EpisodeMediaDownload, LocalMediaProfileBase, Show
 
 
-class DownloadProfileBase(Base):
+class DownloadProfileBase(Base, HasTaskResourcesMixin):
     __tablename__ = "download_profiles"
     __mapper_args__ = {
         "polymorphic_on": "type",
         "polymorphic_identity": DownloadProfileType.BASE.value,
     }
+    # Scheduler history predates the download-profile inheritance split. Accept
+    # both the generic and series-specific resource keys for the same profile id.
+    __task_resource_types__ = ("download_profile", "download_profile_series")
 
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

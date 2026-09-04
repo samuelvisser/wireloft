@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Optional
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.types.media_types import MediaType, MovieExtraType
 
 from .MediaItemBase import MediaItemBase
@@ -14,9 +15,10 @@ if TYPE_CHECKING:
     from .Movie import Movie
 
 
-class MovieExtra(MediaItemBase):
+class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     __tablename__ = "movie_extras"
     __mapper_args__ = {"polymorphic_identity": MediaType.MOVIE_EXTRA.value}
+    __task_resource_types__ = ("movie_extra",)
 
     id: Mapped[int] = mapped_column(
         ForeignKey("media_items.id", ondelete="CASCADE"),

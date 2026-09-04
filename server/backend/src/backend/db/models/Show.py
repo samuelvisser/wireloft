@@ -5,6 +5,7 @@ from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
+from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
@@ -12,8 +13,9 @@ if TYPE_CHECKING:
     from backend.db.models import Season, PodcastDownloadProfile, SeriesDownloadProfile
 
 
-class Show(Base, HasMetadataMixin):
+class Show(Base, HasMetadataMixin, HasTaskResourcesMixin):
     __tablename__ = "shows"
+    __task_resource_types__ = ("show",)
 
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

@@ -5,14 +5,16 @@ from sqlalchemy import ForeignKey, DateTime, func, UniqueConstraint
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 
 from backend.db import Base
+from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 
 if TYPE_CHECKING:
     from backend.db.models import Show
     from backend.db.models.media_item import Episode
 
 
-class Season(Base):
+class Season(Base, HasTaskResourcesMixin):
     __tablename__ = "seasons"
+    __task_resource_types__ = ("season",)
     __table_args__ = (
         UniqueConstraint("show_id", "index", name="uq_season_show_index"),
     )

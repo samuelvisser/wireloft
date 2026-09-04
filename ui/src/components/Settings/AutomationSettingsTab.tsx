@@ -40,6 +40,19 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     help="Upper bound for parallel background task workers."
                 />
                 <NumberField
+                    id="settings-scheduler-stalled-timeout"
+                    label="Stalled task timeout"
+                    value={draft.scheduler.stalledTaskTimeoutMinutes}
+                    min={1}
+                    unit="minutes"
+                    error={errorFor('scheduler.stalledTaskTimeoutMinutes')}
+                    environmentVariable={environmentVariableFor('scheduler.stalledTaskTimeoutMinutes')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.scheduler.stalledTaskTimeoutMinutes = value
+                    })}
+                    help="Cancel a task or operation when its progress percentage has not changed for this long."
+                />
+                <NumberField
                     id="settings-scheduler-retries"
                     label="Default retries"
                     value={draft.scheduler.defaultMaxRetries}
