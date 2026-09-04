@@ -12,9 +12,13 @@ if TYPE_CHECKING:
     from .TaskOperationRun import TaskOperationRun
 
 
-# Represents the logical units of work that must be fulfilled for an operation.
-# Usually used by a TaskOperation to trigger one or more tasks (workers) to finish the operation.
+
 class TaskOperationTarget(Base):
+    """ Represents the logical units of work that must be fulfilled for an operation.
+
+    Usually used by a TaskOperation to trigger one or more tasks (workers) to finish the operation.
+    """
+
     __tablename__ = "task_operation_targets"
     __table_args__ = (
         UniqueConstraint("operation_id", "slot_key", name="uq_task_operation_targets_operation_slot"),
