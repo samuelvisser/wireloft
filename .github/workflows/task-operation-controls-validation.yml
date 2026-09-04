@@ -17,16 +17,29 @@ jobs:
         run: python -m pip install uv
       - name: Install dependencies
         run: uv sync
-      - name: Run focused tests
+      - name: Test durable cancel
+        if: always()
+        run: uv run pytest tests/unit/test_task_operation_controls.py::test_cancel_operation_is_durable_and_requests_running_worker_stop
+      - name: Test shared-run cancel
+        if: always()
+        run: uv run pytest tests/unit/test_task_operation_controls.py::test_cancel_operation_does_not_stop_run_shared_with_another_active_operation
+      - name: Test restart unfinished work
+        if: always()
+        run: uv run pytest tests/unit/test_task_operation_controls.py::test_restart_operation_keeps_completed_targets_and_requeues_only_unfinished
+      - name: Test canceled retry executor
+        if: always()
+        run: uv run pytest tests/unit/test_task_operation_controls.py::test_executor_skips_retry_run_after_cancellation_request
+      - name: Run existing task-operation suites
+        if: always()
         run: >-
           uv run pytest
-          tests/unit/test_task_operation_controls.py
           tests/unit/test_task_operations.py
           tests/unit/test_task_result_execution.py
           tests/unit/test_task_operation_recovery.py
           tests/unit/test_task_execution.py
           tests/unit/test_episode_metadata_finalization.py
       - name: Verify Alembic history
+        if: always()
         run: uv run backend-api db history
 
   frontend-syntax:
