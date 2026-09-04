@@ -51,8 +51,8 @@ The `/downloads/` prefix is virtual. It maps to `downloadSettings.downloadRoot`,
 | `title` | Alias for the episode title |
 | `episode_type` | Parsed episode type |
 | `episode_number` | Parsed episode number |
-| `episode_identifier` | Identifier without the episode-type prefix, for example `2497`, `2497.1`, or `S01E07`; not guaranteed unique |
-| `episode_key` | Full WireLoft episode key including the type prefix, for example `ep.2497` or `ep.S01E07`; guaranteed unique within a show |
+| `episode_label` | Human-facing episode label without the episode-type prefix, for example `2497`, `2497.1`, or `S01E07`; not guaranteed unique |
+| `episode_identifier` | Full WireLoft episode identifier including the type prefix, for example `ep.2497`, `ep-extra.2497.1`, or `ep.S01E07`; guaranteed unique within a show |
 | `episode_published_date` | Publication date as `YYYY-MM-DD` |
 | `episode_published_time` | Publication time as `HH:MM:SS` |
 | `episode_published_datetime` | Publication date and time |
@@ -72,7 +72,7 @@ The `/downloads/` prefix is virtual. It maps to `downloadSettings.downloadRoot`,
 /downloads/Video/TV Shows/{{ show_title }}/Season {{ season_index }}/{{ show_title }} - {{ date }} - {{ title }}.ext
 ```
 
-`episode_identifier` is the identifier portion without the episode-type prefix. That makes it convenient for human-facing filenames, but removing the type means it is not guaranteed to be unique. `episode_key` preserves the complete WireLoft key and is database-guaranteed to be unique within a show. For example, `ep.2497` has the identifier `2497`, `ep-extra.2497.1` has `2497.1`, and `ep.S01E07` has `S01E07`.
+`episode_label` is the human-facing portion with the episode-type prefix removed. It is convenient in filenames but is not guaranteed to be unique. `episode_identifier` preserves the complete WireLoft identifier and is database-guaranteed to be unique within a show. For example, `ep.2497` has the label `2497`, `ep-extra.2497.1` has `2497.1`, and `ep.S01E07` has `S01E07`.
 
 Date-related values can be empty when Daily Wire does not provide the corresponding date. Jinja conditionals are therefore useful when punctuation or folders should only appear when a value exists.
 

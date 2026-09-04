@@ -22,7 +22,8 @@ def test_seasonal_episode_number_renders_as_numeric_episode_number() -> None:
     values = episode_output_template_values(_episode("ep.S01E07"))
 
     assert values["episode_number"] == "7"
-    assert values["episode_identifier"] == "S01E07"
+    assert values["episode_label"] == "S01E07"
+    assert values["episode_identifier"] == "ep.S01E07"
     assert render_output_template(
         "/downloads/Video/{{ show_title }}/Season {{ \"%02d\"|format(season_index|int) }}/"
         "{{ show_title }} - S{{ \"%02d\"|format(season_index|int) }}"
@@ -35,7 +36,7 @@ def test_seasonal_episode_number_renders_as_numeric_episode_number() -> None:
     )
 
 
-def test_episode_identifier_and_episode_key_template_values() -> None:
+def test_episode_label_and_episode_identifier_template_values() -> None:
     from backend.utils.output_template import (
         SHOW_OUTPUT_TEMPLATE_FIELDS,
         episode_output_template_values,
@@ -48,19 +49,22 @@ def test_episode_identifier_and_episode_key_template_values() -> None:
         ("ep.S01E07", "S01E07"),
     )
 
-    assert "episode_key" in SHOW_OUTPUT_TEMPLATE_FIELDS
+    assert "episode_label" in SHOW_OUTPUT_TEMPLATE_FIELDS
+    assert "episode_identifier" in SHOW_OUTPUT_TEMPLATE_FIELDS
+    assert "episode_key" not in SHOW_OUTPUT_TEMPLATE_FIELDS
     assert "ep_id" not in SHOW_OUTPUT_TEMPLATE_FIELDS
 
-    for episode_key, expected_identifier in cases:
-        values = episode_output_template_values(_episode(episode_key))
-        assert values["episode_identifier"] == expected_identifier
-        assert values["episode_key"] == episode_key
+    for episode_identifier, expected_label in cases:
+        values = episode_output_template_values(_episode(episode_identifier))
+        assert values["episode_label"] == expected_label
+        assert values["episode_identifier"] == episode_identifier
+        assert "episode_key" not in values
         assert "ep_id" not in values
         assert render_output_template(
-            "/downloads/{{ episode_identifier }} - {{ episode_key }}.ext",
+            "/downloads/{{ episode_label }} - {{ episode_identifier }}.ext",
             values,
             allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-        ) == f"/downloads/{expected_identifier} - {episode_key}.ext"
+        ) == f"/downloads/{expected_label} - {episode_identifier}.ext"
 
 
 def test_seasonal_episode_extra_uses_parent_episode_number() -> None:
