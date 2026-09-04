@@ -1,5 +1,4 @@
 from asyncio.log import logger
-from itertools import dropwhile, islice
 from typing import Optional, Sequence
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -79,18 +78,11 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
         }
 
         # Fetch remote seasons
-        last_known_season: Optional[Season] = latest_final_episode.season if latest_final_episode is not None else None
         dw_show = client.get_show_page(show.slug, membership_plan=membership_plan)
         all_dw_seasons: list[DwSeasonRecord] = dw_show.seasons
 
-        if last_known_season is not None:
-            relevant_dw_seasons = list(dropwhile(lambda season: season.slug != latest_final_episode.season.slug, all_dw_seasons))
-            new_dw_seasons: list[DwSeasonRecord] = list(islice(relevant_dw_seasons, 1, None))
-        else:
-            new_dw_seasons = all_dw_seasons
-
-        # Add any new seasons to the db
-        for new_dw_season in new_dw_seasons:
+        # Add any newly discovered seasons in the order returned by Daily Wire.
+        for new_dw_season in all_dw_seasons:
             if not any(season.slug == new_dw_season.slug for season in show.seasons):
                 create_season_by_dw_season(s, show=show, dw_season=new_dw_season)
                 s.flush()
