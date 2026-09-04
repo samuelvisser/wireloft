@@ -60,5 +60,5 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: ui/package-lock.json
-      - run: npm --prefix ui ci --registry=https://registry.npmjs.org
+      - run: npm --prefix ui ci --omit=optional --registry=https://registry.npmjs.org
       - run: npm run build
