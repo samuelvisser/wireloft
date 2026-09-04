@@ -14,6 +14,11 @@ from task_manager.scheduler.db import *
 from .types import ResourceType, TaskStatus
 from .registry import get_task
 from .operation_context import operation_context
+from .operation_control import (
+    RUN_CANCEL_REQUESTED_META_KEY,
+    operation_ids_allow_execution,
+    run_cancel_requested,
+)
 from .operations import (
     WORKER_PROGRESS_META_KEY,
     link_run_to_operations,
@@ -25,6 +30,10 @@ from dailywire_downloader import DownloadCancelled
 from task_manager.scheduler import scheduler
 
 
+class TaskCancellationRequested(Exception):
+    """Raised cooperatively when the UI asks a running TaskRun to stop."""
+
+
 class ProgressUpdater:
     def __init__(self, run: TaskRun):
         self.run = run
@@ -32,27 +41,40 @@ class ProgressUpdater:
 
     def set(self, percent: int, message: Optional[str] = None, meta: Optional[dict] = None):
         p = max(0, min(100, int(percent)))
-        values = {"progress": p}
-        if message is not None:
-            values["message"] = message
 
-        # Mark this TaskRun as having genuine worker/service progress. TaskOperation
-        # uses this to prefer granular progress over generic target completion.
-        merged_meta = dict(self._meta)
-        merged_meta[WORKER_PROGRESS_META_KEY] = True
-        if meta is not None:
-            if isinstance(meta, dict):
-                merged_meta.update(meta)
-            else:
-                merged_meta["progress_meta"] = meta
-        self._meta = merged_meta
-        values["meta"] = merged_meta
-
-        # Use a throwaway Session so failures can't poison the main one.
+        # Use a throwaway Session so failures can't poison the main one. Reading
+        # the latest metadata here also makes progress checkpoints cooperative
+        # cancellation points for long-running worker services.
         s = get_session()
         try:
             for i in range(3):
                 try:
+                    current_meta = s.execute(
+                        select(TaskRun.meta).where(TaskRun.id == self.run.id)
+                    ).scalar_one_or_none()
+                    if (
+                        isinstance(current_meta, dict)
+                        and current_meta.get(RUN_CANCEL_REQUESTED_META_KEY) is True
+                    ):
+                        raise TaskCancellationRequested("Canceled by user")
+
+                    values = {"progress": p}
+                    if message is not None:
+                        values["message"] = message
+
+                    # Mark this TaskRun as having genuine worker/service progress.
+                    # TaskOperation uses this to prefer granular progress over
+                    # generic target completion.
+                    merged_meta = dict(current_meta or self._meta)
+                    merged_meta[WORKER_PROGRESS_META_KEY] = True
+                    if meta is not None:
+                        if isinstance(meta, dict):
+                            merged_meta.update(meta)
+                        else:
+                            merged_meta["progress_meta"] = meta
+                    self._meta = merged_meta
+                    values["meta"] = merged_meta
+
                     s.execute(
                         update(TaskRun)
                         .where(TaskRun.id == self.run.id)
@@ -94,6 +116,18 @@ def _backoff_delay(attempt: int) -> float:
     return base * (2 ** max(0, attempt - 1))
 
 
+def _refresh_run_cancellation(session, run: TaskRun) -> bool:
+    session.refresh(run, attribute_names=["meta"])
+    return run_cancel_requested(run)
+
+
+def _mark_run_canceled(run: TaskRun, message: str = "Canceled by user") -> None:
+    run.status = TaskStatus.CANCELED
+    run.message = message
+    run.last_error = None
+    run.next_retry_at = None
+
+
 def execute_task(
         *,
         def_key: str,
@@ -113,6 +147,12 @@ def execute_task(
     session = get_session()
 
     try:
+        explicit_operation_ids = tuple(
+            dict.fromkeys(str(value) for value in (operation_ids or ()) if value)
+        )
+        if explicit_operation_ids and not operation_ids_allow_execution(session, explicit_operation_ids):
+            return
+
         # Load callable
         meta, fn = get_task(def_key)
 
@@ -135,6 +175,14 @@ def execute_task(
                 session.add(run)
                 session.flush()
             else:
+                if run_cancel_requested(run):
+                    _mark_run_canceled(run)
+                    run.finished_at = datetime.now(timezone.utc)
+                    session.commit()
+                    refresh_operations_for_run(session, run.id)
+                    session.commit()
+                    return
+
                 # Merge any provided kwargs into existing inputs (do not drop previous ones)
                 if kwargs:
                     existing_meta = dict(run.meta or {})
@@ -162,7 +210,7 @@ def execute_task(
             session,
             run=run,
             task_key=def_key,
-            operation_ids=operation_ids or (),
+            operation_ids=explicit_operation_ids,
             operation_slot=operation_slot,
         )
 
@@ -207,6 +255,9 @@ def execute_task(
                 else:
                     worker_result = fn(resource_id=resource_id, progress=updater, **call_kwargs)  # type: ignore[arg-type]
 
+            if _refresh_run_cancellation(session, run):
+                raise TaskCancellationRequested("Canceled by user")
+
             if isinstance(worker_result, TaskResult):
                 run.result = worker_result.as_dict()
                 run.message = worker_result.summary
@@ -217,31 +268,31 @@ def execute_task(
                 run.message = "OK"
             run.last_error = None
             run.next_retry_at = None
-        except DownloadCancelled as e:
-            run.status = TaskStatus.CANCELED
-            run.message = str(e)
-            run.last_error = None
-            run.next_retry_at = None
+        except (TaskCancellationRequested, DownloadCancelled) as e:
+            _mark_run_canceled(run, str(e) or "Canceled by user")
         except Exception as e:
-            # failure
-            run.last_error = str(e)
-            # Decide retry
-            if run.attempt_count <= run.max_retries:
-                delay = _backoff_delay(run.attempt_count)
-                when = datetime.now(timezone.utc) + timedelta(seconds=delay)
-                run.next_retry_at = when
-                run.status = TaskStatus.RETRY_SCHEDULED
-                run.message = f"Retry {run.attempt_count}/{run.max_retries} scheduled in {int(delay)}s"
-                session.commit()  # commit before scheduling retry
-                refresh_operations_for_run(session, run.id)
-                session.commit()
-                # enqueue retry using run_id; operation linkage lives on the run
-                scheduler.schedule_retry(def_key=def_key, resource_type=resource_type, resource_id=resource_id, run_id=run.id, run_at=when)
-                return
+            if _refresh_run_cancellation(session, run):
+                _mark_run_canceled(run)
             else:
-                run.status = TaskStatus.FAILED
-                run.message = f"Failed after {run.attempt_count} attempts: {run.last_error}"
-                raise
+                # failure
+                run.last_error = str(e)
+                # Decide retry
+                if run.attempt_count <= run.max_retries:
+                    delay = _backoff_delay(run.attempt_count)
+                    when = datetime.now(timezone.utc) + timedelta(seconds=delay)
+                    run.next_retry_at = when
+                    run.status = TaskStatus.RETRY_SCHEDULED
+                    run.message = f"Retry {run.attempt_count}/{run.max_retries} scheduled in {int(delay)}s"
+                    session.commit()  # commit before scheduling retry
+                    refresh_operations_for_run(session, run.id)
+                    session.commit()
+                    # enqueue retry using run_id; operation linkage lives on the run
+                    scheduler.schedule_retry(def_key=def_key, resource_type=resource_type, resource_id=resource_id, run_id=run.id, run_at=when)
+                    return
+                else:
+                    run.status = TaskStatus.FAILED
+                    run.message = f"Failed after {run.attempt_count} attempts: {run.last_error}"
+                    raise
         finally:
             run.runtime_ms = int((time.perf_counter() - started_perf) * 1000)
             if run.status in (TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELED):
