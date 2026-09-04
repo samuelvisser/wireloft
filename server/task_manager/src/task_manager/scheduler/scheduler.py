@@ -116,9 +116,15 @@ def cancel_pending_operation_jobs(
 ) -> int:
     """Remove queued operation dispatches and retries from the in-memory scheduler.
 
+    A job explicitly owned by more than one operation is left in place; the
+    executor will decide whether any of those operations still needs it. Retry
+    jobs are removed only for TaskRuns that are not shared with another active
+    operation.
+
     APScheduler cannot terminate a Python callable that is already executing in a
     worker thread. Running work is therefore canceled cooperatively by the task
-    executor; this helper prevents work that has not started yet from doing so.
+    executor; this helper prevents exclusively owned work that has not started yet
+    from doing so.
     """
     sch = start_scheduler()
     run_id_set = {int(value) for value in run_ids}
@@ -127,7 +133,9 @@ def cancel_pending_operation_jobs(
         job_kwargs = dict(job.kwargs or {})
         operation_ids = tuple(job_kwargs.get("operation_ids") or ())
         run_id = job_kwargs.get("run_id")
-        if operation_id not in operation_ids and run_id not in run_id_set:
+        exclusively_owned = operation_ids == (operation_id,)
+        owned_retry = run_id in run_id_set
+        if not exclusively_owned and not owned_retry:
             continue
         try:
             sch.remove_job(job.id)
