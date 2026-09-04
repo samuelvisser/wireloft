@@ -52,6 +52,7 @@ def test_cancel_operation_is_durable_and_requests_running_worker_stop(task_datab
         cancel_operation,
     )
     from task_manager.scheduler.operations import (
+        WORKER_PROGRESS_META_KEY,
         OperationTargetSpec,
         create_operation,
         get_operation,
@@ -85,6 +86,7 @@ def test_cancel_operation_is_durable_and_requests_running_worker_stop(task_datab
         status=TaskStatus.RUNNING,
         progress=42,
     )
+    run.meta = {WORKER_PROGRESS_META_KEY: True}
     run_id = run.id
     link_run_to_operations(
         session,
