@@ -15,7 +15,7 @@ from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier import IdentifierMaxValues
 from ...helpers.episodes.mapper import get_dw_episodes_since_ep, count_total_episodes
 from ...helpers.progress import ProgressBounds, update_progress
-from ...helpers.seasons import create_season_by_dw_season, select_dw_seasons_to_create
+from ...helpers.seasons import create_season_by_dw_season
 from ...helpers.episodes.save import save_dw_episodes_per_season_asc, SavedEpisode
 from ...types.general import RecordOrder
 from ..monitor_episode_worker.scheduling import MONITOR_REQUESTED_EVENT
@@ -77,19 +77,12 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
             for ep in s.execute(non_final_stmt).scalars()
         }
 
-        # Fetch remote seasons. Only a completely unindexed show may normalize the
-        # API's season order. Once a season index exists it is immutable; later
-        # discoveries are appended with the next index in the API discovery order.
+        # Fetch remote seasons
         dw_show = client.get_show_page(show.slug, membership_plan=membership_plan)
         all_dw_seasons: list[DwSeasonRecord] = dw_show.seasons
-        existing_season_slugs = {season.slug for season in show.seasons}
-        new_dw_seasons = select_dw_seasons_to_create(
-            existing_season_slugs=existing_season_slugs,
-            seasons=all_dw_seasons,
-        )
 
-        # Add any new seasons to the db
-        for new_dw_season in new_dw_seasons:
+        # Add any newly discovered seasons in the order returned by Daily Wire.
+        for new_dw_season in all_dw_seasons:
             if not any(season.slug == new_dw_season.slug for season in show.seasons):
                 create_season_by_dw_season(s, show=show, dw_season=new_dw_season)
                 s.flush()
