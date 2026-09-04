@@ -29,15 +29,21 @@ jobs:
       - name: Test canceled retry executor
         if: always()
         run: uv run pytest tests/unit/test_task_operation_controls.py::test_executor_skips_retry_run_after_cancellation_request
-      - name: Run existing task-operation suites
+      - name: Test task operations
         if: always()
-        run: >-
-          uv run pytest
-          tests/unit/test_task_operations.py
-          tests/unit/test_task_result_execution.py
-          tests/unit/test_task_operation_recovery.py
-          tests/unit/test_task_execution.py
-          tests/unit/test_episode_metadata_finalization.py
+        run: uv run pytest tests/unit/test_task_operations.py
+      - name: Test task result execution
+        if: always()
+        run: uv run pytest tests/unit/test_task_result_execution.py
+      - name: Test operation recovery
+        if: always()
+        run: uv run pytest tests/unit/test_task_operation_recovery.py
+      - name: Test task execution
+        if: always()
+        run: uv run pytest tests/unit/test_task_execution.py
+      - name: Test metadata operations
+        if: always()
+        run: uv run pytest tests/unit/test_episode_metadata_finalization.py
       - name: Verify Alembic history
         if: always()
         run: uv run backend-api db history
