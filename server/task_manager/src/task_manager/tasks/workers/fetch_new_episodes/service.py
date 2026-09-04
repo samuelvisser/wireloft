@@ -1,5 +1,4 @@
 from asyncio.log import logger
-from itertools import dropwhile, islice
 from typing import Optional, Sequence
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -16,7 +15,7 @@ from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier import IdentifierMaxValues
 from ...helpers.episodes.mapper import get_dw_episodes_since_ep, count_total_episodes
 from ...helpers.progress import ProgressBounds, update_progress
-from ...helpers.seasons import create_season_by_dw_season
+from ...helpers.seasons import create_season_by_dw_season, select_dw_seasons_to_create
 from ...helpers.episodes.save import save_dw_episodes_per_season_asc, SavedEpisode
 from ...types.general import RecordOrder
 from ..monitor_episode_worker.scheduling import MONITOR_REQUESTED_EVENT
@@ -78,16 +77,16 @@ async def run_fetch_new_episodes(s: Session, *, show_id: Optional[int] = None, s
             for ep in s.execute(non_final_stmt).scalars()
         }
 
-        # Fetch remote seasons
-        last_known_season: Optional[Season] = latest_final_episode.season if latest_final_episode is not None else None
+        # Fetch remote seasons. Only a completely unindexed show may normalize the
+        # API's season order. Once a season index exists it is immutable; later
+        # discoveries are appended with the next index in the API discovery order.
         dw_show = client.get_show_page(show.slug, membership_plan=membership_plan)
         all_dw_seasons: list[DwSeasonRecord] = dw_show.seasons
-
-        if last_known_season is not None:
-            relevant_dw_seasons = list(dropwhile(lambda season: season.slug != latest_final_episode.season.slug, all_dw_seasons))
-            new_dw_seasons: list[DwSeasonRecord] = list(islice(relevant_dw_seasons, 1, None))
-        else:
-            new_dw_seasons = all_dw_seasons
+        existing_season_slugs = {season.slug for season in show.seasons}
+        new_dw_seasons = select_dw_seasons_to_create(
+            existing_season_slugs=existing_season_slugs,
+            seasons=all_dw_seasons,
+        )
 
         # Add any new seasons to the db
         for new_dw_season in new_dw_seasons:
