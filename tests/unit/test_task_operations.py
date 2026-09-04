@@ -42,9 +42,15 @@ def _run(
         progress: int = 0,
         status=None,
         inputs: dict | None = None,
+        worker_progress: bool = False,
 ):
     from task_manager.scheduler.db import TaskRun
+    from task_manager.scheduler.operations import WORKER_PROGRESS_META_KEY
     from task_manager.scheduler.types import TaskStatus
+
+    meta = {"inputs": inputs} if inputs else {}
+    if worker_progress:
+        meta[WORKER_PROGRESS_META_KEY] = True
 
     run = TaskRun(
         schedule_id=None,
@@ -54,7 +60,7 @@ def _run(
         status=status or TaskStatus.RUNNING,
         progress=progress,
         message=None,
-        meta={"inputs": inputs} if inputs else None,
+        meta=meta or None,
         result=None,
         attempt_count=1,
         max_retries=0,
@@ -82,6 +88,7 @@ def test_operation_coalesces_onto_compatible_automatic_run():
             resource_type=ResourceType.SHOW,
             resource_id=42,
             progress=41,
+            worker_progress=True,
         )
 
         operation = create_operation(
@@ -194,6 +201,7 @@ def test_one_task_run_can_satisfy_multiple_overlapping_operations():
             resource_type=ResourceType.SHOW,
             resource_id=7,
             progress=20,
+            worker_progress=True,
         )
         linked = link_run_to_operations(
             session,
@@ -287,6 +295,7 @@ def test_multi_target_operation_aggregates_progress_and_structured_results():
             resource_id=102,
             progress=50,
             inputs={"refresh": True},
+            worker_progress=True,
         )
         link_run_to_operations(
             session,
@@ -316,6 +325,84 @@ def test_multi_target_operation_aggregates_progress_and_structured_results():
         assert operation.result["data"]["episodes_refreshed"] == 2
         assert operation.result["data"]["completed"] == 2
         assert operation.result["data"]["total"] == 2
+    finally:
+        session.close()
+
+
+def test_multi_target_operation_falls_back_to_completed_targets_without_worker_progress():
+    from task_manager.scheduler.operations import (
+        OperationTargetSpec,
+        create_operation,
+        link_run_to_operations,
+        refresh_operation,
+    )
+    from task_manager.scheduler.types import OperationStatus, ResourceType, TaskStatus
+
+    session = _session()
+    try:
+        definition = _definition(session, "refresh_episode_metadata_worker")
+        operation = create_operation(
+            session,
+            kind="show.refresh_metadata",
+            resource_type="show",
+            resource_id=5,
+            title="Test Show",
+            targets=[
+                OperationTargetSpec(
+                    task_key=definition.key,
+                    resource_type="episode",
+                    resource_id=101,
+                    task_kwargs={"refresh": True},
+                    slot_key="episode:101",
+                ),
+                OperationTargetSpec(
+                    task_key=definition.key,
+                    resource_type="episode",
+                    resource_id=102,
+                    task_kwargs={"refresh": True},
+                    slot_key="episode:102",
+                ),
+            ],
+        )
+
+        finished = _run(
+            session,
+            definition,
+            resource_type=ResourceType.EPISODE,
+            resource_id=101,
+            progress=100,
+            status=TaskStatus.SUCCEEDED,
+            inputs={"refresh": True},
+        )
+        finished.finished_at = datetime.now(timezone.utc)
+        link_run_to_operations(
+            session,
+            run=finished,
+            task_key=definition.key,
+            operation_ids=(operation.id,),
+            operation_slot="episode:101",
+        )
+
+        active = _run(
+            session,
+            definition,
+            resource_type=ResourceType.EPISODE,
+            resource_id=102,
+            progress=0,
+            inputs={"refresh": True},
+        )
+        link_run_to_operations(
+            session,
+            run=active,
+            task_key=definition.key,
+            operation_ids=(operation.id,),
+            operation_slot="episode:102",
+        )
+
+        refresh_operation(session, operation.id)
+
+        assert operation.status == OperationStatus.RUNNING.value
+        assert operation.progress == 50
     finally:
         session.close()
 

@@ -41,13 +41,15 @@ For fan-out operations, numeric result fields from successful targets are aggreg
 
 ## Progress
 
-Workers continue to use the normal progress updater:
+Workers and worker services continue to use the normal progress updater:
 
 ```python
 progress.set(50, "Refreshing episode 10/20")
 ```
 
-The executor mirrors linked TaskRun progress into the owning operation. A multi-target operation exposes the average target progress, with terminal targets counting as 100% complete.
+A progress update emitted anywhere inside the worker call stack is persisted on the `TaskRun` and is marked as worker-reported progress. `TaskOperation` prefers this worker-reported percentage while the linked worker is active. This preserves purpose-built progress trackers such as the granular `fetch_new_episodes` mapper/indexing progress instead of replacing them with a coarse operation-level estimate.
+
+When none of an operation's active workers reports progress, `TaskOperation` falls back to logical target completion. For example, a 200-episode metadata refresh whose individual workers do not publish percentages advances as targets finish. Terminal targets count as complete and the operation reaches 100% when every target is terminal.
 
 Operation targets and their run associations are loaded through SQLAlchemy relationships with eager loading when aggregate state is calculated. Aggregate progress must remain a bounded-query operation as target counts grow; do not reintroduce per-target TaskRun queries.
 

@@ -20,6 +20,8 @@ from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import OperationSource, OperationStatus, TaskStatus
 
 
+WORKER_PROGRESS_META_KEY = "_worker_progress_reported"
+
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
@@ -257,16 +259,27 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
     terminal_runs = [run for run in linked_runs if _task_status(run.status) in _TERMINAL_TASK_STATUSES]
 
     total = len(targets)
-    progress_total = 0
-    for run in effective_runs:
-        if run is None:
-            continue
-        status = _task_status(run.status)
-        if status in _TERMINAL_TASK_STATUSES:
-            progress_total += 100
-        elif isinstance(run.progress, int):
-            progress_total += max(0, min(100, run.progress))
-    operation.progress = int(progress_total / total) if total else 0
+    worker_progress_runs = [
+        run
+        for run in linked_runs
+        if _task_status(run.status) not in _TERMINAL_TASK_STATUSES
+        and _run_reports_worker_progress(run)
+    ]
+    if worker_progress_runs:
+        progress_total = 0
+        for run in effective_runs:
+            if run is None:
+                continue
+            status = _task_status(run.status)
+            if status in _TERMINAL_TASK_STATUSES:
+                progress_total += 100
+            elif _run_reports_worker_progress(run) and isinstance(run.progress, int):
+                progress_total += max(0, min(100, run.progress))
+        operation.progress = int(progress_total / total) if total else 0
+    else:
+        # Workers that never report their own progress fall back to logical-target
+        # completion, which is the generic TaskOperation behavior.
+        operation.progress = int((len(terminal_runs) / total) * 100) if total else 0
 
     starts = [run.started_at for run in linked_runs if run.started_at is not None]
     if starts:
@@ -555,6 +568,13 @@ def _run_matches_target_inputs(run: TaskRun, target: TaskOperationTarget) -> boo
     if not isinstance(inputs, dict):
         return False
     return all(inputs.get(key) == value for key, value in expected.items())
+
+
+def _run_reports_worker_progress(run: TaskRun) -> bool:
+    return (
+        isinstance(run.meta, dict)
+        and run.meta.get(WORKER_PROGRESS_META_KEY) is True
+    )
 
 
 def _link_target_to_run(session: Session, target: TaskOperationTarget, run: TaskRun) -> None:

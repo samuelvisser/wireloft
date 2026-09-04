@@ -4,7 +4,11 @@ from __future__ import annotations
 def test_executor_persists_task_result_and_completes_operation(task_database):
     from task_manager.scheduler.db import TaskOperation, TaskRun
     from task_manager.scheduler.executor import execute_task
-    from task_manager.scheduler.operations import OperationTargetSpec, create_operation
+    from task_manager.scheduler.operations import (
+        WORKER_PROGRESS_META_KEY,
+        OperationTargetSpec,
+        create_operation,
+    )
     from task_manager.scheduler.registry import sync_registry_to_db, task
     from task_manager.scheduler.results import TaskResult
     from task_manager.scheduler.types import OperationStatus, TaskStatus
@@ -59,6 +63,7 @@ def test_executor_persists_task_result_and_completes_operation(task_database):
         assert run.status == TaskStatus.SUCCEEDED
         assert run.progress == 100
         assert run.message == "Episode scan finished"
+        assert run.meta[WORKER_PROGRESS_META_KEY] is True
         assert run.result == {
             "summary": "Episode scan finished",
             "data": {"episodes_found": 3},
