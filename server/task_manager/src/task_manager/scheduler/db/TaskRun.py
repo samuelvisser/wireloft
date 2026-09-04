@@ -11,6 +11,9 @@ from task_manager.scheduler.types import ResourceType, TaskStatus
 
 
 class TaskRun(Base):
+    """ A TaskRun represents one execution attempt of one registered worker """
+
+
     __tablename__ = "task_runs"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

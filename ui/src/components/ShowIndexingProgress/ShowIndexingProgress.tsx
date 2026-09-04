@@ -19,10 +19,6 @@ export default function ShowIndexingProgress({showId, className}: Props) {
     const progress = typeof indexingOperation.progress === 'number'
         ? indexingOperation.progress
         : null
-    const detail = indexingOperation.message
-        && !['Queued', 'Running', 'OK'].includes(indexingOperation.message)
-        ? indexingOperation.message
-        : null
     const classes = ['show-indexing-progress', className].filter(Boolean).join(' ')
 
     return (
@@ -30,7 +26,6 @@ export default function ShowIndexingProgress({showId, className}: Props) {
             <div className="show-indexing-label">
                 <span>
                     {progress == null ? 'Indexing…' : `Indexing… ${progress}%`}
-                    {detail ? ` · ${detail}` : ''}
                 </span>
                 {progress == null && <FontAwesomeIcon icon={['fas', 'spinner']} spin aria-hidden="true"/>}
             </div>
