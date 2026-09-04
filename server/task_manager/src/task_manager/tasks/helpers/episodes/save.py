@@ -31,6 +31,15 @@ class SavedEpisode:
     detail_resolved: bool
 
 
+@dataclass(frozen=True)
+class ResolvedEpisode:
+    """An episode whose remote detail work is complete and is ready to persist."""
+    episode_identifier: str
+    record: DwEpisodeRecord
+    status: EpisodePublishStatus
+    detail_resolved: bool
+
+
 def upsert_episode(
         s, *, show: Show, season: Season, ep: DwEpisodeRecord, index_value: int, ep_id: str
 ) -> Episode:
@@ -92,38 +101,52 @@ def upsert_episode(
     return episode
 
 
-def _resolve_and_upsert_episode(
+def resolve_dw_episodes(
+        *,
+        episodes: list[EpisodeWithIdentifier],
+        client: MiddlewareClient,
+        require_member_exclusive: bool,
+) -> list[ResolvedEpisode]:
+    """Resolve every remote detail request before the database write phase.
+
+    SQLite permits only one writer at a time. If a season starts flushing episode
+    rows and then performs another Daily Wire HTTP request, that write transaction
+    can block unrelated API writes for the entire request. Resolve all remote
+    detail work first so the subsequent write transaction stays short.
+    """
+    resolved: list[ResolvedEpisode] = []
+    for ep_id, ep in episodes:
+        if is_published_final(ep):
+            status = EpisodePublishStatus.PUBLISHED_FINAL
+            record: DwEpisodeRecord = ep
+            detail_resolved = False
+        else:
+            record = client.get_episode_details(
+                ep.slug,
+                require_member_exclusive=require_member_exclusive,
+            )
+            status = get_publish_status_from_dw_detail(record)
+            detail_resolved = True
+
+        resolved.append(ResolvedEpisode(
+            episode_identifier=ep_id,
+            record=record,
+            status=status,
+            detail_resolved=detail_resolved,
+        ))
+    return resolved
+
+
+def _upsert_resolved_episode(
         s: Session,
         *,
         show: Show,
         season: Season,
-        client: MiddlewareClient,
-        require_member_exclusive: bool,
-        ep_id: str,
-        ep: DwEpisodeRecord,
+        resolved: ResolvedEpisode,
         index_value: int,
 ) -> SavedEpisode:
-    """Persist one episode with the status it currently holds on Daily Wire.
-
-    Episodes the cheap list heuristic already considers final are saved as
-    ``PUBLISHED_FINAL`` without an extra request (the back catalog). Everything else
-    is resolved through the detail endpoint exactly like ``monitor_episode_worker``,
-    so a freshly-indexed episode carries its real non-final status.
-    """
-    if is_published_final(ep):
-        status = EpisodePublishStatus.PUBLISHED_FINAL
-        record: DwEpisodeRecord = ep
-        detail_resolved = False
-    else:
-        record = client.get_episode_details(
-            ep.slug,
-            require_member_exclusive=require_member_exclusive,
-        )
-        status = get_publish_status_from_dw_detail(record)
-        detail_resolved = True
-
-    ep_to_save = record.model_copy(
-        update={"publish_status": status.value},
+    ep_to_save = resolved.record.model_copy(
+        update={"publish_status": resolved.status.value},
         deep=True,
     )
     episode = upsert_episode(
@@ -132,9 +155,71 @@ def _resolve_and_upsert_episode(
         season=season,
         ep=ep_to_save,
         index_value=index_value,
-        ep_id=ep_id,
+        ep_id=resolved.episode_identifier,
     )
-    return SavedEpisode(episode=episode, status=status, detail_resolved=detail_resolved)
+    return SavedEpisode(
+        episode=episode,
+        status=resolved.status,
+        detail_resolved=resolved.detail_resolved,
+    )
+
+
+def save_resolved_episodes_per_season_desc(
+        s: Session, *,
+        show: Show,
+        season: Season,
+        episodes: list[ResolvedEpisode],
+        start_index: int,
+) -> tuple[int, list[SavedEpisode]]:
+    """Persist pre-resolved episodes newest-to-oldest within one transaction."""
+    current_index = start_index
+    saved: list[SavedEpisode] = []
+
+    try:
+        for resolved in episodes:
+            saved.append(_upsert_resolved_episode(
+                s,
+                show=show,
+                season=season,
+                resolved=resolved,
+                index_value=current_index,
+            ))
+            current_index -= 1
+
+        s.commit()
+        return current_index, saved
+    except Exception:
+        s.rollback()
+        raise
+
+
+def save_resolved_episodes_per_season_asc(
+        s: Session, *,
+        show: Show,
+        season: Season,
+        episodes: list[ResolvedEpisode],
+        start_index: int,
+) -> tuple[int, list[SavedEpisode]]:
+    """Persist pre-resolved episodes oldest-to-newest within one transaction."""
+    current_index = start_index
+    saved: list[SavedEpisode] = []
+
+    try:
+        for resolved in episodes:
+            saved.append(_upsert_resolved_episode(
+                s,
+                show=show,
+                season=season,
+                resolved=resolved,
+                index_value=current_index,
+            ))
+            current_index += 1
+
+        s.commit()
+        return current_index, saved
+    except Exception:
+        s.rollback()
+        raise
 
 
 def save_dw_episodes_per_season_desc(s: Session, *,
@@ -148,29 +233,25 @@ def save_dw_episodes_per_season_desc(s: Session, *,
     Index a single season within its own transaction scope. On error, roll back
     all changes for the season and re-raise.
 
+    Remote episode details are resolved before the first write so no database
+    writer lock is held while waiting on Daily Wire.
+
     Returns the next index to use for subsequent (older) episodes together with the
     episodes that were saved.
     """
-    current_index = start_index
-    saved: list[SavedEpisode] = []
-
     try:
-        for ep_id, ep in episodes:
-            saved.append(_resolve_and_upsert_episode(
-                s,
-                show=show,
-                season=season,
-                client=client,
-                require_member_exclusive=require_member_exclusive,
-                ep_id=ep_id,
-                ep=ep,
-                index_value=current_index,
-            ))
-            current_index -= 1
-
-        # Commit this season
-        s.commit()
-        return current_index, saved
+        resolved = resolve_dw_episodes(
+            episodes=episodes,
+            client=client,
+            require_member_exclusive=require_member_exclusive,
+        )
+        return save_resolved_episodes_per_season_desc(
+            s,
+            show=show,
+            season=season,
+            episodes=resolved,
+            start_index=start_index,
+        )
     except Exception:
         s.rollback()
         raise
@@ -187,29 +268,25 @@ def save_dw_episodes_per_season_asc(s: Session, *,
     Index a single season within its own transaction scope. On error, roll back
     all changes for the season and re-raise.
 
+    Remote episode details are resolved before the first write so no database
+    writer lock is held while waiting on Daily Wire.
+
     Returns the next index to use for subsequent (newer) episodes together with the
     episodes that were saved.
     """
-    current_index = start_index
-    saved: list[SavedEpisode] = []
-
     try:
-        for ep_id, ep in episodes:
-            saved.append(_resolve_and_upsert_episode(
-                s,
-                show=show,
-                season=season,
-                client=client,
-                require_member_exclusive=require_member_exclusive,
-                ep_id=ep_id,
-                ep=ep,
-                index_value=current_index,
-            ))
-            current_index += 1
-
-        # Commit this season
-        s.commit()
-        return current_index, saved
+        resolved = resolve_dw_episodes(
+            episodes=episodes,
+            client=client,
+            require_member_exclusive=require_member_exclusive,
+        )
+        return save_resolved_episodes_per_season_asc(
+            s,
+            show=show,
+            season=season,
+            episodes=resolved,
+            start_index=start_index,
+        )
     except Exception:
         s.rollback()
         raise

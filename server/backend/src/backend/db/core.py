@@ -3,14 +3,22 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 import importlib
+import logging
 import os
 import pkgutil
 
-from sqlalchemy import create_engine, MetaData
+from sqlalchemy import MetaData, create_engine, event
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from config import get_settings
+
+
+logger = logging.getLogger(__name__)
+
+_SQLITE_BUSY_TIMEOUT_SECONDS = 30
+_SQLITE_BUSY_TIMEOUT_MS = _SQLITE_BUSY_TIMEOUT_SECONDS * 1_000
 
 naming_convention = {
     "ix": "ix_%(table_name)s_%(column_0_name)s",
@@ -30,6 +38,39 @@ _SessionLocal: Optional[Session] = None
 _db_path: Optional[Path] = None
 
 
+def _configure_sqlite_connection(dbapi_connection, connection_record) -> None:
+    """Apply per-connection SQLite settings used by API and worker threads."""
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute(f"PRAGMA busy_timeout={_SQLITE_BUSY_TIMEOUT_MS}")
+    finally:
+        cursor.close()
+
+
+def _enable_sqlite_wal(engine: Engine) -> None:
+    """Enable WAL so long-running readers do not block unrelated writers."""
+    with engine.connect() as connection:
+        try:
+            journal_mode = connection.exec_driver_sql(
+                "PRAGMA journal_mode=WAL"
+            ).scalar_one()
+        except OperationalError:
+            # A previous development/reload process can briefly retain a lock.
+            # The busy timeout still protects this process; do not make startup
+            # fail solely because WAL could not be switched during that window.
+            logger.warning(
+                "Could not enable SQLite WAL mode; continuing with the current journal mode",
+                exc_info=True,
+            )
+            return
+
+    if str(journal_mode).lower() != "wal":
+        logger.warning(
+            "SQLite did not enable WAL mode (journal_mode=%s)",
+            journal_mode,
+        )
+
+
 def configure_db() -> None:
     """Configure the global SQLAlchemy engine and session factory."""
     global _engine, _SessionLocal, _db_path
@@ -41,8 +82,15 @@ def configure_db() -> None:
     os.makedirs(path.parent, exist_ok=True)
     engine = create_engine(
         get_settings().database_url,
-        connect_args={"check_same_thread": False},
+        connect_args={
+            "check_same_thread": False,
+            # sqlite3 defaults to five seconds. Background workers and API writes
+            # legitimately overlap, so give short writer bursts time to serialize.
+            "timeout": _SQLITE_BUSY_TIMEOUT_SECONDS,
+        },
     )
+    event.listen(engine, "connect", _configure_sqlite_connection)
+    _enable_sqlite_wal(engine)
 
     _engine = engine
     _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)

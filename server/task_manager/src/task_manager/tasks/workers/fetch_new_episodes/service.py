@@ -246,9 +246,11 @@ async def _fetch_show(
         update_progress(progress, 100, f"Dry run complete for '{show.slug}' (nothing saved)")
         return 0
 
+    # Keep identifier metadata pending until the first episode write/commit. The
+    # season saver resolves Daily Wire detail requests before that first flush, so
+    # this worker never owns SQLite's writer lock while waiting on remote I/O.
     for key, value in identifier_max_values.items():
         show.set_meta(key=key, value=str(value))
-        s.flush()
 
     total = count_total_episodes(ep_map_asc)
     upper += 1
