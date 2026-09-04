@@ -22,7 +22,7 @@ const DATE_OUTPUT_TEMPLATE_FIELDS = [
 
 export const SHOW_OUTPUT_TEMPLATE_FIELDS = [
     'show', 'show_title', 'season', 'season_name', 'season_index', 'episode', 'episode_title', 'title',
-    'episode_type', 'episode_number', 'ep_id', 'episode_published_date',
+    'episode_type', 'episode_number', 'episode_label', 'episode_identifier', 'episode_published_date',
     'episode_published_time', 'episode_published_datetime',
     ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const

@@ -34,7 +34,7 @@ MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
 
 SHOW_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "show", "show_title", "season", "season_name", "season_index", "episode", "episode_title", "title",
-    "episode_type", "episode_number", "ep_id", "episode_published_date",
+    "episode_type", "episode_number", "episode_label", "episode_identifier", "episode_published_date",
     "episode_published_time", "episode_published_datetime",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
@@ -175,7 +175,12 @@ def movie_template_uses_release_date(output_template: str) -> bool:
 
 def episode_output_template_values(episode: "Episode") -> dict[str, str]:
     """Build the complete Show-profile context for an episode."""
-    ep_info = episode_type_info(episode.episode_identifier)
+    episode_identifier = episode.episode_identifier or ""
+    _, label_separator, episode_label = episode_identifier.partition(".")
+    if not label_separator:
+        episode_label = episode_identifier
+
+    ep_info = episode_type_info(episode_identifier)
     published_at = episode.published_date
     return {
         "show": episode.show.slug,
@@ -188,7 +193,8 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "title": episode.title,
         "episode_type": ep_info["type"],
         "episode_number": ep_info["number"],
-        "ep_id": episode.episode_identifier or "",
+        "episode_label": episode_label,
+        "episode_identifier": episode_identifier,
         "episode_published_date": published_at.strftime("%Y-%m-%d") if published_at else "",
         "episode_published_time": published_at.strftime("%H:%M:%S") if published_at else "",
         "episode_published_datetime": published_at.strftime("%Y-%m-%d %H:%M:%S") if published_at else "",
