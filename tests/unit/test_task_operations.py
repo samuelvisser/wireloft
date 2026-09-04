@@ -42,15 +42,9 @@ def _run(
         progress: int = 0,
         status=None,
         inputs: dict | None = None,
-        worker_progress: bool = False,
 ):
     from task_manager.scheduler.db import TaskRun
-    from task_manager.scheduler.operations import WORKER_PROGRESS_META_KEY
     from task_manager.scheduler.types import TaskStatus
-
-    meta = {"inputs": inputs} if inputs else {}
-    if worker_progress:
-        meta[WORKER_PROGRESS_META_KEY] = True
 
     run = TaskRun(
         schedule_id=None,
@@ -60,7 +54,7 @@ def _run(
         status=status or TaskStatus.RUNNING,
         progress=progress,
         message=None,
-        meta=meta or None,
+        meta={"inputs": inputs} if inputs else None,
         result=None,
         attempt_count=1,
         max_retries=0,
@@ -88,7 +82,6 @@ def test_operation_coalesces_onto_compatible_automatic_run():
             resource_type=ResourceType.SHOW,
             resource_id=42,
             progress=41,
-            worker_progress=True,
         )
 
         operation = create_operation(
@@ -201,7 +194,6 @@ def test_one_task_run_can_satisfy_multiple_overlapping_operations():
             resource_type=ResourceType.SHOW,
             resource_id=7,
             progress=20,
-            worker_progress=True,
         )
         linked = link_run_to_operations(
             session,
@@ -295,7 +287,6 @@ def test_multi_target_operation_aggregates_progress_and_structured_results():
             resource_id=102,
             progress=50,
             inputs={"refresh": True},
-            worker_progress=True,
         )
         link_run_to_operations(
             session,
