@@ -65,7 +65,6 @@ def cancel_operation(operation_id: str) -> dict | None:
                     continue
                 run_ids.add(run.id)
                 _request_run_cancellation(session, run, operation.id)
-            target.recover_on_restart = False
 
         now = datetime.now(timezone.utc)
         operation.status = OperationStatus.CANCELED.value
@@ -129,7 +128,6 @@ def restart_operation(operation_id: str) -> dict | None:
                     _request_run_cancellation(session, run, operation.id)
                 session.delete(link)
 
-            target.recover_on_restart = True
             if keep_link is None:
                 targets_to_dispatch.append(target)
 
