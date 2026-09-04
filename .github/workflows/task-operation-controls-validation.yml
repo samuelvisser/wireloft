@@ -1,0 +1,44 @@
+name: Task operation controls validation
+
+on:
+  pull_request:
+    branches: [develop]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install uv
+        run: python -m pip install uv
+      - name: Install dependencies
+        run: uv sync
+      - name: Run focused tests
+        run: >-
+          uv run pytest
+          tests/unit/test_task_operation_controls.py
+          tests/unit/test_task_operations.py
+          tests/unit/test_task_result_execution.py
+          tests/unit/test_task_operation_recovery.py
+          tests/unit/test_task_execution.py
+          tests/unit/test_episode_metadata_finalization.py
+      - name: Verify Alembic history
+        run: uv run backend-api db history
+
+  frontend-syntax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse changed TypeScript files
+        run: |
+          npx --yes esbuild@0.24.2 ui/src/components/ActionMenu/ActionMenu.tsx --loader:.tsx=tsx --format=esm --outfile=/tmp/action-menu.js
+          npx --yes esbuild@0.24.2 ui/src/pages/show/ShowPage.tsx --loader:.tsx=tsx --format=esm --outfile=/tmp/show-page.js
+          npx --yes esbuild@0.24.2 ui/src/lib/operations.ts --loader:.ts=ts --format=esm --outfile=/tmp/operations.js
