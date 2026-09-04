@@ -6,7 +6,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from backend.db import Base
 
 
+# Connects logical operation targets to actual TaskRun objects
 class TaskOperationRun(Base):
+    """ Connects logical operation targets to actual TaskRun objects """
+
     __tablename__ = "task_operation_runs"
 
     target_id: Mapped[int] = mapped_column(

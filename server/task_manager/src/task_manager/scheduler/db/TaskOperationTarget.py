@@ -6,6 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from backend.db import Base
 
 
+# Represents the logical units of work that must be fulfilled for an operation
+# Usually used by a TaskOperation to trigger single or multiple tasks (workers) to finish the operation.
 class TaskOperationTarget(Base):
     __tablename__ = "task_operation_targets"
     __table_args__ = (

@@ -10,6 +10,12 @@ from backend.db import Base
 
 
 class TaskOperation(Base):
+    """ A TaskOperation represents the user's high-level intent rather than an individual worker execution.
+
+    It is usually triggered by a user action and is used to track task progress and its result when done.
+    A TaskOperation could be connected to multiple TaskOperationTarget objects that represent a logical unit of work.
+    """
+
     __tablename__ = "task_operations"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
