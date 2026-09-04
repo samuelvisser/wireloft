@@ -1,0 +1,244 @@
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react'
+import {useQuery, useQueryClient, type QueryClient} from '@tanstack/react-query'
+import {toast} from 'react-hot-toast'
+import {TaskOperationReadSchema, type TaskOperationRead} from '../../types/schemas/operation'
+
+const ACTIVE_STATUSES = new Set(['QUEUED', 'RUNNING'])
+const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'PARTIAL', 'FAILED', 'CANCELED'])
+const OPERATION_POLL_ACTIVE_MS = 1250
+const OPERATION_POLL_IDLE_MS = 5000
+
+type OperationContextValue = {
+  operations: TaskOperationRead[]
+  findActive: (
+    kind: string,
+    resourceType?: string,
+    resourceId?: number | null,
+  ) => TaskOperationRead | undefined
+}
+
+const OperationContext = createContext<OperationContextValue>({
+  operations: [],
+  findActive: () => undefined,
+})
+
+async function fetchOperations(): Promise<TaskOperationRead[]> {
+  const base = (window as any).appConfig?.API_URL || '/api'
+  const response = await fetch(`${base}/operations?source=UI&relevant=true&limit=200`, {
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return TaskOperationReadSchema.array().parse(await response.json())
+}
+
+async function markSeen(operationId: string): Promise<void> {
+  const base = (window as any).appConfig?.API_URL || '/api'
+  const response = await fetch(`${base}/operations/${encodeURIComponent(operationId)}/seen`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+}
+
+function contextString(operation: TaskOperationRead, key: string): string | undefined {
+  const value = operation.context?.[key]
+  return typeof value === 'string' && value ? value : undefined
+}
+
+function resultNumber(operation: TaskOperationRead, key: string): number | undefined {
+  const value = operation.result?.data?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function plural(value: number, singular: string, pluralForm = `${singular}s`) {
+  return value === 1 ? singular : pluralForm
+}
+
+function operationLabel(operation: TaskOperationRead): string {
+  switch (operation.kind) {
+    case 'show.index':
+      return 'Show indexing'
+    case 'show.sync':
+      return 'Sync'
+    case 'show.refresh_metadata':
+    case 'episode.refresh_metadata':
+      return 'Metadata refresh'
+    case 'show.redownload_episodes':
+      return 'Re-download'
+    default:
+      return operation.title || 'Operation'
+  }
+}
+
+function successMessage(operation: TaskOperationRead): string {
+  const showTitle = contextString(operation, 'show_title') || operation.title
+
+  switch (operation.kind) {
+    case 'show.index': {
+      const count = resultNumber(operation, 'episodes_found')
+      return count === undefined
+        ? `Indexing finished for ${showTitle}`
+        : `Indexed ${showTitle}: ${count} ${plural(count, 'episode')} found`
+    }
+    case 'show.sync': {
+      const count = resultNumber(operation, 'episodes_found') ?? 0
+      return `Sync finished for ${showTitle}: ${count} new ${plural(count, 'episode')} found`
+    }
+    case 'show.refresh_metadata': {
+      const count = operation.progressTotal
+      return count === 0
+        ? `No episodes to refresh in ${showTitle}`
+        : `Metadata refresh completed for ${count} ${plural(count, 'episode')} in ${showTitle}`
+    }
+    case 'episode.refresh_metadata': {
+      const episodeTitle = contextString(operation, 'episode_title') || operation.title
+      return `Metadata refresh completed for ${episodeTitle}`
+    }
+    case 'show.redownload_episodes': {
+      const files = resultNumber(operation, 'episode_files') ?? 0
+      const profiles = resultNumber(operation, 'download_profiles')
+      const profileDetail = profiles === undefined
+        ? ''
+        : ` using ${profiles} ${plural(profiles, 'Download Profile')}`
+      return `Re-download finished for ${showTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
+    }
+    default:
+      return operation.result?.summary || operation.message || `${operation.title} completed`
+  }
+}
+
+function terminalMessage(operation: TaskOperationRead): string {
+  if (operation.status === 'SUCCEEDED') return successMessage(operation)
+
+  const label = operationLabel(operation)
+  if (operation.status === 'PARTIAL') {
+    const completed = resultNumber(operation, 'completed') ?? operation.progressCurrent
+    const total = resultNumber(operation, 'total') ?? operation.progressTotal
+    return `${label} partially completed for ${operation.title}: ${completed}/${total} tasks succeeded`
+  }
+  if (operation.status === 'CANCELED') {
+    return `${label} was canceled for ${operation.title}`
+  }
+  return `${label} failed for ${operation.title}${operation.error ? `: ${operation.error}` : ''}`
+}
+
+async function invalidateForOperation(queryClient: QueryClient, operation: TaskOperationRead) {
+  const showSlug = contextString(operation, 'show_slug')
+  const episodeSlug = contextString(operation, 'episode_slug')
+  const invalidations: Promise<unknown>[] = []
+
+  if (operation.kind.startsWith('show.')) {
+    invalidations.push(
+      queryClient.invalidateQueries({queryKey: ['shows']}),
+      queryClient.invalidateQueries({queryKey: ['showsView']}),
+    )
+    if (showSlug) {
+      invalidations.push(
+        queryClient.invalidateQueries({queryKey: ['show', showSlug]}),
+        queryClient.invalidateQueries({queryKey: ['episodes', showSlug]}),
+      )
+    }
+  }
+
+  if (operation.kind === 'show.redownload_episodes') {
+    invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+  }
+
+  if (operation.kind === 'episode.refresh_metadata') {
+    if (episodeSlug) {
+      invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
+    }
+    if (showSlug) {
+      invalidations.push(queryClient.invalidateQueries({queryKey: ['episodes', showSlug]}))
+    }
+  }
+
+  await Promise.all(invalidations)
+}
+
+export default function OperationNotifier({children}: {children: ReactNode}) {
+  const queryClient = useQueryClient()
+  const handledRef = useRef(new Set<string>())
+  const {data: operations = []} = useQuery({
+    queryKey: ['operations'],
+    queryFn: fetchOperations,
+    refetchInterval: (query) => {
+      const current = query.state.data as TaskOperationRead[] | undefined
+      return current?.some((operation) => ACTIVE_STATUSES.has(operation.status))
+        ? OPERATION_POLL_ACTIVE_MS
+        : OPERATION_POLL_IDLE_MS
+    },
+    refetchIntervalInBackground: true,
+  })
+
+  useEffect(() => {
+    for (const operation of operations) {
+      if (
+        !TERMINAL_STATUSES.has(operation.status)
+        || operation.notificationSeenAt
+        || handledRef.current.has(operation.id)
+      ) {
+        continue
+      }
+
+      handledRef.current.add(operation.id)
+      const message = terminalMessage(operation)
+      if (operation.status === 'SUCCEEDED') {
+        toast.success(message, {duration: 5000})
+      } else if (operation.status === 'PARTIAL') {
+        toast(message, {duration: 6000})
+      } else {
+        toast.error(message, {duration: 6000})
+      }
+
+      void (async () => {
+        try {
+          await invalidateForOperation(queryClient, operation)
+          await markSeen(operation.id)
+          await queryClient.invalidateQueries({queryKey: ['operations']})
+        } catch {
+          // The notification was already shown in this browser session. Keep the
+          // operation unseen server-side so a later reload can retry the durable
+          // acknowledgement instead of losing completion information.
+        }
+      })()
+    }
+  }, [operations, queryClient])
+
+  const value = useMemo<OperationContextValue>(() => ({
+    operations,
+    findActive: (kind, resourceType, resourceId) => operations.find((operation) => (
+      ACTIVE_STATUSES.has(operation.status)
+      && operation.kind === kind
+      && (resourceType === undefined || operation.resourceType === resourceType)
+      && (resourceId === undefined || operation.resourceId === resourceId)
+    )),
+  }), [operations])
+
+  return (
+    <OperationContext.Provider value={value}>
+      {children}
+    </OperationContext.Provider>
+  )
+}
+
+export function useOperations() {
+  return useContext(OperationContext)
+}
+
+export function useActiveOperation(
+  kind: string,
+  resourceType?: string,
+  resourceId?: number | null,
+) {
+  const {findActive} = useOperations()
+  if (resourceId === null) return undefined
+  return findActive(kind, resourceType, resourceId)
+}

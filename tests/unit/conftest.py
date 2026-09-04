@@ -27,7 +27,14 @@ def task_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Configure scheduler tests with a file-backed, disposable SQLite DB."""
     from backend.db import core
     from backend.db.core import Base
-    from task_manager.scheduler.db import TaskDefinition, TaskRun, TaskSchedule
+    from task_manager.scheduler.db import (
+        TaskDefinition,
+        TaskOperation,
+        TaskOperationRun,
+        TaskOperationTarget,
+        TaskRun,
+        TaskSchedule,
+    )
 
     database_path = tmp_path / "wireloft-test.db"
     engine = create_engine(
@@ -46,6 +53,9 @@ def task_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             TaskDefinition.__table__,
             TaskSchedule.__table__,
             TaskRun.__table__,
+            TaskOperation.__table__,
+            TaskOperationTarget.__table__,
+            TaskOperationRun.__table__,
         ],
     )
 

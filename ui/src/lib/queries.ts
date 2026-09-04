@@ -1,5 +1,5 @@
 import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClient} from '@tanstack/react-query'
-import {useEffect, useRef} from 'react'
+import {useEffect} from 'react'
 import {saveProfilesToStorage, saveShowsToStorage} from './cache'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
 import {PodcastDownloadProfileRead} from "../types/schemas/podcast_download_profile";
@@ -13,7 +13,6 @@ import {SeasonRead} from "../types/schemas/season";
 import {RssStreamProfileRead} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
-import {TaskRunRead, TaskRunReadSchema} from "../types/schemas/task";
 import {MediaDownloadAttemptRead, MediaDownloadViewRead} from "../types/schemas/media_download";
 import {ACTIVE_DOWNLOAD_STATUSES} from "../types/media_download";
 import {MovieRead} from "../types/schemas/movie";
@@ -380,38 +379,6 @@ export function useMediaDownloadAttempts(mediaDownloadId?: number) {
         // A light poll so a ledger entry from a redownload finishing while the
         // log dialog is open shows up without the user having to reopen it.
         refetchInterval: 2000,
-        refetchOnMount: 'always',
-    })
-}
-
-export function useShowIndexingRun(showId?: number, options?: {pollForStart?: boolean}) {
-    const discoveryWindow = useRef({showId, startedAt: Date.now()})
-    if (discoveryWindow.current.showId !== showId) {
-        discoveryWindow.current = {showId, startedAt: Date.now()}
-    }
-    return useQuery<any, Error, TaskRunRead | null, readonly ['showIndexingRun', number | undefined]>({
-        queryKey: ['showIndexingRun', showId] as const,
-        enabled: !!showId,
-        queryFn: async ({signal}) => {
-            const base: string = (window as any).appConfig.API_URL
-            const url = `${base}/tasks/runs?resource_type=show&resource_id=${showId}&definition_key=fetch_new_episodes&status=RUNNING`
-            const data: any[] = await fetchJSON<any[]>(url, signal)
-
-            if(Array.isArray(data) && data.length > 0) {
-                return TaskRunReadSchema.parse(data[0])
-            }
-            return null
-        },
-        // Keep polling an active run. Newly added zero-episode shows also get a
-        // short discovery window so a just-scheduled task cannot lose the race
-        // against the first Library/Show page request.
-        refetchInterval: (q) => {
-            const run = q.state.data as TaskRunRead | null
-            const waitingForStart = options?.pollForStart
-                && Date.now() - discoveryWindow.current.startedAt < 30_000
-            return run || waitingForStart ? 1500 : false
-        },
-        placeholderData: null,
         refetchOnMount: 'always',
     })
 }

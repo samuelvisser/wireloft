@@ -6,7 +6,6 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
-import {waitForMetadataRefreshCompletion} from '../../lib/metadataRefresh'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import {MediaDownloadStatusReg} from '../../types/media_download'
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
@@ -16,6 +15,7 @@ import {getErrorMessageFromResponse} from '../../utils/helpers'
 import ProgressBar from '../../components/common/ProgressBar'
 import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -177,6 +177,12 @@ export default function EpisodePage() {
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads} = useEpisodeDownloads(episodeId)
     const showProfiles = profiles?.filter((profile) => profile.type === 'show')
+    const metadataRefreshOperation = useActiveOperation(
+        'episode.refresh_metadata',
+        'episode',
+        episode?.id ?? null,
+    )
+    const metadataRefreshBusy = metadataRefreshStarting || metadataRefreshOperation !== undefined
 
     if (!showId) {
         return (
@@ -253,7 +259,7 @@ export default function EpisodePage() {
     )
 
     const refreshMetadata = async () => {
-        if (metadataRefreshStarting) return
+        if (metadataRefreshBusy) return
 
         setMetadataRefreshStarting(true)
         try {
@@ -269,21 +275,12 @@ export default function EpisodePage() {
             }
 
             const result = await response.json()
-            if (typeof result?.request_id !== 'string' || !result.request_id) {
-                throw new Error('Metadata refresh request did not return a request ID')
+            if (typeof result?.operationId !== 'string' || !result.operationId) {
+                throw new Error('Metadata refresh request did not return an operation ID')
             }
 
+            await qc.invalidateQueries({queryKey: ['operations']})
             toast.success('Metadata refresh started')
-            try {
-                await waitForMetadataRefreshCompletion(result.request_id, 1)
-                toast.success('Metadata refresh completed', {duration: 5000})
-                await Promise.all([
-                    qc.invalidateQueries({queryKey: ['episode', episodeId]}),
-                    qc.invalidateQueries({queryKey: ['episodes', showId]}),
-                ])
-            } catch {
-                toast.error('Metadata refresh failed')
-            }
         } catch {
             toast.error('Could not start metadata refresh')
         } finally {
@@ -315,7 +312,7 @@ export default function EpisodePage() {
                                 {
                                     label: 'Refresh metadata',
                                     icon: ['fas', 'arrows-rotate'],
-                                    disabled: metadataRefreshStarting,
+                                    disabled: metadataRefreshBusy,
                                     onSelect: () => void refreshMetadata(),
                                 },
                             ]}

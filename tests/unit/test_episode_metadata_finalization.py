@@ -108,7 +108,7 @@ def test_remaining_metadata_checks_are_anchored_to_publish_time(monkeypatch):
     } == {10800, 21600, 86400}
 
 
-def test_metadata_worker_uses_registry_trigger_metadata():
+def test_metadata_worker_uses_registry_trigger_metadata_without_manual_ids():
     import inspect
     import task_manager.tasks  # noqa: F401
     from task_manager.scheduler.registry import get_task
@@ -128,56 +128,25 @@ def test_metadata_worker_uses_registry_trigger_metadata():
         MONITOR_COMPLETED_EVENT,
     }
     parameters = inspect.signature(worker).parameters
-    assert "manual_request_id" in parameters
-    assert "manual_request_ids" in parameters
+    assert "refresh" in parameters
+    assert "scheduled_offset_seconds" in parameters
+    assert "manual_request_id" not in parameters
+    assert "manual_request_ids" not in parameters
 
 
-def test_pending_manual_metadata_refresh_requests_persist_until_completed():
-    from backend.utils.episode import (
-        add_pending_manual_metadata_refresh_request,
-        complete_manual_metadata_refresh_requests,
-        pending_manual_metadata_refresh_request_ids,
-    )
-
-    class FakeEpisode:
-        def __init__(self):
-            self.meta: dict[str, str | None] = {}
-
-        def get_meta(self, key: str):
-            return self.meta.get(key)
-
-        def set_meta(self, key: str, value: str | None):
-            self.meta[key] = value
-
-    episode = FakeEpisode()
-    add_pending_manual_metadata_refresh_request(episode, "request-a")
-    add_pending_manual_metadata_refresh_request(episode, "request-b")
-    add_pending_manual_metadata_refresh_request(episode, "request-a")
-
-    assert pending_manual_metadata_refresh_request_ids(episode) == (
-        "request-a",
-        "request-b",
-    )
-
-    complete_manual_metadata_refresh_requests(episode, ("request-b",))
-    assert pending_manual_metadata_refresh_request_ids(episode) == ("request-a",)
-
-    complete_manual_metadata_refresh_requests(episode, ("request-a",))
-    assert pending_manual_metadata_refresh_request_ids(episode) == ()
-
-
-def test_manual_episode_metadata_refresh_marks_unfinished_and_queues_worker(monkeypatch):
+def test_episode_metadata_refresh_creates_operation_and_queues_worker(monkeypatch):
     from backend.api.endpoints.episodes import service
 
-    request_id = "episode-refresh-request"
     episode = SimpleNamespace(
         id=17,
         slug="test-episode",
+        title="Test Episode",
         show_id=3,
         metadata_is_final=True,
+        show=SimpleNamespace(slug="test-show", title="Test Show"),
     )
     queued: list[tuple[str, dict]] = []
-    persisted_request_ids: list[str] = []
+    created: list[dict] = []
 
     class Query:
         def filter_by(self, **kwargs):
@@ -197,13 +166,13 @@ def test_manual_episode_metadata_refresh_marks_unfinished_and_queues_worker(monk
         def flush(self):
             self.flushes += 1
 
+    def fake_create_operation(_session, **kwargs):
+        created.append(kwargs)
+        return SimpleNamespace(id="operation-episode-refresh")
+
     session = FakeSession()
-    monkeypatch.setattr(service, "uuid4", lambda: request_id)
-    monkeypatch.setattr(
-        service,
-        "add_pending_manual_metadata_refresh_request",
-        lambda item, value: persisted_request_ids.append(value),
-    )
+    monkeypatch.setattr(service, "create_operation", fake_create_operation)
+    monkeypatch.setattr(service, "operation_target_needs_dispatch", lambda *_args: True)
     monkeypatch.setattr(
         service,
         "queue_event",
@@ -215,11 +184,15 @@ def test_manual_episode_metadata_refresh_marks_unfinished_and_queues_worker(monk
     assert result == {
         "queued": True,
         "episode_id": episode.id,
-        "request_id": request_id,
+        "operation_id": "operation-episode-refresh",
     }
     assert episode.metadata_is_final is False
-    assert persisted_request_ids == [request_id]
     assert session.flushes == 1
+    assert created[0]["kind"] == "episode.refresh_metadata"
+    assert created[0]["resource_id"] == episode.id
+    target = created[0]["targets"][0]
+    assert target.task_key == "refresh_episode_metadata_worker"
+    assert target.task_kwargs == {"refresh": True}
     assert queued == [(
         service.METADATA_REFRESH_REQUESTED_EVENT,
         {
@@ -228,23 +201,22 @@ def test_manual_episode_metadata_refresh_marks_unfinished_and_queues_worker(monk
             "slug": episode.slug,
             "show_id": episode.show_id,
             "refresh": True,
-            "manual_request_id": request_id,
         },
     )]
 
 
-def test_show_metadata_refresh_marks_every_episode_through_shared_helper(monkeypatch):
+def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(monkeypatch):
     from backend.api.endpoints.shows import service
     from backend.db.models import Episode, Show
 
-    request_id = "show-refresh-request"
-    show = SimpleNamespace(id=9, slug="test-show")
+    show = SimpleNamespace(id=9, slug="test-show", title="Test Show")
     episodes = [
         SimpleNamespace(id=1, metadata_is_final=True),
         SimpleNamespace(id=2, metadata_is_final=True),
         SimpleNamespace(id=3, metadata_is_final=False),
     ]
-    queued: list[tuple[int, str | None]] = []
+    queued: list[int] = []
+    created: list[dict] = []
 
     class Query:
         def __init__(self, model):
@@ -275,12 +247,17 @@ def test_show_metadata_refresh_marks_every_episode_through_shared_helper(monkeyp
         def flush(self):
             self.flushes += 1
 
-    def queue_refresh(_session, episode, *, manual_request_id=None):
+    def fake_create_operation(_session, **kwargs):
+        created.append(kwargs)
+        return SimpleNamespace(id="operation-show-refresh")
+
+    def queue_refresh(_session, episode):
         episode.metadata_is_final = False
-        queued.append((episode.id, manual_request_id))
+        queued.append(episode.id)
 
     session = FakeSession()
-    monkeypatch.setattr(service, "uuid4", lambda: request_id)
+    monkeypatch.setattr(service, "create_operation", fake_create_operation)
+    monkeypatch.setattr(service, "operation_target_needs_dispatch", lambda *_args: True)
     monkeypatch.setattr(service, "queue_episode_metadata_refresh", queue_refresh)
 
     result = service.request_show_metadata_refresh(session, show.slug)
@@ -288,67 +265,17 @@ def test_show_metadata_refresh_marks_every_episode_through_shared_helper(monkeyp
     assert result == {
         "queued": True,
         "episodes_queued": 3,
-        "request_id": request_id,
+        "operation_id": "operation-show-refresh",
     }
-    assert queued == [
-        (1, request_id),
-        (2, request_id),
-        (3, request_id),
-    ]
+    assert created[0]["kind"] == "show.refresh_metadata"
+    assert [target.resource_id for target in created[0]["targets"]] == [1, 2, 3]
+    assert all(target.task_kwargs == {"refresh": True} for target in created[0]["targets"])
+    assert queued == [1, 2, 3]
     assert all(episode.metadata_is_final is False for episode in episodes)
     assert session.flushes == 1
 
 
-def test_manual_request_id_filters_normal_and_recovery_task_runs(monkeypatch):
-    from backend.api.endpoints.tasks import service
-
-    def task_run(run_id: int, inputs: dict):
-        return SimpleNamespace(
-            id=run_id,
-            resource_type="episode",
-            resource_id=run_id,
-            status="SUCCEEDED",
-            progress=100,
-            message="OK",
-            attempt_count=1,
-            max_retries=5,
-            last_error=None,
-            started_at=datetime(2026, 9, 2, 12, tzinfo=timezone.utc),
-            finished_at=datetime(2026, 9, 2, 12, 0, 1, tzinfo=timezone.utc),
-            runtime_ms=1000,
-            meta={"inputs": inputs},
-        )
-
-    direct = task_run(1, {"manual_request_id": "wanted"})
-    recovered = task_run(2, {"manual_request_ids": ["other", "wanted"]})
-    other = task_run(3, {"manual_request_id": "other"})
-
-    class Result:
-        def all(self):
-            return [
-                (direct, "refresh_episode_metadata_worker"),
-                (recovered, "refresh_episode_metadata_worker"),
-                (other, "refresh_episode_metadata_worker"),
-            ]
-
-    class FakeSession:
-        def execute(self, statement):
-            return Result()
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(service, "get_session", FakeSession)
-
-    result = service.list_runs(
-        definition_key="refresh_episode_metadata_worker",
-        manual_request_id="wanted",
-    )
-
-    assert [row["id"] for row in result] == [direct.id, recovered.id]
-
-
-def test_startup_recovery_preserves_pending_manual_request_ids(monkeypatch):
+def test_startup_metadata_recovery_skips_live_and_active_operation_targets(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.workers.refresh_episode_metadata_worker import service
 
@@ -356,18 +283,18 @@ def test_startup_recovery_preserves_pending_manual_request_ids(monkeypatch):
         id=31,
         publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
     )
-    live_episode = SimpleNamespace(
+    final_with_operation = SimpleNamespace(
         id=32,
-        publish_status=EpisodePublishStatus.LIVE.value,
+        publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
     )
-    live_without_manual_request = SimpleNamespace(
+    live_episode = SimpleNamespace(
         id=33,
         publish_status=EpisodePublishStatus.LIVE.value,
     )
 
     class ScalarResult:
         def __iter__(self):
-            return iter((final_episode, live_episode, live_without_manual_request))
+            return iter((final_episode, final_with_operation, live_episode))
 
     class FakeSession:
         def scalars(self, statement):
@@ -376,8 +303,8 @@ def test_startup_recovery_preserves_pending_manual_request_ids(monkeypatch):
     queued: list[dict] = []
     monkeypatch.setattr(
         service,
-        "pending_manual_metadata_refresh_request_ids",
-        lambda episode: ("request-a", "request-b") if episode.id == live_episode.id else (),
+        "_has_active_operation_target",
+        lambda _session, episode_id: episode_id == final_with_operation.id,
     )
     monkeypatch.setattr(
         service,
@@ -394,17 +321,10 @@ def test_startup_recovery_preserves_pending_manual_request_ids(monkeypatch):
             "resource_id": final_episode.id,
             "refresh": True,
         },
-        {
-            "def_key": "refresh_episode_metadata_worker",
-            "resource_type": "episode",
-            "resource_id": live_episode.id,
-            "refresh": True,
-            "manual_request_ids": ["request-a", "request-b"],
-        },
     ]
 
 
-def test_manual_metadata_refresh_fetches_non_final_episode_and_completes_request(monkeypatch):
+def test_explicit_metadata_refresh_fetches_non_final_episode(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.workers.refresh_episode_metadata_worker import service
 
@@ -414,7 +334,6 @@ def test_manual_metadata_refresh_fetches_non_final_episode_and_completes_request
         publish_status=EpisodePublishStatus.LIVE.value,
     )
     refreshed: list[int] = []
-    completed: list[tuple[str, ...]] = []
 
     class FakeSession:
         def __init__(self):
@@ -433,22 +352,16 @@ def test_manual_metadata_refresh_fetches_non_final_episode_and_completes_request
         "_refresh_episode_from_dailywire",
         lambda _session, item: refreshed.append(item.id),
     )
-    monkeypatch.setattr(
-        service,
-        "complete_manual_metadata_refresh_requests",
-        lambda item, request_ids: completed.append(tuple(request_ids)),
-    )
 
-    asyncio.run(
+    did_refresh = asyncio.run(
         service.run_refresh_episode_metadata_worker(
             session,
             episode_id=episode.id,
             refresh=True,
-            manual_request_ids=("request-a",),
         )
     )
 
+    assert did_refresh is True
     assert refreshed == [episode.id]
-    assert completed == [("request-a",)]
     assert episode.metadata_is_final is False
     assert session.commits == 1

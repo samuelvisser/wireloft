@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 def _session() -> tuple[Session, object]:
     import backend.db.models  # noqa: F401
+    import task_manager.scheduler.db  # noqa: F401
     from backend.db import Base
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
@@ -89,10 +90,10 @@ def _library(session: Session, tmp_path: Path):
         downloaded_publish_status="published_final",
         is_redownload_attempt=False,
     )
-    session.add_all([show, season, episode, local_profile, profile])
+    session.add_all([show, season, episode, local_media_profile := local_profile, profile])
     session.flush()
     download.media_item_id = episode.id
-    download.local_media_profile_id = local_profile.id
+    download.local_media_profile_id = local_media_profile.id
     session.add(download)
     session.commit()
     return show, episode, profile, download, old_path
@@ -102,6 +103,7 @@ def test_show_redownload_request_targets_one_or_all_profiles(monkeypatch, tmp_pa
     from backend.api.endpoints.shows import service
     from backend.db.models import LocalMediaProfile, PodcastDownloadProfile
     from backend.types.download_profile_types import EpIdType
+    from task_manager.scheduler.db import TaskOperationTarget
 
     session, engine = _session()
     show, _episode, profile, _download, _old_path = _library(session, tmp_path)
@@ -127,21 +129,24 @@ def test_show_redownload_request_targets_one_or_all_profiles(monkeypatch, tmp_pa
     session.commit()
 
     queued: list[tuple[str, dict]] = []
-    request_uuid = UUID("12345678-1234-5678-1234-567812345678")
-    monkeypatch.setattr(service, "uuid4", lambda: request_uuid)
     monkeypatch.setattr(service, "queue_event", lambda _s, name, data: queued.append((name, data)))
 
     result = service.request_show_episode_redownload(session, show.slug, None)
-    assert result == {
-        "queued": True,
-        "download_profiles_queued": 2,
-        "request_id": str(request_uuid),
-    }
+    assert result["queued"] is True
+    assert result["download_profiles_queued"] == 2
+    UUID(result["operation_id"])
     assert queued[-1][1]["download_profile_id"] is None
-    assert queued[-1][1]["manual_request_id"] == str(request_uuid)
+    assert "manual_request_id" not in queued[-1][1]
+
+    all_target = session.query(TaskOperationTarget).filter_by(
+        operation_id=result["operation_id"]
+    ).one()
+    assert all_target.task_key == "redownload_show_episodes_worker"
+    assert all_target.task_kwargs == {"download_profile_id": None}
 
     result = service.request_show_episode_redownload(session, show.slug, profile.id)
     assert result["download_profiles_queued"] == 1
+    UUID(result["operation_id"])
     assert queued[-1][1]["download_profile_id"] == profile.id
 
     with pytest.raises(HTTPException) as exc:
@@ -153,18 +158,18 @@ def test_show_redownload_request_targets_one_or_all_profiles(monkeypatch, tmp_pa
 
 
 def test_target_episode_profiles_does_not_deduplicate(monkeypatch):
-    from task_manager.tasks.workers.redownload_show_episodes_worker import service
+    from task_manager.tasks.workers.redownload_show_episodes_worker import _helpers
 
     episode = SimpleNamespace(id=10)
     profile_a = SimpleNamespace(id=1)
     profile_b = SimpleNamespace(id=2)
     monkeypatch.setattr(
-        service,
+        _helpers,
         "get_download_profile_episodes",
         lambda _session, _profile: [episode],
     )
 
-    targets = service._target_episode_profiles(object(), [profile_a, profile_b])
+    targets = _helpers._target_episode_profiles(object(), [profile_a, profile_b])
 
     assert targets == [(episode, profile_a), (episode, profile_b)]
 
@@ -173,15 +178,15 @@ def test_redownload_worker_replaces_existing_file_and_generation(monkeypatch, tm
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadStatus
     from config import get_settings
-    from task_manager.tasks.workers.redownload_show_episodes_worker import service
+    from task_manager.tasks.workers.redownload_show_episodes_worker import _helpers
 
     session, engine = _session()
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     _show, episode, profile, download, old_path = _library(session, tmp_path)
     original_generation = download.attempt_generation
 
-    targets = service._target_episode_profiles(session, [profile])
-    prepared = service._prepare_redownloads(session, targets)
+    targets = _helpers._target_episode_profiles(session, [profile])
+    prepared = _helpers._prepare_redownloads(session, targets)
 
     assert len(prepared) == 1
     session.expire_all()
@@ -207,7 +212,7 @@ def test_redownload_worker_uses_cancel_workflow_for_active_download(monkeypatch,
     from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadAttempt
     from backend.types.download_profile_types import MediaDownloadStatus
     from config import get_settings
-    from task_manager.tasks.workers.redownload_show_episodes_worker import service
+    from task_manager.tasks.workers.redownload_show_episodes_worker import _helpers
 
     session, engine = _session()
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
@@ -226,10 +231,10 @@ def test_redownload_worker_uses_cancel_workflow_for_active_download(monkeypatch,
         cancelled_ids.append(media_download_id)
         return real_cancel_media_download(current_session, media_download_id)
 
-    monkeypatch.setattr(service, "cancel_media_download", tracked_cancel)
+    monkeypatch.setattr(_helpers, "cancel_media_download", tracked_cancel)
 
-    targets = service._target_episode_profiles(session, [profile])
-    prepared = service._prepare_redownloads(session, targets)
+    targets = _helpers._target_episode_profiles(session, [profile])
+    prepared = _helpers._prepare_redownloads(session, targets)
 
     assert len(prepared) == 1
     assert cancelled_ids == [download.id]

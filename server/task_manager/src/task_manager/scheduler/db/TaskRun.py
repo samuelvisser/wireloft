@@ -24,6 +24,7 @@ class TaskRun(Base):
     progress: Mapped[Optional[int]]
     message: Mapped[Optional[str]]
     meta: Mapped[Optional[dict]] = mapped_column(JSON)
+    result: Mapped[Optional[dict]] = mapped_column(JSON)
     attempt_count: Mapped[int] = mapped_column(default=0)
     max_retries: Mapped[int] = mapped_column(default=0)
     last_error: Mapped[Optional[str]]

@@ -31,36 +31,53 @@ def db_session():
 def clear_interrupted_task_runs() -> int:
     """Close task runs that could not have survived a backend process restart.
 
-    Task execution lives inside the WireLoft backend process and APScheduler uses
-    an in-memory job store. A run still marked RUNNING when a new controller
-    starts therefore belongs to the previous process and can no longer make
-    progress. Marking it canceled prevents stale progress indicators from being
-    shown forever while preserving the last recorded progress for task history.
+    Task execution and retry jobs live inside the WireLoft backend process and
+    APScheduler uses an in-memory job store. A RUNNING task or RETRY_SCHEDULED
+    task found at startup therefore belongs to the previous process and can no
+    longer make progress on its own.
+
+    TaskOperations linked to those runs are reset to QUEUED before commit. Their
+    logical targets are durable and will be requeued once the scheduler starts.
+    The dead run associations are detached atomically so the UI cannot briefly
+    mistake an interrupted attempt for the terminal result of the operation.
     """
-    from sqlalchemy import select
-    from task_manager.scheduler.db import TaskRun
+    from sqlalchemy import delete, select
+    from task_manager.scheduler.db import TaskOperationRun, TaskRun
+    from task_manager.scheduler.operations import mark_interrupted_operations_for_recovery
     from task_manager.scheduler.types import TaskStatus
 
+    interrupted_statuses = (
+        TaskStatus.RUNNING,
+        TaskStatus.RETRY_SCHEDULED,
+    )
     with db_session() as session:
         interrupted_runs = list(
             session.scalars(
-                select(TaskRun).where(TaskRun.status == TaskStatus.RUNNING)
+                select(TaskRun).where(TaskRun.status.in_(interrupted_statuses))
             )
         )
         if not interrupted_runs:
             return 0
 
         finished_at = datetime.now(timezone.utc)
+        interrupted_ids: list[int] = []
         for run in interrupted_runs:
+            interrupted_ids.append(run.id)
             run.status = TaskStatus.CANCELED
             run.message = "Interrupted by WireLoft restart"
             run.finished_at = finished_at
             run.next_retry_at = None
 
+        mark_interrupted_operations_for_recovery(session, interrupted_ids)
+        session.execute(
+            delete(TaskOperationRun).where(
+                TaskOperationRun.task_run_id.in_(interrupted_ids)
+            )
+        )
         session.commit()
 
     logger.warning(
-        "Canceled %s task run(s) left RUNNING by a previous WireLoft process",
+        "Canceled %s task run(s) that could not survive the previous WireLoft process",
         len(interrupted_runs),
     )
     return len(interrupted_runs)
@@ -237,10 +254,11 @@ def start_controller() -> None:
         try:
             # Import workers so their decorators populate the registry.
             import task_manager.tasks  # noqa: F401
+            from task_manager.scheduler.operations import recover_pending_operations
             from task_manager.scheduler.registry import sync_registry_to_db
             from task_manager.scheduler.scheduler import start_scheduler
 
-            # Make sure interrupted tasks don't remain forever
+            # Make sure interrupted tasks don't remain forever.
             clear_interrupted_task_runs()
 
             if get_settings().scheduler.enabled:
@@ -248,6 +266,14 @@ def start_controller() -> None:
                 start_scheduler()
                 reload_user_schedules()
                 setup_triggers_from_registry()
+
+                recovered_targets = recover_pending_operations()
+                if recovered_targets:
+                    logger.info(
+                        "Recovered %s TaskOperation target(s) after restart",
+                        recovered_targets,
+                    )
+
                 if _should_emit_startup_event():
                     emit_startup_event()
 

@@ -13,6 +13,11 @@ from .service import (
     request_show_episode_redownload,
     get_show_sync_log,
 )
+from ...models.operations import (
+    ShowMetadataOperationAccepted,
+    ShowRedownloadOperationAccepted,
+    TaskOperationAccepted,
+)
 from ...models.show import (
     ShowAPIRead,
     ShowAPICreate,
@@ -56,7 +61,11 @@ def show_create(body: ShowAPICreate) -> ShowAPIRead:
             raise
 
 
-@router.post("/{show_slug}/sync", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{show_slug}/sync",
+    response_model=TaskOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def show_sync(show_slug: str):
     """Queue an immediate new-episode sync for one show."""
     with db_session() as s:
@@ -69,7 +78,11 @@ def show_sync(show_slug: str):
             raise
 
 
-@router.post("/{show_slug}/refresh-metadata", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{show_slug}/refresh-metadata",
+    response_model=ShowMetadataOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def show_metadata_refresh(show_slug: str):
     """Queue metadata refreshes for every episode in one show."""
     with db_session() as s:
@@ -82,7 +95,11 @@ def show_metadata_refresh(show_slug: str):
             raise
 
 
-@router.post("/{show_slug}/redownload-episodes", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{show_slug}/redownload-episodes",
+    response_model=ShowRedownloadOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def show_redownload_episodes(show_slug: str, body: ShowRedownloadEpisodesAPIRequest):
     """Delete and re-download episodes through one or every attached Download Profile."""
     with db_session() as s:
@@ -123,7 +140,7 @@ def show_update(show_slug: str, body: ShowAPIUpdate):
     Update an existing show's metadata.
 
     Partially updates show information with the provided fields.
-    Only specified fields will be modified; omitted fields remain unchanged.
+    Only specified fields remain unchanged.
     """
     with db_session() as s:
         try:

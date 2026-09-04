@@ -13,6 +13,9 @@ from backend.db.core import get_session
 from task_manager.scheduler.db import *
 from .types import ResourceType, TaskStatus
 from .registry import get_task
+from .operation_context import operation_context
+from .operations import link_run_to_operations, refresh_operations_for_run
+from .results import TaskResult
 from config import get_settings
 from dailywire_downloader import DownloadCancelled
 from task_manager.scheduler import scheduler
@@ -28,12 +31,12 @@ class ProgressUpdater:
         if message is not None:
             values["message"] = message
 
-        # Use a throwaway Session so failures can't poison the main one
+        # Use a throwaway Session so failures can't poison the main one.
         s = get_session()
         try:
             for i in range(3):
                 try:
-                    # Merge meta with existing to avoid overwriting stored inputs
+                    # Merge meta with existing to avoid overwriting stored inputs.
                     if meta is not None:
                         existing_meta = s.execute(
                             select(TaskRun.meta).where(TaskRun.id == self.run.id)
@@ -50,6 +53,8 @@ class ProgressUpdater:
                         .where(TaskRun.id == self.run.id)
                         .values(**values)
                     )
+                    s.commit()
+                    refresh_operations_for_run(s, self.run.id)
                     s.commit()
                     return
                 except OperationalError:
@@ -92,11 +97,13 @@ def execute_task(
         schedule_id: Optional[int] = None,
         run_id: Optional[int] = None,
         max_retries: Optional[int] = None,
+        operation_ids: tuple[str, ...] | list[str] | None = None,
+        operation_slot: str | None = None,
         **kwargs,
 ):
     """
     Synchronous wrapper executed by APScheduler threadpool.
-    Handles retries and progress tracking.
+    Handles retries, progress/result tracking, and generic TaskOperation linkage.
     """
     session = get_session()
 
@@ -117,6 +124,7 @@ def execute_task(
                     status=TaskStatus.RUNNING,
                     progress=0,
                     meta={"inputs": dict(kwargs)} if kwargs else None,
+                    result=None,
                     started_at=datetime.now(timezone.utc),
                 )
                 session.add(run)
@@ -137,12 +145,21 @@ def execute_task(
                 resource_id=resource_id,
                 status=TaskStatus.RUNNING,
                 progress=0,
+                result=None,
                 attempt_count=0,
                 started_at=datetime.now(timezone.utc),
                 meta={"inputs": dict(kwargs)} if kwargs else None,
             )
             session.add(run)
             session.flush()
+
+        linked_operation_ids = link_run_to_operations(
+            session,
+            run=run,
+            task_key=def_key,
+            operation_ids=operation_ids or (),
+            operation_slot=operation_slot,
+        )
 
         # Determine max retries policy once and store on run. An explicit zero
         # means "do not retry" and must not fall through to task defaults.
@@ -154,6 +171,9 @@ def execute_task(
         run.started_at = datetime.now(timezone.utc)
         run.finished_at = None
         run.next_retry_at = None
+        run.result = None
+        session.commit()
+        refresh_operations_for_run(session, run.id)
         session.commit()
 
         # Execute task callable (supports sync or async)
@@ -175,15 +195,21 @@ def execute_task(
         if "resource_type" in inspect.signature(fn).parameters and "resource_type" not in call_kwargs:
             call_kwargs["resource_type"] = resource_type
         try:
-            if inspect.iscoroutinefunction(fn):
-                # run async function in dedicated loop
-                asyncio.run(fn(resource_id=resource_id, progress=updater, **call_kwargs))
-            else:
-                fn(resource_id=resource_id, progress=updater, **call_kwargs)  # type: ignore[arg-type]
+            with operation_context(linked_operation_ids):
+                if inspect.iscoroutinefunction(fn):
+                    # run async function in dedicated loop
+                    worker_result = asyncio.run(fn(resource_id=resource_id, progress=updater, **call_kwargs))
+                else:
+                    worker_result = fn(resource_id=resource_id, progress=updater, **call_kwargs)  # type: ignore[arg-type]
+
+            if isinstance(worker_result, TaskResult):
+                run.result = worker_result.as_dict()
+                run.message = worker_result.summary
             # success
             run.status = TaskStatus.SUCCEEDED
             run.progress = 100
-            run.message = "OK"
+            if not run.message:
+                run.message = "OK"
             run.last_error = None
             run.next_retry_at = None
         except DownloadCancelled as e:
@@ -202,7 +228,9 @@ def execute_task(
                 run.status = TaskStatus.RETRY_SCHEDULED
                 run.message = f"Retry {run.attempt_count}/{run.max_retries} scheduled in {int(delay)}s"
                 session.commit()  # commit before scheduling retry
-                # enqueue retry using run_id
+                refresh_operations_for_run(session, run.id)
+                session.commit()
+                # enqueue retry using run_id; operation linkage lives on the run
                 scheduler.schedule_retry(def_key=def_key, resource_type=resource_type, resource_id=resource_id, run_id=run.id, run_at=when)
                 return
             else:
@@ -216,9 +244,28 @@ def execute_task(
             else:
                 run.finished_at = None
             session.commit()
+            refresh_operations_for_run(session, run.id)
+            session.commit()
     finally:
         session.close()
 
 
-def trigger_now(*, def_key: str, resource_type: str, resource_id: Optional[int], max_retries: Optional[int] = None, **kwargs) -> str:
-    return scheduler.trigger_now(def_key=def_key, resource_type=resource_type, resource_id=resource_id, max_retries=max_retries, **kwargs)
+def trigger_now(
+        *,
+        def_key: str,
+        resource_type: str,
+        resource_id: Optional[int],
+        max_retries: Optional[int] = None,
+        operation_ids: tuple[str, ...] | list[str] | None = None,
+        operation_slot: str | None = None,
+        **kwargs,
+) -> str:
+    return scheduler.trigger_now(
+        def_key=def_key,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        max_retries=max_retries,
+        operation_ids=operation_ids,
+        operation_slot=operation_slot,
+        **kwargs,
+    )

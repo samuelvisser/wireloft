@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "c8d4e2f1a7b9"
+HEAD_REVISION = "d4f0a9c2e713"
+WIRELOFT_1_0_REVISION = "c8d4e2f1a7b9"
 BASE_REVISION = "0001"
 
 
@@ -64,7 +65,29 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "stream_profiles_rss",
         "task_schedules",
         "task_runs",
+        "task_operations",
+        "task_operation_targets",
+        "task_operation_runs",
     } <= tables
+
+    task_run_columns = {
+        column["name"] for column in inspector.get_columns("task_runs")
+    }
+    assert "result" in task_run_columns
+    operation_columns = {
+        column["name"] for column in inspector.get_columns("task_operations")
+    }
+    assert {
+        "kind",
+        "source",
+        "resource_type",
+        "resource_id",
+        "status",
+        "progress",
+        "result",
+        "context",
+        "notification_seen_at",
+    } <= operation_columns
 
     profile_columns = {
         column["name"] for column in inspector.get_columns("local_media_profiles")
@@ -508,7 +531,7 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
     check_database()
 
 
-def test_migration_history_is_main_baseline_plus_wireloft_1_0():
+def test_migration_history_is_main_baseline_plus_wireloft_1_0_and_task_operations():
     from backend.db.migrations import get_alembic_config, get_head_revisions
 
     scripts = ScriptDirectory.from_config(get_alembic_config())
@@ -516,7 +539,9 @@ def test_migration_history_is_main_baseline_plus_wireloft_1_0():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, BASE_REVISION),
+        (HEAD_REVISION, WIRELOFT_1_0_REVISION),
+        (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "WireLoft 1.0."
+    assert revisions[0].doc == "Add durable task operations and structured task results."
+    assert revisions[1].doc == "WireLoft 1.0."

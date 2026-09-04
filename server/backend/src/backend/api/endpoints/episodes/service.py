@@ -1,5 +1,4 @@
 from typing import Optional, Sequence
-from uuid import uuid4
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -9,11 +8,16 @@ from fastapi import HTTPException
 from backend.api.helpers import update_database_fields
 from backend.api.models.episode import *
 from backend.db.models.media_item import Episode
-from backend.utils.episode import add_pending_manual_metadata_refresh_request
 from task_manager.events.transactional import queue_event
+from task_manager.scheduler.operations import (
+    OperationTargetSpec,
+    create_operation,
+    operation_target_needs_dispatch,
+)
 
 
 METADATA_REFRESH_REQUESTED_EVENT = "episode.metadata_refresh_requested"
+_METADATA_REFRESH_TASK_KEY = "refresh_episode_metadata_worker"
 
 
 def get_episodes_by_show_list(s: Session, show_slug: str, limit: int | None = None) -> list[EpisodeAPIRead]:
@@ -45,22 +49,16 @@ def get_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
 def queue_episode_metadata_refresh(
         s: Session,
         episode: Episode,
-        *,
-        manual_request_id: str | None = None,
 ) -> None:
     """Persist unfinished metadata state and queue the normal refresh worker."""
     episode.metadata_is_final = False
-    event_data = {
+    queue_event(s, METADATA_REFRESH_REQUESTED_EVENT, {
         "resource_id": episode.id,
         "id": episode.id,
         "slug": episode.slug,
         "show_id": episode.show_id,
         "refresh": True,
-    }
-    if manual_request_id is not None:
-        add_pending_manual_metadata_refresh_request(episode, manual_request_id)
-        event_data["manual_request_id"] = manual_request_id
-    queue_event(s, METADATA_REFRESH_REQUESTED_EVENT, event_data)
+    })
 
 
 def request_episode_metadata_refresh(
@@ -75,17 +73,35 @@ def request_episode_metadata_refresh(
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
 
-    request_id = str(uuid4())
-    queue_episode_metadata_refresh(
-        s,
-        episode,
-        manual_request_id=request_id,
+    target = OperationTargetSpec(
+        task_key=_METADATA_REFRESH_TASK_KEY,
+        resource_type="episode",
+        resource_id=episode.id,
+        task_kwargs={"refresh": True},
     )
+    show = episode.show
+    operation = create_operation(
+        s,
+        kind="episode.refresh_metadata",
+        resource_type="episode",
+        resource_id=episode.id,
+        title=episode.title,
+        targets=[target],
+        context={
+            "episode_slug": episode.slug,
+            "episode_title": episode.title,
+            "show_id": episode.show_id,
+            "show_slug": show.slug if show is not None else None,
+            "show_title": show.title if show is not None else None,
+        },
+    )
+    if operation_target_needs_dispatch(s, operation.id, target.resolved_slot_key()):
+        queue_episode_metadata_refresh(s, episode)
     s.flush()
     return {
         "queued": True,
         "episode_id": episode.id,
-        "request_id": request_id,
+        "operation_id": operation.id,
     }
 
 

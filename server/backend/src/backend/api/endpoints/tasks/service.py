@@ -102,24 +102,11 @@ def _schedule_to_dict(sch: TaskSchedule, def_key: str) -> dict:
     }
 
 
-def _run_matches_manual_request(run: TaskRun, request_id: str) -> bool:
-    if not isinstance(run.meta, dict):
-        return False
-    inputs = run.meta.get("inputs")
-    if not isinstance(inputs, dict):
-        return False
-    if inputs.get("manual_request_id") == request_id:
-        return True
-    request_ids = inputs.get("manual_request_ids")
-    return isinstance(request_ids, list) and request_id in request_ids
-
-
 def list_runs(
         resource_type: Optional[str] = None,
         resource_id: Optional[int] = None,
         status: Optional[str] = None,
         definition_key: str | None = None,
-        manual_request_id: str | None = None,
 ) -> list[dict]:
     s = get_session()
     try:
@@ -134,13 +121,6 @@ def list_runs(
             stmt = stmt.where(TaskDefinition.key == definition_key)
 
         rows = s.execute(stmt).all()
-        if manual_request_id is not None:
-            rows = [
-                (run, run_definition_key)
-                for run, run_definition_key in rows
-                if _run_matches_manual_request(run, manual_request_id)
-            ]
-
         return [
             {
                 "id": r.id,
@@ -150,6 +130,7 @@ def list_runs(
                 "status": r.status.value if hasattr(r.status, "value") else r.status,
                 "progress": r.progress,
                 "message": r.message,
+                "result": r.result,
                 "attempt_count": r.attempt_count,
                 "max_retries": r.max_retries,
                 "last_error": r.last_error,

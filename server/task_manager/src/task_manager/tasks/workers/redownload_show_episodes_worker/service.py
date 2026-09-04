@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -16,7 +17,7 @@ async def run_redownload_show_episodes_worker(
         show_id: int | None,
         download_profile_id: int | None = None,
         progress=None,
-) -> None:
+) -> dict[str, Any]:
     if show_id is None:
         raise ValueError("Show id is required")
 
@@ -29,14 +30,20 @@ async def run_redownload_show_episodes_worker(
         show_id=show.id,
         download_profile_id=download_profile_id,
     )
+    base_result: dict[str, Any] = {
+        "show_id": show.id,
+        "show_slug": show.slug,
+        "show_title": show.title,
+        "download_profiles": len(profiles),
+    }
     if not profiles:
         update_progress(progress, 100, "No Download Profiles are attached to this show")
-        return
+        return {**base_result, "episode_files": 0}
 
     episode_profiles = _target_episode_profiles(s, profiles)
     if not episode_profiles:
         update_progress(progress, 100, "No eligible episodes to re-download")
-        return
+        return {**base_result, "episode_files": 0}
 
     update_progress(progress, 1, f"Preparing {len(episode_profiles)} episode download(s)")
     targets = _prepare_redownloads(s, episode_profiles)
@@ -58,7 +65,7 @@ async def run_redownload_show_episodes_worker(
             raise RuntimeError(failure)
         if completed >= total:
             update_progress(progress, 100, f"Re-downloaded {total} episode file(s)")
-            return
+            return {**base_result, "episode_files": total}
 
         percentage = max(1, min(99, int(completed / total * 100)))
         update_progress(

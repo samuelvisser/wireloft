@@ -4,12 +4,11 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
 import { useDownloadProfilesView, useEpisodes, useMediaDownloadsView, useShow, useShowSeasons, useStreamProfilesView } from '../../lib/queries'
-import { waitForMetadataRefreshCompletion } from '../../lib/metadataRefresh'
-import { waitForShowRedownloadCompletion } from '../../lib/showRedownload'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import ShowIndexingProgress from '../../components/ShowIndexingProgress/ShowIndexingProgress'
 import ShowSyncLogModal from '../../components/ShowSyncLogModal/ShowSyncLogModal'
 import {PreferredFormatReg} from '../../types/local_media_profile'
@@ -25,16 +24,7 @@ function preferredFormatLabel(value?: string | null) {
   return label === 'Audio Only' ? 'Audio' : label
 }
 
-type ManualSyncLogEntry = {
-  synced_at: string
-  episodes_found: number
-  status?: 'completed' | 'failed'
-  manual_request_id?: string
-  will_retry?: boolean
-}
-
 const EPISODE_SKELETON_COUNT = 12
-const MANUAL_SYNC_POLL_INTERVAL_MS = 2000
 
 export default function ShowPage() {
   const { id } = useParams()
@@ -74,12 +64,17 @@ export default function ShowPage() {
   const [redownloadConfirm, setRedownloadConfirm] = useState(false)
   const [redownloadStarting, setRedownloadStarting] = useState(false)
   const [redownloadProfileId, setRedownloadProfileId] = useState('')
-  const [redownloadRequestId, setRedownloadRequestId] = useState<string | null>(null)
   const [syncLogOpen, setSyncLogOpen] = useState(false)
-  const [manualSyncRequestId, setManualSyncRequestId] = useState<string | null>(null)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
-  const manualSyncing = manualSyncRequestId !== null
+
+  const operationResourceId = show?.id ?? null
+  const syncOperation = useActiveOperation('show.sync', 'show', operationResourceId)
+  const metadataRefreshOperation = useActiveOperation('show.refresh_metadata', 'show', operationResourceId)
+  const redownloadOperation = useActiveOperation('show.redownload_episodes', 'show', operationResourceId)
+  const manualSyncing = syncOperation !== undefined
+  const metadataRefreshBusy = metadataRefreshStarting || metadataRefreshOperation !== undefined
+  const redownloadBusy = redownloadStarting || redownloadOperation !== undefined
 
   useEffect(() => {
     if (!id || episodesPlaceholder || episodesData === undefined) return
@@ -97,63 +92,6 @@ export default function ShowPage() {
       return seasons[0].id
     })
   }, [isSeries, seasons])
-
-  useEffect(() => {
-    if (!id || !manualSyncRequestId) return
-
-    let cancelled = false
-    const apiBase = (window as any).appConfig?.API_URL || '/api'
-
-    const pollForCompletion = async () => {
-      try {
-        const response = await fetch(`${apiBase}/shows/${encodeURIComponent(id)}/sync-log`, {
-          credentials: 'include',
-        })
-        if (!response.ok) return
-
-        const entries: ManualSyncLogEntry[] = await response.json()
-        const requestEntries = entries.filter((entry) => entry.manual_request_id === manualSyncRequestId)
-        if (cancelled) return
-
-        const completedEntry = requestEntries.find((entry) => entry.status === 'completed')
-        if (completedEntry) {
-          setManualSyncRequestId(null)
-          const episodesFound = Number.isFinite(completedEntry.episodes_found)
-            ? completedEntry.episodes_found
-            : 0
-          toast.success(
-            `Sync finished for ${show?.title ?? id}: ${episodesFound} new ${episodesFound === 1 ? 'episode' : 'episodes'} found`,
-            { duration: 5000 },
-          )
-          void Promise.all([
-            qc.invalidateQueries({ queryKey: ['episodes', id] }),
-            qc.invalidateQueries({ queryKey: ['seasons', id] }),
-          ])
-          return
-        }
-
-        const terminalFailure = requestEntries.find(
-          (entry) => entry.status === 'failed' && entry.will_retry === false,
-        )
-        if (terminalFailure) {
-          setManualSyncRequestId(null)
-          toast.error(`Sync failed for ${show?.title ?? id}`)
-        }
-      } catch {
-        // Keep polling through transient errors; the completion entry is durable in the sync log.
-      }
-    }
-
-    void pollForCompletion()
-    const timer = window.setInterval(() => {
-      void pollForCompletion()
-    }, MANUAL_SYNC_POLL_INTERVAL_MS)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
-  }, [id, manualSyncRequestId, qc, show?.title])
 
   const attachedDownloadProfiles = useMemo(
     () => (downloadProfiles ?? []).filter((profile) => profile.showSlug === id),
@@ -242,7 +180,7 @@ export default function ShowPage() {
   }
 
   const syncNow = async () => {
-    if (manualSyncRequestId) {
+    if (manualSyncing) {
       toast(`A sync is already in progress for ${show.title}`)
       return
     }
@@ -256,11 +194,11 @@ export default function ShowPage() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const result = await response.json()
-      if (typeof result?.request_id !== 'string' || !result.request_id) {
-        throw new Error('Sync request did not return a request ID')
+      if (typeof result?.operationId !== 'string' || !result.operationId) {
+        throw new Error('Sync request did not return an operation ID')
       }
 
-      setManualSyncRequestId(result.request_id)
+      await qc.invalidateQueries({queryKey: ['operations']})
       toast.success(`Sync started for ${show.title}`)
     } catch {
       toast.error(`Could not start sync for ${show.title}`)
@@ -268,7 +206,7 @@ export default function ShowPage() {
   }
 
   const refreshAllMetadata = async () => {
-    if (metadataRefreshStarting) return
+    if (metadataRefreshBusy) return
 
     setMetadataRefreshStarting(true)
     try {
@@ -280,30 +218,17 @@ export default function ShowPage() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const result = await response.json()
-      const count = typeof result?.episodes_queued === 'number' ? result.episodes_queued : total
-      if (typeof result?.request_id !== 'string' || !result.request_id) {
-        throw new Error('Metadata refresh request did not return a request ID')
+      const count = typeof result?.episodesQueued === 'number' ? result.episodesQueued : total
+      if (typeof result?.operationId !== 'string' || !result.operationId) {
+        throw new Error('Metadata refresh request did not return an operation ID')
       }
 
       setMetadataRefreshConfirm(false)
-      if (count === 0) {
-        toast(`There are no episodes to refresh for ${show.title}`)
-        return
-      }
-
-      toast.success(
-        `Metadata refresh started for ${count} ${count === 1 ? 'episode' : 'episodes'} in ${show.title}`,
-      )
-
-      try {
-        await waitForMetadataRefreshCompletion(result.request_id, count)
+      await qc.invalidateQueries({queryKey: ['operations']})
+      if (count > 0) {
         toast.success(
-          `Metadata refresh completed for ${count} ${count === 1 ? 'episode' : 'episodes'} in ${show.title}`,
-          { duration: 5000 },
+          `Metadata refresh started for ${count} ${count === 1 ? 'episode' : 'episodes'} in ${show.title}`,
         )
-        await qc.invalidateQueries({ queryKey: ['episodes', id] })
-      } catch {
-        toast.error(`Metadata refresh failed for ${show.title}`)
       }
     } catch {
       toast.error(`Could not start metadata refresh for ${show.title}`)
@@ -324,7 +249,7 @@ export default function ShowPage() {
   }
 
   const redownloadAllEpisodes = async () => {
-    if (redownloadStarting || redownloadRequestId || !redownloadProfileId) return
+    if (redownloadBusy || !redownloadProfileId) return
 
     setRedownloadStarting(true)
     try {
@@ -340,32 +265,18 @@ export default function ShowPage() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const result = await response.json()
-      if (typeof result?.request_id !== 'string' || !result.request_id) {
-        throw new Error('Re-download request did not return a request ID')
+      if (typeof result?.operationId !== 'string' || !result.operationId) {
+        throw new Error('Re-download request did not return an operation ID')
       }
 
-      const profileCount = typeof result?.download_profiles_queued === 'number'
-        ? result.download_profiles_queued
+      const profileCount = typeof result?.downloadProfilesQueued === 'number'
+        ? result.downloadProfilesQueued
         : (redownloadProfileId === 'all' ? attachedDownloadProfiles.length : 1)
       setRedownloadConfirm(false)
-      setRedownloadRequestId(result.request_id)
+      await qc.invalidateQueries({queryKey: ['operations']})
       toast.success(
         `Re-download started for ${show.title} using ${profileCount} ${profileCount === 1 ? 'Download Profile' : 'Download Profiles'}`,
       )
-
-      void waitForShowRedownloadCompletion(result.request_id)
-        .then(async () => {
-          setRedownloadRequestId(null)
-          toast.success(`All selected episode files for ${show.title} were re-downloaded`, {duration: 5000})
-          await Promise.all([
-            qc.invalidateQueries({queryKey: ['mediaDownloadsView']}),
-            qc.invalidateQueries({queryKey: ['episodes', id]}),
-          ])
-        })
-        .catch(() => {
-          setRedownloadRequestId(null)
-          toast.error(`Re-download failed for ${show.title}`)
-        })
     } catch {
       toast.error(`Could not start re-download for ${show.title}`)
     } finally {
@@ -451,6 +362,7 @@ export default function ShowPage() {
                 {
                   label: 'Sync now',
                   icon: ['fas', 'arrows-rotate'],
+                  disabled: manualSyncing,
                   onSelect: () => void syncNow(),
                 },
                 {
@@ -461,13 +373,14 @@ export default function ShowPage() {
                 {
                   label: 'Refresh all metadata',
                   icon: ['fas', 'arrows-rotate'],
+                  disabled: metadataRefreshBusy,
                   onSelect: () => setMetadataRefreshConfirm(true),
                 },
                 {
                   label: 'Delete and re-download all episodes',
                   icon: ['fas', 'arrows-rotate'],
                   tone: 'danger',
-                  disabled: attachedDownloadProfiles.length === 0 || redownloadRequestId !== null,
+                  disabled: attachedDownloadProfiles.length === 0 || redownloadBusy,
                   onSelect: openRedownloadConfirm,
                 },
                 {
@@ -623,7 +536,7 @@ export default function ShowPage() {
           className="modal-overlay"
           role="presentation"
           onClick={() => {
-            if (!metadataRefreshStarting) setMetadataRefreshConfirm(false)
+            if (!metadataRefreshBusy) setMetadataRefreshConfirm(false)
           }}
         >
           <div
@@ -647,7 +560,7 @@ export default function ShowPage() {
               <button
                 type="button"
                 className="btn"
-                disabled={metadataRefreshStarting}
+                disabled={metadataRefreshBusy}
                 onClick={() => setMetadataRefreshConfirm(false)}
               >
                 Cancel
@@ -655,10 +568,10 @@ export default function ShowPage() {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={metadataRefreshStarting}
+                disabled={metadataRefreshBusy}
                 onClick={() => void refreshAllMetadata()}
               >
-                {metadataRefreshStarting ? 'Starting…' : 'Refresh metadata'}
+                {metadataRefreshBusy ? 'Starting…' : 'Refresh metadata'}
               </button>
             </div>
           </div>
@@ -670,7 +583,7 @@ export default function ShowPage() {
           className="modal-overlay"
           role="presentation"
           onClick={() => {
-            if (!redownloadStarting) setRedownloadConfirm(false)
+            if (!redownloadBusy) setRedownloadConfirm(false)
           }}
         >
           <div
@@ -696,7 +609,7 @@ export default function ShowPage() {
                 id="redownload-profile"
                 className="input"
                 value={redownloadProfileId}
-                disabled={redownloadStarting}
+                disabled={redownloadBusy}
                 onChange={(event) => setRedownloadProfileId(event.target.value)}
               >
                 {attachedDownloadProfiles.length > 1 && (
@@ -713,7 +626,7 @@ export default function ShowPage() {
               <button
                 type="button"
                 className="btn"
-                disabled={redownloadStarting}
+                disabled={redownloadBusy}
                 onClick={() => setRedownloadConfirm(false)}
               >
                 Cancel
@@ -721,10 +634,10 @@ export default function ShowPage() {
               <button
                 type="button"
                 className="btn btn-danger"
-                disabled={redownloadStarting || !redownloadProfileId}
+                disabled={redownloadBusy || !redownloadProfileId}
                 onClick={() => void redownloadAllEpisodes()}
               >
-                {redownloadStarting ? 'Starting…' : 'Delete and re-download'}
+                {redownloadBusy ? 'Starting…' : 'Delete and re-download'}
               </button>
             </div>
           </div>

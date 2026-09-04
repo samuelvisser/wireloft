@@ -40,12 +40,10 @@ def runs(
         resource_id: int | None = None,
         status: str | None = None,
         definition_key: str | None = None,
-        manual_request_id: str | None = None,
 ):
     return list_runs(
         resource_type,
         resource_id,
         status,
         definition_key,
-        manual_request_id,
     )

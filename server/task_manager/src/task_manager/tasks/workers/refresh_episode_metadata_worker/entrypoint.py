@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import on_event, task
+from task_manager.scheduler.results import TaskResult
 from .service import run_refresh_episode_metadata_worker
 
 
@@ -22,22 +23,19 @@ async def refresh_episode_metadata_worker(
         progress=None,
         refresh: bool = False,
         scheduled_offset_seconds: int | None = None,
-        manual_request_id: str | None = None,
-        manual_request_ids: list[str] | None = None,
-) -> None:
+) -> TaskResult | None:
     """Schedule or execute targeted metadata checks for finalized episodes."""
-    request_ids = list(manual_request_ids or [])
-    if manual_request_id and manual_request_id not in request_ids:
-        request_ids.append(manual_request_id)
-
-    # Both request-id inputs are deliberately accepted by the task itself. The
-    # executor persists task inputs, allowing the UI to correlate a normal event
-    # run and any startup-recovery run with the same manual request.
     with db_session() as s:
-        await run_refresh_episode_metadata_worker(
+        did_refresh = await run_refresh_episode_metadata_worker(
             s,
             episode_id=resource_id,
             refresh=refresh,
             scheduled_offset_seconds=scheduled_offset_seconds,
-            manual_request_ids=tuple(request_ids),
         )
+
+    if refresh and resource_id is not None:
+        return TaskResult(
+            summary="Metadata refresh completed",
+            data={"episodes_refreshed": 1 if did_refresh else 0},
+        )
+    return None

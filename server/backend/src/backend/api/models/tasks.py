@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Literal
+from typing import Any, Optional, Literal
 
 from backend.api.models.base import ResponseBase, RequestBase
 
@@ -43,6 +43,7 @@ class TaskRunRead(ResponseBase):
     status: str
     progress: Optional[int]
     message: Optional[str]
+    result: Optional[dict[str, Any]]
     attempt_count: int
     max_retries: int
     last_error: Optional[str]

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from datetime import datetime
-from typing import Optional
+from typing import Iterable, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.schedulers.base import BaseScheduler
@@ -122,15 +122,44 @@ def schedule_retry(*, def_key: str, resource_type: str, resource_id: int, run_id
     return job.id
 
 
-def trigger_now(*, def_key: str, resource_type: str, resource_id: Optional[int] = None, max_retries: Optional[int] = None, **kwargs) -> str:
+def trigger_now(
+        *,
+        def_key: str,
+        resource_type: str,
+        resource_id: Optional[int] = None,
+        max_retries: Optional[int] = None,
+        operation_ids: Iterable[str] | None = None,
+        operation_slot: str | None = None,
+        **kwargs,
+) -> str:
+    """Trigger a task immediately, inheriting the current operation context.
+
+    Operation correlation is scheduler infrastructure, not a worker parameter.
+    Child tasks started from inside a worker automatically remain associated with
+    the same high-level operation unless the caller explicitly overrides it.
+    """
     from .executor import execute_task
+    from .operation_context import current_operation_ids
 
     sch = start_scheduler()
+    inherited_ids = tuple(operation_ids) if operation_ids is not None else current_operation_ids()
+    execution_kwargs = dict(
+        def_key=def_key,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        schedule_id=None,
+        max_retries=max_retries,
+        **kwargs,
+    )
+    if inherited_ids:
+        execution_kwargs["operation_ids"] = inherited_ids
+    if operation_slot is not None:
+        execution_kwargs["operation_slot"] = operation_slot
 
     job = sch.add_job(
         execute_task,
         trigger=DateTrigger(run_date=datetime.now(tz=sch.timezone)),
-        kwargs=dict(def_key=def_key, resource_type=resource_type, resource_id=resource_id, schedule_id=None, max_retries=max_retries, **kwargs),
+        kwargs=execution_kwargs,
         replace_existing=False,
     )
     return job.id

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor, wait
+from contextvars import copy_context
 from threading import Lock
 from typing import Any
 
@@ -13,7 +14,13 @@ class WireloftEventLinker(EventLinker):
 
 
 class TrackedExecutorProcessingService(ExecutorProcessingService):
-    """Executor processor whose pending emissions can be drained on shutdown/tests."""
+    """Executor processor whose pending emissions can be drained on shutdown/tests.
+
+    Context variables are copied into the event executor. This is important for
+    TaskOperation: a worker can emit a domain event and a task started by that
+    event automatically inherits the high-level operation without putting an
+    operation/request ID in the event payload or the worker signature.
+    """
 
     def __init__(self, executor: ThreadPoolExecutor) -> None:
         super().__init__(executor)
@@ -22,7 +29,14 @@ class TrackedExecutorProcessingService(ExecutorProcessingService):
         self._futures_lock = Lock()
 
     def submit(self, callback, *args: Any, **kwargs: Any) -> None:
-        future = self._executor.submit(self._execute, callback, args, kwargs)
+        context = copy_context()
+        future = self._executor.submit(
+            context.run,
+            self._execute,
+            callback,
+            args,
+            kwargs,
+        )
         with self._futures_lock:
             self._futures.add(future)
         future.add_done_callback(self._discard_future)

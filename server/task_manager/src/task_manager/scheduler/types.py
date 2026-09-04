@@ -11,6 +11,21 @@ class TaskStatus(str, Enum):
     RETRY_SCHEDULED = "RETRY_SCHEDULED"
 
 
+class OperationStatus(str, Enum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    PARTIAL = "PARTIAL"
+    FAILED = "FAILED"
+    CANCELED = "CANCELED"
+
+
+class OperationSource(str, Enum):
+    UI = "UI"
+    API = "API"
+    SYSTEM = "SYSTEM"
+
+
 class ResourceType(str, Enum):
     SHOW = "show"
     SEASON = "season"

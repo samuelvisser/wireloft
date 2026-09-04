@@ -3,6 +3,7 @@ from fastapi import APIRouter, status
 from .service import *
 from ...models.episode import *
 from ...models.media_download import EpisodeDownloadAPICreate, MediaDownloadAPIRead
+from ...models.operations import EpisodeMetadataOperationAccepted
 from ..media_downloads.service import create_episode_download
 from ..media_downloads.router import _trigger_download_task
 from backend.app import db_session
@@ -69,7 +70,11 @@ def episode_create(body: EpisodeAPICreate):
             raise
 
 
-@router.post("/{episode_slug}/refresh-metadata", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{episode_slug}/refresh-metadata",
+    response_model=EpisodeMetadataOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def episode_metadata_refresh(episode_slug: str):
     """Queue an immediate metadata refresh for one episode."""
     with db_session() as s:

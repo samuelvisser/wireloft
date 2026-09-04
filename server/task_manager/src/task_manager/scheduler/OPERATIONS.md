@@ -1,0 +1,91 @@
+# Task operations
+
+`TaskRun` and `TaskOperation` deliberately represent different things:
+
+- A **TaskRun** is one execution attempt of one registered worker.
+- A **TaskOperation** is one durable high-level action a user asked WireLoft to perform.
+- A **TaskOperationTarget** describes a logical worker result required to satisfy an operation.
+- **TaskOperationRun** links a logical target to the concrete TaskRun(s) that can satisfy it.
+
+Keeping those concepts separate is what allows one UI action to fan out over many workers, one already-running automatic worker to satisfy a UI action, and retries/recovery to remain implementation details rather than UI concerns.
+
+## Adding a UI-triggered worker action
+
+1. Create an operation in the API service with `create_operation()` and one or more `OperationTargetSpec` values.
+2. Queue/trigger the normal worker only when `operation_target_needs_dispatch()` says the target is not already being satisfied by compatible work.
+3. Return an API response containing `operation_id`. Do not create a separate manual request/correlation ID.
+4. Have the worker report ordinary progress through its `progress` object and return a `TaskResult` with structured facts when it completes.
+5. In the frontend, start the request through the generic operation helper and let `OperationNotifier` own polling, final notifications and cache refreshes. Components that need live status can use `useActiveOperation()`.
+
+Workers must not accept `operation_id`, `manual_request_id`, or similar UI-only parameters. Operation correlation belongs to the scheduler infrastructure.
+
+## Worker results
+
+A worker can return:
+
+```python
+return TaskResult(
+    summary="Episode scan finished",
+    data={
+        "episodes_found": 3,
+        "shows_scanned": 1,
+    },
+)
+```
+
+`summary` is a generic human-readable fallback. `data` contains facts, not UI prose. The frontend may present those facts differently depending on the operation kind.
+
+For fan-out operations, numeric result fields from successful targets are aggregated automatically. Operation status becomes `PARTIAL` when only part of the target set succeeds.
+
+## Progress
+
+Workers continue to use the normal progress updater:
+
+```python
+progress.set(50, "Refreshing episode 10/20")
+```
+
+The executor mirrors linked TaskRun progress into the owning operation. A multi-target operation exposes the average target progress, with terminal targets counting as 100% complete.
+
+There must not be a worker-specific frontend polling loop for progress.
+
+## Coalescing
+
+When an operation is created, its targets are matched against compatible active TaskRuns by:
+
+- task key;
+- resource type and ID;
+- the target's declared worker inputs.
+
+A compatible automatic TaskRun can therefore satisfy a later UI operation without starting duplicate work. Conversely, when a TaskRun starts, it attaches itself to every compatible active operation.
+
+A target can be associated with multiple equivalent runs. Once any linked run succeeds, that logical target is satisfied even if another duplicate run later fails.
+
+Target inputs should contain every value that changes the semantics of the requested work. For example, an explicit metadata refresh includes `scheduled_offset_seconds=None`, so it cannot be confused with a timed post-publication check.
+
+## Child work and events
+
+Operation IDs are held in an internal execution `ContextVar`. `trigger_now()` inherits that context automatically. The domain-event executor also copies Python context variables into its worker thread, so a task started by an event emitted from another task retains the operation context without putting an ID in the event payload.
+
+A child task only becomes part of completion accounting when the operation has a matching logical target. A master worker can alternatively aggregate its child work itself and expose one target, as the show re-download worker does.
+
+## Retries and restarts
+
+Retries reuse the same TaskRun, so their target association survives automatically.
+
+Logical targets are durable. On backend restart, in-process `RUNNING` and `RETRY_SCHEDULED` executions from the previous process are marked interrupted and detached from their operation targets. Recoverable incomplete targets are then requeued from their persisted task key, resource and worker inputs.
+
+This is why recovery state must live on TaskOperationTarget rather than in React state or worker-specific metadata.
+
+## Frontend ownership
+
+`OperationNotifier` is mounted once above the router. It is responsible for:
+
+- discovering UI operations;
+- polling more frequently while work is active;
+- exposing active operation status/progress to the rest of the UI;
+- showing exactly one final notification per acknowledged operation;
+- refreshing relevant React Query data after completion;
+- acknowledging the durable notification only after it has been presented.
+
+A page may disappear, the route may change, or the browser may reload while the worker runs. None of those should affect operation tracking.

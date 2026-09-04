@@ -27,7 +27,7 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
         title="Test event target",
         allowed_resource_types=("show",),
     )
-    async def target(*, resource_id=None, slug=None, show_id=None, manual_request_id=None, progress=None):
+    async def target(*, resource_id=None, slug=None, show_id=None, refresh=False, progress=None):
         return None
 
     trigger_now = Mock()
@@ -44,7 +44,7 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
         "id": 99,
         "slug": "stable-slug",
         "show_id": 7,
-        "manual_request_id": "manual-sync-123",
+        "refresh": True,
         "ignored": "not accepted by the worker",
     })
     wait_for_events()
@@ -55,5 +55,24 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
         resource_id=0,
         slug="stable-slug",
         show_id=7,
-        manual_request_id="manual-sync-123",
+        refresh=True,
     )
+
+
+def test_domain_events_preserve_task_operation_context_across_executor_thread():
+    from task_manager.events.emitters import emit_event
+    from task_manager.events.registry import WireloftEventLinker, wait_for_events
+    from task_manager.scheduler.operation_context import current_operation_ids, operation_context
+
+    observed: list[tuple[str, ...]] = []
+
+    def handler(**_event_data):
+        observed.append(current_operation_ids())
+
+    WireloftEventLinker.subscribe("test.operation.context", event_callback=handler)
+
+    with operation_context(("operation-a", "operation-b")):
+        emit_event("test.operation.context", {"value": 1})
+    wait_for_events()
+
+    assert observed == [("operation-a", "operation-b")]

@@ -8,13 +8,11 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
 from backend.types.episode_types import EpisodePublishStatus
-from backend.utils.episode import (
-    complete_manual_metadata_refresh_requests,
-    pending_manual_metadata_refresh_request_ids,
-)
 from dailywire_api.dw_api.client import MiddlewareClient
 from dailywire_api.types.user_info import DwMembershipLevel
+from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
 from task_manager.scheduler.executor import trigger_now
+from task_manager.scheduler.types import OperationStatus
 from ...helpers.episodes.metadata import (
     metadata_refresh_offsets_seconds,
     metadata_watch_expired,
@@ -25,6 +23,10 @@ from .scheduling import remove_episode_metadata_jobs, schedule_remaining_metadat
 
 logger = logging.getLogger(__name__)
 _TASK_KEY = "refresh_episode_metadata_worker"
+_ACTIVE_OPERATION_STATUSES = (
+    OperationStatus.QUEUED.value,
+    OperationStatus.RUNNING.value,
+)
 
 
 async def run_refresh_episode_metadata_worker(
@@ -33,39 +35,32 @@ async def run_refresh_episode_metadata_worker(
         episode_id: int | None,
         refresh: bool = False,
         scheduled_offset_seconds: int | None = None,
-        manual_request_ids: tuple[str, ...] = (),
-) -> None:
-    """Refresh or schedule post-publication metadata reconciliation for episodes."""
+) -> bool:
+    """Refresh or schedule metadata reconciliation; return whether a detail refresh ran."""
     if episode_id is None:
         _queue_startup_recovery(s)
-        return
+        return False
 
     episode = s.get(Episode, episode_id)
     if episode is None:
         # A one-shot job can outlive an episode that was deleted in the meantime.
         logger.info("Skipping metadata refresh for deleted episode %s", episode_id)
-        return
+        return False
 
     if episode.metadata_is_final:
-        # Another task may have completed the same episode before this overlapping
-        # manual request ran. Its successful refresh satisfies this request too.
-        if manual_request_ids:
-            complete_manual_metadata_refresh_requests(episode, manual_request_ids)
-            s.commit()
         remove_episode_metadata_jobs(episode.id)
-        return
+        return False
 
     if episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
-        # The normal monitor already keeps live/non-final metadata fresh. A manual
-        # refresh still performs one explicit detail request, but finality remains
-        # false so the ordinary post-publication flow can finish it later.
+        # The normal monitor already keeps live/non-final metadata fresh. A user
+        # refresh still performs one explicit detail request; operation recovery
+        # is handled generically by TaskOperation rather than episode metadata.
         if refresh:
             _refresh_episode_from_dailywire(s, episode)
-            if manual_request_ids:
-                complete_manual_metadata_refresh_requests(episode, manual_request_ids)
             episode.metadata_is_final = False
             s.commit()
-        return
+            return True
+        return False
 
     configured_offsets = metadata_refresh_offsets_seconds()
     if (
@@ -77,10 +72,10 @@ async def run_refresh_episode_metadata_worker(
         # perform an obsolete check; rebuild the remaining schedule instead.
         refresh = False
 
+    did_refresh = False
     if refresh:
         _refresh_episode_from_dailywire(s, episode)
-        if manual_request_ids:
-            complete_manual_metadata_refresh_requests(episode, manual_request_ids)
+        did_refresh = True
 
     now = datetime.now(timezone.utc)
     if refresh and metadata_watch_expired(episode.published_date, now=now):
@@ -88,7 +83,7 @@ async def run_refresh_episode_metadata_worker(
         s.commit()
         remove_episode_metadata_jobs(episode.id)
         logger.info("Episode %s metadata is final", episode.id)
-        return
+        return did_refresh
 
     pending_jobs = schedule_remaining_metadata_checks(
         episode_id=episode.id,
@@ -97,8 +92,7 @@ async def run_refresh_episode_metadata_worker(
     )
 
     if refresh:
-        # Persist every successful metadata reconciliation, including completion
-        # of any correlated manual request, even when more automatic checks remain.
+        # Persist every successful reconciliation even when automatic checks remain.
         s.commit()
 
     if not pending_jobs and metadata_watch_expired(episode.published_date, now=now):
@@ -111,9 +105,16 @@ async def run_refresh_episode_metadata_worker(
             refresh=True,
         )
 
+    return did_refresh
+
 
 def _queue_startup_recovery(s: Session) -> None:
-    """Immediately recover unfinished metadata work after a restart."""
+    """Immediately recover unfinished automatic metadata work after a restart.
+
+    UI-triggered work has its own durable TaskOperation target and is recovered by
+    the generic operation subsystem. Skipping those targets here prevents duplicate
+    workers after a restart.
+    """
     episodes = list(
         s.scalars(
             select(Episode).where(Episode.metadata_is_final.is_(False))
@@ -122,18 +123,11 @@ def _queue_startup_recovery(s: Session) -> None:
 
     queued_count = 0
     for episode in episodes:
-        request_ids = pending_manual_metadata_refresh_request_ids(episode)
-        if (
-            episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value
-            and not request_ids
-        ):
+        if episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
             # Live/non-final episodes normally remain under monitor_episode_worker.
-            # Only recover one here when a user-requested refresh was interrupted.
             continue
-
-        task_kwargs = {"refresh": True}
-        if request_ids:
-            task_kwargs["manual_request_ids"] = list(request_ids)
+        if _has_active_operation_target(s, episode.id):
+            continue
 
         # Run each episode as its own task so normal worker retry policy applies to
         # individual Daily Wire failures without blocking recovery of the others.
@@ -141,7 +135,7 @@ def _queue_startup_recovery(s: Session) -> None:
             def_key=_TASK_KEY,
             resource_type="episode",
             resource_id=episode.id,
-            **task_kwargs,
+            refresh=True,
         )
         queued_count += 1
 
@@ -150,6 +144,20 @@ def _queue_startup_recovery(s: Session) -> None:
             "Queued immediate metadata recovery for %s episode(s)",
             queued_count,
         )
+
+
+def _has_active_operation_target(s: Session, episode_id: int) -> bool:
+    return s.scalar(
+        select(TaskOperationTarget.id)
+        .join(TaskOperation, TaskOperation.id == TaskOperationTarget.operation_id)
+        .where(
+            TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
+            TaskOperationTarget.task_key == _TASK_KEY,
+            TaskOperationTarget.resource_type == "episode",
+            TaskOperationTarget.resource_id == episode_id,
+        )
+        .limit(1)
+    ) is not None
 
 
 def _refresh_episode_from_dailywire(s: Session, episode: Episode) -> None:

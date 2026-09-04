@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Awaitable, Optional, Dict, Tuple, List
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from backend.db.core import get_session
 from sqlalchemy import select
 
 from task_manager.scheduler.db import TaskDefinition
 
-_REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[None]]]] = {}
+_REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[Any]]]] = {}
 
 
 @dataclass
@@ -43,10 +43,12 @@ def task(
 ):
     """Decorator to register an async task callable.
 
-    The callable signature should be: async def fn(resource_id: int, progress: ProgressUpdater, **kwargs)
+    A worker may return ``None`` or a ``TaskResult``. The executor persists a
+    structured result without forcing the worker to know whether it was started
+    by the UI, a cron schedule, or another worker.
     """
 
-    def decorator(fn: Callable[..., Awaitable[None]]):
+    def decorator(fn: Callable[..., Awaitable[Any]]):
         meta = TaskMeta(
             key=key,
             title=title,
@@ -71,10 +73,10 @@ def on_cron(cron: str, resource_type: str = "show", resource_id: int = 0, coales
     Args:
         cron: Cron expression (e.g., "*/30 * * * *") - must be actual value, not a settings reference
         resource_type: Resource type to run on
-        resource_id: Resource ID to run on (0 for global)
+        resource_id: Resource ID to run on
         coalesce: Whether to coalesce multiple pending jobs
     """
-    def decorator(fn: Callable[..., Awaitable[None]]):
+    def decorator(fn: Callable[..., Awaitable[Any]]):
         if not hasattr(fn, '_task_meta'):
             raise ValueError(f"@on_cron must be used after @task decorator")
 
@@ -98,7 +100,7 @@ def on_event(event_name: str, resource_type: Optional[str] = None):
         event_name: Name of the event to listen for (e.g., "show.added", "episode.published_final")
         resource_type: Optional resource type filter
     """
-    def decorator(fn: Callable[..., Awaitable[None]]):
+    def decorator(fn: Callable[..., Awaitable[Any]]):
         if not hasattr(fn, '_task_meta'):
             raise ValueError(f"@on_event must be used after @task decorator")
 
@@ -113,9 +115,7 @@ def on_event(event_name: str, resource_type: Optional[str] = None):
     return decorator
 
 
-
-
-def get_task(key: str) -> Tuple[TaskMeta, Callable[..., Awaitable[None]]]:
+def get_task(key: str) -> Tuple[TaskMeta, Callable[..., Awaitable[Any]]]:
     return _REGISTRY[key]
 
 
