@@ -19,11 +19,7 @@ from .operation_control import (
     operation_ids_allow_execution,
     run_cancel_requested,
 )
-from .operations import (
-    WORKER_PROGRESS_META_KEY,
-    link_run_to_operations,
-    refresh_operations_for_run,
-)
+from .operations import link_run_to_operations, refresh_operations_for_run
 from .results import TaskResult
 from config import get_settings
 from dailywire_downloader import DownloadCancelled
@@ -37,7 +33,6 @@ class TaskCancellationRequested(Exception):
 class ProgressUpdater:
     def __init__(self, run: TaskRun):
         self.run = run
-        self._meta = dict(run.meta or {})
 
     def set(self, percent: int, message: Optional[str] = None, meta: Optional[dict] = None):
         p = max(0, min(100, int(percent)))
@@ -62,18 +57,17 @@ class ProgressUpdater:
                     if message is not None:
                         values["message"] = message
 
-                    # Mark this TaskRun as having genuine worker/service progress.
-                    # TaskOperation uses this to prefer granular progress over
-                    # generic target completion.
-                    merged_meta = dict(current_meta or self._meta)
-                    merged_meta[WORKER_PROGRESS_META_KEY] = True
+                    # Merge caller-provided metadata with the existing run metadata
+                    # without introducing scheduler-only progress markers. Active
+                    # TaskRun progress above zero is itself sufficient to tell a
+                    # TaskOperation that the worker is reporting granular progress.
                     if meta is not None:
+                        merged_meta = dict(current_meta or {})
                         if isinstance(meta, dict):
                             merged_meta.update(meta)
                         else:
                             merged_meta["progress_meta"] = meta
-                    self._meta = merged_meta
-                    values["meta"] = merged_meta
+                        values["meta"] = merged_meta
 
                     s.execute(
                         update(TaskRun)
