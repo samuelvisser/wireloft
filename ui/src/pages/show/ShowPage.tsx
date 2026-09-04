@@ -55,10 +55,15 @@ export default function ShowPage() {
     return [...(seasonsData ?? [])].sort((a, b) => b.index - a.index)
   }, [seasonsData, seasonsPlaceholder])
   const { data: downloads } = useMediaDownloadsView()
-  const { data: downloadProfiles } = useDownloadProfilesView()
+  const {
+    data: downloadProfiles,
+    isLoading: downloadProfilesLoading,
+    error: downloadProfilesError,
+  } = useDownloadProfilesView()
   const { data: streamProfiles } = useStreamProfilesView()
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
   const [confirm, setConfirm] = useState(false)
+  const [syncStarting, setSyncStarting] = useState(false)
   const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)
   const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
   const [redownloadConfirm, setRedownloadConfirm] = useState(false)
@@ -73,6 +78,7 @@ export default function ShowPage() {
   const metadataRefreshOperation = useActiveOperation('show.refresh_metadata', 'show', operationResourceId)
   const redownloadOperation = useActiveOperation('show.redownload_episodes', 'show', operationResourceId)
   const manualSyncing = syncOperation !== undefined
+  const syncBusy = syncStarting || manualSyncing
   const metadataRefreshBusy = metadataRefreshStarting || metadataRefreshOperation !== undefined
   const redownloadBusy = redownloadStarting || redownloadOperation !== undefined
 
@@ -174,17 +180,44 @@ export default function ShowPage() {
   const hasMore = visibleCount < displayedEpisodes.length
   const episodesViewLoading = episodesInitialLoading || seasonViewLoading
 
+  const syncDisabledReason = syncStarting
+    ? `WireLoft is starting a sync for ${show.title}.`
+    : syncOperation
+      ? `A sync is already running for ${show.title}.`
+      : undefined
+  const metadataRefreshDisabledReason = metadataRefreshStarting
+    ? `WireLoft is starting a metadata refresh for ${show.title}.`
+    : metadataRefreshOperation
+      ? `A metadata refresh is already running for ${show.title}.${metadataRefreshOperation.progressTotal > 0
+        ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} episodes have finished.`
+        : ''}`
+      : undefined
+  const downloadProfileStateUnknown = downloadProfilesLoading && downloadProfiles === undefined
+  const downloadProfileStateFailed = Boolean(downloadProfilesError) && downloadProfiles === undefined
+  const redownloadDisabledReason = redownloadStarting
+    ? `WireLoft is starting a delete and re-download operation for ${show.title}.`
+    : redownloadOperation
+      ? `A delete and re-download operation is already running for ${show.title}.`
+      : downloadProfileStateUnknown
+        ? 'WireLoft is still checking which Download Profiles are attached to this show.'
+        : downloadProfileStateFailed
+          ? 'WireLoft could not determine which Download Profiles are attached to this show.'
+          : attachedDownloadProfiles.length === 0
+            ? `No Download Profiles are attached to ${show.title}.`
+            : undefined
+
   const onDelete = () => setConfirm(true)
   const onEdit = () => {
     navigate(`/edit-show/${id}`)
   }
 
   const syncNow = async () => {
-    if (manualSyncing) {
+    if (syncBusy) {
       toast(`A sync is already in progress for ${show.title}`)
       return
     }
 
+    setSyncStarting(true)
     try {
       const base = (window as any).appConfig?.API_URL || '/api'
       const response = await fetch(`${base}/shows/${encodeURIComponent(id)}/sync`, {
@@ -202,6 +235,8 @@ export default function ShowPage() {
       toast.success(`Sync started for ${show.title}`)
     } catch {
       toast.error(`Could not start sync for ${show.title}`)
+    } finally {
+      setSyncStarting(false)
     }
   }
 
@@ -238,6 +273,14 @@ export default function ShowPage() {
   }
 
   const openRedownloadConfirm = () => {
+    if (downloadProfileStateUnknown) {
+      toast('WireLoft is still checking the Download Profiles attached to this show')
+      return
+    }
+    if (downloadProfileStateFailed) {
+      toast.error('Could not determine which Download Profiles are attached to this show')
+      return
+    }
     if (!attachedDownloadProfiles.length) {
       toast(`There are no Download Profiles attached to ${show.title}`)
       return
@@ -362,7 +405,9 @@ export default function ShowPage() {
                 {
                   label: 'Sync now',
                   icon: ['fas', 'arrows-rotate'],
-                  disabled: manualSyncing,
+                  disabled: syncBusy,
+                  disabledReason: syncDisabledReason,
+                  progress: syncOperation ? (syncOperation.progress ?? 0) : undefined,
                   onSelect: () => void syncNow(),
                 },
                 {
@@ -374,13 +419,17 @@ export default function ShowPage() {
                   label: 'Refresh all metadata',
                   icon: ['fas', 'arrows-rotate'],
                   disabled: metadataRefreshBusy,
+                  disabledReason: metadataRefreshDisabledReason,
+                  progress: metadataRefreshOperation ? (metadataRefreshOperation.progress ?? 0) : undefined,
                   onSelect: () => setMetadataRefreshConfirm(true),
                 },
                 {
                   label: 'Delete and re-download all episodes',
                   icon: ['fas', 'arrows-rotate'],
                   tone: 'danger',
-                  disabled: attachedDownloadProfiles.length === 0 || redownloadBusy,
+                  disabled: redownloadDisabledReason !== undefined,
+                  disabledReason: redownloadDisabledReason,
+                  progress: redownloadOperation ? (redownloadOperation.progress ?? 0) : undefined,
                   onSelect: openRedownloadConfirm,
                 },
                 {
@@ -526,7 +575,7 @@ export default function ShowPage() {
         showSlug={id}
         showTitle={show.title}
         open={syncLogOpen}
-        syncing={manualSyncing}
+        syncing={syncBusy}
         onClose={() => setSyncLogOpen(false)}
         onSyncNow={syncNow}
       />
