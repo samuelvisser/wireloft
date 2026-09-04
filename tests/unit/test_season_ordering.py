@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from backend.api.models.season import SeasonAPIRequestDetached
+from backend.utils.season_ordering import order_initial_seasons
 from dailywire_api.records import DwSeasonRecord
 from task_manager.tasks.helpers.seasons import (
     order_initial_dw_seasons,
@@ -11,7 +13,7 @@ def _season(name: str, slug: str) -> DwSeasonRecord:
     return DwSeasonRecord(id=slug, name=name, slug=slug)
 
 
-def _slugs(seasons: list[DwSeasonRecord]) -> list[str]:
+def _slugs(seasons) -> list[str]:
     return [season.slug for season in seasons]
 
 
@@ -23,6 +25,22 @@ def test_initial_order_puts_unnumbered_seasons_before_sorted_numbered_seasons():
     ]
 
     ordered = order_initial_dw_seasons(seasons)
+
+    assert _slugs(ordered) == [
+        "extras",
+        "debunked-season-1-season",
+        "debunked-season-2-season",
+    ]
+
+
+def test_bundle_seasons_use_the_same_initial_ordering_before_indices_are_assigned():
+    seasons = [
+        SeasonAPIRequestDetached(name="Extras", slug="extras"),
+        SeasonAPIRequestDetached(name="Season 2", slug="debunked-season-2-season"),
+        SeasonAPIRequestDetached(name="Season 1", slug="debunked-season-1-season"),
+    ]
+
+    ordered = order_initial_seasons(seasons)
 
     assert _slugs(ordered) == [
         "extras",

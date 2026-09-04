@@ -14,6 +14,7 @@ from backend.db.models.download_profile import PodcastDownloadProfile, SeriesDow
 from backend.db.models.stream_profile import RssStreamProfile
 from backend.utils.feed_urls import build_rss_feed_url
 from backend.utils.helpers import generate_stream_profile_token
+from backend.utils.season_ordering import order_initial_seasons
 from task_manager.events.transactional import queue_event
 
 
@@ -48,8 +49,11 @@ def create_show_bundle(s: Session, request: Request, payload: ShowAPICreateBundl
     show = create_database_fields(Show, payload.show.model_dump(exclude_none=True))
     s.add(show)
 
+    # The Add Show flow supplies seasons as part of the initial bundle, before the
+    # fetch-new-episodes worker runs. Normalize them here so their persistent
+    # indices are correct from the moment they are first stored.
     seasons: list[Season] = []
-    for index, season_in in enumerate(payload.seasons, start=1):
+    for index, season_in in enumerate(order_initial_seasons(payload.seasons), start=1):
         season = create_database_fields(Season, season_in.model_dump(exclude_none=True))
         season.index = index
         season.show = show
