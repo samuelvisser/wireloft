@@ -250,6 +250,12 @@ def refresh_operation(session: Session, operation_id: str) -> TaskOperation | No
 
 
 def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
+    # A user cancellation is an explicit terminal decision. Do not let linked
+    # worker state turn the operation back into RUNNING while cooperative
+    # cancellation is still propagating through an already executing worker.
+    if operation.status == OperationStatus.CANCELED.value and operation.finished_at is not None:
+        return operation
+
     targets = list(operation.targets)
     if not targets:
         return operation
