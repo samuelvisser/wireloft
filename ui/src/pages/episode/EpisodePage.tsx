@@ -313,6 +313,14 @@ export default function EpisodePage() {
                                     label: 'Refresh metadata',
                                     icon: ['fas', 'arrows-rotate'],
                                     disabled: metadataRefreshBusy,
+                                    disabledReason: metadataRefreshStarting
+                                        ? 'WireLoft is starting a metadata refresh for this episode.'
+                                        : metadataRefreshOperation
+                                            ? 'A metadata refresh is already running for this episode.'
+                                            : undefined,
+                                    progress: metadataRefreshOperation
+                                        ? (metadataRefreshOperation.progress ?? 0)
+                                        : undefined,
                                     onSelect: () => void refreshMetadata(),
                                 },
                             ]}

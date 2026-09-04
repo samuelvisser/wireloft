@@ -14,7 +14,11 @@ from task_manager.scheduler.db import *
 from .types import ResourceType, TaskStatus
 from .registry import get_task
 from .operation_context import operation_context
-from .operations import link_run_to_operations, refresh_operations_for_run
+from .operations import (
+    WORKER_PROGRESS_META_KEY,
+    link_run_to_operations,
+    refresh_operations_for_run,
+)
 from .results import TaskResult
 from config import get_settings
 from dailywire_downloader import DownloadCancelled
@@ -24,6 +28,7 @@ from task_manager.scheduler import scheduler
 class ProgressUpdater:
     def __init__(self, run: TaskRun):
         self.run = run
+        self._meta = dict(run.meta or {})
 
     def set(self, percent: int, message: Optional[str] = None, meta: Optional[dict] = None):
         p = max(0, min(100, int(percent)))
@@ -31,23 +36,23 @@ class ProgressUpdater:
         if message is not None:
             values["message"] = message
 
+        # Mark this TaskRun as having genuine worker/service progress. TaskOperation
+        # uses this to prefer granular progress over generic target completion.
+        merged_meta = dict(self._meta)
+        merged_meta[WORKER_PROGRESS_META_KEY] = True
+        if meta is not None:
+            if isinstance(meta, dict):
+                merged_meta.update(meta)
+            else:
+                merged_meta["progress_meta"] = meta
+        self._meta = merged_meta
+        values["meta"] = merged_meta
+
         # Use a throwaway Session so failures can't poison the main one.
         s = get_session()
         try:
             for i in range(3):
                 try:
-                    # Merge meta with existing to avoid overwriting stored inputs.
-                    if meta is not None:
-                        existing_meta = s.execute(
-                            select(TaskRun.meta).where(TaskRun.id == self.run.id)
-                        ).scalar_one_or_none()
-                        merged_meta = dict(existing_meta or {})
-                        if isinstance(meta, dict):
-                            merged_meta.update(meta)
-                        else:
-                            merged_meta["progress_meta"] = meta
-                        values["meta"] = merged_meta
-
                     s.execute(
                         update(TaskRun)
                         .where(TaskRun.id == self.run.id)
