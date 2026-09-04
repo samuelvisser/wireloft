@@ -23,9 +23,15 @@ jobs:
       - name: Test shared-run cancel
         if: always()
         run: uv run pytest tests/unit/test_task_operation_controls.py::test_cancel_operation_does_not_stop_run_shared_with_another_active_operation
-      - name: Test restart unfinished work
+      - name: Test restart progress
         if: always()
-        run: uv run pytest tests/unit/test_task_operation_controls.py::test_restart_operation_keeps_completed_targets_and_requeues_only_unfinished
+        run: uv run pytest tests/unit/test_task_operation_controls.py::test_restart_operation_reports_restarted_progress
+      - name: Test restart dispatch
+        if: always()
+        run: uv run pytest tests/unit/test_task_operation_controls.py::test_restart_operation_cancels_old_and_dispatches_unfinished
+      - name: Test restart links
+        if: always()
+        run: uv run pytest tests/unit/test_task_operation_controls.py::test_restart_operation_replaces_unfinished_link
       - name: Test canceled retry executor
         if: always()
         run: uv run pytest tests/unit/test_task_operation_controls.py::test_executor_skips_retry_run_after_cancellation_request
