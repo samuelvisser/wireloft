@@ -43,7 +43,7 @@ _EXAMPLE_SHOW_VALUES = {
     "episode_type": "ep",
     "episode_number": "1",
     "episode_identifier": "1",
-    "ep_id": "ep.1",
+    "episode_key": "ep.1",
     "episode_published_date": "2026-08-30",
     "episode_published_time": "20:00:00",
     "episode_published_datetime": "2026-08-30 20:00:00",

@@ -35,7 +35,7 @@ def test_seasonal_episode_number_renders_as_numeric_episode_number() -> None:
     )
 
 
-def test_episode_identifier_preserves_identifier_without_type_prefix() -> None:
+def test_episode_identifier_and_episode_key_template_values() -> None:
     from backend.utils.output_template import (
         SHOW_OUTPUT_TEMPLATE_FIELDS,
         episode_output_template_values,
@@ -48,15 +48,19 @@ def test_episode_identifier_preserves_identifier_without_type_prefix() -> None:
         ("ep.S01E07", "S01E07"),
     )
 
-    for wireloft_identifier, expected in cases:
-        values = episode_output_template_values(_episode(wireloft_identifier))
-        assert values["episode_identifier"] == expected
-        assert values["ep_id"] == wireloft_identifier
+    assert "episode_key" in SHOW_OUTPUT_TEMPLATE_FIELDS
+    assert "ep_id" not in SHOW_OUTPUT_TEMPLATE_FIELDS
+
+    for episode_key, expected_identifier in cases:
+        values = episode_output_template_values(_episode(episode_key))
+        assert values["episode_identifier"] == expected_identifier
+        assert values["episode_key"] == episode_key
+        assert "ep_id" not in values
         assert render_output_template(
-            "/downloads/{{ episode_identifier }}.ext",
+            "/downloads/{{ episode_identifier }} - {{ episode_key }}.ext",
             values,
             allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-        ) == f"/downloads/{expected}.ext"
+        ) == f"/downloads/{expected_identifier} - {episode_key}.ext"
 
 
 def test_seasonal_episode_extra_uses_parent_episode_number() -> None:
