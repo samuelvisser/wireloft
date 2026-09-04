@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
-import { useDownloadProfilesView, useEpisodes, useMediaDownloadsView, useShow, useStreamProfilesView } from '../../lib/queries'
+import { useDownloadProfilesView, useEpisodes, useMediaDownloadsView, useShow, useShowSeasons, useStreamProfilesView } from '../../lib/queries'
 import { waitForMetadataRefreshCompletion } from '../../lib/metadataRefresh'
 import { waitForShowRedownloadCompletion } from '../../lib/showRedownload'
 import { useQueryClient } from '@tanstack/react-query'
@@ -54,6 +54,16 @@ export default function ShowPage() {
     ? (cachedEpisodes ?? [])
     : (episodesData ?? cachedEpisodes ?? [])
   const episodesInitialLoading = !hasCachedEpisodes && (episodesLoading || episodesPlaceholder)
+  const isSeries = show?.type === 'series'
+  const {
+    data: seasonsData,
+    isLoading: seasonsLoading,
+    isPlaceholderData: seasonsPlaceholder,
+  } = useShowSeasons(isSeries ? id : undefined)
+  const seasons = useMemo(() => {
+    if (seasonsPlaceholder) return []
+    return [...(seasonsData ?? [])].sort((a, b) => b.index - a.index)
+  }, [seasonsData, seasonsPlaceholder])
   const { data: downloads } = useMediaDownloadsView()
   const { data: downloadProfiles } = useDownloadProfilesView()
   const { data: streamProfiles } = useStreamProfilesView()
@@ -68,12 +78,25 @@ export default function ShowPage() {
   const [syncLogOpen, setSyncLogOpen] = useState(false)
   const [manualSyncRequestId, setManualSyncRequestId] = useState<string | null>(null)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
+  const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
   const manualSyncing = manualSyncRequestId !== null
 
   useEffect(() => {
     if (!id || episodesPlaceholder || episodesData === undefined) return
     saveEpisodesToStorage(id, episodesData)
   }, [episodesData, episodesPlaceholder, id])
+
+  useEffect(() => {
+    if (!isSeries || seasons.length === 0) {
+      setSelectedSeasonId(null)
+      return
+    }
+
+    setSelectedSeasonId((current) => {
+      if (current !== null && seasons.some((season) => season.id === current)) return current
+      return seasons[0].id
+    })
+  }, [isSeries, seasons])
 
   useEffect(() => {
     if (!id || !manualSyncRequestId) return
@@ -102,7 +125,10 @@ export default function ShowPage() {
             `Sync finished for ${show?.title ?? id}: ${episodesFound} new ${episodesFound === 1 ? 'episode' : 'episodes'} found`,
             { duration: 5000 },
           )
-          void qc.invalidateQueries({ queryKey: ['episodes', id] })
+          void Promise.all([
+            qc.invalidateQueries({ queryKey: ['episodes', id] }),
+            qc.invalidateQueries({ queryKey: ['seasons', id] }),
+          ])
           return
         }
 
@@ -137,12 +163,24 @@ export default function ShowPage() {
     () => (streamProfiles ?? []).filter((profile) => profile.showSlug === id),
     [streamProfiles, id],
   )
+  const displayedEpisodes = useMemo(() => {
+    if (!isSeries) return episodes
+    if (selectedSeasonId === null) return []
+    return episodes.filter((episode) => episode.seasonId === selectedSeasonId)
+  }, [episodes, isSeries, selectedSeasonId])
+  const seasonViewLoading = Boolean(
+    isSeries && (
+      seasonsLoading
+      || seasonsPlaceholder
+      || (seasons.length > 0 && selectedSeasonId === null)
+    )
+  )
 
   // Lazily reveal more episodes as the user scrolls, instead of paginating with buttons.
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
-  }, [id])
+  }, [id, selectedSeasonId])
 
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -151,14 +189,14 @@ export default function ShowPage() {
     const observer = new IntersectionObserver(
         (entries) => {
           if (entries[0]?.isIntersecting) {
-            setVisibleCount((c) => Math.min(c + PAGE_SIZE, episodes.length))
+            setVisibleCount((c) => Math.min(c + PAGE_SIZE, displayedEpisodes.length))
           }
         },
         {rootMargin: '600px'},
     )
     observer.observe(node)
     return () => observer.disconnect()
-  }, [episodes.length])
+  }, [displayedEpisodes.length])
 
   if (!id) {
     return (
@@ -194,8 +232,9 @@ export default function ShowPage() {
   }
 
   const total = episodes.length
-  const visibleItems = episodes.slice(0, visibleCount)
-  const hasMore = visibleCount < total
+  const visibleItems = displayedEpisodes.slice(0, visibleCount)
+  const hasMore = visibleCount < displayedEpisodes.length
+  const episodesViewLoading = episodesInitialLoading || seasonViewLoading
 
   const onDelete = () => setConfirm(true)
   const onEdit = () => {
@@ -521,7 +560,31 @@ export default function ShowPage() {
           )}
         </header>
 
-        {episodesInitialLoading && episodes.length === 0 ? (
+        {isSeries && seasons.length > 0 && (
+          <div className="show-season-filter" aria-label="Season selection">
+            <label htmlFor="show-season">Season</label>
+            <select
+              id="show-season"
+              className="input show-season-select"
+              value={selectedSeasonId === null ? '' : String(selectedSeasonId)}
+              onChange={(event) => setSelectedSeasonId(Number(event.target.value))}
+            >
+              {selectedSeasonId === null && <option value="" disabled>Select a season</option>}
+              {seasons.map((season) => (
+                <option key={season.id} value={String(season.id)}>
+                  {season.name?.trim() || `Season ${season.index}`}
+                </option>
+              ))}
+            </select>
+            <span className="show-season-count">
+              {displayedEpisodes.length} {displayedEpisodes.length === 1 ? 'episode' : 'episodes'}
+            </span>
+          </div>
+        )}
+
+        {isSeries && !seasonViewLoading && seasons.length === 0 ? (
+          <div className="show-season-empty" role="status">No seasons are available for this series.</div>
+        ) : episodesViewLoading ? (
           <div className="episodes-grid" role="status" aria-label="Loading episodes" aria-busy="true">
             {Array.from({length: EPISODE_SKELETON_COUNT}, (_, index) => (
               <div className="episode-card episode-card-skeleton" key={index} aria-hidden="true">
@@ -539,7 +602,7 @@ export default function ShowPage() {
           </div>
         )}
 
-        {hasMore && !episodesInitialLoading && (
+        {hasMore && !episodesViewLoading && (
           <div ref={sentinelRef} className="episodes-load-more" aria-hidden>
             Loading more episodes…
           </div>
