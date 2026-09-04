@@ -16,8 +16,8 @@ from task_manager.scheduler.operations import (
     complete_operation,
     create_operation,
     operation_target_needs_dispatch,
+    queue_operation_target_dispatch,
 )
-from ..episodes.service import queue_episode_metadata_refresh
 
 
 SYNC_LOG_META_KEY = "episode_sync_log"
@@ -216,9 +216,8 @@ def request_show_metadata_refresh(
         )
     else:
         for episode in episodes:
-            slot_key = f"episode:{episode.id}"
-            if operation_target_needs_dispatch(s, operation.id, slot_key):
-                queue_episode_metadata_refresh(s, episode)
+            if queue_operation_target_dispatch(s, operation.id, f"episode:{episode.id}"):
+                episode.metadata_is_final = False
 
     s.flush()
     return {

@@ -12,12 +12,14 @@ Keeping those concepts separate is what allows one UI action to fan out over man
 ## Adding a UI-triggered worker action
 
 1. Create an operation in the API service with `create_operation()` and one or more `OperationTargetSpec` values.
-2. Queue/trigger the normal worker only when `operation_target_needs_dispatch()` says the target is not already being satisfied by compatible work.
+2. For work owned directly by the operation, call `queue_operation_target_dispatch()` for each target. It schedules the target only after the API transaction commits and skips targets already satisfied by compatible work. A domain event can still be used when the action genuinely represents a domain event; use `operation_target_needs_dispatch()` to avoid duplicate work in that case.
 3. Return an API response containing `operation_id`. Do not create a separate manual request/correlation ID.
 4. Have the worker report ordinary progress through its `progress` object and return a `TaskResult` with structured facts when it completes.
 5. In the frontend, start the request through the generic operation helper and let `OperationNotifier` own polling, final notifications and cache refreshes. Components that need live status can use `useActiveOperation()`.
 
 Workers must not accept `operation_id`, `manual_request_id`, or similar UI-only parameters. Operation correlation belongs to the scheduler infrastructure.
+
+For large fan-out actions, dispatch the durable targets directly instead of translating every target into an in-memory event. This keeps correlation explicit in scheduler infrastructure and avoids depending on a transient event queue for hundreds of sibling tasks.
 
 ## Worker results
 
@@ -46,6 +48,8 @@ progress.set(50, "Refreshing episode 10/20")
 ```
 
 The executor mirrors linked TaskRun progress into the owning operation. A multi-target operation exposes the average target progress, with terminal targets counting as 100% complete.
+
+Operation targets and their run associations are loaded through SQLAlchemy relationships with eager loading when aggregate state is calculated. Aggregate progress must remain a bounded-query operation as target counts grow; do not reintroduce per-target TaskRun queries.
 
 There must not be a worker-specific frontend polling loop for progress.
 
