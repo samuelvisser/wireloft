@@ -18,12 +18,6 @@ _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
 }
-_ACTIVE_TASK_STATUSES = {
-    TaskStatus.SCHEDULED,
-    TaskStatus.QUEUED,
-    TaskStatus.RUNNING,
-    TaskStatus.RETRY_SCHEDULED,
-}
 
 
 def operation_ids_allow_execution(session: Session, operation_ids: Iterable[str]) -> bool:
@@ -46,7 +40,7 @@ def run_cancel_requested(run: TaskRun) -> bool:
 
 def cancel_operation(operation_id: str) -> dict | None:
     session = get_session()
-    run_ids: set[int] = set()
+    cancelable_run_ids: set[int] = set()
     try:
         operation = _load_operation(session, operation_id)
         if operation is None:
@@ -63,8 +57,8 @@ def cancel_operation(operation_id: str) -> dict | None:
                 run = link.task_run
                 if run is None:
                     continue
-                run_ids.add(run.id)
-                _request_run_cancellation(session, run, operation.id)
+                if _request_run_cancellation(session, run, operation.id):
+                    cancelable_run_ids.add(run.id)
 
         now = datetime.now(timezone.utc)
         operation.status = OperationStatus.CANCELED.value
@@ -77,7 +71,6 @@ def cancel_operation(operation_id: str) -> dict | None:
             },
         }
         operation.error = None
-        operation.notification_seen_at = now
         operation.finished_at = now
         session.commit()
     finally:
@@ -85,7 +78,10 @@ def cancel_operation(operation_id: str) -> dict | None:
 
     from task_manager.scheduler.scheduler import cancel_pending_operation_jobs
 
-    cancel_pending_operation_jobs(operation_id=operation_id, run_ids=run_ids)
+    cancel_pending_operation_jobs(
+        operation_id=operation_id,
+        run_ids=cancelable_run_ids,
+    )
     from task_manager.scheduler.operations import get_operation
     return get_operation(operation_id)
 
@@ -93,7 +89,7 @@ def cancel_operation(operation_id: str) -> dict | None:
 def restart_operation(operation_id: str) -> dict | None:
     """Restart only the unfinished logical targets of an existing operation."""
     session = get_session()
-    old_run_ids: set[int] = set()
+    cancelable_run_ids: set[int] = set()
     try:
         operation = _load_operation(session, operation_id)
         if operation is None:
@@ -124,9 +120,8 @@ def restart_operation(operation_id: str) -> dict | None:
                 if keep_link is not None and link is keep_link:
                     continue
                 run = link.task_run
-                if run is not None:
-                    old_run_ids.add(run.id)
-                    _request_run_cancellation(session, run, operation.id)
+                if run is not None and _request_run_cancellation(session, run, operation.id):
+                    cancelable_run_ids.add(run.id)
                 session.delete(link)
 
             if keep_link is None:
@@ -136,7 +131,10 @@ def restart_operation(operation_id: str) -> dict | None:
         # again, otherwise an old queued dispatch and the replacement could race.
         from task_manager.scheduler.scheduler import cancel_pending_operation_jobs
 
-        cancel_pending_operation_jobs(operation_id=operation_id, run_ids=old_run_ids)
+        cancel_pending_operation_jobs(
+            operation_id=operation_id,
+            run_ids=cancelable_run_ids,
+        )
 
         operation.status = OperationStatus.QUEUED.value
         operation.progress = int((completed / len(operation.targets)) * 100)
@@ -166,9 +164,14 @@ def restart_operation(operation_id: str) -> dict | None:
     return get_operation(operation_id)
 
 
-def _request_run_cancellation(session: Session, run: TaskRun, operation_id: str) -> None:
+def _request_run_cancellation(
+        session: Session,
+        run: TaskRun,
+        operation_id: str,
+) -> bool:
+    """Request cancellation when this operation exclusively owns the TaskRun."""
     if _run_shared_with_other_active_operation(session, run.id, operation_id):
-        return
+        return False
 
     meta = dict(run.meta or {})
     meta[RUN_CANCEL_REQUESTED_META_KEY] = True
@@ -180,6 +183,7 @@ def _request_run_cancellation(session: Session, run: TaskRun, operation_id: str)
         run.message = "Canceled by user"
         run.next_retry_at = None
         run.finished_at = datetime.now(timezone.utc)
+    return True
 
 
 def _run_shared_with_other_active_operation(
