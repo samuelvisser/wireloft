@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, JSON, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
 from task_manager.scheduler.types import ResourceType, TaskStatus
+
+if TYPE_CHECKING:
+    from .TaskOperationRun import TaskOperationRun
 
 
 class TaskRun(Base):
@@ -37,6 +40,12 @@ class TaskRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # Relationships
+    operation_links: Mapped[list["TaskOperationRun"]] = relationship(
+        back_populates="task_run",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     def __repr__(self) -> str:
         return f"<TaskRun id={self.id} resource_type={self.resource_type} resource_id={self.resource_id} status={self.status} progress={self.progress} created_at={self.created_at} updated_at={self.updated_at}>"

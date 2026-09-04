@@ -111,6 +111,48 @@ def test_operation_coalesces_onto_compatible_automatic_run():
         session.close()
 
 
+def test_task_operation_models_expose_native_relationships():
+    from task_manager.scheduler.operations import OperationTargetSpec, create_operation
+    from task_manager.scheduler.types import ResourceType
+
+    session = _session()
+    try:
+        definition = _definition(session)
+        run = _run(
+            session,
+            definition,
+            resource_type=ResourceType.SHOW,
+            resource_id=42,
+        )
+        operation = create_operation(
+            session,
+            kind="show.sync",
+            resource_type="show",
+            resource_id=42,
+            title="Test Show",
+            targets=[
+                OperationTargetSpec(
+                    task_key=definition.key,
+                    resource_type="show",
+                    resource_id=42,
+                )
+            ],
+        )
+        session.flush()
+
+        target = operation.targets[0]
+        link = target.run_links[0]
+
+        assert target.operation is operation
+        assert link.target is target
+        assert link.task_run is run
+        assert link.operation is operation
+        assert link in operation.run_links
+        assert link in run.operation_links
+    finally:
+        session.close()
+
+
 def test_one_task_run_can_satisfy_multiple_overlapping_operations():
     from task_manager.scheduler.operations import (
         OperationTargetSpec,
@@ -312,5 +354,109 @@ def test_operation_target_input_mismatch_does_not_coalesce():
 
         assert operation.status == OperationStatus.QUEUED.value
         assert operation.progress == 0
+    finally:
+        session.close()
+
+
+def test_operation_target_dispatch_fans_out_after_commit(monkeypatch):
+    import task_manager.scheduler.scheduler as scheduler_module
+    from task_manager.scheduler.operations import (
+        OperationTargetSpec,
+        create_operation,
+        queue_operation_target_dispatch,
+    )
+
+    session = _session()
+    try:
+        definition = _definition(session, "refresh_episode_metadata_worker")
+        operation = create_operation(
+            session,
+            kind="show.refresh_metadata",
+            resource_type="show",
+            resource_id=5,
+            title="Test Show",
+            targets=[
+                OperationTargetSpec(
+                    task_key=definition.key,
+                    resource_type="episode",
+                    resource_id=episode_id,
+                    task_kwargs={"refresh": True},
+                    slot_key=f"episode:{episode_id}",
+                )
+                for episode_id in (101, 102, 103)
+            ],
+        )
+
+        dispatched: list[dict] = []
+        monkeypatch.setattr(
+            scheduler_module,
+            "trigger_now",
+            lambda **kwargs: dispatched.append(kwargs) or "job-id",
+        )
+
+        for episode_id in (101, 102, 103):
+            assert queue_operation_target_dispatch(
+                session,
+                operation.id,
+                f"episode:{episode_id}",
+            ) is True
+
+        assert dispatched == []
+        session.commit()
+
+        assert [item["resource_id"] for item in dispatched] == [101, 102, 103]
+        assert [item["operation_slot"] for item in dispatched] == [
+            "episode:101",
+            "episode:102",
+            "episode:103",
+        ]
+        assert all(item["operation_ids"] == (operation.id,) for item in dispatched)
+        assert all(item["refresh"] is True for item in dispatched)
+    finally:
+        session.close()
+
+
+def test_refresh_operation_eager_loads_target_run_graph_without_n_plus_one_queries():
+    from sqlalchemy import event
+    from task_manager.scheduler.operations import OperationTargetSpec, create_operation, refresh_operation
+
+    session = _session()
+    try:
+        definition = _definition(session, "refresh_episode_metadata_worker")
+        operation = create_operation(
+            session,
+            kind="show.refresh_metadata",
+            resource_type="show",
+            resource_id=5,
+            title="Test Show",
+            targets=[
+                OperationTargetSpec(
+                    task_key=definition.key,
+                    resource_type="episode",
+                    resource_id=episode_id,
+                    task_kwargs={"refresh": True},
+                    slot_key=f"episode:{episode_id}",
+                )
+                for episode_id in range(1, 51)
+            ],
+        )
+        operation_id = operation.id
+        session.expire_all()
+
+        statements: list[str] = []
+
+        def count_statement(*args):
+            statements.append(args[2])
+
+        engine = session.get_bind()
+        event.listen(engine, "before_cursor_execute", count_statement)
+        try:
+            refresh_operation(session, operation_id)
+        finally:
+            event.remove(engine, "before_cursor_execute", count_statement)
+
+        # Operation + targets + association rows are loaded in a bounded number
+        # of SELECTs regardless of the number of logical targets.
+        assert len(statements) <= 4
     finally:
         session.close()

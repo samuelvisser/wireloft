@@ -6,7 +6,7 @@ from typing import Any, Iterable, Sequence
 from uuid import uuid4
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
 from task_manager.scheduler.db import (
@@ -16,6 +16,7 @@ from task_manager.scheduler.db import (
     TaskOperationTarget,
     TaskRun,
 )
+from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import OperationSource, OperationStatus, TaskStatus
 
 
@@ -81,7 +82,7 @@ def create_operation(
     created_targets: list[TaskOperationTarget] = []
     for spec in targets:
         target = TaskOperationTarget(
-            operation_id=operation.id,
+            operation=operation,
             task_key=spec.task_key,
             resource_type=spec.resource_type,
             resource_id=spec.resource_id,
@@ -112,19 +113,38 @@ def operation_target_needs_dispatch(
 ) -> bool:
     """Whether a newly created target still needs a worker to be dispatched.
 
-    A target can already be linked when an equivalent automatic worker was
-    running before the UI action was requested. Callers can then skip emitting a
-    duplicate event and simply let the existing run satisfy the operation.
+    A target can already be linked when equivalent automatic work was running
+    before the UI action was requested. Callers can then skip a duplicate worker.
     """
-    target = session.scalar(
-        select(TaskOperationTarget).where(
-            TaskOperationTarget.operation_id == operation_id,
-            TaskOperationTarget.slot_key == slot_key,
-        )
-    )
-    if target is None:
+    target = _load_target_with_runs(session, operation_id, slot_key)
+    return target is not None and _latest_run_for_target(target) is None
+
+
+def queue_operation_target_dispatch(
+        session: Session,
+        operation_id: str,
+        slot_key: str,
+) -> bool:
+    """Queue one operation target for execution after the current transaction commits.
+
+    Dispatching from the durable target avoids fanning a UI operation out through
+    hundreds of transient domain events. The operation ID and slot stay scheduler
+    infrastructure and are never exposed as worker parameters.
+    """
+    target = _load_target_with_runs(session, operation_id, slot_key)
+    if target is None or _latest_run_for_target(target) is not None:
         return False
-    return _latest_run_for_target(session, target.id) is None
+
+    queue_task_after_commit(
+        session,
+        def_key=target.task_key,
+        resource_type=target.resource_type,
+        resource_id=target.resource_id,
+        operation_ids=(operation_id,),
+        operation_slot=target.slot_key,
+        **dict(target.task_kwargs or {}),
+    )
+    return True
 
 
 def complete_operation(
@@ -163,6 +183,11 @@ def link_run_to_operations(
     Independently, compatible active targets are discovered by task/resource and
     task inputs, allowing automatic WireLoft work to satisfy an overlapping UI
     request without any worker-specific request-ID plumbing.
+
+    The executor commits this lightweight association before refreshing aggregate
+    operation state. Keeping the potentially large aggregate read out of the run
+    creation transaction prevents fan-out operations from holding SQLite's write
+    lock while hundreds of sibling tasks are also starting.
     """
     explicit_ids = tuple(dict.fromkeys(str(value) for value in operation_ids if value))
     targets: dict[int, TaskOperationTarget] = {}
@@ -200,8 +225,6 @@ def link_run_to_operations(
         operation_ids_touched.add(target.operation_id)
 
     session.flush()
-    for operation_id in operation_ids_touched:
-        refresh_operation(session, operation_id)
     return tuple(sorted(operation_ids_touched))
 
 
@@ -218,21 +241,18 @@ def refresh_operations_for_run(session: Session, task_run_id: int) -> None:
 
 
 def refresh_operation(session: Session, operation_id: str) -> TaskOperation | None:
-    operation = session.get(TaskOperation, operation_id)
+    operation = _load_operation_with_runs(session, operation_id)
     if operation is None:
         return None
+    return _refresh_loaded_operation(operation)
 
-    targets = list(
-        session.scalars(
-            select(TaskOperationTarget)
-            .where(TaskOperationTarget.operation_id == operation_id)
-            .order_by(TaskOperationTarget.id.asc())
-        )
-    )
+
+def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
+    targets = list(operation.targets)
     if not targets:
         return operation
 
-    effective_runs = [_effective_run_for_target(session, target.id) for target in targets]
+    effective_runs = [_effective_run_for_target(target) for target in targets]
     linked_runs = [run for run in effective_runs if run is not None]
     terminal_runs = [run for run in linked_runs if _task_status(run.status) in _TERMINAL_TASK_STATUSES]
 
@@ -328,21 +348,17 @@ def recover_pending_operations() -> int:
     try:
         operations = list(
             session.scalars(
-                select(TaskOperation).where(TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES))
+                select(TaskOperation)
+                .where(TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES))
+                .options(_operation_run_graph())
             )
         )
         recoveries: list[tuple[str, str, str, int | None, str, dict[str, Any]]] = []
         for operation in operations:
-            targets = list(
-                session.scalars(
-                    select(TaskOperationTarget).where(
-                        TaskOperationTarget.operation_id == operation.id,
-                        TaskOperationTarget.recover_on_restart.is_(True),
-                    )
-                )
-            )
-            for target in targets:
-                effective = _effective_run_for_target(session, target.id)
+            for target in operation.targets:
+                if not target.recover_on_restart:
+                    continue
+                effective = _effective_run_for_target(target)
                 if effective is not None and _task_status(effective.status) == TaskStatus.SUCCEEDED:
                     continue
                 recoveries.append((
@@ -388,7 +404,7 @@ def list_operations(
 ) -> list[dict[str, Any]]:
     session = get_session()
     try:
-        statement = select(TaskOperation)
+        statement = select(TaskOperation).options(_operation_run_graph())
         if source is not None:
             statement = statement.where(TaskOperation.source == source)
         if resource_type is not None:
@@ -408,9 +424,11 @@ def list_operations(
             )
         )
         for operation in operations:
-            refresh_operation(session, operation.id)
+            _refresh_loaded_operation(operation)
+        session.flush()
+        payloads = [_operation_to_dict(operation) for operation in operations]
         session.commit()
-        return [_operation_to_dict(session, operation) for operation in operations]
+        return payloads
     finally:
         session.close()
 
@@ -421,8 +439,10 @@ def get_operation(operation_id: str) -> dict[str, Any] | None:
         operation = refresh_operation(session, operation_id)
         if operation is None:
             return None
+        session.flush()
+        payload = _operation_to_dict(operation)
         session.commit()
-        return _operation_to_dict(session, operation)
+        return payload
     finally:
         session.close()
 
@@ -430,23 +450,22 @@ def get_operation(operation_id: str) -> dict[str, Any] | None:
 def mark_operation_seen(operation_id: str) -> dict[str, Any] | None:
     session = get_session()
     try:
-        operation = session.get(TaskOperation, operation_id)
+        operation = _load_operation_with_runs(session, operation_id)
         if operation is None:
             return None
+        _refresh_loaded_operation(operation)
         operation.notification_seen_at = datetime.now(timezone.utc)
+        session.flush()
+        payload = _operation_to_dict(operation)
         session.commit()
-        return _operation_to_dict(session, operation)
+        return payload
     finally:
         session.close()
 
 
-def _operation_to_dict(session: Session, operation: TaskOperation) -> dict[str, Any]:
-    targets = list(
-        session.scalars(
-            select(TaskOperationTarget).where(TaskOperationTarget.operation_id == operation.id)
-        )
-    )
-    effective_runs = [_effective_run_for_target(session, target.id) for target in targets]
+def _operation_to_dict(operation: TaskOperation) -> dict[str, Any]:
+    targets = list(operation.targets)
+    effective_runs = [_effective_run_for_target(target) for target in targets]
     terminal_count = sum(
         run is not None and _task_status(run.status) in _TERMINAL_TASK_STATUSES
         for run in effective_runs
@@ -472,6 +491,41 @@ def _operation_to_dict(session: Session, operation: TaskOperation) -> dict[str, 
         "created_at": operation.created_at.isoformat() if operation.created_at else None,
         "updated_at": operation.updated_at.isoformat() if operation.updated_at else None,
     }
+
+
+def _operation_run_graph():
+    return (
+        selectinload(TaskOperation.targets)
+        .selectinload(TaskOperationTarget.run_links)
+        .selectinload(TaskOperationRun.task_run)
+    )
+
+
+def _load_operation_with_runs(session: Session, operation_id: str) -> TaskOperation | None:
+    return session.scalar(
+        select(TaskOperation)
+        .where(TaskOperation.id == operation_id)
+        .options(_operation_run_graph())
+        .execution_options(populate_existing=True)
+    )
+
+
+def _load_target_with_runs(
+        session: Session,
+        operation_id: str,
+        slot_key: str,
+) -> TaskOperationTarget | None:
+    return session.scalar(
+        select(TaskOperationTarget)
+        .where(
+            TaskOperationTarget.operation_id == operation_id,
+            TaskOperationTarget.slot_key == slot_key,
+        )
+        .options(
+            selectinload(TaskOperationTarget.run_links).selectinload(TaskOperationRun.task_run)
+        )
+        .execution_options(populate_existing=True)
+    )
 
 
 def _matching_active_run(session: Session, target: TaskOperationTarget) -> TaskRun | None:
@@ -508,23 +562,18 @@ def _link_target_to_run(session: Session, target: TaskOperationTarget, run: Task
     if existing is not None:
         return
     session.add(TaskOperationRun(
-        target_id=target.id,
-        task_run_id=run.id,
+        target=target,
+        task_run=run,
         operation_id=target.operation_id,
     ))
 
 
-def _latest_run_for_target(session: Session, target_id: int) -> TaskRun | None:
-    return session.scalar(
-        select(TaskRun)
-        .join(TaskOperationRun, TaskOperationRun.task_run_id == TaskRun.id)
-        .where(TaskOperationRun.target_id == target_id)
-        .order_by(TaskRun.id.desc())
-        .limit(1)
-    )
+def _latest_run_for_target(target: TaskOperationTarget) -> TaskRun | None:
+    runs = [link.task_run for link in target.run_links if link.task_run is not None]
+    return max(runs, key=lambda run: run.id) if runs else None
 
 
-def _effective_run_for_target(session: Session, target_id: int) -> TaskRun | None:
+def _effective_run_for_target(target: TaskOperationTarget) -> TaskRun | None:
     """Return the run that currently determines whether a target is satisfied.
 
     A logical target may be linked to more than one equivalent run when automatic
@@ -532,17 +581,11 @@ def _effective_run_for_target(session: Session, target_id: int) -> TaskRun | Non
     satisfied even if another duplicate later fails or is still running. Before
     success, the newest run represents current retry/recovery progress.
     """
-    successful = session.scalar(
-        select(TaskRun)
-        .join(TaskOperationRun, TaskOperationRun.task_run_id == TaskRun.id)
-        .where(
-            TaskOperationRun.target_id == target_id,
-            TaskRun.status == TaskStatus.SUCCEEDED,
-        )
-        .order_by(TaskRun.id.desc())
-        .limit(1)
-    )
-    return successful or _latest_run_for_target(session, target_id)
+    runs = [link.task_run for link in target.run_links if link.task_run is not None]
+    successful = [run for run in runs if _task_status(run.status) == TaskStatus.SUCCEEDED]
+    if successful:
+        return max(successful, key=lambda run: run.id)
+    return max(runs, key=lambda run: run.id) if runs else None
 
 
 def _aggregate_results(

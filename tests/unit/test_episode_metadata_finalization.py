@@ -145,7 +145,7 @@ def test_episode_metadata_refresh_creates_operation_and_queues_worker(monkeypatc
         metadata_is_final=True,
         show=SimpleNamespace(slug="test-show", title="Test Show"),
     )
-    queued: list[tuple[str, dict]] = []
+    queued: list[tuple[str, str]] = []
     created: list[dict] = []
 
     class Query:
@@ -170,14 +170,13 @@ def test_episode_metadata_refresh_creates_operation_and_queues_worker(monkeypatc
         created.append(kwargs)
         return SimpleNamespace(id="operation-episode-refresh")
 
+    def fake_dispatch(_session, operation_id, slot_key):
+        queued.append((operation_id, slot_key))
+        return True
+
     session = FakeSession()
     monkeypatch.setattr(service, "create_operation", fake_create_operation)
-    monkeypatch.setattr(service, "operation_target_needs_dispatch", lambda *_args: True)
-    monkeypatch.setattr(
-        service,
-        "queue_event",
-        lambda _session, name, payload: queued.append((name, payload)),
-    )
+    monkeypatch.setattr(service, "queue_operation_target_dispatch", fake_dispatch)
 
     result = service.request_episode_metadata_refresh(session, episode.slug)
 
@@ -193,16 +192,7 @@ def test_episode_metadata_refresh_creates_operation_and_queues_worker(monkeypatc
     target = created[0]["targets"][0]
     assert target.task_key == "refresh_episode_metadata_worker"
     assert target.task_kwargs == {"refresh": True}
-    assert queued == [(
-        service.METADATA_REFRESH_REQUESTED_EVENT,
-        {
-            "resource_id": episode.id,
-            "id": episode.id,
-            "slug": episode.slug,
-            "show_id": episode.show_id,
-            "refresh": True,
-        },
-    )]
+    assert queued == [("operation-episode-refresh", target.resolved_slot_key())]
 
 
 def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(monkeypatch):
@@ -215,7 +205,7 @@ def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(mon
         SimpleNamespace(id=2, metadata_is_final=True),
         SimpleNamespace(id=3, metadata_is_final=False),
     ]
-    queued: list[int] = []
+    queued: list[tuple[str, str]] = []
     created: list[dict] = []
 
     class Query:
@@ -251,14 +241,13 @@ def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(mon
         created.append(kwargs)
         return SimpleNamespace(id="operation-show-refresh")
 
-    def queue_refresh(_session, episode):
-        episode.metadata_is_final = False
-        queued.append(episode.id)
+    def fake_dispatch(_session, operation_id, slot_key):
+        queued.append((operation_id, slot_key))
+        return True
 
     session = FakeSession()
     monkeypatch.setattr(service, "create_operation", fake_create_operation)
-    monkeypatch.setattr(service, "operation_target_needs_dispatch", lambda *_args: True)
-    monkeypatch.setattr(service, "queue_episode_metadata_refresh", queue_refresh)
+    monkeypatch.setattr(service, "queue_operation_target_dispatch", fake_dispatch)
 
     result = service.request_show_metadata_refresh(session, show.slug)
 
@@ -270,7 +259,11 @@ def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(mon
     assert created[0]["kind"] == "show.refresh_metadata"
     assert [target.resource_id for target in created[0]["targets"]] == [1, 2, 3]
     assert all(target.task_kwargs == {"refresh": True} for target in created[0]["targets"])
-    assert queued == [1, 2, 3]
+    assert queued == [
+        ("operation-show-refresh", "episode:1"),
+        ("operation-show-refresh", "episode:2"),
+        ("operation-show-refresh", "episode:3"),
+    ]
     assert all(episode.metadata_is_final is False for episode in episodes)
     assert session.flushes == 1
 

@@ -12,7 +12,7 @@ from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
     create_operation,
-    operation_target_needs_dispatch,
+    queue_operation_target_dispatch,
 )
 
 
@@ -95,8 +95,8 @@ def request_episode_metadata_refresh(
             "show_title": show.title if show is not None else None,
         },
     )
-    if operation_target_needs_dispatch(s, operation.id, target.resolved_slot_key()):
-        queue_episode_metadata_refresh(s, episode)
+    if queue_operation_target_dispatch(s, operation.id, target.resolved_slot_key()):
+        episode.metadata_is_final = False
     s.flush()
     return {
         "queued": True,
