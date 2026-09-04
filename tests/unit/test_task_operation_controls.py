@@ -45,6 +45,104 @@ def _run(session, definition, *, resource_id: int, status, progress: int, inputs
     return run
 
 
+def _restart_scenario(task_database, monkeypatch):
+    from task_manager.scheduler.operation_control import restart_operation
+    from task_manager.scheduler.operations import (
+        OperationTargetSpec,
+        create_operation,
+        link_run_to_operations,
+        refresh_operations_for_run,
+    )
+    from task_manager.scheduler.types import TaskStatus
+    import task_manager.scheduler.scheduler as scheduler_module
+
+    session = task_database()
+    definition = _definition(session, "test_restart_operation_worker")
+    operation = create_operation(
+        session,
+        kind="show.test_restart",
+        resource_type="show",
+        resource_id=5,
+        title="Test Show",
+        targets=[
+            OperationTargetSpec(
+                task_key=definition.key,
+                resource_type="episode",
+                resource_id=101,
+                slot_key="episode:101",
+            ),
+            OperationTargetSpec(
+                task_key=definition.key,
+                resource_type="episode",
+                resource_id=102,
+                slot_key="episode:102",
+            ),
+        ],
+    )
+    operation_id = operation.id
+    definition_key = definition.key
+
+    completed_run = _run(
+        session,
+        definition,
+        resource_id=101,
+        status=TaskStatus.SUCCEEDED,
+        progress=100,
+    )
+    completed_run_id = completed_run.id
+    running_run = _run(
+        session,
+        definition,
+        resource_id=102,
+        status=TaskStatus.RUNNING,
+        progress=37,
+    )
+    running_run_id = running_run.id
+
+    link_run_to_operations(
+        session,
+        run=completed_run,
+        task_key=definition.key,
+        operation_ids=(operation_id,),
+        operation_slot="episode:101",
+    )
+    link_run_to_operations(
+        session,
+        run=running_run,
+        task_key=definition.key,
+        operation_ids=(operation_id,),
+        operation_slot="episode:102",
+    )
+    refresh_operations_for_run(session, completed_run_id)
+    refresh_operations_for_run(session, running_run_id)
+    session.commit()
+    session.close()
+
+    canceled_jobs: list[tuple[str, set[int]]] = []
+    dispatched: list[dict] = []
+    monkeypatch.setattr(
+        scheduler_module,
+        "cancel_pending_operation_jobs",
+        lambda *, operation_id, run_ids=(): canceled_jobs.append((operation_id, set(run_ids))) or 0,
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "trigger_now",
+        lambda **kwargs: dispatched.append(kwargs) or "job-id",
+    )
+
+    payload = restart_operation(operation_id)
+    return {
+        "payload": payload,
+        "operation_id": operation_id,
+        "definition_key": definition_key,
+        "completed_run_id": completed_run_id,
+        "running_run_id": running_run_id,
+        "canceled_jobs": canceled_jobs,
+        "dispatched": dispatched,
+    }
+
+
 def test_cancel_operation_is_durable_and_requests_running_worker_stop(task_database, monkeypatch):
     from task_manager.scheduler.db import TaskOperation, TaskRun
     from task_manager.scheduler.operation_control import (
@@ -210,120 +308,49 @@ def test_cancel_operation_does_not_stop_run_shared_with_another_active_operation
         session.close()
 
 
-def test_restart_operation_keeps_completed_targets_and_requeues_only_unfinished(task_database, monkeypatch):
-    from task_manager.scheduler.db import TaskOperationRun, TaskRun
-    from task_manager.scheduler.operation_control import (
-        RUN_CANCEL_REQUESTED_META_KEY,
-        restart_operation,
-    )
-    from task_manager.scheduler.operations import (
-        OperationTargetSpec,
-        create_operation,
-        link_run_to_operations,
-        refresh_operations_for_run,
-    )
-    from task_manager.scheduler.types import OperationStatus, TaskStatus
-    import task_manager.scheduler.scheduler as scheduler_module
+def test_restart_operation_reports_restarted_progress(task_database, monkeypatch):
+    from task_manager.scheduler.types import OperationStatus
 
-    session = task_database()
-    definition = _definition(session, "test_restart_operation_worker")
-    operation = create_operation(
-        session,
-        kind="show.test_restart",
-        resource_type="show",
-        resource_id=5,
-        title="Test Show",
-        targets=[
-            OperationTargetSpec(
-                task_key=definition.key,
-                resource_type="episode",
-                resource_id=101,
-                slot_key="episode:101",
-            ),
-            OperationTargetSpec(
-                task_key=definition.key,
-                resource_type="episode",
-                resource_id=102,
-                slot_key="episode:102",
-            ),
-        ],
-    )
-    operation_id = operation.id
-
-    completed_run = _run(
-        session,
-        definition,
-        resource_id=101,
-        status=TaskStatus.SUCCEEDED,
-        progress=100,
-    )
-    completed_run_id = completed_run.id
-    running_run = _run(
-        session,
-        definition,
-        resource_id=102,
-        status=TaskStatus.RUNNING,
-        progress=37,
-    )
-    running_run_id = running_run.id
-
-    link_run_to_operations(
-        session,
-        run=completed_run,
-        task_key=definition.key,
-        operation_ids=(operation_id,),
-        operation_slot="episode:101",
-    )
-    link_run_to_operations(
-        session,
-        run=running_run,
-        task_key=definition.key,
-        operation_ids=(operation_id,),
-        operation_slot="episode:102",
-    )
-    refresh_operations_for_run(session, completed_run_id)
-    refresh_operations_for_run(session, running_run_id)
-    session.commit()
-    session.close()
-
-    canceled_jobs: list[tuple[str, set[int]]] = []
-    dispatched: list[dict] = []
-    monkeypatch.setattr(
-        scheduler_module,
-        "cancel_pending_operation_jobs",
-        lambda *, operation_id, run_ids=(): canceled_jobs.append((operation_id, set(run_ids))) or 0,
-    )
-    monkeypatch.setattr(
-        scheduler_module,
-        "trigger_now",
-        lambda **kwargs: dispatched.append(kwargs) or "job-id",
-    )
-
-    payload = restart_operation(operation_id)
+    scenario = _restart_scenario(task_database, monkeypatch)
+    payload = scenario["payload"]
     assert payload is not None
     assert payload["status"] in {OperationStatus.QUEUED.value, OperationStatus.RUNNING.value}
     assert payload["progress"] == 50
-    assert canceled_jobs == [(operation_id, {running_run_id})]
-    assert dispatched == [
+
+
+def test_restart_operation_cancels_old_and_dispatches_unfinished(task_database, monkeypatch):
+    scenario = _restart_scenario(task_database, monkeypatch)
+    assert scenario["canceled_jobs"] == [
+        (scenario["operation_id"], {scenario["running_run_id"]})
+    ]
+    assert scenario["dispatched"] == [
         {
-            "def_key": definition.key,
+            "def_key": scenario["definition_key"],
             "resource_type": "episode",
             "resource_id": 102,
-            "operation_ids": (operation_id,),
+            "operation_ids": (scenario["operation_id"],),
             "operation_slot": "episode:102",
         }
     ]
 
+
+def test_restart_operation_replaces_unfinished_link(task_database, monkeypatch):
+    from task_manager.scheduler.db import TaskOperationRun, TaskRun
+    from task_manager.scheduler.operation_control import RUN_CANCEL_REQUESTED_META_KEY
+
+    scenario = _restart_scenario(task_database, monkeypatch)
     session = task_database()
     try:
-        running = session.get(TaskRun, running_run_id)
+        running = session.get(TaskRun, scenario["running_run_id"])
         assert running is not None
         assert running.meta is not None
         assert running.meta[RUN_CANCEL_REQUESTED_META_KEY] is True
 
-        links = session.query(TaskOperationRun).filter_by(operation_id=operation_id).all()
+        links = session.query(TaskOperationRun).filter_by(
+            operation_id=scenario["operation_id"]
+        ).all()
         assert len(links) == 1
-        assert links[0].task_run_id == completed_run_id
+        assert links[0].task_run_id == scenario["completed_run_id"]
     finally:
         session.close()
 
