@@ -56,6 +56,7 @@ def test_cancel_operation_is_durable_and_requests_running_worker_stop(task_datab
         create_operation,
         get_operation,
         link_run_to_operations,
+        refresh_operations_for_run,
     )
     from task_manager.scheduler.types import OperationStatus, TaskStatus
     import task_manager.scheduler.scheduler as scheduler_module
@@ -91,6 +92,7 @@ def test_cancel_operation_is_durable_and_requests_running_worker_stop(task_datab
         task_key=definition.key,
         operation_ids=(operation_id,),
     )
+    refresh_operations_for_run(session, run_id)
     session.commit()
     session.close()
 
@@ -126,7 +128,7 @@ def test_cancel_operation_is_durable_and_requests_running_worker_stop(task_datab
 
 
 def test_cancel_operation_does_not_stop_run_shared_with_another_active_operation(task_database, monkeypatch):
-    from task_manager.scheduler.db import TaskRun
+    from task_manager.scheduler.db import TaskOperation, TaskRun
     from task_manager.scheduler.operation_control import (
         RUN_CANCEL_REQUESTED_META_KEY,
         cancel_operation,
@@ -135,6 +137,7 @@ def test_cancel_operation_does_not_stop_run_shared_with_another_active_operation
         OperationTargetSpec,
         create_operation,
         link_run_to_operations,
+        refresh_operations_for_run,
     )
     from task_manager.scheduler.types import OperationStatus, TaskStatus
     import task_manager.scheduler.scheduler as scheduler_module
@@ -178,6 +181,7 @@ def test_cancel_operation_does_not_stop_run_shared_with_another_active_operation
         task_key=definition.key,
         operation_ids=(first_id, second_id),
     )
+    refresh_operations_for_run(session, run_id)
     session.commit()
     session.close()
 
@@ -199,7 +203,7 @@ def test_cancel_operation_does_not_stop_run_shared_with_another_active_operation
         assert shared_run is not None
         assert shared_run.status == TaskStatus.RUNNING
         assert not isinstance(shared_run.meta, dict) or RUN_CANCEL_REQUESTED_META_KEY not in shared_run.meta
-        still_active = session.get(type(first), second_id)
+        still_active = session.get(TaskOperation, second_id)
         assert still_active is not None
         assert still_active.status == OperationStatus.RUNNING.value
     finally:
@@ -216,6 +220,7 @@ def test_restart_operation_keeps_completed_targets_and_requeues_only_unfinished(
         OperationTargetSpec,
         create_operation,
         link_run_to_operations,
+        refresh_operations_for_run,
     )
     from task_manager.scheduler.types import OperationStatus, TaskStatus
     import task_manager.scheduler.scheduler as scheduler_module
@@ -276,6 +281,8 @@ def test_restart_operation_keeps_completed_targets_and_requeues_only_unfinished(
         operation_ids=(operation_id,),
         operation_slot="episode:102",
     )
+    refresh_operations_for_run(session, completed_run_id)
+    refresh_operations_for_run(session, running_run_id)
     session.commit()
     session.close()
 
