@@ -77,6 +77,7 @@ def cancel_operation(operation_id: str) -> dict | None:
             },
         }
         operation.error = None
+        operation.notification_seen_at = now
         operation.finished_at = now
         session.commit()
     finally:
