@@ -7,6 +7,8 @@ export type ActionMenuItem = {
     icon?: any
     onSelect: () => void
     disabled?: boolean
+    disabledReason?: string
+    progress?: number
     tone?: 'default' | 'danger'
     separatorBefore?: boolean
 }
@@ -15,6 +17,11 @@ type Props = {
     label?: string
     items: ActionMenuItem[]
     className?: string
+}
+
+function normalizedProgress(value: number | undefined) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+    return Math.max(0, Math.min(100, Math.round(value)))
 }
 
 export default function ActionMenu({label = 'Actions', items, className = ''}: Props) {
@@ -70,23 +77,46 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                 <>
                     <div className="action-menu-backdrop" aria-hidden="true" onClick={() => setOpen(false)}/>
                     <div id={menuId} className="action-menu-popover" role="menu" aria-label={label}>
-                        {items.map((item, index) => (
-                            <div key={`${item.label}-${index}`} className="action-menu-entry">
-                                {item.separatorBefore && <div className="action-menu-separator" role="separator"/>}
-                                <button
-                                    type="button"
-                                    role="menuitem"
-                                    className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}`}
-                                    disabled={item.disabled}
-                                    onClick={() => selectItem(item)}
+                        {items.map((item, index) => {
+                            const progress = normalizedProgress(item.progress)
+                            const tooltipId = item.disabled && item.disabledReason
+                                ? `${menuId}-disabled-reason-${index}`
+                                : undefined
+
+                            return (
+                                <div
+                                    key={`${item.label}-${index}`}
+                                    className={`action-menu-entry${tooltipId ? ' has-disabled-reason' : ''}`}
                                 >
-                                    {item.icon && (
-                                        <FontAwesomeIcon className="action-menu-item-icon" icon={item.icon} aria-hidden="true"/>
+                                    {item.separatorBefore && <div className="action-menu-separator" role="separator"/>}
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}${item.disabled ? ' is-disabled' : ''}`}
+                                        aria-disabled={item.disabled || undefined}
+                                        aria-describedby={tooltipId}
+                                        onClick={() => selectItem(item)}
+                                    >
+                                        {progress !== undefined && (
+                                            <span
+                                                className="action-menu-item-progress"
+                                                style={{width: `${progress}%`}}
+                                                aria-hidden="true"
+                                            />
+                                        )}
+                                        {item.icon && (
+                                            <FontAwesomeIcon className="action-menu-item-icon" icon={item.icon} aria-hidden="true"/>
+                                        )}
+                                        <span>{item.label}</span>
+                                    </button>
+                                    {tooltipId && (
+                                        <span id={tooltipId} role="tooltip" className="action-menu-disabled-tooltip">
+                                            {item.disabledReason}
+                                        </span>
                                     )}
-                                    <span>{item.label}</span>
-                                </button>
-                            </div>
-                        ))}
+                                </div>
+                            )
+                        })}
                     </div>
                 </>
             )}
