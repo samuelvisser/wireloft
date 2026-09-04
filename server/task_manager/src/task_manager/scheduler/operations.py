@@ -20,8 +20,6 @@ from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import OperationSource, OperationStatus, TaskStatus
 
 
-WORKER_PROGRESS_META_KEY = "_worker_progress_reported"
-
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
@@ -279,12 +277,12 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
             status = _task_status(run.status)
             if status in _TERMINAL_TASK_STATUSES:
                 progress_total += 100
-            elif _run_reports_worker_progress(run) and isinstance(run.progress, int):
-                progress_total += max(0, min(100, run.progress))
+            elif _run_reports_worker_progress(run):
+                progress_total += max(0, min(100, int(run.progress or 0)))
         operation.progress = int(progress_total / total) if total else 0
     else:
-        # Workers that never report their own progress fall back to logical-target
-        # completion, which is the generic TaskOperation behavior.
+        # Workers that have not reported granular progress fall back to logical
+        # target completion, which is the generic TaskOperation behavior.
         operation.progress = int((len(terminal_runs) / total) * 100) if total else 0
 
     starts = [run.started_at for run in linked_runs if run.started_at is not None]
@@ -577,10 +575,10 @@ def _run_matches_target_inputs(run: TaskRun, target: TaskOperationTarget) -> boo
 
 
 def _run_reports_worker_progress(run: TaskRun) -> bool:
-    return (
-        isinstance(run.meta, dict)
-        and run.meta.get(WORKER_PROGRESS_META_KEY) is True
-    )
+    # TaskRuns start at zero and the scheduler does not increment active progress.
+    # Therefore a non-zero active percentage can only come from the worker/service
+    # through ProgressUpdater and is safe to prefer over generic target completion.
+    return isinstance(run.progress, int) and run.progress > 0
 
 
 def _link_target_to_run(session: Session, target: TaskOperationTarget, run: TaskRun) -> None:
