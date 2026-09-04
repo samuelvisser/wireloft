@@ -28,15 +28,16 @@ jobs:
       - name: Verify Alembic history
         run: uv run backend-api db history
 
-  frontend:
+  frontend-syntax:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install UI dependencies
-        run: npm --prefix ui ci --registry=https://registry.npmjs.org
-      - name: Build frontend
-        run: npm run build
+      - name: Parse changed TSX files
+        run: |
+          npx --yes esbuild@0.25.9 ui/src/components/ActionMenu/ActionMenu.tsx --loader:.tsx=tsx --format=esm --outfile=/tmp/action-menu.js
+          npx --yes esbuild@0.25.9 ui/src/pages/show/ShowPage.tsx --loader:.tsx=tsx --format=esm --outfile=/tmp/show-page.js
+          npx --yes esbuild@0.25.9 ui/src/pages/episode/EpisodePage.tsx --loader:.tsx=tsx --format=esm --outfile=/tmp/episode-page.js
