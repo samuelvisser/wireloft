@@ -250,17 +250,26 @@ export default function TimeInterval({
     const removeCoarsestUnit = () => {
         if (!canRemoveCoarsestUnit) return
 
+        const removedUnit = visibleUnits[0]
         const nextFirstUnit = visibleUnits[1]
-        const total = valueFromDraft(draftParts)
+        const nextDraft = {...draftParts, [removedUnit]: ''}
+        const remainingUnits = visibleUnits.slice(1)
+        const total = remainingUnits.every((unit) => nextDraft[unit].trim() === '')
+            ? Number.NaN
+            : roundValue(remainingUnits.reduce((sum, unit) => {
+                const rawValue = nextDraft[unit].trim()
+                if (rawValue === '') return sum
+                const parsed = Number(rawValue)
+                if (!Number.isFinite(parsed) || parsed < 0) return Number.NaN
+                return sum + parsed * backendUnitsPerDisplayUnit(unit, backendUnit)
+            }, 0))
+
         setRemoveControlVisible(false)
         setCollapsedBeforeUnit(nextFirstUnit)
         setFirstVisibleUnit(nextFirstUnit)
-
-        if (Number.isFinite(total)) {
-            setDraftParts(normalizeDraft(draftParts, total, nextFirstUnit))
-            lastEmittedValue.current = total
-            onChange(total)
-        }
+        setDraftParts(nextDraft)
+        lastEmittedValue.current = total
+        onChange(total)
     }
 
     return (
