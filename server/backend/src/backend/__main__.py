@@ -250,7 +250,7 @@ def main(argv: Optional[list[str]] = None) -> None:
                     host=args.host,
                     port=args.port,
                     reload=debug,
-                    reload_dirs=str(PROJECT_ROOT / "server"),
+                    reload_dirs=str(PROJECT_ROOT / "server") if debug else None,
                     log_level="debug" if debug else "info",
                 )
             finally:
