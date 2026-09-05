@@ -19,11 +19,7 @@ class MovieDownloadAPICreate(RequestBase):
 
 
 class MediaDownloadAPIUpdate(RequestBase):
-    """Update persistent artifact metadata only.
-
-    Execution state is owned by TaskRun/TaskOperation and is intentionally not
-    writable through the MediaDownload resource.
-    """
+    """Update persistent artifact metadata only."""
 
     file_path: str
 
@@ -51,11 +47,7 @@ class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):
 
 
 class MediaDownloadAttemptAPIRead(ResponseBase):
-    """Immutable audit entry for one completed worker attempt.
-
-    This table is historical only; live state always comes from TaskRun and
-    TaskOperation.
-    """
+    """Immutable audit entry for one completed worker attempt."""
 
     id: int
     media_download_id: int
@@ -70,7 +62,7 @@ class MediaDownloadAttemptAPIRead(ResponseBase):
 
 
 class MediaDownloadAPIReadView(MediaDownloadAPIRead):
-    """A media artifact joined with its media item, parent context and profile."""
+    """A persistent artifact joined with media/profile context and last attempt history."""
 
     media_slug: Optional[str]
     media_title: Optional[str]
@@ -85,3 +77,12 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
     local_media_profile_name: Optional[str]
     preferred_format: Optional[str]
     downloaded_publish_status: Optional[str]
+
+    # Historical facts from MediaDownloadAttempt. These are not live execution
+    # state; they let an ordinary domain query explain why an absent artifact has
+    # no file after the operation that produced the outcome is no longer active.
+    latest_attempt_status: Optional[str]
+    latest_attempt_error: Optional[str]
+    latest_attempt_is_redownload: Optional[bool]
+    latest_attempt_started_at: Optional[datetime]
+    latest_attempt_finished_at: Optional[datetime]
