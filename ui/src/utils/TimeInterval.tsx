@@ -5,6 +5,9 @@ import type {CSSProperties, ChangeEventHandler, FocusEventHandler, MouseEventHan
 export const TIME_UNITS = ['days', 'hours', 'minutes', 'seconds', 'milliseconds'] as const
 export type TimeUnit = typeof TIME_UNITS[number]
 
+type TimeUnitValues = Record<TimeUnit, number>
+type TimeUnitDraft = Record<TimeUnit, string>
+
 export type TimeIntervalProps = {
     value: number
     onChange: (value: number) => void
@@ -47,8 +50,8 @@ function backendUnitsPerDisplayUnit(displayUnit: TimeUnit, backendUnit: TimeUnit
     return UNIT_SIZE_IN_MILLISECONDS[displayUnit] / UNIT_SIZE_IN_MILLISECONDS[backendUnit]
 }
 
-function splitValue(value: number, backendUnit: TimeUnit): Record<TimeUnit, number> {
-    const parts: Record<TimeUnit, number> = {
+function splitValue(value: number, backendUnit: TimeUnit): TimeUnitValues {
+    const parts: TimeUnitValues = {
         days: 0,
         hours: 0,
         minutes: 0,
@@ -70,6 +73,16 @@ function splitValue(value: number, backendUnit: TimeUnit): Record<TimeUnit, numb
     }
 
     return parts
+}
+
+function toDraft(parts: TimeUnitValues): TimeUnitDraft {
+    return {
+        days: String(parts.days),
+        hours: String(parts.hours),
+        minutes: String(parts.minutes),
+        seconds: String(parts.seconds),
+        milliseconds: String(parts.milliseconds),
+    }
 }
 
 function visibleUnitsForValue(value: number, backendUnit: TimeUnit): TimeUnit[] {
@@ -98,56 +111,61 @@ export default function TimeInterval({
     const autoId = useId()
     const baseId = idPrefix ?? `ti-${autoId}`
     const justFocusedUnit = useRef<TimeUnit | null>(null)
-    const [manualFirstUnit, setManualFirstUnit] = useState<TimeUnit | null>(null)
-    const [replaceFinerOnEditUnit, setReplaceFinerOnEditUnit] = useState<TimeUnit | null>(null)
-    const parts = useMemo(() => splitValue(value, backendUnit), [backendUnit, value])
+    const previousBackendUnit = useRef(backendUnit)
+    const availableUnits = useMemo(() => unitsForBackendUnit(backendUnit), [backendUnit])
     const automaticallyVisibleUnits = useMemo(
         () => visibleUnitsForValue(value, backendUnit),
         [backendUnit, value],
     )
-    const availableUnits = useMemo(() => unitsForBackendUnit(backendUnit), [backendUnit])
-    const visibleUnits = useMemo(() => {
-        if (!manualFirstUnit) return automaticallyVisibleUnits
-
-        const automaticIndex = availableUnits.indexOf(automaticallyVisibleUnits[0])
-        const manualIndex = availableUnits.indexOf(manualFirstUnit)
-        if (manualIndex < 0) return automaticallyVisibleUnits
-        return availableUnits.slice(Math.min(automaticIndex, manualIndex))
-    }, [automaticallyVisibleUnits, availableUnits, manualFirstUnit])
-    const nextLargerUnit = useMemo(() => {
-        const firstVisibleIndex = availableUnits.indexOf(visibleUnits[0])
-        return firstVisibleIndex > 0 ? availableUnits[firstVisibleIndex - 1] : null
-    }, [availableUnits, visibleUnits])
+    const [firstVisibleUnit, setFirstVisibleUnit] = useState<TimeUnit>(automaticallyVisibleUnits[0])
+    const [draftParts, setDraftParts] = useState<TimeUnitDraft>(() => toDraft(splitValue(value, backendUnit)))
 
     useEffect(() => {
-        setManualFirstUnit(null)
-        setReplaceFinerOnEditUnit(null)
-    }, [backendUnit])
-
-    const emitPart = (unit: TimeUnit, rawValue: string) => {
-        const parsed = rawValue.trim() === '' ? 0 : Number(rawValue)
-        let nextPart = Number.isFinite(parsed) && parsed > 0 ? parsed : 0
-        const allowFraction = unit === backendUnit && !Number.isInteger(step)
-        if (!allowFraction) nextPart = Math.floor(nextPart)
-
-        const shouldReplaceFinerUnits = replaceFinerOnEditUnit === unit && rawValue.trim() !== ''
-        const nextParts = {...parts, [unit]: nextPart}
-        if (shouldReplaceFinerUnits) {
-            const editedUnitIndex = availableUnits.indexOf(unit)
-            for (const finerUnit of availableUnits.slice(editedUnitIndex + 1)) {
-                nextParts[finerUnit] = 0
-            }
-            setReplaceFinerOnEditUnit(null)
-        } else if (replaceFinerOnEditUnit && replaceFinerOnEditUnit !== unit) {
-            setReplaceFinerOnEditUnit(null)
+        if (previousBackendUnit.current !== backendUnit) {
+            previousBackendUnit.current = backendUnit
+            setFirstVisibleUnit(automaticallyVisibleUnits[0])
+            setDraftParts(toDraft(splitValue(value, backendUnit)))
+            return
         }
 
-        const total = availableUnits.reduce(
-            (sum, availableUnit) => (
-                sum + nextParts[availableUnit] * backendUnitsPerDisplayUnit(availableUnit, backendUnit)
-            ),
-            0,
-        )
+        const automaticFirstUnit = automaticallyVisibleUnits[0]
+        setFirstVisibleUnit((currentFirstUnit) => {
+            const currentIndex = availableUnits.indexOf(currentFirstUnit)
+            const automaticIndex = availableUnits.indexOf(automaticFirstUnit)
+            if (currentIndex < 0 || automaticIndex < currentIndex) return automaticFirstUnit
+            return currentFirstUnit
+        })
+
+        // NaN is the form's temporary incomplete state. Keep the user's raw input
+        // intact until every visible field has a value again.
+        if (Number.isFinite(value)) {
+            setDraftParts(toDraft(splitValue(value, backendUnit)))
+        }
+    }, [automaticallyVisibleUnits, availableUnits, backendUnit, value])
+
+    const firstVisibleIndex = Math.max(0, availableUnits.indexOf(firstVisibleUnit))
+    const visibleUnits = availableUnits.slice(firstVisibleIndex)
+    const nextLargerUnit = firstVisibleIndex > 0 ? availableUnits[firstVisibleIndex - 1] : null
+
+    const emitDraft = (nextDraft: TimeUnitDraft) => {
+        let total = 0
+
+        for (const unit of availableUnits) {
+            const rawValue = nextDraft[unit].trim()
+            if (rawValue === '') {
+                onChange(Number.NaN)
+                return
+            }
+
+            const parsed = Number(rawValue)
+            if (!Number.isFinite(parsed) || parsed < 0) {
+                onChange(Number.NaN)
+                return
+            }
+
+            total += parsed * backendUnitsPerDisplayUnit(unit, backendUnit)
+        }
+
         onChange(roundValue(total))
     }
 
@@ -163,13 +181,14 @@ export default function TimeInterval({
     }
 
     const onUnitChange = (unit: TimeUnit): ChangeEventHandler<HTMLInputElement> => (event) => {
-        emitPart(unit, event.currentTarget.value)
+        const nextDraft = {...draftParts, [unit]: event.currentTarget.value}
+        setDraftParts(nextDraft)
+        emitDraft(nextDraft)
     }
 
     const addLargerUnit = () => {
         if (!nextLargerUnit) return
-        setManualFirstUnit(nextLargerUnit)
-        setReplaceFinerOnEditUnit(nextLargerUnit)
+        setFirstVisibleUnit(nextLargerUnit)
     }
 
     return (
@@ -185,7 +204,7 @@ export default function TimeInterval({
                             inputMode={unit === backendUnit && !Number.isInteger(step) ? 'decimal' : 'numeric'}
                             min={0}
                             step={unit === backendUnit ? step : 1}
-                            value={parts[unit]}
+                            value={draftParts[unit]}
                             onChange={onUnitChange(unit)}
                             onFocus={onFocus(unit)}
                             onMouseUp={onMouseUp(unit)}
