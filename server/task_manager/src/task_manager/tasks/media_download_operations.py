@@ -8,8 +8,10 @@ from sqlalchemy.orm import Session
 
 from backend.db.core import get_session
 from backend.db.models import Episode, Movie, MovieExtra
-from backend.db.models.media_download import MediaDownloadBase
+from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_types import MediaType
+from backend.utils.download_files import remove_download_artifacts
 from config import get_settings
 from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskRun
 from task_manager.scheduler.operations import (
@@ -31,6 +33,29 @@ _ACTIVE_RUN_STATUSES = (
     TaskStatus.RUNNING,
     TaskStatus.RETRY_SCHEDULED,
 )
+
+
+def prepare_media_download_artifact(
+    download: MediaDownloadBase,
+    *,
+    remove_existing_artifacts: bool = True,
+) -> None:
+    """Prepare domain state for an attempt without encoding any execution state.
+
+    The attempt itself is represented by TaskOperation/TaskRun. This helper only
+    says that the previous artifact is no longer the artifact WireLoft should
+    present and clears facts that describe that previous file.
+    """
+    if remove_existing_artifacts:
+        remove_download_artifacts(download.file_path)
+    download.artifact_status = MediaDownloadArtifactStatus.ABSENT.value
+    download.artifact_error = None
+    download.automatic_retry_suppressed = False
+    download.downloaded_bytes = None
+    download.format_downloaded = None
+    download.downloaded_at = None
+    if isinstance(download, EpisodeMediaDownload):
+        download.downloaded_publish_status = None
 
 
 def _task_key(download: MediaDownloadBase) -> str:
@@ -93,11 +118,7 @@ def create_media_download_operation(
     source: str = OperationSource.SYSTEM.value,
     is_redownload: bool = False,
 ) -> TaskOperation:
-    """Create the canonical execution operation for one MediaDownload attempt.
-
-    A MediaDownload row is persistent artifact state. Every attempt to create or
-    replace that artifact is represented by this operation and a download TaskRun.
-    """
+    """Create the canonical execution operation for one MediaDownload attempt."""
     existing = get_active_media_download_operation(session, download.id)
     if existing is not None:
         return existing
