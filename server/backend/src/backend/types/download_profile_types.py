@@ -8,8 +8,28 @@ class DownloadProfileType(Enum):
     # For instances of DownloadProfileBase class (parent class)
     BASE = "base"
 
+
+class MediaDownloadArtifactStatus(str, Enum):
+    """Persistent state of the file represented by a MediaDownload.
+
+    Execution state deliberately does not live here. Queued/running/failed/canceled
+    attempts are TaskRun/TaskOperation state; this enum only describes the artifact
+    that currently exists (or does not exist) on disk.
+    """
+
+    ABSENT = "absent"
+    AVAILABLE = "available"
+    MISSING = "missing"
+    CORRUPTED = "corrupted"
+
+
 class MediaDownloadStatus(Enum):
-    # Download requested but not picked up by the download worker yet
+    """Legacy wire values kept for migration/test compatibility only.
+
+    Runtime code must use TaskRun/TaskOperation for execution state and
+    MediaDownloadArtifactStatus for persistent file state.
+    """
+
     PENDING = "pending"
     DOWNLOADED = "downloaded"
     DOWNLOADING = "downloading"
@@ -17,10 +37,9 @@ class MediaDownloadStatus(Enum):
     LOCAL_PROCESSING = "local_processing"
     CANCELLED = "cancelled"
     ERROR = "error"
-    # The file watcher could not find the file that was previously downloaded
     MISSING = "missing"
-    # The file watcher found the file, but it is empty or smaller than expected
     CORRUPTED = "corrupted"
+
 
 # Types for the episode identification field
 class EpIdType(StrEnum):
