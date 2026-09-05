@@ -155,9 +155,8 @@ def remaining_media_download_budget(session: Session) -> int:
     """Return free slots in the single download execution lane.
 
     SCHEDULED TaskRuns count as reservations. The dispatcher creates those rows
-    transactionally before APScheduler receives the jobs, so concurrent queue
-    fills cannot mistake committed dispatches for free capacity merely because a
-    worker thread has not started yet.
+    transactionally before APScheduler receives the jobs, so committed dispatches
+    cannot be mistaken for free capacity merely because a worker has not started.
     """
     max_concurrent = get_settings().download_settings.max_concurrent_downloads
     in_flight = session.scalar(
