@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
-
-from backend.api.endpoints.media_downloads.service import get_media_downloads_view
 from backend.api.models.puller import FrontendPullAPIRead, FrontendPullData
-from backend.types.download_profile_types import MediaDownloadStatus
 from task_manager.scheduler.operations import list_operations
 from task_manager.scheduler.types import OperationSource, OperationStatus
 
@@ -13,45 +9,34 @@ _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
 }
-_ACTIVE_DOWNLOAD_STATUSES = {
-    MediaDownloadStatus.PENDING.value,
-    MediaDownloadStatus.DOWNLOADING.value,
-    MediaDownloadStatus.LOCAL_PROCESSING.value,
-}
 
 
 def _value(value) -> str:
     return str(getattr(value, "value", value))
 
 
-def get_frontend_pull(s: Session) -> FrontendPullAPIRead:
-    """Build the complete frontend polling snapshot in one HTTP request.
+def get_frontend_pull() -> FrontendPullAPIRead:
+    """Return the frontend's one generic stream of changing execution state.
 
-    Only UI-relevant operations are included, matching OperationNotifier's existing
-    behavior. Downloads are returned as the same joined view used by the Downloads
-    UI. The server chooses the next polling mode so the frontend does not need to
-    know which status values count as active work.
+    Active operations from every source are visible, so work started by schedules,
+    API clients or another browser is discovered by the same pipeline. Completed
+    non-UI operations are intentionally omitted: they need no user notification
+    and their domain results are ordinary query data. UI operations remain until
+    OperationNotifier acknowledges their terminal notification.
     """
-    operations = list_operations(
-        source=OperationSource.UI.value,
-        relevant=True,
-        limit=200,
-    )
-    media_downloads = get_media_downloads_view(s)
-
+    candidates = list_operations(relevant=True, limit=500)
+    operations = [
+        operation
+        for operation in candidates
+        if _value(operation.get("status")) in _ACTIVE_OPERATION_STATUSES
+        or _value(operation.get("source")) == OperationSource.UI.value
+    ]
     has_active_operation = any(
         _value(operation.get("status")) in _ACTIVE_OPERATION_STATUSES
         for operation in operations
     )
-    has_active_download = any(
-        _value(download.download_status) in _ACTIVE_DOWNLOAD_STATUSES
-        for download in media_downloads
-    )
 
     return FrontendPullAPIRead(
-        mode="fast" if has_active_operation or has_active_download else "slow",
-        data=FrontendPullData(
-            operations=operations,
-            media_downloads=media_downloads,
-        ),
+        mode="fast" if has_active_operation else "slow",
+        data=FrontendPullData(operations=operations),
     )
