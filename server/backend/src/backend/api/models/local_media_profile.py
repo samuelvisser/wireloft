@@ -11,7 +11,6 @@ from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
     SHOW_OUTPUT_TEMPLATE_FIELDS,
     movie_template_has_media_item_field,
-    upgrade_legacy_output_template,
     validate_output_template_fields,
 )
 from backend.utils.helpers import slugify
@@ -41,7 +40,6 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
     @field_validator("output_template")
     @classmethod
     def _validate_output_template(cls, v: str, info: ValidationInfo) -> str:
-        v = upgrade_legacy_output_template(v)
         if not v.endswith(".ext"):
             raise ValueError("Output template must end with '.ext'")
         if not v.startswith("/downloads/"):

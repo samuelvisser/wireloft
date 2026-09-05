@@ -344,7 +344,7 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     profile = MovieLocalMediaProfile(
         slug="movies",
         name="Movies",
-        output_template="/downloads/{movie_title}/{movie_slug}.ext",
+        output_template="/downloads/{{ movie_title }}/{{ movie_slug }}.ext",
         preferred_format="format_1080p",
     )
     session.add(profile)
@@ -578,7 +578,7 @@ def test_movie_download_rolls_back_movie_and_extras_together(tmp_path, monkeypat
     profile = MovieLocalMediaProfile(
         slug="movies",
         name="Movies",
-        output_template="/downloads/{movie_slug}.ext",
+        output_template="/downloads/{{ movie_slug }}.ext",
         preferred_format="format_1080p",
     )
     session.add(profile)

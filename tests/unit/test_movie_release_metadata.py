@@ -279,7 +279,7 @@ def test_show_date_component_placeholders_use_episode_publish_datetime(tmp_path,
     )
 
     result = resolve_episode_output_path(
-        "/downloads/{year}-{month}-{day}_{hour}-{minute}-{second}/{episode}.ext",
+        "/downloads/{{ year }}-{{ month }}-{{ day }}_{{ hour }}-{{ minute }}-{{ second }}/{{ episode }}.ext",
         episode=episode,
         extension="mp4",
     )

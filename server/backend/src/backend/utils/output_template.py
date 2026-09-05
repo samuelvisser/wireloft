@@ -22,8 +22,9 @@ _MAX_RENDERED_PATH_LENGTH = 4096
 _WINDOWS_UNSAFE_COMPONENT_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
 _WINDOWS_RESERVED_COMPONENT = re.compile(r"^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$", re.IGNORECASE)
 _RESTRICTED_UNSAFE_COMPONENT_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
-# Matches WireLoft's original single-brace syntax, without touching Jinja tags.
-_LEGACY_PLACEHOLDER = re.compile(r"(?<!\{)\{([A-Za-z_][A-Za-z0-9_]*)\}(?!\})")
+_SINGLE_BRACE_TEMPLATE_VARIABLE = re.compile(
+    r"(?<!\{)\{[A-Za-z_][A-Za-z0-9_]*\}(?!\})"
+)
 
 DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second",
@@ -69,17 +70,21 @@ def _jinja_environment() -> ImmutableSandboxedEnvironment:
     return environment
 
 
-def upgrade_legacy_output_template(output_template: str) -> str:
-    """Convert WireLoft's original ``{field}`` tokens to Jinja expressions."""
-    return _LEGACY_PLACEHOLDER.sub(lambda match: "{{ " + match.group(1) + " }}", output_template)
+def _reject_single_brace_template_variables(output_template: str) -> None:
+    """Require all output-template variables to use Jinja expression syntax."""
+    if _SINGLE_BRACE_TEMPLATE_VARIABLE.search(output_template):
+        raise ValueError(
+            "Output template variables must use Jinja syntax such as '{{ show }}'; "
+            "single-brace variables are not supported"
+        )
 
 
 def output_template_fields(output_template: str) -> frozenset[str]:
     """Return all context variables referenced by a Jinja path template."""
-    normalized = upgrade_legacy_output_template(output_template)
+    _reject_single_brace_template_variables(output_template)
     environment = _jinja_environment()
     try:
-        parsed = environment.parse(normalized)
+        parsed = environment.parse(output_template)
     except TemplateSyntaxError as exc:
         location = f" on line {exc.lineno}" if exc.lineno else ""
         raise ValueError(f"Invalid Jinja template{location}: {exc.message}") from exc
@@ -152,12 +157,11 @@ def _sanitize_rendered_path(rendered: str, *, mode: FilenameRestrictionMode) -> 
 
 def validate_output_template_fields(output_template: str, *, allowed_fields: frozenset[str]) -> str:
     """Validate Jinja syntax and reject variables unavailable for this media type."""
-    normalized = upgrade_legacy_output_template(output_template)
-    unsupported = sorted(output_template_fields(normalized) - allowed_fields)
+    unsupported = sorted(output_template_fields(output_template) - allowed_fields)
     if unsupported:
         fields = ", ".join("{{ " + field + " }}" for field in unsupported)
         raise ValueError(f"Unsupported output template variable(s): {fields}")
-    return normalized
+    return output_template
 
 
 def movie_template_has_media_item_field(output_template: str) -> bool:

@@ -18,7 +18,7 @@ def test_movie_profile_requires_an_item_specific_variable() -> None:
         LocalMediaProfileAPICreate.model_validate({
             "type": "movie",
             "name": "Unsafe",
-            "outputTemplate": "/downloads/movies/{movie_title}/{movie_title}.ext",
+            "outputTemplate": "/downloads/movies/{{ movie_title }}/{{ movie_title }}.ext",
             "preferredFormat": "format_1080p",
         })
 
@@ -27,7 +27,7 @@ def test_movie_profile_requires_an_item_specific_variable() -> None:
     profile = LocalMediaProfileAPICreate(
         type="movie",
         name="Safe",
-        output_template="/downloads/movies/{movie_title}/{title}.ext",
+        output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
         preferred_format="format_1080p",
     )
     assert profile.output_template.endswith("{{ title }}.ext")
@@ -39,7 +39,7 @@ def test_movie_profile_accepts_media_type_placeholder_without_suffix() -> None:
     profile = LocalMediaProfileAPICreate(
         type="movie",
         name="Typed",
-        output_template="/downloads/movies/{movie_title}/{movie_title}-{media_type}.ext",
+        output_template="/downloads/movies/{{ movie_title }}/{{ movie_title }}-{{ media_type }}.ext",
         preferred_format="format_1080p",
     )
     assert profile.output_template.endswith("{{ media_type }}.ext")
@@ -79,7 +79,7 @@ def test_movie_extra_output_uses_parent_movie_and_actual_media_fields(tmp_path: 
     )
 
     result = resolve_movie_output_path(
-        "/downloads/movies/{movie_title}/{title}-{dw_id}-{media_type}.ext",
+        "/downloads/movies/{{ movie_title }}/{{ title }}-{{ dw_id }}-{{ media_type }}.ext",
         movie=movie,
         media_item=trailer,
         append_media_type_to_filename=False,
@@ -123,7 +123,7 @@ def test_movie_extra_type_suffix_is_added_before_extension(tmp_path: Path, monke
     )
 
     result = resolve_movie_output_path(
-        "/downloads/movies/{movie_title}/{title}.ext",
+        "/downloads/movies/{{ movie_title }}/{{ title }}.ext",
         movie=movie,
         media_item=interview,
         append_media_type_to_filename=True,
@@ -155,7 +155,7 @@ def test_download_view_uses_movie_extra_as_media_identity_and_movie_as_parent() 
         profile = MovieLocalMediaProfile(
             slug="movies",
             name="Movies",
-            output_template="/downloads/movies/{movie_title}/{title}.ext",
+            output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
             preferred_format="format_1080p",
             append_media_type_to_filename=True,
         )

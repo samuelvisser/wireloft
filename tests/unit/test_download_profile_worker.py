@@ -69,7 +69,7 @@ def _make_local_media_profile(session, *, slug="audio"):
     profile = LocalMediaProfile(
         slug=slug,
         name=slug,
-        output_template="/downloads/{show}/{episode}.ext",
+        output_template="/downloads/{{ show }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
     session.add(profile)

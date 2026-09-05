@@ -25,7 +25,7 @@ type MovieLocalMediaProfileCreateIn = Extract<LocalMediaProfileCreateIn, {type: 
 const NEW_PROFILE_DEFAULTS: MovieLocalMediaProfileCreateIn = {
     type: 'movie',
     name: 'My Movies',
-    outputTemplate: '/downloads/movies/{movie_title}/{title}.ext',
+    outputTemplate: '/downloads/movies/{{ movie_title }}/{{ title }}.ext',
     preferredFormat: 'format_1080p',
 }
 
