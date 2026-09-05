@@ -147,6 +147,18 @@ def all_triggers() -> Dict[str, List[TriggerMeta]]:
     return {key: meta.triggers for key, (meta, _) in _REGISTRY.items() if meta.triggers}
 
 
+def run_recovery_dispatchers() -> int:
+    """Run each registered constrained-queue recovery dispatcher exactly once."""
+    dispatchers = {
+        meta.recovery_dispatcher
+        for meta, _ in _REGISTRY.values()
+        if meta.recovery_dispatcher is not None
+    }
+    for dispatcher in dispatchers:
+        dispatcher()
+    return len(dispatchers)
+
+
 def sync_registry_to_db() -> None:
     """Insert new task definitions and refresh metadata for existing ones."""
     session = get_session()
