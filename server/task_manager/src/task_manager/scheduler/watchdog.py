@@ -87,7 +87,7 @@ def _stalled_ids(
 
 
 def reset_watchdog_state() -> None:
-    """Forget progress observations, giving active work a fresh watchdog window."""
+    """Forget progress observations, giving running work a fresh watchdog window."""
     with _state_lock:
         _operation_progress.clear()
         _task_progress.clear()
@@ -106,9 +106,9 @@ def monitor_stalled_work(
     merely queued, scheduled, waiting on an external dependency, or waiting for a
     retry is intentionally excluded.
 
-    Runs attached to active TaskOperations are watched only through their
-    operations. This preserves shared-run semantics: canceling an old stalled
-    request must not kill a run that another active operation still needs.
+    Runs attached to active TaskOperations are excluded from standalone watchdog
+    accounting even when the operation itself is currently WAITING. This preserves
+    shared-run semantics without turning an intentional external wait into a stall.
     """
     current_time = _as_utc(now or datetime.now(timezone.utc))
     configured_timeout = (
@@ -196,7 +196,7 @@ def monitor_stalled_work(
 
 def install_stalled_work_watchdog() -> None:
     """Install the lightweight scheduler housekeeping job once per process."""
-    from task_manager.scheduler.scheduler import start_scheduler
+    from task_manager.scheduler.scheduler import WATCHDOG_EXECUTOR_ALIAS, start_scheduler
 
     reset_watchdog_state()
     scheduler = start_scheduler()
@@ -208,4 +208,5 @@ def install_stalled_work_watchdog() -> None:
         coalesce=True,
         max_instances=1,
         misfire_grace_time=None,
+        executor=WATCHDOG_EXECUTOR_ALIAS,
     )

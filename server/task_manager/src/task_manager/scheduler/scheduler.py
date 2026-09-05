@@ -15,6 +15,7 @@ from apscheduler.triggers.date import DateTrigger
 from config import get_settings
 
 _scheduler: Optional[AsyncIOScheduler] = None
+WATCHDOG_EXECUTOR_ALIAS = "watchdog"
 
 
 def get_trigger(name: str, args: dict):
@@ -37,6 +38,9 @@ def _new_scheduler(loop: asyncio.AbstractEventLoop | None = None) -> AsyncIOSche
         "timezone": settings.timezone,
         "executors": {
             "default": ThreadPoolExecutor(max_workers=settings.scheduler.max_workers),
+            # The stalled-work watchdog must remain runnable when every normal
+            # worker slot is occupied by the work it is responsible for watching.
+            WATCHDOG_EXECUTOR_ALIAS: ThreadPoolExecutor(max_workers=1),
         },
     }
     if loop is not None:
