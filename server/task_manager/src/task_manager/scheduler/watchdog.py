@@ -18,15 +18,11 @@ from task_manager.scheduler.types import OperationStatus, TaskStatus
 logger = logging.getLogger(__name__)
 WATCHDOG_JOB_ID = "wireloft-stalled-task-watchdog"
 
-_ACTIVE_OPERATION_STATUSES = {
-    OperationStatus.QUEUED.value,
-    OperationStatus.RUNNING.value,
-}
-_ACTIVE_TASK_STATUSES = {
-    TaskStatus.SCHEDULED,
-    TaskStatus.QUEUED,
-    TaskStatus.RUNNING,
-}
+# A queued operation may legitimately wait behind a constrained resource queue
+# (downloads are one example). The watchdog is a *runtime* stall detector, so its
+# clock starts only after actual execution begins.
+_ACTIVE_OPERATION_STATUSES = {OperationStatus.RUNNING.value}
+_ACTIVE_TASK_STATUSES = {TaskStatus.RUNNING}
 
 
 @dataclass(frozen=True)
@@ -95,18 +91,16 @@ def monitor_stalled_work(
         now: datetime | None = None,
         timeout_minutes: int | None = None,
 ) -> WatchdogResult:
-    """Cancel tasks/operations whose progress percentage has stopped changing.
+    """Cancel running tasks/operations whose percentage has stopped changing.
 
     APScheduler controls when jobs may start and how many may run concurrently,
-    but it has no progress-aware runtime timeout. WireLoft therefore samples the
-    durable TaskRun/TaskOperation percentages once per minute and remembers when
-    each percentage last changed. Watchdog observations intentionally reset when
-    the backend process restarts; recovered work gets a fresh chance to progress.
+    but it has no progress-aware runtime timeout. WireLoft samples RUNNING work
+    once per minute and remembers when each percentage last changed. Work that is
+    merely queued, scheduled or waiting for a retry is intentionally excluded.
 
     Runs attached to active TaskOperations are watched only through their
-    operations. This preserves TaskOperation's shared-run semantics: canceling an
-    old stalled UI request must not kill a run that a newer active request still
-    needs. Standalone scheduled/automatic TaskRuns are monitored directly.
+    operations. This preserves shared-run semantics: canceling an old stalled
+    request must not kill a run that another active operation still needs.
     """
     current_time = _as_utc(now or datetime.now(timezone.utc))
     configured_timeout = (
@@ -170,7 +164,6 @@ def monitor_stalled_work(
             ) is not None:
                 operations_canceled += 1
         except ValueError:
-            # Another worker may have completed/canceled it after the snapshot.
             continue
 
     task_runs_canceled = 0
