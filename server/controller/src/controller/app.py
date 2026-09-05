@@ -255,7 +255,7 @@ def start_controller() -> None:
             # Import workers so their decorators populate the registry.
             import task_manager.tasks  # noqa: F401
             from task_manager.scheduler.operations import recover_pending_operations
-            from task_manager.scheduler.registry import sync_registry_to_db
+            from task_manager.scheduler.registry import run_recovery_dispatchers, sync_registry_to_db
             from task_manager.scheduler.scheduler import start_scheduler
             from task_manager.scheduler.watchdog import install_stalled_work_watchdog
 
@@ -274,6 +274,17 @@ def start_controller() -> None:
                     logger.info(
                         "Recovered %s TaskOperation target(s) after restart",
                         recovered_targets,
+                    )
+
+                # Queue-managed task definitions restore their own available
+                # slots after generic operation recovery. This keeps recovery
+                # generic while preserving policies such as a constrained
+                # concurrency lane instead of blasting every target at APScheduler.
+                recovery_dispatchers = run_recovery_dispatchers()
+                if recovery_dispatchers:
+                    logger.info(
+                        "Ran %s TaskOperation recovery dispatcher(s)",
+                        recovery_dispatchers,
                     )
 
                 if _should_emit_startup_event():
