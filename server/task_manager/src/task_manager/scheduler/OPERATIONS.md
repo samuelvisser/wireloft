@@ -99,11 +99,13 @@ This is why recovery and control state must live in scheduler infrastructure rat
 
 APScheduler can limit concurrent jobs and decide how to handle late/misfired jobs, but it cannot decide whether WireLoft's application-level progress percentage has stopped changing. WireLoft installs a lightweight watchdog job for that purpose.
 
-Once per minute, the watchdog samples active TaskOperation percentages and standalone active TaskRun percentages. If a percentage remains unchanged for `scheduler.stalledTaskTimeoutMinutes` (20 minutes by default), the work is canceled with a durable reason. A progress change resets the timer. Retry backoff is not treated as stalled execution.
+Once per minute, the watchdog samples only `RUNNING` TaskOperation percentages and standalone `RUNNING` TaskRun percentages. Queued, scheduled, and retry-waiting work is ignored until it actually starts executing, so time spent waiting for worker capacity never consumes the stall timeout. If a running percentage remains unchanged for `scheduler.stalledTaskTimeoutMinutes` (20 minutes by default), the work is canceled with a durable reason. A progress change resets the timer.
 
-TaskRuns attached to active operations are watched through the operation rather than independently. This preserves shared/coalesced-run behavior: an old stalled request cannot kill work that a newer active operation still needs.
+The watchdog itself runs on a reserved single-thread executor rather than the normal worker executor. Saturating the configured worker pool therefore cannot prevent the watchdog from checking and canceling work that has genuinely stalled.
 
-Watchdog observations are process-local and reset on backend restart. The durable operation-recovery mechanism handles interrupted work first, then recovered work receives a fresh watchdog window.
+TaskRuns attached to running operations are watched through the operation rather than independently. This preserves shared/coalesced-run behavior: an old stalled request cannot kill work that a newer running operation still needs.
+
+Watchdog observations are process-local and reset on backend restart. The durable operation-recovery mechanism handles interrupted work first, then recovered work receives a fresh watchdog window once it starts running.
 
 ## Frontend ownership
 
