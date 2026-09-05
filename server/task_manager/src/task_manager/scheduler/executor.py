@@ -41,8 +41,76 @@ class _PreparedExecution:
 
 
 class ProgressUpdater:
+    """Generic progress and cooperative-cancellation channel for a TaskRun.
+
+    Workers report percentage/message through ``set``. Long-running libraries
+    may also use the updater itself as a ``should_cancel`` callback; cancellation
+    is then driven by the same durable TaskRun state used for every other worker
+    rather than by worker-specific generation flags.
+    """
+
+    _CANCEL_CHECK_INTERVAL_SECONDS = 0.25
+
     def __init__(self, run_id: int):
         self.run_id = run_id
+        self._last_cancel_check = 0.0
+        self._cancelled = False
+        self._cancel_reason = "Canceled"
+
+    def _read_cancellation(self, *, force: bool = False) -> tuple[bool, str]:
+        if self._cancelled:
+            return True, self._cancel_reason
+
+        now = time.monotonic()
+        if not force and now - self._last_cancel_check < self._CANCEL_CHECK_INTERVAL_SECONDS:
+            return False, self._cancel_reason
+        self._last_cancel_check = now
+
+        s = get_session()
+        try:
+            row = s.execute(
+                select(TaskRun.status, TaskRun.meta).where(TaskRun.id == self.run_id)
+            ).one_or_none()
+            if row is None:
+                self._cancelled = True
+                self._cancel_reason = "Task resource was deleted"
+                return True, self._cancel_reason
+
+            status, meta = row
+            requested = (
+                isinstance(meta, dict)
+                and meta.get(RUN_CANCEL_REQUESTED_META_KEY) is True
+            )
+            if status == TaskStatus.CANCELED or requested:
+                reason = (
+                    meta.get(RUN_CANCEL_REASON_META_KEY)
+                    if isinstance(meta, dict)
+                    else None
+                )
+                self._cancelled = True
+                self._cancel_reason = (
+                    reason if isinstance(reason, str) and reason else "Canceled"
+                )
+                return True, self._cancel_reason
+            return False, self._cancel_reason
+        except Exception:
+            # Cancellation checks are deliberately conservative: transient DB
+            # contention must not abort irreversible worker/file work. The normal
+            # progress/finalization checkpoints will try again shortly.
+            s.rollback()
+            return False, self._cancel_reason
+        finally:
+            s.close()
+
+    def __call__(self) -> bool:
+        """Return True when the worker should stop, suitable for downloader callbacks."""
+        canceled, _ = self._read_cancellation()
+        return canceled
+
+    def raise_if_cancelled(self) -> None:
+        canceled, reason = self._read_cancellation(force=True)
+        if canceled:
+            raise TaskCancellationRequested(reason)
 
     def set(self, percent: int, message: Optional[str] = None, meta: Optional[dict] = None):
         p = max(0, min(100, int(percent)))
@@ -56,23 +124,32 @@ class ProgressUpdater:
         try:
             for i in range(3):
                 try:
-                    current_meta = s.execute(
-                        select(TaskRun.meta).where(TaskRun.id == self.run_id)
-                    ).scalar_one_or_none()
-                    if current_meta is None:
-                        exists = s.execute(
-                            select(TaskRun.id).where(TaskRun.id == self.run_id)
-                        ).scalar_one_or_none()
-                        if exists is None:
-                            raise TaskCancellationRequested("Task resource was deleted")
+                    row = s.execute(
+                        select(TaskRun.status, TaskRun.meta).where(TaskRun.id == self.run_id)
+                    ).one_or_none()
+                    if row is None:
+                        self._cancelled = True
+                        self._cancel_reason = "Task resource was deleted"
+                        raise TaskCancellationRequested(self._cancel_reason)
+
+                    status, current_meta = row
                     if (
-                        isinstance(current_meta, dict)
-                        and current_meta.get(RUN_CANCEL_REQUESTED_META_KEY) is True
+                        status == TaskStatus.CANCELED
+                        or (
+                            isinstance(current_meta, dict)
+                            and current_meta.get(RUN_CANCEL_REQUESTED_META_KEY) is True
+                        )
                     ):
-                        reason = current_meta.get(RUN_CANCEL_REASON_META_KEY)
-                        raise TaskCancellationRequested(
+                        reason = (
+                            current_meta.get(RUN_CANCEL_REASON_META_KEY)
+                            if isinstance(current_meta, dict)
+                            else None
+                        )
+                        self._cancelled = True
+                        self._cancel_reason = (
                             reason if isinstance(reason, str) and reason else "Canceled"
                         )
+                        raise TaskCancellationRequested(self._cancel_reason)
 
                     values: dict[str, Any] = {"progress": p}
                     if message is not None:
@@ -93,7 +170,9 @@ class ProgressUpdater:
                     )
                     if result.rowcount == 0:
                         s.rollback()
-                        raise TaskCancellationRequested("Task resource was deleted")
+                        self._cancelled = True
+                        self._cancel_reason = "Task resource was deleted"
+                        raise TaskCancellationRequested(self._cancel_reason)
                     s.commit()
                     refresh_operations_for_run(s, self.run_id)
                     s.commit()
