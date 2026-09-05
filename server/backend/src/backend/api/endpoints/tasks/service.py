@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal, Optional
 
 from sqlalchemy import func, select
@@ -8,7 +9,7 @@ from backend.db.core import get_session
 from task_manager.scheduler.db import TaskDefinition, TaskSchedule, TaskRun
 from task_manager.scheduler.scheduler import schedule_job, remove_job
 from task_manager.scheduler.executor import trigger_now as exec_trigger_now
-from task_manager.scheduler.types import ResourceType
+from task_manager.scheduler.types import ResourceType, TaskStatus
 
 
 def list_definitions() -> list[dict]:
@@ -149,7 +150,9 @@ def list_ledger(
         *,
         definition_key: str,
         resource_type: str | None = None,
-        resource_id: int | None = None,
+        resource_ids: list[int] | None = None,
+        statuses: list[str] | None = None,
+        started_after: datetime | None = None,
         order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
         order: Literal["asc", "desc"] = "desc",
         offset: int = 0,
@@ -161,8 +164,12 @@ def list_ledger(
         filters = [TaskDefinition.key == definition_key]
         if resource_type is not None:
             filters.append(TaskRun.resource_type == ResourceType(resource_type))
-        if resource_id is not None:
-            filters.append(TaskRun.resource_id == resource_id)
+        if resource_ids:
+            filters.append(TaskRun.resource_id.in_(resource_ids))
+        if statuses:
+            filters.append(TaskRun.status.in_([TaskStatus(status) for status in statuses]))
+        if started_after is not None:
+            filters.append(TaskRun.started_at >= started_after)
 
         total = int(s.execute(
             select(func.count(TaskRun.id))

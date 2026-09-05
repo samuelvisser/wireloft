@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { useShow, useTaskLedger } from '../../lib/queries'
-import { TaskLedgerEntryRead } from '../../types/schemas/task'
+import {useEffect, useState} from 'react'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {useShow} from '../../lib/queries'
+import {useTaskLedgerPage} from '../../lib/taskLedger'
+import {TaskLedgerEntryRead} from '../../types/schemas/task'
 import './ShowSyncLogModal.css'
 
 type Props = {
@@ -12,6 +13,9 @@ type Props = {
   onClose: () => void
   onSyncNow: () => void | Promise<void>
 }
+
+const PAGE_SIZE = 10
+const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELED'] as const
 
 function resultData(run: TaskLedgerEntryRead): Record<string, unknown> {
   const result = run.result
@@ -34,9 +38,10 @@ function showResult(run: TaskLedgerEntryRead, showId: number): Record<string, un
   })
   if (matching && typeof matching === 'object') return matching as Record<string, unknown>
 
-  // A global failure/cancellation still represents a scan attempt for every show,
-  // even though no result payload could be produced.
-  return run.status === 'FAILED' || run.status === 'CANCELED' ? {} : null
+  // Global fetches are scoped to every show that existed when they ran. The
+  // ledger query starts at this show's creation time, so keep the row even if a
+  // failed/canceled run (or an older result shape) has no per-show payload.
+  return {}
 }
 
 function episodeCount(run: TaskLedgerEntryRead, showId: number): string | number {
@@ -52,36 +57,33 @@ function formatDate(value: string | null | undefined): string {
   return new Date(normalized).toLocaleString()
 }
 
-export default function ShowSyncLogModal({ showSlug, showTitle, open, syncing, onClose, onSyncNow }: Props) {
-  const { data: show } = useShow(showSlug)
+export default function ShowSyncLogModal({showSlug, showTitle, open, syncing, onClose, onSyncNow}: Props) {
+  const {data: show} = useShow(showSlug)
   const showId = show?.id
-  const wasSyncingRef = useRef(false)
-  const ledger = useTaskLedger({
-    definitionKey: 'fetch_new_episodes',
-    resourceType: 'show',
-    enabled: open && showId !== undefined,
-  })
-  const { refetch } = ledger
-
-  const entries = useMemo(() => {
-    if (showId === undefined) return []
-    return ledger.data?.pages
-      .flatMap((page) => page.items)
-      .filter((run) => ['SUCCEEDED', 'FAILED', 'CANCELED'].includes(run.status))
-      .filter((run) => showResult(run, showId) !== null) ?? []
-  }, [ledger.data?.pages, showId])
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
-    if (!open) {
-      wasSyncingRef.current = syncing
-      return
-    }
+    if (open) setPage(1)
+  }, [open, showSlug])
 
-    if (wasSyncingRef.current && !syncing) {
-      void refetch()
-    }
-    wasSyncingRef.current = syncing
-  }, [open, refetch, syncing])
+  const ledger = useTaskLedgerPage({
+    definitionKey: 'fetch_new_episodes',
+    resourceType: 'show',
+    resourceId: showId === undefined ? undefined : [0, showId],
+    status: TERMINAL_STATUSES,
+    startedAfter: show?.createdAt,
+    offset: (page - 1) * PAGE_SIZE,
+    limit: PAGE_SIZE,
+    enabled: open && showId !== undefined,
+  })
+
+  const total = ledger.data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const entries = ledger.data?.items ?? []
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
 
   if (!open) return null
 
@@ -120,32 +122,48 @@ export default function ShowSyncLogModal({ showSlug, showTitle, open, syncing, o
               {entries.map((entry) => (
                 <div className="show-sync-log-row" role="row" key={entry.id}>
                   <span role="cell">{formatDate(entry.finishedAt ?? entry.startedAt)}</span>
-                  <span role="cell" className={entry.status === 'FAILED' ? 'show-sync-log-failed' : undefined}>
+                  <span
+                    role="cell"
+                    className={entry.status === 'FAILED' ? 'show-sync-log-failed' : undefined}
+                  >
                     {showId === undefined ? '—' : episodeCount(entry, showId)}
                   </span>
                 </div>
               ))}
             </div>
           )}
+        </div>
 
-          {ledger.hasNextPage && (
+        <div className="show-sync-log-footer">
+          <nav className="show-sync-log-pagination" aria-label="Sync log pages">
             <button
               type="button"
               className="btn"
-              disabled={ledger.isFetchingNextPage}
-              onClick={() => void ledger.fetchNextPage()}
+              disabled={page <= 1 || ledger.isFetching}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
             >
-              {ledger.isFetchingNextPage ? 'Loading...' : 'Load older syncs'}
+              Previous
             </button>
-          )}
-        </div>
+            <span className="show-sync-log-page-label" aria-live="polite">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn"
+              disabled={page >= totalPages || ledger.isFetching}
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            >
+              Next
+            </button>
+          </nav>
 
-        <div className="modal-actions">
-          <button type="button" className="btn" onClick={onClose}>Close</button>
-          <button type="button" className="btn btn-primary" onClick={() => void onSyncNow()} disabled={syncing}>
-            <FontAwesomeIcon icon={['fas', syncing ? 'spinner' : 'arrows-rotate']} spin={syncing} aria-hidden="true" />
-            <span>{syncing ? 'Syncing...' : 'Sync now'}</span>
-          </button>
+          <div className="modal-actions show-sync-log-actions">
+            <button type="button" className="btn" onClick={onClose}>Close</button>
+            <button type="button" className="btn btn-primary" onClick={() => void onSyncNow()} disabled={syncing}>
+              <FontAwesomeIcon icon={['fas', syncing ? 'spinner' : 'arrows-rotate']} spin={syncing} aria-hidden="true" />
+              <span>{syncing ? 'Syncing...' : 'Sync now'}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

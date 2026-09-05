@@ -1,9 +1,18 @@
 .show-sync-log-modal {
   width: min(560px, calc(100vw - 32px));
+  max-width: 560px;
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
 }
 
 .show-sync-log-header {
+  flex: 0 0 auto;
   align-items: flex-start;
+  margin-bottom: 0;
+  padding: 20px 20px 0;
 }
 
 .show-sync-log-subtitle {
@@ -13,14 +22,20 @@
 }
 
 .show-sync-log-content {
+  flex: 1 1 auto;
+  min-height: 0;
   margin-top: 18px;
+  padding: 0 20px 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .show-sync-log-table {
   display: grid;
   gap: 0;
   overflow: hidden;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--border-color, rgba(15, 23, 42, 0.12));
   border-radius: 10px;
 }
 
@@ -30,7 +45,7 @@
   gap: 24px;
   align-items: center;
   padding: 11px 14px;
-  border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  border-top: 1px solid var(--border-color, rgba(15, 23, 42, 0.12));
 }
 
 .show-sync-log-row:first-child {
@@ -48,4 +63,73 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.show-sync-log-failed {
+  color: #b91c1c;
+}
+
+.show-sync-log-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px 20px;
+  border-top: 1px solid var(--border-color, rgba(15, 23, 42, 0.12));
+  background: #fff;
+}
+
+.show-sync-log-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.show-sync-log-page-label {
+  min-width: 86px;
+  text-align: center;
+  color: var(--text-muted, #64748b);
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.show-sync-log-actions {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .show-sync-log-modal {
+    max-height: calc(100dvh - 24px);
+  }
+
+  .show-sync-log-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .show-sync-log-pagination,
+  .show-sync-log-actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .show-sync-log-footer {
+    background: #0b1220;
+    border-top-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .show-sync-log-table,
+  .show-sync-log-row {
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .show-sync-log-failed {
+    color: #fecaca;
+  }
 }
