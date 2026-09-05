@@ -16,7 +16,7 @@ from .cached_video import get_cached_mp4_size
 from backend.db.models import Episode, LocalMediaProfile, RssStreamProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.dailywire_user_info import WlDwMembershipLevel
-from backend.types.download_profile_types import MediaDownloadStatus
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import (
     DEFAULT_RSS_DW_VIDEO_METHOD,
@@ -27,10 +27,7 @@ from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 
 logger = logging.getLogger(__name__)
 
-_AVAILABLE_STATUSES = {
-    MediaDownloadStatus.DOWNLOADED.value,
-    MediaDownloadStatus.REDOWNLOADED.value,
-}
+_AVAILABLE_ARTIFACT_STATUS = MediaDownloadArtifactStatus.AVAILABLE.value
 _VIDEO_HEIGHTS = {
     PreferredFormat.FORMAT_4K.value: 2160,
     PreferredFormat.FORMAT_1080P.value: 1080,
@@ -81,7 +78,7 @@ def _select_best_download(
         preferred_format: str,
         require_exact_match: bool,
 ) -> Optional[EpisodeMediaDownload]:
-    """Pick the local download that best matches a stream profile."""
+    """Pick the local artifact that best matches a stream profile."""
     wants_audio = preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
     candidates = [d for d in downloads if _is_audio_download(d) == wants_audio]
     if not candidates:
@@ -92,7 +89,7 @@ def _select_best_download(
         if d.local_media_profile.preferred_format == preferred_format
     ]
     if exact:
-        return max(exact, key=lambda d: d.finished_at or d.updated_at)
+        return max(exact, key=lambda d: d.downloaded_at or d.updated_at)
 
     if require_exact_match:
         return None
@@ -144,7 +141,7 @@ def get_feed_items(
             .options(joinedload(EpisodeMediaDownload.local_media_profile))
             .filter(Episode.show_id == profile.show_id)
             .filter(
-                EpisodeMediaDownload.download_status.in_(_AVAILABLE_STATUSES)
+                EpisodeMediaDownload.artifact_status == _AVAILABLE_ARTIFACT_STATUS
             )
             .all()
         )
@@ -189,7 +186,7 @@ def get_media_for_episode(
         profile: RssStreamProfile,
         episode_slug: str,
 ) -> tuple[Episode, Optional[EpisodeMediaDownload]]:
-    """Resolve an enclosure to a local download or a Daily Wire fallback."""
+    """Resolve an enclosure to a local artifact or a Daily Wire fallback."""
     episode: Optional[Episode] = (
         s.query(Episode)
         .filter_by(slug=episode_slug, show_id=profile.show_id)
@@ -207,7 +204,7 @@ def get_media_for_episode(
             .options(joinedload(EpisodeMediaDownload.local_media_profile))
             .filter(EpisodeMediaDownload.media_item_id == episode.id)
             .filter(
-                EpisodeMediaDownload.download_status.in_(_AVAILABLE_STATUSES)
+                EpisodeMediaDownload.artifact_status == _AVAILABLE_ARTIFACT_STATUS
             )
             .all()
         )
@@ -233,7 +230,7 @@ def get_download_for_episode(
         profile: RssStreamProfile,
         episode_slug: str,
 ) -> EpisodeMediaDownload:
-    """Return the local download this profile would serve for one episode."""
+    """Return the local artifact this profile would serve for one episode."""
     _, download = get_media_for_episode(s, profile, episode_slug)
     if download is None:
         raise HTTPException(
