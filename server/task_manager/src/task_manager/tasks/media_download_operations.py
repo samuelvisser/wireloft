@@ -125,6 +125,11 @@ def create_media_download_operation(
         resource_id=download.id,
         task_kwargs={"is_redownload": bool(is_redownload)},
         slot_key=f"media-download:{download.id}",
+        # This target belongs to a constrained operation queue. Generic recovery
+        # restores it to QUEUED but does not bypass maxConcurrentDownloads by
+        # dispatching every interrupted/queued target at once. The task's
+        # recovery_dispatcher fills available slots after recovery instead.
+        recover_on_restart=False,
     )
     operation = create_operation(
         session,
