@@ -13,9 +13,7 @@ from .service import run_check_episodes_stuck_at_dw_processing
     resource_type="show",
 )
 @on_cron(
-    # Keep the existing setting name for config.yml/environment compatibility;
-    # its responsibility is now the broader stuck-processing cleanup.
-    cron=get_settings().new_episode_schedule.check_no_show_today_cron,
+    cron=get_settings().new_episode_schedule.check_episodes_stuck_at_dw_processing,
     resource_type="show",
     resource_id=0,
     coalesce=True,

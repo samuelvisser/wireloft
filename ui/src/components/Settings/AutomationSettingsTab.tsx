@@ -129,11 +129,11 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                 <CronEditor
                     id="settings-stuck-dw-processing-cron"
                     label="Check stuck processing episodes"
-                    value={draft.newEpisodeSchedule.checkNoShowTodayCron}
-                    error={errorFor('newEpisodeSchedule.checkNoShowTodayCron')}
-                    environmentVariable={environmentVariableFor('newEpisodeSchedule.checkNoShowTodayCron')}
+                    value={draft.newEpisodeSchedule.checkEpisodesStuckAtDwProcessing}
+                    error={errorFor('newEpisodeSchedule.checkEpisodesStuckAtDwProcessing')}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.checkEpisodesStuckAtDwProcessing')}
                     onChange={(value) => updateDraft((next) => {
-                        next.newEpisodeSchedule.checkNoShowTodayCron = value
+                        next.newEpisodeSchedule.checkEpisodesStuckAtDwProcessing = value
                     })}
                     help={
                         <ReadMore summary={<span>Cleans up Daily Wire entries that remain unusable for too long.</span>}>
@@ -142,9 +142,6 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                             </p>
                             <p>
                                 This worker checks those entries periodically. A placeholder, or an episode that keeps returning 404, is deleted only after both the episode and that processing incident have been at least four hours old. The default schedule is once per hour.
-                            </p>
-                            <p>
-                                The underlying config key remains <code>newEpisodeSchedule.checkNoShowTodayCron</code> for backwards compatibility with existing config.yml files and environment variables.
                             </p>
                         </ReadMore>
                     }

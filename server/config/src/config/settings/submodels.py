@@ -251,7 +251,7 @@ class RepeatingTaskSettings(SubmodelBase):
 class TrackNewEpisodeSchedule(SubmodelBase):
     find_episodes_cron: str = Field(..., min_length=1, description="Cron schedule string for finding new episodes")
     monitor_episode_cron: str = Field(..., min_length=1, description="Cron schedule string for monitoring an episode that exists but is not yet fully published")
-    check_no_show_today_cron: str = Field(
+    check_episodes_stuck_at_dw_processing: str = Field(
         ...,
         min_length=1,
         description="Cron schedule for cleaning up No Show Today and continuously missing episodes stuck in dw_processing",
