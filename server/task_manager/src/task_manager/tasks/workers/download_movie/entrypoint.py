@@ -18,6 +18,7 @@ from .service import run_download_movie
     default_max_retries=2,
     tracks_progress=True,
     terminal_callback=on_media_download_task_terminal,
+    recovery_dispatcher=on_media_download_task_terminal,
 )
 async def download_movie(
     *,
