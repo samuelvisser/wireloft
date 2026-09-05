@@ -112,6 +112,7 @@ export default function TimeInterval({
     const baseId = idPrefix ?? `ti-${autoId}`
     const justFocusedUnit = useRef<TimeUnit | null>(null)
     const previousBackendUnit = useRef(backendUnit)
+    const lastEmittedValue = useRef<number | null>(null)
     const availableUnits = useMemo(() => unitsForBackendUnit(backendUnit), [backendUnit])
     const automaticallyVisibleUnits = useMemo(
         () => visibleUnitsForValue(value, backendUnit),
@@ -123,6 +124,7 @@ export default function TimeInterval({
     useEffect(() => {
         if (previousBackendUnit.current !== backendUnit) {
             previousBackendUnit.current = backendUnit
+            lastEmittedValue.current = null
             setFirstVisibleUnit(automaticallyVisibleUnits[0])
             setDraftParts(toDraft(splitValue(value, backendUnit)))
             return
@@ -136,8 +138,13 @@ export default function TimeInterval({
             return currentFirstUnit
         })
 
-        // NaN is the form's temporary incomplete state. Keep the user's raw input
-        // intact until every visible field has a value again.
+        // Preserve raw local editing state (including blank parts) when this value
+        // is the result we just emitted. External form resets still resync the fields.
+        if (lastEmittedValue.current !== null && Object.is(value, lastEmittedValue.current)) {
+            lastEmittedValue.current = null
+            return
+        }
+
         if (Number.isFinite(value)) {
             setDraftParts(toDraft(splitValue(value, backendUnit)))
         }
@@ -147,26 +154,36 @@ export default function TimeInterval({
     const visibleUnits = availableUnits.slice(firstVisibleIndex)
     const nextLargerUnit = firstVisibleIndex > 0 ? availableUnits[firstVisibleIndex - 1] : null
 
-    const emitDraft = (nextDraft: TimeUnitDraft) => {
-        let total = 0
+    const valueFromDraft = (nextDraft: TimeUnitDraft): number => {
+        if (visibleUnits.every((unit) => nextDraft[unit].trim() === '')) {
+            return Number.NaN
+        }
 
+        let total = 0
         for (const unit of availableUnits) {
             const rawValue = nextDraft[unit].trim()
-            if (rawValue === '') {
-                onChange(Number.NaN)
-                return
-            }
+            if (rawValue === '') continue
 
             const parsed = Number(rawValue)
-            if (!Number.isFinite(parsed) || parsed < 0) {
-                onChange(Number.NaN)
-                return
-            }
-
+            if (!Number.isFinite(parsed) || parsed < 0) return Number.NaN
             total += parsed * backendUnitsPerDisplayUnit(unit, backendUnit)
         }
 
-        onChange(roundValue(total))
+        return roundValue(total)
+    }
+
+    const normalizeDraft = (nextDraft: TimeUnitDraft, editedUnit: TimeUnit, total: number): TimeUnitDraft => {
+        const normalized = toDraft(splitValue(total, backendUnit))
+
+        // A blank unit is a valid temporary representation of zero. Preserve those
+        // blanks unless normalization actually needs that unit to carry a value.
+        for (const unit of availableUnits) {
+            if (unit !== editedUnit && nextDraft[unit].trim() === '' && normalized[unit] === '0') {
+                normalized[unit] = ''
+            }
+        }
+
+        return normalized
     }
 
     const onFocus = (unit: TimeUnit): FocusEventHandler<HTMLInputElement> => (event) => {
@@ -181,9 +198,18 @@ export default function TimeInterval({
     }
 
     const onUnitChange = (unit: TimeUnit): ChangeEventHandler<HTMLInputElement> => (event) => {
-        const nextDraft = {...draftParts, [unit]: event.currentTarget.value}
-        setDraftParts(nextDraft)
-        emitDraft(nextDraft)
+        const rawValue = event.currentTarget.value
+        const nextDraft = {...draftParts, [unit]: rawValue}
+        const total = valueFromDraft(nextDraft)
+
+        if (rawValue.trim() !== '' && Number.isFinite(total)) {
+            setDraftParts(normalizeDraft(nextDraft, unit, total))
+        } else {
+            setDraftParts(nextDraft)
+        }
+
+        lastEmittedValue.current = total
+        onChange(total)
     }
 
     const addLargerUnit = () => {
