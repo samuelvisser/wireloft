@@ -143,6 +143,8 @@ def get_local_media_profile(s: Session, local_media_profile_slug: str) -> LocalM
 def create_local_media_profile(s: Session, body: LocalMediaProfileAPICreate) -> LocalMediaProfileAPIRead:
     _ensure_unique_profile_settings(s, body)
     data = body.model_dump(by_alias=True)
+    if body.type != LocalMediaProfileType.SHOW:
+        data.pop("show_scope", None)
     profile_model = _PROFILE_MODELS[body.type]
     mp = profile_model(**data)
     s.add(mp)
@@ -162,7 +164,8 @@ def update_local_media_profile(s: Session, local_media_profile_slug: str, body: 
         raise HTTPException(status_code=422, detail="A Local Media Profile's type cannot be changed")
 
     _ensure_unique_profile_settings(s, body, exclude_id=local_media_profile.id)
-    update_database_fields(local_media_profile, body)
+    exclude_fields = {"show_scope"} if local_media_profile.type != LocalMediaProfileType.SHOW.value else None
+    update_database_fields(local_media_profile, body, exclude_fields=exclude_fields)
     s.flush()
     return LocalMediaProfileAPIRead.model_validate(local_media_profile)
 

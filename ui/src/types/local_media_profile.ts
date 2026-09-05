@@ -21,17 +21,37 @@ export const LocalMediaProfileTypeReg = createSelectRegistry("LocalMediaProfileT
   'movie': { label: "Movie", help: "Store manually downloaded movies" },
 });
 
+export const ShowLocalMediaProfileScopeReg = createSelectRegistry("ShowLocalMediaProfileScope", {
+  'both': { label: "Both", help: "Offer this profile for both Podcasts and Series" },
+  'podcast': { label: "Podcast", help: "Offer this profile only for Podcasts" },
+  'series': { label: "Series", help: "Offer this profile only for Series" },
+});
+
 export type LocalMediaProfileType = 'show' | 'movie'
+export type ShowLocalMediaProfileScope = (typeof ShowLocalMediaProfileScopeReg)["values"][number]
+export type ShowLocalMediaProfileContext = 'podcast' | 'series'
+
+export function isShowLocalMediaProfileAvailableFor(
+    profile: LocalMediaProfileRead,
+    showType: string | null | undefined,
+): boolean {
+    if (profile.type !== 'show') return false
+    if (showType !== 'podcast' && showType !== 'series') return true
+    const scope = profile.showScope ?? 'both'
+    return scope === 'both' || scope === showType
+}
 
 /** Build a select registry for Local Media Profiles from an array (no memoization). */
 export function buildLocalMediaProfileSelectRegistry(
     mediaProfiles: readonly LocalMediaProfileRead[] | undefined | null,
     type?: LocalMediaProfileType,
+    showType?: ShowLocalMediaProfileContext,
 ): SelectRegistry{
     const spec: Record<string, { label: string }> = {}
     if (Array.isArray(mediaProfiles)) {
         for (const p of mediaProfiles) {
             if (type && p.type !== type) continue
+            if (type === 'show' && showType && !isShowLocalMediaProfileAvailableFor(p, showType)) continue
             const id = (p as any).id
             const name = (p as any).name ?? String(id)
             if (typeof id === 'number') spec[String(id)] = {label: String(name)}
@@ -44,9 +64,10 @@ export function buildLocalMediaProfileSelectRegistry(
 export function useLocalMediaProfileSelectRegistry(
     mediaProfiles: readonly LocalMediaProfileRead[] | undefined | null,
     type?: LocalMediaProfileType,
+    showType?: ShowLocalMediaProfileContext,
 ): SelectRegistry{
     return useMemo(
-        (): SelectRegistry => buildLocalMediaProfileSelectRegistry(mediaProfiles, type),
-        [mediaProfiles, type],
+        (): SelectRegistry => buildLocalMediaProfileSelectRegistry(mediaProfiles, type, showType),
+        [mediaProfiles, type, showType],
     )
 }

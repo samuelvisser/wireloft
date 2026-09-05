@@ -1,6 +1,10 @@
 import {z} from "zod";
 import {createServerErrorMapper} from "../../utils/serverMessageMap";
-import {MoviePreferredFormatReg, PreferredFormatReg} from "../local_media_profile";
+import {
+    MoviePreferredFormatReg,
+    PreferredFormatReg,
+    ShowLocalMediaProfileScopeReg,
+} from "../local_media_profile";
 
 export const LocalMediaProfileServerErrors = createServerErrorMapper({
     name: {unique_violation: "Name is already taken."},
@@ -43,6 +47,7 @@ const LocalMediaProfileCommonSchema = z.object({
 
 export const ShowLocalMediaProfileCreateSchema = LocalMediaProfileCommonSchema.extend({
     type: z.literal('show'),
+    showScope: z.enum(ShowLocalMediaProfileScopeReg.values).default('both'),
     outputTemplate: outputTemplateSchema,
     preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
 })
@@ -88,6 +93,7 @@ export const LocalMediaProfileReadSchema = z.looseObject({
     outputTemplate: z.string(),
     preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
     appendMediaTypeToFilename: z.boolean().optional().default(false),
+    showScope: z.enum(ShowLocalMediaProfileScopeReg.values).nullable().optional().transform((value) => value ?? 'both'),
     createdAt: z.iso.datetime().transform((s) => new Date(s)),
     updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })

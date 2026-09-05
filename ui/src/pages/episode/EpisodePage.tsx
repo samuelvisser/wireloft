@@ -6,7 +6,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
-import {PreferredFormatReg} from '../../types/local_media_profile'
+import {isShowLocalMediaProfileAvailableFor, PreferredFormatReg} from '../../types/local_media_profile'
 import {MediaDownloadStatusReg} from '../../types/media_download'
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
@@ -176,7 +176,7 @@ export default function EpisodePage() {
     const {data: episode, isLoading: isLoadingEpisode} = useEpisode(episodeId)
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads} = useEpisodeDownloads(episodeId)
-    const showProfiles = profiles?.filter((profile) => profile.type === 'show')
+    const showProfiles = profiles?.filter((profile) => isShowLocalMediaProfileAvailableFor(profile, show?.type))
     const metadataRefreshOperation = useActiveOperation(
         'episode.refresh_metadata',
         'episode',

@@ -45,7 +45,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
     }, [watch, onChange]);
 
     // Snapshot previous values when switching to an existing profile, so we can restore on deselect
-    const snapshotRef = useRef<Pick<LocalMediaProfileCreateUnionIn, 'name' | 'outputTemplate' | 'preferredFormat'> | null>(null)
+    const snapshotRef = useRef<Pick<LocalMediaProfileCreateUnionIn, 'name' | 'showScope' | 'outputTemplate' | 'preferredFormat'> | null>(null)
 
     const watchedOp = watch('op')
     const watchedSlug = watch('slug')
@@ -60,6 +60,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
             setValue('id', undefined as any, {shouldValidate: true, shouldDirty: true})
             const snap = snapshotRef.current
             setValue('name', snap?.name ?? '', {shouldValidate: true})
+            setValue('showScope', snap?.showScope ?? 'both', {shouldValidate: true})
             setValue('outputTemplate', snap?.outputTemplate ?? '', {shouldValidate: true})
             setValue('preferredFormat', (snap?.preferredFormat ?? 'format_1080p') as any, {shouldValidate: true})
             snapshotRef.current = null
@@ -69,6 +70,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                 // Save current values before replacing
                 snapshotRef.current = {
                     name: watch('name'),
+                    showScope: watch('showScope'),
                     outputTemplate: watch('outputTemplate'),
                     preferredFormat: watch('preferredFormat'),
                 }
@@ -78,6 +80,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
             setValue('slug', p.slug, {shouldValidate: true, shouldDirty: true})
             setValue('id', p.id as any, {shouldValidate: true, shouldDirty: true})
             setValue('name', p.name, {shouldValidate: true})
+            setValue('showScope', p.showScope, {shouldValidate: true})
             setValue('outputTemplate', p.outputTemplate, {shouldValidate: true})
             setValue('preferredFormat', p.preferredFormat as any, {shouldValidate: true})
         }

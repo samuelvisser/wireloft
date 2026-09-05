@@ -6,7 +6,11 @@ from typing import Union
 from pydantic import Field, ValidationInfo, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
+from backend.types.local_media_profile_types import (
+    LocalMediaProfileType,
+    PreferredFormat,
+    ShowLocalMediaProfileScope,
+)
 from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
     SHOW_OUTPUT_TEMPLATE_FIELDS,
@@ -30,6 +34,7 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
 
     name: str = Field(min_length=1)
     type: LocalMediaProfileType
+    show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH
     preferred_format: PreferredFormat
     output_template: str = Field(min_length=16, max_length=4096)
 
@@ -75,6 +80,20 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
             raise ValueError("A Local Media Profile must be for shows or movies")
         return v
 
+    @field_validator("show_scope")
+    @classmethod
+    def _validate_show_scope(
+        cls,
+        v: ShowLocalMediaProfileScope,
+        info: ValidationInfo,
+    ) -> ShowLocalMediaProfileScope:
+        if (
+            info.data.get("type") == LocalMediaProfileType.MOVIE
+            and v != ShowLocalMediaProfileScope.BOTH
+        ):
+            raise ValueError("Show availability only applies to Show Local Media Profiles")
+        return v
+
     @field_validator("preferred_format")
     @classmethod
     def _validate_preferred_format(
@@ -116,6 +135,7 @@ class _LocalMediaProfileAPIBaseOut(ResponseBase):
     output_template: str
     preferred_format: Union[PreferredFormat, str]
     append_media_type_to_filename: bool
+    show_scope: Union[ShowLocalMediaProfileScope, str, None] = None
 
 
 class LocalMediaProfileAPIRead(_LocalMediaProfileAPIBaseOut):
