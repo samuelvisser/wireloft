@@ -9,7 +9,7 @@ from .workers.monitor_episode_worker import monitor_episode_worker
 from .workers.refresh_episode_metadata_worker import refresh_episode_metadata_worker
 from .workers.redownload_show_episodes_worker import redownload_show_episodes_worker
 from .workers.fetch_new_episodes import fetch_new_episodes
-from .workers.check_no_show_today_episodes import check_no_show_today_episodes
+from .workers.check_episodes_stuck_at_dw_processing import check_episodes_stuck_at_dw_processing
 from .workers.file_watcher import file_watcher
 from .workers.trigger_task_worker import trigger_task_worker
 
@@ -24,7 +24,7 @@ __all__ = [
     "refresh_episode_metadata_worker",
     "redownload_show_episodes_worker",
     "fetch_new_episodes",
-    "check_no_show_today_episodes",
+    "check_episodes_stuck_at_dw_processing",
     "file_watcher",
     "trigger_task_worker",
 ]

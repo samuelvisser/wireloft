@@ -16,6 +16,7 @@ from backend.db.models.media_download import (
     MovieMediaDownload,
 )
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from backend.utils.download_files import remove_download_artifacts
@@ -153,8 +154,8 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
     episode: Optional[Episode] = s.query(Episode).filter(Episode.slug == episode_slug).one_or_none()
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
-    if episode.is_no_show_today:
-        raise HTTPException(status_code=422, detail="This is not a downloadable episode")
+    if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
+        raise HTTPException(status_code=422, detail="Episode media is still processing on Daily Wire")
 
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
     existing: Optional[EpisodeMediaDownload] = (

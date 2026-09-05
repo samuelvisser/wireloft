@@ -173,6 +173,7 @@ async def _fetch_show(
         select(Episode)
         .where(Episode.show_id == show.id)
         .where(Episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value)
+        .where(Episode.is_no_show_today.is_not(True))
     )
     monitor_requests: dict[str, dict] = {
         ep.episode_identifier: _monitor_request_for_db_episode(show, ep)
@@ -182,8 +183,6 @@ async def _fetch_show(
     dw_show = client.get_show_page(show.slug, membership_plan=membership_plan)
     all_dw_seasons: list[DwSeasonRecord] = dw_show.seasons
 
-    # Add newly discovered seasons in Daily Wire's returned order. Season ordering
-    # normalization belongs to show creation/update, not this worker.
     for new_dw_season in all_dw_seasons:
         if not any(season.slug == new_dw_season.slug for season in show.seasons):
             create_season_by_dw_season(s, show=show, dw_season=new_dw_season)
@@ -224,9 +223,6 @@ async def _fetch_show(
         update_progress(progress, 100, f"Dry run complete for '{show.slug}' (nothing saved)")
         return 0
 
-    # Keep identifier metadata pending until the first episode write/commit. The
-    # season saver resolves Daily Wire detail requests before that first flush, so
-    # this worker never owns SQLite's writer lock while waiting on remote I/O.
     for key, value in identifier_max_values.items():
         show.set_meta(key=key, value=str(value))
 
@@ -265,10 +261,12 @@ async def _fetch_show(
                 start_index=current_index,
                 client=client,
                 require_member_exclusive=require_member_exclusive,
+                # Existing libraries discover only a small incremental tail. Resolve
+                # each new item's detail endpoint even if the age fallback already
+                # says "final" so a current 404 can still force DW_PROCESSING.
+                always_resolve_details=latest_final_episode is not None,
             )
         except Exception as exc:
-            # The season helper already rolled back its failed unit of work. Let
-            # the task executor handle retry policy for the complete worker run.
             print(f"Exception: {exc}")
             raise
 
@@ -302,12 +300,7 @@ def _announce_new_episodes(
     saved_episodes: list[SavedEpisode],
     monitor_requests: dict,
 ) -> None:
-    """Emit status-lifecycle events for freshly indexed live/recent episodes.
-
-    Only episodes whose status was resolved from the detail endpoint are announced;
-    the bulk final back catalog is saved silently, as before. Any episode that is
-    still non-final is (re)scheduled for monitoring, now with a real ``resource_id``.
-    """
+    """Emit status-lifecycle events for freshly indexed live/recent episodes."""
     for saved in saved_episodes:
         if not saved.detail_resolved:
             continue
@@ -321,7 +314,10 @@ def _announce_new_episodes(
             was_created=True,
         )
 
-        if saved.status is not EpisodePublishStatus.PUBLISHED_FINAL:
+        if (
+            saved.status is not EpisodePublishStatus.PUBLISHED_FINAL
+            and not saved.episode.is_no_show_today
+        ):
             monitor_requests[saved.episode.episode_identifier] = (
                 _monitor_request_for_db_episode(show, saved.episode)
             )
@@ -346,7 +342,6 @@ def _queue_monitor_requests(s: Session, requests) -> None:
 
 
 def _queue_show_indexed(s: Session, *, show: Show, indexed_count: int) -> None:
-    """Announce a completed index only after its database commit succeeds."""
     queue_event(s, SHOW_INDEXED_EVENT, {
         "resource_id": show.id,
         "id": show.id,
@@ -365,7 +360,6 @@ def _completion_message(indexed_count: int, monitor_count: int) -> str:
 
 
 def _print_dry_run_report(show: Show, ep_map_asc, identifier_max_values: IdentifierMaxValues) -> None:
-    """Print the episodes and identifiers a real run would have saved."""
     total = count_total_episodes(ep_map_asc)
     print(f"\n=== DRY RUN: '{show.slug}' — {total} new episode(s), nothing saved ===")
     for season_id, ep_list in ep_map_asc.items():

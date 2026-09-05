@@ -7,7 +7,7 @@ from .download_profile_worker import download_profile_worker
 from .download_series_thumbnail import download_series_thumbnail
 from .monitor_episode_worker import monitor_episode_worker
 from .fetch_new_episodes import fetch_new_episodes
-from .check_no_show_today_episodes import check_no_show_today_episodes
+from .check_episodes_stuck_at_dw_processing import check_episodes_stuck_at_dw_processing
 
 # Worker to test other workers
 from .trigger_task_worker import trigger_task_worker

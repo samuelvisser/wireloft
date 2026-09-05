@@ -202,7 +202,7 @@ def _episode_detail(slug: str, episode_number: str = "103.00", *, status: str = 
         **_episode_record(
             slug,
             episode_number,
-            datetime(2026, 7, 22, 13, tzinfo=timezone.utc),
+            datetime.now(timezone.utc),
             status=status,
         ).model_dump(mode="python", by_alias=False),
         audio_url="https://example.test/audio.mp3",
@@ -262,7 +262,7 @@ def test_monitor_updates_and_completes_one_episode(monkeypatch):
         ep=_episode_record(
             detail.slug,
             "103.00",
-            datetime(2026, 7, 22, 13, tzinfo=timezone.utc),
+            datetime.now(timezone.utc),
         ).model_copy(
             update={"publish_status": EpisodePublishStatus.SCHEDULED.value},
             deep=True,
@@ -462,7 +462,7 @@ def test_fetch_saves_non_final_episode_and_requests_monitor(monkeypatch):
     live = _episode_record(
         "live-episode",
         "101.00",
-        datetime(2026, 7, 23, 10, tzinfo=timezone.utc),
+        datetime.now(timezone.utc),
     )
     live_detail = _episode_detail(live.slug, "101.00")
 
@@ -482,7 +482,6 @@ def test_fetch_saves_non_final_episode_and_requests_monitor(monkeypatch):
         )
     )
 
-    # The non-final episode is indexed immediately, with its real remote status
     episode = (
         session.query(Episode)
         .filter(Episode.slug == live.slug)
@@ -547,7 +546,7 @@ def test_fetch_rerun_requeues_monitor_without_reidentifying(monkeypatch):
     live = _episode_record(
         "live-episode",
         "101.00",
-        datetime(2026, 7, 23, 10, tzinfo=timezone.utc),
+        datetime.now(timezone.utc),
     )
     live_detail = _episode_detail(live.slug, "101.00")
 
@@ -563,9 +562,6 @@ def test_fetch_rerun_requeues_monitor_without_reidentifying(monkeypatch):
     asyncio.run(service.run_fetch_new_episodes(session, show_slug=show.slug))
     queued.reset_mock()
 
-    # Second run: same remote state. The still-live episode must keep its row,
-    # identifier and index, and its monitor must be requested again (monitor jobs
-    # are in-memory only, so a fetch after a restart has to restore them).
     asyncio.run(service.run_fetch_new_episodes(session, show_slug=show.slug))
 
     episodes = (

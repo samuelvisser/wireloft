@@ -109,11 +109,12 @@ def get_download_profile_episodes(
 
     eligible: list[Episode] = []
     for episode in candidates:
-        if episode.is_no_show_today:
-            continue
         if _episode_type_prefix(episode) not in allowed_types:
             continue
 
+        # Publication status is the single eligibility authority. A No Show Today
+        # placeholder and a detail-endpoint 404 both become DW_PROCESSING, so they
+        # need no profile-specific exclusions here.
         publish_status = episode.publish_status
         if publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
             pass
@@ -196,8 +197,6 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
     if existing.download_profile_id != profile.id:
         existing.download_profile_id = profile.id
 
-    # The operation graph is the sole authority for whether an attempt is
-    # queued/running. Never infer that from MediaDownload domain state.
     if get_active_media_download_operation(s, existing.id) is not None:
         s.flush()
         return DownloadAction(existing.id, False)
@@ -215,8 +214,6 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         s.flush()
         return DownloadAction(existing.id, True, is_redownload=True)
 
-    # absent/missing/corrupted all mean the profile still wants an artifact but
-    # none is currently healthy. A new SYSTEM operation is the only requeue state.
     prepare_media_download_artifact(existing)
     existing.file_path = target_path
     s.flush()
@@ -257,9 +254,6 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
         if profile.delete_older_episodes:
             rows = candidates
         else:
-            # Even when completed old files are retained, a not-yet-produced
-            # artifact outside latest-N must be removed so its queued/running
-            # operation is canceled by the MediaDownload relationship cascade.
             rows = [
                 row for row in candidates
                 if row.artifact_status == MediaDownloadArtifactStatus.ABSENT.value

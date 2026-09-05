@@ -17,6 +17,7 @@ from backend.db.models import Episode, LocalMediaProfile, RssStreamProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import (
     DEFAULT_RSS_DW_VIDEO_METHOD,
@@ -126,10 +127,13 @@ def get_feed_items(
     if not profile.use_downloads and not profile.use_dw_stream:
         return []
 
+    # DW_PROCESSING is the single generic "not usable yet" state for stream
+    # profiles. This covers No Show Today placeholders and detail-endpoint 404s
+    # without teaching the feed layer either Daily Wire special case.
     episodes = (
         s.query(Episode)
         .filter(Episode.show_id == profile.show_id)
-        .filter(Episode.is_no_show_today.is_not(True))
+        .filter(Episode.publish_status != EpisodePublishStatus.DW_PROCESSING.value)
         .all()
     )
 
@@ -196,6 +200,8 @@ def get_media_for_episode(
         raise HTTPException(status_code=404, detail="Episode not found")
     if not _profile_allows_episode(profile, episode):
         raise HTTPException(status_code=404, detail="Episode not included in this feed")
+    if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
+        raise HTTPException(status_code=404, detail="Episode media is still processing")
 
     best = None
     if profile.use_downloads:
@@ -216,7 +222,7 @@ def get_media_for_episode(
 
     if best is not None:
         return episode, best
-    if profile.use_dw_stream and episode.is_no_show_today is not True:
+    if profile.use_dw_stream:
         return episode, None
 
     raise HTTPException(

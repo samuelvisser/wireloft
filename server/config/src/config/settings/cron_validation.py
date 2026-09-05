@@ -99,7 +99,7 @@ def validate_worker_cron_settings(
             monitor_episode_cron,
         ),
         (
-            "Check no-show-today episodes",
+            "Check stuck processing episodes",
             ("new_episode_schedule", "check_no_show_today_cron"),
             check_no_show_today_cron,
         ),

@@ -112,26 +112,23 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         next.newEpisodeSchedule.monitorEpisodeCron = value
                     })}
                     help={
-                        <ReadMore summary={<span>Monitors currently live or scheduled episodes.</span>}>
+                        <ReadMore summary={<span>Monitors currently live, scheduled or processing episodes.</span>}>
                             <p>
                                 This cron schedule determines how often WireLoft will monitor an episode after the <code>Find new episodes</code> worker
-                                found it. As long as the episode is either scheduled or live, WireLoft checks on its status very frequently.
-                                This makes sure that any changes in it's status get picked up quickly, and the download- and stream profiles
-                                can serve you the episode as soon as possible.
+                                found it. As long as the episode has not reached its final published state, WireLoft checks for lifecycle and metadata changes frequently.
                             </p>
                             <p>
-                                This worker is expected to run quite frequently. It is as lightweight as possible, should not impact performance much
-                                or annoying the Daily Wire API. Make sure to not set it to run more often than once every two minutes though.
+                                This worker is expected to run quite frequently. Make sure to not set it to run more often than once every two minutes.
                             </p>
                             <p>
-                                <code>Monitor pending episodes</code> never runs on episodes that are not pending.
+                                If Daily Wire temporarily returns a 404 for an indexed episode, WireLoft keeps it in <code>dw_processing</code> and continues monitoring it instead of exposing unusable media.
                             </p>
                         </ReadMore>
                     }
                 />
                 <CronEditor
-                    id="settings-no-show-today-cron"
-                    label="Check no-show-today episodes"
+                    id="settings-stuck-dw-processing-cron"
+                    label="Check stuck processing episodes"
                     value={draft.newEpisodeSchedule.checkNoShowTodayCron}
                     error={errorFor('newEpisodeSchedule.checkNoShowTodayCron')}
                     environmentVariable={environmentVariableFor('newEpisodeSchedule.checkNoShowTodayCron')}
@@ -139,11 +136,15 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         next.newEpisodeSchedule.checkNoShowTodayCron = value
                     })}
                     help={
-                        <ReadMore summary={<span>How often to check for no-show-today episodes.</span>}>
+                        <ReadMore summary={<span>Cleans up Daily Wire entries that remain unusable for too long.</span>}>
                             <p>
-                                The Daily Wire does this annoying thing where they sometimes 'publish' an episode just to tell
-                                everyone there will not be any episodes today. This cron schedule runs infrequently and checks
-                                if any of the new episodes are no-show-today episodes. It removes them from WireLoft when found.
+                                WireLoft marks <code>No Show Today</code> placeholders and episodes whose Daily Wire detail endpoint returns 404 as <code>dw_processing</code> so download and stream profiles cannot use them.
+                            </p>
+                            <p>
+                                This worker checks those entries periodically. A placeholder, or an episode that keeps returning 404, is deleted only after both the episode and that processing incident have been at least four hours old. The default schedule is once per hour.
+                            </p>
+                            <p>
+                                The underlying config key remains <code>newEpisodeSchedule.checkNoShowTodayCron</code> for backwards compatibility with existing config.yml files and environment variables.
                             </p>
                         </ReadMore>
                     }
@@ -158,16 +159,9 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         next.newEpisodeSchedule.metadataRefreshIntervals = value
                     })}
                     help={
-                        <ReadMore summary={<span>Intervals to refresh episode metadata after its published.</span>}>
+                        <ReadMore summary={<span>Intervals to refresh episode metadata after it is published.</span>}>
                             <p>
-                                While a Daily Wire episode is live, WireLoft closely monitors it for any status updates, title changes or new
-                                thumbnails. When it is published, this metadata refresh is our next approach.
-                            </p>
-                            <p>
-                                Show episodes sometimes do not yet contain their final thumbnail even when they are fully published. Other times,
-                                their title might change a little after publication. For these cases,
-                                WireLoft automatically updates episode metadata at a couple intervals after its publication. Here, you can configure
-                                those intervals.
+                                While a Daily Wire episode is live, WireLoft closely monitors it for status, title and thumbnail updates. After publication, these targeted metadata refreshes keep reconciling late Daily Wire changes, including corrected episode numbers.
                             </p>
                             <p>
                                 Value is a list of comma-separated offsets after publication. Use s, m, h or d, for example: 120s,30m,3h,2d
@@ -205,7 +199,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.episodeStatusTiming.publishedFinalAfterMinutes = value
                     })}
-                    help="Must be at least as long as the countdown publication threshold."
+                    help="Absolute fallback from publishedAt: after this many minutes WireLoft treats an otherwise ambiguous episode as published final. A current 404 or No Show Today placeholder remains dw_processing instead."
                 />
             </SettingsDisclosure>
         </>

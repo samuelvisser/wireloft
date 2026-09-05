@@ -251,7 +251,11 @@ class RepeatingTaskSettings(SubmodelBase):
 class TrackNewEpisodeSchedule(SubmodelBase):
     find_episodes_cron: str = Field(..., min_length=1, description="Cron schedule string for finding new episodes")
     monitor_episode_cron: str = Field(..., min_length=1, description="Cron schedule string for monitoring an episode that exists but is not yet fully published")
-    check_no_show_today_cron: str = Field(..., min_length=1, description="Cron schedule string for checking whether 'No Show Today' placeholder episodes have been removed from Daily Wire")
+    check_no_show_today_cron: str = Field(
+        ...,
+        min_length=1,
+        description="Cron schedule for cleaning up No Show Today and continuously missing episodes stuck in dw_processing",
+    )
     metadata_refresh_intervals: str = Field(
         ...,
         min_length=1,
@@ -273,7 +277,7 @@ class EpisodeStatusTiming(SubmodelBase):
     published_final_after_minutes: int = Field(
         ...,
         ge=0,
-        description="Delay in minutes after dw reports the episode as published we can safely assume it no longer contains the countdown",
+        description="Absolute minutes after publishedAt after which an otherwise ambiguous episode is treated as published final",
     )
 
     @field_validator("published_final_after_minutes")

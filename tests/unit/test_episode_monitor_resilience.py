@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 import pytest
 from sqlalchemy import create_engine
@@ -116,9 +115,14 @@ def _monitor_fixture():
     return engine, session, show, episode
 
 
-def test_monitor_treats_dailywire_404_as_unchanged_poll(monkeypatch):
+def test_monitor_marks_dailywire_404_as_dw_processing(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from dailywire_api.dw_api.client import MiddlewareAPIError
+    from task_manager.tasks.helpers.episodes.processing import (
+        DwProcessingReason,
+        episode_dw_processing_reason,
+        episode_dw_processing_since,
+    )
     from task_manager.tasks.workers.monitor_episode_worker import service
 
     engine, session, show, episode = _monitor_fixture()
@@ -132,9 +136,7 @@ def test_monitor_treats_dailywire_404_as_unchanged_poll(monkeypatch):
                 status_code=404,
             )
 
-    queued = Mock()
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
-    monkeypatch.setattr(service, "queue_event", queued)
 
     result = asyncio.run(
         service.run_monitor_episode_worker(
@@ -147,10 +149,29 @@ def test_monitor_treats_dailywire_404_as_unchanged_poll(monkeypatch):
         )
     )
 
-    assert result is EpisodePublishStatus.LIVE
+    assert result is EpisodePublishStatus.DW_PROCESSING
     session.expire_all()
-    assert session.query(type(episode)).one().publish_status == EpisodePublishStatus.LIVE.value
-    queued.assert_not_called()
+    stored = session.query(type(episode)).one()
+    assert stored.publish_status == EpisodePublishStatus.DW_PROCESSING.value
+    assert stored.metadata_is_final is False
+    assert episode_dw_processing_reason(stored) is DwProcessingReason.NOT_FOUND
+    first_seen = episode_dw_processing_since(stored)
+    assert first_seen is not None
+
+    # Another 404 is the same continuous incident and must not restart its age.
+    asyncio.run(
+        service.run_monitor_episode_worker(
+            session,
+            episode_id=stored.id,
+            episode_slug=stored.slug,
+            show_slug=show.slug,
+            episode_identifier=stored.episode_identifier,
+            episode_index=stored.index,
+        )
+    )
+    session.expire_all()
+    stored = session.query(type(episode)).one()
+    assert episode_dw_processing_since(stored) == first_seen
 
     session.close()
     engine.dispose()

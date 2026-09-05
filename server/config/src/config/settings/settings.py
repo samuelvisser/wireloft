@@ -108,7 +108,9 @@ class AppSettings(SettingsBase):
     new_episode_schedule: TrackNewEpisodeSchedule = Field(default=TrackNewEpisodeSchedule(
         find_episodes_cron="*/30 * * * *",
         monitor_episode_cron="*/2 * * * *",
-        check_no_show_today_cron="0 */6 * * *",
+        # Retain the field name for config/env compatibility; it now schedules the
+        # broader stuck-DW-processing cleanup worker.
+        check_no_show_today_cron="0 * * * *",
         metadata_refresh_intervals="5m,15m,30m,1h,3h,6h,24h",
     ))
     episode_status_timing: EpisodeStatusTiming = Field(default=EpisodeStatusTiming(

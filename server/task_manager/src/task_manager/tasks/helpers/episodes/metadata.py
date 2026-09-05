@@ -7,6 +7,7 @@ from backend.types.episode_types import EpisodePublishStatus
 from config import get_settings
 from config.settings.submodels import parse_metadata_refresh_intervals
 from dailywire_api.records import DwEpisodeDetailRecord
+from .no_show import is_no_show_today_title
 
 
 METADATA_REFRESH_REQUESTED_EVENT = "episode.metadata_refresh_requested"
@@ -76,6 +77,7 @@ def update_episode_from_dailywire(
         "episode_identifier",
         "publish_status",
         "metadata_is_final",
+        "is_no_show_today",
     }
     model_fields = set(Episode.__mapper__.attrs.keys())
     for field, value in dw_episode.model_dump(
@@ -84,3 +86,8 @@ def update_episode_from_dailywire(
     ).items():
         if field in model_fields and field not in protected_fields:
             setattr(episode, field, value)
+
+    # This flag is WireLoft-owned state derived from the current title rather than
+    # a direct Daily Wire field. Recompute it whenever metadata is refreshed so a
+    # late placeholder/title correction cannot leave stale eligibility state.
+    episode.is_no_show_today = is_no_show_today_title(dw_episode.title)

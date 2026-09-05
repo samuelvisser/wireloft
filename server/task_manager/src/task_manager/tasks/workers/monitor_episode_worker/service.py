@@ -15,6 +15,11 @@ from ._helpers import save_status_metadata
 from .scheduling import MONITOR_COMPLETED_EVENT
 from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
 from ...helpers.episodes.metadata import metadata_watch_expired, update_episode_from_dailywire
+from ...helpers.episodes.processing import (
+    DwProcessingReason,
+    clear_episode_dw_processing_tracking,
+    mark_episode_dw_processing,
+)
 from ...helpers.episodes.status import get_publish_status_from_dw_detail
 from ...helpers.shows.get import get_show_from_params
 
@@ -33,14 +38,7 @@ async def run_monitor_episode_worker(
         episode_identifier: Optional[str] = None,
         episode_index: Optional[int] = None,
 ) -> EpisodePublishStatus:
-    """Refresh one already-indexed non-final episode and persist its current state.
-
-    ``fetch_new_episodes`` is responsible for creating the episode row (with its
-    initial non-final status). This worker only drives an existing episode forward
-    until it reaches ``PUBLISHED_FINAL``. ``season_id``/``episode_identifier``/
-    ``episode_index`` are accepted for scheduler compatibility and used only as
-    lookup hints.
-    """
+    """Refresh one already-indexed non-final episode until its lifecycle settles."""
     print(f"Starting monitor_episode_worker for {episode_slug or episode_id}")
 
     show = get_show_from_params(
@@ -67,9 +65,6 @@ async def run_monitor_episode_worker(
         )
 
     client = MiddlewareClient()
-    # The database slug is the freshest one we know: Daily Wire may change an
-    # episode's slug between statuses, and the slug baked into the scheduled job's
-    # kwargs goes stale, while the row is refreshed on every successful poll.
     try:
         dw_episode = client.get_episode_details(
             db_episode.slug,
@@ -81,36 +76,61 @@ async def run_monitor_episode_worker(
         if exc.status_code != 404:
             raise
 
-        # Daily Wire can temporarily stop resolving a live/scheduled episode's
-        # detail slug while its publication state is changing. A missing detail
-        # endpoint is therefore not enough evidence to mutate or delete our local
-        # episode. Leave the known state untouched and let the next recurring poll
-        # try again. The recurring monitor itself is the retry mechanism.
-        current_status = EpisodePublishStatus(db_episode.publish_status)
+        # A list entry whose detail endpoint currently 404s is not usable media.
+        # Keep it under the monitor lifecycle but put it in the generic processing
+        # state. Repeated 404s preserve the first-observed timestamp, allowing the
+        # hourly cleanup worker to remove entries that remain broken for four hours.
+        old_status = db_episode.publish_status
+        new_status = EpisodePublishStatus.DW_PROCESSING
+        mark_episode_dw_processing(
+            db_episode,
+            reason=DwProcessingReason.NOT_FOUND,
+        )
+        s.flush()
+        queue_episode_status_events(
+            s,
+            episode=db_episode,
+            show=show,
+            old_status=old_status,
+            new_status=new_status,
+            was_created=False,
+        )
+        s.commit()
+
         logger.info(
-            "Daily Wire temporarily returned 404 for monitored episode %s; "
-            "keeping status %s until the next poll",
+            "Daily Wire returned 404 for monitored episode %s; status %s -> %s",
             db_episode.slug,
-            current_status.value,
+            old_status,
+            new_status.value,
         )
         print(
             f"monitor_episode_worker completed for {db_episode.slug}: "
-            f"unchanged ({current_status.value}; Daily Wire returned 404)"
+            f"{new_status.value} (Daily Wire returned 404)"
         )
-        return current_status
+        return new_status
 
     new_status = get_publish_status_from_dw_detail(dw_episode)
-
     old_status = db_episode.publish_status
 
     update_episode_from_dailywire(db_episode, dw_episode)
-    db_episode.publish_status = new_status.value
-    if new_status is EpisodePublishStatus.PUBLISHED_FINAL:
-        # This poll itself is a fresh metadata check. If the entire configured
-        # settling window has already elapsed, no follow-up work is required.
-        db_episode.metadata_is_final = metadata_watch_expired(db_episode.published_date)
+    if new_status is EpisodePublishStatus.DW_PROCESSING:
+        mark_episode_dw_processing(
+            db_episode,
+            reason=(
+                DwProcessingReason.NO_SHOW_TODAY
+                if db_episode.is_no_show_today
+                else DwProcessingReason.DAILY_WIRE
+            ),
+        )
     else:
-        db_episode.metadata_is_final = False
+        db_episode.publish_status = new_status.value
+        clear_episode_dw_processing_tracking(db_episode)
+        if new_status is EpisodePublishStatus.PUBLISHED_FINAL:
+            # This poll itself is a fresh metadata check. If the entire configured
+            # settling window has already elapsed, no follow-up work is required.
+            db_episode.metadata_is_final = metadata_watch_expired(db_episode.published_date)
+        else:
+            db_episode.metadata_is_final = False
     s.flush()
 
     save_status_metadata(
@@ -129,7 +149,12 @@ async def run_monitor_episode_worker(
         was_created=False,
     )
 
-    if new_status is EpisodePublishStatus.PUBLISHED_FINAL:
+    if (
+        new_status is EpisodePublishStatus.PUBLISHED_FINAL
+        or db_episode.is_no_show_today
+    ):
+        # No-show placeholders are intentionally handed off to the hourly stuck
+        # processing cleanup instead of being polled every monitor interval.
         queue_event(
             s,
             MONITOR_COMPLETED_EVENT,

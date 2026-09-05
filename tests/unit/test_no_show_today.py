@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -54,11 +54,23 @@ def _make_season(session, show, *, index=1, slug="season-1", name="One"):
     return season
 
 
-def _make_episode(session, show, season, *, slug, ep_id, title, index, is_no_show_today=False):
+def _make_episode(
+        session,
+        show,
+        season,
+        *,
+        slug,
+        ep_id,
+        title,
+        index,
+        is_no_show_today=False,
+        publish_status="published_final",
+        published_at=None,
+):
     from backend.db.models import Episode
     from backend.utils.helpers import generate_uuid
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    published_at = published_at or datetime.now(timezone.utc).replace(tzinfo=None)
     episode = Episode(
         uuid=generate_uuid(),
         type="episode",
@@ -69,9 +81,9 @@ def _make_episode(session, show, season, *, slug, ep_id, title, index, is_no_sho
         slug=slug,
         title=title,
         duration=100.0,
-        publish_status="published_final",
+        publish_status=publish_status,
         sharing_url=f"https://example.test/{slug}",
-        published_date=now,
+        published_date=published_at,
         is_no_show_today=is_no_show_today,
     )
     session.add(episode)
@@ -95,7 +107,7 @@ def _make_local_media_profile(session, *, slug="audio"):
 
 @pytest.fixture
 def db_session():
-    import backend.db.models  # noqa: F401 (registers all mappers before create_all)
+    import backend.db.models  # noqa: F401
     from backend.db import Base
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
@@ -106,11 +118,8 @@ def db_session():
     engine.dispose()
 
 
-# ---------- upsert_episode sets the flag ----------
-
 def _dw_episode_record(slug: str, title: str):
     from dailywire_api.records import DwEpisodeRecord
-    from datetime import datetime, timezone
 
     return DwEpisodeRecord(
         dw_id=f"remote-{slug}",
@@ -133,16 +142,50 @@ def _dw_episode_record(slug: str, title: str):
     )
 
 
-def test_upsert_episode_flags_no_show_today_on_create(db_session):
+def _dw_episode_detail(slug: str, title: str):
+    from dailywire_api.records import DwEpisodeDetailRecord
+
+    return DwEpisodeDetailRecord(
+        **_dw_episode_record(slug, title).model_dump(mode="python", by_alias=False),
+        audio_url="https://example.test/audio.mp3",
+        video_url="https://example.test/video.m3u8",
+        delivery_mode="VOD",
+        progress=0,
+        next_episode_url=None,
+        playback_status=None,
+    )
+
+
+# ---------- no-show state normalization ----------
+
+def test_upsert_episode_marks_no_show_today_as_dw_processing(db_session):
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.helpers.episodes.processing import (
+        DwProcessingReason,
+        episode_dw_processing_reason,
+    )
     from task_manager.tasks.helpers.episodes.save import upsert_episode
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
+    ep = _dw_episode_record(
+        "matt-walsh-ep-1809-no-show-today",
+        "The Matt Walsh Show - No Show Today",
+    )
 
-    ep = _dw_episode_record("matt-walsh-ep-1809-no-show-today", "The Matt Walsh Show - No Show Today")
-    episode = upsert_episode(db_session, show=show, season=season, ep=ep, index_value=1, ep_id="ep.1809")
+    episode = upsert_episode(
+        db_session,
+        show=show,
+        season=season,
+        ep=ep,
+        index_value=1,
+        ep_id="ep.1809",
+    )
 
     assert episode.is_no_show_today is True
+    assert episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value
+    assert episode.metadata_is_final is False
+    assert episode_dw_processing_reason(episode) is DwProcessingReason.NO_SHOW_TODAY
 
 
 def test_upsert_episode_does_not_flag_a_real_episode(db_session):
@@ -150,91 +193,251 @@ def test_upsert_episode_does_not_flag_a_real_episode(db_session):
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-
     ep = _dw_episode_record("matt-walsh-ep-1810", "Episode 1810: The Real Deal")
-    episode = upsert_episode(db_session, show=show, season=season, ep=ep, index_value=1, ep_id="ep.1810")
+
+    episode = upsert_episode(
+        db_session,
+        show=show,
+        season=season,
+        ep=ep,
+        index_value=1,
+        ep_id="ep.1810",
+    )
 
     assert episode.is_no_show_today is False
 
 
 def test_upsert_episode_reflags_on_update(db_session):
-    """Re-indexing an existing episode must recompute the flag too, not just set it once."""
+    from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.helpers.episodes.save import upsert_episode
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
 
     ep = _dw_episode_record("matt-walsh-ep-1809", "Episode 1809")
-    episode = upsert_episode(db_session, show=show, season=season, ep=ep, index_value=1, ep_id="ep.1809")
+    episode = upsert_episode(
+        db_session,
+        show=show,
+        season=season,
+        ep=ep,
+        index_value=1,
+        ep_id="ep.1809",
+    )
     assert episode.is_no_show_today is False
 
-    renamed = _dw_episode_record("matt-walsh-ep-1809", "The Matt Walsh Show - No Show Today")
-    episode = upsert_episode(db_session, show=show, season=season, ep=renamed, index_value=1, ep_id="ep.1809")
+    renamed = _dw_episode_record(
+        "matt-walsh-ep-1809",
+        "The Matt Walsh Show - No Show Today",
+    )
+    episode = upsert_episode(
+        db_session,
+        show=show,
+        season=season,
+        ep=renamed,
+        index_value=1,
+        ep_id="ep.1809",
+    )
     assert episode.is_no_show_today is True
+    assert episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value
 
 
-# ---------- excluded from download profile eligibility ----------
+# ---------- profile eligibility is generic ----------
 
-def test_get_download_profile_episodes_excludes_no_show_today(db_session):
-    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+def test_download_profile_excludes_dw_processing_without_no_show_special_case(db_session):
     from backend.db.models.download_profile import PodcastDownloadProfile
     from backend.types.download_profile_types import EpIdType
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.workers.download_profile_worker._helpers import (
+        get_download_profile_episodes,
+    )
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
     lmp = _make_local_media_profile(db_session)
 
-    real_ep = _make_episode(db_session, show, season, slug="ep-real", ep_id="ep.1", title="Real episode", index=1)
-    no_show_ep = _make_episode(
-        db_session, show, season, slug="ep-no-show", ep_id="aux.1", title="No Show Today", index=2, is_no_show_today=True,
+    real_ep = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="ep-real",
+        ep_id="ep.1",
+        title="Real episode",
+        index=1,
+    )
+    processing_ep = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="ep-processing",
+        ep_id="aux.1",
+        title="Ordinary title",
+        index=2,
+        is_no_show_today=False,
+        publish_status=EpisodePublishStatus.DW_PROCESSING.value,
     )
 
     profile = PodcastDownloadProfile(
-        show=show, local_media_profile=lmp, type="podcast", enable_profile=True,
+        show=show,
+        local_media_profile=lmp,
+        type="podcast",
+        enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value, EpIdType.AUX.value],
-        download_with_countdown=False, redownload_final=False, download_days_in_past=0, delete_older_episodes=False,
+        download_with_countdown=False,
+        redownload_final=False,
+        download_days_in_past=0,
+        delete_older_episodes=False,
     )
     db_session.add(profile)
     db_session.commit()
 
-    episodes = get_download_profile_episodes(db_session, profile)
-    slugs = {e.slug for e in episodes}
+    slugs = {episode.slug for episode in get_download_profile_episodes(db_session, profile)}
     assert real_ep.slug in slugs
-    assert no_show_ep.slug not in slugs
+    assert processing_ep.slug not in slugs
 
 
-# ---------- manual download creation is rejected too ----------
+# ---------- stale DW_PROCESSING cleanup ----------
 
-def test_create_episode_download_rejects_no_show_today_episode(db_session):
-    from fastapi import HTTPException
-    from backend.api.endpoints.media_downloads.service import create_episode_download
-    from backend.api.models.media_download import EpisodeDownloadAPICreate
+def _mark_processing_at(episode, reason, observed_at):
+    from task_manager.tasks.helpers.episodes.processing import mark_episode_dw_processing
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
-    lmp = _make_local_media_profile(db_session)
-    episode = _make_episode(
-        db_session, show, season, slug="ep-no-show", ep_id="aux.1", title="No Show Today", index=1, is_no_show_today=True,
+    mark_episode_dw_processing(episode, reason=reason, now=observed_at)
+
+
+def _patch_no_token(monkeypatch, service):
+    monkeypatch.setattr(
+        service,
+        "DeviceAuthClient",
+        lambda: Mock(get_token=lambda: None),
     )
-    db_session.commit()
-
-    with pytest.raises(HTTPException) as exc_info:
-        create_episode_download(db_session, episode.slug, EpisodeDownloadAPICreate(local_media_profile_id=lmp.id))
-    assert exc_info.value.status_code == 422
 
 
-# ---------- deletion once Daily Wire removes it ----------
-
-def test_check_no_show_today_deletes_when_dw_returns_404(db_session, monkeypatch):
-    from task_manager.tasks.workers.check_no_show_today_episodes import service
-    from dailywire_api.dw_api.client import MiddlewareAPIError
+def test_cleanup_keeps_recent_no_show_today(db_session, monkeypatch):
     from backend.db.models import Episode
+    from task_manager.tasks.helpers.episodes.processing import DwProcessingReason
+    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
 
+    now = datetime.now(timezone.utc)
     show = _make_show(db_session)
     season = _make_season(db_session, show)
     episode = _make_episode(
-        db_session, show, season, slug="ep-no-show", ep_id="aux.1", title="No Show Today", index=1, is_no_show_today=True,
+        db_session,
+        show,
+        season,
+        slug="ep-no-show",
+        ep_id="aux.1",
+        title="No Show Today",
+        index=1,
+        is_no_show_today=True,
+        published_at=(now - timedelta(hours=1)).replace(tzinfo=None),
     )
+    _mark_processing_at(episode, DwProcessingReason.NO_SHOW_TODAY, now - timedelta(hours=1))
+    db_session.commit()
+    episode_id = episode.id
+
+    _patch_no_token(monkeypatch, service)
+    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
+
+    assert db_session.get(Episode, episode_id) is not None
+
+
+def test_cleanup_deletes_no_show_after_four_hour_grace(db_session, monkeypatch):
+    from backend.db.models import Episode
+    from task_manager.tasks.helpers.episodes.processing import DwProcessingReason
+    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+
+    now = datetime.now(timezone.utc)
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="ep-no-show",
+        ep_id="aux.1",
+        title="No Show Today",
+        index=1,
+        is_no_show_today=True,
+        published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
+    )
+    _mark_processing_at(episode, DwProcessingReason.NO_SHOW_TODAY, now - timedelta(hours=5))
+    db_session.commit()
+    episode_id = episode.id
+
+    class FakeClient:
+        def __init__(self, access_token=None):
+            pass
+
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            return _dw_episode_detail(slug, "The Test Show - No Show Today")
+
+    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+    _patch_no_token(monkeypatch, service)
+    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
+
+    assert db_session.get(Episode, episode_id) is None
+
+
+def test_cleanup_preserves_no_show_that_became_real_episode(db_session, monkeypatch):
+    from backend.db.models import Episode
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.helpers.episodes.processing import DwProcessingReason
+    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+
+    now = datetime.now(timezone.utc)
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="ep-no-show",
+        ep_id="aux.1",
+        title="No Show Today",
+        index=1,
+        is_no_show_today=True,
+        published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
+    )
+    _mark_processing_at(episode, DwProcessingReason.NO_SHOW_TODAY, now - timedelta(hours=5))
+    db_session.commit()
+    episode_id = episode.id
+
+    class FakeClient:
+        def __init__(self, access_token=None):
+            pass
+
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            return _dw_episode_detail(slug, "Episode 1: A Real Episode")
+
+    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+    _patch_no_token(monkeypatch, service)
+    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
+
+    stored = db_session.get(Episode, episode_id)
+    assert stored is not None
+    assert stored.is_no_show_today is False
+    assert stored.publish_status == EpisodePublishStatus.DW_PROCESSING.value
+
+
+def test_cleanup_deletes_continuous_404_after_four_hours(db_session, monkeypatch):
+    from backend.db.models import Episode
+    from dailywire_api.dw_api.client import MiddlewareAPIError
+    from task_manager.tasks.helpers.episodes.processing import DwProcessingReason
+    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+
+    now = datetime.now(timezone.utc)
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="bad-remote-episode",
+        ep_id="ep.1",
+        title="Real episode",
+        index=1,
+        published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
+    )
+    _mark_processing_at(episode, DwProcessingReason.NOT_FOUND, now - timedelta(hours=5))
     db_session.commit()
     episode_id = episode.id
 
@@ -246,22 +449,67 @@ def test_check_no_show_today_deletes_when_dw_returns_404(db_session, monkeypatch
             raise MiddlewareAPIError("HTTP error 404: episode not found", status_code=404)
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
-    monkeypatch.setattr(service, "DeviceAuthClient", lambda: Mock(get_token=lambda: None))
+    _patch_no_token(monkeypatch, service)
 
-    asyncio.run(service.run_check_no_show_today_episodes(db_session))
+    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
 
     assert db_session.get(Episode, episode_id) is None
 
 
-def test_check_no_show_today_keeps_episode_when_dw_still_has_it(db_session, monkeypatch):
-    from task_manager.tasks.workers.check_no_show_today_episodes import service
+def test_cleanup_does_not_verify_404_until_incident_is_four_hours_old(db_session, monkeypatch):
     from backend.db.models import Episode
+    from task_manager.tasks.helpers.episodes.processing import DwProcessingReason
+    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
 
+    now = datetime.now(timezone.utc)
     show = _make_show(db_session)
     season = _make_season(db_session, show)
     episode = _make_episode(
-        db_session, show, season, slug="ep-no-show", ep_id="aux.1", title="No Show Today", index=1, is_no_show_today=True,
+        db_session,
+        show,
+        season,
+        slug="temporarily-missing",
+        ep_id="ep.1",
+        title="Real episode",
+        index=1,
+        published_at=(now - timedelta(hours=10)).replace(tzinfo=None),
     )
+    _mark_processing_at(episode, DwProcessingReason.NOT_FOUND, now - timedelta(hours=1))
+    db_session.commit()
+    episode_id = episode.id
+
+    client = Mock()
+    monkeypatch.setattr(service, "MiddlewareClient", lambda access_token=None: client)
+    _patch_no_token(monkeypatch, service)
+
+    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
+
+    client.get_episode_details.assert_not_called()
+    assert db_session.get(Episode, episode_id) is not None
+
+
+def test_cleanup_keeps_episode_when_404_endpoint_recovers(db_session, monkeypatch):
+    from backend.db.models import Episode
+    from task_manager.tasks.helpers.episodes.processing import (
+        DwProcessingReason,
+        episode_dw_processing_reason,
+    )
+    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+
+    now = datetime.now(timezone.utc)
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="recovered-episode",
+        ep_id="ep.1",
+        title="Real episode",
+        index=1,
+        published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
+    )
+    _mark_processing_at(episode, DwProcessingReason.NOT_FOUND, now - timedelta(hours=5))
     db_session.commit()
     episode_id = episode.id
 
@@ -270,68 +518,25 @@ def test_check_no_show_today_keeps_episode_when_dw_still_has_it(db_session, monk
             pass
 
         def get_episode_details(self, slug, *, require_member_exclusive):
-            return object()
+            return _dw_episode_detail(slug, "Real episode")
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
-    monkeypatch.setattr(service, "DeviceAuthClient", lambda: Mock(get_token=lambda: None))
+    _patch_no_token(monkeypatch, service)
 
-    asyncio.run(service.run_check_no_show_today_episodes(db_session))
+    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
 
-    assert db_session.get(Episode, episode_id) is not None
-
-
-def test_check_no_show_today_ignores_a_real_episode_even_if_deleted_remotely(db_session, monkeypatch):
-    """Only "No Show Today" episodes get auto-deleted; real episodes are kept
-    even if a check for some other reason reported them missing."""
-    from task_manager.tasks.workers.check_no_show_today_episodes import service
-    from backend.db.models import Episode
-
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
-    real_episode = _make_episode(
-        db_session, show, season, slug="ep-real", ep_id="ep.1", title="Real Episode", index=1, is_no_show_today=False,
-    )
-    db_session.commit()
-    real_episode_id = real_episode.id
-
-    called = Mock()
-    monkeypatch.setattr(service, "MiddlewareClient", lambda access_token=None: called)
-
-    asyncio.run(service.run_check_no_show_today_episodes(db_session))
-
-    called.get_episode_details.assert_not_called()
-    assert db_session.get(Episode, real_episode_id) is not None
+    stored = db_session.get(Episode, episode_id)
+    assert stored is not None
+    assert episode_dw_processing_reason(stored) is None
 
 
-def test_check_no_show_today_skips_premium_show_without_token(db_session, monkeypatch):
-    from task_manager.tasks.workers.check_no_show_today_episodes import service
-    from backend.db.models import Episode
-
-    show = _make_show(db_session, slug="premium-show")
-    show.membership_level = "ALL_ACCESS"
-    season = _make_season(db_session, show)
-    episode = _make_episode(
-        db_session, show, season, slug="ep-no-show", ep_id="aux.1", title="No Show Today", index=1, is_no_show_today=True,
-    )
-    db_session.commit()
-    episode_id = episode.id
-
-    client_calls = Mock()
-    monkeypatch.setattr(service, "MiddlewareClient", lambda access_token=None: client_calls)
-    monkeypatch.setattr(service, "DeviceAuthClient", lambda: Mock(get_token=lambda: None))
-
-    asyncio.run(service.run_check_no_show_today_episodes(db_session))
-
-    client_calls.get_episode_details.assert_not_called()
-    assert db_session.get(Episode, episode_id) is not None
-
-
-def test_check_no_show_today_noop_when_none_flagged(db_session, monkeypatch):
-    from task_manager.tasks.workers.check_no_show_today_episodes import service
+def test_cleanup_noop_when_nothing_is_processing(db_session, monkeypatch):
+    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
 
     called = Mock()
     monkeypatch.setattr(service, "MiddlewareClient", called)
+    _patch_no_token(monkeypatch, service)
 
-    asyncio.run(service.run_check_no_show_today_episodes(db_session))
+    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
 
     called.assert_not_called()
