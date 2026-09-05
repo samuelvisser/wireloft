@@ -64,6 +64,8 @@ function operationLabel(operation: TaskOperationRead): string {
       return 'Re-download'
     case 'movie.refresh_extras':
       return 'Movie extra refresh'
+    case 'media.download':
+      return 'Download'
     default:
       return operation.title || 'Operation'
   }
@@ -101,6 +103,8 @@ function successMessage(operation: TaskOperationRead): string {
         : ` using ${profiles} ${plural(profiles, 'Download Profile')}`
       return `Re-download finished for ${showTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
     }
+    case 'media.download':
+      return operation.result?.summary || `Downloaded ${operation.title}`
     default:
       return operation.result?.summary || operation.message || `${operation.title} completed`
   }
@@ -163,15 +167,62 @@ async function invalidateForOperation(queryClient: QueryClient, operation: TaskO
     }
   }
 
+  if (operation.kind === 'media.download') {
+    invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+    if (operation.resourceId != null) {
+      invalidations.push(queryClient.invalidateQueries({
+        queryKey: ['mediaDownloadAttempts', operation.resourceId],
+        exact: true,
+      }))
+    }
+    if (episodeSlug) {
+      invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
+    }
+    if (showSlug) {
+      invalidations.push(queryClient.invalidateQueries({queryKey: ['episodes', showSlug]}))
+    }
+    if (movieSlug) {
+      invalidations.push(
+        queryClient.invalidateQueries({queryKey: ['movies']}),
+        queryClient.invalidateQueries({queryKey: ['dailywireMovie', movieSlug]}),
+      )
+    }
+  }
+
   await Promise.all(invalidations)
 }
 
 export default function OperationNotifier({children}: {children: ReactNode}) {
   const queryClient = useQueryClient()
   const handledRef = useRef(new Set<string>())
+  const previousActiveRef = useRef(new Map<string, TaskOperationRead>())
   const {data: pullData} = useFrontendPuller()
   const operations = pullData?.operations ?? []
 
+  // Non-UI operations are included in the generic pull only while active. When
+  // one disappears, it has become terminal (or its resource was deleted), so
+  // refresh the ordinary domain queries affected by that operation. This keeps
+  // the puller transport generic: it does not need to know what a download,
+  // episode, movie, or any future operation kind stores persistently.
+  useEffect(() => {
+    if (!pullData) return
+
+    const currentById = new Map(operations.map((operation) => [operation.id, operation]))
+    const currentActive = new Map(
+      operations
+        .filter((operation) => ACTIVE_STATUSES.has(operation.status))
+        .map((operation) => [operation.id, operation]),
+    )
+
+    for (const [operationId, previous] of previousActiveRef.current) {
+      if (currentActive.has(operationId) || currentById.has(operationId)) continue
+      void invalidateForOperation(queryClient, previous)
+    }
+    previousActiveRef.current = currentActive
+  }, [operations, pullData, queryClient])
+
+  // UI operations remain in the pull after completion until this browser has
+  // shown and acknowledged their durable notification.
   useEffect(() => {
     for (const operation of operations) {
       if (
