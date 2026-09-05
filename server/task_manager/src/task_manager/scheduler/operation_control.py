@@ -26,6 +26,7 @@ RUN_CANCEL_REASON_META_KEY = "_operation_cancel_reason"
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
+    OperationStatus.WAITING.value,
 }
 _ACTIVE_TASK_STATUSES = {
     TaskStatus.SCHEDULED,
@@ -115,7 +116,7 @@ def cancel_operation(
         if operation is None:
             return None
         if operation.status not in _ACTIVE_OPERATION_STATUSES:
-            raise ValueError("Only a queued or running operation can be canceled")
+            raise ValueError("Only an active operation can be canceled")
 
         completed = 0
         for target in operation.targets:

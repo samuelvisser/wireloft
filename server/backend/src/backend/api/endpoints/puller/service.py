@@ -8,6 +8,7 @@ from task_manager.scheduler.types import OperationStatus
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
+    OperationStatus.WAITING.value,
 }
 
 

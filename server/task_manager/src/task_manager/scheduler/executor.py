@@ -23,14 +23,21 @@ from .operation_control import (
     run_cancel_reason,
     run_cancel_requested,
 )
-from .operations import link_run_to_operations, refresh_operations_for_run
+from .operations import (
+    TASK_RUN_WAIT_STATE_META_KEY,
+    link_run_to_operations,
+    refresh_operations_for_run,
+)
 from .results import TaskResult
 from config import get_settings
+from dailywire_api.dw_api.client import slow_request_cooldown_observer
 from dailywire_downloader import DownloadCancelled
 from task_manager.scheduler import scheduler
 
 
 logger = logging.getLogger(__name__)
+_DAILY_WIRE_COOLDOWN_REASON = "daily_wire_request_cooldown"
+_DAILY_WIRE_COOLDOWN_MESSAGE = "Waiting for Daily Wire request cooldown. Will resume soon."
 
 
 class TaskCancellationRequested(Exception):
@@ -191,6 +198,54 @@ class ProgressUpdater:
         finally:
             s.close()
 
+    def set_wait_state(self, reason: str | None, message: str | None = None) -> None:
+        """Persist transient worker waiting state without changing worker progress."""
+        s = get_session()
+        last_operational_error: OperationalError | None = None
+        try:
+            for i in range(3):
+                try:
+                    current_meta = s.execute(
+                        select(TaskRun.meta).where(TaskRun.id == self.run_id)
+                    ).scalar_one_or_none()
+                    if current_meta is None:
+                        exists = s.execute(
+                            select(TaskRun.id).where(TaskRun.id == self.run_id)
+                        ).scalar_one_or_none()
+                        if exists is None:
+                            return
+
+                    merged_meta = dict(current_meta or {})
+                    if reason:
+                        merged_meta[TASK_RUN_WAIT_STATE_META_KEY] = {
+                            "reason": reason,
+                            "message": message,
+                        }
+                    else:
+                        merged_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+
+                    result = s.execute(
+                        update(TaskRun)
+                        .where(TaskRun.id == self.run_id)
+                        .values(meta=merged_meta or None)
+                    )
+                    if result.rowcount == 0:
+                        s.rollback()
+                        return
+                    s.commit()
+                    refresh_operations_for_run(s, self.run_id)
+                    s.commit()
+                    return
+                except OperationalError as exc:
+                    last_operational_error = exc
+                    s.rollback()
+                    time.sleep(0.1 * (2 ** i))
+
+            if last_operational_error is not None:
+                raise last_operational_error
+        finally:
+            s.close()
+
 
 def _resolve_max_retries(session, def_key: str, schedule_id: Optional[int], override: Optional[int]) -> int:
     if override is not None:
@@ -278,6 +333,10 @@ def _prepare_execution(
             session.add(run)
             session.flush()
 
+        run_meta = dict(run.meta or {})
+        run_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+        run.meta = run_meta or None
+
         linked_operation_ids = link_run_to_operations(
             session,
             run=run,
@@ -333,6 +392,10 @@ def _finalize_execution(
         run = session.get(TaskRun, prepared.run_id)
         if run is None:
             return None, None
+
+        run_meta = dict(run.meta or {})
+        run_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+        run.meta = run_meta or None
 
         if run_cancel_requested(run):
             cancellation_reason = run_cancel_reason(run, cancellation_reason or "Canceled")
@@ -423,8 +486,17 @@ def execute_task(
     cancellation_reason: str | None = None
     started_perf = time.perf_counter()
 
+    def on_slow_request_cooldown(waiting: bool) -> None:
+        updater.set_wait_state(
+            _DAILY_WIRE_COOLDOWN_REASON if waiting else None,
+            _DAILY_WIRE_COOLDOWN_MESSAGE if waiting else None,
+        )
+
     try:
-        with operation_context(prepared.linked_operation_ids):
+        with (
+            operation_context(prepared.linked_operation_ids),
+            slow_request_cooldown_observer(on_slow_request_cooldown),
+        ):
             if inspect.iscoroutinefunction(fn):
                 worker_result = asyncio.run(
                     fn(resource_id=resource_id, progress=updater, **prepared.call_kwargs)

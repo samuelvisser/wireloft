@@ -18,10 +18,17 @@ from task_manager.scheduler.types import OperationStatus, TaskStatus
 logger = logging.getLogger(__name__)
 WATCHDOG_JOB_ID = "wireloft-stalled-task-watchdog"
 
-# A queued operation may legitimately wait behind a constrained resource queue
-# (downloads are one example). The watchdog is a *runtime* stall detector, so its
-# clock starts only after actual execution begins.
-_ACTIVE_OPERATION_STATUSES = {OperationStatus.RUNNING.value}
+# A queued operation may legitimately wait behind a constrained resource queue,
+# while WAITING means a running worker is intentionally blocked on an external
+# dependency such as Daily Wire request pacing. Neither state is runtime stall
+# time, but their TaskRuns still belong to an active operation and must not be
+# monitored independently as standalone work.
+_WATCHED_OPERATION_STATUSES = {OperationStatus.RUNNING.value}
+_OWNED_OPERATION_STATUSES = {
+    OperationStatus.QUEUED.value,
+    OperationStatus.RUNNING.value,
+    OperationStatus.WAITING.value,
+}
 _ACTIVE_TASK_STATUSES = {TaskStatus.RUNNING}
 
 
@@ -96,7 +103,8 @@ def monitor_stalled_work(
     APScheduler controls when jobs may start and how many may run concurrently,
     but it has no progress-aware runtime timeout. WireLoft samples RUNNING work
     once per minute and remembers when each percentage last changed. Work that is
-    merely queued, scheduled or waiting for a retry is intentionally excluded.
+    merely queued, scheduled, waiting on an external dependency, or waiting for a
+    retry is intentionally excluded.
 
     Runs attached to active TaskOperations are watched only through their
     operations. This preserves shared-run semantics: canceling an old stalled
@@ -117,7 +125,7 @@ def monitor_stalled_work(
             operation_id: _percent(progress)
             for operation_id, progress in session.execute(
                 select(TaskOperation.id, TaskOperation.progress).where(
-                    TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES)
+                    TaskOperation.status.in_(_WATCHED_OPERATION_STATUSES)
                 )
             )
         }
@@ -125,7 +133,7 @@ def monitor_stalled_work(
             session.scalars(
                 select(TaskOperationRun.task_run_id)
                 .join(TaskOperation, TaskOperation.id == TaskOperationRun.operation_id)
-                .where(TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES))
+                .where(TaskOperation.status.in_(_OWNED_OPERATION_STATUSES))
             )
         )
         current_tasks = {

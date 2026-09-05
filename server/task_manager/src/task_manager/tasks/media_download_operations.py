@@ -27,7 +27,11 @@ from task_manager.scheduler.types import OperationSource, OperationStatus, Resou
 logger = logging.getLogger(__name__)
 MEDIA_DOWNLOAD_OPERATION_KIND = "media.download"
 _DOWNLOAD_TASK_KEYS = ("download_episode", "download_movie")
-_ACTIVE_OPERATION_STATUSES = (OperationStatus.QUEUED.value, OperationStatus.RUNNING.value)
+_ACTIVE_OPERATION_STATUSES = (
+    OperationStatus.QUEUED.value,
+    OperationStatus.RUNNING.value,
+    OperationStatus.WAITING.value,
+)
 _ACTIVE_RUN_STATUSES = (
     TaskStatus.SCHEDULED,
     TaskStatus.QUEUED,
