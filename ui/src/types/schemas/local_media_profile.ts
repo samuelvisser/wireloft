@@ -45,16 +45,19 @@ const LocalMediaProfileCommonSchema = z.object({
     name: z.string().min(1, "Name is required"),
 })
 
+export const SHOW_DEFAULT_TEMPLATE = '/downloads/shows/{{ show }}/{{ episode_title }}.ext'
 export const ShowLocalMediaProfileCreateSchema = LocalMediaProfileCommonSchema.extend({
-    type: z.literal('show'),
+    type: z.literal('show').default('show'),
     showScope: z.enum(ShowLocalMediaProfileScopeReg.values).default('both'),
-    outputTemplate: outputTemplateSchema,
+    outputTemplate: outputTemplateSchema.default(SHOW_DEFAULT_TEMPLATE),
     preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
 })
 
+
+export const MOVIE_DEFAULT_TEMPLATE = "/downloads/movies/{{ movie_title }}/{{ title }}{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
 const MovieLocalMediaProfileBaseSchema = LocalMediaProfileCommonSchema.extend({
-    type: z.literal('movie'),
-    outputTemplate: outputTemplateSchema,
+    type: z.literal('movie').default('movie'),
+    outputTemplate: outputTemplateSchema.default(MOVIE_DEFAULT_TEMPLATE),
     preferredFormat: z.enum(MoviePreferredFormatReg.values).default('format_1080p'),
 })
 

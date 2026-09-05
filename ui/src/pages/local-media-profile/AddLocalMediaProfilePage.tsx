@@ -4,7 +4,7 @@ import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {
     LocalMediaProfileCreateIn, LocalMediaProfileCreateOut,
-    LocalMediaProfileCreateSchema,
+    LocalMediaProfileCreateSchema, MOVIE_DEFAULT_TEMPLATE,
     MovieLocalMediaProfileCreateSchema,
     ShowLocalMediaProfileCreateSchema,
 } from "../../types/schemas/local_media_profile";
@@ -22,23 +22,20 @@ import {
 import {getZodDefaults} from '../../utils/defaultZod'
 
 const SHOW_DEFAULT_TEMPLATE = '/downloads/shows/{{ show }}/{{ episode_title }}.ext'
-const MOVIE_DEFAULT_TEMPLATE = "/downloads/movies/{{ movie_title }}/{{ title }}{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
 
 function defaultsForMode(mode: LocalMediaProfileMode): LocalMediaProfileCreateIn {
     if (mode === 'movie') {
         return {
             ...getZodDefaults(MovieLocalMediaProfileCreateSchema),
             type: 'movie',
-            name: '',
-            outputTemplate: MOVIE_DEFAULT_TEMPLATE,
+            name: ''
         }
     }
 
     return {
         ...getZodDefaults(ShowLocalMediaProfileCreateSchema),
         type: 'show',
-        name: '',
-        outputTemplate: SHOW_DEFAULT_TEMPLATE,
+        name: ''
     }
 }
 
