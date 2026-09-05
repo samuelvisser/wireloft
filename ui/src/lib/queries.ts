@@ -1,5 +1,5 @@
 import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClient} from '@tanstack/react-query'
-import {useEffect} from 'react'
+import {useEffect, useMemo} from 'react'
 import {saveProfilesToStorage, saveShowsToStorage} from './cache'
 import {useFrontendPuller} from './puller'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
@@ -14,7 +14,13 @@ import {SeasonRead} from "../types/schemas/season";
 import {RssStreamProfileRead} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
-import {MediaDownloadAttemptRead, MediaDownloadViewRead} from "../types/schemas/media_download";
+import {
+    MediaDownloadAttemptRead,
+    MediaDownloadDomainViewRead,
+    MediaDownloadViewRead,
+    MediaDownloadViewReadSchema,
+} from "../types/schemas/media_download";
+import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead} from "../types/schemas/movie";
 import {
     DailywireCatalogRead,
@@ -252,7 +258,6 @@ export function useDailywireShow(slug?: string, membershipPlan?: string) {
             const url = `${urlBase}/dailywire/shows/${encodeURIComponent(slug!)}` + params
             const r = await fetch(url, {signal, credentials: 'include'})
             if (!r.ok) {
-                // Try to surface server-provided error detail and attach status
                 try {
                     const body = await r.json()
                     const detail = typeof body?.detail === 'string' ? body.detail : null
@@ -325,45 +330,198 @@ export function useStreamProfilesByShowSlug(showSlug?: string) {
     })
 }
 
-function usePullerBackedDownloads(
-    queryKey: readonly unknown[],
-    predicate?: (download: MediaDownloadViewRead) => boolean,
-) {
-    // Keep the historical query key registered so existing mutation code can
-    // invalidate it. FrontendPuller converts that invalidation into an immediate
-    // pull, while the actual live data always comes through the shared pipeline.
-    useQuery({
-        queryKey,
-        queryFn: async () => [] as MediaDownloadViewRead[],
-        enabled: false,
-    })
+const ACTIVE_OPERATION_STATUSES = new Set(['QUEUED', 'RUNNING'])
 
-    const puller = useFrontendPuller()
-    const downloads = puller.data?.mediaDownloads
+function contextString(operation: TaskOperationRead, key: string): string | null {
+    const value = operation.context?.[key]
+    return typeof value === 'string' ? value : null
+}
+
+function contextNumber(operation: TaskOperationRead, key: string): number | null {
+    const value = operation.context?.[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function contextBoolean(operation: TaskOperationRead, key: string): boolean | null {
+    const value = operation.context?.[key]
+    return typeof value === 'boolean' ? value : null
+}
+
+function operationDate(value: string | null | undefined): Date | null {
+    if (!value) return null
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function operationForDownload(
+    operations: TaskOperationRead[],
+    mediaDownloadId: number,
+): TaskOperationRead | undefined {
+    return operations.find((operation) => (
+        operation.kind === 'media.download'
+        && operation.resourceType === 'media_download'
+        && operation.resourceId === mediaDownloadId
+    ))
+}
+
+function presentationStatus(
+    download: MediaDownloadDomainViewRead,
+    operation?: TaskOperationRead,
+): string {
+    if (operation?.status === 'QUEUED') return 'pending'
+    if (operation?.status === 'RUNNING') return 'downloading'
+    if (operation?.status === 'FAILED' || operation?.status === 'PARTIAL') return 'error'
+    if (operation?.status === 'CANCELED') return 'cancelled'
+    if (operation?.status === 'SUCCEEDED') {
+        return contextBoolean(operation, 'is_redownload') ? 'redownloaded' : 'downloaded'
+    }
+
+    if (download.artifactStatus === 'available') {
+        return download.latestAttemptIsRedownload ? 'redownloaded' : 'downloaded'
+    }
+    if (download.artifactStatus === 'missing') return 'missing'
+    if (download.artifactStatus === 'corrupted') return 'corrupted'
+    if (download.automaticRetrySuppressed) return 'cancelled'
+    if (download.latestAttemptStatus === 'cancelled') return 'cancelled'
+    if (download.latestAttemptStatus === 'error') return 'error'
+    return 'pending'
+}
+
+function presentDownload(
+    download: MediaDownloadDomainViewRead,
+    operation?: TaskOperationRead,
+): MediaDownloadViewRead {
+    const status = presentationStatus(download, operation)
+    const operationError = operation?.status === 'FAILED'
+        ? (operation.error || operation.message || null)
+        : null
     return {
-        data: downloads && predicate ? downloads.filter(predicate) : downloads,
-        isLoading: puller.isLoading,
-        error: puller.error,
-        refetch: puller.refetch,
+        ...download,
+        downloadStatus: status,
+        progress: operation && ACTIVE_OPERATION_STATUSES.has(operation.status)
+            ? Math.max(0, Math.min(100, operation.progress ?? 0))
+            : status === 'downloaded' || status === 'redownloaded'
+                ? 100
+                : 0,
+        errorMessage: operationError || download.artifactError || download.latestAttemptError,
+        startedAt: operationDate(operation?.startedAt) || download.latestAttemptStartedAt,
+        finishedAt: operationDate(operation?.finishedAt) || download.downloadedAt || download.latestAttemptFinishedAt,
+        isRedownloadAttempt: operation
+            ? contextBoolean(operation, 'is_redownload')
+            : download.latestAttemptIsRedownload,
     }
 }
 
+function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainViewRead | null {
+    if (
+        operation.kind !== 'media.download'
+        || operation.resourceType !== 'media_download'
+        || operation.resourceId == null
+        || !ACTIVE_OPERATION_STATUSES.has(operation.status)
+    ) {
+        return null
+    }
+
+    const mediaItemId = contextNumber(operation, 'media_item_id')
+    const localMediaProfileId = contextNumber(operation, 'local_media_profile_id')
+    if (mediaItemId == null || localMediaProfileId == null) return null
+
+    const createdAt = operationDate(operation.createdAt) || new Date()
+    return {
+        id: operation.resourceId,
+        type: contextString(operation, 'media_type') || 'episode',
+        mediaItemId,
+        localMediaProfileId,
+        filePath: contextString(operation, 'file_path') || '',
+        artifactStatus: 'absent',
+        artifactError: null,
+        automaticRetrySuppressed: false,
+        downloadedBytes: null,
+        formatDownloaded: null,
+        downloadedAt: null,
+        createdAt,
+        updatedAt: operationDate(operation.updatedAt) || createdAt,
+        mediaSlug: contextString(operation, 'media_slug'),
+        mediaTitle: contextString(operation, 'media_title'),
+        episodeSlug: contextString(operation, 'episode_slug'),
+        episodeTitle: contextString(operation, 'episode_title'),
+        episodeIdentifier: contextString(operation, 'episode_identifier'),
+        showSlug: contextString(operation, 'show_slug'),
+        showTitle: contextString(operation, 'show_title'),
+        movieSlug: contextString(operation, 'movie_slug'),
+        movieTitle: contextString(operation, 'movie_title'),
+        movieExtraType: contextString(operation, 'movie_extra_type'),
+        localMediaProfileName: contextString(operation, 'local_media_profile_name'),
+        preferredFormat: contextString(operation, 'preferred_format'),
+        downloadedPublishStatus: null,
+        latestAttemptStatus: null,
+        latestAttemptError: null,
+        latestAttemptIsRedownload: null,
+        latestAttemptStartedAt: null,
+        latestAttemptFinishedAt: null,
+    }
+}
+
+function useMediaDownloadPresentation() {
+    const domainQuery = useQuery<unknown[], Error, MediaDownloadDomainViewRead[], readonly ['mediaDownloadsView']>({
+        queryKey: ['mediaDownloadsView'] as const,
+        queryFn: async ({signal}) => {
+            const value = await fetchJSON<unknown[]>(
+                `${(window as any).appConfig.API_URL}/media-downloads/as-view`,
+                signal,
+            )
+            return MediaDownloadViewReadSchema.array().parse(value)
+        },
+        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
+    })
+    const {data: pullData} = useFrontendPuller()
+    const operations = pullData?.operations ?? []
+
+    const data = useMemo(() => {
+        if (domainQuery.data === undefined && operations.length === 0) return undefined
+
+        const downloads = new Map<number, MediaDownloadDomainViewRead>()
+        for (const download of domainQuery.data ?? []) downloads.set(download.id, download)
+        for (const operation of operations) {
+            if (operation.kind !== 'media.download' || operation.resourceId == null) continue
+            if (!downloads.has(operation.resourceId)) {
+                const synthetic = syntheticDownload(operation)
+                if (synthetic) downloads.set(synthetic.id, synthetic)
+            }
+        }
+
+        return [...downloads.values()]
+            .map((download) => presentDownload(
+                download,
+                operationForDownload(operations, download.id),
+            ))
+            .sort((left, right) => right.id - left.id)
+    }, [domainQuery.data, operations])
+
+    return {...domainQuery, data}
+}
+
 export function useEpisodeDownloads(episodeSlug?: string) {
-    return usePullerBackedDownloads(
-        ['episodeDownloads', episodeSlug] as const,
-        episodeSlug ? (download) => download.episodeSlug === episodeSlug : () => false,
+    const query = useMediaDownloadPresentation()
+    const data = useMemo(
+        () => query.data?.filter((download) => download.episodeSlug === episodeSlug),
+        [episodeSlug, query.data],
     )
+    return {...query, data}
 }
 
 export function useMovieDownloads(movieSlug?: string) {
-    return usePullerBackedDownloads(
-        ['movieDownloads', movieSlug] as const,
-        movieSlug ? (download) => download.movieSlug === movieSlug : () => false,
+    const query = useMediaDownloadPresentation()
+    const data = useMemo(
+        () => query.data?.filter((download) => download.movieSlug === movieSlug),
+        [movieSlug, query.data],
     )
+    return {...query, data}
 }
 
 export function useMediaDownloadsView() {
-    return usePullerBackedDownloads(['mediaDownloadsView'] as const)
+    return useMediaDownloadPresentation()
 }
 
 export function useMediaDownloadAttempts(mediaDownloadId?: number) {
