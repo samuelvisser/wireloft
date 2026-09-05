@@ -7,7 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
-from task_manager.scheduler.db import TaskOperation, TaskOperationRun, TaskOperationTarget, TaskRun
+from task_manager.scheduler.db import (
+    TaskDefinition,
+    TaskOperation,
+    TaskOperationRun,
+    TaskOperationTarget,
+    TaskRun,
+)
 from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import OperationStatus, TaskStatus
 
@@ -53,6 +59,30 @@ def run_cancel_reason(run: TaskRun, default: str = "Canceled") -> str:
     return default
 
 
+def _terminal_callbacks_for_definition_ids(
+        session: Session,
+        definition_ids: set[int],
+) -> set:
+    """Resolve generic queue/backfill hooks for synchronously canceled runs."""
+    if not definition_ids:
+        return set()
+
+    from task_manager.scheduler.registry import get_task
+
+    keys = session.scalars(
+        select(TaskDefinition.key).where(TaskDefinition.id.in_(definition_ids))
+    ).all()
+    callbacks = set()
+    for key in keys:
+        try:
+            task_meta, _ = get_task(key)
+        except KeyError:
+            continue
+        if task_meta.terminal_callback is not None:
+            callbacks.add(task_meta.terminal_callback)
+    return callbacks
+
+
 def cancel_operation(
         operation_id: str,
         *,
@@ -67,6 +97,8 @@ def cancel_operation(
     """
     session = get_session()
     cancelable_run_ids: set[int] = set()
+    released_definition_ids: set[int] = set()
+    terminal_callbacks: set = set()
     try:
         operation = _load_operation(session, operation_id)
         if operation is None:
@@ -90,6 +122,13 @@ def cancel_operation(
                     reason=reason,
                 ):
                     cancelable_run_ids.add(run.id)
+                    # Pending/retry runs become terminal synchronously, so a
+                    # constrained task lane may immediately fill the released
+                    # slot. RUNNING workers keep their slot until the executor
+                    # reaches its cooperative cancellation boundary and invokes
+                    # the same terminal callback itself.
+                    if _task_status(run.status) == TaskStatus.CANCELED:
+                        released_definition_ids.add(run.definition_id)
 
         now = datetime.now(timezone.utc)
         operation.status = OperationStatus.CANCELED.value
@@ -104,6 +143,11 @@ def cancel_operation(
         operation.error = None
         operation.notification_seen_at = now if acknowledge else None
         operation.finished_at = now
+        session.flush()
+        terminal_callbacks = _terminal_callbacks_for_definition_ids(
+            session,
+            released_definition_ids,
+        )
         session.commit()
     finally:
         session.close()
@@ -114,6 +158,9 @@ def cancel_operation(
         operation_id=operation_id,
         run_ids=cancelable_run_ids,
     )
+    for callback in terminal_callbacks:
+        callback()
+
     from task_manager.scheduler.operations import get_operation
     return get_operation(operation_id)
 
@@ -127,10 +174,16 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
     finalization both honor that request and cannot resurrect the run.
     """
     session = get_session()
+    callback = None
+    was_running = False
     try:
         run = session.get(TaskRun, run_id)
         if run is None or _task_status(run.status) not in _ACTIVE_TASK_STATUSES:
             return False
+
+        previous_status = _task_status(run.status)
+        was_running = previous_status == TaskStatus.RUNNING
+        definition_id = run.definition_id
 
         meta = dict(run.meta or {})
         meta[RUN_CANCEL_REQUESTED_META_KEY] = True
@@ -147,12 +200,17 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
 
         refresh_operations_for_run(session, run.id)
         session.commit()
+        if not was_running:
+            callbacks = _terminal_callbacks_for_definition_ids(session, {definition_id})
+            callback = next(iter(callbacks), None)
     finally:
         session.close()
 
     from task_manager.scheduler.scheduler import cancel_pending_task_run_jobs
 
     cancel_pending_task_run_jobs((run_id,))
+    if callback is not None:
+        callback()
     return True
 
 
