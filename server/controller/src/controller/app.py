@@ -31,13 +31,13 @@ def db_session():
 def clear_interrupted_task_runs() -> int:
     """Close task runs that could not have survived a backend process restart.
 
-    Task execution and retry jobs live inside the WireLoft backend process and
-    APScheduler uses an in-memory job store. A RUNNING task or RETRY_SCHEDULED
-    task found at startup therefore belongs to the previous process and can no
-    longer make progress on its own.
+    APScheduler uses an in-memory job store, so every non-terminal TaskRun belongs
+    to scheduler work from the previous process. This includes SCHEDULED/QUEUED
+    reservations that had not started yet, RUNNING work, and RETRY_SCHEDULED
+    retries. None of those jobs can still execute after a process restart.
 
     TaskOperations linked to those runs are reset to QUEUED before commit. Their
-    logical targets are durable and will be requeued once the scheduler starts.
+    logical targets are durable and will be recovered once the scheduler starts.
     The dead run associations are detached atomically so the UI cannot briefly
     mistake an interrupted attempt for the terminal result of the operation.
     """
@@ -47,6 +47,8 @@ def clear_interrupted_task_runs() -> int:
     from task_manager.scheduler.types import TaskStatus
 
     interrupted_statuses = (
+        TaskStatus.SCHEDULED,
+        TaskStatus.QUEUED,
         TaskStatus.RUNNING,
         TaskStatus.RETRY_SCHEDULED,
     )
