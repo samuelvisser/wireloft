@@ -476,7 +476,7 @@ export default function ShowPage() {
                 },
                 {
                   label: 'Delete and re-download all episodes',
-                  icon: ['fas', 'arrows-rotate'],
+                  icon: ['fas', 'trash'],
                   tone: 'danger',
                   disabled: redownloadDisabledReason !== undefined,
                   disabledReason: redownloadDisabledReason,
