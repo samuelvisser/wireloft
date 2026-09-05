@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import func, select
@@ -40,12 +41,7 @@ def prepare_media_download_artifact(
     *,
     remove_existing_artifacts: bool = True,
 ) -> None:
-    """Prepare domain state for an attempt without encoding any execution state.
-
-    The attempt itself is represented by TaskOperation/TaskRun. This helper only
-    says that the previous artifact is no longer the artifact WireLoft should
-    present and clears facts that describe that previous file.
-    """
+    """Prepare domain state for an attempt without encoding any execution state."""
     if remove_existing_artifacts:
         remove_download_artifacts(download.file_path)
     download.artifact_status = MediaDownloadArtifactStatus.ABSENT.value
@@ -140,11 +136,16 @@ def create_media_download_operation(
         targets=[target],
         context=_operation_context(download, is_redownload=is_redownload),
     )
+    if source != OperationSource.UI.value:
+        # SYSTEM/API operations are visible to the puller while active but do not
+        # need a completion toast. Mark the notification side as already handled;
+        # active-state relevance is independent of this timestamp.
+        operation.notification_seen_at = datetime.now(timezone.utc)
+    session.flush()
     return operation
 
 
 def remaining_media_download_budget(session: Session) -> int:
-    """Return how many download TaskRuns may be dispatched without exceeding the configured cap."""
     max_concurrent = get_settings().download_settings.max_concurrent_downloads
     in_flight = session.scalar(
         select(func.count())
@@ -163,12 +164,7 @@ def dispatch_queued_media_download_operations(
     *,
     budget: int | None = None,
 ) -> int:
-    """Dispatch queued media.download operations up to the global download limit.
-
-    Waiting work is represented by durable QUEUED TaskOperations, not by a
-    pseudo-execution state on MediaDownload. Dispatching a target is transactional
-    and happens only after the caller commits.
-    """
+    """Dispatch queued media.download operations up to the global download limit."""
     if budget is None:
         budget = remaining_media_download_budget(session)
     if budget <= 0:
