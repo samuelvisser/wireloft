@@ -35,9 +35,17 @@ def test_restart_cancels_every_nonterminal_task_run(task_database):
             )
             for index, status in enumerate(interrupted_statuses)
         ]
-        session.add_all(runs)
+        completed = TaskRun(
+            definition_id=definition.id,
+            resource_type=ResourceType.SHOW,
+            resource_id=99,
+            status=TaskStatus.SUCCEEDED,
+            progress=100,
+        )
+        session.add_all([*runs, completed])
         session.commit()
         run_ids = [run.id for run in runs]
+        completed_id = completed.id
 
     assert controller_app.clear_interrupted_task_runs() == len(interrupted_statuses)
 
@@ -47,3 +55,8 @@ def test_restart_cancels_every_nonterminal_task_run(task_database):
         assert all(run.status == TaskStatus.CANCELED for run in recovered if run is not None)
         assert all(run.message == "Interrupted by WireLoft restart" for run in recovered if run is not None)
         assert all(run.finished_at is not None for run in recovered if run is not None)
+
+        completed = session.get(TaskRun, completed_id)
+        assert completed is not None
+        assert completed.status == TaskStatus.SUCCEEDED
+        assert completed.progress == 100
