@@ -6,12 +6,13 @@ import {useQueryClient} from '@tanstack/react-query'
 import LocalMediaProfileCard from '../LocalMediaProfile/LocalMediaProfileCard'
 import LocalMediaProfileForm from '../LocalMediaProfile/LocalMediaProfileForm'
 import {useLocalMediaProfiles} from '../../lib/queries'
+import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {
-    LocalMediaProfileCreateIn,
-    LocalMediaProfileRead,
+    MovieLocalMediaProfileCreateIn,
     MovieLocalMediaProfileCreateSchema,
-} from '../../types/schemas/local_media_profile'
+} from '../../types/schemas/movie_local_media_profile'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
+import {getZodDefaults} from '../../utils/defaultZod'
 
 
 type Props = {
@@ -20,13 +21,9 @@ type Props = {
     onContinue: (profile: LocalMediaProfileRead) => void
 }
 
-type MovieLocalMediaProfileCreateIn = Extract<LocalMediaProfileCreateIn, {type: 'movie'}>
-
 const NEW_PROFILE_DEFAULTS: MovieLocalMediaProfileCreateIn = {
-    type: 'movie',
+    ...getZodDefaults(MovieLocalMediaProfileCreateSchema),
     name: 'My Movies',
-    outputTemplate: '/downloads/movies/{movie_title}/{title}.ext',
-    preferredFormat: 'format_1080p',
 }
 
 export default function OnboardingMovieProfileStep({movieTitle, onBack, onContinue}: Props) {
@@ -48,9 +45,10 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
     )
 
     const selectProfile = useCallback((profile: LocalMediaProfileRead) => {
+        if (profile.type !== 'movie') return
         setSelectedSlug(profile.slug)
         form.reset({
-            type: 'movie',
+            ...getZodDefaults(MovieLocalMediaProfileCreateSchema),
             name: profile.name,
             outputTemplate: profile.outputTemplate,
             preferredFormat: profile.preferredFormat as MovieLocalMediaProfileCreateIn['preferredFormat'],
@@ -96,10 +94,6 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
                 return
             }
 
-            // The API response is already the canonical Local Media Profile read model.
-            // Do not run it back through the stricter client-side schema here: that can
-            // reject otherwise valid server timestamps and incorrectly report a network
-            // failure after the profile has actually been saved.
             const profile = await response.json() as LocalMediaProfileRead
             await queryClient.invalidateQueries({queryKey: ['localMediaProfiles']})
             onContinue(profile)

@@ -1,24 +1,30 @@
-import {z} from "zod";
-import {createServerErrorMapper} from "../../utils/serverMessageMap";
+import {z} from 'zod'
+
+import {createServerErrorMapper} from '../../utils/serverMessageMap'
 import {
-    MoviePreferredFormatReg,
-    PreferredFormatReg,
-    ShowLocalMediaProfileScopeReg,
-} from "../local_media_profile";
+    MovieLocalMediaProfileCreateSchema,
+    MovieLocalMediaProfileReadSchema,
+    MovieLocalMediaProfileUpdateSchema,
+} from './movie_local_media_profile'
+import {
+    ShowLocalMediaProfileCreateSchema,
+    ShowLocalMediaProfileReadSchema,
+    ShowLocalMediaProfileUpdateSchema,
+} from './show_local_media_profile'
+
+export * from './local_media_profile_base'
+export * from './movie_local_media_profile'
+export * from './show_local_media_profile'
+
 
 export const LocalMediaProfileServerErrors = createServerErrorMapper({
-    name: {unique_violation: "Name is already taken."},
-    slug: {unique_violation: "Slug is already taken."},
+    name: {unique_violation: 'Name is already taken.'},
+    slug: {unique_violation: 'Slug is already taken.'},
     outputTemplate: {
-        unique_violation: "A profile with these output settings already exists.",
+        unique_violation: 'A profile with these output settings already exists.',
     },
-});
+})
 
-const outputTemplateSchema = z.string()
-    .regex(/^\/downloads\//, "Output template must start with '/downloads/'")
-    .regex(/\.ext$/, "Output template must end with '.ext'")
-    .min(16)
-    .max(4096)
 
 const DATE_OUTPUT_TEMPLATE_FIELDS = [
     'date', 'time', 'datetime', 'year', 'month', 'day', 'hour', 'minute', 'second',
@@ -41,63 +47,26 @@ export const MOVIE_OUTPUT_TEMPLATE_FIELDS = [
     ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const
 
-const LocalMediaProfileCommonSchema = z.object({
-    name: z.string().min(1, "Name is required"),
-})
 
-export const SHOW_DEFAULT_TEMPLATE = '/downloads/shows/{{ show }}/{{ episode_title }}.ext'
-export const ShowLocalMediaProfileCreateSchema = LocalMediaProfileCommonSchema.extend({
-    type: z.literal('show').default('show'),
-    showScope: z.enum(ShowLocalMediaProfileScopeReg.values).default('both'),
-    outputTemplate: outputTemplateSchema.default(SHOW_DEFAULT_TEMPLATE),
-    preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
-})
-
-
-export const MOVIE_DEFAULT_TEMPLATE = "/downloads/movies/{{ movie_title }}/{{ title }}{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
-const MovieLocalMediaProfileBaseSchema = LocalMediaProfileCommonSchema.extend({
-    type: z.literal('movie').default('movie'),
-    outputTemplate: outputTemplateSchema.default(MOVIE_DEFAULT_TEMPLATE),
-    preferredFormat: z.enum(MoviePreferredFormatReg.values).default('format_1080p'),
-})
-
-export const MovieLocalMediaProfileCreateSchema = MovieLocalMediaProfileBaseSchema
-
+// ---------- Strict request (create/update) ----------
 export const LocalMediaProfileCreateSchema = z.discriminatedUnion('type', [
     ShowLocalMediaProfileCreateSchema,
     MovieLocalMediaProfileCreateSchema,
 ])
-export type LocalMediaProfileCreateIn = z.input<typeof LocalMediaProfileCreateSchema>;
-export type LocalMediaProfileCreateOut = z.output<typeof LocalMediaProfileCreateSchema>;
-
-export const ShowLocalMediaProfileUpdateSchema = ShowLocalMediaProfileCreateSchema.extend({
-    id: z.int(),
-    slug: z.string(),
-})
-
-export const MovieLocalMediaProfileUpdateSchema = MovieLocalMediaProfileBaseSchema.extend({
-    id: z.int(),
-    slug: z.string(),
-})
+export type LocalMediaProfileCreateIn = z.input<typeof LocalMediaProfileCreateSchema>
+export type LocalMediaProfileCreateOut = z.output<typeof LocalMediaProfileCreateSchema>
 
 export const LocalMediaProfileUpdateSchema = z.discriminatedUnion('type', [
     ShowLocalMediaProfileUpdateSchema,
     MovieLocalMediaProfileUpdateSchema,
 ])
-export type LocalMediaProfileUpdateIn = z.input<typeof LocalMediaProfileUpdateSchema>;
-export type LocalMediaProfileUpdateOut = z.output<typeof LocalMediaProfileUpdateSchema>;
+export type LocalMediaProfileUpdateIn = z.input<typeof LocalMediaProfileUpdateSchema>
+export type LocalMediaProfileUpdateOut = z.output<typeof LocalMediaProfileUpdateSchema>
 
 
-export const LocalMediaProfileReadSchema = z.looseObject({
-    id: z.int(),
-    type: z.enum(['show', 'movie']),
-    slug: z.string(),
-    name: z.string(),
-    outputTemplate: z.string(),
-    preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
-    appendMediaTypeToFilename: z.boolean().optional().default(false),
-    showScope: z.enum(ShowLocalMediaProfileScopeReg.values).nullable().optional().transform((value) => value ?? 'both'),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
-})
-export type LocalMediaProfileRead = z.infer<typeof LocalMediaProfileReadSchema>;
+// ------------ Lenient response (read) ------------
+export const LocalMediaProfileReadSchema = z.discriminatedUnion('type', [
+    ShowLocalMediaProfileReadSchema,
+    MovieLocalMediaProfileReadSchema,
+])
+export type LocalMediaProfileRead = z.infer<typeof LocalMediaProfileReadSchema>

@@ -1,6 +1,6 @@
 import {createSelectRegistry, SelectRegistry} from "../utils/selectRegistry";
 import {useMemo} from "react";
-import {LocalMediaProfileRead} from "./schemas/local_media_profile";
+import type {LocalMediaProfileRead} from "./schemas/local_media_profile";
 
 
 export const PreferredFormatReg = createSelectRegistry("PreferredFormat", {

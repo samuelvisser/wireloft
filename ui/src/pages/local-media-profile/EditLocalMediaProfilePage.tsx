@@ -2,9 +2,21 @@ import {useCallback, useEffect, useRef, useState} from 'react'
 import {useNavigate, useParams} from 'react-router-dom'
 import LocalMediaProfileForm from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
-import {useForm} from 'react-hook-form'
+import {useForm, UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {LocalMediaProfileUpdateIn, LocalMediaProfileUpdateOut, LocalMediaProfileUpdateSchema} from '../../types/schemas/local_media_profile'
+import {
+    LocalMediaProfileRead,
+    LocalMediaProfileUpdateIn,
+    LocalMediaProfileUpdateOut,
+} from '../../types/schemas/local_media_profile'
+import {
+    MovieLocalMediaProfileUpdateIn,
+    MovieLocalMediaProfileUpdateSchema,
+} from '../../types/schemas/movie_local_media_profile'
+import {
+    ShowLocalMediaProfileUpdateIn,
+    ShowLocalMediaProfileUpdateSchema,
+} from '../../types/schemas/show_local_media_profile'
 import {WithRoot} from '../../types/form'
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import {LocalMediaProfileTypeReg} from '../../types/local_media_profile'
@@ -22,36 +34,50 @@ export default function EditLocalMediaProfilePage() {
     const initializedSlug = useRef<string | undefined>(undefined)
     const [draftReady, setDraftReady] = useState(false)
 
-    // Fetch the latest profile by slug
-    const {data: profile, isLoading, error} = useQuery<LocalMediaProfileUpdateIn | undefined>({
+    const {data: profile, isLoading, error} = useQuery<LocalMediaProfileRead | undefined>({
         queryKey: ['localMediaProfile', slug],
         enabled: !!slug,
         refetchOnMount: 'always',
         queryFn: async ({signal}) => {
-            const res = await fetch(`${(window as any).appConfig.API_URL}/local-media-profiles/${slug}`, { signal, credentials: 'include' })
+            const res = await fetch(`${(window as any).appConfig.API_URL}/local-media-profiles/${slug}`, {signal, credentials: 'include'})
             if (!res.ok) throw new Error(`Failed to load profile (${res.status})`)
-            return await res.json() as Promise<LocalMediaProfileUpdateIn>
+            return await res.json() as Promise<LocalMediaProfileRead>
         },
     })
 
-    // Initialize form unconditionally to keep hooks order consistent
-    const form = useForm<WithRoot<LocalMediaProfileUpdateIn>>({
-        resolver: zodResolver(LocalMediaProfileUpdateSchema),
+    const formShow = useForm<WithRoot<ShowLocalMediaProfileUpdateIn>>({
+        resolver: zodResolver(ShowLocalMediaProfileUpdateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: profile,
     })
 
-    // Restore a versioned browser draft once the canonical profile type and
-    // values have loaded. The slug keeps drafts isolated per profile.
+    const formMovie = useForm<WithRoot<MovieLocalMediaProfileUpdateIn>>({
+        resolver: zodResolver(MovieLocalMediaProfileUpdateSchema),
+        mode: 'onBlur',
+        shouldFocusError: true,
+    })
+
+    const form = (profile?.type === 'movie' ? formMovie : formShow) as UseFormReturn<any>
+
     useEffect(() => {
         if (!profile || !slug || initializedSlug.current === slug) return
+
+        const canonical = profile.type === 'movie'
+            ? MovieLocalMediaProfileUpdateSchema.parse(profile)
+            : ShowLocalMediaProfileUpdateSchema.parse(profile)
         const draftKey = editLocalMediaProfileDraftKey(slug)
         const draft = loadLocalMediaProfileDraft<LocalMediaProfileUpdateIn>(draftKey)
         const values = draft?.mode === profile.type
-            ? {...profile, ...draft.values, type: profile.type, id: profile.id, slug: profile.slug}
-            : profile
-        form.reset(values as WithRoot<LocalMediaProfileUpdateIn>)
+            ? {
+                ...canonical,
+                ...draft.values,
+                type: canonical.type,
+                id: canonical.id,
+                slug: canonical.slug,
+            }
+            : canonical
+
+        form.reset(values)
         initializedSlug.current = slug
         setDraftReady(true)
     }, [profile, slug, form])

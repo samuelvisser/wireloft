@@ -3,14 +3,20 @@ import LocalMediaProfileForm, {LocalMediaProfileMode} from '../../components/Loc
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {
-    LocalMediaProfileCreateIn, LocalMediaProfileCreateOut,
-    LocalMediaProfileCreateSchema, MOVIE_DEFAULT_TEMPLATE,
+    LocalMediaProfileCreateIn,
+    LocalMediaProfileCreateOut,
+} from '../../types/schemas/local_media_profile'
+import {
+    MovieLocalMediaProfileCreateIn,
     MovieLocalMediaProfileCreateSchema,
+} from '../../types/schemas/movie_local_media_profile'
+import {
+    ShowLocalMediaProfileCreateIn,
     ShowLocalMediaProfileCreateSchema,
-} from "../../types/schemas/local_media_profile";
-import {useForm} from "react-hook-form";
-import {zodResolver} from "@hookform/resolvers/zod";
-import {WithRoot} from "../../types/form";
+} from '../../types/schemas/show_local_media_profile'
+import {useForm, UseFormReturn} from 'react-hook-form'
+import {zodResolver} from '@hookform/resolvers/zod'
+import {WithRoot} from '../../types/form'
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions'
 import {
@@ -21,23 +27,6 @@ import {
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
 import {getZodDefaults} from '../../utils/defaultZod'
 
-const SHOW_DEFAULT_TEMPLATE = '/downloads/shows/{{ show }}/{{ episode_title }}.ext'
-
-function defaultsForMode(mode: LocalMediaProfileMode): LocalMediaProfileCreateIn {
-    if (mode === 'movie') {
-        return {
-            ...getZodDefaults(MovieLocalMediaProfileCreateSchema),
-            type: 'movie',
-            name: ''
-        }
-    }
-
-    return {
-        ...getZodDefaults(ShowLocalMediaProfileCreateSchema),
-        type: 'show',
-        name: ''
-    }
-}
 
 export default function AddLocalMediaProfilePage() {
     const navigate = useNavigate()
@@ -52,29 +41,47 @@ export default function AddLocalMediaProfilePage() {
     const explicitMode = requestedMode === 'movie' || requestedMode === 'show' ? requestedMode : undefined
     const initialMode: LocalMediaProfileMode = explicitMode ?? restoredDraft?.mode ?? 'show'
     const [mode, setMode] = useState<LocalMediaProfileMode>(initialMode)
-    const defaultValues = {
-        ...defaultsForMode(initialMode),
-        ...(restoredDraft?.mode === initialMode ? restoredDraft.values : {}),
-        type: initialMode,
-    } as LocalMediaProfileCreateIn
 
-    const form = useForm<WithRoot<LocalMediaProfileCreateIn>>({
-        resolver: zodResolver(LocalMediaProfileCreateSchema),
+    const formShow = useForm<WithRoot<ShowLocalMediaProfileCreateIn>>({
+        resolver: zodResolver(ShowLocalMediaProfileCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues,
+        defaultValues: {
+            ...getZodDefaults(ShowLocalMediaProfileCreateSchema),
+            ...(restoredDraft?.mode === 'show'
+                ? restoredDraft.values as Partial<ShowLocalMediaProfileCreateIn>
+                : {}),
+        },
     })
 
+    const formMovie = useForm<WithRoot<MovieLocalMediaProfileCreateIn>>({
+        resolver: zodResolver(MovieLocalMediaProfileCreateSchema),
+        mode: 'onBlur',
+        shouldFocusError: true,
+        defaultValues: {
+            ...getZodDefaults(MovieLocalMediaProfileCreateSchema),
+            ...(restoredDraft?.mode === 'movie'
+                ? restoredDraft.values as Partial<MovieLocalMediaProfileCreateIn>
+                : {}),
+        },
+    })
+
+    const form = (mode === 'movie' ? formMovie : formShow) as UseFormReturn<any>
+
     useEffect(() => {
-        const subscription = form.watch((values) => {
-            const draftMode: LocalMediaProfileMode = values.type === 'movie' ? 'movie' : 'show'
+        const saveDraft = (values: Partial<LocalMediaProfileCreateIn>) => {
             saveLocalMediaProfileDraft<LocalMediaProfileCreateIn>(draftKey, {
-                mode: draftMode,
-                values: values as Partial<LocalMediaProfileCreateIn>,
+                mode,
+                values,
             })
+        }
+
+        saveDraft(form.getValues() as Partial<LocalMediaProfileCreateIn>)
+        const subscription = form.watch((values) => {
+            saveDraft(values as Partial<LocalMediaProfileCreateIn>)
         })
         return () => subscription.unsubscribe()
-    }, [draftKey, form])
+    }, [draftKey, form, mode])
 
     const submitFn = async (data: LocalMediaProfileCreateOut) => {
         return fetch(`${(window as any).appConfig.API_URL}/local-media-profiles`, {
@@ -83,25 +90,25 @@ export default function AddLocalMediaProfilePage() {
             credentials: 'include',
             body: JSON.stringify(data),
         })
-    };
+    }
 
-    const onSuccess = async (_result: any, {resetForm}: { resetForm: (v?: Partial<LocalMediaProfileCreateIn>) => void }) => {
+    const onSuccess = async () => {
         await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
-        resetForm();
         clearLocalMediaProfileDraft(draftKey)
         navigate('/local-media-profiles')
-    };
+    }
 
     const onCancel = useCallback(() => {
         clearLocalMediaProfileDraft(draftKey)
         navigate('/local-media-profiles')
     }, [draftKey, navigate])
-    const onCreate = buildLocalMediaProfileOnSubmit(form as any, submitFn, {
+
+    const onCreate = buildLocalMediaProfileOnSubmit(form, submitFn, {
         onSuccess,
         mode: 'create',
-    });
+    })
 
-    const {formState: {isSubmitting}} = form;
+    const {formState: {isSubmitting}} = form
 
     return (
         <section className="view" aria-labelledby="add-media-profile-title">
@@ -115,21 +122,7 @@ export default function AddLocalMediaProfilePage() {
                     <SegmentedOptions
                         name="local-media-profile-mode"
                         value={mode}
-                        onChange={(value) => {
-                            const nextMode = value as LocalMediaProfileMode
-                            setMode(nextMode)
-                            form.setValue('type', nextMode, {shouldDirty: true, shouldValidate: true})
-                            form.setValue(
-                                'outputTemplate',
-                                nextMode === 'movie'
-                                    ? MOVIE_DEFAULT_TEMPLATE
-                                    : SHOW_DEFAULT_TEMPLATE,
-                                {shouldDirty: true, shouldValidate: true},
-                            )
-                            if (nextMode === 'movie' && form.getValues('preferredFormat') === 'format_audio_only') {
-                                form.setValue('preferredFormat', 'format_1080p', {shouldDirty: true, shouldValidate: true})
-                            }
-                        }}
+                        onChange={(value) => setMode(value as LocalMediaProfileMode)}
                         options={[
                             {
                                 value: 'show',
@@ -149,7 +142,7 @@ export default function AddLocalMediaProfilePage() {
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>
-                    <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting} />
+                    <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting}/>
                 </div>
             </form>
         </section>
