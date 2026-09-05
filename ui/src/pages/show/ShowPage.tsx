@@ -186,12 +186,12 @@ export default function ShowPage() {
   const syncDisabledReason = syncStarting
     ? `WireLoft is starting a sync for ${show.title}.`
     : syncOperation
-      ? `A sync is already running for ${show.title}.`
+      ? `A sync is running for ${show.title}.`
       : undefined
   const metadataRefreshDisabledReason = metadataRefreshStarting
     ? `WireLoft is starting a metadata refresh for ${show.title}.`
     : metadataRefreshOperation
-      ? `A metadata refresh is already running for ${show.title}.${metadataRefreshOperation.progressTotal > 0
+      ? `A metadata refresh is running for ${show.title}.${metadataRefreshOperation.progressTotal > 0
         ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} episodes have finished.`
         : ''}`
       : undefined
@@ -200,7 +200,7 @@ export default function ShowPage() {
   const redownloadDisabledReason = redownloadStarting
     ? `WireLoft is starting a delete and re-download operation for ${show.title}.`
     : redownloadOperation
-      ? `A delete and re-download operation is already running for ${show.title}.`
+      ? `A delete and re-download operation is running for ${show.title}.`
       : downloadProfileStateUnknown
         ? 'WireLoft is still checking which Download Profiles are attached to this show.'
         : downloadProfileStateFailed
