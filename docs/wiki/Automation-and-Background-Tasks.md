@@ -24,12 +24,6 @@ APScheduler manages scheduling, concurrency, misfires, and coalescing, but it do
 
 Disabling `scheduler.enabled` stops scheduled background jobs. Manual actions can still exist independently, but a disabled scheduler means WireLoft will not perform its normal periodic maintenance.
 
-### Task state and library state
-
-WireLoft keeps execution state separate from persistent library data. Anything that is currently happening—queued/running state, progress, retries, cancellation, worker errors and execution timing—is represented by `TaskRun`/`TaskOperation`.
-
-Once work has produced a library result, that result is stored as ordinary domain data. For downloads, for example, the `MediaDownload` row describes the file artifact that WireLoft manages (path, availability, downloaded size/format/time and historical attempts); it does not double as a live worker-status row. This keeps restart recovery and background-task control independent from the library records those tasks create or update.
-
 ## New episode discovery
 
 Default schedule:
