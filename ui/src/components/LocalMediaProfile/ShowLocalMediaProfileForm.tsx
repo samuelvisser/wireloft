@@ -3,8 +3,9 @@ import Select from 'react-select'
 
 import {PreferredFormatReg, ShowLocalMediaProfileScopeReg} from '../../types/local_media_profile'
 import LocalMediaProfileTypeFields from './LocalMediaProfileTypeFields'
+import ReadMore from "../../utils/ReadMore";
 
-export default function ShowLocalMediaProfileForm({form}: {form: UseFormReturn<any>}) {
+export default function ShowLocalMediaProfileForm({form}: { form: UseFormReturn<any> }) {
     const {control, formState: {errors}} = form
 
     return (
@@ -34,7 +35,9 @@ export default function ShowLocalMediaProfileForm({form}: {form: UseFormReturn<a
                     </div>
                 )}
                 <div className="help" id="mp-show-scope-help">
-                    Controls where this profile is offered in the UI. It does not change how media is downloaded or stored.
+                    <ReadMore summary={<span>Controls where this profile is offered within WireLoft</span>}>
+                        <p>This will not change anything technical about this Local Media Profile, but acts as a filter where WireLoft shows this profile as an option</p>
+                    </ReadMore>
                 </div>
             </div>
             <LocalMediaProfileTypeFields

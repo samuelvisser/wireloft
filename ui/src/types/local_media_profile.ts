@@ -22,8 +22,8 @@ export const LocalMediaProfileTypeReg = createSelectRegistry("LocalMediaProfileT
 });
 
 export const ShowLocalMediaProfileScopeReg = createSelectRegistry("ShowLocalMediaProfileScope", {
-  'both': { label: "Both", help: "Offer this profile for both Podcasts and Series" },
-  'podcast': { label: "Podcast", help: "Offer this profile only for Podcasts" },
+  'both': { label: "Podcasts and Series", help: "Offer this profile for both Podcasts and Series" },
+  'podcast': { label: "Podcasts", help: "Offer this profile only for Podcasts" },
   'series': { label: "Series", help: "Offer this profile only for Series" },
 });
 
