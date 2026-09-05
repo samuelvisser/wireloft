@@ -467,7 +467,7 @@ export default function ShowPage() {
                 },
                 {
                   label: 'Refresh all metadata',
-                  icon: ['fas', 'gallery-thumbnails'],
+                  icon: ['fas', 'clipboard-list'],
                   disabled: metadataRefreshBusy,
                   disabledReason: metadataRefreshDisabledReason,
                   progress: metadataRefreshOperation ? (metadataRefreshOperation.progress ?? 0) : undefined,
