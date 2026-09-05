@@ -157,9 +157,19 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
 
 
 def restart_operation(operation_id: str) -> dict | None:
-    """Restart only the unfinished logical targets of an existing operation."""
+    """Restart only unfinished logical targets, preserving generic queue policies.
+
+    Ordinary targets are dispatched directly after commit. A task definition may
+    instead register a recovery dispatcher when its targets belong to a
+    constrained queue (for example the shared media-download concurrency lane).
+    Those targets remain QUEUED and the generic dispatcher is invoked after this
+    transaction commits, so restart never bypasses the task's scheduling policy.
+    """
+    from task_manager.scheduler.registry import get_task
+
     session = get_session()
     cancelable_run_ids: set[int] = set()
+    queue_dispatchers: set = set()
     try:
         operation = _load_operation(session, operation_id)
         if operation is None:
@@ -221,6 +231,10 @@ def restart_operation(operation_id: str) -> dict | None:
         session.flush()
 
         for target in targets_to_dispatch:
+            task_meta, _ = get_task(target.task_key)
+            if task_meta.recovery_dispatcher is not None:
+                queue_dispatchers.add(task_meta.recovery_dispatcher)
+                continue
             queue_task_after_commit(
                 session,
                 def_key=target.task_key,
@@ -234,6 +248,11 @@ def restart_operation(operation_id: str) -> dict | None:
         session.commit()
     finally:
         session.close()
+
+    # Queue-managed work is dispatched only after the restarted operation is
+    # durable. Each dispatcher decides how many slots are available.
+    for dispatcher in queue_dispatchers:
+        dispatcher()
 
     from task_manager.scheduler.operations import get_operation
     return get_operation(operation_id)
