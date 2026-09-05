@@ -15,7 +15,7 @@ from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
 from task_manager.scheduler.executor import trigger_now
 from task_manager.scheduler.types import OperationStatus
 from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
-from ...helpers.episodes.identifier import reconcile_episode_identifier_from_dailywire
+from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.episodes.metadata import (
     metadata_refresh_offsets_seconds,
     metadata_watch_expired,
@@ -228,10 +228,15 @@ def _refresh_episode_from_dailywire(s: Session, episode: Episode) -> bool:
         )
     else:
         # A successful detail lookup ended any prior 404 incident. Metadata refresh
-        # is also the reconciliation point for Daily Wire correcting episodeNumber
-        # after initial indexing, regardless of the row's current lifecycle state.
+        # and the live monitor use the same application-level reconciliation path,
+        # including the post-publication identifier-change domain event.
         clear_episode_dw_processing_tracking(episode)
-        reconcile_episode_identifier_from_dailywire(s, episode, dw_episode)
+        reconcile_episode_identifier(
+            s,
+            episode,
+            dw_episode,
+            previous_publish_status=old_status,
+        )
 
     s.flush()
     logger.info("Refreshed Daily Wire metadata for episode %s", episode.id)
