@@ -13,7 +13,7 @@ from .service import run_check_episodes_stuck_at_dw_processing
     resource_type="show",
 )
 @on_cron(
-    cron=get_settings().new_episode_schedule.check_episodes_stuck_at_dw_processing,
+    cron=get_settings().new_episode_schedule.check_episodes_stuck_at_dw_processing_cron,
     resource_type="show",
     resource_id=0,
     coalesce=True,
