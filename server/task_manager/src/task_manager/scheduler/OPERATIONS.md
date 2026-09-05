@@ -87,7 +87,7 @@ A child task only becomes part of completion accounting when the operation has a
 
 Domain resources that can own scheduler work use `HasTaskResourcesMixin`. It exposes generic `task_schedules`, `task_runs`, `task_operations`, and `task_operation_targets` relationships over the scheduler's `resource_type` + `resource_id` key.
 
-Deleting a resource through SQLAlchemy therefore deletes the scheduler rows owned by that resource through normal ORM cascade semantics. Once the transaction commits, matching in-memory APScheduler jobs are removed as well. A retry whose TaskRun has already been deleted is ignored rather than recreating an orphaned run.
+Deleting a resource through SQLAlchemy therefore deletes the scheduler rows owned by that resource through normal ORM cascade semantics. Once the transaction commits, matching in-memory APScheduler jobs are removed as well. A retry whose TaskRun has already been deleted is ignored rather than recreating an orphaned run. If deletion removes a pending reservation from a constrained task lane, the task definition's generic terminal callback may refill the released slot; a still-running worker waits until its cooperative cancellation actually exits before releasing its slot.
 
 This is intentionally generic. Show, season, episode, movie, movie-extra, download-profile and media-download deletion should not need action-specific scheduler cleanup code.
 
