@@ -5,6 +5,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, PodcastDownloadProfile
+from backend.db.models.media_download import MediaDownloadBase
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.media_download_operations import (
@@ -53,10 +54,7 @@ async def run_download_profile_worker(
             if not action.needs_operation:
                 continue
 
-            download = s.get(__import__(
-                "backend.db.models.media_download",
-                fromlist=["MediaDownloadBase"],
-            ).MediaDownloadBase, action.media_download_id)
+            download = s.get(MediaDownloadBase, action.media_download_id)
             if download is None:
                 continue
             create_media_download_operation(
