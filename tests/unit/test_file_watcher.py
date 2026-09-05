@@ -11,7 +11,7 @@ def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes |
     from backend.db import Base
     from backend.db.models import Episode, LocalMediaProfile, Season, Show
     from backend.db.models.media_download import EpisodeMediaDownload
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from backend.types.show_types import EpisodeIdentifier, ShowType
     from backend.utils.helpers import generate_uuid
@@ -64,9 +64,8 @@ def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes |
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=profile.id,
-        download_status=MediaDownloadStatus.DOWNLOADED.value,
+        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
         file_path=str(file_path),
-        progress=100,
         downloaded_bytes=len(write_bytes) if write_bytes is not None else None,
     )
     session.add(download)
@@ -91,30 +90,30 @@ def _run(session, **kwargs):
 
 
 def test_healthy_download_is_left_untouched(tmp_path):
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, show, episode, download = _db_with_download(tmp_path)
+    session, engine, _show, _episode, download = _db_with_download(tmp_path)
 
     _run(session)
 
-    assert download.download_status == MediaDownloadStatus.DOWNLOADED.value
-    assert download.error_message is None
+    assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+    assert download.artifact_error is None
 
     session.close()
     engine.dispose()
 
 
 def test_deleted_file_is_flagged_missing(tmp_path):
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, show, episode, download = _db_with_download(tmp_path)
+    session, engine, _show, _episode, download = _db_with_download(tmp_path)
     import os
     os.remove(download.file_path)
 
     _run(session)
 
-    assert download.download_status == MediaDownloadStatus.MISSING.value
-    assert "not found" in download.error_message
+    assert download.artifact_status == MediaDownloadArtifactStatus.MISSING.value
+    assert "not found" in download.artifact_error
 
     session.close()
     engine.dispose()
@@ -122,149 +121,147 @@ def test_deleted_file_is_flagged_missing(tmp_path):
 
 def test_renamed_away_file_is_flagged_missing(tmp_path):
     """A file moved/renamed outside WireLoft is indistinguishable from a deletion."""
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, show, episode, download = _db_with_download(tmp_path)
+    session, engine, _show, _episode, download = _db_with_download(tmp_path)
     import os
     os.rename(download.file_path, tmp_path / "renamed-by-user.m4a")
 
     _run(session)
 
-    assert download.download_status == MediaDownloadStatus.MISSING.value
+    assert download.artifact_status == MediaDownloadArtifactStatus.MISSING.value
 
     session.close()
     engine.dispose()
 
 
 def test_empty_file_is_flagged_corrupted(tmp_path):
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, show, episode, download = _db_with_download(tmp_path, write_bytes=b"")
+    session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=b"")
 
     _run(session)
 
-    assert download.download_status == MediaDownloadStatus.CORRUPTED.value
-    assert "empty" in download.error_message
+    assert download.artifact_status == MediaDownloadArtifactStatus.CORRUPTED.value
+    assert "empty" in download.artifact_error
 
     session.close()
     engine.dispose()
 
 
 def test_truncated_file_is_flagged_corrupted(tmp_path):
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, show, episode, download = _db_with_download(tmp_path, write_bytes=b"0123456789")
-    with open(download.file_path, "wb") as f:
-        f.write(b"012")
+    session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=b"0123456789")
+    with open(download.file_path, "wb") as file:
+        file.write(b"012")
 
     _run(session)
 
-    assert download.download_status == MediaDownloadStatus.CORRUPTED.value
-    assert "well under" in download.error_message
+    assert download.artifact_status == MediaDownloadArtifactStatus.CORRUPTED.value
+    assert "well under" in download.artifact_error
 
     session.close()
     engine.dispose()
 
 
 def test_modest_shrinkage_is_tolerated(tmp_path):
-    """A remuxed .mp4 is legitimately a bit smaller than the raw .ts it came
-    from (download.downloaded_bytes records the latter); that must never
-    read as corruption."""
-    from backend.types.download_profile_types import MediaDownloadStatus
+    """A remuxed .mp4 may be smaller than the bytes fetched for its raw stream."""
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, show, episode, download = _db_with_download(tmp_path, write_bytes=b"x" * 1000)
-    with open(download.file_path, "wb") as f:
-        f.write(b"x" * 900)  # 10% smaller, well within tolerance
+    session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=b"x" * 1000)
+    with open(download.file_path, "wb") as file:
+        file.write(b"x" * 900)
 
     _run(session)
 
-    assert download.download_status == MediaDownloadStatus.DOWNLOADED.value
+    assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
 
     session.close()
     engine.dispose()
 
 
 def test_truncation_check_can_be_disabled(tmp_path, monkeypatch):
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from config import get_settings
 
     monkeypatch.setattr(get_settings().file_watcher, "verify_file_size", False)
 
-    session, engine, show, episode, download = _db_with_download(tmp_path, write_bytes=b"0123456789")
-    with open(download.file_path, "wb") as f:
-        f.write(b"012")
+    session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=b"0123456789")
+    with open(download.file_path, "wb") as file:
+        file.write(b"012")
 
     _run(session)
 
-    assert download.download_status == MediaDownloadStatus.DOWNLOADED.value
+    assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
 
     session.close()
     engine.dispose()
 
 
 def test_missing_download_recovers_once_file_reappears(tmp_path):
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, show, episode, download = _db_with_download(tmp_path)
-    download.download_status = MediaDownloadStatus.MISSING.value
-    download.error_message = "File not found"
+    session, engine, _show, _episode, download = _db_with_download(tmp_path)
+    download.artifact_status = MediaDownloadArtifactStatus.MISSING.value
+    download.artifact_error = "File not found"
     session.commit()
 
     _run(session)
 
-    assert download.download_status == MediaDownloadStatus.DOWNLOADED.value
-    assert download.error_message is None
+    assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+    assert download.artifact_error is None
 
     session.close()
     engine.dispose()
 
 
-def test_in_progress_downloads_are_never_touched(tmp_path):
-    from backend.types.download_profile_types import MediaDownloadStatus
+def test_absent_artifacts_are_never_touched(tmp_path):
+    """An active attempt is TaskRun state; an absent artifact is not watched as a file."""
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, show, episode, download = _db_with_download(tmp_path, write_bytes=None)
-    download.download_status = MediaDownloadStatus.DOWNLOADING.value
+    session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=None)
+    download.artifact_status = MediaDownloadArtifactStatus.ABSENT.value
     download.file_path = str(tmp_path / "not-written-yet.m4a")
     session.commit()
 
     _run(session)
 
-    assert download.download_status == MediaDownloadStatus.DOWNLOADING.value
-    assert download.error_message is None
+    assert download.artifact_status == MediaDownloadArtifactStatus.ABSENT.value
+    assert download.artifact_error is None
 
     session.close()
     engine.dispose()
 
 
 def test_disabled_file_watcher_skips_everything(tmp_path, monkeypatch):
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from config import get_settings
 
     monkeypatch.setattr(get_settings().file_watcher, "enabled", False)
 
-    session, engine, show, episode, download = _db_with_download(tmp_path)
+    session, engine, _show, _episode, download = _db_with_download(tmp_path)
     import os
     os.remove(download.file_path)
 
     _run(session)
 
-    assert download.download_status == MediaDownloadStatus.DOWNLOADED.value
+    assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
 
     session.close()
     engine.dispose()
 
 
 def test_scan_can_be_scoped_to_one_show(tmp_path):
-    from backend.db.models import Episode, Season, Show
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.db.models import Episode, LocalMediaProfile, Season, Show
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from backend.types.show_types import EpisodeIdentifier, ShowType
     from backend.utils.helpers import generate_uuid
-    from backend.db.models import LocalMediaProfile
-    from backend.db.models.media_download import EpisodeMediaDownload
     import os
 
-    session, engine, show, episode, download = _db_with_download(tmp_path)
+    session, engine, show, _episode, download = _db_with_download(tmp_path)
 
     other_show = Show(
         uuid="show-uuid-2",
@@ -300,9 +297,8 @@ def test_scan_can_be_scoped_to_one_show(tmp_path):
         type=MediaType.EPISODE.value,
         media_item_id=None,
         local_media_profile_id=profile.id,
-        download_status=MediaDownloadStatus.DOWNLOADED.value,
+        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
         file_path=str(other_file),
-        progress=100,
         downloaded_bytes=7,
     )
     session.add_all([other_show, other_season, other_episode])
@@ -311,14 +307,13 @@ def test_scan_can_be_scoped_to_one_show(tmp_path):
     session.add(other_download)
     session.commit()
 
-    # Both files disappear, but the scan only targets `show`
     os.remove(download.file_path)
     os.remove(other_file)
 
     _run(session, show_id=show.id)
 
-    assert download.download_status == MediaDownloadStatus.MISSING.value
-    assert other_download.download_status == MediaDownloadStatus.DOWNLOADED.value
+    assert download.artifact_status == MediaDownloadArtifactStatus.MISSING.value
+    assert other_download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
 
     session.close()
     engine.dispose()

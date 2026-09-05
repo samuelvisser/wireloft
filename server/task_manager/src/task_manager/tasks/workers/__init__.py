@@ -3,7 +3,6 @@ from .debug_ep_details import debug_ep_details
 from .download_episode import download_episode
 from .download_movie import download_movie
 from .refresh_movie_extras import refresh_movie_extras
-from .resume_interrupted_downloads import resume_interrupted_downloads
 from .download_profile_worker import download_profile_worker
 from .download_series_thumbnail import download_series_thumbnail
 from .monitor_episode_worker import monitor_episode_worker

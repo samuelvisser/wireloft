@@ -2,42 +2,45 @@ from fastapi import APIRouter, status
 
 from .service import *
 from ...models.episode import *
-from ...models.media_download import EpisodeDownloadAPICreate, MediaDownloadAPIRead
-from ...models.operations import EpisodeMetadataOperationAccepted
+from ...models.media_download import EpisodeDownloadAPICreate
+from ...models.operations import EpisodeMetadataOperationAccepted, MediaDownloadOperationAccepted
 from ..media_downloads.service import create_episode_download
-from ..media_downloads.router import _trigger_download_task
 from backend.app import db_session
+from task_manager.scheduler.types import OperationSource
+from task_manager.tasks.media_download_operations import (
+    create_media_download_operation,
+    dispatch_queued_media_download_operations,
+)
 
 router = APIRouter(prefix="/episodes", tags=["Episodes"])
 
 
-@router.post("/{episode_slug}/downloads", response_model=MediaDownloadAPIRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{episode_slug}/downloads",
+    response_model=MediaDownloadOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
-    """
-    Start downloading an episode according to a Local Media Profile.
-
-    Creates the download record and queues the download task. Each episode can
-    have at most one download per Local Media Profile; a pending or errored
-    download for the same profile is restarted instead.
-    """
+    """Start an episode download as a generic UI TaskOperation."""
     with db_session() as s:
         try:
             download = create_episode_download(s, episode_slug, body)
-            payload = MediaDownloadAPIRead.model_validate(download)
-            episode_id = download.media_item_id
-            attempt_generation = download.attempt_generation
+            operation = create_media_download_operation(
+                s,
+                download,
+                source=OperationSource.UI.value,
+            )
+            dispatch_queued_media_download_operations(s)
+            result = {
+                "queued": True,
+                "operation_id": operation.id,
+                "media_download_id": download.id,
+            }
             s.commit()
+            return result
         except Exception:
             s.rollback()
             raise
-
-    _trigger_download_task(
-        media_download_id=payload.id,
-        media_item_id=episode_id,
-        media_type="episode",
-        attempt_generation=attempt_generation,
-    )
-    return payload
 
 
 @router.get("/by-show-slug/{show_slug}", response_model=list[EpisodeAPIRead])
@@ -89,23 +92,12 @@ def episode_metadata_refresh(episode_slug: str):
 
 @router.get("/{episode_slug}", response_model=EpisodeAPIRead)
 def episode_detail(episode_slug: str):
-    """
-    Retrieve detailed information for a specific episode.
-
-    Returns complete episode metadata including title, description, and associated media.
-    """
     with db_session() as s:
         return get_episode(s, episode_slug)
 
 
 @router.patch("/{episode_slug}", response_model=EpisodeAPIRead)
 def episode_update(episode_slug: str, body: EpisodeAPIUpdate):
-    """
-    Update an existing episode's metadata.
-
-    Partially updates episode information with the provided fields.
-    Only specified fields will be modified; omitted fields remain unchanged.
-    """
     with db_session() as s:
         try:
             result = update_episode(s, episode_slug, body)
@@ -118,12 +110,6 @@ def episode_update(episode_slug: str, body: EpisodeAPIUpdate):
 
 @router.delete("/{episode_slug}", response_model=EpisodeAPIRead)
 def episode_delete(episode_slug: str):
-    """
-    Delete an episode from the system.
-
-    Permanently removes the specified episode and its associated data.
-    Returns the deleted episode's information for confirmation.
-    """
     with db_session() as s:
         try:
             result = delete_episode(s, episode_slug)
