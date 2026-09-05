@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
@@ -8,6 +9,8 @@ from sqlalchemy import select
 
 from task_manager.scheduler.db import TaskDefinition
 
+
+logger = logging.getLogger(__name__)
 _REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[Any]]]] = {}
 TerminalCallback = Callable[..., None]
 RecoveryDispatcher = Callable[[], None]
@@ -148,15 +151,24 @@ def all_triggers() -> Dict[str, List[TriggerMeta]]:
 
 
 def run_recovery_dispatchers() -> int:
-    """Run each registered constrained-queue recovery dispatcher exactly once."""
+    """Run each unique constrained-queue recovery dispatcher once."""
     dispatchers = {
         meta.recovery_dispatcher
         for meta, _ in _REGISTRY.values()
         if meta.recovery_dispatcher is not None
     }
+    ran = 0
     for dispatcher in dispatchers:
-        dispatcher()
-    return len(dispatchers)
+        try:
+            dispatcher()
+            ran += 1
+        except Exception:
+            # Generic operation recovery is already durable. One constrained
+            # queue failing to refill must not prevent the rest of the scheduler
+            # from starting; the failure remains visible in logs and later queue
+            # activity can retry the refill.
+            logger.exception("Task recovery dispatcher failed")
+    return ran
 
 
 def sync_registry_to_db() -> None:
