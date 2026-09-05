@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Optional
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.media_download import *
-from backend.db.models import Episode, LocalMediaProfileBase, Movie, MovieExtra, Show
+from backend.db.models import Episode, LocalMediaProfileBase, Movie, MovieExtra
 from backend.db.models.media_download import (
     EpisodeMediaDownload,
     MediaDownloadAttempt,
@@ -17,28 +16,13 @@ from backend.db.models.media_download import (
     MovieExtraMediaDownload,
     MovieMediaDownload,
 )
-from backend.types.download_profile_types import MediaDownloadStatus
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
-
-_RESTARTABLE_STATUSES = {
-    MediaDownloadStatus.PENDING.value,
-    MediaDownloadStatus.CANCELLED.value,
-    MediaDownloadStatus.ERROR.value,
-    MediaDownloadStatus.MISSING.value,
-    MediaDownloadStatus.CORRUPTED.value,
-}
-_ACTIVE_STATUSES = {
-    MediaDownloadStatus.DOWNLOADING.value,
-    MediaDownloadStatus.LOCAL_PROCESSING.value,
-}
-_RETRYABLE_STATUSES = _RESTARTABLE_STATUSES | _ACTIVE_STATUSES
-_CANCELLABLE_STATUSES = _ACTIVE_STATUSES | {MediaDownloadStatus.PENDING.value}
-_USER_CANCEL_MESSAGE = "Cancelled by the user"
-_USER_RESTART_MESSAGE = "Cancelled by the user and restarted"
+from task_manager.tasks.media_download_operations import get_active_media_download_operation
 
 
 def get_media_downloads_list(s: Session) -> list[MediaDownloadAPIRead]:
@@ -54,14 +38,14 @@ def get_media_downloads_view(
         statuses: Optional[list[str]] = None,
         limit: Optional[int] = None,
 ) -> list[MediaDownloadAPIReadView]:
-    """Downloads joined with media and profile context, newest first."""
+    """Persistent media artifacts joined with media/profile context, newest first."""
     stmt = (
         select(MediaDownloadBase, LocalMediaProfileBase)
         .join(LocalMediaProfileBase, LocalMediaProfileBase.id == MediaDownloadBase.local_media_profile_id)
         .order_by(MediaDownloadBase.id.desc())
     )
     if statuses:
-        stmt = stmt.where(MediaDownloadBase.download_status.in_(statuses))
+        stmt = stmt.where(MediaDownloadBase.artifact_status.in_(statuses))
 
     views: list[MediaDownloadAPIReadView] = []
     for download, profile in s.execute(stmt):
@@ -89,7 +73,6 @@ def get_media_downloads_view(
             movie_extra_type=movie_extra.movie_extra_type if movie_extra else None,
             local_media_profile_name=profile.name,
             preferred_format=profile.preferred_format,
-            is_redownload_attempt=getattr(download, "is_redownload_attempt", None),
             downloaded_publish_status=getattr(download, "downloaded_publish_status", None),
         ))
         if limit is not None and len(views) >= limit:
@@ -116,6 +99,33 @@ def get_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRe
     return MediaDownloadAPIRead.model_validate(item)
 
 
+def _assert_no_active_attempt(s: Session, download: MediaDownloadBase) -> None:
+    if get_active_media_download_operation(s, download.id) is not None:
+        raise HTTPException(status_code=409, detail="This download already has an active operation")
+
+
+def prepare_media_download_for_attempt(
+    download: MediaDownloadBase,
+    *,
+    remove_existing_artifacts: bool = True,
+) -> None:
+    """Prepare persistent artifact state for a replacement attempt.
+
+    This does not queue or describe execution. It only records the fact that the
+    previous artifact is no longer the artifact WireLoft should present.
+    """
+    if remove_existing_artifacts:
+        remove_download_artifacts(download.file_path)
+    download.artifact_status = MediaDownloadArtifactStatus.ABSENT.value
+    download.artifact_error = None
+    download.automatic_retry_suppressed = False
+    download.downloaded_bytes = None
+    download.format_downloaded = None
+    download.downloaded_at = None
+    if isinstance(download, EpisodeMediaDownload):
+        download.downloaded_publish_status = None
+
+
 def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownloadAPICreate) -> EpisodeMediaDownload:
     episode: Optional[Episode] = s.query(Episode).filter(Episode.slug == episode_slug).one_or_none()
     if episode is None:
@@ -133,9 +143,11 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         .one_or_none()
     )
     if existing is not None:
-        if existing.download_status not in _RESTARTABLE_STATUSES:
-            raise HTTPException(status_code=409, detail=f"Episode already has a download for profile '{profile.name}'")
-        _reset_download(existing)
+        _assert_no_active_attempt(s, existing)
+        if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
+            raise HTTPException(status_code=409, detail=f"Episode already has a downloaded file for profile '{profile.name}'")
+        prepare_media_download_for_attempt(existing)
+        existing.file_path = str(resolve_episode_output_path(profile.output_template, episode=episode))
         s.flush()
         return existing
 
@@ -143,9 +155,8 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=profile.id,
-        download_status=MediaDownloadStatus.PENDING.value,
+        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
         file_path=str(resolve_episode_output_path(profile.output_template, episode=episode)),
-        progress=0,
     )
     s.add(download)
     s.flush()
@@ -171,9 +182,11 @@ def create_movie_download(
         .one_or_none()
     )
     if existing is not None:
-        if existing.download_status not in _RESTARTABLE_STATUSES:
-            raise HTTPException(status_code=409, detail=f"Movie already has a download for profile '{profile.name}'")
-        _reset_download(existing)
+        _assert_no_active_attempt(s, existing)
+        if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
+            raise HTTPException(status_code=409, detail=f"Movie already has a downloaded file for profile '{profile.name}'")
+        prepare_media_download_for_attempt(existing)
+        existing.file_path = str(resolve_movie_output_path(profile.output_template, movie=movie))
         s.flush()
         return existing
 
@@ -181,12 +194,8 @@ def create_movie_download(
         type=MediaType.MOVIE.value,
         media_item_id=movie.id,
         local_media_profile_id=profile.id,
-        download_status=MediaDownloadStatus.PENDING.value,
-        file_path=str(resolve_movie_output_path(
-            profile.output_template,
-            movie=movie,
-        )),
-        progress=0,
+        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
+        file_path=str(resolve_movie_output_path(profile.output_template, movie=movie)),
     )
     s.add(download)
     s.flush()
@@ -199,12 +208,8 @@ def create_movie_extra_download(
     movie_extra_slug: str,
     body: MovieDownloadAPICreate,
 ) -> MovieExtraMediaDownload:
-    """Persist a browsed movie extra and queue it with a Movie profile."""
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE)
-    remote_extra = next(
-        (extra for extra in movie_data.movie_extras if extra.slug == movie_extra_slug),
-        None,
-    )
+    remote_extra = next((extra for extra in movie_data.movie_extras if extra.slug == movie_extra_slug), None)
     if remote_extra is None:
         raise HTTPException(status_code=404, detail="Movie extra not found for this movie")
 
@@ -226,9 +231,11 @@ def create_movie_extra_download(
         .one_or_none()
     )
     if existing is not None:
-        if existing.download_status not in _RESTARTABLE_STATUSES:
-            raise HTTPException(status_code=409, detail=f"Movie extra already has a download for profile '{profile.name}'")
-        _reset_download(existing)
+        _assert_no_active_attempt(s, existing)
+        if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
+            raise HTTPException(status_code=409, detail=f"Movie extra already has a downloaded file for profile '{profile.name}'")
+        prepare_media_download_for_attempt(existing)
+        existing.file_path = str(resolve_movie_output_path(profile.output_template, movie=movie, media_item=movie_extra))
         s.flush()
         return existing
 
@@ -236,13 +243,8 @@ def create_movie_extra_download(
         type=MediaType.MOVIE_EXTRA.value,
         media_item_id=movie_extra.id,
         local_media_profile_id=profile.id,
-        download_status=MediaDownloadStatus.PENDING.value,
-        file_path=str(resolve_movie_output_path(
-            profile.output_template,
-            movie=movie,
-            media_item=movie_extra,
-        )),
-        progress=0,
+        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
+        file_path=str(resolve_movie_output_path(profile.output_template, movie=movie, media_item=movie_extra)),
     )
     s.add(download)
     s.flush()
@@ -269,61 +271,22 @@ def retry_media_download(s: Session, media_download_id: int) -> MediaDownloadBas
     download: Optional[MediaDownloadBase] = s.get(MediaDownloadBase, media_download_id)
     if download is None:
         raise HTTPException(status_code=404, detail="Media download not found")
-    if download.download_status not in _RETRYABLE_STATUSES:
-        raise HTTPException(status_code=409, detail="This download cannot be retried in its current state")
-
-    if download.download_status in _CANCELLABLE_STATUSES:
-        _record_cancellation(s, download, message=_USER_RESTART_MESSAGE)
-
-    _reset_download(download)
+    _assert_no_active_attempt(s, download)
+    prepare_media_download_for_attempt(download)
     s.flush()
     return download
 
 
-def cancel_media_download(s: Session, media_download_id: int) -> MediaDownloadBase:
-    """Stop a queued/running download without scheduling a replacement."""
+def suppress_media_download_automatic_retry(s: Session, media_download_id: int) -> MediaDownloadBase:
+    """Persist the user's choice not to have a Download Profile immediately re-arm this artifact."""
     download: Optional[MediaDownloadBase] = s.get(MediaDownloadBase, media_download_id)
     if download is None:
         raise HTTPException(status_code=404, detail="Media download not found")
-    if download.download_status not in _CANCELLABLE_STATUSES:
-        raise HTTPException(status_code=409, detail="This download is not currently in progress")
-
-    _record_cancellation(s, download, message=_USER_CANCEL_MESSAGE)
-    download.attempt_generation += 1
-    download.download_status = MediaDownloadStatus.CANCELLED.value
-    download.progress = 0
-    download.error_message = None
-    download.downloaded_bytes = None
-    download.format_downloaded = None
-    download.started_at = None
-    download.finished_at = datetime.now(timezone.utc)
+    download.automatic_retry_suppressed = True
+    if download.artifact_status == MediaDownloadArtifactStatus.ABSENT.value:
+        remove_download_artifacts(download.file_path)
     s.flush()
-    remove_download_artifacts(download.file_path)
     return download
-
-
-def _record_cancellation(s: Session, download: MediaDownloadBase, *, message: str) -> None:
-    s.add(MediaDownloadAttempt(
-        media_download_id=download.id,
-        is_redownload=bool(getattr(download, "is_redownload_attempt", False) or False),
-        status=MediaDownloadStatus.CANCELLED.value,
-        error_message=message,
-        downloaded_bytes=download.downloaded_bytes,
-        format_downloaded=download.format_downloaded,
-        started_at=download.started_at,
-        finished_at=datetime.now(timezone.utc),
-    ))
-
-
-def _reset_download(download: MediaDownloadBase) -> None:
-    download.attempt_generation += 1
-    download.download_status = MediaDownloadStatus.PENDING.value
-    download.progress = 0
-    download.error_message = None
-    download.downloaded_bytes = None
-    download.format_downloaded = None
-    download.started_at = None
-    download.finished_at = None
 
 
 def update_media_download(s: Session, media_download_id: int, body: MediaDownloadAPIUpdate) -> MediaDownloadAPIRead:
@@ -340,9 +303,7 @@ def delete_media_download(s: Session, media_download_id: int) -> MediaDownloadAP
     if item is None:
         raise HTTPException(status_code=404, detail="Media download not found")
     payload = MediaDownloadAPIRead.model_validate(item)
-    if item.download_status in _CANCELLABLE_STATUSES:
-        # Removing the row invalidates every queued/running generation. Cleanup
-        # is also repeated by an already-running worker when it notices this.
+    if item.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value:
         remove_download_artifacts(item.file_path)
     s.delete(item)
     s.flush()
