@@ -14,14 +14,6 @@ from .service import run_download_profile_worker
     resource_type="show",
 )
 @on_event(
-    event_name="download_profile.added",
-    resource_type="download_profile",
-)
-@on_event(
-    event_name="download_profile.updated",
-    resource_type="download_profile",
-)
-@on_event(
     event_name="episode.published_final",
     resource_type="episode",
 )
