@@ -2,6 +2,16 @@ import {z} from "zod";
 import {MediaDownloadStatus} from "../media_download";
 
 
+// SQLite does not preserve timezone information for DateTime columns, even
+// though WireLoft writes these values in UTC. Pydantic therefore serializes
+// persisted timestamps such as "2026-09-05T08:04:12.123456" without a trailing
+// offset. Accept both that representation and ordinary UTC ISO timestamps, and
+// interpret unqualified database values as UTC rather than browser-local time.
+const DatabaseDateTimeSchema = z.iso.datetime({local: true}).transform((value) =>
+    new Date(/Z$/i.test(value) ? value : `${value}Z`),
+)
+
+
 // ---------- Strict request (create/update) ----------
 const MediaDownloadBaseSchema = z.object({
     downloadStatus: z.enum(MediaDownloadStatus),
@@ -33,10 +43,10 @@ export const MediaDownloadReadSchema = z.looseObject({
     errorMessage: z.string().nullable(),
     downloadedBytes: z.int().nullable(),
     formatDownloaded: z.string().nullable(),
-    startedAt: z.iso.datetime().transform((s) => new Date(s)).nullable(),
-    finishedAt: z.iso.datetime().transform((s) => new Date(s)).nullable(),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    startedAt: DatabaseDateTimeSchema.nullable(),
+    finishedAt: DatabaseDateTimeSchema.nullable(),
+    createdAt: DatabaseDateTimeSchema,
+    updatedAt: DatabaseDateTimeSchema,
 })
 export type MediaDownloadRead = z.infer<typeof MediaDownloadReadSchema>;
 
@@ -69,8 +79,8 @@ export const MediaDownloadAttemptReadSchema = z.looseObject({
     errorMessage: z.string().nullable(),
     downloadedBytes: z.int().nullable(),
     formatDownloaded: z.string().nullable(),
-    startedAt: z.iso.datetime().transform((s) => new Date(s)).nullable(),
-    finishedAt: z.iso.datetime().transform((s) => new Date(s)).nullable(),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
+    startedAt: DatabaseDateTimeSchema.nullable(),
+    finishedAt: DatabaseDateTimeSchema.nullable(),
+    createdAt: DatabaseDateTimeSchema,
 })
 export type MediaDownloadAttemptRead = z.infer<typeof MediaDownloadAttemptReadSchema>;
