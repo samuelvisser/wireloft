@@ -11,7 +11,6 @@ from .service import (
     request_show_sync,
     request_show_metadata_refresh,
     request_show_episode_redownload,
-    get_show_sync_log,
 )
 from ...models.operations import (
     ShowMetadataOperationAccepted,
@@ -114,13 +113,6 @@ def show_redownload_episodes(show_slug: str, body: ShowRedownloadEpisodesAPIRequ
         except Exception:
             s.rollback()
             raise
-
-
-@router.get("/{show_slug}/sync-log", response_model=list[dict])
-def show_sync_log(show_slug: str):
-    """Return the ten most recent completed episode syncs for one show."""
-    with db_session() as s:
-        return get_show_sync_log(s, show_slug)
 
 
 @router.get("/{show_slug}", response_model=ShowAPIRead)

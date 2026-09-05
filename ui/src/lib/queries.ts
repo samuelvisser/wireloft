@@ -15,12 +15,12 @@ import {RssStreamProfileRead} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
 import {
-    MediaDownloadAttemptRead,
     MediaDownloadDomainViewRead,
     MediaDownloadViewRead,
     MediaDownloadViewReadSchema,
 } from "../types/schemas/media_download";
 import {TaskOperationRead} from "../types/schemas/operation";
+import {TaskLedgerPageReadSchema} from "../types/schemas/task";
 import {MovieRead} from "../types/schemas/movie";
 import {
     DailywireCatalogRead,
@@ -377,13 +377,14 @@ function presentationStatus(
     }
 
     if (download.artifactStatus === 'available') {
-        return download.latestAttemptIsRedownload ? 'redownloaded' : 'downloaded'
+        return download.latestTaskIsRedownload ? 'redownloaded' : 'downloaded'
     }
     if (download.artifactStatus === 'missing') return 'missing'
     if (download.artifactStatus === 'corrupted') return 'corrupted'
     if (download.automaticRetrySuppressed) return 'cancelled'
-    if (download.latestAttemptStatus === 'cancelled') return 'cancelled'
-    if (download.latestAttemptStatus === 'error') return 'error'
+    if (download.latestTaskStatus === 'CANCELED') return 'cancelled'
+    if (download.latestTaskStatus === 'FAILED') return 'error'
+    if (download.latestTaskStatus === 'RUNNING') return 'downloading'
     return 'pending'
 }
 
@@ -403,12 +404,12 @@ function presentDownload(
             : status === 'downloaded' || status === 'redownloaded'
                 ? 100
                 : 0,
-        errorMessage: operationError || download.artifactError || download.latestAttemptError,
-        startedAt: operationDate(operation?.startedAt) || download.latestAttemptStartedAt,
-        finishedAt: operationDate(operation?.finishedAt) || download.downloadedAt || download.latestAttemptFinishedAt,
+        errorMessage: operationError || download.artifactError || download.latestTaskError,
+        startedAt: operationDate(operation?.startedAt) || download.latestTaskStartedAt,
+        finishedAt: operationDate(operation?.finishedAt) || download.downloadedAt || download.latestTaskFinishedAt,
         isRedownloadAttempt: operation
             ? contextBoolean(operation, 'is_redownload')
-            : download.latestAttemptIsRedownload,
+            : download.latestTaskIsRedownload,
     }
 }
 
@@ -454,11 +455,11 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         localMediaProfileName: contextString(operation, 'local_media_profile_name'),
         preferredFormat: contextString(operation, 'preferred_format'),
         downloadedPublishStatus: null,
-        latestAttemptStatus: null,
-        latestAttemptError: null,
-        latestAttemptIsRedownload: null,
-        latestAttemptStartedAt: null,
-        latestAttemptFinishedAt: null,
+        latestTaskStatus: null,
+        latestTaskError: null,
+        latestTaskIsRedownload: null,
+        latestTaskStartedAt: null,
+        latestTaskFinishedAt: null,
     }
 }
 
@@ -524,12 +525,48 @@ export function useMediaDownloadsView() {
     return useMediaDownloadPresentation()
 }
 
-export function useMediaDownloadAttempts(mediaDownloadId?: number) {
-    return useQuery<any[], Error, MediaDownloadAttemptRead[], readonly ['mediaDownloadAttempts', number | undefined]>({
-        queryKey: ['mediaDownloadAttempts', mediaDownloadId] as const,
-        enabled: mediaDownloadId != null,
-        queryFn: ({signal}) =>
-            fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/media-downloads/${mediaDownloadId}/attempts`, signal),
+type TaskLedgerQuery = {
+    definitionKey: string
+    resourceType?: string
+    resourceId?: number
+    orderBy?: 'started_at' | 'finished_at' | 'created_at'
+    order?: 'asc' | 'desc'
+    limit?: number
+    enabled?: boolean
+}
+
+export function useTaskLedger({
+    definitionKey,
+    resourceType,
+    resourceId,
+    orderBy = 'started_at',
+    order = 'desc',
+    limit = 50,
+    enabled = true,
+}: TaskLedgerQuery) {
+    return useInfiniteQuery({
+        queryKey: ['taskLedger', definitionKey, resourceType, resourceId, orderBy, order, limit] as const,
+        enabled: enabled && definitionKey.length > 0,
+        initialPageParam: 0,
+        queryFn: async ({pageParam, signal}) => {
+            const params = new URLSearchParams({
+                definition_key: definitionKey,
+                order_by: orderBy,
+                order,
+                offset: String(pageParam),
+                limit: String(limit),
+            })
+            if (resourceType) params.set('resource_type', resourceType)
+            if (resourceId !== undefined) params.set('resource_id', String(resourceId))
+            const value = await fetchJSON<unknown>(
+                `${(window as any).appConfig.API_URL}/tasks/ledger?${params}`,
+                signal,
+            )
+            return TaskLedgerPageReadSchema.parse(value)
+        },
+        getNextPageParam: (lastPage) => lastPage.hasMore
+            ? lastPage.offset + lastPage.items.length
+            : undefined,
         refetchOnMount: 'always',
     })
 }

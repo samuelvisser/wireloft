@@ -153,12 +153,6 @@ def media_downloads_cancel(media_download_id: int):
     return payload
 
 
-@router.get("/{media_download_id}/attempts", response_model=list[MediaDownloadAttemptAPIRead])
-def media_downloads_attempts(media_download_id: int):
-    with db_session() as s:
-        return get_media_download_attempts(s, media_download_id)
-
-
 @router.get("/{media_download_id}", response_model=MediaDownloadAPIRead)
 def media_downloads_detail(media_download_id: int):
     with db_session() as s:

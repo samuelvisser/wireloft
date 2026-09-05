@@ -1,9 +1,27 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Literal
 
-from ...models.tasks import TaskDefinitionRead, TaskScheduleCreate, TaskScheduleRead, TaskRunRead
-from .service import list_definitions, list_schedules, create_schedule, delete_schedule, list_runs, trigger_now
+from fastapi import APIRouter, Query
+
+from task_manager.scheduler.types import ResourceType
+
+from ...models.tasks import (
+    TaskDefinitionRead,
+    TaskLedgerPageRead,
+    TaskRunRead,
+    TaskScheduleCreate,
+    TaskScheduleRead,
+)
+from .service import (
+    create_schedule,
+    delete_schedule,
+    list_definitions,
+    list_ledger,
+    list_runs,
+    list_schedules,
+    trigger_now,
+)
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -46,4 +64,26 @@ def runs(
         resource_id,
         status,
         definition_key,
+    )
+
+
+@router.get("/ledger", response_model=TaskLedgerPageRead)
+def ledger(
+        definition_key: str,
+        resource_type: ResourceType | None = None,
+        resource_id: int | None = None,
+        order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
+        order: Literal["asc", "desc"] = "desc",
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=50, ge=1, le=200),
+):
+    """Return paginated durable TaskRun history for one task type."""
+    return list_ledger(
+        definition_key=definition_key,
+        resource_type=resource_type.value if resource_type is not None else None,
+        resource_id=resource_id,
+        order_by=order_by,
+        order=order,
+        offset=offset,
+        limit=limit,
     )

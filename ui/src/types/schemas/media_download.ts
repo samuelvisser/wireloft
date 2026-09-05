@@ -64,20 +64,20 @@ export const MediaDownloadViewReadSchema = MediaDownloadReadSchema.extend({
     localMediaProfileName: z.string().nullable(),
     preferredFormat: z.string().nullable(),
     downloadedPublishStatus: z.string().nullable(),
-    latestAttemptStatus: z.string().nullable(),
-    latestAttemptError: z.string().nullable(),
-    latestAttemptIsRedownload: z.boolean().nullable(),
-    latestAttemptStartedAt: DatabaseDateTimeSchema.nullable(),
-    latestAttemptFinishedAt: DatabaseDateTimeSchema.nullable(),
+    latestTaskStatus: z.string().nullable(),
+    latestTaskError: z.string().nullable(),
+    latestTaskIsRedownload: z.boolean().nullable(),
+    latestTaskStartedAt: DatabaseDateTimeSchema.nullable(),
+    latestTaskFinishedAt: DatabaseDateTimeSchema.nullable(),
 })
 export type MediaDownloadDomainViewRead = z.infer<typeof MediaDownloadViewReadSchema>;
 
 /**
- * Presentation view consumed by existing download UI.
+ * Presentation view consumed by the download UI.
  *
- * The fields below are deliberately not part of MediaDownload's API schema.
- * They are derived in queries.ts from generic media.download TaskOperations
- * (while execution is active) or immutable attempt history (afterwards).
+ * Live execution data comes from generic media.download TaskOperations. Once an
+ * operation is no longer active, the latest canonical TaskRun facts supplied by
+ * the domain view provide the stable presentation fallback.
  */
 export type MediaDownloadViewRead = MediaDownloadDomainViewRead & {
     downloadStatus: string
@@ -87,19 +87,3 @@ export type MediaDownloadViewRead = MediaDownloadDomainViewRead & {
     finishedAt: Date | null
     isRedownloadAttempt: boolean | null
 }
-
-
-// ------------ Historical attempt ledger ------------
-export const MediaDownloadAttemptReadSchema = z.looseObject({
-    id: z.int(),
-    mediaDownloadId: z.int(),
-    isRedownload: z.boolean(),
-    status: z.string(),
-    errorMessage: z.string().nullable(),
-    downloadedBytes: z.int().nullable(),
-    formatDownloaded: z.string().nullable(),
-    startedAt: DatabaseDateTimeSchema.nullable(),
-    finishedAt: DatabaseDateTimeSchema.nullable(),
-    createdAt: DatabaseDateTimeSchema,
-})
-export type MediaDownloadAttemptRead = z.infer<typeof MediaDownloadAttemptReadSchema>;

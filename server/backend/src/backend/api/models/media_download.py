@@ -46,23 +46,8 @@ class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):
     updated_at: datetime
 
 
-class MediaDownloadAttemptAPIRead(ResponseBase):
-    """Immutable audit entry for one completed worker attempt."""
-
-    id: int
-    media_download_id: int
-    is_redownload: bool
-    status: str
-    error_message: Optional[str]
-    downloaded_bytes: Optional[int]
-    format_downloaded: Optional[str]
-    started_at: Optional[datetime]
-    finished_at: Optional[datetime]
-    created_at: datetime
-
-
 class MediaDownloadAPIReadView(MediaDownloadAPIRead):
-    """A persistent artifact joined with media/profile context and last attempt history."""
+    """A persistent artifact joined with media/profile context and latest TaskRun facts."""
 
     media_slug: Optional[str]
     media_title: Optional[str]
@@ -78,11 +63,10 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
     preferred_format: Optional[str]
     downloaded_publish_status: Optional[str]
 
-    # Historical facts from MediaDownloadAttempt. These are not live execution
-    # state; they let an ordinary domain query explain why an absent artifact has
-    # no file after the operation that produced the outcome is no longer active.
-    latest_attempt_status: Optional[str]
-    latest_attempt_error: Optional[str]
-    latest_attempt_is_redownload: Optional[bool]
-    latest_attempt_started_at: Optional[datetime]
-    latest_attempt_finished_at: Optional[datetime]
+    # Generic facts from the latest canonical download TaskRun. Full history is
+    # served by /tasks/ledger rather than a MediaDownload-specific audit table.
+    latest_task_status: Optional[str]
+    latest_task_error: Optional[str]
+    latest_task_is_redownload: Optional[bool]
+    latest_task_started_at: Optional[datetime]
+    latest_task_finished_at: Optional[datetime]

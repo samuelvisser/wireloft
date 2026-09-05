@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -24,10 +23,6 @@ from .operations import (
     ShowRedownloadOperation,
     ShowSyncOperation,
 )
-
-
-SYNC_LOG_META_KEY = "episode_sync_log"
-SYNC_LOG_LIMIT = 10
 
 
 def get_shows_list(s: Session) -> list[ShowAPIRead]:
@@ -216,26 +211,3 @@ def request_show_episode_redownload(
         "download_profiles_queued": selected_profile_count,
         "operation_id": operation.id,
     }
-
-
-def get_show_sync_log(s: Session, show_slug: str) -> list[dict]:
-    show = (
-        s.query(Show)
-        .filter_by(slug=show_slug)
-        .one_or_none()
-    )
-    if show is None:
-        raise HTTPException(status_code=404, detail="Show not found")
-
-    raw = show.get_meta(SYNC_LOG_META_KEY)
-    if not raw:
-        return []
-
-    try:
-        history = json.loads(raw)
-    except (TypeError, ValueError):
-        return []
-
-    if not isinstance(history, list):
-        return []
-    return history[:SYNC_LOG_LIMIT]

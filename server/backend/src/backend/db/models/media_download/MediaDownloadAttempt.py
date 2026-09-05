@@ -11,20 +11,17 @@ if TYPE_CHECKING:
 
 
 class MediaDownloadAttempt(Base):
-    """Append-only ledger of every completed download attempt (success or error).
+    """Legacy download-history rows retained for schema/data compatibility.
 
-    A MediaDownloadBase row's own error_message/status/progress reflect only
-    the current attempt and are reset the moment a retry starts, so without
-    this a previous error would simply be lost as soon as the user clicked
-    retry. Each row here is a permanent record of one attempt's outcome.
+    WireLoft no longer writes or serves this table. TaskRun is the canonical
+    execution ledger; keeping the mapped table avoids a destructive migration
+    that would erase pre-existing attempt history during this change.
     """
     __tablename__ = "media_download_attempts"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     media_download_id: Mapped[int] = mapped_column(ForeignKey("media_downloads.id", ondelete="CASCADE"), index=True)
     is_redownload: Mapped[bool]
-    # The final status: "downloaded", "redownloaded", "error", or a
-    # user-initiated "cancelled" recorded when an active attempt is restarted.
     status: Mapped[str]
     error_message: Mapped[Optional[str]]
     downloaded_bytes: Mapped[Optional[int]]
