@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.db.core import get_session
 from backend.db.models import Episode, Movie, MovieExtra
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.media_types import MediaType
@@ -19,6 +21,7 @@ from task_manager.scheduler.operations import (
 from task_manager.scheduler.types import OperationSource, OperationStatus, TaskStatus
 
 
+logger = logging.getLogger(__name__)
 MEDIA_DOWNLOAD_OPERATION_KIND = "media.download"
 _DOWNLOAD_TASK_KEYS = ("download_episode", "download_movie")
 _ACTIVE_OPERATION_STATUSES = (OperationStatus.QUEUED.value, OperationStatus.RUNNING.value)
@@ -139,7 +142,12 @@ def dispatch_queued_media_download_operations(
     *,
     budget: int | None = None,
 ) -> int:
-    """Dispatch queued media.download operations up to the global download limit."""
+    """Dispatch queued media.download operations up to the global download limit.
+
+    Waiting work is represented by durable QUEUED TaskOperations, not by a
+    pseudo-execution state on MediaDownload. Dispatching a target is transactional
+    and happens only after the caller commits.
+    """
     if budget is None:
         budget = remaining_media_download_budget(session)
     if budget <= 0:
@@ -169,3 +177,16 @@ def dispatch_queued_media_download_operations(
             if dispatched >= budget:
                 break
     return dispatched
+
+
+def on_media_download_task_terminal(**_) -> None:
+    """Fill newly freed download slots after a download TaskRun becomes terminal."""
+    session = get_session()
+    try:
+        dispatch_queued_media_download_operations(session)
+        session.commit()
+    except Exception:
+        session.rollback()
+        logger.exception("Failed to dispatch the next queued media download operation")
+    finally:
+        session.close()
