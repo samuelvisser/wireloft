@@ -17,27 +17,48 @@ type FontAwesomeFamily = {
 const FONT_AWESOME_FAMILIES = fontAwesomeFamilies as readonly FontAwesomeFamily[]
 
 function fontAwesomeModuleSource(proIcons: boolean) {
+  if (proIcons) {
+    const exports = FONT_AWESOME_FAMILIES.map(
+      (family) => `export const ${family.proExport} = proIconPacks[${JSON.stringify(family.prefix)}] ?? {}`,
+    )
+
+    return [
+      `import { byPrefixAndName as proIconPacks } from ${JSON.stringify(PRO_ICON_PACKAGE)}`,
+      ...exports,
+      'export const iconPacks = Object.values(proIconPacks)',
+      'export const proIcons = true',
+    ].join('\n')
+  }
+
   const imports: string[] = []
   const declarations: string[] = []
   const exports: string[] = []
+  const packsByPrefix = new Map<string, string>()
   const registeredPacks: string[] = []
 
   FONT_AWESOME_FAMILIES.forEach((family, index) => {
     const localName = `iconPack${index}`
 
-    if (proIcons) {
-      imports.push(
-        `import { ${family.proExport} as ${localName} } from ${JSON.stringify(PRO_ICON_PACKAGE)}`,
-      )
-      registeredPacks.push(localName)
-    } else if (family.freePackage) {
+    if (family.freePackage) {
       imports.push(
         `import { ${family.freeExport ?? family.proExport} as ${localName} } from ${JSON.stringify(family.freePackage)}`,
       )
+      packsByPrefix.set(family.prefix, localName)
+      registeredPacks.push(localName)
+    } else if (family.freeFallbackPrefix) {
+      const fallbackPack = packsByPrefix.get(family.freeFallbackPrefix)
+      if (!fallbackPack) {
+        throw new Error(
+          `Font Awesome family '${family.prefix}' references unavailable Free fallback family '${family.freeFallbackPrefix}'`,
+        )
+      }
+
+      declarations.push(
+        `const ${localName} = Object.fromEntries(Object.entries(${fallbackPack}).map(([key, definition]) => [key, {...definition, prefix: ${JSON.stringify(family.prefix)}}]))`,
+      )
+      packsByPrefix.set(family.prefix, localName)
       registeredPacks.push(localName)
     } else {
-      // Keep the named export available in credential-free builds. The runtime
-      // registry supplies this family through its configured Free fallback.
       declarations.push(`const ${localName} = {}`)
     }
 
@@ -51,7 +72,7 @@ function fontAwesomeModuleSource(proIcons: boolean) {
     ...declarations,
     ...exports,
     `export const iconPacks = [${registeredPacks.join(', ')}]`,
-    `export const proIcons = ${JSON.stringify(proIcons)}`,
+    'export const proIcons = false',
   ].join('\n')
 }
 

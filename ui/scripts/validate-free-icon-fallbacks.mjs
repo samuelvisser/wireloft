@@ -7,6 +7,7 @@ import freeIconFallbacks from '../src/icons/freeIconFallbacks.json' with {type: 
 const sourceRoot = fileURLToPath(new URL('../src/', import.meta.url))
 const sourceExtensions = new Set(['.ts', '.tsx'])
 const supportedPrefixes = new Set(fontAwesomeFamilies.map((family) => family.prefix))
+const familiesByPrefix = new Map(fontAwesomeFamilies.map((family) => [family.prefix, family]))
 const freeIconNamesByPrefix = new Map()
 
 for (const family of fontAwesomeFamilies) {
@@ -19,30 +20,24 @@ for (const family of fontAwesomeFamilies) {
   )
 }
 
-// Families without their own Free package may alias another configured Free
-// family. This mirrors the runtime registry, so validation and rendering stay
-// driven by the same family configuration.
-const unresolvedFamilies = new Set(
-  fontAwesomeFamilies.filter((family) => family.freeFallbackPrefix).map((family) => family.prefix),
-)
-for (let pass = 0; pass < fontAwesomeFamilies.length && unresolvedFamilies.size > 0; pass += 1) {
-  for (const prefix of [...unresolvedFamilies]) {
-    const family = fontAwesomeFamilies.find((candidate) => candidate.prefix === prefix)
-    const fallbackNames = family?.freeFallbackPrefix
-      ? freeIconNamesByPrefix.get(family.freeFallbackPrefix)
-      : undefined
-    if (!fallbackNames) continue
+function freeIconNames(prefix, resolving = new Set()) {
+  const existing = freeIconNamesByPrefix.get(prefix)
+  if (existing) return existing
 
-    freeIconNamesByPrefix.set(prefix, new Set(fallbackNames))
-    unresolvedFamilies.delete(prefix)
+  const family = familiesByPrefix.get(prefix)
+  if (!family?.freeFallbackPrefix) return undefined
+  if (resolving.has(prefix)) {
+    throw new Error(`Circular Font Awesome Free family fallback involving '${prefix}'`)
   }
+
+  const nextResolving = new Set(resolving)
+  nextResolving.add(prefix)
+  const fallbackNames = freeIconNames(family.freeFallbackPrefix, nextResolving)
+  if (fallbackNames) freeIconNamesByPrefix.set(prefix, fallbackNames)
+  return fallbackNames
 }
 
-if (unresolvedFamilies.size) {
-  throw new Error(
-    `Font Awesome family/families have unavailable Free fallback families: ${[...unresolvedFamilies].sort().join(', ')}`,
-  )
-}
+for (const prefix of supportedPrefixes) freeIconNames(prefix)
 
 async function sourceFiles(directory) {
   const entries = await readdir(directory, {withFileTypes: true})
@@ -86,7 +81,7 @@ function parseReference(reference) {
 const invalidFallbacks = []
 for (const [proReference, freeReference] of Object.entries(freeIconFallbacks)) {
   const proIcon = parseReference(proReference)
-  const targetNames = freeIconNamesByPrefix.get(freeReference.prefix)
+  const targetNames = freeIconNames(freeReference.prefix)
 
   if (!proIcon || !supportedPrefixes.has(proIcon.prefix)) {
     invalidFallbacks.push(`${proReference} -> unsupported source family`)
@@ -111,7 +106,7 @@ const missingFallbacks = [...usedIcons]
   .filter((reference) => {
     const icon = parseReference(reference)
     if (!icon) return true
-    return !freeIconNamesByPrefix.get(icon.prefix)?.has(icon.iconName) && !freeIconFallbacks[reference]
+    return !freeIconNames(icon.prefix)?.has(icon.iconName) && !freeIconFallbacks[reference]
   })
   .sort()
 
