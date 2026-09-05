@@ -127,7 +127,7 @@ def get_feed_items(
     if not profile.use_downloads and not profile.use_dw_stream:
         return []
 
-    # DW_PROCESSING is the single generic "not usable yet" state for stream profiles.
+    # DW_PROCESSING episodes are not (yet) usable.
     episodes = (
         s.query(Episode)
         .filter(Episode.show_id == profile.show_id)

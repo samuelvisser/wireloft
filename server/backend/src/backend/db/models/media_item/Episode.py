@@ -44,9 +44,6 @@ class Episode(MediaItemBase, HasMetadataMixin, HasTaskResourcesMixin):
     published_date: Mapped[Optional[datetime]]
     scheduled_date: Mapped[Optional[datetime]]
     redownloaded_date: Mapped[Optional[datetime]]
-    # Daily Wire publishes placeholder entries titled "... - No Show Today" on
-    # days a show doesn't air. The flag records why a DW_PROCESSING row is known
-    # to be disposable; media eligibility itself relies only on publish_status.
     is_no_show_today: Mapped[Optional[bool]]
 
     # Relationships

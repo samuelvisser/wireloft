@@ -109,7 +109,7 @@ class AppSettings(SettingsBase):
         find_episodes_cron="*/30 * * * *",
         monitor_episode_cron="*/2 * * * *",
         check_episodes_stuck_at_dw_processing="0 * * * *",
-        metadata_refresh_intervals="5m,15m,30m,1h,3h,6h,24h",
+        metadata_refresh_intervals="15m,30m,1h,3h,6h,24h,3d",
     ))
     episode_status_timing: EpisodeStatusTiming = Field(default=EpisodeStatusTiming(
         published_countdown_after_minutes=20,
