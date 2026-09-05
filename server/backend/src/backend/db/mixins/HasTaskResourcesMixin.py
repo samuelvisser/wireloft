@@ -11,7 +11,7 @@ from task_manager.scheduler.types import ResourceType, TaskStatus
 
 logger = logging.getLogger(__name__)
 _PENDING_DELETED_RESOURCES_KEY = "wireloft.deleted_task_resources"
-_PENDING_RELEASED_TASK_DEFINITIONS_KEY = "wireloft.released_task_definitions"
+_PENDING_RELEASED_TASK_CALLBACKS_KEY = "wireloft.released_task_callbacks"
 
 
 class HasTaskResourcesMixin:
@@ -112,32 +112,8 @@ def _task_status(value) -> TaskStatus:
     return value if isinstance(value, TaskStatus) else TaskStatus(value)
 
 
-def _run_released_task_callbacks(definition_ids: set[int]) -> None:
+def _run_released_task_callbacks(callbacks: set) -> None:
     """Refill constrained task queues when deletion removes a pending reservation."""
-    if not definition_ids:
-        return
-
-    from backend.db.core import get_session
-    from task_manager.scheduler.db import TaskDefinition
-    from task_manager.scheduler.registry import get_task
-
-    lookup = get_session()
-    try:
-        keys = lookup.scalars(
-            select(TaskDefinition.key).where(TaskDefinition.id.in_(definition_ids))
-        ).all()
-    finally:
-        lookup.close()
-
-    callbacks = set()
-    for key in keys:
-        try:
-            task_meta, _ = get_task(key)
-        except KeyError:
-            continue
-        if task_meta.terminal_callback is not None:
-            callbacks.add(task_meta.terminal_callback)
-
     for callback in callbacks:
         try:
             callback()
@@ -149,16 +125,18 @@ def _run_released_task_callbacks(definition_ids: set[int]) -> None:
 
 @event.listens_for(Session, "after_flush")
 def _remember_deleted_task_resources(session: Session, flush_context) -> None:
-    from task_manager.scheduler.db import TaskRun
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.registry import get_task
 
     resources: set[tuple[str, int]] = session.info.setdefault(
         _PENDING_DELETED_RESOURCES_KEY,
         set(),
     )
-    released_definitions: set[int] = session.info.setdefault(
-        _PENDING_RELEASED_TASK_DEFINITIONS_KEY,
+    callbacks: set = session.info.setdefault(
+        _PENDING_RELEASED_TASK_CALLBACKS_KEY,
         set(),
     )
+    released_definition_ids: set[int] = set()
 
     for item in session.deleted:
         # A pending/retry TaskRun occupied a durable queue slot but has no Python
@@ -172,7 +150,7 @@ def _remember_deleted_task_resources(session: Session, flush_context) -> None:
                 TaskStatus.QUEUED,
                 TaskStatus.RETRY_SCHEDULED,
             }:
-                released_definitions.add(item.definition_id)
+                released_definition_ids.add(item.definition_id)
 
         if not isinstance(item, HasTaskResourcesMixin):
             continue
@@ -182,10 +160,24 @@ def _remember_deleted_task_resources(session: Session, flush_context) -> None:
         for resource_type in item._task_resource_values():
             resources.add((resource_type, int(resource_id)))
 
+    if released_definition_ids:
+        keys = session.scalars(
+            select(TaskDefinition.key).where(
+                TaskDefinition.id.in_(released_definition_ids)
+            )
+        ).all()
+        for key in keys:
+            try:
+                task_meta, _ = get_task(key)
+            except KeyError:
+                continue
+            if task_meta.terminal_callback is not None:
+                callbacks.add(task_meta.terminal_callback)
+
     if not resources:
         session.info.pop(_PENDING_DELETED_RESOURCES_KEY, None)
-    if not released_definitions:
-        session.info.pop(_PENDING_RELEASED_TASK_DEFINITIONS_KEY, None)
+    if not callbacks:
+        session.info.pop(_PENDING_RELEASED_TASK_CALLBACKS_KEY, None)
 
 
 @event.listens_for(Session, "after_commit")
@@ -195,26 +187,23 @@ def _remove_deleted_resource_jobs(session: Session) -> None:
         return
 
     resources = session.info.pop(_PENDING_DELETED_RESOURCES_KEY, set())
-    released_definitions = session.info.pop(
-        _PENDING_RELEASED_TASK_DEFINITIONS_KEY,
-        set(),
-    )
+    callbacks = session.info.pop(_PENDING_RELEASED_TASK_CALLBACKS_KEY, set())
 
     if resources:
         from task_manager.scheduler.scheduler import cancel_pending_resource_jobs
 
         cancel_pending_resource_jobs(resources)
 
-    _run_released_task_callbacks(released_definitions)
+    _run_released_task_callbacks(callbacks)
 
 
 @event.listens_for(Session, "after_rollback")
 def _discard_deleted_resource_jobs(session: Session) -> None:
     session.info.pop(_PENDING_DELETED_RESOURCES_KEY, None)
-    session.info.pop(_PENDING_RELEASED_TASK_DEFINITIONS_KEY, None)
+    session.info.pop(_PENDING_RELEASED_TASK_CALLBACKS_KEY, None)
 
 
 @event.listens_for(Session, "after_soft_rollback")
 def _discard_soft_rolled_back_resource_jobs(session: Session, previous_transaction) -> None:
     session.info.pop(_PENDING_DELETED_RESOURCES_KEY, None)
-    session.info.pop(_PENDING_RELEASED_TASK_DEFINITIONS_KEY, None)
+    session.info.pop(_PENDING_RELEASED_TASK_CALLBACKS_KEY, None)
