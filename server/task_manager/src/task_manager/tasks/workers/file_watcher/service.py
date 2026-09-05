@@ -7,34 +7,27 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.models.media_download import MediaDownloadBase
-from backend.types.download_profile_types import MediaDownloadStatus
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from config import get_settings
 
 from ._helpers import get_tracked_downloads
 
 logger = logging.getLogger(__name__)
 
-# The status a download is restored to once its file is healthy again.
-_HEALTHY_STATUS = MediaDownloadStatus.DOWNLOADED.value
-_PROBLEM_STATUSES = (MediaDownloadStatus.MISSING.value, MediaDownloadStatus.CORRUPTED.value)
-
-# How much smaller than the recorded size a file is allowed to be before it's
-# flagged corrupted. `downloaded_bytes` is the size of what was actually
-# fetched (e.g. the raw .ts for a remuxed video, see download_settings.
-# remux_video_to_mp4), not necessarily of the file at file_path: remuxing to
-# .mp4 legitimately drops container/packetization overhead. A generous
-# tolerance keeps that from ever looking like corruption while still catching
-# a genuinely truncated file, which loses far more than this.
+_HEALTHY_STATUS = MediaDownloadArtifactStatus.AVAILABLE.value
+_PROBLEM_STATUSES = (
+    MediaDownloadArtifactStatus.MISSING.value,
+    MediaDownloadArtifactStatus.CORRUPTED.value,
+)
 _MIN_SIZE_RATIO = 0.5
 
 
 async def run_file_watcher(s: Session, *, show_id: Optional[int] = None, show_slug: Optional[str] = None, progress=None) -> None:
-    """Reconcile media_downloads rows with what is actually on disk.
+    """Reconcile persistent MediaDownload artifact facts with the filesystem.
 
-    A download whose file was deleted or renamed/moved away is flagged
-    'missing'; one whose file is empty, or has shrunk below the size recorded
-    when it finished downloading, is flagged 'corrupted'. A previously
-    flagged download whose file is healthy again is put back to 'downloaded'.
+    This worker never changes execution state. A missing/corrupt file is normal
+    domain state; whether a replacement is currently queued or running remains a
+    TaskOperation/TaskRun concern.
     """
     settings = get_settings().file_watcher
     if not settings.enabled:
@@ -42,7 +35,6 @@ async def run_file_watcher(s: Session, *, show_id: Optional[int] = None, show_sl
         return
 
     print("Starting file_watcher")
-
     downloads = get_tracked_downloads(s, show_id=show_id, show_slug=show_slug)
     updated = 0
     for download in downloads:
@@ -50,58 +42,57 @@ async def run_file_watcher(s: Session, *, show_id: Optional[int] = None, show_sl
             updated += 1
 
     s.commit()
-    print(f"file_watcher completed: checked {len(downloads)} download(s), updated {updated}")
+    print(f"file_watcher completed: checked {len(downloads)} artifact(s), updated {updated}")
 
 
 def _reconcile(download: MediaDownloadBase, *, verify_file_size: bool) -> bool:
-    """Compare one download's file against disk and fix up its status if it drifted.
-
-    Returns True when the row's status/error_message changed.
-    """
     problem = _detect_problem(download, verify_file_size=verify_file_size)
 
     if problem is not None:
         status, message = problem
-        if download.download_status == status.value and download.error_message == message:
+        if download.artifact_status == status.value and download.artifact_error == message:
             return False
         logger.warning("file_watcher: media_download %s -> %s (%s)", download.id, status.value, message)
-        download.download_status = status.value
-        download.error_message = message
+        download.artifact_status = status.value
+        download.artifact_error = message
         return True
 
-    if download.download_status in _PROBLEM_STATUSES:
-        logger.info("file_watcher: media_download %s file is healthy again, marking downloaded", download.id)
-        download.download_status = _HEALTHY_STATUS
-        download.error_message = None
+    if download.artifact_status in _PROBLEM_STATUSES:
+        logger.info("file_watcher: media_download %s file is healthy again", download.id)
+        download.artifact_status = _HEALTHY_STATUS
+        download.artifact_error = None
         return True
 
     return False
 
 
-def _detect_problem(download: MediaDownloadBase, *, verify_file_size: bool) -> Optional[tuple[MediaDownloadStatus, str]]:
-    """Inspect a download's file on disk; return the problem found, if any."""
+def _detect_problem(
+    download: MediaDownloadBase,
+    *,
+    verify_file_size: bool,
+) -> Optional[tuple[MediaDownloadArtifactStatus, str]]:
     path = download.file_path
 
     try:
         exists = os.path.exists(path)
-    except OSError as e:
-        return MediaDownloadStatus.MISSING, f"Could not check '{path}': {e}"
+    except OSError as exc:
+        return MediaDownloadArtifactStatus.MISSING, f"Could not check '{path}': {exc}"
 
     if not exists:
-        return MediaDownloadStatus.MISSING, f"File not found at '{path}'"
+        return MediaDownloadArtifactStatus.MISSING, f"File not found at '{path}'"
     if not os.path.isfile(path):
-        return MediaDownloadStatus.CORRUPTED, f"Expected a file at '{path}' but found something else"
+        return MediaDownloadArtifactStatus.CORRUPTED, f"Expected a file at '{path}' but found something else"
 
     try:
         size = os.path.getsize(path)
-    except OSError as e:
-        return MediaDownloadStatus.MISSING, f"Could not read '{path}': {e}"
+    except OSError as exc:
+        return MediaDownloadArtifactStatus.MISSING, f"Could not read '{path}': {exc}"
 
     if size == 0:
-        return MediaDownloadStatus.CORRUPTED, f"File at '{path}' is empty"
+        return MediaDownloadArtifactStatus.CORRUPTED, f"File at '{path}' is empty"
 
     if verify_file_size and download.downloaded_bytes and size < download.downloaded_bytes * _MIN_SIZE_RATIO:
-        return MediaDownloadStatus.CORRUPTED, (
+        return MediaDownloadArtifactStatus.CORRUPTED, (
             f"File at '{path}' is only {size} bytes, well under the "
             f"{download.downloaded_bytes} recorded when it finished downloading"
         )
