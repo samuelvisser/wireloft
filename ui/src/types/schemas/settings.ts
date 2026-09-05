@@ -124,7 +124,7 @@ const metadataRefreshIntervals = z.string().refine((value) => {
 
 export const SettingsFormSchema = SettingsValuesSchema.extend({
     loginSession: SessionSettingsSchema.extend({
-        ttlSeconds: requiredNumber().int().min(60, 'Must be at least 60.'),
+        ttlSeconds: requiredNumber().int().min(60, 'Must be at least 60 seconds.'),
     }),
     movieMetadata: MovieMetadataSettingsSchema.extend({
         requestTimeoutSeconds: requiredNumber().min(1, 'Must be at least 1.'),
