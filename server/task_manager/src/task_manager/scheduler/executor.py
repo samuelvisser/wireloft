@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -27,6 +28,9 @@ from .results import TaskResult
 from config import get_settings
 from dailywire_downloader import DownloadCancelled
 from task_manager.scheduler import scheduler
+
+
+logger = logging.getLogger(__name__)
 
 
 class TaskCancellationRequested(Exception):
@@ -192,24 +196,20 @@ def _resolve_max_retries(session, def_key: str, schedule_id: Optional[int], over
     if override is not None:
         return override
 
-    # schedule override
     if schedule_id is not None:
         sch = session.get(TaskSchedule, schedule_id)
         if sch and sch.max_retries is not None:
             return int(sch.max_retries)
 
-    # definition default
     td = session.execute(select(TaskDefinition).where(TaskDefinition.key == def_key)).scalar_one()
     if td.default_max_retries is not None:
         return int(td.default_max_retries)
 
-    # global default
     return int(get_settings().scheduler.default_max_retries)
 
 
 def _backoff_delay(attempt: int) -> float:
     base = float(get_settings().scheduler.retry_backoff_seconds)
-    # attempt starts at 1
     return base * (2 ** max(0, attempt - 1))
 
 
@@ -239,17 +239,12 @@ def _prepare_execution(
         if operation_ids and not operation_ids_allow_execution(session, operation_ids):
             return None
 
-        # A user-created TaskSchedule is owned by its resource relationship. If
-        # that resource was deleted, the schedule row is gone and an in-memory
-        # APScheduler job from the old row must not manufacture orphan TaskRuns.
         if schedule_id is not None and session.get(TaskSchedule, schedule_id) is None:
             return None
 
         if run_id is not None:
             run = session.get(TaskRun, run_id)
             if run is None:
-                # A deleted resource cascades its TaskRuns. Never recreate a
-                # missing retry row with a now-orphaned resource id.
                 return None
             if run_cancel_requested(run):
                 _mark_run_canceled(run, run_cancel_reason(run))
@@ -330,19 +325,13 @@ def _finalize_execution(
         worker_error: Exception | None = None,
         cancellation_reason: str | None = None,
 ) -> tuple[datetime | None, Exception | None]:
-    """Persist terminal/retry state using a fresh short-lived Session.
-
-    Returns ``(retry_at, terminal_error)``. Scheduling occurs only after the
-    Session is released so waiting worker jobs never pin database connections.
-    """
+    """Persist terminal/retry state using a fresh short-lived Session."""
     session = get_session()
     retry_at: datetime | None = None
     terminal_error: Exception | None = None
     try:
         run = session.get(TaskRun, prepared.run_id)
         if run is None:
-            # Resource deletion cascaded the tracking row while the callable was
-            # in flight. There is intentionally nothing left to finalize.
             return None, None
 
         if run_cancel_requested(run):
@@ -368,8 +357,7 @@ def _finalize_execution(
                 run.next_retry_at = retry_at
                 run.status = TaskStatus.RETRY_SCHEDULED
                 run.message = (
-                    f"Retry {run.attempt_count}/{run.max_retries} "
-                    f"scheduled in {int(delay)}s"
+                    f"Retry {run.attempt_count}/{run.max_retries} scheduled in {int(delay)}s"
                 )
             else:
                 run.status = TaskStatus.FAILED
@@ -413,7 +401,7 @@ def execute_task(
         dict.fromkeys(str(value) for value in (operation_ids or ()) if value)
     )
 
-    _, fn = get_task(def_key)
+    task_meta, fn = get_task(def_key)
     prepared = _prepare_execution(
         def_key=def_key,
         resource_type=resource_type,
@@ -470,6 +458,19 @@ def execute_task(
             run_at=retry_at,
         )
         return
+
+    if task_meta.terminal_callback is not None:
+        try:
+            task_meta.terminal_callback(
+                task_key=def_key,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                task_run_id=prepared.run_id,
+            )
+        except Exception:
+            # A post-terminal queue/backfill hook must never rewrite the outcome
+            # of the TaskRun that has already been durably finalized.
+            logger.exception("Terminal callback failed for task %s run %s", def_key, prepared.run_id)
 
     if terminal_error is not None:
         raise terminal_error
