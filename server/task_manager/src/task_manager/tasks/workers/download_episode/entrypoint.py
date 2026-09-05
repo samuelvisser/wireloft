@@ -4,6 +4,7 @@ from typing import Optional
 
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import task
+from task_manager.tasks.media_download_operations import on_media_download_task_terminal
 from task_manager.tasks.workers.download_attempt import serialize_download_attempt
 from .service import run_download_episode
 
@@ -15,6 +16,7 @@ from .service import run_download_episode
     allowed_resource_types=("media_download",),
     default_max_retries=2,
     tracks_progress=True,
+    terminal_callback=on_media_download_task_terminal,
 )
 async def download_episode(
         *,
