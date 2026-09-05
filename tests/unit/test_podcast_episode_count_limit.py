@@ -118,19 +118,12 @@ def test_podcast_profile_selects_only_latest_episode_count(db_session):
     local_media_profile = _make_local_media_profile(db_session)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     episodes = [
-        _make_episode(
-            db_session,
-            show,
-            season,
-            index=index,
-            published_at=now - timedelta(days=4 - index),
-        )
+        _make_episode(db_session, show, season, index=index, published_at=now - timedelta(days=4 - index))
         for index in range(1, 5)
     ]
     profile = _make_podcast_profile(db_session, show, local_media_profile, count=2)
 
     selected = get_download_profile_episodes(db_session, profile)
-
     assert [episode.id for episode in selected] == [episodes[3].id, episodes[2].id]
 
 
@@ -141,29 +134,17 @@ def test_episode_scoped_run_still_checks_global_latest_set(db_session):
     season = _make_season(db_session, show)
     local_media_profile = _make_local_media_profile(db_session)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    old_episode = _make_episode(
-        db_session,
-        show,
-        season,
-        index=1,
-        published_at=now - timedelta(days=10),
-    )
-    newest_episode = _make_episode(
-        db_session,
-        show,
-        season,
-        index=2,
-        published_at=now,
-    )
+    old_episode = _make_episode(db_session, show, season, index=1, published_at=now - timedelta(days=10))
+    newest_episode = _make_episode(db_session, show, season, index=2, published_at=now)
     profile = _make_podcast_profile(db_session, show, local_media_profile, count=1)
 
     assert get_download_profile_episodes(db_session, profile, only_episode=old_episode) == []
     assert get_download_profile_episodes(db_session, profile, only_episode=newest_episode) == [newest_episode]
 
 
-def test_episode_count_cleanup_removes_completed_and_pending_rows_outside_limit(db_session, tmp_path):
+def test_episode_count_cleanup_removes_available_and_absent_artifacts_outside_limit(db_session, tmp_path):
     from backend.db.models.media_download import EpisodeMediaDownload
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
 
@@ -172,22 +153,10 @@ def test_episode_count_cleanup_removes_completed_and_pending_rows_outside_limit(
     local_media_profile = _make_local_media_profile(db_session)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     episodes = [
-        _make_episode(
-            db_session,
-            show,
-            season,
-            index=index,
-            published_at=now - timedelta(days=4 - index),
-        )
+        _make_episode(db_session, show, season, index=index, published_at=now - timedelta(days=4 - index))
         for index in range(1, 5)
     ]
-    profile = _make_podcast_profile(
-        db_session,
-        show,
-        local_media_profile,
-        count=2,
-        delete_older=True,
-    )
+    profile = _make_podcast_profile(db_session, show, local_media_profile, count=2, delete_older=True)
 
     completed_file = tmp_path / "old-completed.m4a"
     completed_file.write_bytes(b"data")
@@ -196,29 +165,26 @@ def test_episode_count_cleanup_removes_completed_and_pending_rows_outside_limit(
         media_item_id=episodes[0].id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        download_status=MediaDownloadStatus.DOWNLOADED.value,
+        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
         file_path=str(completed_file),
-        progress=100,
     )
-    pending = EpisodeMediaDownload(
+    absent = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
         media_item_id=episodes[1].id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        download_status=MediaDownloadStatus.PENDING.value,
-        file_path=str(tmp_path / "old-pending.m4a"),
-        progress=0,
+        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
+        file_path=str(tmp_path / "old-absent.m4a"),
     )
     kept = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
         media_item_id=episodes[2].id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        download_status=MediaDownloadStatus.DOWNLOADED.value,
+        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
         file_path=str(tmp_path / "kept.m4a"),
-        progress=100,
     )
-    db_session.add_all([completed, pending, kept])
+    db_session.add_all([completed, absent, kept])
     db_session.commit()
 
     removed = cleanup_older_episodes(db_session, profile)
@@ -226,15 +192,13 @@ def test_episode_count_cleanup_removes_completed_and_pending_rows_outside_limit(
 
     assert removed == 2
     assert not completed_file.exists()
-    remaining_episode_ids = {
-        row.media_item_id for row in db_session.query(EpisodeMediaDownload).all()
-    }
+    remaining_episode_ids = {row.media_item_id for row in db_session.query(EpisodeMediaDownload).all()}
     assert remaining_episode_ids == {episodes[2].id}
 
 
-def test_episode_count_cleanup_keeps_completed_files_when_delete_older_is_off(db_session, tmp_path):
+def test_episode_count_cleanup_keeps_available_files_when_delete_older_is_off(db_session, tmp_path):
     from backend.db.models.media_download import EpisodeMediaDownload
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
 
@@ -242,34 +206,10 @@ def test_episode_count_cleanup_keeps_completed_files_when_delete_older_is_off(db
     season = _make_season(db_session, show)
     local_media_profile = _make_local_media_profile(db_session)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    completed_episode = _make_episode(
-        db_session,
-        show,
-        season,
-        index=1,
-        published_at=now - timedelta(days=2),
-    )
-    pending_episode = _make_episode(
-        db_session,
-        show,
-        season,
-        index=2,
-        published_at=now - timedelta(days=1),
-    )
-    _make_episode(
-        db_session,
-        show,
-        season,
-        index=3,
-        published_at=now,
-    )
-    profile = _make_podcast_profile(
-        db_session,
-        show,
-        local_media_profile,
-        count=1,
-        delete_older=False,
-    )
+    completed_episode = _make_episode(db_session, show, season, index=1, published_at=now - timedelta(days=2))
+    absent_episode = _make_episode(db_session, show, season, index=2, published_at=now - timedelta(days=1))
+    _make_episode(db_session, show, season, index=3, published_at=now)
+    profile = _make_podcast_profile(db_session, show, local_media_profile, count=1, delete_older=False)
 
     completed_file = tmp_path / "retained-old.m4a"
     completed_file.write_bytes(b"data")
@@ -278,20 +218,18 @@ def test_episode_count_cleanup_keeps_completed_files_when_delete_older_is_off(db
         media_item_id=completed_episode.id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        download_status=MediaDownloadStatus.DOWNLOADED.value,
+        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
         file_path=str(completed_file),
-        progress=100,
     )
-    pending = EpisodeMediaDownload(
+    absent = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
-        media_item_id=pending_episode.id,
+        media_item_id=absent_episode.id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        download_status=MediaDownloadStatus.PENDING.value,
-        file_path=str(tmp_path / "stale-pending.m4a"),
-        progress=0,
+        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
+        file_path=str(tmp_path / "stale-absent.m4a"),
     )
-    db_session.add_all([completed, pending])
+    db_session.add_all([completed, absent])
     db_session.commit()
 
     removed = cleanup_older_episodes(db_session, profile)
@@ -302,4 +240,4 @@ def test_episode_count_cleanup_keeps_completed_files_when_delete_older_is_off(db
     rows = db_session.query(EpisodeMediaDownload).all()
     assert len(rows) == 1
     assert rows[0].media_item_id == completed_episode.id
-    assert rows[0].download_status == MediaDownloadStatus.DOWNLOADED.value
+    assert rows[0].artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
