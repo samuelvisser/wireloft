@@ -5,6 +5,8 @@ import {useQueryClient} from '@tanstack/react-query'
 import {
     LocalMediaProfileCreateIn, LocalMediaProfileCreateOut,
     LocalMediaProfileCreateSchema,
+    MovieLocalMediaProfileCreateSchema,
+    ShowLocalMediaProfileCreateSchema,
 } from "../../types/schemas/local_media_profile";
 import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
@@ -17,24 +19,27 @@ import {
     loadLocalMediaProfileDraft,
     saveLocalMediaProfileDraft,
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
+import {getZodDefaults} from '../../utils/defaultZod'
 
 const SHOW_DEFAULT_TEMPLATE = '/downloads/shows/{{ show }}/{{ episode_title }}.ext'
 const MOVIE_DEFAULT_TEMPLATE = "/downloads/movies/{{ movie_title }}/{{ title }}{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
 
 function defaultsForMode(mode: LocalMediaProfileMode): LocalMediaProfileCreateIn {
-    return mode === 'movie'
-        ? {
+    if (mode === 'movie') {
+        return {
+            ...getZodDefaults(MovieLocalMediaProfileCreateSchema),
             type: 'movie',
             name: '',
             outputTemplate: MOVIE_DEFAULT_TEMPLATE,
-            preferredFormat: 'format_1080p',
         }
-        : {
-            type: 'show',
-            name: '',
-            outputTemplate: SHOW_DEFAULT_TEMPLATE,
-            preferredFormat: 'format_audio_only',
-        }
+    }
+
+    return {
+        ...getZodDefaults(ShowLocalMediaProfileCreateSchema),
+        type: 'show',
+        name: '',
+        outputTemplate: SHOW_DEFAULT_TEMPLATE,
+    }
 }
 
 export default function AddLocalMediaProfilePage() {
