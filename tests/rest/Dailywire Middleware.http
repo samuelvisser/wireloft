@@ -184,7 +184,7 @@ GET https://middleware-prod.dailywire.com//middleware/v4/getPaginatedEpisodes?la
 
 
 ### Get episode details
-GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=ep-2324-the-trump-administration-cracks-down-on-third-world-migration
+GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=ben-shapiro-show-ep-2500
 Authorization: Bearer {{access_token}}
 
 <> 2025-12-01T175614.200.json
