@@ -1,4 +1,10 @@
 {
-  "circle-video": "video",
-  "floppy-disk-circle-xmark": "floppy-disk"
+  "fas:circle-video": {
+    "prefix": "fas",
+    "iconName": "video"
+  },
+  "fas:floppy-disk-circle-xmark": {
+    "prefix": "fas",
+    "iconName": "floppy-disk"
+  }
 }
