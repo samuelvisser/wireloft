@@ -127,8 +127,10 @@ async def run_download_episode(
         )
         s.commit()
 
-        if progress is not None:
-            progress.set(100, f"Downloaded {episode.title if episode else 'episode'}")
+        # The executor owns the final 100% transition. Avoid a second progress
+        # checkpoint after the artifact commit: cancellation discovered at that
+        # point must not turn a successfully published artifact into a canceled
+        # TaskRun.
         print(
             f"download_episode completed for {getattr(episode, 'slug', media_download_id)}: "
             f"{result.format_downloaded} -> {result.file_path} ({result.bytes_downloaded} bytes)"
