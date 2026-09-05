@@ -18,10 +18,11 @@ from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskRun
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
     create_operation,
+    link_run_to_operations,
     operation_target_needs_dispatch,
-    queue_operation_target_dispatch,
 )
-from task_manager.scheduler.types import OperationSource, OperationStatus, TaskStatus
+from task_manager.scheduler.transactional import queue_task_after_commit
+from task_manager.scheduler.types import OperationSource, OperationStatus, ResourceType, TaskStatus
 
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,13 @@ def create_media_download_operation(
 
 
 def remaining_media_download_budget(session: Session) -> int:
+    """Return free slots in the single download execution lane.
+
+    SCHEDULED TaskRuns count as reservations. The dispatcher creates those rows
+    transactionally before APScheduler receives the jobs, so concurrent queue
+    fills cannot mistake committed dispatches for free capacity merely because a
+    worker thread has not started yet.
+    """
     max_concurrent = get_settings().download_settings.max_concurrent_downloads
     in_flight = session.scalar(
         select(func.count())
@@ -164,17 +172,81 @@ def remaining_media_download_budget(session: Session) -> int:
     return max(0, int(max_concurrent) - int(in_flight))
 
 
+def _reserve_target_dispatch(
+    session: Session,
+    operation: TaskOperation,
+) -> bool:
+    """Reserve and transactionally dispatch one media.download target.
+
+    Generic TaskOperations normally create TaskRuns when APScheduler starts a
+    job. The constrained download lane needs a durable reservation slightly
+    earlier so its concurrency accounting remains correct while jobs wait for a
+    scheduler thread. The reservation is still an ordinary TaskRun and becomes
+    the exact run executed by the generic executor after commit.
+    """
+    if not operation.targets:
+        return False
+    target = operation.targets[0]
+    if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
+        return False
+
+    definition_id = session.scalar(
+        select(TaskDefinition.id).where(TaskDefinition.key == target.task_key)
+    )
+    if definition_id is None:
+        raise RuntimeError(f"Task definition '{target.task_key}' is not registered")
+
+    task_kwargs = dict(target.task_kwargs or {})
+    run = TaskRun(
+        schedule_id=None,
+        definition_id=definition_id,
+        resource_type=ResourceType.MEDIA_DOWNLOAD,
+        resource_id=target.resource_id,
+        status=TaskStatus.SCHEDULED,
+        progress=0,
+        result=None,
+        attempt_count=0,
+        max_retries=0,
+        meta={"inputs": task_kwargs} if task_kwargs else None,
+    )
+    session.add(run)
+    session.flush()
+    link_run_to_operations(
+        session,
+        run=run,
+        task_key=target.task_key,
+        operation_ids=(operation.id,),
+        operation_slot=target.slot_key,
+    )
+
+    queue_task_after_commit(
+        session,
+        def_key=target.task_key,
+        resource_type=target.resource_type,
+        resource_id=target.resource_id,
+        operation_ids=(operation.id,),
+        operation_slot=target.slot_key,
+        run_id=run.id,
+        **task_kwargs,
+    )
+    return True
+
+
 def dispatch_queued_media_download_operations(
     session: Session,
     *,
     budget: int | None = None,
 ) -> int:
-    """Dispatch queued media.download operations up to the global download limit."""
+    """Reserve queued media.download operations up to the global download limit."""
     if budget is None:
         budget = remaining_media_download_budget(session)
     if budget <= 0:
         return 0
 
+    # Fetch beyond the budget because an older QUEUED operation may already have
+    # a committed SCHEDULED reservation. Those operations still count as active
+    # in the UI but should not prevent a later truly-unreserved operation from
+    # consuming another free slot.
     operations = list(
         session.scalars(
             select(TaskOperation)
@@ -183,18 +255,13 @@ def dispatch_queued_media_download_operations(
                 TaskOperation.status == OperationStatus.QUEUED.value,
             )
             .order_by(TaskOperation.created_at.asc(), TaskOperation.id.asc())
-            .limit(budget)
+            .limit(max(25, budget * 4))
         )
     )
 
     dispatched = 0
     for operation in operations:
-        if not operation.targets:
-            continue
-        target = operation.targets[0]
-        if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
-            continue
-        if queue_operation_target_dispatch(session, operation.id, target.slot_key):
+        if _reserve_target_dispatch(session, operation):
             dispatched += 1
             if dispatched >= budget:
                 break
