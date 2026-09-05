@@ -7,7 +7,6 @@ from task_manager.scheduler.operation_factory import OperationDefinition
 from task_manager.scheduler.operations import OperationTargetSpec
 
 
-SHOW_REDOWNLOAD_EPISODES_REQUESTED_EVENT = "show.redownload_episodes_requested"
 _FETCH_EPISODES_TASK_KEY = "fetch_new_episodes"
 _REFRESH_METADATA_TASK_KEY = "refresh_episode_metadata_worker"
 _REDOWNLOAD_TASK_KEY = "redownload_show_episodes_worker"
@@ -22,27 +21,15 @@ class _ShowOperation(OperationDefinition[Show]):
             "show_title": self.resource.title,
         }
 
-    def event_payload(self) -> dict[str, object]:
-        return {"slug": self.resource.slug}
-
 
 class ShowIndexOperation(_ShowOperation):
     kind = "show.index"
     task = _FETCH_EPISODES_TASK_KEY
-    event = "show.added"
-
-    def event_payload(self) -> dict[str, object]:
-        return {
-            **super().event_payload(),
-            "title": self.resource.title,
-        }
 
 
 class ShowSyncOperation(_ShowOperation):
     kind = "show.sync"
     task = _FETCH_EPISODES_TASK_KEY
-    event = "show.sync_requested"
-    event_is_dispatch = True
 
 
 class ShowMetadataRefreshOperation(_ShowOperation):
@@ -74,8 +61,6 @@ class ShowMetadataRefreshOperation(_ShowOperation):
 class ShowRedownloadOperation(_ShowOperation):
     kind = "show.redownload_episodes"
     task = _REDOWNLOAD_TASK_KEY
-    event = SHOW_REDOWNLOAD_EPISODES_REQUESTED_EVENT
-    event_is_dispatch = True
 
     def __init__(
         self,
@@ -95,10 +80,4 @@ class ShowRedownloadOperation(_ShowOperation):
         return {
             **super().context(),
             "download_profiles_requested": self.selected_profile_count,
-        }
-
-    def event_payload(self) -> dict[str, object]:
-        return {
-            **super().event_payload(),
-            "download_profile_id": self.download_profile_id,
         }

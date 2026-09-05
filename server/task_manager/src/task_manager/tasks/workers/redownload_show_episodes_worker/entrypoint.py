@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from backend.api.endpoints.shows.operations import SHOW_REDOWNLOAD_EPISODES_REQUESTED_EVENT
 from controller.db_utils import db_session
-from task_manager.scheduler.registry import on_event, task
+from task_manager.scheduler.registry import task
 from task_manager.scheduler.results import TaskResult
 
 from .service import run_redownload_show_episodes_worker
 
 
-@on_event(SHOW_REDOWNLOAD_EPISODES_REQUESTED_EVENT, resource_type="show")
 @task(
     key="redownload_show_episodes_worker",
     title="Re-download show episodes",

@@ -19,16 +19,23 @@ This boundary is intentional. A backend restart can reconstruct unfinished execu
 
 ## Defining operations
 
-Prefer an `OperationDefinition` plus `create_operation(session, definition)` when an operation has a stable shape, is created from more than one place, or otherwise repeats the same resource, target, context and event metadata. The definition is the single declaration of that operation shape; call sites should only supply the domain resource and genuinely variable inputs.
+Prefer an `OperationDefinition` plus `create_operation(session, definition)` when an operation has a stable shape, is created from more than one place, or otherwise repeats the same resource, target and context metadata. The definition is the single declaration of that operation shape; call sites should only supply the domain resource and genuinely variable inputs.
 
-A definition may declare a transactional domain event alongside the TaskOperation. Events that are merely a worker-dispatch transport set `event_is_dispatch = True`, allowing the factory to suppress the event when compatible work is already satisfying the target. Genuine domain events such as `show.added` are always emitted even though a worker also subscribes to them.
+`OperationDefinition` deliberately does not emit domain events. Events describe domain facts and should stay explicit at the business call site, including their literal event name. When the same action both creates an operation and announces a domain fact, keep those as separate statements in the same transaction:
+
+```python
+create_operation(s, ShowIndexOperation(show))
+queue_event(s, "show.added", ShowAdded(show))
+```
+
+The event may independently have multiple consumers. If one consumer starts work matching the operation target, the resulting TaskRun attaches to the operation through the normal task/resource/input matching rules.
 
 The definition-aware `create_operation()` lives in `operation_factory`. Keep the lower-level `scheduler.operations.create_operation()` API for genuinely dynamic or one-off operation shapes when introducing a definition would add more indirection than it removes. Definitions are a concision tool, not a mandatory wrapper around every operation.
 
 ## Adding a UI-triggered worker action
 
 1. Define the stable operation shape with `OperationDefinition` and call `create_operation(session, definition)` when that makes the call site clearer. Use the lower-level scheduler operation builder directly for dynamic one-off cases.
-2. For work owned directly by the operation, call `queue_operation_target_dispatch()` for each target. It schedules the target only after the API transaction commits and skips targets already satisfied by compatible work. A definition can instead declare a domain/dispatch event when the action genuinely belongs on the event bus.
+2. For work owned directly by the operation, call `queue_operation_target_dispatch()` for each target. It schedules the target only after the API transaction commits and skips targets already satisfied by compatible work. Do not introduce a domain event merely as worker-dispatch plumbing.
 3. Return an API response containing `operation_id`. Do not create a separate manual request/correlation ID.
 4. Have the worker report ordinary progress through its `progress` object and return a `TaskResult` with structured facts when it completes.
 5. In the frontend, start the request through the generic operation helper. `FrontendPuller` owns discovery/progress polling, while `OperationNotifier` owns final notifications and operation-driven cache refreshes. Components that need live status can use `useActiveOperation()`.

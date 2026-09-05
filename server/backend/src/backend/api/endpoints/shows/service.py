@@ -17,6 +17,7 @@ from task_manager.scheduler.operations import (
     queue_operation_target_dispatch,
 )
 
+from .events import ShowAdded
 from .operations import (
     ShowIndexOperation,
     ShowMetadataRefreshOperation,
@@ -60,6 +61,7 @@ def create_show(s: Session, body: ShowAPICreate) -> ShowAPIRead:
     s.flush()
 
     create_operation(s, ShowIndexOperation(show))
+    queue_event(s, "show.added", ShowAdded(show))
 
     return ShowAPIRead.model_validate(show)
 
@@ -119,6 +121,7 @@ def request_show_sync(s: Session, show_slug: str) -> dict[str, bool | str]:
         raise HTTPException(status_code=404, detail="Show not found")
 
     operation = create_operation(s, ShowSyncOperation(show))
+    queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
     return {"queued": True, "operation_id": operation.id}
 
 
@@ -207,6 +210,7 @@ def request_show_episode_redownload(
             selected_profile_count=selected_profile_count,
         ),
     )
+    queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
     return {
         "queued": True,
         "download_profiles_queued": selected_profile_count,
