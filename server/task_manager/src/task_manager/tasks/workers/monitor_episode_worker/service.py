@@ -12,8 +12,9 @@ from dailywire_api.types.user_info import DwMembershipLevel
 from task_manager.events.transactional import queue_event
 
 from ._helpers import save_status_metadata
-from .scheduling import MONITOR_COMPLETED_EVENT
+from .scheduling import MONITOR_COMPLETED_EVENT, MONITOR_REQUESTED_EVENT
 from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
+from ...helpers.episodes.identifier import reconcile_episode_identifier_from_dailywire
 from ...helpers.episodes.metadata import metadata_watch_expired, update_episode_from_dailywire
 from ...helpers.episodes.processing import (
     DwProcessingReason,
@@ -63,6 +64,11 @@ async def run_monitor_episode_worker(
             "Monitored episode not found in database; "
             "fetch_new_episodes must index it before monitoring"
         )
+
+    # The recurring APScheduler job is keyed by the identifier it was scheduled
+    # with. Keep that identity separately from the mutable database identifier so
+    # a Daily Wire correction can safely re-key or remove the current monitor job.
+    monitor_job_identifier = episode_identifier or db_episode.episode_identifier
 
     client = MiddlewareClient()
     try:
@@ -131,6 +137,18 @@ async def run_monitor_episode_worker(
             db_episode.metadata_is_final = metadata_watch_expired(db_episode.published_date)
         else:
             db_episode.metadata_is_final = False
+
+    # Use the exact same authoritative reconciliation path as metadata refresh.
+    # Daily Wire sometimes changes episodeNumber while an episode is still live or
+    # processing, so waiting for the post-publication metadata worker can leave the
+    # row misclassified for the entire pre-publication lifecycle.
+    identifier_changed = False
+    if not db_episode.is_no_show_today:
+        identifier_changed = reconcile_episode_identifier_from_dailywire(
+            s,
+            db_episode,
+            dw_episode,
+        )
     s.flush()
 
     save_status_metadata(
@@ -149,17 +167,46 @@ async def run_monitor_episode_worker(
         was_created=False,
     )
 
-    if (
-        new_status is EpisodePublishStatus.PUBLISHED_FINAL
-        or db_episode.is_no_show_today
-    ):
-        # No-show placeholders are intentionally handed off to the hourly stuck
-        # processing cleanup instead of being polled every monitor interval.
-        queue_event(
-            s,
-            MONITOR_COMPLETED_EVENT,
-            episode_event_payload(episode=db_episode, show=show, old_status=old_status),
+    monitor_should_continue = (
+        new_status is not EpisodePublishStatus.PUBLISHED_FINAL
+        and not db_episode.is_no_show_today
+    )
+
+    if identifier_changed:
+        # Remove the recurring job under the identifier it was originally keyed
+        # with. If monitoring still needs to continue, immediately recreate the
+        # job using the corrected identifier. Both events are transactional, so a
+        # failed database commit cannot desynchronize scheduler state from the row.
+        completion_payload = episode_event_payload(
+            episode=db_episode,
+            show=show,
+            old_status=old_status,
         )
+        completion_payload["episode_identifier"] = monitor_job_identifier
+        queue_event(s, MONITOR_COMPLETED_EVENT, completion_payload)
+
+        if monitor_should_continue:
+            queue_event(
+                s,
+                MONITOR_REQUESTED_EVENT,
+                episode_event_payload(
+                    episode=db_episode,
+                    show=show,
+                    old_status=old_status,
+                ),
+            )
+    elif not monitor_should_continue:
+        # Even if the identifier was corrected by an earlier monitor pass, the
+        # currently executing recurring job may still carry its old identifier in
+        # its kwargs until the queued re-key event is processed. Always remove the
+        # job by that scheduled identity rather than by the mutable database value.
+        completion_payload = episode_event_payload(
+            episode=db_episode,
+            show=show,
+            old_status=old_status,
+        )
+        completion_payload["episode_identifier"] = monitor_job_identifier
+        queue_event(s, MONITOR_COMPLETED_EVENT, completion_payload)
 
     s.commit()
 
