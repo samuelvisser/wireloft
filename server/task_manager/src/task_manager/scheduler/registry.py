@@ -9,6 +9,7 @@ from sqlalchemy import select
 from task_manager.scheduler.db import TaskDefinition
 
 _REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[Any]]]] = {}
+TerminalCallback = Callable[..., None]
 
 
 @dataclass
@@ -30,6 +31,7 @@ class TaskMeta:
     allowed_resource_types: tuple[str, ...] = ("show", "season", "episode", "movie")
     default_max_retries: Optional[int] = None
     tracks_progress: bool = True
+    terminal_callback: Optional[TerminalCallback] = None
     triggers: List[TriggerMeta] = field(default_factory=list)
 
 
@@ -40,12 +42,19 @@ def task(
     allowed_resource_types: Optional[tuple[str, ...]] = None,
     default_max_retries: Optional[int] = None,
     tracks_progress: bool = True,
+    terminal_callback: Optional[TerminalCallback] = None,
 ):
     """Decorator to register an async task callable.
 
     A worker may return ``None`` or a ``TaskResult``. The executor persists a
     structured result without forcing the worker to know whether it was started
     by the UI, a cron schedule, or another worker.
+
+    ``terminal_callback`` is an optional infrastructure hook invoked after the
+    TaskRun has been durably finalized (success/failure/cancellation, but not
+    while waiting for a retry). It is useful for generic resource queues that
+    need to fill a newly freed execution slot without putting queue logic inside
+    worker result handling.
     """
 
     def decorator(fn: Callable[..., Awaitable[Any]]):
@@ -57,6 +66,7 @@ def task(
             or ("show", "season", "episode", "movie"),
             default_max_retries=default_max_retries,
             tracks_progress=tracks_progress,
+            terminal_callback=terminal_callback,
         )
         _REGISTRY[key] = (meta, fn)
 
