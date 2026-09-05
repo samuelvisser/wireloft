@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Sequence
 
-from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from backend.db.core import get_session
 from backend.db.models import Episode, Show
-from backend.db.models.media_download import MediaDownloadBase
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.local_media_profile_types import PreferredFormat
 from dailywire_api.dw_api.client import MiddlewareClient
@@ -50,54 +47,25 @@ def refresh_episode_media_urls(s: Session, *, episode: Episode, show: Show) -> N
     s.commit()
 
 
-class RowProgressWriter:
-    """Persists download progress onto the media_downloads row (and TaskRun).
+class TaskProgressWriter:
+    """Translate downloader byte progress into generic TaskRun progress.
 
-    Uses a throwaway session per write so it never interferes with the worker's
-    main transaction; the downloader already throttles callbacks to ~1/second.
+    MediaDownload is intentionally not touched here. Live percentage, status and
+    cancellation belong exclusively to TaskRun/TaskOperation; the domain row is
+    updated only when a worker has produced a persistent artifact.
     """
 
-    def __init__(
-            self,
-            media_download_id: int,
-            task_progress=None,
-            attempt_generation: Optional[int] = None,
-    ):
-        self._id = media_download_id
+    def __init__(self, task_progress=None):
         self._task_progress = task_progress
-        self._attempt_generation = attempt_generation
-        self._last_pct: int = -1
+        self._last_pct = -1
 
-    def __call__(self, p: DownloadProgress) -> None:
-        fraction = p.fraction
+    def __call__(self, progress: DownloadProgress) -> None:
+        fraction = progress.fraction
         if fraction is None:
             return
         pct = max(0, min(99, int(fraction * 100)))
         if pct == self._last_pct:
             return
         self._last_pct = pct
-
-        updated = self.write(pct, downloaded_bytes=p.bytes_downloaded)
-        if updated and self._task_progress is not None:
+        if self._task_progress is not None:
             self._task_progress.set(pct)
-
-    def write(self, pct: int, *, downloaded_bytes: Optional[int] = None) -> bool:
-        values: dict = {"progress": pct}
-        if downloaded_bytes is not None:
-            values["downloaded_bytes"] = downloaded_bytes
-
-        s = get_session()
-        try:
-            stmt = update(MediaDownloadBase).where(MediaDownloadBase.id == self._id)
-            if self._attempt_generation is not None:
-                stmt = stmt.where(
-                    MediaDownloadBase.attempt_generation == self._attempt_generation
-                )
-            result = s.execute(stmt.values(**values))
-            s.commit()
-            return bool(result.rowcount)
-        except Exception:
-            s.rollback()
-            return False
-        finally:
-            s.close()
