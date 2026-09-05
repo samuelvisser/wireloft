@@ -12,6 +12,7 @@ from task_manager.scheduler.types import OperationSource, OperationStatus
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
+    OperationStatus.WAITING.value,
 }
 _ACTIVE_DOWNLOAD_STATUSES = {
     MediaDownloadStatus.PENDING.value,

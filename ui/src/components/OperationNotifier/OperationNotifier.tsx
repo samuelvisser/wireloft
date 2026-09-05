@@ -11,7 +11,7 @@ import {toast} from 'react-hot-toast'
 import {type TaskOperationRead} from '../../types/schemas/operation'
 import {refreshFrontendPuller, useFrontendPuller} from '../../lib/puller'
 
-const ACTIVE_STATUSES = new Set(['QUEUED', 'RUNNING'])
+const ACTIVE_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'PARTIAL', 'FAILED', 'CANCELED'])
 
 type OperationContextValue = {

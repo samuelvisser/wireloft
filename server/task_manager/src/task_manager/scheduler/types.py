@@ -14,6 +14,7 @@ class TaskStatus(str, Enum):
 class OperationStatus(str, Enum):
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
+    WAITING = "WAITING"
     SUCCEEDED = "SUCCEEDED"
     PARTIAL = "PARTIAL"
     FAILED = "FAILED"

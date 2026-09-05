@@ -1,10 +1,13 @@
 import json
+import logging
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from threading import Condition
 
 from builtins import str
 from dataclasses import dataclass
-from typing import Dict, ClassVar, Any, Optional, Literal, NamedTuple
+from typing import Callable, Dict, ClassVar, Any, Iterator, Optional, Literal, NamedTuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import Request, urlopen
@@ -26,6 +29,8 @@ from dailywire_api.records import (
 from dailywire_authorisation import DeviceAuthClient
 from config import get_settings
 
+logger = logging.getLogger(__name__)
+
 # ---------------- request pacing (global across dailywire_api) ----------------
 # We intentionally keep this module-level so that all clients share the same pacing state.
 # A ticketed Condition serializes request starts without holding the underlying lock while
@@ -37,6 +42,34 @@ _pacing_serving_ticket: int = 0
 _last_request_ns: Optional[int] = None
 _ms_since_last_request: Optional[int] = None
 _fast_requests: int = 0
+
+SlowRequestCooldownObserver = Callable[[bool], None]
+_slow_request_cooldown_observer: ContextVar[SlowRequestCooldownObserver | None] = ContextVar(
+    "dailywire_slow_request_cooldown_observer",
+    default=None,
+)
+
+
+@contextmanager
+def slow_request_cooldown_observer(observer: SlowRequestCooldownObserver) -> Iterator[None]:
+    """Observe slow request cooldown waits in the current execution context."""
+    token = _slow_request_cooldown_observer.set(observer)
+    try:
+        yield
+    finally:
+        _slow_request_cooldown_observer.reset(token)
+
+
+def _notify_slow_request_cooldown(waiting: bool) -> None:
+    observer = _slow_request_cooldown_observer.get()
+    if observer is None:
+        return
+    try:
+        observer(waiting)
+    except Exception:
+        # Pacing must never fail a Daily Wire request merely because optional
+        # execution-state reporting could not be persisted.
+        logger.exception("Daily Wire slow request cooldown observer failed")
 
 
 def _wait_before_request() -> None:
@@ -59,58 +92,66 @@ def _wait_before_request() -> None:
     min_fast_ms = int(st.min_fast_request_ms)
     min_slow_ms = int(st.min_slow_request_ms)
     max_fast = int(st.max_fast_requests)
+    cooldown_waiting = False
 
-    with _pacing_condition:
-        ticket = _pacing_next_ticket
-        _pacing_next_ticket += 1
+    try:
+        with _pacing_condition:
+            ticket = _pacing_next_ticket
+            _pacing_next_ticket += 1
 
-        while ticket != _pacing_serving_ticket:
-            _pacing_condition.wait()
+            while ticket != _pacing_serving_ticket:
+                _pacing_condition.wait()
 
-        try:
-            # Sample the clock only after this request owns the pacing turn. A
-            # timestamp captured before waiting in the queue can be minutes stale.
-            now_ns = time.monotonic_ns()
-            if _last_request_ns is None:
-                elapsed_ms: Optional[int] = None
-                next_fast_requests = 0
-                slow_cooldown = False
-                target_start_ns = now_ns
-            else:
-                elapsed_ns = max(0, now_ns - _last_request_ns)
-                elapsed_ms = int(elapsed_ns / 1_000_000)
-
-                if elapsed_ms >= min_slow_ms:
+            try:
+                # Sample the clock only after this request owns the pacing turn. A
+                # timestamp captured before waiting in the queue can be minutes stale.
+                now_ns = time.monotonic_ns()
+                if _last_request_ns is None:
+                    elapsed_ms: Optional[int] = None
                     next_fast_requests = 0
+                    slow_cooldown = False
+                    target_start_ns = now_ns
                 else:
-                    next_fast_requests = _fast_requests + 1
+                    elapsed_ns = max(0, now_ns - _last_request_ns)
+                    elapsed_ms = int(elapsed_ns / 1_000_000)
 
-                slow_cooldown = next_fast_requests > max_fast
-                target_ms = min_fast_ms
-                if slow_cooldown:
-                    target_ms = max(target_ms, min_slow_ms)
+                    if elapsed_ms >= min_slow_ms:
+                        next_fast_requests = 0
+                    else:
+                        next_fast_requests = _fast_requests + 1
 
-                target_start_ns = max(
-                    now_ns,
-                    _last_request_ns + (target_ms * 1_000_000),
-                )
+                    slow_cooldown = next_fast_requests > max_fast
+                    target_ms = min_fast_ms
+                    if slow_cooldown:
+                        target_ms = max(target_ms, min_slow_ms)
 
-            _ms_since_last_request = elapsed_ms
+                    target_start_ns = max(
+                        now_ns,
+                        _last_request_ns + (target_ms * 1_000_000),
+                    )
 
-            # Condition.wait() releases the underlying lock. Other callers can
-            # therefore enqueue while this request is pacing, but cannot overtake
-            # it because only the serving ticket may proceed.
-            while True:
+                _ms_since_last_request = elapsed_ms
+
                 remaining_ns = target_start_ns - time.monotonic_ns()
-                if remaining_ns <= 0:
-                    break
-                _pacing_condition.wait(timeout=remaining_ns / 1_000_000_000)
+                if slow_cooldown and remaining_ns > 0:
+                    cooldown_waiting = True
+                    _notify_slow_request_cooldown(True)
 
-            _last_request_ns = time.monotonic_ns()
-            _fast_requests = 0 if slow_cooldown else next_fast_requests
-        finally:
-            _pacing_serving_ticket += 1
-            _pacing_condition.notify_all()
+                # Condition.wait() releases the underlying lock. Other callers can
+                # therefore enqueue while this request is pacing, but cannot overtake
+                # it because only the serving ticket may proceed.
+                while remaining_ns > 0:
+                    _pacing_condition.wait(timeout=remaining_ns / 1_000_000_000)
+                    remaining_ns = target_start_ns - time.monotonic_ns()
+
+                _last_request_ns = time.monotonic_ns()
+                _fast_requests = 0 if slow_cooldown else next_fast_requests
+            finally:
+                _pacing_serving_ticket += 1
+                _pacing_condition.notify_all()
+    finally:
+        if cooldown_waiting:
+            _notify_slow_request_cooldown(False)
 
 
 @dataclass(frozen=True)

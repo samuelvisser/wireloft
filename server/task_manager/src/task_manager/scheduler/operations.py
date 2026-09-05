@@ -20,9 +20,12 @@ from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import OperationSource, OperationStatus, TaskStatus
 
 
+TASK_RUN_WAIT_STATE_META_KEY = "_operation_wait_state"
+
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
+    OperationStatus.WAITING.value,
 }
 _TERMINAL_TASK_STATUSES = {
     TaskStatus.SUCCEEDED,
@@ -296,13 +299,28 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
         return operation
 
     if len(terminal_runs) < total:
-        operation.status = OperationStatus.RUNNING.value
         operation.finished_at = None
         operation.error = None
-        if total == 1:
-            operation.message = linked_runs[-1].message or "Running"
+        wait_state = next(
+            (
+                state
+                for run in reversed(linked_runs)
+                if _task_status(run.status) not in _TERMINAL_TASK_STATUSES
+                for state in (_run_wait_state(run),)
+                if state is not None
+            ),
+            None,
+        )
+        if wait_state is not None:
+            operation.status = OperationStatus.WAITING.value
+            message = wait_state.get("message")
+            operation.message = message if isinstance(message, str) and message else "Waiting"
         else:
-            operation.message = f"{len(terminal_runs)}/{total} tasks finished"
+            operation.status = OperationStatus.RUNNING.value
+            if total == 1:
+                operation.message = linked_runs[-1].message or "Running"
+            else:
+                operation.message = f"{len(terminal_runs)}/{total} tasks finished"
         return operation
 
     statuses = [_task_status(run.status) for run in terminal_runs]
@@ -579,6 +597,18 @@ def _run_reports_worker_progress(run: TaskRun) -> bool:
     # Therefore a non-zero active percentage can only come from the worker/service
     # through ProgressUpdater and is safe to prefer over generic target completion.
     return isinstance(run.progress, int) and run.progress > 0
+
+
+def _run_wait_state(run: TaskRun) -> dict[str, Any] | None:
+    if not isinstance(run.meta, dict):
+        return None
+    wait_state = run.meta.get(TASK_RUN_WAIT_STATE_META_KEY)
+    if not isinstance(wait_state, dict):
+        return None
+    reason = wait_state.get("reason")
+    if not isinstance(reason, str) or not reason:
+        return None
+    return wait_state
 
 
 def _link_target_to_run(session: Session, target: TaskOperationTarget, run: TaskRun) -> None:

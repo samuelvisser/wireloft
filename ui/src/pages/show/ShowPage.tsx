@@ -26,6 +26,7 @@ function preferredFormatLabel(value?: string | null) {
 }
 
 const EPISODE_SKELETON_COUNT = 12
+const DAILY_WIRE_COOLDOWN_MESSAGE = 'Waiting for Daily Wire request cooldown. Will resume soon.'
 
 export default function ShowPage() {
   const { id } = useParams()
@@ -186,21 +187,27 @@ export default function ShowPage() {
   const syncDisabledReason = syncStarting
     ? `WireLoft is starting a sync for ${show.title}.`
     : syncOperation
-      ? `A sync is running for ${show.title}.`
+      ? syncOperation.status === 'WAITING'
+        ? syncOperation.message || DAILY_WIRE_COOLDOWN_MESSAGE
+        : `A sync is running for ${show.title}.`
       : undefined
   const metadataRefreshDisabledReason = metadataRefreshStarting
     ? `WireLoft is starting a metadata refresh for ${show.title}.`
     : metadataRefreshOperation
-      ? `A metadata refresh is running for ${show.title}.${metadataRefreshOperation.progressTotal > 0
-        ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} episodes have finished.`
-        : ''}`
+      ? metadataRefreshOperation.status === 'WAITING'
+        ? metadataRefreshOperation.message || DAILY_WIRE_COOLDOWN_MESSAGE
+        : `A metadata refresh is running for ${show.title}.${metadataRefreshOperation.progressTotal > 0
+          ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} episodes have finished.`
+          : ''}`
       : undefined
   const downloadProfileStateUnknown = downloadProfilesLoading && downloadProfiles === undefined
   const downloadProfileStateFailed = Boolean(downloadProfilesError) && downloadProfiles === undefined
   const redownloadDisabledReason = redownloadStarting
     ? `WireLoft is starting a delete and re-download operation for ${show.title}.`
     : redownloadOperation
-      ? `A delete and re-download operation is running for ${show.title}.`
+      ? redownloadOperation.status === 'WAITING'
+        ? redownloadOperation.message || DAILY_WIRE_COOLDOWN_MESSAGE
+        : `A delete and re-download operation is running for ${show.title}.`
       : downloadProfileStateUnknown
         ? 'WireLoft is still checking which Download Profiles are attached to this show.'
         : downloadProfileStateFailed
@@ -541,7 +548,7 @@ export default function ShowPage() {
                             type="button"
                             className="show-profile-chip show-profile-chip-main"
                             onClick={() => navigate(`/edit-stream-profile/${profile.type}/${profile.id}`, {state: profile})}
-                            title={`Open ${label} stream profile`}
+                            title={`Open ${label}`}
                           >
                             <span>{label}</span>
                             <FontAwesomeIcon icon={['fas', 'arrow-up-right-from-square'] as any} aria-hidden="true"/>
