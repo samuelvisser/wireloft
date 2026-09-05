@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.media_download import *
@@ -22,7 +22,10 @@ from backend.types.media_types import MediaType
 from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
-from task_manager.tasks.media_download_operations import get_active_media_download_operation
+from task_manager.tasks.media_download_operations import (
+    get_active_media_download_operation,
+    prepare_media_download_artifact,
+)
 
 
 def get_media_downloads_list(s: Session) -> list[MediaDownloadAPIRead]:
@@ -38,10 +41,11 @@ def get_media_downloads_view(
         statuses: Optional[list[str]] = None,
         limit: Optional[int] = None,
 ) -> list[MediaDownloadAPIReadView]:
-    """Persistent media artifacts joined with media/profile context, newest first."""
+    """Return persistent media-artifact state; active execution is not part of this query."""
     stmt = (
         select(MediaDownloadBase, LocalMediaProfileBase)
         .join(LocalMediaProfileBase, LocalMediaProfileBase.id == MediaDownloadBase.local_media_profile_id)
+        .options(selectinload(MediaDownloadBase.attempts))
         .order_by(MediaDownloadBase.id.desc())
     )
     if statuses:
@@ -57,7 +61,9 @@ def get_media_downloads_view(
             continue
         if movie_slug is not None and (movie is None or movie.slug != movie_slug):
             continue
+
         show = episode.show if episode else None
+        latest_attempt = download.attempts[0] if download.attempts else None
         base = MediaDownloadAPIRead.model_validate(download)
         views.append(MediaDownloadAPIReadView(
             **base.model_dump(by_alias=False),
@@ -74,6 +80,11 @@ def get_media_downloads_view(
             local_media_profile_name=profile.name,
             preferred_format=profile.preferred_format,
             downloaded_publish_status=getattr(download, "downloaded_publish_status", None),
+            latest_attempt_status=latest_attempt.status if latest_attempt else None,
+            latest_attempt_error=latest_attempt.error_message if latest_attempt else None,
+            latest_attempt_is_redownload=latest_attempt.is_redownload if latest_attempt else None,
+            latest_attempt_started_at=latest_attempt.started_at if latest_attempt else None,
+            latest_attempt_finished_at=latest_attempt.finished_at if latest_attempt else None,
         ))
         if limit is not None and len(views) >= limit:
             break
@@ -104,28 +115,6 @@ def _assert_no_active_attempt(s: Session, download: MediaDownloadBase) -> None:
         raise HTTPException(status_code=409, detail="This download already has an active operation")
 
 
-def prepare_media_download_for_attempt(
-    download: MediaDownloadBase,
-    *,
-    remove_existing_artifacts: bool = True,
-) -> None:
-    """Prepare persistent artifact state for a replacement attempt.
-
-    This does not queue or describe execution. It only records the fact that the
-    previous artifact is no longer the artifact WireLoft should present.
-    """
-    if remove_existing_artifacts:
-        remove_download_artifacts(download.file_path)
-    download.artifact_status = MediaDownloadArtifactStatus.ABSENT.value
-    download.artifact_error = None
-    download.automatic_retry_suppressed = False
-    download.downloaded_bytes = None
-    download.format_downloaded = None
-    download.downloaded_at = None
-    if isinstance(download, EpisodeMediaDownload):
-        download.downloaded_publish_status = None
-
-
 def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownloadAPICreate) -> EpisodeMediaDownload:
     episode: Optional[Episode] = s.query(Episode).filter(Episode.slug == episode_slug).one_or_none()
     if episode is None:
@@ -146,7 +135,7 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         _assert_no_active_attempt(s, existing)
         if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
             raise HTTPException(status_code=409, detail=f"Episode already has a downloaded file for profile '{profile.name}'")
-        prepare_media_download_for_attempt(existing)
+        prepare_media_download_artifact(existing)
         existing.file_path = str(resolve_episode_output_path(profile.output_template, episode=episode))
         s.flush()
         return existing
@@ -185,7 +174,7 @@ def create_movie_download(
         _assert_no_active_attempt(s, existing)
         if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
             raise HTTPException(status_code=409, detail=f"Movie already has a downloaded file for profile '{profile.name}'")
-        prepare_media_download_for_attempt(existing)
+        prepare_media_download_artifact(existing)
         existing.file_path = str(resolve_movie_output_path(profile.output_template, movie=movie))
         s.flush()
         return existing
@@ -234,7 +223,7 @@ def create_movie_extra_download(
         _assert_no_active_attempt(s, existing)
         if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
             raise HTTPException(status_code=409, detail=f"Movie extra already has a downloaded file for profile '{profile.name}'")
-        prepare_media_download_for_attempt(existing)
+        prepare_media_download_artifact(existing)
         existing.file_path = str(resolve_movie_output_path(profile.output_template, movie=movie, media_item=movie_extra))
         s.flush()
         return existing
@@ -272,7 +261,7 @@ def retry_media_download(s: Session, media_download_id: int) -> MediaDownloadBas
     if download is None:
         raise HTTPException(status_code=404, detail="Media download not found")
     _assert_no_active_attempt(s, download)
-    prepare_media_download_for_attempt(download)
+    prepare_media_download_artifact(download)
     s.flush()
     return download
 
