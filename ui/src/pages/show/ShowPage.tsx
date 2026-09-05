@@ -26,7 +26,7 @@ function preferredFormatLabel(value?: string | null) {
 }
 
 const EPISODE_SKELETON_COUNT = 12
-const DAILY_WIRE_COOLDOWN_MESSAGE = 'Waiting for Daily Wire request cooldown. Will resume soon.'
+const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
 
 export default function ShowPage() {
   const { id } = useParams()
@@ -188,14 +188,14 @@ export default function ShowPage() {
     ? `WireLoft is starting a sync for ${show.title}.`
     : syncOperation
       ? syncOperation.status === 'WAITING'
-        ? syncOperation.message || DAILY_WIRE_COOLDOWN_MESSAGE
+        ? syncOperation.message || OPERATION_WAITING_MESSAGE
         : `A sync is running for ${show.title}.`
       : undefined
   const metadataRefreshDisabledReason = metadataRefreshStarting
     ? `WireLoft is starting a metadata refresh for ${show.title}.`
     : metadataRefreshOperation
       ? metadataRefreshOperation.status === 'WAITING'
-        ? metadataRefreshOperation.message || DAILY_WIRE_COOLDOWN_MESSAGE
+        ? metadataRefreshOperation.message || OPERATION_WAITING_MESSAGE
         : `A metadata refresh is running for ${show.title}.${metadataRefreshOperation.progressTotal > 0
           ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} episodes have finished.`
           : ''}`
@@ -206,7 +206,7 @@ export default function ShowPage() {
     ? `WireLoft is starting a delete and re-download operation for ${show.title}.`
     : redownloadOperation
       ? redownloadOperation.status === 'WAITING'
-        ? redownloadOperation.message || DAILY_WIRE_COOLDOWN_MESSAGE
+        ? redownloadOperation.message || OPERATION_WAITING_MESSAGE
         : `A delete and re-download operation is running for ${show.title}.`
       : downloadProfileStateUnknown
         ? 'WireLoft is still checking which Download Profiles are attached to this show.'
