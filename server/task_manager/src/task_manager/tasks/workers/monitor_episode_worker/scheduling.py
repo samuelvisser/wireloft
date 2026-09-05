@@ -50,6 +50,11 @@ def schedule_episode_monitor(
             "resource_type": "episode",
             "resource_id": resource_id,
             "schedule_id": None,
+            # The recurring cron schedule already is this worker's retry loop.
+            # Generic TaskRun retries would create separate date jobs that can run
+            # in between cron ticks and multiply one transient failure into many
+            # concurrent monitor attempts.
+            "max_retries": 0,
             "slug": episode_slug,
             "show_slug": show_slug,
             "season_id": season_id,

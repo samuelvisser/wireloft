@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
 from backend.types.episode_types import EpisodePublishStatus
-from dailywire_api.dw_api.client import MiddlewareClient
+from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from dailywire_api.types.user_info import DwMembershipLevel
 from task_manager.events.transactional import queue_event
 
@@ -70,12 +70,35 @@ async def run_monitor_episode_worker(
     # The database slug is the freshest one we know: Daily Wire may change an
     # episode's slug between statuses, and the slug baked into the scheduled job's
     # kwargs goes stale, while the row is refreshed on every successful poll.
-    dw_episode = client.get_episode_details(
-        db_episode.slug,
-        require_member_exclusive=(
-            show.membership_level != DwMembershipLevel.FREE.value
-        ),
-    )
+    try:
+        dw_episode = client.get_episode_details(
+            db_episode.slug,
+            require_member_exclusive=(
+                show.membership_level != DwMembershipLevel.FREE.value
+            ),
+        )
+    except MiddlewareAPIError as exc:
+        if exc.status_code != 404:
+            raise
+
+        # Daily Wire can temporarily stop resolving a live/scheduled episode's
+        # detail slug while its publication state is changing. A missing detail
+        # endpoint is therefore not enough evidence to mutate or delete our local
+        # episode. Leave the known state untouched and let the next recurring poll
+        # try again. The recurring monitor itself is the retry mechanism.
+        current_status = EpisodePublishStatus(db_episode.publish_status)
+        logger.info(
+            "Daily Wire temporarily returned 404 for monitored episode %s; "
+            "keeping status %s until the next poll",
+            db_episode.slug,
+            current_status.value,
+        )
+        print(
+            f"monitor_episode_worker completed for {db_episode.slug}: "
+            f"unchanged ({current_status.value}; Daily Wire returned 404)"
+        )
+        return current_status
+
     new_status = get_publish_status_from_dw_detail(dw_episode)
 
     old_status = db_episode.publish_status
