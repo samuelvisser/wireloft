@@ -46,8 +46,9 @@ def media_downloads_view(
     status_code=status.HTTP_202_ACCEPTED,
 )
 def media_downloads_retry(media_download_id: int):
-    """Start a new UI-visible attempt using the generic operation pipeline."""
+    """Start a replacement attempt using the generic operation pipeline."""
     active_operation_id: str | None = None
+    is_redownload = False
     with db_session() as s:
         download = s.get(MediaDownloadBase, media_download_id)
         if download is None:
@@ -55,6 +56,13 @@ def media_downloads_retry(media_download_id: int):
         active = get_active_media_download_operation(s, media_download_id)
         if active is not None:
             active_operation_id = active.id
+        # Capture this before retry_media_download clears the old artifact facts.
+        # A missing/corrupt artifact still represents a replacement of something
+        # WireLoft previously downloaded, so keep the redownload audit semantics.
+        is_redownload = (
+            download.downloaded_at is not None
+            or download.artifact_status in {"available", "missing", "corrupted"}
+        )
 
     if active_operation_id is not None:
         cancel_operation(
@@ -70,7 +78,7 @@ def media_downloads_retry(media_download_id: int):
                 s,
                 download,
                 source=OperationSource.UI.value,
-                is_redownload=download.artifact_status == "available",
+                is_redownload=is_redownload,
             )
             dispatch_queued_media_download_operations(s)
             operation_id = operation.id
