@@ -1,4 +1,4 @@
-import {useId, useMemo, useRef} from 'react'
+import {useEffect, useId, useMemo, useRef, useState} from 'react'
 import type {CSSProperties, ChangeEventHandler, FocusEventHandler, MouseEventHandler} from 'react'
 
 
@@ -98,9 +98,31 @@ export default function TimeInterval({
     const autoId = useId()
     const baseId = idPrefix ?? `ti-${autoId}`
     const justFocusedUnit = useRef<TimeUnit | null>(null)
+    const [manualFirstUnit, setManualFirstUnit] = useState<TimeUnit | null>(null)
+    const [replaceFinerOnEditUnit, setReplaceFinerOnEditUnit] = useState<TimeUnit | null>(null)
     const parts = useMemo(() => splitValue(value, backendUnit), [backendUnit, value])
-    const visibleUnits = useMemo(() => visibleUnitsForValue(value, backendUnit), [backendUnit, value])
+    const automaticallyVisibleUnits = useMemo(
+        () => visibleUnitsForValue(value, backendUnit),
+        [backendUnit, value],
+    )
     const availableUnits = useMemo(() => unitsForBackendUnit(backendUnit), [backendUnit])
+    const visibleUnits = useMemo(() => {
+        if (!manualFirstUnit) return automaticallyVisibleUnits
+
+        const automaticIndex = availableUnits.indexOf(automaticallyVisibleUnits[0])
+        const manualIndex = availableUnits.indexOf(manualFirstUnit)
+        if (manualIndex < 0) return automaticallyVisibleUnits
+        return availableUnits.slice(Math.min(automaticIndex, manualIndex))
+    }, [automaticallyVisibleUnits, availableUnits, manualFirstUnit])
+    const nextLargerUnit = useMemo(() => {
+        const firstVisibleIndex = availableUnits.indexOf(visibleUnits[0])
+        return firstVisibleIndex > 0 ? availableUnits[firstVisibleIndex - 1] : null
+    }, [availableUnits, visibleUnits])
+
+    useEffect(() => {
+        setManualFirstUnit(null)
+        setReplaceFinerOnEditUnit(null)
+    }, [backendUnit])
 
     const emitPart = (unit: TimeUnit, rawValue: string) => {
         const parsed = rawValue.trim() === '' ? 0 : Number(rawValue)
@@ -108,7 +130,18 @@ export default function TimeInterval({
         const allowFraction = unit === backendUnit && !Number.isInteger(step)
         if (!allowFraction) nextPart = Math.floor(nextPart)
 
+        const shouldReplaceFinerUnits = replaceFinerOnEditUnit === unit && rawValue.trim() !== ''
         const nextParts = {...parts, [unit]: nextPart}
+        if (shouldReplaceFinerUnits) {
+            const editedUnitIndex = availableUnits.indexOf(unit)
+            for (const finerUnit of availableUnits.slice(editedUnitIndex + 1)) {
+                nextParts[finerUnit] = 0
+            }
+            setReplaceFinerOnEditUnit(null)
+        } else if (replaceFinerOnEditUnit && replaceFinerOnEditUnit !== unit) {
+            setReplaceFinerOnEditUnit(null)
+        }
+
         const total = availableUnits.reduce(
             (sum, availableUnit) => (
                 sum + nextParts[availableUnit] * backendUnitsPerDisplayUnit(availableUnit, backendUnit)
@@ -131,6 +164,12 @@ export default function TimeInterval({
 
     const onUnitChange = (unit: TimeUnit): ChangeEventHandler<HTMLInputElement> => (event) => {
         emitPart(unit, event.currentTarget.value)
+    }
+
+    const addLargerUnit = () => {
+        if (!nextLargerUnit) return
+        setManualFirstUnit(nextLargerUnit)
+        setReplaceFinerOnEditUnit(nextLargerUnit)
     }
 
     return (
@@ -159,6 +198,18 @@ export default function TimeInterval({
                     </div>
                 </div>
             ))}
+            {nextLargerUnit ? (
+                <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={addLargerUnit}
+                    disabled={disabled}
+                    aria-label={`Add ${UNIT_LABELS[nextLargerUnit]} input`}
+                    title={`Add ${UNIT_LABELS[nextLargerUnit]}`}
+                >
+                    + {UNIT_LABELS[nextLargerUnit]}
+                </button>
+            ) : null}
         </div>
     )
 }
