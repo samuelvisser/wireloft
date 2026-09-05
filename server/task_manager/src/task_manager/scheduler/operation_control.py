@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Iterable
 
@@ -18,6 +19,7 @@ from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import OperationStatus, TaskStatus
 
 
+logger = logging.getLogger(__name__)
 RUN_CANCEL_REQUESTED_META_KEY = "_operation_cancel_requested"
 RUN_CANCEL_REASON_META_KEY = "_operation_cancel_reason"
 
@@ -81,6 +83,15 @@ def _terminal_callbacks_for_definition_ids(
         if task_meta.terminal_callback is not None:
             callbacks.add(task_meta.terminal_callback)
     return callbacks
+
+
+def _run_terminal_callbacks(callbacks: Iterable) -> None:
+    """Run post-terminal queue hooks without changing an already-durable outcome."""
+    for callback in callbacks:
+        try:
+            callback()
+        except Exception:
+            logger.exception("Task terminal callback failed after cancellation")
 
 
 def cancel_operation(
@@ -158,8 +169,7 @@ def cancel_operation(
         operation_id=operation_id,
         run_ids=cancelable_run_ids,
     )
-    for callback in terminal_callbacks:
-        callback()
+    _run_terminal_callbacks(terminal_callbacks)
 
     from task_manager.scheduler.operations import get_operation
     return get_operation(operation_id)
@@ -174,7 +184,7 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
     finalization both honor that request and cannot resurrect the run.
     """
     session = get_session()
-    callback = None
+    callbacks: set = set()
     was_running = False
     try:
         run = session.get(TaskRun, run_id)
@@ -202,15 +212,13 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
         session.commit()
         if not was_running:
             callbacks = _terminal_callbacks_for_definition_ids(session, {definition_id})
-            callback = next(iter(callbacks), None)
     finally:
         session.close()
 
     from task_manager.scheduler.scheduler import cancel_pending_task_run_jobs
 
     cancel_pending_task_run_jobs((run_id,))
-    if callback is not None:
-        callback()
+    _run_terminal_callbacks(callbacks)
     return True
 
 
@@ -309,8 +317,7 @@ def restart_operation(operation_id: str) -> dict | None:
 
     # Queue-managed work is dispatched only after the restarted operation is
     # durable. Each dispatcher decides how many slots are available.
-    for dispatcher in queue_dispatchers:
-        dispatcher()
+    _run_terminal_callbacks(queue_dispatchers)
 
     from task_manager.scheduler.operations import get_operation
     return get_operation(operation_id)
