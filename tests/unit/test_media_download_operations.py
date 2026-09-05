@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 
@@ -183,76 +183,54 @@ def test_deleting_media_download_cascades_its_operation_graph():
 
 def test_deleting_reserved_download_releases_its_queue_slot(monkeypatch):
     import task_manager.tasks  # noqa: F401 - register download task metadata
-    from task_manager.scheduler.db import TaskRun
-    from task_manager.scheduler.types import OperationSource, TaskStatus
-    from task_manager.tasks import media_download_operations
+    from task_manager.scheduler.db import TaskDefinition, TaskOperationRun, TaskRun
+    from task_manager.scheduler.registry import get_task
+    from task_manager.scheduler.types import OperationSource, ResourceType, TaskStatus
+    from task_manager.tasks.media_download_operations import create_media_download_operation
 
     session, engine = _session()
     try:
-        first = _make_download(session, slug="reserved-delete")
-        second = _make_download(session, slug="waiting-delete")
-        first_operation = media_download_operations.create_media_download_operation(
+        download = _make_download(session, slug="reserved-delete")
+        operation = create_media_download_operation(
             session,
-            first,
+            download,
             source=OperationSource.SYSTEM.value,
         )
-        second_operation = media_download_operations.create_media_download_operation(
-            session,
-            second,
-            source=OperationSource.SYSTEM.value,
+        definition_id = session.scalar(
+            select(TaskDefinition.id).where(TaskDefinition.key == "download_episode")
         )
+        assert definition_id is not None
 
-        # Avoid touching a real APScheduler instance in this relationship test.
+        run = TaskRun(
+            definition_id=definition_id,
+            resource_type=ResourceType.MEDIA_DOWNLOAD,
+            resource_id=download.id,
+            status=TaskStatus.SCHEDULED,
+            progress=0,
+            attempt_count=0,
+            max_retries=2,
+        )
+        session.add(run)
+        session.flush()
+        session.add(TaskOperationRun(
+            operation_id=operation.id,
+            target_id=operation.targets[0].id,
+            task_run_id=run.id,
+        ))
+        session.commit()
+
         monkeypatch.setattr(
             "task_manager.scheduler.scheduler.cancel_pending_resource_jobs",
             lambda resources: 0,
         )
-        dispatched = []
-        monkeypatch.setattr(
-            media_download_operations,
-            "on_media_download_task_terminal",
-            lambda **_: dispatched.append(True),
-        )
-
-        # The relationship listener resolves callbacks from the registry, whose
-        # registered callback object predates the monkeypatch above. Replace the
-        # task metadata callback directly for this test.
-        from task_manager.scheduler.registry import get_task
+        callbacks: list[bool] = []
         task_meta, _ = get_task("download_episode")
         original_callback = task_meta.terminal_callback
-        task_meta.terminal_callback = lambda **_: dispatched.append(True)
+        task_meta.terminal_callback = lambda **_: callbacks.append(True)
         try:
-            run = TaskRun(
-                definition_id=session.scalar(
-                    __import__("sqlalchemy").select(
-                        __import__("task_manager.scheduler.db", fromlist=["TaskDefinition"]).TaskDefinition.id
-                    ).where(
-                        __import__("task_manager.scheduler.db", fromlist=["TaskDefinition"]).TaskDefinition.key
-                        == "download_episode"
-                    )
-                ),
-                resource_type="media_download",
-                resource_id=first.id,
-                status=TaskStatus.SCHEDULED,
-                progress=0,
-                attempt_count=0,
-                max_retries=2,
-            )
-            session.add(run)
-            session.flush()
-            first_operation.targets[0].run_links.append(
-                __import__("task_manager.scheduler.db", fromlist=["TaskOperationRun"]).TaskOperationRun(
-                    operation_id=first_operation.id,
-                    target_id=first_operation.targets[0].id,
-                    task_run_id=run.id,
-                )
-            )
+            session.delete(download)
             session.commit()
-
-            assert second_operation.status == "QUEUED"
-            session.delete(first)
-            session.commit()
-            assert dispatched
+            assert callbacks == [True]
         finally:
             task_meta.terminal_callback = original_callback
     finally:
