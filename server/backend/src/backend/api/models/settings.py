@@ -51,6 +51,7 @@ SettingFieldPath = Literal[
     "newEpisodeSchedule.metadataRefreshIntervals",
     "episodeStatusTiming.publishedCountdownAfterMinutes",
     "episodeStatusTiming.publishedFinalAfterMinutes",
+    "episodeStatusTiming.dwProcessingDeleteAfterMinutes",
     "downloadSettings.verifyDownloadsCron",
     "downloadSettings.maxConcurrentDownloads",
     "downloadSettings.maxDownloadAttempts",
@@ -95,6 +96,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "newEpisodeSchedule.metadataRefreshIntervals",
     "episodeStatusTiming.publishedCountdownAfterMinutes",
     "episodeStatusTiming.publishedFinalAfterMinutes",
+    "episodeStatusTiming.dwProcessingDeleteAfterMinutes",
     "downloadSettings.verifyDownloadsCron",
     "downloadSettings.maxConcurrentDownloads",
     "downloadSettings.maxDownloadAttempts",
@@ -225,6 +227,7 @@ class TrackNewEpisodeScheduleValue(_SettingsValueModel):
 class EpisodeStatusTimingValue(_SettingsValueModel):
     published_countdown_after_minutes: int = Field(ge=0)
     published_final_after_minutes: int = Field(ge=0)
+    dw_processing_delete_after_minutes: int = Field(ge=0)
 
     @field_validator("published_final_after_minutes")
     @classmethod

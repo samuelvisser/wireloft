@@ -28,7 +28,7 @@ from ..monitor_episode_worker.scheduling import MONITOR_REQUESTED_EVENT
 
 
 logger = logging.getLogger(__name__)
-STUCK_DW_PROCESSING_DELETE_AFTER = timedelta(hours=4)
+DEFAULT_STUCK_DW_PROCESSING_DELETE_AFTER_MINUTES = 4 * 60
 
 
 def _ensure_utc(value: datetime) -> datetime:
@@ -37,18 +37,28 @@ def _ensure_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _episode_is_old_enough(episode: Episode, *, now: datetime) -> bool:
+def _episode_is_old_enough(
+        episode: Episode,
+        *,
+        now: datetime,
+        delete_after: timedelta,
+) -> bool:
     reference = episode.published_date or episode.created_at
     if reference is None:
         return False
-    return now - _ensure_utc(reference) >= STUCK_DW_PROCESSING_DELETE_AFTER
+    return now - _ensure_utc(reference) >= delete_after
 
 
-def _processing_incident_is_old_enough(episode: Episode, *, now: datetime) -> bool:
+def _processing_incident_is_old_enough(
+        episode: Episode,
+        *,
+        now: datetime,
+        delete_after: timedelta,
+) -> bool:
     since = episode_dw_processing_since(episode)
     if since is None:
         return False
-    return now - since >= STUCK_DW_PROCESSING_DELETE_AFTER
+    return now - since >= delete_after
 
 
 def _delete_episode(s: Session, episode: Episode) -> None:
@@ -74,15 +84,23 @@ async def run_check_episodes_stuck_at_dw_processing(
         *,
         show_id: Optional[int] = None,
         show_slug: Optional[str] = None,
+        episode_id: Optional[int] = None,
+        force: bool = False,
+        delete_after_minutes: int = DEFAULT_STUCK_DW_PROCESSING_DELETE_AFTER_MINUTES,
         progress=None,
 ) -> None:
-    """Clean up Daily Wire placeholders/404 entries after a four-hour grace.
+    """Clean up Daily Wire placeholders/404 entries after the configured grace period.
 
-    Only two processing reasons are destructive: a known "No Show Today"
-    placeholder or an episode whose detail endpoint has continuously returned 404.
-    Generic Daily Wire processing remains owned by ``monitor_episode_worker`` and
-    the normal publication-final timeout.
+    Scheduled cleanup only destroys two known unusable processing states: a
+    "No Show Today" placeholder or an episode whose detail endpoint has
+    continuously returned 404. A forced run is a deliberate UI override for one
+    specific episode and removes that episode immediately while it is still in
+    ``dw_processing``.
     """
+    if force and episode_id is None:
+        raise ValueError("Forced stuck-processing cleanup requires a specific episode_id")
+
+    delete_after = timedelta(minutes=max(0, delete_after_minutes))
     stmt = select(Episode).where(
         or_(
             Episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value,
@@ -91,7 +109,9 @@ async def run_check_episodes_stuck_at_dw_processing(
             Episode.is_no_show_today.is_(True),
         )
     )
-    if show_id is not None:
+    if episode_id is not None:
+        stmt = stmt.where(Episode.id == episode_id)
+    elif show_id is not None:
         stmt = stmt.where(Episode.show_id == show_id)
     elif show_slug is not None:
         stmt = stmt.where(Episode.show.has(slug=show_slug))
@@ -100,6 +120,19 @@ async def run_check_episodes_stuck_at_dw_processing(
     if not candidates:
         update_progress(progress, 100, "No episodes stuck at dw_processing")
         print("check_episodes_stuck_at_dw_processing completed: nothing to check")
+        return
+
+    if force:
+        episode = candidates[0]
+        if episode.publish_status != EpisodePublishStatus.DW_PROCESSING.value:
+            update_progress(progress, 100, "Episode is no longer in dw_processing")
+            print("check_episodes_stuck_at_dw_processing completed: episode no longer processing")
+            return
+
+        logger.info("Early deleting dw_processing episode %s", episode.slug)
+        _delete_episode(s, episode)
+        update_progress(progress, 100, "Deleted processing episode early")
+        print("check_episodes_stuck_at_dw_processing completed: early deleted 1 episode")
         return
 
     access_token: Optional[str] = None
@@ -118,7 +151,7 @@ async def run_check_episodes_stuck_at_dw_processing(
 
         if episode.is_no_show_today:
             # Also migrates legacy placeholder rows into the generic non-usable
-            # state. Repeated hourly checks preserve the original observed time.
+            # state. Repeated checks preserve the original observed time.
             mark_episode_dw_processing(
                 episode,
                 reason=DwProcessingReason.NO_SHOW_TODAY,
@@ -149,11 +182,20 @@ async def run_check_episodes_stuck_at_dw_processing(
             continue
 
         # The cleanup condition means "this same unusable condition has persisted
-        # for four hours", not merely "the episode happens to be old". Requiring
-        # both clocks prevents a fresh 404 on an old episode from being deleted.
+        # for the configured grace period", not merely "the episode happens to be
+        # old". Requiring both clocks prevents a fresh 404 on an old episode from
+        # being deleted.
         if (
-            not _episode_is_old_enough(episode, now=now)
-            or not _processing_incident_is_old_enough(episode, now=now)
+            not _episode_is_old_enough(
+                episode,
+                now=now,
+                delete_after=delete_after,
+            )
+            or not _processing_incident_is_old_enough(
+                episode,
+                now=now,
+                delete_after=delete_after,
+            )
         ):
             checked += 1
             update_progress(
@@ -190,8 +232,9 @@ async def run_check_episodes_stuck_at_dw_processing(
         except MiddlewareAPIError as exc:
             if exc.status_code == 404:
                 logger.info(
-                    "Deleting episode %s after its unusable Daily Wire state persisted for four hours",
+                    "Deleting episode %s after its unusable Daily Wire state persisted for %s minutes",
                     episode.slug,
+                    delete_after_minutes,
                 )
                 _delete_episode(s, episode)
                 removed += 1
@@ -206,11 +249,13 @@ async def run_check_episodes_stuck_at_dw_processing(
                 reason is DwProcessingReason.NO_SHOW_TODAY
                 and is_no_show_today_title(detail.title)
             ):
-                # The placeholder itself still exists after four hours. It has no
-                # playable content and no reason to remain in the local library.
+                # The placeholder itself still exists after the configured grace
+                # period. It has no playable content and no reason to remain in the
+                # local library.
                 logger.info(
-                    "Deleting No Show Today episode %s after four hours in dw_processing",
+                    "Deleting No Show Today episode %s after %s minutes in dw_processing",
                     episode.slug,
+                    delete_after_minutes,
                 )
                 _delete_episode(s, episode)
                 removed += 1

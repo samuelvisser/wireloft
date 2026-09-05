@@ -23,7 +23,7 @@ from .service import run_check_episodes_stuck_at_dw_processing
     title="Check stuck Daily Wire episodes",
     description=(
         "Deletes No Show Today placeholders and continuously missing Daily Wire "
-        "episodes after a four-hour processing grace period"
+        "episodes after the configured processing grace period"
     ),
     allowed_resource_types=("show",),
     default_max_retries=2,
@@ -33,13 +33,21 @@ async def check_episodes_stuck_at_dw_processing(
         *,
         resource_id: Optional[int] = None,
         slug: Optional[str] = None,
+        episode_id: Optional[int] = None,
+        force: bool = False,
         progress=None,
 ) -> None:
     """Clean up unusable episodes that remain in dw_processing for too long."""
+    settings = get_settings()
     with db_session() as s:
         await run_check_episodes_stuck_at_dw_processing(
             s,
             show_id=resource_id,
             show_slug=slug,
+            episode_id=episode_id,
+            force=force,
+            delete_after_minutes=(
+                settings.episode_status_timing.dw_processing_delete_after_minutes
+            ),
             progress=progress,
         )

@@ -3,7 +3,7 @@ from fastapi import APIRouter, status
 from .service import *
 from ...models.episode import *
 from ...models.media_download import EpisodeDownloadAPICreate
-from ...models.operations import EpisodeMetadataOperationAccepted, MediaDownloadOperationAccepted
+from ...models.operations import EpisodeMetadataOperationAccepted, MediaDownloadOperationAccepted, TaskOperationAccepted
 from ..media_downloads.service import create_episode_download
 from backend.app import db_session
 from task_manager.scheduler.types import OperationSource
@@ -83,6 +83,23 @@ def episode_metadata_refresh(episode_slug: str):
     with db_session() as s:
         try:
             result = request_episode_metadata_refresh(s, episode_slug)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post(
+    "/{episode_slug}/early-delete",
+    response_model=TaskOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def episode_early_delete(episode_slug: str):
+    """Immediately remove one episode that is currently stuck in dw_processing."""
+    with db_session() as s:
+        try:
+            result = request_episode_early_delete(s, episode_slug)
             s.commit()
             return result
         except Exception:

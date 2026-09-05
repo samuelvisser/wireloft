@@ -446,23 +446,23 @@ All cron strings use standard five-field cron syntax (`minute hour day-of-month 
 <tr>
 <td><code>newEpisodeSchedule.monitorEpisodeCron</code></td>
 <td><code>WL_NEW_EPISODE_SCHEDULE__MONITOR_EPISODE_CRON</code></td>
-<td><code>*/1 * * * *</code></td>
+<td><code>*/2 * * * *</code></td>
 </tr>
 <tr>
-<td colspan="3">Rechecks episodes that exist but are not yet considered fully published every minute by default.</td>
+<td colspan="3">Rechecks episodes that exist but are not yet considered fully published every two minutes by default.</td>
 </tr>
 <tr>
-<td><code>newEpisodeSchedule.checkNoShowTodayCron</code></td>
-<td><code>WL_NEW_EPISODE_SCHEDULE__CHECK_NO_SHOW_TODAY_CRON</code></td>
-<td><code>0 */6 * * *</code></td>
+<td><code>newEpisodeSchedule.checkEpisodesStuckAtDwProcessingCron</code></td>
+<td><code>WL_NEW_EPISODE_SCHEDULE__CHECK_EPISODES_STUCK_AT_DW_PROCESSING_CRON</code></td>
+<td><code>0 * * * *</code></td>
 </tr>
 <tr>
-<td colspan="3">Rechecks Daily Wire <code>No Show Today</code> placeholder state every six hours by default.</td>
+<td colspan="3">Checks <code>dw_processing</code> episodes once per hour by default and cleans up persistent <code>No Show Today</code> placeholders or continuously missing Daily Wire episodes after the configured deletion delay.</td>
 </tr>
 <tr>
 <td><code>newEpisodeSchedule.metadataRefreshIntervals</code></td>
 <td><code>WL_NEW_EPISODE_SCHEDULE__METADATA_REFRESH_INTERVALS</code></td>
-<td><code>5m,15m,30m,1h,3h,6h,24h</code></td>
+<td><code>15m,30m,1h,3h,6h,24h,3d</code></td>
 </tr>
 <tr>
 <td colspan="3">Offsets after publication at which finalized episode metadata is refreshed. Values must be positive <code>s</code>, <code>m</code>, <code>h</code>, or <code>d</code> tokens, comma-separated, unique, and strictly increasing.</td>
@@ -473,9 +473,9 @@ All cron strings use standard five-field cron syntax (`minute hour day-of-month 
 
 ---
 
-## Episode publication timing
+## Episode lifecycle timing
 
-Daily Wire can report an episode as published before the media has fully transitioned away from a live/countdown version. WireLoft uses two timing thresholds.
+Daily Wire can report an episode as published before the media has fully transitioned away from a live/countdown version, and it can temporarily leave unusable entries in <code>dw_processing</code>. WireLoft uses these timing thresholds to handle both cases.
 
 <table>
 <thead>
@@ -502,13 +502,18 @@ Daily Wire can report an episode as published before the media has fully transit
 <tr>
 <td colspan="3">Safety fallback: usually WireLoft can very accurately determine episode status. If something seems to be hanging, this is the fallback. Minutes after publication before WireLoft can safely treat the episode as final/past the countdown stage. Must be at least the countdown threshold.</td>
 </tr>
+<tr>
+<td><code>episodeStatusTiming.dwProcessingDeleteAfterMinutes</code></td>
+<td><code>WL_EPISODE_STATUS_TIMING__DW_PROCESSING_DELETE_AFTER_MINUTES</code></td>
+<td><code>240</code> (4 hours)</td>
+</tr>
+<tr>
+<td colspan="3">How long an unusable <code>dw_processing</code> episode must remain in the same placeholder/404 incident before automatic cleanup may delete it. Both the episode and the processing incident must be at least this old. Set to <code>0</code> to make the episode eligible on the next cleanup run. The episode Actions menu can use <strong>Early Delete</strong> to bypass this delay for one processing episode.</td>
+</tr>
 </tbody>
 </table>
 
-These settings are all safety fallbacks, mostly originating from a time when The Daily Wire's API did not provide any useful information about episode publish status.
-It still doesnt, really, but it does expose when an episode is eligible to be downloaded (on The Daily Wire website itself), which happens to be true only if the episode
-is fully published. WireLoft now uses this and its very reliable. As its still a workaround though, these settings provide a fallback for if for example The Daily Wire
-ever decides to stop supporting downloads ect.
+The countdown and final thresholds are safety fallbacks, mostly originating from a time when The Daily Wire's API did not provide useful information about episode publish status. WireLoft now also uses the separate processing-deletion delay to avoid destroying an episode during a transient Daily Wire 404 or placeholder state.
 
 
 ---
@@ -660,11 +665,12 @@ scheduler:
 
 newEpisodeSchedule:
   findEpisodesCron: "*/15 * * * *"
-  metadataRefreshIntervals: 5m,15m,30m,1h,3h,6h,24h
+  metadataRefreshIntervals: 15m,30m,1h,3h,6h,24h,3d
 
 episodeStatusTiming:
   publishedCountdownAfterMinutes: 20
   publishedFinalAfterMinutes: 180
+  dwProcessingDeleteAfterMinutes: 240
 
 downloadSettings:
   downloadRoot: /downloads

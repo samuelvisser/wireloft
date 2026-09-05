@@ -88,7 +88,7 @@ Even after an episode is considered published, metadata such as a title, thumbna
 Default offsets:
 
 ```text
-5m,15m,30m,1h,3h,6h,24h
+15m,30m,1h,3h,6h,24h,3d
 ```
 
 This sequence is intentionally an offset list rather than a cron schedule: it says how long after an episode's publication WireLoft should revisit that episode's metadata.
@@ -112,9 +112,11 @@ WireLoft runs `check_episodes_stuck_at_dw_processing` once per hour by default. 
 - `No Show Today` placeholders are placed in `dw_processing` as soon as they are detected;
 - ordinary episode entries whose detail endpoint returns `404` are also placed in `dw_processing` while WireLoft waits for Daily Wire to make them usable again.
 
-An entry is deleted only when both the episode itself and the same continuous placeholder/404 processing incident are at least four hours old. For a 404 episode WireLoft verifies the detail endpoint once more before deleting it; a successful response clears the stale-404 incident instead.
+The automatic cleanup delay is controlled by `episodeStatusTiming.dwProcessingDeleteAfterMinutes` and defaults to `240` minutes (four hours). An entry becomes eligible only when both the episode itself and the same continuous placeholder/404 processing incident have reached that age. For a 404 episode WireLoft verifies the detail endpoint once more before deleting it; a successful response clears the stale-404 incident instead.
 
-The existing setting name `newEpisodeSchedule.checkNoShowTodayCron` and its environment-variable equivalent are retained for backward compatibility, but they now control this broader cleanup worker.
+The cleanup cadence itself is controlled by `newEpisodeSchedule.checkEpisodesStuckAtDwProcessingCron` (`WL_NEW_EPISODE_SCHEDULE__CHECK_EPISODES_STUCK_AT_DW_PROCESSING_CRON`). Because cleanup runs periodically, automatic deletion can occur on the first cleanup run after the configured delay has elapsed.
+
+While an episode is in `dw_processing`, its episode Actions menu also exposes **Early Delete**. This is normally unnecessary because automatic cleanup handles the episode after the configured delay. After confirmation, Early Delete runs the same cleanup worker in a targeted force mode for that one episode and removes it immediately without waiting for the delay.
 
 Because download and stream eligibility already rejects `dw_processing`, profiles do not need a separate `No Show Today` exception.
 

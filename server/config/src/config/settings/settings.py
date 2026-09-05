@@ -113,7 +113,8 @@ class AppSettings(SettingsBase):
     ))
     episode_status_timing: EpisodeStatusTiming = Field(default=EpisodeStatusTiming(
         published_countdown_after_minutes=20,
-        published_final_after_minutes=3 * 60
+        published_final_after_minutes=3 * 60,
+        dw_processing_delete_after_minutes=4 * 60,
     ))
     download_settings: DownloadSettings = Field(default=DownloadSettings(
         verify_downloads_cron="0 */2 * * *",

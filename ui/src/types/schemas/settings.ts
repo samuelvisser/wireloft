@@ -57,6 +57,7 @@ const TrackNewEpisodeScheduleSchema = z.object({
 const EpisodeStatusTimingSchema = z.object({
     publishedCountdownAfterMinutes: z.number(),
     publishedFinalAfterMinutes: z.number(),
+    dwProcessingDeleteAfterMinutes: z.number(),
 })
 
 export const FilenameRestrictionModeSchema = z.enum(['unrestricted', 'windows', 'restricted'])
@@ -150,6 +151,7 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
     episodeStatusTiming: EpisodeStatusTimingSchema.extend({
         publishedCountdownAfterMinutes: requiredNumber().int().min(0, 'Must be 0 or greater.'),
         publishedFinalAfterMinutes: requiredNumber().int().min(0, 'Must be 0 or greater.'),
+        dwProcessingDeleteAfterMinutes: requiredNumber().int().min(0, 'Must be 0 or greater.'),
     }),
     downloadSettings: DownloadSettingsSchema.extend({
         verifyDownloadsCron: cronExpression,
@@ -203,6 +205,7 @@ export const SETTINGS_FIELD_PATHS = [
     'newEpisodeSchedule.metadataRefreshIntervals',
     'episodeStatusTiming.publishedCountdownAfterMinutes',
     'episodeStatusTiming.publishedFinalAfterMinutes',
+    'episodeStatusTiming.dwProcessingDeleteAfterMinutes',
     'downloadSettings.verifyDownloadsCron',
     'downloadSettings.maxConcurrentDownloads',
     'downloadSettings.maxDownloadAttempts',

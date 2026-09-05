@@ -141,7 +141,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                                 WireLoft marks <code>No Show Today</code> placeholders and episodes whose Daily Wire detail endpoint returns 404 as <code>dw_processing</code> so download and stream profiles cannot use them.
                             </p>
                             <p>
-                                This worker checks those entries periodically. A placeholder, or an episode that keeps returning 404, is deleted only after both the episode and that processing incident have been at least four hours old. The default schedule is once per hour.
+                                This worker periodically verifies those entries. It only deletes one automatically after both the episode and the current processing incident have reached the configured stuck-processing deletion delay below.
                             </p>
                         </ReadMore>
                     }
@@ -169,8 +169,8 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
             </SettingsSection>
 
             <SettingsDisclosure
-                title="Episode publication timing"
-                description="Thresholds used while a newly published episode is still settling on DailyWire."
+                title="Episode lifecycle timing"
+                description="Fallback and cleanup thresholds used while Daily Wire episode state is settling."
             >
                 <NumberField
                     id="settings-published-countdown"
@@ -197,6 +197,19 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         next.episodeStatusTiming.publishedFinalAfterMinutes = value
                     })}
                     help="Absolute fallback from publishedAt: after this many minutes WireLoft treats an otherwise ambiguous episode as published final. A current 404 or No Show Today placeholder remains dw_processing instead."
+                />
+                <NumberField
+                    id="settings-dw-processing-delete-after"
+                    label="Stuck processing deletion delay"
+                    value={draft.episodeStatusTiming.dwProcessingDeleteAfterMinutes}
+                    min={0}
+                    unit="minutes"
+                    error={errorFor('episodeStatusTiming.dwProcessingDeleteAfterMinutes')}
+                    environmentVariable={environmentVariableFor('episodeStatusTiming.dwProcessingDeleteAfterMinutes')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.episodeStatusTiming.dwProcessingDeleteAfterMinutes = value
+                    })}
+                    help="How long a No Show Today placeholder or continuously missing Daily Wire episode must remain unusable before automatic cleanup may delete it. Set to 0 to make it eligible on the next cleanup run."
                 />
             </SettingsDisclosure>
         </>

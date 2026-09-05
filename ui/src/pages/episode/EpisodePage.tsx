@@ -6,6 +6,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
+import {useSettings} from '../../lib/settings'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import {MediaDownloadStatusReg} from '../../types/media_download'
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
@@ -41,6 +42,18 @@ function formatBytes(n: number | null | undefined) {
     if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GiB`
     if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MiB`
     return `${Math.round(n / 1024)} KiB`
+}
+
+function formatDurationMinutes(minutes: number) {
+    if (minutes === 0) return '0 minutes (the next cleanup run)'
+    const hours = Math.floor(minutes / 60)
+    const remainingMinutes = minutes % 60
+    const parts: string[] = []
+    if (hours > 0) parts.push(`${hours} ${hours === 1 ? 'hour' : 'hours'}`)
+    if (remainingMinutes > 0) {
+        parts.push(`${remainingMinutes} ${remainingMinutes === 1 ? 'minute' : 'minutes'}`)
+    }
+    return parts.join(' ')
 }
 
 function ProfileDownloadRow({
@@ -171,18 +184,27 @@ export default function EpisodePage() {
     const {id: showId, episodeId} = useParams()
     const qc = useQueryClient()
     const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
+    const [earlyDeleteConfirm, setEarlyDeleteConfirm] = useState(false)
+    const [earlyDeleteStarting, setEarlyDeleteStarting] = useState(false)
 
     const {data: show, isLoading, error} = useShow(showId)
     const {data: episode, isLoading: isLoadingEpisode} = useEpisode(episodeId)
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads} = useEpisodeDownloads(episodeId)
+    const settingsQuery = useSettings()
     const showProfiles = profiles?.filter((profile) => profile.type === 'show')
     const metadataRefreshOperation = useActiveOperation(
         'episode.refresh_metadata',
         'episode',
         episode?.id ?? null,
     )
+    const earlyDeleteOperation = useActiveOperation(
+        'episode.early_delete',
+        'episode',
+        episode?.id ?? null,
+    )
     const metadataRefreshBusy = metadataRefreshStarting || metadataRefreshOperation !== undefined
+    const earlyDeleteBusy = earlyDeleteStarting || earlyDeleteOperation !== undefined
 
     if (!showId) {
         return (
@@ -245,9 +267,20 @@ export default function EpisodePage() {
     const publishStatus = String(episode.publishStatus)
     const statusLabel = PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus
     const isLive = publishStatus === 'live' || publishStatus === EpisodePublishStatus.live
+    const isDwProcessing = publishStatus === 'dw_processing'
     const isDownloadable = !episode.isNoShowToday && (
         publishStatus === 'published_final' || publishStatus === EpisodePublishStatus.publishedFinal
     )
+    const earlyDeleteAfterMinutes = settingsQuery.data?.values.episodeStatusTiming.dwProcessingDeleteAfterMinutes
+    const earlyDeleteDisabledReason = earlyDeleteStarting
+        ? 'WireLoft is starting an early delete for this episode.'
+        : earlyDeleteOperation
+            ? 'An early delete is already running for this episode.'
+            : settingsQuery.error
+                ? 'WireLoft could not load the automatic deletion delay.'
+                : earlyDeleteAfterMinutes === undefined
+                    ? 'WireLoft is loading the automatic deletion delay.'
+                    : undefined
 
     const coverUrl: string = episode.thumbnailLandscapePath
         || episode.backgroundImagePath
@@ -288,6 +321,37 @@ export default function EpisodePage() {
         }
     }
 
+    const earlyDelete = async () => {
+        if (earlyDeleteBusy) return
+
+        setEarlyDeleteStarting(true)
+        try {
+            const base = (window as any).appConfig?.API_URL || '/api'
+            const response = await fetch(
+                `${base}/episodes/${encodeURIComponent(episode.slug)}/early-delete`,
+                {method: 'POST', credentials: 'include'},
+            )
+            if (!response.ok) {
+                const {error: message} = await getErrorMessageFromResponse(response)
+                toast.error(message || 'Could not start early delete')
+                return
+            }
+
+            const result = await response.json()
+            if (typeof result?.operationId !== 'string' || !result.operationId) {
+                throw new Error('Early delete request did not return an operation ID')
+            }
+
+            setEarlyDeleteConfirm(false)
+            await qc.invalidateQueries({queryKey: ['operations']})
+            toast.success('Early delete started')
+        } catch {
+            toast.error('Could not start early delete')
+        } finally {
+            setEarlyDeleteStarting(false)
+        }
+    }
+
     return (
         <section className="view episode-view" aria-labelledby="episode-title">
             <article className="episode-details" aria-label="Episode details">
@@ -323,6 +387,18 @@ export default function EpisodePage() {
                                         : undefined,
                                     onSelect: () => void refreshMetadata(),
                                 },
+                                ...(isDwProcessing ? [{
+                                    label: 'Early Delete',
+                                    icon: ['fas', 'trash'] as [string, string],
+                                    tone: 'danger' as const,
+                                    separatorBefore: true,
+                                    disabled: earlyDeleteDisabledReason !== undefined,
+                                    disabledReason: earlyDeleteDisabledReason,
+                                    progress: earlyDeleteOperation
+                                        ? (earlyDeleteOperation.progress ?? 0)
+                                        : undefined,
+                                    onSelect: () => setEarlyDeleteConfirm(true),
+                                }] : []),
                             ]}
                         />
                     </div>
@@ -379,6 +455,57 @@ export default function EpisodePage() {
                     </div>
                 )}
             </article>
+
+            {earlyDeleteConfirm && earlyDeleteAfterMinutes !== undefined && (
+                <div
+                    className="modal-overlay"
+                    role="presentation"
+                    onClick={() => {
+                        if (!earlyDeleteBusy) setEarlyDeleteConfirm(false)
+                    }}
+                >
+                    <div
+                        className="modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="early-delete-title"
+                        aria-describedby="early-delete-desc"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="modal-header">
+                            <div className="modal-icon danger" aria-hidden>
+                                <FontAwesomeIcon icon={['fas', 'trash']}/>
+                            </div>
+                            <h2 id="early-delete-title" className="modal-title">Early Delete</h2>
+                        </div>
+                        <p id="early-delete-desc" className="modal-text">
+                            WireLoft automatically deletes this episode after it has remained unusable in Daily Wire processing for{' '}
+                            <strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong>. You do not normally need to delete it manually.
+                        </p>
+                        <p className="modal-text">
+                            Deleting it early permanently removes it now without waiting for that automatic cleanup delay.
+                        </p>
+                        <div className="modal-actions">
+                            <button
+                                type="button"
+                                className="btn"
+                                disabled={earlyDeleteBusy}
+                                onClick={() => setEarlyDeleteConfirm(false)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-danger"
+                                disabled={earlyDeleteBusy}
+                                onClick={() => void earlyDelete()}
+                            >
+                                {earlyDeleteBusy ? 'Deleting…' : 'Delete now'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <style>{`
         .episode-view { padding-top: 0; }

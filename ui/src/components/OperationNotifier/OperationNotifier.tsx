@@ -60,6 +60,8 @@ function operationLabel(operation: TaskOperationRead): string {
     case 'show.refresh_metadata':
     case 'episode.refresh_metadata':
       return 'Metadata refresh'
+    case 'episode.early_delete':
+      return 'Early delete'
     case 'show.redownload_episodes':
       return 'Re-download'
     case 'movie.refresh_extras':
@@ -94,6 +96,10 @@ function successMessage(operation: TaskOperationRead): string {
     case 'episode.refresh_metadata': {
       const episodeTitle = contextString(operation, 'episode_title') || operation.title
       return `Metadata refresh completed for ${episodeTitle}`
+    }
+    case 'episode.early_delete': {
+      const episodeTitle = contextString(operation, 'episode_title') || operation.title
+      return `Deleted ${episodeTitle}`
     }
     case 'show.redownload_episodes': {
       const files = resultNumber(operation, 'episode_files') ?? 0
@@ -167,7 +173,7 @@ async function invalidateForOperation(queryClient: QueryClient, operation: TaskO
     invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
   }
 
-  if (operation.kind === 'episode.refresh_metadata') {
+  if (operation.kind.startsWith('episode.')) {
     if (episodeSlug) {
       invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
     }
