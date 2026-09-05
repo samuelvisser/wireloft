@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "d4f0a9c2e713"
+HEAD_REVISION = "f2c7a4e8b901"
+TASK_OPERATIONS_REVISION = "d4f0a9c2e713"
 WIRELOFT_1_0_REVISION = "c8d4e2f1a7b9"
 BASE_REVISION = "0001"
 
@@ -70,13 +71,9 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "task_operation_runs",
     } <= tables
 
-    task_run_columns = {
-        column["name"] for column in inspector.get_columns("task_runs")
-    }
+    task_run_columns = {column["name"] for column in inspector.get_columns("task_runs")}
     assert "result" in task_run_columns
-    operation_columns = {
-        column["name"] for column in inspector.get_columns("task_operations")
-    }
+    operation_columns = {column["name"] for column in inspector.get_columns("task_operations")}
     assert {
         "kind",
         "source",
@@ -89,9 +86,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "notification_seen_at",
     } <= operation_columns
 
-    profile_columns = {
-        column["name"] for column in inspector.get_columns("local_media_profiles")
-    }
+    profile_columns = {column["name"] for column in inspector.get_columns("local_media_profiles")}
     assert {"type", "append_media_type_to_filename"} <= profile_columns
     profile_indexes = {
         index["name"]: index
@@ -107,24 +102,16 @@ def test_fresh_database_upgrades_to_head(migration_database):
     ]
     assert bool(settings_index["unique"])
 
-    settings_columns = {
-        column["name"] for column in inspector.get_columns("settings")
-    }
+    settings_columns = {column["name"] for column in inspector.get_columns("settings")}
     assert "onboarding_completed" in settings_columns
 
-    episode_columns = {
-        column["name"] for column in inspector.get_columns("episodes")
-    }
+    episode_columns = {column["name"] for column in inspector.get_columns("episodes")}
     assert "metadata_is_final" in episode_columns
 
-    stream_profile_columns = {
-        column["name"] for column in inspector.get_columns("stream_profiles")
-    }
+    stream_profile_columns = {column["name"] for column in inspector.get_columns("stream_profiles")}
     assert "ep_id_type_list" in stream_profile_columns
 
-    rss_profile_columns = {
-        column["name"] for column in inspector.get_columns("stream_profiles_rss")
-    }
+    rss_profile_columns = {column["name"] for column in inspector.get_columns("stream_profiles_rss")}
     assert {"dw_video_method", "max_items"} <= rss_profile_columns
 
     podcast_columns = {
@@ -200,9 +187,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "official_trailer_id",
     }
 
-    movie_extra_columns = {
-        column["name"] for column in inspector.get_columns("movie_extras")
-    }
+    movie_extra_columns = {column["name"] for column in inspector.get_columns("movie_extras")}
     assert movie_extra_columns == {
         "id",
         "movie_id",
@@ -213,16 +198,33 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "published_date",
     }
 
-    movie_indexes = {
-        index["name"]: index for index in inspector.get_indexes("movies")
-    }
+    movie_indexes = {index["name"]: index for index in inspector.get_indexes("movies")}
     assert "ix_movies_dw_id" in movie_indexes
     assert bool(movie_indexes["ix_movies_dw_id"]["unique"])
 
     media_download_columns = {
         column["name"] for column in inspector.get_columns("media_downloads")
     }
-    assert "attempt_generation" in media_download_columns
+    assert {
+        "artifact_status",
+        "artifact_error",
+        "automatic_retry_suppressed",
+        "downloaded_at",
+        "downloaded_bytes",
+        "format_downloaded",
+    } <= media_download_columns
+    assert {
+        "download_status",
+        "progress",
+        "error_message",
+        "started_at",
+        "finished_at",
+        "attempt_generation",
+    }.isdisjoint(media_download_columns)
+    episode_download_columns = {
+        column["name"] for column in inspector.get_columns("media_downloads_episode")
+    }
+    assert "is_redownload_attempt" not in episode_download_columns
 
 
 def test_0001_is_the_main_branch_schema_baseline(migration_database):
@@ -235,20 +237,11 @@ def test_0001_is_the_main_branch_schema_baseline(migration_database):
     assert get_current_revisions() == (BASE_REVISION,)
     inspector = inspect(engine)
 
-    # Movie support was the schema accidentally folded into 0001 on develop.
-    # The main branch has only the joined-inheritance id and slug columns and no
-    # movie-download subtype table.
-    assert {
-        column["name"] for column in inspector.get_columns("movies")
-    } == {"id", "slug"}
+    assert {column["name"] for column in inspector.get_columns("movies")} == {"id", "slug"}
     assert "media_downloads_movie" not in set(inspector.get_table_names())
 
-    assert {
-        column["name"] for column in inspector.get_columns("settings")
-    } == {"id", "created_at", "updated_at"}
-    assert {
-        column["name"] for column in inspector.get_columns("local_media_profiles")
-    } == {
+    assert {column["name"] for column in inspector.get_columns("settings")} == {"id", "created_at", "updated_at"}
+    assert {column["name"] for column in inspector.get_columns("local_media_profiles")} == {
         "id",
         "slug",
         "name",
@@ -257,18 +250,10 @@ def test_0001_is_the_main_branch_schema_baseline(migration_database):
         "created_at",
         "updated_at",
     }
-    assert "metadata_is_final" not in {
-        column["name"] for column in inspector.get_columns("episodes")
-    }
-    assert "attempt_generation" not in {
-        column["name"] for column in inspector.get_columns("media_downloads")
-    }
-    assert "ep_id_type_list" not in {
-        column["name"] for column in inspector.get_columns("stream_profiles")
-    }
-    assert {
-        column["name"] for column in inspector.get_columns("stream_profiles_rss")
-    } == {"id", "feed_url"}
+    assert "metadata_is_final" not in {column["name"] for column in inspector.get_columns("episodes")}
+    assert "attempt_generation" not in {column["name"] for column in inspector.get_columns("media_downloads")}
+    assert "ep_id_type_list" not in {column["name"] for column in inspector.get_columns("stream_profiles")}
+    assert {column["name"] for column in inspector.get_columns("stream_profiles_rss")} == {"id", "feed_url"}
 
 
 def test_upgrade_from_main_baseline_preserves_movie_rows(migration_database):
@@ -306,9 +291,7 @@ def test_upgrade_from_main_baseline_preserves_movie_rows(migration_database):
 
     command.downgrade(get_alembic_config(), BASE_REVISION)
     inspector = inspect(engine)
-    assert {
-        column["name"] for column in inspector.get_columns("movies")
-    } == {"id", "slug"}
+    assert {column["name"] for column in inspector.get_columns("movies")} == {"id", "slug"}
     assert "media_downloads_movie" not in set(inspector.get_table_names())
     with engine.connect() as connection:
         assert connection.execute(
@@ -453,13 +436,8 @@ def test_upgrade_from_0001_rejects_duplicate_profile_settings(migration_database
         upgrade_database()
 
     assert get_current_revisions() == (BASE_REVISION,)
-    assert "type" not in {
-        column["name"] for column in inspect(engine).get_columns("local_media_profiles")
-    }
-    assert not {
-        "local_media_profiles_show",
-        "local_media_profiles_movie",
-    } & set(inspect(engine).get_table_names())
+    assert "type" not in {column["name"] for column in inspect(engine).get_columns("local_media_profiles")}
+    assert not {"local_media_profiles_show", "local_media_profiles_movie"} & set(inspect(engine).get_table_names())
 
 
 def test_local_media_profile_migration_downgrades_to_0001(migration_database):
@@ -476,12 +454,8 @@ def test_local_media_profile_migration_downgrades_to_0001(migration_database):
     assert "local_media_profiles_movie" not in tables
     assert "movie_extras" not in tables
     assert "media_downloads_movie" not in tables
-    assert "type" not in {
-        column["name"] for column in inspector.get_columns("local_media_profiles")
-    }
-    assert {
-        column["name"] for column in inspector.get_columns("movies")
-    } == {"id", "slug"}
+    assert "type" not in {column["name"] for column in inspector.get_columns("local_media_profiles")}
+    assert {column["name"] for column in inspector.get_columns("movies")} == {"id", "slug"}
 
 
 def test_upgrade_is_idempotent(migration_database):
@@ -520,8 +494,6 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
 
     upgrade_database()
 
-    # APScheduler owns this table independently in the same SQLite file. Its
-    # presence must not make Alembic think a WireLoft migration is missing.
     with engine.begin() as connection:
         connection.execute(text(
             "CREATE TABLE apscheduler_jobs ("
@@ -531,7 +503,7 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
     check_database()
 
 
-def test_migration_history_is_main_baseline_plus_wireloft_1_0_and_task_operations():
+def test_migration_history_is_linear_through_universal_download_execution():
     from backend.db.migrations import get_alembic_config, get_head_revisions
 
     scripts = ScriptDirectory.from_config(get_alembic_config())
@@ -539,9 +511,11 @@ def test_migration_history_is_main_baseline_plus_wireloft_1_0_and_task_operation
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, WIRELOFT_1_0_REVISION),
+        (HEAD_REVISION, TASK_OPERATIONS_REVISION),
+        (TASK_OPERATIONS_REVISION, WIRELOFT_1_0_REVISION),
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Add durable task operations and structured task results."
-    assert revisions[1].doc == "WireLoft 1.0."
+    assert revisions[0].doc == "Move download execution state into TaskRun/TaskOperation."
+    assert revisions[1].doc == "Add durable task operations and structured task results."
+    assert revisions[2].doc == "WireLoft 1.0."

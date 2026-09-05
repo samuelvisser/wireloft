@@ -2,17 +2,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def test_delete_movie_uses_download_cleanup_and_preserves_completed_files(tmp_path):
+def test_delete_movie_removes_nonexistent_artifact_work_and_preserves_available_files(tmp_path):
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.movies.service import delete_movie
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
     from backend.db.models.media_download import (
         MediaDownloadBase,
-        MovieMediaDownload,
         MovieExtraMediaDownload,
+        MovieMediaDownload,
     )
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
 
     engine = create_engine("sqlite:///:memory:")
@@ -72,25 +72,24 @@ def test_delete_movie_uses_download_cleanup_and_preserves_completed_files(tmp_pa
                 type=MediaType.MOVIE.value,
                 media_item_id=movie.id,
                 local_media_profile_id=active_profile.id,
-                download_status=MediaDownloadStatus.DOWNLOADING.value,
+                artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
                 file_path=str(movie_path),
-                progress=50,
             ),
             MovieExtraMediaDownload(
                 type=MediaType.MOVIE_EXTRA.value,
                 media_item_id=trailer.id,
                 local_media_profile_id=active_profile.id,
-                download_status=MediaDownloadStatus.LOCAL_PROCESSING.value,
+                artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
                 file_path=str(trailer_path),
-                progress=100,
             ),
             MovieMediaDownload(
                 type=MediaType.MOVIE.value,
                 media_item_id=movie.id,
                 local_media_profile_id=completed_profile.id,
-                download_status=MediaDownloadStatus.DOWNLOADED.value,
+                artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
                 file_path=str(completed_path),
-                progress=100,
+                downloaded_bytes=len(b"download data"),
+                format_downloaded="720p",
             ),
         ])
         session.commit()

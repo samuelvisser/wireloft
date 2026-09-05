@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
 from backend.db.models.media_download import MediaDownloadAttempt, MediaDownloadBase
-from backend.types.download_profile_types import MediaDownloadStatus
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path
@@ -26,9 +26,9 @@ from dailywire_downloader import (
     probe,
     remux_to_mp4,
 )
+from task_manager.scheduler.results import TaskResult
 
-from ._helpers import FORMAT_HEIGHTS, RowProgressWriter, refresh_episode_media_urls, select_rendition
-from task_manager.tasks.workers.download_attempt import DownloadAttemptGuard
+from ._helpers import FORMAT_HEIGHTS, TaskProgressWriter, refresh_episode_media_urls, select_rendition
 
 logger = logging.getLogger(__name__)
 
@@ -40,31 +40,23 @@ class _AttemptResult:
     format_downloaded: str
 
 
+def _ensure_not_cancelled(progress) -> None:
+    if progress is not None and callable(progress) and progress():
+        raise DownloadCancelled("Download was canceled")
+
+
 async def run_download_episode(
         s: Session,
         *,
         media_download_id: int,
-        attempt_generation: Optional[int] = None,
         is_redownload: bool = False,
         progress=None,
-) -> None:
-    """Download one episode's media according to its media download row.
-
-    The media URLs stored on the episode are used first; when they are missing or
-    no longer usable, fresh ones are fetched from the Daily Wire API once. Only
-    when those don't work either does the download fail.
-    """
+) -> TaskResult:
+    """Produce one episode artifact while TaskRun owns all changing execution state."""
+    started_at = datetime.now(timezone.utc)
     download: Optional[MediaDownloadBase] = s.get(MediaDownloadBase, media_download_id)
     if download is None:
         raise DownloadCancelled(f"Media download {media_download_id} was deleted before it started")
-
-    expected_generation = (
-        download.attempt_generation
-        if attempt_generation is None
-        else attempt_generation
-    )
-    attempt_guard = DownloadAttemptGuard(media_download_id, expected_generation)
-    attempt_guard.ensure_current()
 
     episode: Optional[Episode] = s.get(Episode, download.media_item_id)
     if episode is None:
@@ -75,138 +67,160 @@ async def run_download_episode(
         raise DownloadError("Episodes require a Show Local Media Profile")
 
     print(f"Starting download_episode for {episode.slug} ({profile.name})")
-
-    # Recorded up front so it survives a failed attempt too, not just a
-    # successful one: the download's log shows what kind of attempt this was
-    # regardless of how it ends.
-    download.is_redownload_attempt = is_redownload
-    attempt_guard.update_current(
-        s,
-        download_status=MediaDownloadStatus.DOWNLOADING.value,
-        progress=0,
-        error_message=None,
-        started_at=datetime.now(timezone.utc),
-        finished_at=None,
-    )
-    s.commit()
-    s.refresh(download)
+    if progress is not None:
+        progress.set(0, f"Starting download for {episode.title}")
 
     want_audio = profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
-    row_progress = RowProgressWriter(
-        media_download_id,
-        task_progress=progress,
-        attempt_generation=expected_generation,
-    )
-    cancelled = False
+    task_progress = TaskProgressWriter(progress)
 
     try:
-        try:
-            result = _download_with_url_refresh(
-                s,
-                download=download,
-                episode=episode,
-                show=show,
-                want_audio=want_audio,
-                row_progress=row_progress,
-                attempt_guard=attempt_guard,
-            )
-            attempt_guard.ensure_current()
-        except DownloadCancelled:
-            _discard_cancelled_attempt(s, download.__dict__.get("file_path"))
-            cancelled = True
-            raise
-        except Exception as e:
-            file_path = download.__dict__.get("file_path")
-            s.rollback()
-            try:
-                attempt_guard.update_current(
-                    s,
-                    download_status=MediaDownloadStatus.ERROR.value,
-                    error_message=_truncate_message(str(e)),
-                    finished_at=datetime.now(timezone.utc),
-                )
-            except DownloadCancelled:
-                _discard_cancelled_attempt(s, file_path)
-                cancelled = True
-                raise
-            s.refresh(download)
-            _record_attempt(s, download, is_redownload=is_redownload)
-            s.commit()
-            raise
+        _ensure_not_cancelled(progress)
+        result = _download_with_url_refresh(
+            s,
+            download=download,
+            episode=episode,
+            show=show,
+            want_audio=want_audio,
+            task_progress=task_progress,
+            cancellation=progress,
+        )
+        _ensure_not_cancelled(progress)
 
-        try:
-            attempt_guard.update_current(
-                s,
-                download_status=(
-                    MediaDownloadStatus.REDOWNLOADED.value if is_redownload else MediaDownloadStatus.DOWNLOADED.value
-                ),
-                progress=100,
-                downloaded_bytes=result.bytes_downloaded,
-                format_downloaded=result.format_downloaded,
-                file_path=result.file_path,
-                finished_at=datetime.now(timezone.utc),
-            )
-        except DownloadCancelled:
-            _discard_cancelled_attempt(s, result.file_path)
-            cancelled = True
-            raise
-        s.refresh(download)
-        # Records what version was actually fetched, so a Download Profile can later
-        # tell whether this file still needs replacing (e.g. still countdown-era)
-        # instead of redownloading on every check.
-        download.downloaded_publish_status = episode.publish_status
-        if episode.downloaded_date is None:
-            episode.downloaded_date = datetime.now(timezone.utc)
-        if is_redownload:
-            episode.redownloaded_date = datetime.now(timezone.utc)
-        _record_attempt(s, download, is_redownload=is_redownload)
+        # The worker may have been canceled/deleted while the downloader was
+        # finishing. Re-read before publishing the persistent artifact so a stale
+        # worker can never resurrect domain state after generic task cancellation.
+        s.rollback()
+        s.expire_all()
+        download = s.get(MediaDownloadBase, media_download_id)
+        if download is None:
+            remove_download_artifacts(result.file_path)
+            raise DownloadCancelled("Media download was deleted while the worker was running")
+        _ensure_not_cancelled(progress)
+
+        download.file_path = result.file_path
+        download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        download.artifact_error = None
+        download.automatic_retry_suppressed = False
+        download.downloaded_bytes = result.bytes_downloaded
+        download.format_downloaded = result.format_downloaded
+        download.downloaded_at = datetime.now(timezone.utc)
+
+        episode = s.get(Episode, download.media_item_id)
+        if episode is not None:
+            if hasattr(download, "downloaded_publish_status"):
+                download.downloaded_publish_status = episode.publish_status
+            if episode.downloaded_date is None:
+                episode.downloaded_date = download.downloaded_at
+            if is_redownload:
+                episode.redownloaded_date = download.downloaded_at
+
+        _record_attempt(
+            s,
+            download,
+            is_redownload=is_redownload,
+            status="redownloaded" if is_redownload else "downloaded",
+            error_message=None,
+            downloaded_bytes=result.bytes_downloaded,
+            format_downloaded=result.format_downloaded,
+            started_at=started_at,
+            finished_at=download.downloaded_at,
+        )
         s.commit()
 
+        # The executor owns the final 100% transition. Avoid a second progress
+        # checkpoint after the artifact commit: cancellation discovered at that
+        # point must not turn a successfully published artifact into a canceled
+        # TaskRun.
         print(
-            f"download_episode completed for {episode.slug}: "
+            f"download_episode completed for {getattr(episode, 'slug', media_download_id)}: "
             f"{result.format_downloaded} -> {result.file_path} ({result.bytes_downloaded} bytes)"
         )
-    finally:
-        # This download just freed a concurrency slot, one way or another;
-        # immediately backfill it from the queue instead of leaving it idle
-        # until the next full Download Profile sweep.
-        if not cancelled:
-            _drain_next_pending_downloads(s)
+        return TaskResult(
+            summary=f"Downloaded {getattr(episode, 'title', 'episode')}",
+            data={
+                "media_download_id": media_download_id,
+                "downloaded_bytes": result.bytes_downloaded,
+                "format_downloaded": result.format_downloaded,
+                "file_path": result.file_path,
+                "is_redownload": is_redownload,
+            },
+        )
+    except DownloadCancelled as exc:
+        s.rollback()
+        remove_download_artifacts(getattr(download, "file_path", None))
+        _record_terminal_attempt_if_present(
+            s,
+            media_download_id=media_download_id,
+            is_redownload=is_redownload,
+            status="cancelled",
+            error_message=_truncate_message(str(exc)),
+            started_at=started_at,
+        )
+        raise
+    except Exception as exc:
+        s.rollback()
+        remove_download_artifacts(getattr(download, "file_path", None))
+        _record_terminal_attempt_if_present(
+            s,
+            media_download_id=media_download_id,
+            is_redownload=is_redownload,
+            status="error",
+            error_message=_truncate_message(str(exc)),
+            started_at=started_at,
+        )
+        raise
 
 
-def _record_attempt(s: Session, download: MediaDownloadBase, *, is_redownload: bool) -> None:
-    """Append this attempt's outcome to the download's permanent ledger.
-
-    download's own error_message/status/bytes get reset the moment the next
-    attempt starts, so without this a previous error would simply vanish the
-    instant someone clicks retry. Call this after the download row's own
-    fields have been set to their final state for this attempt (status,
-    error_message, finished_at, ...), right before committing.
-    """
+def _record_attempt(
+        s: Session,
+        download: MediaDownloadBase,
+        *,
+        is_redownload: bool,
+        status: str,
+        error_message: Optional[str],
+        downloaded_bytes: Optional[int],
+        format_downloaded: Optional[str],
+        started_at: datetime,
+        finished_at: datetime,
+) -> None:
+    """Append immutable attempt history; live state remains on TaskRun."""
     s.add(MediaDownloadAttempt(
         media_download_id=download.id,
         is_redownload=is_redownload,
-        status=download.download_status,
-        error_message=download.error_message,
-        downloaded_bytes=download.downloaded_bytes,
-        format_downloaded=download.format_downloaded,
-        started_at=download.started_at,
-        finished_at=download.finished_at,
+        status=status,
+        error_message=error_message,
+        downloaded_bytes=downloaded_bytes,
+        format_downloaded=format_downloaded,
+        started_at=started_at,
+        finished_at=finished_at,
     ))
 
 
-def _discard_cancelled_attempt(s: Session, file_path: Optional[str]) -> None:
-    s.rollback()
-    remove_download_artifacts(file_path)
-
-
-def _drain_next_pending_downloads(s: Session) -> None:
-    try:
-        from task_manager.tasks.workers.download_profile_worker._helpers import trigger_next_pending_downloads
-
-        trigger_next_pending_downloads(s)
-    except Exception:
-        logger.exception("Failed to trigger the next pending download(s) after completion")
+def _record_terminal_attempt_if_present(
+        s: Session,
+        *,
+        media_download_id: int,
+        is_redownload: bool,
+        status: str,
+        error_message: str,
+        started_at: datetime,
+) -> None:
+    """Record a failed/canceled attempt unless resource deletion removed its ledger owner."""
+    current = s.get(MediaDownloadBase, media_download_id)
+    if current is None:
+        return
+    _record_attempt(
+        s,
+        current,
+        is_redownload=is_redownload,
+        status=status,
+        error_message=error_message,
+        downloaded_bytes=None,
+        format_downloaded=None,
+        started_at=started_at,
+        finished_at=datetime.now(timezone.utc),
+    )
+    s.commit()
 
 
 def _download_with_url_refresh(
@@ -216,11 +230,11 @@ def _download_with_url_refresh(
         episode: Episode,
         show: Show,
         want_audio: bool,
-        row_progress: RowProgressWriter,
-        attempt_guard: DownloadAttemptGuard,
+        task_progress: TaskProgressWriter,
+        cancellation,
 ) -> _AttemptResult:
     """Try the stored media URL; on a missing/unusable URL refresh from DW once."""
-    attempt_guard.ensure_current()
+    _ensure_not_cancelled(cancellation)
     url = episode.audio_url if want_audio else episode.video_url
     refreshed = False
 
@@ -239,8 +253,8 @@ def _download_with_url_refresh(
             episode=episode,
             url=url,
             want_audio=want_audio,
-            row_progress=row_progress,
-            attempt_guard=attempt_guard,
+            task_progress=task_progress,
+            cancellation=cancellation,
         )
     except MediaUnavailableError:
         if refreshed:
@@ -257,8 +271,8 @@ def _download_with_url_refresh(
             episode=episode,
             url=url,
             want_audio=want_audio,
-            row_progress=row_progress,
-            attempt_guard=attempt_guard,
+            task_progress=task_progress,
+            cancellation=cancellation,
         )
 
 
@@ -267,10 +281,10 @@ def _refresh(s: Session, *, episode: Episode, show: Show) -> None:
         refresh_episode_media_urls(s, episode=episode, show=show)
     except MediaUnavailableError:
         raise
-    except Exception as e:
+    except Exception as exc:
         raise MediaUnavailableError(
-            f"Could not refresh media URLs from Daily Wire for '{episode.slug}': {e}"
-        ) from e
+            f"Could not refresh media URLs from Daily Wire for '{episode.slug}': {exc}"
+        ) from exc
 
 
 def _attempt_download(
@@ -280,14 +294,14 @@ def _attempt_download(
         episode: Episode,
         url: str,
         want_audio: bool,
-        row_progress: RowProgressWriter,
-        attempt_guard: DownloadAttemptGuard,
+        task_progress: TaskProgressWriter,
+        cancellation,
 ) -> _AttemptResult:
     """Probe the URL, pick what to fetch, and download it to its final path."""
     profile = download.local_media_profile
-    attempt_guard.ensure_current()
+    _ensure_not_cancelled(cancellation)
     info = probe(url)
-    attempt_guard.ensure_current()
+    _ensure_not_cancelled(cancellation)
 
     if want_audio:
         if info.kind is MediaKind.HLS_MASTER:
@@ -315,36 +329,36 @@ def _attempt_download(
 
     remux_video = not want_audio and use_hls and get_settings().download_settings.remux_video_to_mp4
     extension = "mp4" if remux_video else info.suggested_extension
-
-    dest = resolve_episode_output_path(
+    destination = resolve_episode_output_path(
         profile.output_template,
         episode=episode,
         extension=extension,
     )
-    attempt_guard.update_current(s, file_path=str(dest))
+
+    # The expected artifact location is domain data, not execution state.
+    download.file_path = str(destination)
     s.commit()
-    s.refresh(download)
 
     if remux_video:
         result = _download_and_remux_to_mp4(
             source_url,
-            str(dest),
-            row_progress=row_progress,
-            attempt_guard=attempt_guard,
+            str(destination),
+            task_progress=task_progress,
+            cancellation=cancellation,
         )
     elif use_hls:
         result = download_hls(
             source_url,
-            str(dest),
-            progress=row_progress,
-            should_cancel=attempt_guard,
+            str(destination),
+            progress=task_progress,
+            should_cancel=cancellation,
         )
     else:
         result = download_file(
             source_url,
-            str(dest),
-            progress=row_progress,
-            should_cancel=attempt_guard,
+            str(destination),
+            progress=task_progress,
+            should_cancel=cancellation,
         )
 
     return _AttemptResult(
@@ -358,29 +372,23 @@ def _download_and_remux_to_mp4(
         source_url: str,
         dest_path: str,
         *,
-        row_progress: RowProgressWriter,
-        attempt_guard: DownloadAttemptGuard,
+        task_progress: TaskProgressWriter,
+        cancellation,
 ) -> DownloadResult:
-    """Download an HLS video to a temporary .ts file, then remux it into dest_path.
-
-    The raw TS download reports progress as usual; the remux itself is a fast
-    stream copy (no re-encoding) so it isn't broken out into its own progress
-    phase. The temporary file is always cleaned up, even on failure.
-    """
     raw_ts_path = dest_path + ".rawts"
     try:
         ts_result = download_hls(
             source_url,
             raw_ts_path,
-            progress=row_progress,
-            should_cancel=attempt_guard,
+            progress=task_progress,
+            should_cancel=cancellation,
         )
-        attempt_guard.ensure_current()
+        _ensure_not_cancelled(cancellation)
         remux_to_mp4(
             raw_ts_path,
             dest_path,
             ffmpeg_path=get_settings().download_settings.ffmpeg_path,
-            should_cancel=attempt_guard,
+            should_cancel=cancellation,
         )
     finally:
         _remove_quietly(raw_ts_path)
@@ -393,15 +401,6 @@ def _download_and_remux_to_mp4(
 
 
 def _truncate_message(message: str, limit: int = 20_000) -> str:
-    """Cap a stored error message, keeping its *end* rather than its start.
-
-    This is the full text shown in a download's log, so the cap is generous -
-    it exists only to bound a pathological case, not to compact the message
-    for a table row (the UI truncates that display on its own). Errors built
-    from a diagnostic tail (e.g. ffmpeg's own last output lines) put the
-    actually useful part at the end; a plain head slice (``msg[:limit]``)
-    would just as easily cut that off and keep only a generic prefix instead.
-    """
     if len(message) <= limit:
         return message
     return "…" + message[-(limit - 1):]

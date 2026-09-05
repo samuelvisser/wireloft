@@ -18,11 +18,17 @@ Default global behavior:
 
 The retry delay uses exponential backoff so repeated transient failures do not immediately hammer the same dependency.
 
-WireLoft also watches active tasks and operations for stalled progress. Once per minute it samples their progress percentage; when the same percentage remains unchanged for `scheduler.stalledTaskTimeoutMinutes` (20 minutes by default), WireLoft cancels the stalled work and surfaces the reason in the UI. Waiting for a scheduled retry is excluded from this check because that inactivity is intentional.
+WireLoft also watches actively running tasks and operations for stalled progress. Once per minute it samples their progress percentage; when the same percentage remains unchanged for `scheduler.stalledTaskTimeoutMinutes` (20 minutes by default), WireLoft cancels the stalled work and surfaces the reason in the UI. Work that is merely queued or scheduled, and work waiting for a scheduled retry, is excluded because that inactivity is intentional.
 
 APScheduler manages scheduling, concurrency, misfires, and coalescing, but it does not know WireLoft's application-level progress percentage. The stalled-work timeout is therefore implemented by WireLoft's task layer rather than as an APScheduler job option.
 
 Disabling `scheduler.enabled` stops scheduled background jobs. Manual actions can still exist independently, but a disabled scheduler means WireLoft will not perform its normal periodic maintenance.
+
+### Task state and library state
+
+WireLoft keeps execution state separate from persistent library data. Anything that is currently happening—queued/running state, progress, retries, cancellation, worker errors and execution timing—is represented by `TaskRun`/`TaskOperation`.
+
+Once work has produced a library result, that result is stored as ordinary domain data. For downloads, for example, the `MediaDownload` row describes the file artifact that WireLoft manages (path, availability, downloaded size/format/time and historical attempts); it does not double as a live worker-status row. This keeps restart recovery and background-task control independent from the library records those tasks create or update.
 
 ## New episode discovery
 
@@ -111,6 +117,8 @@ Defaults:
 - maximum attempts: `3`;
 - timeout per attempt: `600` seconds;
 - downloaded-video remux to MP4: enabled.
+
+Each required download is represented as a normal `media.download` TaskOperation. The shared download lane reserves TaskRuns before dispatch so queued work cannot bypass `maxConcurrentDownloads`; after a restart, unfinished operations are recovered through the same queue instead of inferring interrupted work from fields on the MediaDownload record.
 
 See [[Download-Profiles]] and [[Settings#downloads]].
 

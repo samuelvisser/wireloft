@@ -6,9 +6,16 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from backend.db.models import Show
+from dailywire_downloader import DownloadCancelled
 from task_manager.tasks.helpers.progress import update_progress
-from task_manager.tasks.workers.download_profile_worker._helpers import trigger_next_pending_downloads
-from ._helpers import _selected_profiles, _target_episode_profiles, _prepare_redownloads, _POLL_INTERVAL_SECONDS, _check_targets
+from ._helpers import (
+    _POLL_INTERVAL_SECONDS,
+    _cancel_targets,
+    _check_targets,
+    _prepare_redownloads,
+    _selected_profiles,
+    _target_episode_profiles,
+)
 
 
 async def run_redownload_show_episodes_worker(
@@ -18,6 +25,7 @@ async def run_redownload_show_episodes_worker(
         download_profile_id: int | None = None,
         progress=None,
 ) -> dict[str, Any]:
+    """Coordinate a show-wide replacement through child media.download operations."""
     if show_id is None:
         raise ValueError("Show id is required")
 
@@ -47,29 +55,32 @@ async def run_redownload_show_episodes_worker(
 
     update_progress(progress, 1, f"Preparing {len(episode_profiles)} episode download(s)")
     targets = _prepare_redownloads(s, episode_profiles)
-
-    # Let the normal global queue enforce max_concurrent_downloads. Each episode
-    # worker backfills the next pending slot when it finishes, so this master task
-    # can simply watch the exact generations it prepared.
-    trigger_next_pending_downloads(s)
     total = len(targets)
 
-    while True:
-        await asyncio.sleep(_POLL_INTERVAL_SECONDS)
-        # End the previous read transaction so every poll observes child-worker
-        # commits on SQLite as well as on databases with snapshot isolation.
-        s.rollback()
-        s.expire_all()
-        completed, failure = _check_targets(s, targets)
-        if failure:
-            raise RuntimeError(failure)
-        if completed >= total:
-            update_progress(progress, 100, f"Re-downloaded {total} episode file(s)")
-            return {**base_result, "episode_files": total}
+    try:
+        while True:
+            await asyncio.sleep(_POLL_INTERVAL_SECONDS)
+            if progress is not None and callable(progress) and progress():
+                raise DownloadCancelled("Show re-download was canceled")
 
-        percentage = max(1, min(99, int(completed / total * 100)))
-        update_progress(
-            progress,
-            percentage,
-            f"Re-downloaded {completed}/{total} episode file(s)",
-        )
+            # End the previous read transaction so every poll observes child
+            # TaskOperation commits on SQLite as well as snapshot databases.
+            s.rollback()
+            s.expire_all()
+            completed, aggregate_percent, failure = _check_targets(s, targets)
+            if failure:
+                raise RuntimeError(failure)
+            if completed >= total:
+                update_progress(progress, 100, f"Re-downloaded {total} episode file(s)")
+                return {**base_result, "episode_files": total}
+
+            update_progress(
+                progress,
+                max(1, min(99, aggregate_percent)),
+                f"Re-downloaded {completed}/{total} episode file(s)",
+            )
+    except Exception:
+        # A canceled/failed parent operation must not leave independent child
+        # downloads running after the high-level user action has ended.
+        _cancel_targets(targets, reason="Parent show re-download stopped")
+        raise

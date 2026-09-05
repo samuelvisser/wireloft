@@ -1,12 +1,22 @@
 from typing import Optional
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from .service import *
 from ...models.media_download import *
+from ...models.operations import MediaDownloadOperationAccepted
 from backend.app import db_session
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from task_manager.scheduler.operation_control import cancel_operation
+from task_manager.scheduler.types import OperationSource
+from task_manager.tasks.media_download_operations import (
+    create_media_download_operation,
+    dispatch_queued_media_download_operations,
+    get_active_media_download_operation,
+)
 
 router = APIRouter(prefix="/media-downloads", tags=["Media Downloads"])
+
 
 @router.get("", response_model=list[MediaDownloadAPIRead])
 def media_downloads_list():
@@ -31,41 +41,116 @@ def media_downloads_view(
         )
 
 
-@router.post("/{media_download_id}/retry", response_model=MediaDownloadAPIRead)
+@router.post(
+    "/{media_download_id}/retry",
+    response_model=MediaDownloadOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def media_downloads_retry(media_download_id: int):
+    """Start a replacement attempt using the generic operation pipeline."""
+    active_operation_id: str | None = None
+    is_redownload = False
+    with db_session() as s:
+        download = s.get(MediaDownloadBase, media_download_id)
+        if download is None:
+            raise HTTPException(status_code=404, detail="Media download not found")
+        active = get_active_media_download_operation(s, media_download_id)
+        if active is not None:
+            active_operation_id = active.id
+        # Capture this before retry_media_download clears the old artifact facts.
+        # A missing/corrupt artifact still represents a replacement of something
+        # WireLoft previously downloaded, so keep the redownload audit semantics.
+        is_redownload = (
+            download.downloaded_at is not None
+            or download.artifact_status in {"available", "missing", "corrupted"}
+        )
+
+    if active_operation_id is not None:
+        cancel_operation(
+            active_operation_id,
+            reason="Replaced by retry",
+            acknowledge=True,
+        )
+
     with db_session() as s:
         try:
             download = retry_media_download(s, media_download_id)
-            payload = MediaDownloadAPIRead.model_validate(download)
-            media_item_id = download.media_item_id
-            media_type = download.type
-            attempt_generation = download.attempt_generation
+            operation = create_media_download_operation(
+                s,
+                download,
+                source=OperationSource.UI.value,
+                is_redownload=is_redownload,
+            )
+            dispatch_queued_media_download_operations(s)
+            operation_id = operation.id
             s.commit()
+            return {
+                "queued": True,
+                "operation_id": operation_id,
+                "media_download_id": media_download_id,
+            }
         except Exception:
             s.rollback()
             raise
-
-    _trigger_download_task(
-        media_download_id=payload.id,
-        media_item_id=media_item_id,
-        media_type=media_type,
-        attempt_generation=attempt_generation,
-    )
-    return payload
 
 
 @router.post("/{media_download_id}/cancel", response_model=MediaDownloadAPIRead)
 def media_downloads_cancel(media_download_id: int):
-    """Cancel a queued or running download without starting another attempt."""
+    """Cancel the active media.download operation and suppress automatic requeue."""
+    with db_session() as s:
+        download = s.get(MediaDownloadBase, media_download_id)
+        if download is None:
+            raise HTTPException(status_code=404, detail="Media download not found")
+        operation = get_active_media_download_operation(s, media_download_id)
+        if operation is None:
+            raise HTTPException(status_code=409, detail="This download is not currently in progress")
+        operation_id = operation.id
+
+    try:
+        cancel_operation(operation_id, reason="Canceled by user", acknowledge=True)
+    except ValueError as exc:
+        # The worker may have completed between the read above and the durable
+        # cancellation transaction. Treat that as a normal state race, not a 500.
+        raise HTTPException(status_code=409, detail="This download is not currently in progress") from exc
+
     with db_session() as s:
         try:
-            download = cancel_media_download(s, media_download_id)
+            download = s.get(MediaDownloadBase, media_download_id)
+            if download is None:
+                raise HTTPException(status_code=404, detail="Media download not found")
+
+            # Persist the user's intent after cancellation. A Download Profile
+            # sweep that raced with the first cancellation may have observed the
+            # brief no-operation gap and queued one more SYSTEM media.download;
+            # once this commit is visible, no new automatic replacement may do so.
+            download.automatic_retry_suppressed = (
+                download.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value
+            )
             payload = MediaDownloadAPIRead.model_validate(download)
             s.commit()
-            return payload
         except Exception:
             s.rollback()
             raise
+
+    # Close the cancellation/requeue race without teaching the generic operation
+    # controller about MediaDownload policy. Only a SYSTEM replacement can be the
+    # automatic race described above; never cancel a new explicit UI/API retry
+    # another caller may have started after the user's cancellation completed.
+    with db_session() as s:
+        replacement = get_active_media_download_operation(s, media_download_id)
+        replacement_id = (
+            replacement.id
+            if replacement is not None and replacement.source == OperationSource.SYSTEM.value
+            else None
+        )
+
+    if replacement_id is not None:
+        try:
+            cancel_operation(replacement_id, reason="Canceled by user", acknowledge=True)
+        except ValueError:
+            pass
+
+    return payload
 
 
 @router.get("/{media_download_id}/attempts", response_model=list[MediaDownloadAttemptAPIRead])
@@ -94,14 +179,7 @@ def media_downloads_update(media_download_id: int, body: MediaDownloadAPIUpdate)
 
 @router.delete("/{media_download_id}", response_model=MediaDownloadAPIRead)
 def media_downloads_delete(media_download_id: int):
-    """
-    Delete a media download record from the system.
-
-    Permanently removes the download record. A queued/running download is
-    cancelled and its partial artifacts are removed first. Completed files are
-    left on disk.
-    Returns the deleted download's information for confirmation.
-    """
+    """Delete the domain artifact record and all scheduler work it owns."""
     with db_session() as s:
         try:
             result = delete_media_download(s, media_download_id)
@@ -110,32 +188,3 @@ def media_downloads_delete(media_download_id: int):
         except Exception:
             s.rollback()
             raise
-
-
-def _trigger_download_task(
-        *,
-        media_download_id: int,
-        media_item_id: int,
-        media_type: str,
-        attempt_generation: int,
-) -> None:
-    """Queue the download worker for a freshly created/reset download row."""
-    from task_manager.scheduler.executor import trigger_now
-
-    if media_type in {"movie", "movie_extra"}:
-        trigger_now(
-            def_key="download_movie",
-            resource_type=media_type,
-            resource_id=media_item_id,
-            media_download_id=media_download_id,
-            attempt_generation=attempt_generation,
-        )
-        return
-
-    trigger_now(
-        def_key="download_episode",
-        resource_type="episode",
-        resource_id=media_item_id,
-        media_download_id=media_download_id,
-        attempt_generation=attempt_generation,
-    )

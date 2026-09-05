@@ -31,13 +31,13 @@ def db_session():
 def clear_interrupted_task_runs() -> int:
     """Close task runs that could not have survived a backend process restart.
 
-    Task execution and retry jobs live inside the WireLoft backend process and
-    APScheduler uses an in-memory job store. A RUNNING task or RETRY_SCHEDULED
-    task found at startup therefore belongs to the previous process and can no
-    longer make progress on its own.
+    APScheduler uses an in-memory job store, so every non-terminal TaskRun belongs
+    to scheduler work from the previous process. This includes SCHEDULED/QUEUED
+    reservations that had not started yet, RUNNING work, and RETRY_SCHEDULED
+    retries. None of those jobs can still execute after a process restart.
 
     TaskOperations linked to those runs are reset to QUEUED before commit. Their
-    logical targets are durable and will be requeued once the scheduler starts.
+    logical targets are durable and will be recovered once the scheduler starts.
     The dead run associations are detached atomically so the UI cannot briefly
     mistake an interrupted attempt for the terminal result of the operation.
     """
@@ -47,6 +47,8 @@ def clear_interrupted_task_runs() -> int:
     from task_manager.scheduler.types import TaskStatus
 
     interrupted_statuses = (
+        TaskStatus.SCHEDULED,
+        TaskStatus.QUEUED,
         TaskStatus.RUNNING,
         TaskStatus.RETRY_SCHEDULED,
     )
@@ -255,7 +257,7 @@ def start_controller() -> None:
             # Import workers so their decorators populate the registry.
             import task_manager.tasks  # noqa: F401
             from task_manager.scheduler.operations import recover_pending_operations
-            from task_manager.scheduler.registry import sync_registry_to_db
+            from task_manager.scheduler.registry import run_recovery_dispatchers, sync_registry_to_db
             from task_manager.scheduler.scheduler import start_scheduler
             from task_manager.scheduler.watchdog import install_stalled_work_watchdog
 
@@ -274,6 +276,17 @@ def start_controller() -> None:
                     logger.info(
                         "Recovered %s TaskOperation target(s) after restart",
                         recovered_targets,
+                    )
+
+                # Queue-managed task definitions restore their own available
+                # slots after generic operation recovery. This keeps recovery
+                # generic while preserving policies such as a constrained
+                # concurrency lane instead of blasting every target at APScheduler.
+                recovery_dispatchers = run_recovery_dispatchers()
+                if recovery_dispatchers:
+                    logger.info(
+                        "Ran %s TaskOperation recovery dispatcher(s)",
+                        recovery_dispatchers,
                     )
 
                 if _should_emit_startup_event():

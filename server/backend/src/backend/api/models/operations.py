@@ -10,6 +10,10 @@ class TaskOperationAccepted(ResponseBase):
     operation_id: str
 
 
+class MediaDownloadOperationAccepted(TaskOperationAccepted):
+    media_download_id: int
+
+
 class ShowMetadataOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
 

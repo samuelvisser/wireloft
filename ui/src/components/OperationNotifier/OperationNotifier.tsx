@@ -64,6 +64,8 @@ function operationLabel(operation: TaskOperationRead): string {
       return 'Re-download'
     case 'movie.refresh_extras':
       return 'Movie extra refresh'
+    case 'media.download':
+      return 'Download'
     default:
       return operation.title || 'Operation'
   }
@@ -101,6 +103,8 @@ function successMessage(operation: TaskOperationRead): string {
         : ` using ${profiles} ${plural(profiles, 'Download Profile')}`
       return `Re-download finished for ${showTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
     }
+    case 'media.download':
+      return operation.result?.summary || `Downloaded ${operation.title}`
     default:
       return operation.result?.summary || operation.message || `${operation.title} completed`
   }
@@ -163,44 +167,92 @@ async function invalidateForOperation(queryClient: QueryClient, operation: TaskO
     }
   }
 
+  if (operation.kind === 'media.download') {
+    invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+    if (operation.resourceId != null) {
+      invalidations.push(queryClient.invalidateQueries({
+        queryKey: ['mediaDownloadAttempts', operation.resourceId],
+        exact: true,
+      }))
+    }
+    if (episodeSlug) {
+      invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
+    }
+    if (showSlug) {
+      invalidations.push(queryClient.invalidateQueries({queryKey: ['episodes', showSlug]}))
+    }
+    if (movieSlug) {
+      invalidations.push(
+        queryClient.invalidateQueries({queryKey: ['movies']}),
+        queryClient.invalidateQueries({queryKey: ['dailywireMovie', movieSlug]}),
+      )
+    }
+  }
+
   await Promise.all(invalidations)
 }
 
 export default function OperationNotifier({children}: {children: ReactNode}) {
   const queryClient = useQueryClient()
   const handledRef = useRef(new Set<string>())
+  const previousActiveRef = useRef(new Map<string, TaskOperationRead>())
   const {data: pullData} = useFrontendPuller()
   const operations = pullData?.operations ?? []
 
+  // If another browser acknowledges a terminal operation before this browser
+  // observes the terminal snapshot, it disappears from the pull. Remembering the
+  // active snapshot still lets this browser refresh the affected ordinary queries.
+  useEffect(() => {
+    if (!pullData) return
+
+    const currentById = new Map(operations.map((operation) => [operation.id, operation]))
+    const currentActive = new Map(
+      operations
+        .filter((operation) => ACTIVE_STATUSES.has(operation.status))
+        .map((operation) => [operation.id, operation]),
+    )
+
+    for (const [operationId, previous] of previousActiveRef.current) {
+      if (currentActive.has(operationId) || currentById.has(operationId)) continue
+      void invalidateForOperation(queryClient, previous)
+    }
+    previousActiveRef.current = currentActive
+  }, [operations, pullData, queryClient])
+
+  // Every terminal operation stays in the generic pull until a frontend has
+  // processed the domain-data refresh it implies. UI operations additionally get
+  // a toast; automated/API work is acknowledged silently after invalidation.
   useEffect(() => {
     for (const operation of operations) {
       if (
         !TERMINAL_STATUSES.has(operation.status)
-        || operation.notificationSeenAt
         || handledRef.current.has(operation.id)
       ) {
         continue
       }
 
       handledRef.current.add(operation.id)
-      const message = terminalMessage(operation)
-      if (operation.status === 'SUCCEEDED') {
-        toast.success(message, {duration: 5000})
-      } else if (operation.status === 'PARTIAL' || operation.status === 'CANCELED') {
-        toast(message, {duration: 6000})
-      } else {
-        toast.error(message, {duration: 6000})
+      if (operation.source === 'UI' && !operation.notificationSeenAt) {
+        const message = terminalMessage(operation)
+        if (operation.status === 'SUCCEEDED') {
+          toast.success(message, {duration: 5000})
+        } else if (operation.status === 'PARTIAL' || operation.status === 'CANCELED') {
+          toast(message, {duration: 6000})
+        } else {
+          toast.error(message, {duration: 6000})
+        }
       }
 
       void (async () => {
         try {
           await invalidateForOperation(queryClient, operation)
-          await markSeen(operation.id)
-          await refreshFrontendPuller(queryClient)
+          if (!operation.notificationSeenAt) {
+            await markSeen(operation.id)
+            await refreshFrontendPuller(queryClient)
+          }
         } catch {
-          // The notification was already shown in this browser session. Keep the
-          // operation unseen server-side so a later reload can retry the durable
-          // acknowledgement instead of losing completion information.
+          // Leave an unacknowledged operation durable server-side so a later
+          // browser reload can retry the cache refresh/acknowledgement path.
         }
       })()
     }
