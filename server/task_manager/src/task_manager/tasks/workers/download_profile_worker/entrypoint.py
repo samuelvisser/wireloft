@@ -5,7 +5,9 @@ from typing import Optional
 from config import get_settings
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import task, on_cron, on_event
+from ...helpers.episodes.events import EPISODE_IDENTIFIER_CHANGED_EVENT
 from ..fetch_new_episodes.service import SHOW_INDEXED_EVENT
+from .identifier_changes import handle_episode_identifier_changed
 from .service import run_download_profile_worker
 
 
@@ -27,6 +29,10 @@ from .service import run_download_profile_worker
 )
 @on_event(
     event_name="episode.published_with_countdown",
+    resource_type="episode",
+)
+@on_event(
+    event_name=EPISODE_IDENTIFIER_CHANGED_EVENT,
     resource_type="episode",
 )
 @on_event(
@@ -52,15 +58,39 @@ async def download_profile_worker(
         resource_id: Optional[int] = None,
         resource_type: Optional[str] = None,
         progress=None,
+        old_episode_identifier: Optional[str] = None,
+        new_episode_identifier: Optional[str] = None,
 ) -> None:
     """
     Ensures the episodes requested by enabled Download Profiles are downloaded.
 
     ``resource_id`` is polymorphic: an episode id when triggered by an episode
-    publish event (checks just that episode), a show id (checks the whole show's
-    profiles), a specific download_profile id, or 0/None for a global sweep across
-    every enabled profile (cron, app.startup, or a manual "show"/"download_profile"
-    trigger). ``resource_type`` disambiguates which one it is.
+    publish/identifier event, a show id (checks the whole show's profiles), a
+    specific download_profile id, or 0/None for a global sweep across every enabled
+    profile (cron, app.startup, or a manual "show"/"download_profile" trigger).
+    ``resource_type`` disambiguates which one it is.
+
+    An identifier-change event takes the narrower repair path: only Download
+    Profiles that contain that episode and whose Local Media Profile path depends
+    on ``episode_identifier`` or ``episode_label`` are re-downloaded.
     """
     with db_session() as s:
-        await run_download_profile_worker(s, resource_id=resource_id, resource_type=resource_type, progress=progress)
+        if (
+            resource_type == "episode"
+            and old_episode_identifier is not None
+            and new_episode_identifier is not None
+        ):
+            handle_episode_identifier_changed(
+                s,
+                episode_id=resource_id,
+                old_episode_identifier=old_episode_identifier,
+                new_episode_identifier=new_episode_identifier,
+            )
+            return
+
+        await run_download_profile_worker(
+            s,
+            resource_id=resource_id,
+            resource_type=resource_type,
+            progress=progress,
+        )

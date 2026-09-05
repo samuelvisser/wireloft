@@ -14,7 +14,7 @@ from task_manager.events.transactional import queue_event
 from ._helpers import save_status_metadata
 from .scheduling import MONITOR_COMPLETED_EVENT, MONITOR_REQUESTED_EVENT
 from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
-from ...helpers.episodes.identifier import reconcile_episode_identifier_from_dailywire
+from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.episodes.metadata import metadata_watch_expired, update_episode_from_dailywire
 from ...helpers.episodes.processing import (
     DwProcessingReason,
@@ -141,13 +141,16 @@ async def run_monitor_episode_worker(
     # Use the exact same authoritative reconciliation path as metadata refresh.
     # Daily Wire sometimes changes episodeNumber while an episode is still live or
     # processing, so waiting for the post-publication metadata worker can leave the
-    # row misclassified for the entire pre-publication lifecycle.
+    # row misclassified for the entire pre-publication lifecycle. The old status is
+    # passed explicitly so a correction made on the first publication transition
+    # is not mistaken for a post-publication identifier change.
     identifier_changed = False
     if not db_episode.is_no_show_today:
-        identifier_changed = reconcile_episode_identifier_from_dailywire(
+        identifier_changed = reconcile_episode_identifier(
             s,
             db_episode,
             dw_episode,
+            previous_publish_status=old_status,
         )
     s.flush()
 
