@@ -17,10 +17,18 @@ Anything that has happened and is now part of WireLoft's library belongs to ordi
 
 This boundary is intentional. A backend restart can reconstruct unfinished execution entirely from scheduler state without guessing from domain rows, while completed library facts remain useful even after the operation that produced them is no longer active.
 
+## Defining operations
+
+Prefer an `OperationDefinition` plus `OperationFactory.create()` when an operation has a stable shape, is created from more than one place, or otherwise repeats the same resource, target, context and event metadata. The definition is the single declaration of that operation shape; call sites should only supply the domain resource and genuinely variable inputs.
+
+A definition may declare a transactional domain event alongside the TaskOperation. Events that are merely a worker-dispatch transport set `event_is_dispatch = True`, allowing the factory to suppress the event when compatible work is already satisfying the target. Genuine domain events such as `show.added` are always emitted even though a worker also subscribes to them.
+
+Keep the lower-level `create_operation()` API for genuinely dynamic or one-off operation shapes when introducing a definition would add more indirection than it removes. The factory is a concision tool, not a mandatory wrapper around every operation.
+
 ## Adding a UI-triggered worker action
 
-1. Create an operation in the API service with `create_operation()` and one or more `OperationTargetSpec` values.
-2. For work owned directly by the operation, call `queue_operation_target_dispatch()` for each target. It schedules the target only after the API transaction commits and skips targets already satisfied by compatible work. A domain event can still be used when the action genuinely represents a domain event; use `operation_target_needs_dispatch()` to avoid duplicate work in that case.
+1. Define the stable operation shape with `OperationDefinition` and create it through `OperationFactory` when that makes the call site clearer. Use `create_operation()` directly for dynamic one-off cases.
+2. For work owned directly by the operation, call `queue_operation_target_dispatch()` for each target. It schedules the target only after the API transaction commits and skips targets already satisfied by compatible work. A definition can instead declare a domain/dispatch event when the action genuinely belongs on the event bus.
 3. Return an API response containing `operation_id`. Do not create a separate manual request/correlation ID.
 4. Have the worker report ordinary progress through its `progress` object and return a `TaskResult` with structured facts when it completes.
 5. In the frontend, start the request through the generic operation helper. `FrontendPuller` owns discovery/progress polling, while `OperationNotifier` owns final notifications and operation-driven cache refreshes. Components that need live status can use `useActiveOperation()`.
