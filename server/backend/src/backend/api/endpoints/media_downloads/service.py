@@ -4,14 +4,13 @@ from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.media_download import *
 from backend.db.models import Episode, LocalMediaProfileBase, Movie, MovieExtra
 from backend.db.models.media_download import (
     EpisodeMediaDownload,
-    MediaDownloadAttempt,
     MediaDownloadBase,
     MovieExtraMediaDownload,
     MovieMediaDownload,
@@ -22,15 +21,57 @@ from backend.types.media_types import MediaType
 from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
+from task_manager.scheduler.db import TaskDefinition, TaskRun
+from task_manager.scheduler.types import ResourceType
 from task_manager.tasks.media_download_operations import (
     get_active_media_download_operation,
     prepare_media_download_artifact,
 )
 
 
+_DOWNLOAD_TASK_KEYS = ("download_episode", "download_movie")
+
+
 def get_media_downloads_list(s: Session) -> list[MediaDownloadAPIRead]:
     items = s.query(MediaDownloadBase).order_by(MediaDownloadBase.id).all()
     return [MediaDownloadAPIRead.model_validate(it) for it in items]
+
+
+def _latest_download_runs(s: Session, media_download_ids: list[int]) -> dict[int, TaskRun]:
+    if not media_download_ids:
+        return {}
+
+    rows = s.scalars(
+        select(TaskRun)
+        .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
+        .where(
+            TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD,
+            TaskRun.resource_id.in_(media_download_ids),
+            TaskDefinition.key.in_(_DOWNLOAD_TASK_KEYS),
+        )
+        .order_by(TaskRun.id.desc())
+    )
+    latest: dict[int, TaskRun] = {}
+    for run in rows:
+        if run.resource_id is not None:
+            latest.setdefault(run.resource_id, run)
+    return latest
+
+
+def _run_is_redownload(run: TaskRun | None) -> Optional[bool]:
+    if run is None:
+        return None
+
+    meta = run.meta if isinstance(run.meta, dict) else {}
+    inputs = meta.get("inputs") if isinstance(meta.get("inputs"), dict) else {}
+    value = inputs.get("is_redownload")
+    if isinstance(value, bool):
+        return value
+
+    result = run.result if isinstance(run.result, dict) else {}
+    data = result.get("data") if isinstance(result.get("data"), dict) else {}
+    value = data.get("is_redownload")
+    return value if isinstance(value, bool) else None
 
 
 def get_media_downloads_view(
@@ -41,18 +82,20 @@ def get_media_downloads_view(
         statuses: Optional[list[str]] = None,
         limit: Optional[int] = None,
 ) -> list[MediaDownloadAPIReadView]:
-    """Return persistent media-artifact state; active execution is not part of this query."""
+    """Return persistent media-artifact state plus latest canonical TaskRun facts."""
     stmt = (
         select(MediaDownloadBase, LocalMediaProfileBase)
         .join(LocalMediaProfileBase, LocalMediaProfileBase.id == MediaDownloadBase.local_media_profile_id)
-        .options(selectinload(MediaDownloadBase.attempts))
         .order_by(MediaDownloadBase.id.desc())
     )
     if statuses:
         stmt = stmt.where(MediaDownloadBase.artifact_status.in_(statuses))
 
+    rows = list(s.execute(stmt))
+    latest_runs = _latest_download_runs(s, [download.id for download, _ in rows])
+
     views: list[MediaDownloadAPIReadView] = []
-    for download, profile in s.execute(stmt):
+    for download, profile in rows:
         media = download.media
         episode = media if isinstance(media, Episode) else None
         movie_extra = media if isinstance(media, MovieExtra) else None
@@ -63,7 +106,7 @@ def get_media_downloads_view(
             continue
 
         show = episode.show if episode else None
-        latest_attempt = download.attempts[0] if download.attempts else None
+        latest_run = latest_runs.get(download.id)
         base = MediaDownloadAPIRead.model_validate(download)
         views.append(MediaDownloadAPIReadView(
             **base.model_dump(by_alias=False),
@@ -80,27 +123,18 @@ def get_media_downloads_view(
             local_media_profile_name=profile.name,
             preferred_format=profile.preferred_format,
             downloaded_publish_status=getattr(download, "downloaded_publish_status", None),
-            latest_attempt_status=latest_attempt.status if latest_attempt else None,
-            latest_attempt_error=latest_attempt.error_message if latest_attempt else None,
-            latest_attempt_is_redownload=latest_attempt.is_redownload if latest_attempt else None,
-            latest_attempt_started_at=latest_attempt.started_at if latest_attempt else None,
-            latest_attempt_finished_at=latest_attempt.finished_at if latest_attempt else None,
+            latest_task_status=(
+                latest_run.status.value if latest_run is not None and hasattr(latest_run.status, "value")
+                else latest_run.status if latest_run is not None else None
+            ),
+            latest_task_error=latest_run.last_error if latest_run is not None else None,
+            latest_task_is_redownload=_run_is_redownload(latest_run),
+            latest_task_started_at=latest_run.started_at if latest_run is not None else None,
+            latest_task_finished_at=latest_run.finished_at if latest_run is not None else None,
         ))
         if limit is not None and len(views) >= limit:
             break
     return views
-
-
-def get_media_download_attempts(s: Session, media_download_id: int) -> list[MediaDownloadAttemptAPIRead]:
-    if s.get(MediaDownloadBase, media_download_id) is None:
-        raise HTTPException(status_code=404, detail="Media download not found")
-    items = (
-        s.query(MediaDownloadAttempt)
-        .filter_by(media_download_id=media_download_id)
-        .order_by(MediaDownloadAttempt.id.desc())
-        .all()
-    )
-    return [MediaDownloadAttemptAPIRead.model_validate(it) for it in items]
 
 
 def get_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRead:
@@ -197,6 +231,7 @@ def create_movie_extra_download(
     movie_extra_slug: str,
     body: MovieDownloadAPICreate,
 ) -> MovieExtraMediaDownload:
+    """Persist a browsed movie extra and queue it with a Movie profile."""
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE)
     remote_extra = next((extra for extra in movie_data.movie_extras if extra.slug == movie_extra_slug), None)
     if remote_extra is None:

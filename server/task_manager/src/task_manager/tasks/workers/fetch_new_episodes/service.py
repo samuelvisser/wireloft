@@ -15,7 +15,6 @@ from dailywire_api.records import DwSeasonRecord
 from dailywire_authorisation import DeviceAuthClient
 from task_manager.events.transactional import queue_event
 from ._helpers import get_shows, get_season_from_list_by_id, get_latest_ep_index
-from .sync_logger import append_sync_log, task_will_retry
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier import IdentifierMaxValues
 from ...helpers.episodes.mapper import get_dw_episodes_since_ep, count_total_episodes
@@ -120,35 +119,14 @@ async def run_fetch_new_episodes(
             )
         except Exception:
             s.rollback()
-            if not dry_run:
-                failed_show = s.get(Show, current_show_id)
-                if failed_show is not None:
-                    append_sync_log(
-                        failed_show,
-                        episodes_found=0,
-                        status="failed",
-                        will_retry=task_will_retry(progress),
-                    )
-                    s.commit()
             raise
 
-        result = ShowEpisodeScanResult(
+        completed.append(ShowEpisodeScanResult(
             show_id=current_show_id,
             show_slug=current_show_slug,
             show_title=current_show_title,
             episodes_found=0 if dry_run else episodes_found,
-        )
-        completed.append(result)
-
-        if not dry_run:
-            completed_show = s.get(Show, current_show_id)
-            if completed_show is not None:
-                append_sync_log(
-                    completed_show,
-                    episodes_found=episodes_found,
-                    status="completed",
-                )
-                s.commit()
+        ))
 
     print("fetch_new_episodes finished")
     return FetchNewEpisodesResult(shows=tuple(completed), dry_run=dry_run)

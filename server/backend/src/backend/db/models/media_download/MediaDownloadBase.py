@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import Boolean, DateTime, String, Text, func, UniqueConstraint
@@ -13,7 +13,6 @@ from backend.types.media_types import MediaType
 if TYPE_CHECKING:
     from backend.db.models.media_item import MediaItemBase
     from backend.db.models import LocalMediaProfileBase
-    from .MediaDownloadAttempt import MediaDownloadAttempt
 
 
 class MediaDownloadBase(HasTaskResourcesMixin, Base):
@@ -74,12 +73,6 @@ class MediaDownloadBase(HasTaskResourcesMixin, Base):
     # Relationships
     media: Mapped["MediaItemBase"] = relationship(back_populates="downloads")
     local_media_profile: Mapped["LocalMediaProfileBase"] = relationship(back_populates="media_downloads")
-    # Historical audit only. Live execution state is never read from this table.
-    attempts: Mapped[List["MediaDownloadAttempt"]] = relationship(
-        back_populates="media_download",
-        cascade="all, delete-orphan",
-        order_by="MediaDownloadAttempt.id.desc()",
-    )
 
     def __repr__(self) -> str:
         return (

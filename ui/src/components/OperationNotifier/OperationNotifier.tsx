@@ -128,11 +128,27 @@ function terminalMessage(operation: TaskOperationRead): string {
   return `${label} failed for ${operation.title}${operation.error ? `: ${operation.error}` : ''}`
 }
 
+function taskLedgerQueryMatchesOperation(queryKey: readonly unknown[], operation: TaskOperationRead): boolean {
+  if (queryKey[0] !== 'taskLedger') return false
+
+  const resourceType = queryKey[2]
+  if (resourceType !== undefined && resourceType !== operation.resourceType) return false
+
+  const resourceFilter = queryKey[3]
+  if (resourceFilter === undefined || operation.resourceId == null) return true
+  if (typeof resourceFilter === 'number') return resourceFilter === operation.resourceId
+  return Array.isArray(resourceFilter) && resourceFilter.includes(operation.resourceId)
+}
+
 async function invalidateForOperation(queryClient: QueryClient, operation: TaskOperationRead) {
   const showSlug = contextString(operation, 'show_slug')
   const episodeSlug = contextString(operation, 'episode_slug')
   const movieSlug = contextString(operation, 'movie_slug')
-  const invalidations: Promise<unknown>[] = []
+  const invalidations: Promise<unknown>[] = [
+    queryClient.invalidateQueries({
+      predicate: (query) => taskLedgerQueryMatchesOperation(query.queryKey, operation),
+    }),
+  ]
 
   if (operation.kind.startsWith('show.')) {
     invalidations.push(
@@ -169,12 +185,6 @@ async function invalidateForOperation(queryClient: QueryClient, operation: TaskO
 
   if (operation.kind === 'media.download') {
     invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
-    if (operation.resourceId != null) {
-      invalidations.push(queryClient.invalidateQueries({
-        queryKey: ['mediaDownloadAttempts', operation.resourceId],
-        exact: true,
-      }))
-    }
     if (episodeSlug) {
       invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
     }

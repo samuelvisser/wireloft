@@ -1,13 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { toast } from 'react-hot-toast'
+import {useEffect, useState} from 'react'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {useShow} from '../../lib/queries'
+import {useTaskLedgerPage} from '../../lib/taskLedger'
+import {TaskLedgerEntryRead} from '../../types/schemas/task'
 import './ShowSyncLogModal.css'
-
-type SyncLogEntry = {
-  synced_at: string
-  episodes_found: number
-  status?: 'completed' | 'failed'
-}
 
 type Props = {
   showSlug: string
@@ -18,45 +14,76 @@ type Props = {
   onSyncNow: () => void | Promise<void>
 }
 
-export default function ShowSyncLogModal({ showSlug, showTitle, open, syncing, onClose, onSyncNow }: Props) {
-  const [entries, setEntries] = useState<SyncLogEntry[]>([])
-  const [loading, setLoading] = useState(false)
-  const wasSyncingRef = useRef(false)
+const PAGE_SIZE = 10
+const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELED'] as const
 
-  const apiBase = (window as any).appConfig?.API_URL || '/api'
+function resultData(run: TaskLedgerEntryRead): Record<string, unknown> {
+  const result = run.result
+  if (!result || typeof result !== 'object') return {}
+  const data = result.data
+  return data && typeof data === 'object' && !Array.isArray(data)
+    ? data as Record<string, unknown>
+    : {}
+}
 
-  const loadLog = useCallback(async () => {
-    const response = await fetch(`${apiBase}/shows/${encodeURIComponent(showSlug)}/sync-log`, {
-      credentials: 'include',
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data: SyncLogEntry[] = await response.json()
-    setEntries(data)
-    return data
-  }, [apiBase, showSlug])
+function showResult(run: TaskLedgerEntryRead, showId: number): Record<string, unknown> | null {
+  const data = resultData(run)
+  if (run.resourceId === showId) return data
+  if (run.resourceId !== 0) return null
+
+  const shows = Array.isArray(data.shows) ? data.shows : []
+  const matching = shows.find((item) => {
+    if (!item || typeof item !== 'object') return false
+    return Number((item as Record<string, unknown>).show_id) === showId
+  })
+  if (matching && typeof matching === 'object') return matching as Record<string, unknown>
+
+  // Global fetches are scoped to every show that existed when they ran. The
+  // ledger query starts at this show's creation time, so keep the row even if a
+  // failed/canceled run (or an older result shape) has no per-show payload.
+  return {}
+}
+
+function episodeCount(run: TaskLedgerEntryRead, showId: number): string | number {
+  if (run.status === 'FAILED') return 'Failed'
+  if (run.status === 'CANCELED') return 'Canceled'
+  const found = showResult(run, showId)?.episodes_found
+  return typeof found === 'number' && Number.isFinite(found) ? found : '—'
+}
+
+function formatDate(value: string | null | undefined): string {
+  if (!value) return '—'
+  const normalized = /(?:Z|[+-]\d\d:\d\d)$/i.test(value) ? value : `${value}Z`
+  return new Date(normalized).toLocaleString()
+}
+
+export default function ShowSyncLogModal({showSlug, showTitle, open, syncing, onClose, onSyncNow}: Props) {
+  const {data: show} = useShow(showSlug)
+  const showId = show?.id
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
-    if (!open) return
-    setLoading(true)
-    loadLog()
-      .catch(() => toast.error('Could not load sync history'))
-      .finally(() => setLoading(false))
-  }, [loadLog, open])
+    if (open) setPage(1)
+  }, [open, showSlug])
+
+  const ledger = useTaskLedgerPage({
+    definitionKey: 'fetch_new_episodes',
+    resourceType: 'show',
+    resourceId: showId === undefined ? undefined : [0, showId],
+    status: TERMINAL_STATUSES,
+    startedAfter: show?.createdAt,
+    offset: (page - 1) * PAGE_SIZE,
+    limit: PAGE_SIZE,
+    enabled: open && showId !== undefined,
+  })
+
+  const total = ledger.data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const entries = ledger.data?.items ?? []
 
   useEffect(() => {
-    if (!open) {
-      wasSyncingRef.current = syncing
-      return
-    }
-
-    // The shared frontend puller owns the live sync state. Refresh the historical
-    // log once when that operation becomes terminal instead of polling the log
-    // independently while the operation runs.
-    if (wasSyncingRef.current && !syncing) {
-      loadLog().catch(() => undefined)
-    }
-    wasSyncingRef.current = syncing
-  }, [loadLog, open, syncing])
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
 
   if (!open) return null
 
@@ -80,8 +107,10 @@ export default function ShowSyncLogModal({ showSlug, showTitle, open, syncing, o
         </div>
 
         <div className="show-sync-log-content">
-          {loading ? (
+          {ledger.isLoading ? (
             <p className="modal-text">Loading sync history...</p>
+          ) : ledger.isError ? (
+            <p className="modal-text">Could not load sync history.</p>
           ) : entries.length === 0 ? (
             <p className="modal-text">No syncs have been recorded yet.</p>
           ) : (
@@ -91,10 +120,13 @@ export default function ShowSyncLogModal({ showSlug, showTitle, open, syncing, o
                 <span role="columnheader">Episodes found</span>
               </div>
               {entries.map((entry) => (
-                <div className="show-sync-log-row" role="row" key={entry.synced_at}>
-                  <span role="cell">{new Date(entry.synced_at).toLocaleString()}</span>
-                  <span role="cell" className={entry.status === 'failed' ? 'show-sync-log-failed' : undefined}>
-                    {entry.status === 'failed' ? 'Failed' : entry.episodes_found}
+                <div className="show-sync-log-row" role="row" key={entry.id}>
+                  <span role="cell">{formatDate(entry.finishedAt ?? entry.startedAt)}</span>
+                  <span
+                    role="cell"
+                    className={entry.status === 'FAILED' ? 'show-sync-log-failed' : undefined}
+                  >
+                    {showId === undefined ? '—' : episodeCount(entry, showId)}
                   </span>
                 </div>
               ))}
@@ -102,12 +134,36 @@ export default function ShowSyncLogModal({ showSlug, showTitle, open, syncing, o
           )}
         </div>
 
-        <div className="modal-actions">
-          <button type="button" className="btn" onClick={onClose}>Close</button>
-          <button type="button" className="btn btn-primary" onClick={() => void onSyncNow()} disabled={syncing}>
-            <FontAwesomeIcon icon={['fas', syncing ? 'spinner' : 'arrows-rotate']} spin={syncing} aria-hidden="true" />
-            <span>{syncing ? 'Syncing...' : 'Sync now'}</span>
-          </button>
+        <div className="show-sync-log-footer">
+          <nav className="show-sync-log-pagination" aria-label="Sync log pages">
+            <button
+              type="button"
+              className="btn"
+              disabled={page <= 1 || ledger.isFetching}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
+              Previous
+            </button>
+            <span className="show-sync-log-page-label" aria-live="polite">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn"
+              disabled={page >= totalPages || ledger.isFetching}
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            >
+              Next
+            </button>
+          </nav>
+
+          <div className="modal-actions show-sync-log-actions">
+            <button type="button" className="btn" onClick={onClose}>Close</button>
+            <button type="button" className="btn btn-primary" onClick={() => void onSyncNow()} disabled={syncing}>
+              <FontAwesomeIcon icon={['fas', syncing ? 'spinner' : 'arrows-rotate']} spin={syncing} aria-hidden="true" />
+              <span>{syncing ? 'Syncing...' : 'Sync now'}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

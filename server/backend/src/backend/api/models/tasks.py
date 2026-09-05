@@ -50,3 +50,28 @@ class TaskRunRead(ResponseBase):
     started_at: Optional[str]
     finished_at: Optional[str]
     runtime_ms: Optional[int]
+
+
+class TaskLedgerEntryRead(ResponseBase):
+    """Durable execution facts for one canonical TaskRun."""
+
+    id: int
+    definition_key: str
+    resource_type: str
+    resource_id: Optional[int]
+    status: str
+    message: Optional[str]
+    last_error: Optional[str]
+    inputs: dict[str, Any]
+    result: Optional[dict[str, Any]]
+    started_at: Optional[str]
+    finished_at: Optional[str]
+    runtime_ms: Optional[int]
+
+
+class TaskLedgerPageRead(ResponseBase):
+    items: list[TaskLedgerEntryRead]
+    total: int
+    offset: int
+    limit: int
+    has_more: bool
