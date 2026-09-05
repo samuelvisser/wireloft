@@ -2,12 +2,16 @@ from fastapi import APIRouter, HTTPException, status
 
 from .service import *
 from ...models.movie import *
-from ...models.media_download import MediaDownloadAPIRead, MovieDownloadAPICreate
-from ...models.operations import TaskOperationAccepted
+from ...models.media_download import MovieDownloadAPICreate
+from ...models.operations import MediaDownloadOperationAccepted, TaskOperationAccepted
 from ..dailywire.movies.service import get_movie_for_action as get_dailywire_movie
-from ..media_downloads.router import _trigger_download_task
 from ..media_downloads.service import create_movie_download, create_movie_extra_download
 from backend.app import db_session
+from task_manager.scheduler.types import OperationSource
+from task_manager.tasks.media_download_operations import (
+    create_media_download_operation,
+    dispatch_queued_media_download_operations,
+)
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
 
@@ -31,9 +35,13 @@ def movie_index(movie_slug: str):
             raise
 
 
-@router.post("/{movie_slug}/downloads", response_model=MediaDownloadAPIRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{movie_slug}/downloads",
+    response_model=MediaDownloadOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
-    """Persist a browsed Daily Wire movie and start its manual download."""
+    """Persist a movie artifact target and start it as a generic UI operation."""
     try:
         movie_data = get_dailywire_movie(movie_slug)
     except Exception as exc:
@@ -41,30 +49,31 @@ def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
     with db_session() as s:
         try:
             download = create_movie_download(s, movie_data, body)
-            payload = MediaDownloadAPIRead.model_validate(download)
-            movie_id = download.media_item_id
-            attempt_generation = download.attempt_generation
+            operation = create_media_download_operation(
+                s,
+                download,
+                source=OperationSource.UI.value,
+            )
+            dispatch_queued_media_download_operations(s)
+            result = {
+                "queued": True,
+                "operation_id": operation.id,
+                "media_download_id": download.id,
+            }
             s.commit()
+            return result
         except Exception:
             s.rollback()
             raise
 
-    _trigger_download_task(
-        media_download_id=payload.id,
-        media_item_id=movie_id,
-        media_type="movie",
-        attempt_generation=attempt_generation,
-    )
-    return payload
-
 
 @router.post(
     "/{movie_slug}/extras/{movie_extra_slug}/downloads",
-    response_model=MediaDownloadAPIRead,
-    status_code=status.HTTP_201_CREATED,
+    response_model=MediaDownloadOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 def movie_extra_download_create(movie_slug: str, movie_extra_slug: str, body: MovieDownloadAPICreate):
-    """Persist a browsed Daily Wire movie extra and download it with a Movie profile."""
+    """Persist a movie-extra artifact target and start it as a generic UI operation."""
     try:
         movie_data = get_dailywire_movie(movie_slug)
     except Exception as exc:
@@ -72,21 +81,22 @@ def movie_extra_download_create(movie_slug: str, movie_extra_slug: str, body: Mo
     with db_session() as s:
         try:
             download = create_movie_extra_download(s, movie_data, movie_extra_slug, body)
-            payload = MediaDownloadAPIRead.model_validate(download)
-            movie_extra_id = download.media_item_id
-            attempt_generation = download.attempt_generation
+            operation = create_media_download_operation(
+                s,
+                download,
+                source=OperationSource.UI.value,
+            )
+            dispatch_queued_media_download_operations(s)
+            result = {
+                "queued": True,
+                "operation_id": operation.id,
+                "media_download_id": download.id,
+            }
             s.commit()
+            return result
         except Exception:
             s.rollback()
             raise
-
-    _trigger_download_task(
-        media_download_id=payload.id,
-        media_item_id=movie_extra_id,
-        media_type="movie_extra",
-        attempt_generation=attempt_generation,
-    )
-    return payload
 
 
 @router.post(
@@ -108,14 +118,12 @@ def movie_extras_refresh(movie_slug: str):
 
 @router.get("", response_model=list[MovieAPIRead])
 def movie_list():
-    """List all movies in the system."""
     with db_session() as s:
         return get_movies_list(s)
 
 
 @router.post("", response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)
 def movie_create(body: MovieAPICreate):
-    """Create a new movie entry."""
     with db_session() as s:
         try:
             result = create_movie(s, body)
@@ -128,7 +136,6 @@ def movie_create(body: MovieAPICreate):
 
 @router.post("/{movie_slug}/release-metadata/retry", response_model=MovieAPIRead)
 def movie_release_metadata_retry(movie_slug: str):
-    """Retry a TMDB release-date lookup that previously failed with an error."""
     with db_session() as s:
         try:
             result = retry_movie_release_metadata(s, movie_slug)
@@ -141,14 +148,12 @@ def movie_release_metadata_retry(movie_slug: str):
 
 @router.get("/{movie_slug}", response_model=MovieAPIRead)
 def movie_detail(movie_slug: str):
-    """Retrieve detailed information for a specific movie."""
     with db_session() as s:
         return get_movie(s, movie_slug)
 
 
 @router.patch("/{movie_slug}", response_model=MovieAPIRead)
 def movie_update(movie_slug: str, body: MovieAPIUpdate):
-    """Update an existing movie's metadata."""
     with db_session() as s:
         try:
             result = update_movie(s, movie_slug, body)
@@ -161,7 +166,6 @@ def movie_update(movie_slug: str, body: MovieAPIUpdate):
 
 @router.delete("/{movie_slug}", response_model=MovieAPIRead)
 def movie_delete(movie_slug: str):
-    """Delete a movie from the system."""
     with db_session() as s:
         try:
             result = delete_movie(s, movie_slug)

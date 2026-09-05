@@ -18,7 +18,7 @@ Default global behavior:
 
 The retry delay uses exponential backoff so repeated transient failures do not immediately hammer the same dependency.
 
-WireLoft also watches active tasks and operations for stalled progress. Once per minute it samples their progress percentage; when the same percentage remains unchanged for `scheduler.stalledTaskTimeoutMinutes` (20 minutes by default), WireLoft cancels the stalled work and surfaces the reason in the UI. Waiting for a scheduled retry is excluded from this check because that inactivity is intentional.
+WireLoft also watches actively running tasks and operations for stalled progress. Once per minute it samples their progress percentage; when the same percentage remains unchanged for `scheduler.stalledTaskTimeoutMinutes` (20 minutes by default), WireLoft cancels the stalled work and surfaces the reason in the UI. Work that is merely queued or scheduled, and work waiting for a scheduled retry, is excluded because that inactivity is intentional.
 
 APScheduler manages scheduling, concurrency, misfires, and coalescing, but it does not know WireLoft's application-level progress percentage. The stalled-work timeout is therefore implemented by WireLoft's task layer rather than as an APScheduler job option.
 
@@ -111,6 +111,8 @@ Defaults:
 - maximum attempts: `3`;
 - timeout per attempt: `600` seconds;
 - downloaded-video remux to MP4: enabled.
+
+Each required download is represented as a normal `media.download` TaskOperation. The shared download lane reserves TaskRuns before dispatch so queued work cannot bypass `maxConcurrentDownloads`; after a restart, unfinished operations are recovered through the same queue instead of inferring interrupted work from fields on the MediaDownload record.
 
 See [[Download-Profiles]] and [[Settings#downloads]].
 

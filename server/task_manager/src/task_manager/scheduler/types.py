@@ -14,6 +14,7 @@ class TaskStatus(str, Enum):
 class OperationStatus(str, Enum):
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
+    WAITING = "WAITING"
     SUCCEEDED = "SUCCEEDED"
     PARTIAL = "PARTIAL"
     FAILED = "FAILED"
@@ -32,5 +33,6 @@ class ResourceType(str, Enum):
     EPISODE = "episode"
     MOVIE = "movie"
     MOVIE_EXTRA = "movie_extra"
+    MEDIA_DOWNLOAD = "media_download"
     DOWNLOAD_PROFILE = "download_profile"
     DOWNLOAD_PROFILE_SERIES = "download_profile_series"

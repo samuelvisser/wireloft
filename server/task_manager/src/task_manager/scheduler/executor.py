@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -22,11 +23,21 @@ from .operation_control import (
     run_cancel_reason,
     run_cancel_requested,
 )
-from .operations import link_run_to_operations, refresh_operations_for_run
+from .operations import (
+    TASK_RUN_WAIT_STATE_META_KEY,
+    link_run_to_operations,
+    refresh_operations_for_run,
+)
 from .results import TaskResult
 from config import get_settings
+from dailywire_api.dw_api.client import slow_request_cooldown_observer
 from dailywire_downloader import DownloadCancelled
 from task_manager.scheduler import scheduler
+
+
+logger = logging.getLogger(__name__)
+_DAILY_WIRE_COOLDOWN_REASON = "daily_wire_request_cooldown"
+_DAILY_WIRE_COOLDOWN_MESSAGE = "Waiting for Daily Wire request cooldown. Will resume soon."
 
 
 class TaskCancellationRequested(Exception):
@@ -41,8 +52,76 @@ class _PreparedExecution:
 
 
 class ProgressUpdater:
+    """Generic progress and cooperative-cancellation channel for a TaskRun.
+
+    Workers report percentage/message through ``set``. Long-running libraries
+    may also use the updater itself as a ``should_cancel`` callback; cancellation
+    is then driven by the same durable TaskRun state used for every other worker
+    rather than by worker-specific generation flags.
+    """
+
+    _CANCEL_CHECK_INTERVAL_SECONDS = 0.25
+
     def __init__(self, run_id: int):
         self.run_id = run_id
+        self._last_cancel_check = 0.0
+        self._cancelled = False
+        self._cancel_reason = "Canceled"
+
+    def _read_cancellation(self, *, force: bool = False) -> tuple[bool, str]:
+        if self._cancelled:
+            return True, self._cancel_reason
+
+        now = time.monotonic()
+        if not force and now - self._last_cancel_check < self._CANCEL_CHECK_INTERVAL_SECONDS:
+            return False, self._cancel_reason
+        self._last_cancel_check = now
+
+        s = get_session()
+        try:
+            row = s.execute(
+                select(TaskRun.status, TaskRun.meta).where(TaskRun.id == self.run_id)
+            ).one_or_none()
+            if row is None:
+                self._cancelled = True
+                self._cancel_reason = "Task resource was deleted"
+                return True, self._cancel_reason
+
+            status, meta = row
+            requested = (
+                isinstance(meta, dict)
+                and meta.get(RUN_CANCEL_REQUESTED_META_KEY) is True
+            )
+            if status == TaskStatus.CANCELED or requested:
+                reason = (
+                    meta.get(RUN_CANCEL_REASON_META_KEY)
+                    if isinstance(meta, dict)
+                    else None
+                )
+                self._cancelled = True
+                self._cancel_reason = (
+                    reason if isinstance(reason, str) and reason else "Canceled"
+                )
+                return True, self._cancel_reason
+            return False, self._cancel_reason
+        except Exception:
+            # Cancellation checks are deliberately conservative: transient DB
+            # contention must not abort irreversible worker/file work. The normal
+            # progress/finalization checkpoints will try again shortly.
+            s.rollback()
+            return False, self._cancel_reason
+        finally:
+            s.close()
+
+    def __call__(self) -> bool:
+        """Return True when the worker should stop, suitable for downloader callbacks."""
+        canceled, _ = self._read_cancellation()
+        return canceled
+
+    def raise_if_cancelled(self) -> None:
+        canceled, reason = self._read_cancellation(force=True)
+        if canceled:
+            raise TaskCancellationRequested(reason)
 
     def set(self, percent: int, message: Optional[str] = None, meta: Optional[dict] = None):
         p = max(0, min(100, int(percent)))
@@ -56,23 +135,32 @@ class ProgressUpdater:
         try:
             for i in range(3):
                 try:
-                    current_meta = s.execute(
-                        select(TaskRun.meta).where(TaskRun.id == self.run_id)
-                    ).scalar_one_or_none()
-                    if current_meta is None:
-                        exists = s.execute(
-                            select(TaskRun.id).where(TaskRun.id == self.run_id)
-                        ).scalar_one_or_none()
-                        if exists is None:
-                            raise TaskCancellationRequested("Task resource was deleted")
+                    row = s.execute(
+                        select(TaskRun.status, TaskRun.meta).where(TaskRun.id == self.run_id)
+                    ).one_or_none()
+                    if row is None:
+                        self._cancelled = True
+                        self._cancel_reason = "Task resource was deleted"
+                        raise TaskCancellationRequested(self._cancel_reason)
+
+                    status, current_meta = row
                     if (
-                        isinstance(current_meta, dict)
-                        and current_meta.get(RUN_CANCEL_REQUESTED_META_KEY) is True
+                        status == TaskStatus.CANCELED
+                        or (
+                            isinstance(current_meta, dict)
+                            and current_meta.get(RUN_CANCEL_REQUESTED_META_KEY) is True
+                        )
                     ):
-                        reason = current_meta.get(RUN_CANCEL_REASON_META_KEY)
-                        raise TaskCancellationRequested(
+                        reason = (
+                            current_meta.get(RUN_CANCEL_REASON_META_KEY)
+                            if isinstance(current_meta, dict)
+                            else None
+                        )
+                        self._cancelled = True
+                        self._cancel_reason = (
                             reason if isinstance(reason, str) and reason else "Canceled"
                         )
+                        raise TaskCancellationRequested(self._cancel_reason)
 
                     values: dict[str, Any] = {"progress": p}
                     if message is not None:
@@ -93,7 +181,57 @@ class ProgressUpdater:
                     )
                     if result.rowcount == 0:
                         s.rollback()
-                        raise TaskCancellationRequested("Task resource was deleted")
+                        self._cancelled = True
+                        self._cancel_reason = "Task resource was deleted"
+                        raise TaskCancellationRequested(self._cancel_reason)
+                    s.commit()
+                    refresh_operations_for_run(s, self.run_id)
+                    s.commit()
+                    return
+                except OperationalError as exc:
+                    last_operational_error = exc
+                    s.rollback()
+                    time.sleep(0.1 * (2 ** i))
+
+            if last_operational_error is not None:
+                raise last_operational_error
+        finally:
+            s.close()
+
+    def set_wait_state(self, reason: str | None, message: str | None = None) -> None:
+        """Persist transient worker waiting state without changing worker progress."""
+        s = get_session()
+        last_operational_error: OperationalError | None = None
+        try:
+            for i in range(3):
+                try:
+                    current_meta = s.execute(
+                        select(TaskRun.meta).where(TaskRun.id == self.run_id)
+                    ).scalar_one_or_none()
+                    if current_meta is None:
+                        exists = s.execute(
+                            select(TaskRun.id).where(TaskRun.id == self.run_id)
+                        ).scalar_one_or_none()
+                        if exists is None:
+                            return
+
+                    merged_meta = dict(current_meta or {})
+                    if reason:
+                        merged_meta[TASK_RUN_WAIT_STATE_META_KEY] = {
+                            "reason": reason,
+                            "message": message,
+                        }
+                    else:
+                        merged_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+
+                    result = s.execute(
+                        update(TaskRun)
+                        .where(TaskRun.id == self.run_id)
+                        .values(meta=merged_meta or None)
+                    )
+                    if result.rowcount == 0:
+                        s.rollback()
+                        return
                     s.commit()
                     refresh_operations_for_run(s, self.run_id)
                     s.commit()
@@ -113,24 +251,20 @@ def _resolve_max_retries(session, def_key: str, schedule_id: Optional[int], over
     if override is not None:
         return override
 
-    # schedule override
     if schedule_id is not None:
         sch = session.get(TaskSchedule, schedule_id)
         if sch and sch.max_retries is not None:
             return int(sch.max_retries)
 
-    # definition default
     td = session.execute(select(TaskDefinition).where(TaskDefinition.key == def_key)).scalar_one()
     if td.default_max_retries is not None:
         return int(td.default_max_retries)
 
-    # global default
     return int(get_settings().scheduler.default_max_retries)
 
 
 def _backoff_delay(attempt: int) -> float:
     base = float(get_settings().scheduler.retry_backoff_seconds)
-    # attempt starts at 1
     return base * (2 ** max(0, attempt - 1))
 
 
@@ -160,17 +294,12 @@ def _prepare_execution(
         if operation_ids and not operation_ids_allow_execution(session, operation_ids):
             return None
 
-        # A user-created TaskSchedule is owned by its resource relationship. If
-        # that resource was deleted, the schedule row is gone and an in-memory
-        # APScheduler job from the old row must not manufacture orphan TaskRuns.
         if schedule_id is not None and session.get(TaskSchedule, schedule_id) is None:
             return None
 
         if run_id is not None:
             run = session.get(TaskRun, run_id)
             if run is None:
-                # A deleted resource cascades its TaskRuns. Never recreate a
-                # missing retry row with a now-orphaned resource id.
                 return None
             if run_cancel_requested(run):
                 _mark_run_canceled(run, run_cancel_reason(run))
@@ -203,6 +332,10 @@ def _prepare_execution(
             )
             session.add(run)
             session.flush()
+
+        run_meta = dict(run.meta or {})
+        run_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+        run.meta = run_meta or None
 
         linked_operation_ids = link_run_to_operations(
             session,
@@ -251,20 +384,18 @@ def _finalize_execution(
         worker_error: Exception | None = None,
         cancellation_reason: str | None = None,
 ) -> tuple[datetime | None, Exception | None]:
-    """Persist terminal/retry state using a fresh short-lived Session.
-
-    Returns ``(retry_at, terminal_error)``. Scheduling occurs only after the
-    Session is released so waiting worker jobs never pin database connections.
-    """
+    """Persist terminal/retry state using a fresh short-lived Session."""
     session = get_session()
     retry_at: datetime | None = None
     terminal_error: Exception | None = None
     try:
         run = session.get(TaskRun, prepared.run_id)
         if run is None:
-            # Resource deletion cascaded the tracking row while the callable was
-            # in flight. There is intentionally nothing left to finalize.
             return None, None
+
+        run_meta = dict(run.meta or {})
+        run_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+        run.meta = run_meta or None
 
         if run_cancel_requested(run):
             cancellation_reason = run_cancel_reason(run, cancellation_reason or "Canceled")
@@ -289,8 +420,7 @@ def _finalize_execution(
                 run.next_retry_at = retry_at
                 run.status = TaskStatus.RETRY_SCHEDULED
                 run.message = (
-                    f"Retry {run.attempt_count}/{run.max_retries} "
-                    f"scheduled in {int(delay)}s"
+                    f"Retry {run.attempt_count}/{run.max_retries} scheduled in {int(delay)}s"
                 )
             else:
                 run.status = TaskStatus.FAILED
@@ -334,7 +464,7 @@ def execute_task(
         dict.fromkeys(str(value) for value in (operation_ids or ()) if value)
     )
 
-    _, fn = get_task(def_key)
+    task_meta, fn = get_task(def_key)
     prepared = _prepare_execution(
         def_key=def_key,
         resource_type=resource_type,
@@ -356,8 +486,17 @@ def execute_task(
     cancellation_reason: str | None = None
     started_perf = time.perf_counter()
 
+    def on_slow_request_cooldown(waiting: bool) -> None:
+        updater.set_wait_state(
+            _DAILY_WIRE_COOLDOWN_REASON if waiting else None,
+            _DAILY_WIRE_COOLDOWN_MESSAGE if waiting else None,
+        )
+
     try:
-        with operation_context(prepared.linked_operation_ids):
+        with (
+            operation_context(prepared.linked_operation_ids),
+            slow_request_cooldown_observer(on_slow_request_cooldown),
+        ):
             if inspect.iscoroutinefunction(fn):
                 worker_result = asyncio.run(
                     fn(resource_id=resource_id, progress=updater, **prepared.call_kwargs)
@@ -391,6 +530,19 @@ def execute_task(
             run_at=retry_at,
         )
         return
+
+    if task_meta.terminal_callback is not None:
+        try:
+            task_meta.terminal_callback(
+                task_key=def_key,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                task_run_id=prepared.run_id,
+            )
+        except Exception:
+            # A post-terminal queue/backfill hook must never rewrite the outcome
+            # of the TaskRun that has already been durably finalized.
+            logger.exception("Terminal callback failed for task %s run %s", def_key, prepared.run_id)
 
     if terminal_error is not None:
         raise terminal_error

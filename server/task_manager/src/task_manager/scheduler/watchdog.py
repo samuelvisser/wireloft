@@ -18,15 +18,18 @@ from task_manager.scheduler.types import OperationStatus, TaskStatus
 logger = logging.getLogger(__name__)
 WATCHDOG_JOB_ID = "wireloft-stalled-task-watchdog"
 
-_ACTIVE_OPERATION_STATUSES = {
+# A queued operation may legitimately wait behind a constrained resource queue,
+# while WAITING means a running worker is intentionally blocked on an external
+# dependency such as Daily Wire request pacing. Neither state is runtime stall
+# time, but their TaskRuns still belong to an active operation and must not be
+# monitored independently as standalone work.
+_WATCHED_OPERATION_STATUSES = {OperationStatus.RUNNING.value}
+_OWNED_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
+    OperationStatus.WAITING.value,
 }
-_ACTIVE_TASK_STATUSES = {
-    TaskStatus.SCHEDULED,
-    TaskStatus.QUEUED,
-    TaskStatus.RUNNING,
-}
+_ACTIVE_TASK_STATUSES = {TaskStatus.RUNNING}
 
 
 @dataclass(frozen=True)
@@ -84,7 +87,7 @@ def _stalled_ids(
 
 
 def reset_watchdog_state() -> None:
-    """Forget progress observations, giving active work a fresh watchdog window."""
+    """Forget progress observations, giving running work a fresh watchdog window."""
     with _state_lock:
         _operation_progress.clear()
         _task_progress.clear()
@@ -95,18 +98,17 @@ def monitor_stalled_work(
         now: datetime | None = None,
         timeout_minutes: int | None = None,
 ) -> WatchdogResult:
-    """Cancel tasks/operations whose progress percentage has stopped changing.
+    """Cancel running tasks/operations whose percentage has stopped changing.
 
     APScheduler controls when jobs may start and how many may run concurrently,
-    but it has no progress-aware runtime timeout. WireLoft therefore samples the
-    durable TaskRun/TaskOperation percentages once per minute and remembers when
-    each percentage last changed. Watchdog observations intentionally reset when
-    the backend process restarts; recovered work gets a fresh chance to progress.
+    but it has no progress-aware runtime timeout. WireLoft samples RUNNING work
+    once per minute and remembers when each percentage last changed. Work that is
+    merely queued, scheduled, waiting on an external dependency, or waiting for a
+    retry is intentionally excluded.
 
-    Runs attached to active TaskOperations are watched only through their
-    operations. This preserves TaskOperation's shared-run semantics: canceling an
-    old stalled UI request must not kill a run that a newer active request still
-    needs. Standalone scheduled/automatic TaskRuns are monitored directly.
+    Runs attached to active TaskOperations are excluded from standalone watchdog
+    accounting even when the operation itself is currently WAITING. This preserves
+    shared-run semantics without turning an intentional external wait into a stall.
     """
     current_time = _as_utc(now or datetime.now(timezone.utc))
     configured_timeout = (
@@ -123,7 +125,7 @@ def monitor_stalled_work(
             operation_id: _percent(progress)
             for operation_id, progress in session.execute(
                 select(TaskOperation.id, TaskOperation.progress).where(
-                    TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES)
+                    TaskOperation.status.in_(_WATCHED_OPERATION_STATUSES)
                 )
             )
         }
@@ -131,7 +133,7 @@ def monitor_stalled_work(
             session.scalars(
                 select(TaskOperationRun.task_run_id)
                 .join(TaskOperation, TaskOperation.id == TaskOperationRun.operation_id)
-                .where(TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES))
+                .where(TaskOperation.status.in_(_OWNED_OPERATION_STATUSES))
             )
         )
         current_tasks = {
@@ -170,7 +172,6 @@ def monitor_stalled_work(
             ) is not None:
                 operations_canceled += 1
         except ValueError:
-            # Another worker may have completed/canceled it after the snapshot.
             continue
 
     task_runs_canceled = 0
@@ -195,7 +196,7 @@ def monitor_stalled_work(
 
 def install_stalled_work_watchdog() -> None:
     """Install the lightweight scheduler housekeeping job once per process."""
-    from task_manager.scheduler.scheduler import start_scheduler
+    from task_manager.scheduler.scheduler import WATCHDOG_EXECUTOR_ALIAS, start_scheduler
 
     reset_watchdog_state()
     scheduler = start_scheduler()
@@ -207,4 +208,5 @@ def install_stalled_work_watchdog() -> None:
         coalesce=True,
         max_instances=1,
         misfire_grace_time=None,
+        executor=WATCHDOG_EXECUTOR_ALIAS,
     )

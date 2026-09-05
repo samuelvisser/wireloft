@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
@@ -8,7 +9,11 @@ from sqlalchemy import select
 
 from task_manager.scheduler.db import TaskDefinition
 
+
+logger = logging.getLogger(__name__)
 _REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[Any]]]] = {}
+TerminalCallback = Callable[..., None]
+RecoveryDispatcher = Callable[[], None]
 
 
 @dataclass
@@ -30,6 +35,8 @@ class TaskMeta:
     allowed_resource_types: tuple[str, ...] = ("show", "season", "episode", "movie")
     default_max_retries: Optional[int] = None
     tracks_progress: bool = True
+    terminal_callback: Optional[TerminalCallback] = None
+    recovery_dispatcher: Optional[RecoveryDispatcher] = None
     triggers: List[TriggerMeta] = field(default_factory=list)
 
 
@@ -40,12 +47,25 @@ def task(
     allowed_resource_types: Optional[tuple[str, ...]] = None,
     default_max_retries: Optional[int] = None,
     tracks_progress: bool = True,
+    terminal_callback: Optional[TerminalCallback] = None,
+    recovery_dispatcher: Optional[RecoveryDispatcher] = None,
 ):
     """Decorator to register an async task callable.
 
     A worker may return ``None`` or a ``TaskResult``. The executor persists a
     structured result without forcing the worker to know whether it was started
     by the UI, a cron schedule, or another worker.
+
+    ``terminal_callback`` is an optional infrastructure hook invoked after the
+    TaskRun has been durably finalized (success/failure/cancellation, but not
+    while waiting for a retry). It is useful for constrained resource queues that
+    need to fill a newly freed execution slot without putting queue logic inside
+    worker result handling.
+
+    ``recovery_dispatcher`` marks tasks whose operation targets are dispatched by
+    such a queue rather than immediately. Generic TaskOperation recovery leaves
+    those targets QUEUED and invokes each dispatcher once after durable recovery
+    state has been restored, preserving the queue's own concurrency policy.
     """
 
     def decorator(fn: Callable[..., Awaitable[Any]]):
@@ -57,6 +77,8 @@ def task(
             or ("show", "season", "episode", "movie"),
             default_max_retries=default_max_retries,
             tracks_progress=tracks_progress,
+            terminal_callback=terminal_callback,
+            recovery_dispatcher=recovery_dispatcher,
         )
         _REGISTRY[key] = (meta, fn)
 
@@ -126,6 +148,27 @@ def all_definitions() -> list[TaskMeta]:
 def all_triggers() -> Dict[str, List[TriggerMeta]]:
     """Get all triggers organized by task key."""
     return {key: meta.triggers for key, (meta, _) in _REGISTRY.items() if meta.triggers}
+
+
+def run_recovery_dispatchers() -> int:
+    """Run each unique constrained-queue recovery dispatcher once."""
+    dispatchers = {
+        meta.recovery_dispatcher
+        for meta, _ in _REGISTRY.values()
+        if meta.recovery_dispatcher is not None
+    }
+    ran = 0
+    for dispatcher in dispatchers:
+        try:
+            dispatcher()
+            ran += 1
+        except Exception:
+            # Generic operation recovery is already durable. One constrained
+            # queue failing to refill must not prevent the rest of the scheduler
+            # from starting; the failure remains visible in logs and later queue
+            # activity can retry the refill.
+            logger.exception("Task recovery dispatcher failed")
+    return ran
 
 
 def sync_registry_to_db() -> None:

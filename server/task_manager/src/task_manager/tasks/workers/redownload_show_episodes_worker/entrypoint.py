@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backend.api.endpoints.shows.service import SHOW_REDOWNLOAD_EPISODES_REQUESTED_EVENT
+from backend.api.endpoints.shows.operations import SHOW_REDOWNLOAD_EPISODES_REQUESTED_EVENT
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import on_event, task
 from task_manager.scheduler.results import TaskResult

@@ -29,12 +29,10 @@ def podcast_download_profiles_create(body: PodcastDownloadProfileAPICreate):
         try:
             result = create_download_profile_podcast(s, body)
             s.commit()
+            return result
         except Exception:
             s.rollback()
             raise
-
-    _trigger_download_profile_worker(result.id)
-    return result
 
 
 @router.get("/{download_profile_podcast_id}", response_model=PodcastDownloadProfileAPIRead)
@@ -60,12 +58,10 @@ def podcast_download_profiles_update(download_profile_podcast_id: int, body: Pod
         try:
             result = update_download_profile_podcast(s, download_profile_podcast_id, body)
             s.commit()
+            return result
         except Exception:
             s.rollback()
             raise
-
-    _trigger_download_profile_worker(result.id)
-    return result
 
 
 @router.delete("/{download_profile_podcast_id}", response_model=PodcastDownloadProfileAPIRead)
@@ -84,14 +80,3 @@ def podcast_download_profiles_delete(download_profile_podcast_id: int):
         except Exception:
             s.rollback()
             raise
-
-
-def _trigger_download_profile_worker(download_profile_id: int) -> None:
-    """Run exactly the Download Profile that was changed through this API."""
-    from task_manager.scheduler.executor import trigger_now
-
-    trigger_now(
-        def_key="download_profile_worker",
-        resource_type="download_profile",
-        resource_id=download_profile_id,
-    )

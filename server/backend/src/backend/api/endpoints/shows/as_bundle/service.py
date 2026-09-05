@@ -15,8 +15,9 @@ from backend.db.models.stream_profile import RssStreamProfile
 from backend.utils.feed_urls import build_rss_feed_url
 from backend.utils.helpers import generate_stream_profile_token
 from backend.utils.season_ordering import order_initial_seasons
-from task_manager.events.transactional import queue_event
-from task_manager.scheduler.operations import OperationTargetSpec, create_operation
+from task_manager.scheduler.operation_factory import create_operation
+
+from ..operations import ShowIndexOperation
 
 
 def upsert_local_media_profile(s: Session, mp_input: dict) -> LocalMediaProfileBase:
@@ -111,28 +112,5 @@ def create_show_bundle(s: Session, request: Request, payload: ShowAPICreateBundl
         s.add(stream_profile)
 
     s.flush()
-    create_operation(
-        s,
-        kind="show.index",
-        resource_type="show",
-        resource_id=show.id,
-        title=show.title,
-        targets=[
-            OperationTargetSpec(
-                task_key="fetch_new_episodes",
-                resource_type="show",
-                resource_id=show.id,
-            )
-        ],
-        context={
-            "show_slug": show.slug,
-            "show_title": show.title,
-        },
-    )
-    queue_event(s, "show.added", {
-        "resource_id": show.id,
-        "id": show.id,
-        "slug": show.slug,
-        "title": show.title,
-    })
+    create_operation(s, ShowIndexOperation(show))
     return ShowAPIRead.model_validate(show)

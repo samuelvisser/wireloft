@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 
 def _definition(session, key: str = "watchdog_worker"):
@@ -71,6 +72,37 @@ def _running_operation(session, *, progress: int = 30):
     return operation
 
 
+def test_watchdog_uses_reserved_executor(monkeypatch):
+    import task_manager.scheduler.scheduler as scheduler_module
+    from task_manager.scheduler.watchdog import install_stalled_work_watchdog
+
+    settings = SimpleNamespace(
+        timezone="UTC",
+        scheduler=SimpleNamespace(
+            enabled=False,
+            max_workers=3,
+        ),
+    )
+    monkeypatch.setattr(scheduler_module, "get_settings", lambda: settings)
+
+    scheduler = scheduler_module._new_scheduler()
+    assert scheduler._executors["default"]._pool._max_workers == 3
+    watchdog_executor = scheduler._executors[scheduler_module.WATCHDOG_EXECUTOR_ALIAS]
+    assert watchdog_executor._pool._max_workers == 1
+
+    captured: dict = {}
+
+    class FakeScheduler:
+        def add_job(self, *args, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(scheduler_module, "start_scheduler", lambda: FakeScheduler())
+    install_stalled_work_watchdog()
+
+    assert captured["executor"] == scheduler_module.WATCHDOG_EXECUTOR_ALIAS
+    assert captured["max_instances"] == 1
+
+
 def test_watchdog_cancels_only_after_progress_stays_unchanged(task_database, monkeypatch):
     import task_manager.scheduler.scheduler as scheduler_module
     from task_manager.scheduler.db import TaskOperation, TaskRun
@@ -131,6 +163,64 @@ def test_watchdog_cancels_only_after_progress_stays_unchanged(task_database, mon
         assert "20 minutes without progress" in stored_task.meta[RUN_CANCEL_REASON_META_KEY]
     finally:
         session.close()
+
+
+def test_watchdog_ignores_queue_time_and_starts_timeout_only_when_running(task_database, monkeypatch):
+    import task_manager.scheduler.scheduler as scheduler_module
+    from task_manager.scheduler.db import TaskOperation, TaskRun
+    from task_manager.scheduler.types import OperationStatus, TaskStatus
+    from task_manager.scheduler.watchdog import monitor_stalled_work, reset_watchdog_state
+
+    monkeypatch.setattr(scheduler_module, "cancel_pending_operation_jobs", lambda **kwargs: 0)
+    monkeypatch.setattr(scheduler_module, "cancel_pending_task_run_jobs", lambda run_ids: 0)
+    reset_watchdog_state()
+
+    session = task_database()
+    definition = _definition(session, "watchdog_waiting_worker")
+    queued_task = _running_task(session, definition, progress=10)
+    queued_task.status = TaskStatus.QUEUED
+    scheduled_task = _running_task(session, definition, progress=20)
+    scheduled_task.resource_id = 8
+    scheduled_task.status = TaskStatus.SCHEDULED
+    operation = _running_operation(session, progress=15)
+    operation.status = OperationStatus.QUEUED.value
+    queued_task_id = queued_task.id
+    scheduled_task_id = scheduled_task.id
+    operation_id = operation.id
+    session.commit()
+    session.close()
+
+    waiting_since = datetime(2026, 9, 4, 12, 0, tzinfo=timezone.utc)
+    monitor_stalled_work(now=waiting_since, timeout_minutes=20)
+    still_waiting = monitor_stalled_work(
+        now=waiting_since + timedelta(minutes=40),
+        timeout_minutes=20,
+    )
+    assert still_waiting.operations_canceled == 0
+    assert still_waiting.task_runs_canceled == 0
+
+    session = task_database()
+    assert session.get(TaskRun, queued_task_id).status == TaskStatus.QUEUED
+    assert session.get(TaskRun, scheduled_task_id).status == TaskStatus.SCHEDULED
+    assert session.get(TaskOperation, operation_id).status == OperationStatus.QUEUED.value
+    session.get(TaskRun, queued_task_id).status = TaskStatus.RUNNING
+    session.get(TaskRun, scheduled_task_id).status = TaskStatus.RUNNING
+    session.get(TaskOperation, operation_id).status = OperationStatus.RUNNING.value
+    session.commit()
+    session.close()
+
+    started = waiting_since + timedelta(minutes=40)
+    first_running_observation = monitor_stalled_work(now=started, timeout_minutes=20)
+    assert first_running_observation.operations_canceled == 0
+    assert first_running_observation.task_runs_canceled == 0
+
+    almost = monitor_stalled_work(now=started + timedelta(minutes=19), timeout_minutes=20)
+    assert almost.operations_canceled == 0
+    assert almost.task_runs_canceled == 0
+
+    stalled = monitor_stalled_work(now=started + timedelta(minutes=20), timeout_minutes=20)
+    assert stalled.operations_canceled == 1
+    assert stalled.task_runs_canceled == 2
 
 
 def test_watchdog_does_not_treat_retry_backoff_as_stalled_execution(task_database, monkeypatch):

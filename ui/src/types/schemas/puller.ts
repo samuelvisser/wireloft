@@ -1,11 +1,9 @@
 import {z} from 'zod'
-import {MediaDownloadViewReadSchema} from './media_download'
 import {TaskOperationReadSchema} from './operation'
 
 
 export const FrontendPullDataSchema = z.object({
   operations: TaskOperationReadSchema.array(),
-  mediaDownloads: MediaDownloadViewReadSchema.array(),
 })
 
 export const FrontendPullReadSchema = z.object({

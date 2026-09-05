@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Iterable
 
@@ -7,17 +8,25 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
-from task_manager.scheduler.db import TaskOperation, TaskOperationRun, TaskOperationTarget, TaskRun
+from task_manager.scheduler.db import (
+    TaskDefinition,
+    TaskOperation,
+    TaskOperationRun,
+    TaskOperationTarget,
+    TaskRun,
+)
 from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import OperationStatus, TaskStatus
 
 
+logger = logging.getLogger(__name__)
 RUN_CANCEL_REQUESTED_META_KEY = "_operation_cancel_requested"
 RUN_CANCEL_REASON_META_KEY = "_operation_cancel_reason"
 
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
+    OperationStatus.WAITING.value,
 }
 _ACTIVE_TASK_STATUSES = {
     TaskStatus.SCHEDULED,
@@ -53,6 +62,39 @@ def run_cancel_reason(run: TaskRun, default: str = "Canceled") -> str:
     return default
 
 
+def _terminal_callbacks_for_definition_ids(
+        session: Session,
+        definition_ids: set[int],
+) -> set:
+    """Resolve generic queue/backfill hooks for synchronously canceled runs."""
+    if not definition_ids:
+        return set()
+
+    from task_manager.scheduler.registry import get_task
+
+    keys = session.scalars(
+        select(TaskDefinition.key).where(TaskDefinition.id.in_(definition_ids))
+    ).all()
+    callbacks = set()
+    for key in keys:
+        try:
+            task_meta, _ = get_task(key)
+        except KeyError:
+            continue
+        if task_meta.terminal_callback is not None:
+            callbacks.add(task_meta.terminal_callback)
+    return callbacks
+
+
+def _run_terminal_callbacks(callbacks: Iterable) -> None:
+    """Run post-terminal queue hooks without changing an already-durable outcome."""
+    for callback in callbacks:
+        try:
+            callback()
+        except Exception:
+            logger.exception("Task terminal callback failed after cancellation")
+
+
 def cancel_operation(
         operation_id: str,
         *,
@@ -67,12 +109,14 @@ def cancel_operation(
     """
     session = get_session()
     cancelable_run_ids: set[int] = set()
+    released_definition_ids: set[int] = set()
+    terminal_callbacks: set = set()
     try:
         operation = _load_operation(session, operation_id)
         if operation is None:
             return None
         if operation.status not in _ACTIVE_OPERATION_STATUSES:
-            raise ValueError("Only a queued or running operation can be canceled")
+            raise ValueError("Only an active operation can be canceled")
 
         completed = 0
         for target in operation.targets:
@@ -90,6 +134,13 @@ def cancel_operation(
                     reason=reason,
                 ):
                     cancelable_run_ids.add(run.id)
+                    # Pending/retry runs become terminal synchronously, so a
+                    # constrained task lane may immediately fill the released
+                    # slot. RUNNING workers keep their slot until the executor
+                    # reaches its cooperative cancellation boundary and invokes
+                    # the same terminal callback itself.
+                    if _task_status(run.status) == TaskStatus.CANCELED:
+                        released_definition_ids.add(run.definition_id)
 
         now = datetime.now(timezone.utc)
         operation.status = OperationStatus.CANCELED.value
@@ -104,6 +155,11 @@ def cancel_operation(
         operation.error = None
         operation.notification_seen_at = now if acknowledge else None
         operation.finished_at = now
+        session.flush()
+        terminal_callbacks = _terminal_callbacks_for_definition_ids(
+            session,
+            released_definition_ids,
+        )
         session.commit()
     finally:
         session.close()
@@ -114,6 +170,8 @@ def cancel_operation(
         operation_id=operation_id,
         run_ids=cancelable_run_ids,
     )
+    _run_terminal_callbacks(terminal_callbacks)
+
     from task_manager.scheduler.operations import get_operation
     return get_operation(operation_id)
 
@@ -127,10 +185,16 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
     finalization both honor that request and cannot resurrect the run.
     """
     session = get_session()
+    callbacks: set = set()
+    was_running = False
     try:
         run = session.get(TaskRun, run_id)
         if run is None or _task_status(run.status) not in _ACTIVE_TASK_STATUSES:
             return False
+
+        previous_status = _task_status(run.status)
+        was_running = previous_status == TaskStatus.RUNNING
+        definition_id = run.definition_id
 
         meta = dict(run.meta or {})
         meta[RUN_CANCEL_REQUESTED_META_KEY] = True
@@ -147,19 +211,32 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
 
         refresh_operations_for_run(session, run.id)
         session.commit()
+        if not was_running:
+            callbacks = _terminal_callbacks_for_definition_ids(session, {definition_id})
     finally:
         session.close()
 
     from task_manager.scheduler.scheduler import cancel_pending_task_run_jobs
 
     cancel_pending_task_run_jobs((run_id,))
+    _run_terminal_callbacks(callbacks)
     return True
 
 
 def restart_operation(operation_id: str) -> dict | None:
-    """Restart only the unfinished logical targets of an existing operation."""
+    """Restart only unfinished logical targets, preserving generic queue policies.
+
+    Ordinary targets are dispatched directly after commit. A task definition may
+    instead register a recovery dispatcher when its targets belong to a
+    constrained queue (for example the shared media-download concurrency lane).
+    Those targets remain QUEUED and the generic dispatcher is invoked after this
+    transaction commits, so restart never bypasses the task's scheduling policy.
+    """
+    from task_manager.scheduler.registry import get_task
+
     session = get_session()
     cancelable_run_ids: set[int] = set()
+    queue_dispatchers: set = set()
     try:
         operation = _load_operation(session, operation_id)
         if operation is None:
@@ -221,6 +298,10 @@ def restart_operation(operation_id: str) -> dict | None:
         session.flush()
 
         for target in targets_to_dispatch:
+            task_meta, _ = get_task(target.task_key)
+            if task_meta.recovery_dispatcher is not None:
+                queue_dispatchers.add(task_meta.recovery_dispatcher)
+                continue
             queue_task_after_commit(
                 session,
                 def_key=target.task_key,
@@ -234,6 +315,10 @@ def restart_operation(operation_id: str) -> dict | None:
         session.commit()
     finally:
         session.close()
+
+    # Queue-managed work is dispatched only after the restarted operation is
+    # durable. Each dispatcher decides how many slots are available.
+    _run_terminal_callbacks(queue_dispatchers)
 
     from task_manager.scheduler.operations import get_operation
     return get_operation(operation_id)

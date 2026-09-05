@@ -1,41 +1,41 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.api.endpoints.media_downloads.service import cancel_media_download, retry_media_download
-from backend.db.models import DownloadProfileBase, Episode, Show
+from backend.db.models import DownloadProfileBase, Episode
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.types.download_profile_types import MediaDownloadStatus
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_types import MediaType
 from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path
-from task_manager.scheduler.db import TaskDefinition, TaskRun
-from task_manager.scheduler.types import TaskStatus
-from task_manager.tasks.workers.download_profile_worker._helpers import (
-    get_download_profile_episodes,
+from task_manager.scheduler.db import TaskOperation
+from task_manager.scheduler.operation_control import cancel_operation
+from task_manager.scheduler.types import OperationSource, OperationStatus
+from task_manager.tasks.media_download_operations import (
+    create_media_download_operation,
+    dispatch_queued_media_download_operations,
+    get_active_media_download_operation,
+    prepare_media_download_artifact,
 )
+from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
 
 _POLL_INTERVAL_SECONDS = 0.5
-_COMPLETED_STATUSES = {
-    MediaDownloadStatus.DOWNLOADED.value,
-    MediaDownloadStatus.REDOWNLOADED.value,
-}
-_CANCELLABLE_STATUSES = {
-    MediaDownloadStatus.PENDING.value,
-    MediaDownloadStatus.DOWNLOADING.value,
-    MediaDownloadStatus.LOCAL_PROCESSING.value,
+_TERMINAL_CHILD_STATUSES = {
+    OperationStatus.SUCCEEDED.value,
+    OperationStatus.PARTIAL.value,
+    OperationStatus.FAILED.value,
+    OperationStatus.CANCELED.value,
 }
 
 
 @dataclass(frozen=True)
 class RedownloadTarget:
     media_download_id: int
-    attempt_generation: int
+    operation_id: str
     episode_title: str
 
 
@@ -58,7 +58,6 @@ def _target_episode_profiles(
         s: Session,
         profiles: list[DownloadProfileBase],
 ) -> list[tuple[Episode, DownloadProfileBase]]:
-    """Return every episode managed by each selected Download Profile."""
     return [
         (episode, profile)
         for profile in profiles
@@ -66,84 +65,12 @@ def _target_episode_profiles(
     ]
 
 
-def _reset_existing_download(
-        s: Session,
-        download: EpisodeMediaDownload,
-        *,
-        episode: Episode,
-        profile: DownloadProfileBase,
-) -> RedownloadTarget:
-    """Delete the old file and arm the same row for a fresh download."""
-    old_path = download.file_path
-    new_path = str(resolve_episode_output_path(profile.local_media_profile.output_template, episode=episode))
-
-    if download.download_status in _CANCELLABLE_STATUSES:
-        # Use the normal cancellation workflow for queued/running downloads. It
-        # invalidates the current attempt generation and removes final/partial
-        # artifacts. A running download worker will observe the generation change,
-        # stop cooperatively, and repeat cleanup once it has released its writer.
-        cancel_media_download(s, download.id)
-        s.commit()
-        download = retry_media_download(s, download.id)
-    else:
-        download.attempt_generation += 1
-        download.download_status = MediaDownloadStatus.PENDING.value
-        download.progress = 0
-        download.error_message = None
-        download.downloaded_bytes = None
-        download.format_downloaded = None
-        download.started_at = None
-        download.finished_at = None
-        remove_download_artifacts(old_path)
-
-    download.download_profile_id = profile.id
-    download.downloaded_publish_status = None
-    download.is_redownload_attempt = True
-    download.file_path = new_path
-    s.flush()
-
-    if new_path != old_path:
-        remove_download_artifacts(new_path)
-
-    return RedownloadTarget(
-        media_download_id=download.id,
-        attempt_generation=download.attempt_generation,
-        episode_title=episode.title,
-    )
-
-
-def _create_download(
-        s: Session,
-        *,
-        episode: Episode,
-        profile: DownloadProfileBase,
-) -> RedownloadTarget:
-    path = str(resolve_episode_output_path(profile.local_media_profile.output_template, episode=episode))
-    remove_download_artifacts(path)
-    download = EpisodeMediaDownload(
-        type=MediaType.EPISODE.value,
-        media_item_id=episode.id,
-        local_media_profile_id=profile.local_media_profile_id,
-        download_profile_id=profile.id,
-        download_status=MediaDownloadStatus.PENDING.value,
-        file_path=path,
-        progress=0,
-        is_redownload_attempt=False,
-    )
-    s.add(download)
-    s.flush()
-    return RedownloadTarget(
-        media_download_id=download.id,
-        attempt_generation=download.attempt_generation,
-        episode_title=episode.title,
-    )
-
-
-def _prepare_redownloads(
-        s: Session,
-        targets: list[tuple[Episode, DownloadProfileBase]],
-) -> list[RedownloadTarget]:
-    prepared: list[RedownloadTarget] = []
+def _cancel_existing_attempts(
+    s: Session,
+    targets: list[tuple[Episode, DownloadProfileBase]],
+) -> None:
+    """Cancel active child operations before this destructive replacement starts."""
+    operation_ids: set[str] = set()
     for episode, profile in targets:
         existing = s.scalar(
             select(EpisodeMediaDownload).where(
@@ -152,60 +79,134 @@ def _prepare_redownloads(
             )
         )
         if existing is None:
-            prepared.append(_create_download(s, episode=episode, profile=profile))
-        else:
-            prepared.append(
-                _reset_existing_download(s, existing, episode=episode, profile=profile)
+            continue
+        active = get_active_media_download_operation(s, existing.id)
+        if active is not None:
+            operation_ids.add(active.id)
+
+    # cancel_operation owns its own short transaction. Drop this session's read
+    # transaction first so SQLite never has to upgrade an old snapshot afterwards.
+    s.rollback()
+    for operation_id in operation_ids:
+        try:
+            cancel_operation(
+                operation_id,
+                reason="Replaced by show re-download",
+                acknowledge=True,
             )
+        except ValueError:
+            pass
+    s.expire_all()
+
+
+def _prepare_redownloads(
+        s: Session,
+        targets: list[tuple[Episode, DownloadProfileBase]],
+) -> list[RedownloadTarget]:
+    """Prepare artifacts and create one SYSTEM media.download operation per target."""
+    _cancel_existing_attempts(s, targets)
+    prepared: list[RedownloadTarget] = []
+
+    for episode, profile in targets:
+        existing = s.scalar(
+            select(EpisodeMediaDownload).where(
+                EpisodeMediaDownload.media_item_id == episode.id,
+                EpisodeMediaDownload.local_media_profile_id == profile.local_media_profile_id,
+            )
+        )
+        target_path = str(resolve_episode_output_path(
+            profile.local_media_profile.output_template,
+            episode=episode,
+        ))
+
+        if existing is None:
+            remove_download_artifacts(target_path)
+            download = EpisodeMediaDownload(
+                type=MediaType.EPISODE.value,
+                media_item_id=episode.id,
+                local_media_profile_id=profile.local_media_profile_id,
+                download_profile_id=profile.id,
+                artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
+                file_path=target_path,
+            )
+            s.add(download)
+            s.flush()
+            is_redownload = False
+        else:
+            is_redownload = (
+                existing.downloaded_at is not None
+                or existing.artifact_status in {
+                    MediaDownloadArtifactStatus.AVAILABLE.value,
+                    MediaDownloadArtifactStatus.MISSING.value,
+                    MediaDownloadArtifactStatus.CORRUPTED.value,
+                }
+            )
+            prepare_media_download_artifact(existing)
+            existing.download_profile_id = profile.id
+            existing.file_path = target_path
+            download = existing
+            s.flush()
+
+        operation = create_media_download_operation(
+            s,
+            download,
+            source=OperationSource.SYSTEM.value,
+            is_redownload=is_redownload,
+        )
+        prepared.append(RedownloadTarget(
+            media_download_id=download.id,
+            operation_id=operation.id,
+            episode_title=episode.title,
+        ))
+        # Keep destructive file changes and their durable child operation paired.
         s.commit()
+
+    dispatch_queued_media_download_operations(s)
+    s.commit()
     return prepared
 
 
-def _latest_download_task_status(
-        s: Session,
-        *,
-        media_download_id: int,
-        attempt_generation: int,
-) -> TaskStatus | None:
-    runs = s.execute(
-        select(TaskRun)
-        .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
-        .where(TaskDefinition.key == "download_episode")
-        .order_by(TaskRun.started_at.desc(), TaskRun.id.desc())
-    ).scalars()
-    for run in runs:
-        inputs = run.meta.get("inputs") if isinstance(run.meta, dict) else None
-        if not isinstance(inputs, dict):
-            continue
-        if inputs.get("media_download_id") != media_download_id:
-            continue
-        if inputs.get("attempt_generation") != attempt_generation:
-            continue
-        return run.status if isinstance(run.status, TaskStatus) else TaskStatus(run.status)
-    return None
+def _check_targets(
+    s: Session,
+    targets: list[RedownloadTarget],
+) -> tuple[int, int, str | None]:
+    """Return completed count, aggregate percent and first terminal child failure."""
+    if not targets:
+        return 0, 100, None
 
+    operation_ids = [target.operation_id for target in targets]
+    operations = {
+        operation.id: operation
+        for operation in s.scalars(
+            select(TaskOperation).where(TaskOperation.id.in_(operation_ids))
+        )
+    }
 
-def _check_targets(s: Session, targets: list[RedownloadTarget]) -> tuple[int, str | None]:
     completed = 0
+    progress_total = 0
     for target in targets:
-        download = s.get(EpisodeMediaDownload, target.media_download_id)
-        if download is None:
-            return completed, f"Download for '{target.episode_title}' was removed"
-        if download.attempt_generation != target.attempt_generation:
-            return completed, f"Download for '{target.episode_title}' was restarted by another action"
-        if download.download_status in _COMPLETED_STATUSES:
+        operation = operations.get(target.operation_id)
+        if operation is None:
+            return completed, int(progress_total / len(targets)), (
+                f"Download operation for '{target.episode_title}' was removed"
+            )
+
+        progress_total += max(0, min(100, int(operation.progress or 0)))
+        if operation.status == OperationStatus.SUCCEEDED.value:
             completed += 1
             continue
-        if download.download_status == MediaDownloadStatus.CANCELLED.value:
-            return completed, f"Download for '{target.episode_title}' was cancelled"
-        if download.download_status == MediaDownloadStatus.ERROR.value:
-            task_status = _latest_download_task_status(
-                s,
-                media_download_id=target.media_download_id,
-                attempt_generation=target.attempt_generation,
+        if operation.status in _TERMINAL_CHILD_STATUSES:
+            detail = operation.error or operation.message or operation.status.lower()
+            return completed, int(progress_total / len(targets)), (
+                f"Download for '{target.episode_title}' {detail}"
             )
-            if task_status == TaskStatus.FAILED:
-                return completed, f"Download for '{target.episode_title}' failed"
-            if task_status == TaskStatus.CANCELED:
-                return completed, f"Download for '{target.episode_title}' was cancelled"
-    return completed, None
+
+    return completed, int(progress_total / len(targets)), None
+
+
+def _cancel_targets(targets: list[RedownloadTarget], *, reason: str) -> None:
+    for target in targets:
+        try:
+            cancel_operation(target.operation_id, reason=reason, acknowledge=True)
+        except ValueError:
+            pass
