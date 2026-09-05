@@ -15,7 +15,7 @@ from backend.db.models.stream_profile import RssStreamProfile
 from backend.utils.feed_urls import build_rss_feed_url
 from backend.utils.helpers import generate_stream_profile_token
 from backend.utils.season_ordering import order_initial_seasons
-from task_manager.scheduler.operation_factory import OperationFactory
+from task_manager.scheduler.operation_factory import create_operation
 
 from ..operations import ShowIndexOperation
 
@@ -112,5 +112,5 @@ def create_show_bundle(s: Session, request: Request, payload: ShowAPICreateBundl
         s.add(stream_profile)
 
     s.flush()
-    OperationFactory.create(s, ShowIndexOperation(show))
+    create_operation(s, ShowIndexOperation(show))
     return ShowAPIRead.model_validate(show)

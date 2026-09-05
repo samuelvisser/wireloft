@@ -26,7 +26,7 @@ def _session() -> tuple[Session, Engine]:
 
 
 def test_factory_creates_operation_target_context_and_domain_event():
-    from task_manager.scheduler.operation_factory import OperationDefinition, OperationFactory
+    from task_manager.scheduler.operation_factory import OperationDefinition, create_operation
 
     class IndexOperation(OperationDefinition[_Resource]):
         kind = "show.index"
@@ -42,7 +42,7 @@ def test_factory_creates_operation_target_context_and_domain_event():
 
     session, engine = _session()
     try:
-        operation = OperationFactory.create(
+        operation = create_operation(
             session,
             IndexOperation(_Resource(id=42, title="Test Show", slug="test-show")),
         )
@@ -71,7 +71,7 @@ def test_factory_creates_operation_target_context_and_domain_event():
 
 
 def test_dispatch_event_is_queued_when_target_needs_work():
-    from task_manager.scheduler.operation_factory import OperationDefinition, OperationFactory
+    from task_manager.scheduler.operation_factory import OperationDefinition, create_operation
 
     class SyncOperation(OperationDefinition[_Resource]):
         kind = "show.sync"
@@ -85,7 +85,7 @@ def test_dispatch_event_is_queued_when_target_needs_work():
 
     session, engine = _session()
     try:
-        OperationFactory.create(
+        create_operation(
             session,
             SyncOperation(_Resource(id=42, title="Test Show", slug="test-show")),
         )
@@ -105,7 +105,7 @@ def test_dispatch_event_is_queued_when_target_needs_work():
 
 def test_dispatch_event_is_skipped_when_compatible_work_is_already_running():
     from task_manager.scheduler.db import TaskDefinition, TaskRun
-    from task_manager.scheduler.operation_factory import OperationDefinition, OperationFactory
+    from task_manager.scheduler.operation_factory import OperationDefinition, create_operation
     from task_manager.scheduler.types import OperationStatus, ResourceType, TaskStatus
 
     class SyncOperation(OperationDefinition[_Resource]):
@@ -148,7 +148,7 @@ def test_dispatch_event_is_skipped_when_compatible_work_is_already_running():
         session.add(run)
         session.flush()
 
-        operation = OperationFactory.create(
+        operation = create_operation(
             session,
             SyncOperation(_Resource(id=42, title="Test Show", slug="test-show")),
         )

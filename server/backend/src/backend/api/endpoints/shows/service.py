@@ -11,7 +11,7 @@ from fastapi import HTTPException
 
 from backend.db.models import DownloadProfileBase, Episode, Show
 from task_manager.events.transactional import queue_event
-from task_manager.scheduler.operation_factory import OperationFactory
+from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import (
     complete_operation,
     queue_operation_target_dispatch,
@@ -59,7 +59,7 @@ def create_show(s: Session, body: ShowAPICreate) -> ShowAPIRead:
     s.add(show)
     s.flush()
 
-    OperationFactory.create(s, ShowIndexOperation(show))
+    create_operation(s, ShowIndexOperation(show))
 
     return ShowAPIRead.model_validate(show)
 
@@ -118,7 +118,7 @@ def request_show_sync(s: Session, show_slug: str) -> dict[str, bool | str]:
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
-    operation = OperationFactory.create(s, ShowSyncOperation(show))
+    operation = create_operation(s, ShowSyncOperation(show))
     return {"queued": True, "operation_id": operation.id}
 
 
@@ -140,7 +140,7 @@ def request_show_metadata_refresh(
         .filter_by(show_id=show.id)
         .all()
     )
-    operation = OperationFactory.create(
+    operation = create_operation(
         s,
         ShowMetadataRefreshOperation(show, episodes),
     )
@@ -199,7 +199,7 @@ def request_show_episode_redownload(
             raise HTTPException(status_code=422, detail="Download Profile is not attached to this show")
         selected_profile_count = 1
 
-    operation = OperationFactory.create(
+    operation = create_operation(
         s,
         ShowRedownloadOperation(
             show,

@@ -8,7 +8,7 @@ from task_manager.events.transactional import queue_event
 from task_manager.scheduler.db import TaskOperation
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
-    create_operation,
+    create_operation as create_task_operation,
     operation_target_needs_dispatch,
 )
 from task_manager.scheduler.types import OperationSource
@@ -91,7 +91,7 @@ class OperationFactory:
                     "when its event is used for worker dispatch"
                 )
 
-        operation = create_operation(
+        operation = create_task_operation(
             session,
             kind=definition.kind,
             source=definition.source,
@@ -123,3 +123,11 @@ class OperationFactory:
         payload.update(definition.event_payload())
         queue_event(session, definition.event, payload)
         return operation
+
+
+def create_operation(
+    session: Session,
+    definition: OperationDefinition[Any],
+) -> TaskOperation:
+    """Create an operation from its declarative definition."""
+    return OperationFactory.create(session, definition)
