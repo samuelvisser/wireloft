@@ -231,7 +231,7 @@ export default function TimeInterval({
                             min={0}
                             step={unit === backendUnit ? step : 1}
                             value={draftParts[unit]}
-                            style={unit === 'minutes' || unit === 'seconds' ? {paddingRight: 60} : undefined}
+                            style={unit === 'minutes' || unit === 'seconds' ? {textAlign: 'left'} : undefined}
                             onChange={onUnitChange(unit)}
                             onFocus={onFocus(unit)}
                             onMouseUp={onMouseUp(unit)}
