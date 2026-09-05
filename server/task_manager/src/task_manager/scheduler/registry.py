@@ -10,6 +10,7 @@ from task_manager.scheduler.db import TaskDefinition
 
 _REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[Any]]]] = {}
 TerminalCallback = Callable[..., None]
+RecoveryDispatcher = Callable[[], None]
 
 
 @dataclass
@@ -32,6 +33,7 @@ class TaskMeta:
     default_max_retries: Optional[int] = None
     tracks_progress: bool = True
     terminal_callback: Optional[TerminalCallback] = None
+    recovery_dispatcher: Optional[RecoveryDispatcher] = None
     triggers: List[TriggerMeta] = field(default_factory=list)
 
 
@@ -43,6 +45,7 @@ def task(
     default_max_retries: Optional[int] = None,
     tracks_progress: bool = True,
     terminal_callback: Optional[TerminalCallback] = None,
+    recovery_dispatcher: Optional[RecoveryDispatcher] = None,
 ):
     """Decorator to register an async task callable.
 
@@ -52,9 +55,14 @@ def task(
 
     ``terminal_callback`` is an optional infrastructure hook invoked after the
     TaskRun has been durably finalized (success/failure/cancellation, but not
-    while waiting for a retry). It is useful for generic resource queues that
+    while waiting for a retry). It is useful for constrained resource queues that
     need to fill a newly freed execution slot without putting queue logic inside
     worker result handling.
+
+    ``recovery_dispatcher`` marks tasks whose operation targets are dispatched by
+    such a queue rather than immediately. Generic TaskOperation recovery leaves
+    those targets QUEUED and invokes each dispatcher once after durable recovery
+    state has been restored, preserving the queue's own concurrency policy.
     """
 
     def decorator(fn: Callable[..., Awaitable[Any]]):
@@ -67,6 +75,7 @@ def task(
             default_max_retries=default_max_retries,
             tracks_progress=tracks_progress,
             terminal_callback=terminal_callback,
+            recovery_dispatcher=recovery_dispatcher,
         )
         _REGISTRY[key] = (meta, fn)
 
