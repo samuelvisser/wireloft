@@ -5,14 +5,17 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, PodcastDownloadProfile
-from task_manager.scheduler.executor import trigger_now
+from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.helpers.progress import update_progress
+from task_manager.tasks.media_download_operations import (
+    create_media_download_operation,
+    dispatch_queued_media_download_operations,
+)
 
 from ._helpers import (
     cleanup_older_episodes,
     ensure_episode_download,
     get_download_profile_episodes,
-    remaining_download_budget,
     resolve_target_profiles,
 )
 
@@ -20,14 +23,12 @@ from ._helpers import (
 async def run_download_profile_worker(
         s: Session, *, resource_id: Optional[int] = None, resource_type: Optional[str] = None, progress=None
 ) -> None:
-    """Make sure every enabled Download Profile's episodes are being downloaded.
+    """Reconcile Download Profile domain state and create SYSTEM download operations.
 
-    Scope depends on how the run was triggered: a single episode going final (or
-    countdown-published) only checks that episode against its show's profiles; a
-    freshly indexed show, a manual "run this show/profile" trigger, or the periodic
-    verification cron/app-startup sweep all fall through to a full re-check of the
-    profile(s) in scope. Podcast profiles also reconcile downloads that fell outside
-    their configured date or latest-episode limit.
+    The profile worker no longer maintains or starts a second download queue. It
+    creates/reuses persistent MediaDownload artifact rows and represents every
+    required attempt as a normal ``media.download`` TaskOperation. The shared
+    operation dispatcher enforces the configured download concurrency limit.
     """
     print("Starting download_profile_worker" + (f" ({resource_type}={resource_id})" if resource_type else ""))
 
@@ -42,55 +43,49 @@ async def run_download_profile_worker(
         only_episode = s.get(Episode, resource_id)
         if only_episode is None:
             update_progress(progress, 100, f"Episode {resource_id} no longer exists")
-            print("download_profile_worker completed: episode not found")
             return
 
-    budget = remaining_download_budget(s)
-    triggered = 0
-    deferred = 0
+    created = 0
     total = len(profiles)
-
     for index, profile in enumerate(profiles):
         for episode in get_download_profile_episodes(s, profile, only_episode=only_episode):
             action = ensure_episode_download(s, profile, episode)
-            s.commit()
-
-            if not action.needs_trigger:
-                continue
-            if budget <= 0:
-                deferred += 1
+            if not action.needs_operation:
                 continue
 
-            trigger_now(
-                def_key="download_episode",
-                resource_type="episode",
-                resource_id=episode.id,
-                media_download_id=action.media_download_id,
-                attempt_generation=action.attempt_generation,
+            download = s.get(__import__(
+                "backend.db.models.media_download",
+                fromlist=["MediaDownloadBase"],
+            ).MediaDownloadBase, action.media_download_id)
+            if download is None:
+                continue
+            create_media_download_operation(
+                s,
+                download,
+                source=OperationSource.SYSTEM.value,
                 is_redownload=action.is_redownload,
             )
-            budget -= 1
-            triggered += 1
+            created += 1
 
         if isinstance(profile, PodcastDownloadProfile):
-            # Date-based cleanup remains a profile-wide reconciliation step and is
-            # skipped for individual publish events. Latest-N profiles must also
-            # reconcile on publish events, because the new episode can immediately
-            # push the previous Nth episode outside the configured set.
             should_cleanup = only_episode is None or profile.download_episode_count > 0
             if should_cleanup:
-                removed = cleanup_older_episodes(s, profile)
-                if removed:
-                    s.commit()
+                cleanup_older_episodes(s, profile)
 
+        # Keep each profile reconciliation transaction short. The operations are
+        # durable but remain QUEUED until the shared dispatcher below has room.
+        s.commit()
         update_progress(
             progress,
-            int((index + 1) / total * 100),
-            f"Queued {triggered} download(s) so far ({index + 1}/{total} profile(s) checked)",
+            int((index + 1) / total * 90),
+            f"Prepared {created} download operation(s) ({index + 1}/{total} profile(s) checked)",
         )
 
-    message = f"Queued {triggered} download(s)"
-    if deferred:
-        message += f"; {deferred} left pending (concurrent download limit reached)"
+    dispatched = dispatch_queued_media_download_operations(s)
+    s.commit()
+
+    message = f"Prepared {created} download operation(s)"
+    if dispatched:
+        message += f"; started {dispatched} queued download(s)"
     update_progress(progress, 100, message)
     print(f"download_profile_worker completed: {message}")
