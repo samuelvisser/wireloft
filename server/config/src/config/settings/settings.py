@@ -100,7 +100,7 @@ class AppSettings(SettingsBase):
     ))
     scheduler: SchedulerSettings = Field(default=SchedulerSettings(
         enabled=True,
-        max_workers=5,
+        max_workers=20,
         stalled_task_timeout_minutes=20,
         default_max_retries=3,
         retry_backoff_seconds=5.0,
