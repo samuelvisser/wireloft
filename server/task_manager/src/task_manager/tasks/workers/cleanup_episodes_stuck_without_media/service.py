@@ -28,7 +28,7 @@ from ..monitor_episode_worker.scheduling import MONITOR_REQUESTED_EVENT
 
 
 logger = logging.getLogger(__name__)
-DEFAULT_STUCK_DW_PROCESSING_DELETE_AFTER_MINUTES = 4 * 60
+DEFAULT_STUCK_WITHOUT_MEDIA_DELETE_AFTER_MINUTES = 4 * 60
 
 
 def _ensure_utc(value: datetime) -> datetime:
@@ -79,14 +79,14 @@ def _queue_monitor_recovery(s: Session, *, episode: Episode, show: Show, old_sta
     )
 
 
-async def run_check_episodes_stuck_at_dw_processing(
+async def run_cleanup_episodes_stuck_without_media(
         s: Session,
         *,
         show_id: Optional[int] = None,
         show_slug: Optional[str] = None,
         episode_id: Optional[int] = None,
         force: bool = False,
-        delete_after_minutes: int = DEFAULT_STUCK_DW_PROCESSING_DELETE_AFTER_MINUTES,
+        delete_after_minutes: int = DEFAULT_STUCK_WITHOUT_MEDIA_DELETE_AFTER_MINUTES,
         progress=None,
 ) -> None:
     """Clean up Daily Wire placeholders/404 entries after the configured grace period.
@@ -98,7 +98,7 @@ async def run_check_episodes_stuck_at_dw_processing(
     ``dw_processing``.
     """
     if force and episode_id is None:
-        raise ValueError("Forced stuck-processing cleanup requires a specific episode_id")
+        raise ValueError("Forced cleanup requires a specific episode_id")
 
     delete_after = timedelta(minutes=max(0, delete_after_minutes))
     stmt = select(Episode).where(
@@ -118,21 +118,21 @@ async def run_check_episodes_stuck_at_dw_processing(
 
     candidates = list(s.execute(stmt).scalars())
     if not candidates:
-        update_progress(progress, 100, "No episodes stuck at dw_processing")
-        print("check_episodes_stuck_at_dw_processing completed: nothing to check")
+        update_progress(progress, 100, "No episodes stuck without usable media")
+        print("cleanup_episodes_stuck_without_media completed: nothing to check")
         return
 
     if force:
         episode = candidates[0]
         if episode.publish_status != EpisodePublishStatus.DW_PROCESSING.value:
             update_progress(progress, 100, "Episode is no longer in dw_processing")
-            print("check_episodes_stuck_at_dw_processing completed: episode no longer processing")
+            print("cleanup_episodes_stuck_without_media completed: episode no longer processing")
             return
 
         logger.info("Early deleting dw_processing episode %s", episode.slug)
         _delete_episode(s, episode)
         update_progress(progress, 100, "Deleted processing episode early")
-        print("check_episodes_stuck_at_dw_processing completed: early deleted 1 episode")
+        print("cleanup_episodes_stuck_without_media completed: early deleted 1 episode")
         return
 
     access_token: Optional[str] = None
@@ -286,4 +286,4 @@ async def run_check_episodes_stuck_at_dw_processing(
 
     message = f"Checked {checked} processing episode(s); removed {removed}"
     update_progress(progress, 100, message)
-    print(f"check_episodes_stuck_at_dw_processing completed: {message}")
+    print(f"cleanup_episodes_stuck_without_media completed: {message}")

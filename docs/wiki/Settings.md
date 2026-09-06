@@ -452,12 +452,12 @@ All cron strings use standard five-field cron syntax (`minute hour day-of-month 
 <td colspan="3">Rechecks episodes that exist but are not yet considered fully published every two minutes by default.</td>
 </tr>
 <tr>
-<td><code>newEpisodeSchedule.checkEpisodesStuckAtDwProcessingCron</code></td>
-<td><code>WL_NEW_EPISODE_SCHEDULE__CHECK_EPISODES_STUCK_AT_DW_PROCESSING_CRON</code></td>
+<td><code>newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron</code></td>
+<td><code>WL_NEW_EPISODE_SCHEDULE__CLEANUP_EPISODES_STUCK_WITHOUT_MEDIA_CRON</code></td>
 <td><code>0 * * * *</code></td>
 </tr>
 <tr>
-<td colspan="3">Checks <code>dw_processing</code> episodes once per hour by default and cleans up persistent <code>No Show Today</code> placeholders or continuously missing Daily Wire episodes after the configured deletion delay.</td>
+<td colspan="3">Runs cleanup once per hour by default for episodes stuck without usable media, including persistent <code>No Show Today</code> placeholders or continuously missing Daily Wire episodes after the configured deletion delay.</td>
 </tr>
 <tr>
 <td><code>newEpisodeSchedule.metadataRefreshIntervals</code></td>

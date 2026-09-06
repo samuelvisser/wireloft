@@ -108,7 +108,7 @@ class AppSettings(SettingsBase):
     new_episode_schedule: TrackNewEpisodeSchedule = Field(default=TrackNewEpisodeSchedule(
         find_episodes_cron="*/30 * * * *",
         monitor_episode_cron="*/2 * * * *",
-        check_episodes_stuck_at_dw_processing_cron="0 * * * *",
+        cleanup_episodes_stuck_without_media_cron="0 * * * *",
         metadata_refresh_intervals="15m,30m,1h,3h,6h,24h,3d",
     ))
     episode_status_timing: EpisodeStatusTiming = Field(default=EpisodeStatusTiming(
@@ -155,7 +155,7 @@ class AppSettings(SettingsBase):
             min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
             find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
             monitor_episode_cron=self.new_episode_schedule.monitor_episode_cron,
-            check_episodes_stuck_at_dw_processing_cron=self.new_episode_schedule.check_episodes_stuck_at_dw_processing_cron,
+            cleanup_episodes_stuck_without_media_cron=self.new_episode_schedule.cleanup_episodes_stuck_without_media_cron,
             verify_downloads_cron=self.download_settings.verify_downloads_cron,
             file_watcher_scan_cron=self.file_watcher.scan_cron,
         )

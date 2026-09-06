@@ -5,7 +5,7 @@ from typing import Optional
 from config import get_settings
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import task, on_cron, on_event
-from .service import run_check_episodes_stuck_at_dw_processing
+from .service import run_cleanup_episodes_stuck_without_media
 
 
 @on_event(
@@ -13,23 +13,23 @@ from .service import run_check_episodes_stuck_at_dw_processing
     resource_type="show",
 )
 @on_cron(
-    cron=get_settings().new_episode_schedule.check_episodes_stuck_at_dw_processing_cron,
+    cron=get_settings().new_episode_schedule.cleanup_episodes_stuck_without_media_cron,
     resource_type="show",
     resource_id=0,
     coalesce=True,
 )
 @task(
-    key="check_episodes_stuck_at_dw_processing",
-    title="Check stuck Daily Wire episodes",
+    key="cleanup_episodes_stuck_without_media",
+    title="Clean up episodes stuck without media",
     description=(
         "Deletes No Show Today placeholders and continuously missing Daily Wire "
-        "episodes after the configured processing grace period"
+        "episodes after the configured cleanup delay"
     ),
     allowed_resource_types=("show",),
     default_max_retries=2,
     tracks_progress=True,
 )
-async def check_episodes_stuck_at_dw_processing(
+async def cleanup_episodes_stuck_without_media(
         *,
         resource_id: Optional[int] = None,
         slug: Optional[str] = None,
@@ -37,10 +37,10 @@ async def check_episodes_stuck_at_dw_processing(
         force: bool = False,
         progress=None,
 ) -> None:
-    """Clean up unusable episodes that remain in dw_processing for too long."""
+    """Clean up episodes that remain stuck without usable media for too long."""
     settings = get_settings()
     with db_session() as s:
-        await run_check_episodes_stuck_at_dw_processing(
+        await run_cleanup_episodes_stuck_without_media(
             s,
             show_id=resource_id,
             show_slug=slug,

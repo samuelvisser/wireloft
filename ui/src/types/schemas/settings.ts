@@ -50,7 +50,7 @@ const SchedulerSettingsSchema = z.object({
 const TrackNewEpisodeScheduleSchema = z.object({
     findEpisodesCron: z.string(),
     monitorEpisodeCron: z.string(),
-    checkEpisodesStuckAtDwProcessingCron: z.string(),
+    cleanupEpisodesStuckWithoutMediaCron: z.string(),
     metadataRefreshIntervals: z.string(),
 })
 
@@ -145,7 +145,7 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
     newEpisodeSchedule: TrackNewEpisodeScheduleSchema.extend({
         findEpisodesCron: cronExpression,
         monitorEpisodeCron: cronExpression,
-        checkEpisodesStuckAtDwProcessingCron: cronExpression,
+        cleanupEpisodesStuckWithoutMediaCron: cronExpression,
         metadataRefreshIntervals,
     }),
     episodeStatusTiming: EpisodeStatusTimingSchema.extend({
@@ -169,7 +169,7 @@ const WORKER_CRON_MINIMUM_MESSAGE = 'This worker runs more often than the config
 export const SettingsServerErrors = createServerErrorMapper({
     'values.newEpisodeSchedule.findEpisodesCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
     'values.newEpisodeSchedule.monitorEpisodeCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
-    'values.newEpisodeSchedule.checkEpisodesStuckAtDwProcessingCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
+    'values.newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
     'values.downloadSettings.verifyDownloadsCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
     'values.fileWatcher.scanCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
 })
@@ -201,7 +201,7 @@ export const SETTINGS_FIELD_PATHS = [
     'scheduler.retryBackoffSeconds',
     'newEpisodeSchedule.findEpisodesCron',
     'newEpisodeSchedule.monitorEpisodeCron',
-    'newEpisodeSchedule.checkEpisodesStuckAtDwProcessingCron',
+    'newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron',
     'newEpisodeSchedule.metadataRefreshIntervals',
     'episodeStatusTiming.publishedCountdownAfterMinutes',
     'episodeStatusTiming.publishedFinalAfterMinutes',

@@ -83,7 +83,7 @@ def validate_worker_cron_settings(
     min_slow_request_ms: int,
     find_episodes_cron: str,
     monitor_episode_cron: str,
-    check_episodes_stuck_at_dw_processing_cron: str,
+    cleanup_episodes_stuck_without_media_cron: str,
     verify_downloads_cron: str,
     file_watcher_scan_cron: str,
 ) -> None:
@@ -99,9 +99,9 @@ def validate_worker_cron_settings(
             monitor_episode_cron,
         ),
         (
-            "Check stuck processing episodes",
-            ("new_episode_schedule", "check_episodes_stuck_at_dw_processing_cron"),
-            check_episodes_stuck_at_dw_processing_cron,
+            "Clean up episodes stuck without media",
+            ("new_episode_schedule", "cleanup_episodes_stuck_without_media_cron"),
+            cleanup_episodes_stuck_without_media_cron,
         ),
         (
             "Verify downloads",

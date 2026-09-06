@@ -19,7 +19,7 @@ from task_manager.scheduler.operations import (
 
 METADATA_REFRESH_REQUESTED_EVENT = "episode.metadata_refresh_requested"
 _METADATA_REFRESH_TASK_KEY = "refresh_episode_metadata_worker"
-_EARLY_DELETE_TASK_KEY = "check_episodes_stuck_at_dw_processing"
+_EARLY_DELETE_TASK_KEY = "cleanup_episodes_stuck_without_media"
 
 
 def get_episodes_by_show_list(s: Session, show_slug: str, limit: int | None = None) -> list[EpisodeAPIRead]:
@@ -111,7 +111,7 @@ def request_episode_early_delete(
         s: Session,
         episode_slug: str,
 ) -> dict[str, bool | str]:
-    """Queue the normal stuck-processing worker as an explicit immediate delete."""
+    """Queue the stuck-without-media cleanup worker as an explicit immediate delete."""
     episode = (
         s.query(Episode)
         .filter_by(slug=episode_slug)

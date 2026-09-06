@@ -126,13 +126,13 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     }
                 />
                 <CronEditor
-                    id="settings-stuck-dw-processing-cron"
-                    label="Check stuck processing episodes"
-                    value={draft.newEpisodeSchedule.checkEpisodesStuckAtDwProcessingCron}
-                    error={errorFor('newEpisodeSchedule.checkEpisodesStuckAtDwProcessingCron')}
-                    environmentVariable={environmentVariableFor('newEpisodeSchedule.checkEpisodesStuckAtDwProcessingCron')}
+                    id="settings-cleanup-episodes-stuck-without-media-cron"
+                    label="Clean up episodes stuck without media"
+                    value={draft.newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron}
+                    error={errorFor('newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron')}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron')}
                     onChange={(value) => updateDraft((next) => {
-                        next.newEpisodeSchedule.checkEpisodesStuckAtDwProcessingCron = value
+                        next.newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron = value
                     })}
                     help={
                         <ReadMore summary={<span>Cleans up Daily Wire entries that remain unusable for too long.</span>}>

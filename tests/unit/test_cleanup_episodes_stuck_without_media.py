@@ -87,7 +87,7 @@ def test_cleanup_uses_configured_processing_delete_delay(db_session, monkeypatch
         DwProcessingReason,
         mark_episode_dw_processing,
     )
-    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
     show = _make_show(db_session)
     episode = _make_episode(db_session, show)
@@ -110,7 +110,7 @@ def test_cleanup_uses_configured_processing_delete_delay(db_session, monkeypatch
     _patch_no_token(monkeypatch, service)
 
     asyncio.run(
-        service.run_check_episodes_stuck_at_dw_processing(
+        service.run_cleanup_episodes_stuck_without_media(
             db_session,
             delete_after_minutes=60,
         )
@@ -121,7 +121,7 @@ def test_cleanup_uses_configured_processing_delete_delay(db_session, monkeypatch
 
 def test_force_cleanup_deletes_targeted_processing_episode_immediately(db_session, monkeypatch):
     from backend.db.models import Episode
-    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
     show = _make_show(db_session)
     episode = _make_episode(db_session, show, slug="early-delete")
@@ -135,7 +135,7 @@ def test_force_cleanup_deletes_targeted_processing_episode_immediately(db_sessio
     monkeypatch.setattr(service, "DeviceAuthClient", UnexpectedAuthClient)
 
     asyncio.run(
-        service.run_check_episodes_stuck_at_dw_processing(
+        service.run_cleanup_episodes_stuck_without_media(
             db_session,
             episode_id=episode_id,
             force=True,
@@ -147,11 +147,11 @@ def test_force_cleanup_deletes_targeted_processing_episode_immediately(db_sessio
 
 
 def test_force_cleanup_requires_specific_episode(db_session):
-    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
     with pytest.raises(ValueError, match="specific episode_id"):
         asyncio.run(
-            service.run_check_episodes_stuck_at_dw_processing(
+            service.run_cleanup_episodes_stuck_without_media(
                 db_session,
                 force=True,
             )

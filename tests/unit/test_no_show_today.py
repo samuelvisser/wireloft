@@ -314,7 +314,7 @@ def _patch_no_token(monkeypatch, service):
 def test_cleanup_keeps_recent_no_show_today(db_session, monkeypatch):
     from backend.db.models import Episode
     from task_manager.tasks.helpers.episodes.processing import DwProcessingReason
-    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
     now = datetime.now(timezone.utc)
     show = _make_show(db_session)
@@ -335,7 +335,7 @@ def test_cleanup_keeps_recent_no_show_today(db_session, monkeypatch):
     episode_id = episode.id
 
     _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
+    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
     assert db_session.get(Episode, episode_id) is not None
 
@@ -343,7 +343,7 @@ def test_cleanup_keeps_recent_no_show_today(db_session, monkeypatch):
 def test_cleanup_deletes_no_show_after_four_hour_grace(db_session, monkeypatch):
     from backend.db.models import Episode
     from task_manager.tasks.helpers.episodes.processing import DwProcessingReason
-    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
     now = datetime.now(timezone.utc)
     show = _make_show(db_session)
@@ -372,7 +372,7 @@ def test_cleanup_deletes_no_show_after_four_hour_grace(db_session, monkeypatch):
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
+    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
     assert db_session.get(Episode, episode_id) is None
 
@@ -381,7 +381,7 @@ def test_cleanup_preserves_no_show_that_became_real_episode(db_session, monkeypa
     from backend.db.models import Episode
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.helpers.episodes.processing import DwProcessingReason
-    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
     now = datetime.now(timezone.utc)
     show = _make_show(db_session)
@@ -410,7 +410,7 @@ def test_cleanup_preserves_no_show_that_became_real_episode(db_session, monkeypa
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
+    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
     stored = db_session.get(Episode, episode_id)
     assert stored is not None
@@ -422,7 +422,7 @@ def test_cleanup_deletes_continuous_404_after_four_hours(db_session, monkeypatch
     from backend.db.models import Episode
     from dailywire_api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.helpers.episodes.processing import DwProcessingReason
-    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
     now = datetime.now(timezone.utc)
     show = _make_show(db_session)
@@ -451,7 +451,7 @@ def test_cleanup_deletes_continuous_404_after_four_hours(db_session, monkeypatch
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
 
-    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
+    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
     assert db_session.get(Episode, episode_id) is None
 
@@ -459,7 +459,7 @@ def test_cleanup_deletes_continuous_404_after_four_hours(db_session, monkeypatch
 def test_cleanup_does_not_verify_404_until_incident_is_four_hours_old(db_session, monkeypatch):
     from backend.db.models import Episode
     from task_manager.tasks.helpers.episodes.processing import DwProcessingReason
-    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
     now = datetime.now(timezone.utc)
     show = _make_show(db_session)
@@ -482,7 +482,7 @@ def test_cleanup_does_not_verify_404_until_incident_is_four_hours_old(db_session
     monkeypatch.setattr(service, "MiddlewareClient", lambda access_token=None: client)
     _patch_no_token(monkeypatch, service)
 
-    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
+    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
     client.get_episode_details.assert_not_called()
     assert db_session.get(Episode, episode_id) is not None
@@ -494,7 +494,7 @@ def test_cleanup_keeps_episode_when_404_endpoint_recovers(db_session, monkeypatc
         DwProcessingReason,
         episode_dw_processing_reason,
     )
-    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
     now = datetime.now(timezone.utc)
     show = _make_show(db_session)
@@ -523,7 +523,7 @@ def test_cleanup_keeps_episode_when_404_endpoint_recovers(db_session, monkeypatc
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
 
-    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
+    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
     stored = db_session.get(Episode, episode_id)
     assert stored is not None
@@ -531,12 +531,12 @@ def test_cleanup_keeps_episode_when_404_endpoint_recovers(db_session, monkeypatc
 
 
 def test_cleanup_noop_when_nothing_is_processing(db_session, monkeypatch):
-    from task_manager.tasks.workers.check_episodes_stuck_at_dw_processing import service
+    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
     called = Mock()
     monkeypatch.setattr(service, "MiddlewareClient", called)
     _patch_no_token(monkeypatch, service)
 
-    asyncio.run(service.run_check_episodes_stuck_at_dw_processing(db_session))
+    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
     called.assert_not_called()

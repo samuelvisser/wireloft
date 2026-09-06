@@ -47,7 +47,7 @@ SettingFieldPath = Literal[
     "scheduler.retryBackoffSeconds",
     "newEpisodeSchedule.findEpisodesCron",
     "newEpisodeSchedule.monitorEpisodeCron",
-    "newEpisodeSchedule.checkEpisodesStuckAtDwProcessingCron",
+    "newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
     "episodeStatusTiming.publishedCountdownAfterMinutes",
     "episodeStatusTiming.publishedFinalAfterMinutes",
@@ -92,7 +92,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "scheduler.retryBackoffSeconds",
     "newEpisodeSchedule.findEpisodesCron",
     "newEpisodeSchedule.monitorEpisodeCron",
-    "newEpisodeSchedule.checkEpisodesStuckAtDwProcessingCron",
+    "newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
     "episodeStatusTiming.publishedCountdownAfterMinutes",
     "episodeStatusTiming.publishedFinalAfterMinutes",
@@ -213,12 +213,12 @@ class SchedulerSettingsValue(_SettingsValueModel):
 class TrackNewEpisodeScheduleValue(_SettingsValueModel):
     find_episodes_cron: str = Field(min_length=1)
     monitor_episode_cron: str = Field(min_length=1)
-    check_episodes_stuck_at_dw_processing_cron: str = Field(min_length=1)
+    cleanup_episodes_stuck_without_media_cron: str = Field(min_length=1)
     metadata_refresh_intervals: str = Field(min_length=1)
 
     _validate_find_episodes_cron = field_validator("find_episodes_cron")(_validate_cron_expression)
     _validate_monitor_episode_cron = field_validator("monitor_episode_cron")(_validate_cron_expression)
-    _validate_check_episodes_stuck_at_dw_processing_cron = field_validator("check_episodes_stuck_at_dw_processing_cron")(_validate_cron_expression)
+    _validate_cleanup_episodes_stuck_without_media_cron = field_validator("cleanup_episodes_stuck_without_media_cron")(_validate_cron_expression)
     _validate_metadata_refresh_intervals = field_validator(
         "metadata_refresh_intervals"
     )(normalize_metadata_refresh_intervals)
@@ -307,7 +307,7 @@ class SettingsValues(_SettingsValueModel):
                 min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
                 find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
                 monitor_episode_cron=self.new_episode_schedule.monitor_episode_cron,
-                check_episodes_stuck_at_dw_processing_cron=self.new_episode_schedule.check_episodes_stuck_at_dw_processing_cron,
+                cleanup_episodes_stuck_without_media_cron=self.new_episode_schedule.cleanup_episodes_stuck_without_media_cron,
                 verify_downloads_cron=self.download_settings.verify_downloads_cron,
                 file_watcher_scan_cron=self.file_watcher.scan_cron,
             )
