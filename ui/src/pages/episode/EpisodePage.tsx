@@ -16,6 +16,7 @@ import {getErrorMessageFromResponse} from '../../utils/helpers'
 import ProgressBar from '../../components/common/ProgressBar'
 import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 
 // Ensure icons from the kit are registered (idempotent)
@@ -456,60 +457,35 @@ export default function EpisodePage() {
                 )}
             </article>
 
-            {earlyDeleteConfirm && earlyDeleteAfterMinutes !== undefined && (
-                <div
-                    className="modal-overlay"
-                    role="presentation"
-                    onClick={() => {
+            {earlyDeleteAfterMinutes !== undefined && (
+                <ConfirmDialog
+                    open={earlyDeleteConfirm}
+                    title="Early Delete"
+                    onDismiss={() => {
                         if (!earlyDeleteBusy) setEarlyDeleteConfirm(false)
                     }}
+                    icon={['fas', 'trash']}
+                    iconTone="danger"
+                    dismissOnOverlayClick={!earlyDeleteBusy}
+                    cancelButton={{disabled: earlyDeleteBusy}}
+                    confirmButton={{
+                        label: earlyDeleteBusy ? 'Deleting…' : 'Delete now',
+                        onClick: earlyDelete,
+                        className: 'btn btn-danger',
+                        disabled: earlyDeleteBusy,
+                    }}
                 >
-                    <div
-                        className="modal"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="early-delete-title"
-                        aria-describedby="early-delete-desc"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <div className="modal-header">
-                            <div className="modal-icon danger" aria-hidden>
-                                <FontAwesomeIcon icon={['fas', 'trash']}/>
-                            </div>
-                            <h2 id="early-delete-title" className="modal-title">Early Delete</h2>
-                        </div>
-                        <p id="early-delete-desc" className="modal-text">
-                            <p>
-                                This episode is marked by WireLot as unusable for downloading or streaming.
-                            </p>
-                            <p>
-                                This could have various reasons, but could be temporary. Therefore, WireLoft keeps it around for
-                                {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> before it auto-deletes it.
-                            </p>
-                            <p>
-                                If you want though, you can delete it early now. This is a permanent action and cannot be undone.
-                            </p>
-                         </p>
-                        <div className="modal-actions">
-                            <button
-                                type="button"
-                                className="btn"
-                                disabled={earlyDeleteBusy}
-                                onClick={() => setEarlyDeleteConfirm(false)}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                className="btn btn-danger"
-                                disabled={earlyDeleteBusy}
-                                onClick={() => void earlyDelete()}
-                            >
-                                {earlyDeleteBusy ? 'Deleting…' : 'Delete now'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                    <p>
+                        This episode is marked by WireLot as unusable for downloading or streaming.
+                    </p>
+                    <p>
+                        This could have various reasons, but could be temporary. Therefore, WireLoft keeps it around for
+                        {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> before it auto-deletes it.
+                    </p>
+                    <p>
+                        If you want though, you can delete it early now. This is a permanent action and cannot be undone.
+                    </p>
+                </ConfirmDialog>
             )}
 
             <style type="text/css">{`
