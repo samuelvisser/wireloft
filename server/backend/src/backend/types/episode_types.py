@@ -12,6 +12,10 @@ class EpisodePublishStatus(Enum):
     # DW API returns as live
     LIVE = "live"
 
+    # WireLoft knows about the episode, but Daily Wire currently exposes no usable media for it.
+    # Examples include No Show Today placeholders and episode-detail requests that return 404.
+    NO_USABLE_MEDIA = "no_usable_media"
+
     # DW API returns as published, but with the same ID as when it was live. This means the episode is not
     # yet ready to be downloaded.
     DW_PROCESSING = "dw_processing"
@@ -22,4 +26,3 @@ class EpisodePublishStatus(Enum):
 
     # The episode file size changed, meaning it was edited by DW likely meaning it now no longer contains the countdown
     PUBLISHED_FINAL = "published_final"
-

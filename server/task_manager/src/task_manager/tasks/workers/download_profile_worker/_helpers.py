@@ -112,9 +112,9 @@ def get_download_profile_episodes(
         if _episode_type_prefix(episode) not in allowed_types:
             continue
 
-        # Publication status is the single eligibility authority. A No Show Today
-        # placeholder and a detail-endpoint 404 both become DW_PROCESSING, so they
-        # need no profile-specific exclusions here.
+        # Publication status is the single eligibility authority. NO_USABLE_MEDIA
+        # and DW_PROCESSING are both naturally excluded because neither is a
+        # downloadable publication state, with no placeholder-specific exception.
         publish_status = episode.publish_status
         if publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
             pass

@@ -29,6 +29,10 @@ from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 logger = logging.getLogger(__name__)
 
 _AVAILABLE_ARTIFACT_STATUS = MediaDownloadArtifactStatus.AVAILABLE.value
+_UNAVAILABLE_PUBLISH_STATUSES = {
+    EpisodePublishStatus.NO_USABLE_MEDIA.value,
+    EpisodePublishStatus.DW_PROCESSING.value,
+}
 _VIDEO_HEIGHTS = {
     PreferredFormat.FORMAT_4K.value: 2160,
     PreferredFormat.FORMAT_1080P.value: 1080,
@@ -127,11 +131,10 @@ def get_feed_items(
     if not profile.use_downloads and not profile.use_dw_stream:
         return []
 
-    # DW_PROCESSING episodes are not (yet) usable.
     episodes = (
         s.query(Episode)
         .filter(Episode.show_id == profile.show_id)
-        .filter(Episode.publish_status != EpisodePublishStatus.DW_PROCESSING.value)
+        .filter(Episode.publish_status.notin_(_UNAVAILABLE_PUBLISH_STATUSES))
         .all()
     )
 
@@ -198,6 +201,8 @@ def get_media_for_episode(
         raise HTTPException(status_code=404, detail="Episode not found")
     if not _profile_allows_episode(profile, episode):
         raise HTTPException(status_code=404, detail="Episode not included in this feed")
+    if episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
+        raise HTTPException(status_code=404, detail="Episode has no usable media")
     if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
         raise HTTPException(status_code=404, detail="Episode media is still processing")
 

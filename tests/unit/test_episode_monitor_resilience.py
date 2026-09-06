@@ -115,13 +115,13 @@ def _monitor_fixture():
     return engine, session, show, episode
 
 
-def test_monitor_marks_dailywire_404_as_dw_processing(monkeypatch):
+def test_monitor_marks_dailywire_404_as_no_usable_media(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from dailywire_api.dw_api.client import MiddlewareAPIError
-    from task_manager.tasks.helpers.episodes.processing import (
-        DwProcessingReason,
-        episode_dw_processing_reason,
-        episode_dw_processing_since,
+    from task_manager.tasks.helpers.episodes.unusable_media import (
+        NoUsableMediaReason,
+        episode_no_usable_media_reason,
+        episode_no_usable_media_since,
     )
     from task_manager.tasks.workers.monitor_episode_worker import service
 
@@ -149,13 +149,13 @@ def test_monitor_marks_dailywire_404_as_dw_processing(monkeypatch):
         )
     )
 
-    assert result is EpisodePublishStatus.DW_PROCESSING
+    assert result is EpisodePublishStatus.NO_USABLE_MEDIA
     session.expire_all()
     stored = session.query(type(episode)).one()
-    assert stored.publish_status == EpisodePublishStatus.DW_PROCESSING.value
+    assert stored.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value
     assert stored.metadata_is_final is False
-    assert episode_dw_processing_reason(stored) is DwProcessingReason.NOT_FOUND
-    first_seen = episode_dw_processing_since(stored)
+    assert episode_no_usable_media_reason(stored) is NoUsableMediaReason.NOT_FOUND
+    first_seen = episode_no_usable_media_since(stored)
     assert first_seen is not None
 
     # Another 404 is the same continuous incident and must not restart its age.
@@ -171,7 +171,7 @@ def test_monitor_marks_dailywire_404_as_dw_processing(monkeypatch):
     )
     session.expire_all()
     stored = session.query(type(episode)).one()
-    assert episode_dw_processing_since(stored) == first_seen
+    assert episode_no_usable_media_since(stored) == first_seen
 
     session.close()
     engine.dispose()

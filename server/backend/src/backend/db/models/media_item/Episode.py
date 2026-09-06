@@ -54,7 +54,7 @@ class Episode(MediaItemBase, HasMetadataMixin, HasTaskResourcesMixin):
     def _keep_no_show_status_unusable(self, _key: str, value: Optional[bool]) -> Optional[bool]:
         """Keep the model invariant that a known placeholder is never playable."""
         if value:
-            self.publish_status = EpisodePublishStatus.DW_PROCESSING.value
+            self.publish_status = EpisodePublishStatus.NO_USABLE_MEDIA.value
             self.metadata_is_final = False
         return value
 

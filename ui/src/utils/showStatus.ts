@@ -12,6 +12,8 @@ export function statusIcon(status: string) {
             return ['fas', 'clock-rotate-left'] as const
         case 'live':
             return ['fas', 'circle-video'] as const
+        case 'no_usable_media':
+            return ['fas', 'circle-exclamation'] as const
         case 'dw_processing':
         case 'local_processing':
             return ['fas', 'spinner'] as const
@@ -52,6 +54,8 @@ export function statusLabel(status: string) {
             return 'Queued'
         case 'downloading':
             return 'Downloading'
+        case 'no_usable_media':
+            return 'No usable media'
         case 'dw_processing':
             return 'Dailywire is processing the episode'
         case 'local_processing':

@@ -154,6 +154,8 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
     episode: Optional[Episode] = s.query(Episode).filter(Episode.slug == episode_slug).one_or_none()
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
+    if episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
+        raise HTTPException(status_code=422, detail="Episode has no usable media")
     if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
         raise HTTPException(status_code=422, detail="Episode media is still processing on Daily Wire")
 

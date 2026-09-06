@@ -47,9 +47,9 @@ def _make_episode(session, show, *, slug="episode"):
         index=1,
         episode_identifier="ep.1",
         slug=slug,
-        title="Processing episode",
+        title="Unavailable episode",
         duration=100.0,
-        publish_status=EpisodePublishStatus.DW_PROCESSING.value,
+        publish_status=EpisodePublishStatus.NO_USABLE_MEDIA.value,
         sharing_url=f"https://example.test/{slug}",
         published_date=(datetime.now(timezone.utc) - timedelta(hours=2)).replace(tzinfo=None),
         is_no_show_today=False,
@@ -80,20 +80,20 @@ def _patch_no_token(monkeypatch, service):
     )
 
 
-def test_cleanup_uses_configured_processing_delete_delay(db_session, monkeypatch):
+def test_cleanup_uses_configured_no_usable_media_delete_delay(db_session, monkeypatch):
     from backend.db.models import Episode
     from dailywire_api.dw_api.client import MiddlewareAPIError
-    from task_manager.tasks.helpers.episodes.processing import (
-        DwProcessingReason,
-        mark_episode_dw_processing,
+    from task_manager.tasks.helpers.episodes.unusable_media import (
+        NoUsableMediaReason,
+        mark_episode_no_usable_media,
     )
     from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
     show = _make_show(db_session)
     episode = _make_episode(db_session, show)
-    mark_episode_dw_processing(
+    mark_episode_no_usable_media(
         episode,
-        reason=DwProcessingReason.NOT_FOUND,
+        reason=NoUsableMediaReason.NOT_FOUND,
         now=datetime.now(timezone.utc) - timedelta(hours=2),
     )
     db_session.commit()
@@ -119,7 +119,7 @@ def test_cleanup_uses_configured_processing_delete_delay(db_session, monkeypatch
     assert db_session.get(Episode, episode_id) is None
 
 
-def test_force_cleanup_deletes_targeted_processing_episode_immediately(db_session, monkeypatch):
+def test_force_cleanup_deletes_targeted_no_usable_media_episode_immediately(db_session, monkeypatch):
     from backend.db.models import Episode
     from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 

@@ -268,11 +268,11 @@ export default function EpisodePage() {
     const publishStatus = String(episode.publishStatus)
     const statusLabel = PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus
     const isLive = publishStatus === 'live' || publishStatus === EpisodePublishStatus.live
-    const isDwProcessing = publishStatus === 'dw_processing'
-    const isDownloadable = !episode.isNoShowToday && (
+    const hasNoUsableMedia = publishStatus === 'no_usable_media'
+    const isDownloadable = (
         publishStatus === 'published_final' || publishStatus === EpisodePublishStatus.publishedFinal
     )
-    const earlyDeleteAfterMinutes = settingsQuery.data?.values.episodeStatusTiming.dwProcessingDeleteAfterMinutes
+    const earlyDeleteAfterMinutes = settingsQuery.data?.values.episodeStatusTiming.noUsableMediaDeleteAfterMinutes
     const earlyDeleteDisabledReason = earlyDeleteStarting
         ? 'WireLoft is starting an early delete for this episode.'
         : earlyDeleteOperation
@@ -388,7 +388,7 @@ export default function EpisodePage() {
                                         : undefined,
                                     onSelect: () => void refreshMetadata(),
                                 },
-                                ...(isDwProcessing ? [{
+                                ...(hasNoUsableMedia ? [{
                                     label: 'Early Delete',
                                     icon: ['fas', 'trash'] as [string, string],
                                     tone: 'danger' as const,
@@ -476,7 +476,7 @@ export default function EpisodePage() {
                     }}
                 >
                     <p>
-                        This episode is marked by WireLot as unusable for downloading or streaming.
+                        This episode is marked by WireLoft as unusable for downloading or streaming.
                     </p>
                     <p>
                         This could have various reasons, but could be temporary. Therefore, WireLoft keeps it around for

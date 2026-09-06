@@ -475,7 +475,7 @@ All cron strings use standard five-field cron syntax (`minute hour day-of-month 
 
 ## Episode lifecycle timing
 
-Daily Wire can report an episode as published before the media has fully transitioned away from a live/countdown version, and it can temporarily leave unusable entries in <code>dw_processing</code>. WireLoft uses these timing thresholds to handle both cases.
+Daily Wire can report an episode as published before the media has fully transitioned away from a live/countdown version, and it can temporarily expose entries with no usable media. WireLoft represents the latter as <code>no_usable_media</code>, separately from genuine <code>dw_processing</code>.
 
 <table>
 <thead>
@@ -503,17 +503,17 @@ Daily Wire can report an episode as published before the media has fully transit
 <td colspan="3">Safety fallback: usually WireLoft can very accurately determine episode status. If something seems to be hanging, this is the fallback. Minutes after publication before WireLoft can safely treat the episode as final/past the countdown stage. Must be at least the countdown threshold.</td>
 </tr>
 <tr>
-<td><code>episodeStatusTiming.dwProcessingDeleteAfterMinutes</code></td>
-<td><code>WL_EPISODE_STATUS_TIMING__DW_PROCESSING_DELETE_AFTER_MINUTES</code></td>
+<td><code>episodeStatusTiming.noUsableMediaDeleteAfterMinutes</code></td>
+<td><code>WL_EPISODE_STATUS_TIMING__NO_USABLE_MEDIA_DELETE_AFTER_MINUTES</code></td>
 <td><code>240</code> (4 hours)</td>
 </tr>
 <tr>
-<td colspan="3">How long an unusable <code>dw_processing</code> episode must remain in the same placeholder/404 incident before automatic cleanup may delete it. Both the episode and the processing incident must be at least this old. Set to <code>0</code> to make the episode eligible on the next cleanup run. The episode Actions menu can use <strong>Early Delete</strong> to bypass this delay for one processing episode.</td>
+<td colspan="3">How long an episode must remain in <code>no_usable_media</code> during the same placeholder/404 incident before automatic cleanup may delete it. Both the episode and the unusable-media incident must be at least this old. Set to <code>0</code> to make the episode eligible on the next cleanup run. The episode Actions menu can use <strong>Early Delete</strong> to bypass this delay for one <code>no_usable_media</code> episode.</td>
 </tr>
 </tbody>
 </table>
 
-The countdown and final thresholds are safety fallbacks, mostly originating from a time when The Daily Wire's API did not provide useful information about episode publish status. WireLoft now also uses the separate processing-deletion delay to avoid destroying an episode during a transient Daily Wire 404 or placeholder state.
+The countdown and final thresholds are safety fallbacks for normal publication. The separate no-usable-media deletion delay prevents WireLoft from destroying an episode during a transient Daily Wire 404 or placeholder state. Normal <code>dw_processing</code> episodes are not subject to this cleanup delay.
 
 
 ---
@@ -670,7 +670,7 @@ newEpisodeSchedule:
 episodeStatusTiming:
   publishedCountdownAfterMinutes: 20
   publishedFinalAfterMinutes: 180
-  dwProcessingDeleteAfterMinutes: 240
+  noUsableMediaDeleteAfterMinutes: 240
 
 downloadSettings:
   downloadRoot: /downloads

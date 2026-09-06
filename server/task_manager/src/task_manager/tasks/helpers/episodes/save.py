@@ -19,10 +19,10 @@ from task_manager.events.transactional import queue_event
 from .identifier import EpisodeWithIdentifier
 from .metadata import METADATA_REFRESH_REQUESTED_EVENT, metadata_is_final_for_new_episode
 from .no_show import is_no_show_today_title
-from .processing import (
-    DwProcessingReason,
-    clear_episode_dw_processing_tracking,
-    mark_episode_dw_processing,
+from .unusable_media import (
+    NoUsableMediaReason,
+    clear_episode_no_usable_media_tracking,
+    mark_episode_no_usable_media,
 )
 from .status import is_published_final, get_publish_status_from_dw_detail
 
@@ -45,7 +45,7 @@ class ResolvedEpisode:
     record: DwEpisodeRecord
     status: EpisodePublishStatus
     detail_resolved: bool
-    processing_reason: DwProcessingReason | None = None
+    unusable_media_reason: NoUsableMediaReason | None = None
 
 
 def upsert_episode(
@@ -60,7 +60,7 @@ def upsert_episode(
     was_created = episode is None
     is_no_show_today = is_no_show_today_title(ep.title)
     effective_publish_status = (
-        EpisodePublishStatus.DW_PROCESSING.value
+        EpisodePublishStatus.NO_USABLE_MEDIA.value
         if is_no_show_today
         else ep.publish_status
     )
@@ -95,12 +95,12 @@ def upsert_episode(
     s.flush()
 
     if is_no_show_today:
-        mark_episode_dw_processing(
+        mark_episode_no_usable_media(
             episode,
-            reason=DwProcessingReason.NO_SHOW_TODAY,
+            reason=NoUsableMediaReason.NO_SHOW_TODAY,
         )
-    elif effective_publish_status != EpisodePublishStatus.DW_PROCESSING.value:
-        clear_episode_dw_processing_tracking(episode)
+    elif effective_publish_status != EpisodePublishStatus.NO_USABLE_MEDIA.value:
+        clear_episode_no_usable_media_tracking(episode)
 
     s.flush()
 
@@ -134,17 +134,17 @@ def resolve_dw_episodes(
     avoid thousands of detail calls. Incremental discovery sets
     ``always_resolve_details`` so every newly seen item gets one authoritative
     detail lookup: the final-timeout fallback still wins on a successful response,
-    while a current 404 can override it with DW_PROCESSING.
+    while a current 404 can override it with NO_USABLE_MEDIA.
     """
     resolved: list[ResolvedEpisode] = []
     for ep_id, ep in episodes:
-        processing_reason: DwProcessingReason | None = None
+        unusable_media_reason: NoUsableMediaReason | None = None
 
         if is_no_show_today_title(ep.title):
-            status = EpisodePublishStatus.DW_PROCESSING
+            status = EpisodePublishStatus.NO_USABLE_MEDIA
             record: DwEpisodeRecord = ep
             detail_resolved = True
-            processing_reason = DwProcessingReason.NO_SHOW_TODAY
+            unusable_media_reason = NoUsableMediaReason.NO_SHOW_TODAY
         elif is_published_final(ep) and not always_resolve_details:
             status = EpisodePublishStatus.PUBLISHED_FINAL
             record = ep
@@ -160,29 +160,25 @@ def resolve_dw_episodes(
                     raise
                 logger.info(
                     "Daily Wire returned 404 while resolving new episode %s; "
-                    "persisting it as dw_processing",
+                    "persisting it as no_usable_media",
                     ep.slug,
                 )
                 record = ep
-                status = EpisodePublishStatus.DW_PROCESSING
+                status = EpisodePublishStatus.NO_USABLE_MEDIA
                 detail_resolved = True
-                processing_reason = DwProcessingReason.NOT_FOUND
+                unusable_media_reason = NoUsableMediaReason.NOT_FOUND
             else:
                 status = get_publish_status_from_dw_detail(record)
                 detail_resolved = True
-                if status is EpisodePublishStatus.DW_PROCESSING:
-                    processing_reason = (
-                        DwProcessingReason.NO_SHOW_TODAY
-                        if is_no_show_today_title(record.title)
-                        else DwProcessingReason.DAILY_WIRE
-                    )
+                if status is EpisodePublishStatus.NO_USABLE_MEDIA:
+                    unusable_media_reason = NoUsableMediaReason.NO_SHOW_TODAY
 
         resolved.append(ResolvedEpisode(
             episode_identifier=ep_id,
             record=record,
             status=status,
             detail_resolved=detail_resolved,
-            processing_reason=processing_reason,
+            unusable_media_reason=unusable_media_reason,
         ))
     return resolved
 
@@ -208,13 +204,15 @@ def _upsert_resolved_episode(
         ep_id=resolved.episode_identifier,
     )
 
-    if resolved.status is EpisodePublishStatus.DW_PROCESSING:
-        mark_episode_dw_processing(
+    if resolved.status is EpisodePublishStatus.NO_USABLE_MEDIA:
+        if resolved.unusable_media_reason is None:
+            raise ValueError("NO_USABLE_MEDIA episodes require an unusable-media reason")
+        mark_episode_no_usable_media(
             episode,
-            reason=resolved.processing_reason or DwProcessingReason.DAILY_WIRE,
+            reason=resolved.unusable_media_reason,
         )
     else:
-        clear_episode_dw_processing_tracking(episode)
+        clear_episode_no_usable_media_tracking(episode)
     s.flush()
 
     return SavedEpisode(

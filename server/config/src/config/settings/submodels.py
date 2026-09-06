@@ -279,10 +279,10 @@ class EpisodeStatusTiming(SubmodelBase):
         ge=0,
         description="Absolute minutes after publishedAt after which an otherwise ambiguous episode is treated as published final",
     )
-    dw_processing_delete_after_minutes: int = Field(
+    no_usable_media_delete_after_minutes: int = Field(
         default=4 * 60,
         ge=0,
-        description="Minutes an unusable episode may remain in dw_processing before automatic cleanup may delete it",
+        description="Minutes an episode may remain in no_usable_media before automatic cleanup may delete it",
     )
 
     @field_validator("published_final_after_minutes")

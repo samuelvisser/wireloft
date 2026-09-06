@@ -47,7 +47,7 @@ async def cleanup_episodes_stuck_without_media(
             episode_id=episode_id,
             force=force,
             delete_after_minutes=(
-                settings.episode_status_timing.dw_processing_delete_after_minutes
+                settings.episode_status_timing.no_usable_media_delete_after_minutes
             ),
             progress=progress,
         )

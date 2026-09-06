@@ -49,21 +49,21 @@ def test_runtime_settings_reject_final_episode_timing_before_countdown():
         )
 
 
-def test_runtime_settings_default_stuck_processing_delete_delay_is_four_hours():
+def test_runtime_settings_default_no_usable_media_delete_delay_is_four_hours():
     timing = EpisodeStatusTiming(
         published_countdown_after_minutes=20,
         published_final_after_minutes=180,
     )
 
-    assert timing.dw_processing_delete_after_minutes == 240
+    assert timing.no_usable_media_delete_after_minutes == 240
 
 
-def test_runtime_settings_reject_negative_stuck_processing_delete_delay():
+def test_runtime_settings_reject_negative_no_usable_media_delete_delay():
     with pytest.raises(ValidationError):
         EpisodeStatusTiming(
             published_countdown_after_minutes=20,
             published_final_after_minutes=180,
-            dw_processing_delete_after_minutes=-1,
+            no_usable_media_delete_after_minutes=-1,
         )
 
 

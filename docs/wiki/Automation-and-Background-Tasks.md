@@ -38,7 +38,7 @@ This is the normal job that answers: **Has Daily Wire added a new episode for th
 
 The discovery worker operates on managed shows rather than requiring a full destructive re-index of your library.
 
-When a newly discovered list entry does not yet have a usable Daily Wire detail endpoint, WireLoft keeps it as `dw_processing` rather than exposing incomplete media. A successful later monitor pass moves it through the normal publication states.
+When a newly discovered list entry does not yet have a usable Daily Wire detail endpoint, WireLoft stores it as `no_usable_media` rather than exposing incomplete media. A successful later monitor pass restores the publication state represented by Daily Wire.
 
 ### Sync now
 
@@ -58,7 +58,9 @@ Some episodes are visible before their final media is ready. WireLoft checks the
 
 This is separate from general discovery. Once WireLoft already knows an episode exists, it can monitor that small set without querying the entire library at the same frequency.
 
-A Daily Wire `404` from the episode-detail endpoint is treated as publication state, not as a reason to expose stale media: the local row becomes `dw_processing` and stays under targeted monitoring. The recurring monitor itself is the retry mechanism, so individual monitor runs do not also create scheduler retry chains.
+`no_usable_media` and `dw_processing` are deliberately separate publication states. A Daily Wire `404` from the episode-detail endpoint puts the local row in `no_usable_media`: WireLoft knows the episode exists, but Daily Wire currently exposes nothing usable for it. `dw_processing` is reserved for a valid Daily Wire episode whose media is genuinely still being processed. Both remain unavailable to downloads and RSS, but for different reasons.
+
+A `no_usable_media` episode caused by a temporary 404 stays under targeted monitoring. The recurring monitor itself is the retry mechanism, so individual monitor runs do not also create scheduler retry chains.
 
 ## Worker cron safety
 
@@ -77,7 +79,7 @@ Two timing thresholds help WireLoft interpret Daily Wire's publication state:
 
 The final threshold cannot be shorter than the countdown threshold.
 
-`episodeStatusTiming.publishedFinalAfterMinutes` is an absolute safety fallback measured directly from the episode's `publishedAt`: after that many minutes, an otherwise ambiguous successful Daily Wire response is treated as final. A currently missing (`404`) detail endpoint and a `No Show Today` placeholder deliberately override that fallback and remain `dw_processing`, because neither is usable media.
+`episodeStatusTiming.publishedFinalAfterMinutes` is an absolute safety fallback measured directly from the episode's `publishedAt`: after that many minutes, an otherwise ambiguous successful Daily Wire response is treated as final. A currently missing (`404`) detail endpoint and a `No Show Today` placeholder deliberately override that fallback and remain `no_usable_media`, because neither exposes usable media.
 
 Podcast Download Profiles can use these stages to decide whether to download an early countdown version and whether to redownload the later final version.
 
@@ -107,18 +109,18 @@ Default schedule:
 0 * * * *
 ```
 
-WireLoft runs `cleanup_episodes_stuck_without_media` once per hour by default. The worker handles two disposable Daily Wire failure modes through the same generic publication state:
+WireLoft runs `cleanup_episodes_stuck_without_media` once per hour by default. The worker handles two disposable Daily Wire failure modes through the dedicated `no_usable_media` publication state:
 
-- `No Show Today` placeholders are placed in `dw_processing` as soon as they are detected;
-- ordinary episode entries whose detail endpoint returns `404` are also placed in `dw_processing` while WireLoft waits for Daily Wire to make them usable again.
+- `No Show Today` placeholders are placed in `no_usable_media` as soon as they are detected;
+- ordinary episode entries whose detail endpoint returns `404` are also placed in `no_usable_media` while WireLoft waits for Daily Wire to make them usable again.
 
-The automatic cleanup delay is controlled by `episodeStatusTiming.dwProcessingDeleteAfterMinutes` and defaults to `240` minutes (four hours). An entry becomes eligible only when both the episode itself and the same continuous placeholder/404 processing incident have reached that age. For a 404 episode WireLoft verifies the detail endpoint once more before deleting it; a successful response clears the stale-404 incident instead.
+The automatic cleanup delay is controlled by `episodeStatusTiming.noUsableMediaDeleteAfterMinutes` and defaults to `240` minutes (four hours). Its environment-variable equivalent is `WL_EPISODE_STATUS_TIMING__NO_USABLE_MEDIA_DELETE_AFTER_MINUTES`. An entry becomes eligible only when both the episode itself and the same continuous placeholder/404 incident have reached that age. For a 404 episode WireLoft verifies the detail endpoint once more before deleting it; a successful response clears the incident and restores the episode's current publication status instead.
 
 The cleanup cadence itself is controlled by `newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron` (`WL_NEW_EPISODE_SCHEDULE__CLEANUP_EPISODES_STUCK_WITHOUT_MEDIA_CRON`). Because cleanup runs periodically, automatic deletion can occur on the first cleanup run after the configured delay has elapsed.
 
-While an episode is in `dw_processing`, its episode Actions menu also exposes **Early Delete**. This is normally unnecessary because automatic cleanup handles the episode after the configured delay. After confirmation, Early Delete runs the same cleanup worker in a targeted force mode for that one episode and removes it immediately without waiting for the delay.
+While an episode is in `no_usable_media`, its episode Actions menu also exposes **Early Delete**. This is normally unnecessary because automatic cleanup handles the episode after the configured delay. After confirmation, Early Delete runs the same cleanup worker in a targeted force mode for that one episode and removes it immediately without waiting for the delay. Normal `dw_processing` episodes do not expose Early Delete.
 
-Because download and stream eligibility already rejects `dw_processing`, profiles do not need a separate `No Show Today` exception.
+Because download and stream eligibility already use publication status, profiles do not need a separate `No Show Today` exception.
 
 ## Download execution
 

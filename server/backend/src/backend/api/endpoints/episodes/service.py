@@ -119,10 +119,10 @@ def request_episode_early_delete(
     )
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
-    if episode.publish_status != EpisodePublishStatus.DW_PROCESSING.value:
+    if episode.publish_status != EpisodePublishStatus.NO_USABLE_MEDIA.value:
         raise HTTPException(
             status_code=409,
-            detail="Early Delete is only available while an episode is processing on Daily Wire",
+            detail="Early Delete is only available while an episode has no usable media",
         )
 
     show = episode.show

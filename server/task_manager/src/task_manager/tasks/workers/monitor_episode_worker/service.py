@@ -16,10 +16,10 @@ from .scheduling import MONITOR_COMPLETED_EVENT, MONITOR_REQUESTED_EVENT
 from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.episodes.metadata import metadata_watch_expired, update_episode_from_dailywire
-from ...helpers.episodes.processing import (
-    DwProcessingReason,
-    clear_episode_dw_processing_tracking,
-    mark_episode_dw_processing,
+from ...helpers.episodes.unusable_media import (
+    NoUsableMediaReason,
+    clear_episode_no_usable_media_tracking,
+    mark_episode_no_usable_media,
 )
 from ...helpers.episodes.status import get_publish_status_from_dw_detail
 from ...helpers.shows.get import get_show_from_params
@@ -82,15 +82,15 @@ async def run_monitor_episode_worker(
         if exc.status_code != 404:
             raise
 
-        # A list entry whose detail endpoint currently 404s is not usable media.
-        # Keep it under the monitor lifecycle but put it in the generic processing
-        # state. Repeated 404s preserve the first-observed timestamp, allowing the
-        # hourly cleanup worker to remove entries that remain broken for four hours.
+        # A list entry whose detail endpoint currently 404s has no usable media.
+        # Keep it under the monitor lifecycle, but use the dedicated status rather
+        # than conflating this with genuine Daily Wire processing. Repeated 404s
+        # preserve the first-observed timestamp for the cleanup worker.
         old_status = db_episode.publish_status
-        new_status = EpisodePublishStatus.DW_PROCESSING
-        mark_episode_dw_processing(
+        new_status = EpisodePublishStatus.NO_USABLE_MEDIA
+        mark_episode_no_usable_media(
             db_episode,
-            reason=DwProcessingReason.NOT_FOUND,
+            reason=NoUsableMediaReason.NOT_FOUND,
         )
         s.flush()
         queue_episode_status_events(
@@ -119,18 +119,14 @@ async def run_monitor_episode_worker(
     old_status = db_episode.publish_status
 
     update_episode_from_dailywire(db_episode, dw_episode)
-    if new_status is EpisodePublishStatus.DW_PROCESSING:
-        mark_episode_dw_processing(
+    if new_status is EpisodePublishStatus.NO_USABLE_MEDIA:
+        mark_episode_no_usable_media(
             db_episode,
-            reason=(
-                DwProcessingReason.NO_SHOW_TODAY
-                if db_episode.is_no_show_today
-                else DwProcessingReason.DAILY_WIRE
-            ),
+            reason=NoUsableMediaReason.NO_SHOW_TODAY,
         )
     else:
         db_episode.publish_status = new_status.value
-        clear_episode_dw_processing_tracking(db_episode)
+        clear_episode_no_usable_media_tracking(db_episode)
         if new_status is EpisodePublishStatus.PUBLISHED_FINAL:
             # This poll itself is a fresh metadata check. If the entire configured
             # settling window has already elapsed, no follow-up work is required.

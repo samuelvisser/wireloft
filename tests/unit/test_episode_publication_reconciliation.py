@@ -99,7 +99,7 @@ def test_no_show_today_overrides_absolute_final_fallback(monkeypatch):
         published_at=datetime.now(timezone.utc) - timedelta(days=1),
     )
 
-    assert status.get_publish_status_from_dw_detail(detail) is EpisodePublishStatus.DW_PROCESSING
+    assert status.get_publish_status_from_dw_detail(detail) is EpisodePublishStatus.NO_USABLE_MEDIA
     assert status.is_published_final(detail) is False
 
 
@@ -107,7 +107,7 @@ def test_incremental_detail_404_overrides_age_fallback(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from dailywire_api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.helpers.episodes import save, status
-    from task_manager.tasks.helpers.episodes.processing import DwProcessingReason
+    from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
 
     monkeypatch.setattr(
         status,
@@ -134,8 +134,8 @@ def test_incremental_detail_404_overrides_age_fallback(monkeypatch):
         always_resolve_details=True,
     )
 
-    assert resolved.status is EpisodePublishStatus.DW_PROCESSING
-    assert resolved.processing_reason is DwProcessingReason.NOT_FOUND
+    assert resolved.status is EpisodePublishStatus.NO_USABLE_MEDIA
+    assert resolved.unusable_media_reason is NoUsableMediaReason.NOT_FOUND
     assert resolved.detail_resolved is True
 
 
@@ -306,8 +306,8 @@ def test_identifier_reconciliation_keeps_wireloft_extra_ordinal_for_dw_segment_1
     engine.dispose()
 
 
-def test_stuck_processing_cleanup_defaults_to_hourly():
+def test_unusable_media_cleanup_defaults_to_hourly():
     from config.settings.settings import AppSettings
 
     settings = AppSettings(timezone="UTC")
-    assert settings.new_episode_schedule.check_no_show_today_cron == "0 * * * *"
+    assert settings.new_episode_schedule.cleanup_episodes_stuck_without_media_cron == "0 * * * *"

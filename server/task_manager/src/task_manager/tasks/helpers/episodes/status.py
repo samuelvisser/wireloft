@@ -39,11 +39,10 @@ def is_published_final(episode: DwEpisode | DbEpisode):
 
 
 def get_publish_status_from_dw_detail(dw_ep: DwEpisodeDetailRecord) -> EpisodePublishStatus:
-    # "No Show Today" entries are placeholders, not playable episodes. Keeping
-    # them in DW_PROCESSING makes all media eligibility logic treat them like any
-    # other temporarily unusable Daily Wire item.
+    # "No Show Today" entries are placeholders rather than a normal Daily Wire
+    # processing phase. They belong to WireLoft's dedicated no-usable-media state.
     if is_no_show_today_title(dw_ep.title):
-        return EpisodePublishStatus.DW_PROCESSING
+        return EpisodePublishStatus.NO_USABLE_MEDIA
 
     # Hard cutoff to prevent stale or contradictory Daily Wire state from keeping
     # an episode pending forever. This intentionally ignores episode duration:

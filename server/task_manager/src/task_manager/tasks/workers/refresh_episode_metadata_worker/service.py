@@ -21,10 +21,11 @@ from ...helpers.episodes.metadata import (
     metadata_watch_expired,
     update_episode_from_dailywire,
 )
-from ...helpers.episodes.processing import (
-    DwProcessingReason,
-    clear_episode_dw_processing_tracking,
-    mark_episode_dw_processing,
+from ...helpers.episodes.status import get_publish_status_from_dw_detail
+from ...helpers.episodes.unusable_media import (
+    NoUsableMediaReason,
+    clear_episode_no_usable_media_tracking,
+    mark_episode_no_usable_media,
 )
 from ..monitor_episode_worker.scheduling import MONITOR_REQUESTED_EVENT
 from .scheduling import remove_episode_metadata_jobs, schedule_remaining_metadata_checks
@@ -85,9 +86,9 @@ async def run_refresh_episode_metadata_worker(
             not detail_available
             or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value
         ):
-            # A 404 or newly recognized placeholder moved the row back to
-            # DW_PROCESSING. Final-metadata jobs no longer apply; normal episode
-            # monitoring (or the hourly no-show cleanup) owns it from here.
+            # A 404 or newly recognized placeholder moved the row to
+            # NO_USABLE_MEDIA. Final-metadata jobs no longer apply; normal episode
+            # monitoring or unusable-media cleanup owns it from here.
             episode.metadata_is_final = False
             s.commit()
             remove_episode_metadata_jobs(episode.id)
@@ -182,10 +183,10 @@ def _refresh_episode_from_dailywire(s: Session, episode: Episode) -> bool:
         if exc.status_code != 404:
             raise
 
-        new_status = EpisodePublishStatus.DW_PROCESSING
-        mark_episode_dw_processing(
+        new_status = EpisodePublishStatus.NO_USABLE_MEDIA
+        mark_episode_no_usable_media(
             episode,
-            reason=DwProcessingReason.NOT_FOUND,
+            reason=NoUsableMediaReason.NOT_FOUND,
         )
         queue_episode_status_events(
             s,
@@ -213,10 +214,10 @@ def _refresh_episode_from_dailywire(s: Session, episode: Episode) -> bool:
     update_episode_from_dailywire(episode, dw_episode)
 
     if episode.is_no_show_today:
-        new_status = EpisodePublishStatus.DW_PROCESSING
-        mark_episode_dw_processing(
+        new_status = EpisodePublishStatus.NO_USABLE_MEDIA
+        mark_episode_no_usable_media(
             episode,
-            reason=DwProcessingReason.NO_SHOW_TODAY,
+            reason=NoUsableMediaReason.NO_SHOW_TODAY,
         )
         queue_episode_status_events(
             s,
@@ -227,10 +228,19 @@ def _refresh_episode_from_dailywire(s: Session, episode: Episode) -> bool:
             was_created=False,
         )
     else:
-        # A successful detail lookup ended any prior 404 incident. Metadata refresh
-        # and the live monitor use the same application-level reconciliation path,
-        # including the post-publication identifier-change domain event.
-        clear_episode_dw_processing_tracking(episode)
+        # A successful detail lookup ended any previous unusable-media incident.
+        # If this refresh itself recovered such an episode, immediately restore its
+        # real lifecycle status instead of leaving it mislabeled until another poll.
+        clear_episode_no_usable_media_tracking(episode)
+        if old_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
+            recovered_status = get_publish_status_from_dw_detail(dw_episode)
+            episode.publish_status = recovered_status.value
+            if recovered_status is not EpisodePublishStatus.PUBLISHED_FINAL:
+                queue_event(
+                    s,
+                    MONITOR_REQUESTED_EVENT,
+                    episode_event_payload(episode=episode, show=show, old_status=old_status),
+                )
         reconcile_episode_identifier(
             s,
             episode,
