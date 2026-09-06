@@ -1,6 +1,7 @@
 import type {SettingsTabProps} from './SettingsTabTypes'
 import CronEditor from './CronEditor'
 import {
+    DurationField,
     NumberField,
     SettingsDisclosure,
     SettingsSection,
@@ -39,12 +40,11 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     })}
                     help="Upper bound for parallel background task workers."
                 />
-                <NumberField
+                <DurationField
                     id="settings-scheduler-stalled-timeout"
                     label="Stalled task timeout"
                     value={draft.scheduler.stalledTaskTimeoutMinutes}
-                    min={1}
-                    unit="minutes"
+                    backendUnit="minutes"
                     error={errorFor('scheduler.stalledTaskTimeoutMinutes')}
                     environmentVariable={environmentVariableFor('scheduler.stalledTaskTimeoutMinutes')}
                     onChange={(value) => updateDraft((next) => {
@@ -64,13 +64,12 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     })}
                     help="Used when a task or schedule does not specify its own retry count."
                 />
-                <NumberField
+                <DurationField
                     id="settings-scheduler-backoff"
                     label="Retry backoff"
                     value={draft.scheduler.retryBackoffSeconds}
-                    min={0}
+                    backendUnit="seconds"
                     step={0.5}
-                    unit="seconds"
                     error={errorFor('scheduler.retryBackoffSeconds')}
                     environmentVariable={environmentVariableFor('scheduler.retryBackoffSeconds')}
                     onChange={(value) => updateDraft((next) => {
@@ -172,12 +171,11 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                 title="Episode lifecycle timing"
                 description="Fallback and cleanup thresholds used while Daily Wire episode state is settling."
             >
-                <NumberField
+                <DurationField
                     id="settings-published-countdown"
                     label="Countdown publication threshold"
                     value={draft.episodeStatusTiming.publishedCountdownAfterMinutes}
-                    min={0}
-                    unit="minutes"
+                    backendUnit="minutes"
                     error={errorFor('episodeStatusTiming.publishedCountdownAfterMinutes')}
                     environmentVariable={environmentVariableFor('episodeStatusTiming.publishedCountdownAfterMinutes')}
                     onChange={(value) => updateDraft((next) => {
@@ -185,12 +183,11 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     })}
                     help="When a scheduled episode may first be treated as published while final media is still processing."
                 />
-                <NumberField
+                <DurationField
                     id="settings-published-final"
                     label="Final publication threshold"
                     value={draft.episodeStatusTiming.publishedFinalAfterMinutes}
-                    min={0}
-                    unit="minutes"
+                    backendUnit="minutes"
                     error={errorFor('episodeStatusTiming.publishedFinalAfterMinutes')}
                     environmentVariable={environmentVariableFor('episodeStatusTiming.publishedFinalAfterMinutes')}
                     onChange={(value) => updateDraft((next) => {

@@ -1,8 +1,7 @@
 import type {SettingsValues} from '../../types/schemas/settings'
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {
-    humanizeSeconds,
-    NumberField,
+    DurationField,
     SelectField,
     SettingsSection,
     TextField,
@@ -42,18 +41,16 @@ export default function GeneralSettingsTab({draft, updateDraft, environmentVaria
                 title="Login session"
                 description="Controls how long a signed-in browser remains authenticated."
             >
-                <NumberField
+                <DurationField
                     id="settings-session-ttl"
                     label="Session lifetime"
                     value={draft.loginSession.ttlSeconds}
-                    min={60}
-                    unit="seconds"
+                    backendUnit="seconds"
                     error={errorFor('loginSession.ttlSeconds')}
                     environmentVariable={environmentVariableFor('loginSession.ttlSeconds')}
                     onChange={(value) => updateDraft((next) => {
                         next.loginSession.ttlSeconds = value
                     })}
-                    help={`Currently ${humanizeSeconds(draft.loginSession.ttlSeconds)}.`}
                 />
             </SettingsSection>
         </>

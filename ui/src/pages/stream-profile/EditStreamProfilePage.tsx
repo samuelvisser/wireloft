@@ -6,6 +6,7 @@ import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {useDownloadProfilesView} from '../../lib/queries'
 import {StreamProfileReadView} from '../../types/schemas/stream_profile_base'
 import StreamProfileForm from '../../components/StreamProfile/StreamProfileForm'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {RssStreamProfileUpdateIn, RssStreamProfileUpdateSchema} from '../../types/schemas/rss_stream_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 
@@ -60,9 +61,11 @@ export default function EditStreamProfilePage() {
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
 
     const [regenerating, setRegenerating] = useState(false)
-    const onRegenerateToken = useCallback(async () => {
-        if (!profileId) return
-        if (!window.confirm('Regenerating will immediately invalidate the current feed URL. Any podcast app already subscribed to it will need the new URL. Continue?')) return
+    const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false)
+    const onRegenerateToken = useCallback(() => setRegenerateConfirmOpen(true), [])
+    const regenerateToken = useCallback(async () => {
+        if (!profileId || regenerating) return
+        setRegenerateConfirmOpen(false)
         setRegenerating(true)
         try {
             const res = await fetch(`${(window as any).appConfig.API_URL}/rss-stream-profiles/${profileId}/regenerate-token`, {
@@ -78,7 +81,7 @@ export default function EditStreamProfilePage() {
         } finally {
             setRegenerating(false)
         }
-    }, [profileId, id, qc, form])
+    }, [profileId, regenerating, id, qc, form])
 
     const submitFn = async (data: RssStreamProfileUpdateIn) => {
         if (!profileId) return undefined as any
@@ -160,6 +163,23 @@ export default function EditStreamProfilePage() {
                     </div>
                 </form>
             )}
+
+            <ConfirmDialog
+                open={regenerateConfirmOpen}
+                title="Regenerate RSS feed URL"
+                onDismiss={() => setRegenerateConfirmOpen(false)}
+                icon={['fas', 'rotate']}
+                iconTone="danger"
+                confirmButton={{
+                    label: 'Regenerate URL',
+                    onClick: regenerateToken,
+                    icon: ['fas', 'rotate'],
+                    className: 'btn btn-danger',
+                }}
+            >
+                <p>Regenerating will immediately invalidate the current feed URL.</p>
+                <p>Any podcast app already subscribed to it will need the new URL.</p>
+            </ConfirmDialog>
         </section>
     )
 }

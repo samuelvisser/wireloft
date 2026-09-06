@@ -1,6 +1,6 @@
 import DailywireAuthCard from '../DailywireAuth/DailywireAuthCard'
 import type {SettingsTabProps} from './SettingsTabTypes'
-import {NumberField, SettingsDisclosure, TextField} from './SettingsControls'
+import {DurationField, NumberField, SettingsDisclosure, TextField} from './SettingsControls'
 
 export default function DailyWireSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
     return (
@@ -89,12 +89,11 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
                 title="Request pacing"
                 description="Rate-control thresholds used when WireLoft talks to DailyWire."
             >
-                <NumberField
+                <DurationField
                     id="settings-fast-request-delay"
                     label="Minimum fast-request delay"
                     value={draft.dwTimeout.minFastRequestMs}
-                    min={0}
-                    unit="ms"
+                    backendUnit="milliseconds"
                     error={errorFor('dwTimeout.minFastRequestMs')}
                     environmentVariable={environmentVariableFor('dwTimeout.minFastRequestMs')}
                     onChange={(value) => updateDraft((next) => {
@@ -112,12 +111,11 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
                         next.dwTimeout.maxFastRequests = value
                     })}
                 />
-                <NumberField
+                <DurationField
                     id="settings-slow-request-delay"
                     label="Minimum slow-request delay"
                     value={draft.dwTimeout.minSlowRequestMs}
-                    min={0}
-                    unit="ms"
+                    backendUnit="milliseconds"
                     error={errorFor('dwTimeout.minSlowRequestMs')}
                     environmentVariable={environmentVariableFor('dwTimeout.minSlowRequestMs')}
                     onChange={(value) => updateDraft((next) => {
