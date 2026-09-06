@@ -479,12 +479,17 @@ export default function EpisodePage() {
                             <h2 id="early-delete-title" className="modal-title">Early Delete</h2>
                         </div>
                         <p id="early-delete-desc" className="modal-text">
-                            WireLoft automatically deletes this episode after it has remained unusable in Daily Wire processing for{' '}
-                            <strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong>. You do not normally need to delete it manually.
-                        </p>
-                        <p className="modal-text">
-                            Deleting it early permanently removes it now without waiting for that automatic cleanup delay.
-                        </p>
+                            <p>
+                                This episode is marked by WireLot as unusable for downloading or streaming.
+                            </p>
+                            <p>
+                                This could have various reasons, but could be temporary. Therefore, WireLoft keeps it around for
+                                {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> before it auto-deletes it.
+                            </p>
+                            <p>
+                                If you want though, you can delete it early now. This is a permanent action and cannot be undone.
+                            </p>
+                         </p>
                         <div className="modal-actions">
                             <button
                                 type="button"
@@ -507,7 +512,7 @@ export default function EpisodePage() {
                 </div>
             )}
 
-            <style>{`
+            <style type="text/css">{`
         .episode-view { padding-top: 0; }
         .episode-details { width: min(100%, 980px); margin: 0 auto; }
         .episode-breadcrumb { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; color: var(--muted, #777); font-size: 0.9rem; }
