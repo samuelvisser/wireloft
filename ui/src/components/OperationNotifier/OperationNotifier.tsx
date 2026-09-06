@@ -116,10 +116,10 @@ function successMessage(operation: TaskOperationRead): string {
     }
     case 'show.redownload_episodes': {
       const files = resultNumber(operation, 'episode_files') ?? 0
-      const profiles = resultNumber(operation, 'download_profiles')
+      const profiles = resultNumber(operation, 'local_media_profiles')
       const profileDetail = profiles === undefined
         ? ''
-        : ` using ${profiles} ${plural(profiles, 'Download Profile')}`
+        : ` using ${profiles} ${plural(profiles, 'Local Media Profile')}`
       return `Re-download finished for ${showTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
     }
     case 'media.download':
@@ -239,9 +239,6 @@ export default function OperationNotifier({children}: {children: ReactNode}) {
   const {data: pullData} = useFrontendPuller()
   const operations = pullData?.operations ?? []
 
-  // If another browser acknowledges a terminal operation before this browser
-  // observes the terminal snapshot, it disappears from the pull. Remembering the
-  // active snapshot still lets this browser refresh the affected ordinary queries.
   useEffect(() => {
     if (!pullData) return
 
@@ -259,9 +256,6 @@ export default function OperationNotifier({children}: {children: ReactNode}) {
     previousActiveRef.current = currentActive
   }, [operations, pullData, queryClient])
 
-  // Every terminal operation stays in the generic pull until a frontend has
-  // processed the domain-data refresh it implies. UI operations additionally get
-  // a toast; automated/API work is acknowledged silently after invalidation.
   useEffect(() => {
     for (const operation of operations) {
       if (
@@ -291,8 +285,6 @@ export default function OperationNotifier({children}: {children: ReactNode}) {
             await refreshFrontendPuller(queryClient)
           }
         } catch {
-          // Leave an unacknowledged operation durable server-side so a later
-          // browser reload can retry the cache refresh/acknowledgement path.
         }
       })()
     }

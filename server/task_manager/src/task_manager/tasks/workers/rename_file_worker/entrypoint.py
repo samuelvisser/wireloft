@@ -20,11 +20,10 @@ async def rename_file_worker(
         *,
         resource_id: int | None = None,
         progress=None,
-        download_profile_id: int | None = None,
         local_media_profile_id: int | None = None,
         identifier_fields_only: bool = False,
 ) -> TaskResult:
-    """Rename the existing files for one episode in the requested profile scope."""
+    """Rename the existing files for one episode in the requested Local Media Profile scope."""
     if resource_id is None:
         raise ValueError("Rename File requires an episode resource")
 
@@ -32,7 +31,6 @@ async def rename_file_worker(
         return await run_rename_file_worker(
             s,
             episode_id=resource_id,
-            download_profile_id=download_profile_id,
             local_media_profile_id=local_media_profile_id,
             identifier_fields_only=identifier_fields_only,
             progress=progress,

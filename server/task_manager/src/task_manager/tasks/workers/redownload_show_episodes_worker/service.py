@@ -13,8 +13,8 @@ from ._helpers import (
     _cancel_targets,
     _check_targets,
     _prepare_redownloads,
-    _selected_profiles,
-    _target_episode_profiles,
+    _selected_download_ids,
+    _selected_local_media_profile_count,
 )
 
 
@@ -22,10 +22,10 @@ async def run_redownload_show_episodes_worker(
         s: Session,
         *,
         show_id: int | None,
-        download_profile_id: int | None = None,
+        local_media_profile_id: int | None = None,
         progress=None,
 ) -> dict[str, Any]:
-    """Coordinate a show-wide replacement through child media.download operations."""
+    """Re-download the show's existing EpisodeMediaDownload rows in the requested profile scope."""
     if show_id is None:
         raise ValueError("Show id is required")
 
@@ -33,29 +33,28 @@ async def run_redownload_show_episodes_worker(
     if show is None:
         raise ValueError(f"Show {show_id} no longer exists")
 
-    profiles = _selected_profiles(
+    media_download_ids = _selected_download_ids(
         s,
         show_id=show.id,
-        download_profile_id=download_profile_id,
+        local_media_profile_id=local_media_profile_id,
     )
+    profile_count = _selected_local_media_profile_count(s, media_download_ids)
     base_result: dict[str, Any] = {
         "show_id": show.id,
         "show_slug": show.slug,
         "show_title": show.title,
-        "download_profiles": len(profiles),
+        "local_media_profiles": profile_count,
     }
-    if not profiles:
-        update_progress(progress, 100, "No Download Profiles are attached to this show")
+    if not media_download_ids:
+        update_progress(progress, 100, "No existing episode downloads to re-download")
         return {**base_result, "episode_files": 0}
 
-    episode_profiles = _target_episode_profiles(s, profiles)
-    if not episode_profiles:
-        update_progress(progress, 100, "No eligible episodes to re-download")
-        return {**base_result, "episode_files": 0}
-
-    update_progress(progress, 1, f"Preparing {len(episode_profiles)} episode download(s)")
-    targets = _prepare_redownloads(s, episode_profiles)
+    update_progress(progress, 1, f"Preparing {len(media_download_ids)} episode download(s)")
+    targets = _prepare_redownloads(s, media_download_ids)
     total = len(targets)
+    if total == 0:
+        update_progress(progress, 100, "No existing episode downloads remained to re-download")
+        return {**base_result, "episode_files": 0}
 
     try:
         while True:
@@ -80,7 +79,5 @@ async def run_redownload_show_episodes_worker(
                 f"Re-downloaded {completed}/{total} episode file(s)",
             )
     except Exception:
-        # A canceled/failed parent operation must not leave independent child
-        # downloads running after the high-level user action has ended.
         _cancel_targets(targets, reason="Parent show re-download stopped")
         raise

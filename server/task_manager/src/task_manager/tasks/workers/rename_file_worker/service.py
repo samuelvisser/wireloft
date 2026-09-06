@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from backend.db.models import DownloadProfileBase, Episode
+from backend.db.models import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.output_template import output_template_fields, resolve_episode_output_path
@@ -29,7 +29,6 @@ async def run_rename_file_worker(
         s: Session,
         *,
         episode_id: int,
-        download_profile_id: int | None = None,
         local_media_profile_id: int | None = None,
         identifier_fields_only: bool = False,
         progress=None,
@@ -42,9 +41,6 @@ async def run_rename_file_worker(
     idempotent and lets retries recover a move that reached the filesystem before
     the database path was committed.
     """
-    if download_profile_id is not None and local_media_profile_id is not None:
-        raise ValueError("Rename File can filter by Download Profile or Local Media Profile, not both")
-
     episode = s.get(Episode, episode_id)
     if episode is None:
         update_progress(progress, 100, f"Episode {episode_id} no longer exists")
@@ -58,13 +54,6 @@ async def run_rename_file_worker(
             },
         )
 
-    scoped_local_media_profile_id = local_media_profile_id
-    if download_profile_id is not None:
-        download_profile = s.get(DownloadProfileBase, download_profile_id)
-        if download_profile is None:
-            raise ValueError(f"Download Profile {download_profile_id} no longer exists")
-        scoped_local_media_profile_id = download_profile.local_media_profile_id
-
     query = (
         s.query(EpisodeMediaDownload)
         .filter(
@@ -73,9 +62,9 @@ async def run_rename_file_worker(
         )
         .order_by(EpisodeMediaDownload.id.asc())
     )
-    if scoped_local_media_profile_id is not None:
+    if local_media_profile_id is not None:
         query = query.filter(
-            EpisodeMediaDownload.local_media_profile_id == scoped_local_media_profile_id,
+            EpisodeMediaDownload.local_media_profile_id == local_media_profile_id,
         )
 
     downloads = query.all()

@@ -20,7 +20,7 @@ class ShowMetadataOperationAccepted(TaskOperationAccepted):
 
 class ShowFileRenameOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
-    download_profiles_queued: int
+    local_media_profiles_queued: int
 
 
 class LocalMediaProfileFileRenameOperationAccepted(TaskOperationAccepted):
@@ -28,7 +28,7 @@ class LocalMediaProfileFileRenameOperationAccepted(TaskOperationAccepted):
 
 
 class ShowRedownloadOperationAccepted(TaskOperationAccepted):
-    download_profiles_queued: int
+    local_media_profiles_queued: int
 
 
 class EpisodeMetadataOperationAccepted(TaskOperationAccepted):
