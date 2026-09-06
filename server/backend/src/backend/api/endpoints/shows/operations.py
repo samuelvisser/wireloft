@@ -9,6 +9,7 @@ from task_manager.scheduler.operations import OperationTargetSpec
 
 _FETCH_EPISODES_TASK_KEY = "fetch_new_episodes"
 _REFRESH_METADATA_TASK_KEY = "refresh_episode_metadata_worker"
+_RENAME_FILE_TASK_KEY = "rename_file_worker"
 _REDOWNLOAD_TASK_KEY = "redownload_show_episodes_worker"
 
 
@@ -55,6 +56,42 @@ class ShowMetadataRefreshOperation(_ShowOperation):
         return {
             **super().context(),
             "episodes_requested": len(self.episodes),
+        }
+
+
+class ShowFileRenameOperation(_ShowOperation):
+    kind = "show.rename_files"
+
+    def __init__(
+        self,
+        show: Show,
+        episodes: Sequence[Episode],
+        *,
+        download_profile_id: int | None,
+        selected_profile_count: int,
+    ) -> None:
+        super().__init__(show)
+        self.episodes = tuple(episodes)
+        self.download_profile_id = download_profile_id
+        self.selected_profile_count = selected_profile_count
+
+    def targets(self) -> tuple[OperationTargetSpec, ...]:
+        return tuple(
+            OperationTargetSpec(
+                task_key=_RENAME_FILE_TASK_KEY,
+                resource_type="episode",
+                resource_id=episode.id,
+                task_kwargs={"download_profile_id": self.download_profile_id},
+                slot_key=f"episode:{episode.id}",
+            )
+            for episode in self.episodes
+        )
+
+    def context(self) -> dict[str, object]:
+        return {
+            **super().context(),
+            "episodes_requested": len(self.episodes),
+            "download_profiles_requested": self.selected_profile_count,
         }
 
 

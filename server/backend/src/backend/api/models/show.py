@@ -48,6 +48,12 @@ class ShowAPIUpdate(_ShowAPIBaseIn):
     pass
 
 
+class ShowFileRenameAPIRequest(RequestBase):
+    """Select one Download Profile, or every attached profile when omitted."""
+
+    download_profile_id: Optional[int] = Field(default=None, gt=0)
+
+
 class ShowRedownloadEpisodesAPIRequest(RequestBase):
     """Select one Download Profile, or every attached profile when omitted."""
 

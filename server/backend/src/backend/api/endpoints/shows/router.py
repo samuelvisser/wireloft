@@ -10,9 +10,11 @@ from .service import (
     delete_show,
     request_show_sync,
     request_show_metadata_refresh,
+    request_show_file_rename,
     request_show_episode_redownload,
 )
 from ...models.operations import (
+    ShowFileRenameOperationAccepted,
     ShowMetadataOperationAccepted,
     ShowRedownloadOperationAccepted,
     TaskOperationAccepted,
@@ -21,6 +23,7 @@ from ...models.show import (
     ShowAPIRead,
     ShowAPICreate,
     ShowAPIUpdate,
+    ShowFileRenameAPIRequest,
     ShowRedownloadEpisodesAPIRequest,
 )
 from backend.app import db_session
@@ -87,6 +90,27 @@ def show_metadata_refresh(show_slug: str):
     with db_session() as s:
         try:
             result = request_show_metadata_refresh(s, show_slug)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post(
+    "/{show_slug}/rename-files",
+    response_model=ShowFileRenameOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def show_rename_files(show_slug: str, body: ShowFileRenameAPIRequest):
+    """Rename existing episode files through one or every attached Download Profile."""
+    with db_session() as s:
+        try:
+            result = request_show_file_rename(
+                s,
+                show_slug,
+                body.download_profile_id,
+            )
             s.commit()
             return result
         except Exception:

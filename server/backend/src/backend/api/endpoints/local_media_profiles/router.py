@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from .service import *
 from ...models.local_media_profile import *
+from ...models.operations import LocalMediaProfileFileRenameOperationAccepted
 from backend.app import db_session
 
 router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles"])
@@ -61,6 +62,23 @@ def local_media_profile_template_preview(body: LocalMediaProfileTemplatePreview)
                 "type": "value_error",
             }],
         ) from exc
+
+
+@router.post(
+    "/{local_media_profile_slug}/rename-files",
+    response_model=LocalMediaProfileFileRenameOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def local_media_profile_rename_files(local_media_profile_slug: str):
+    """Rename every existing episode file affected by this Local Media Profile."""
+    with db_session() as s:
+        try:
+            result = request_local_media_profile_file_rename(s, local_media_profile_slug)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
 
 
 @router.get("/{local_media_profile_slug}", response_model=LocalMediaProfileAPIRead)

@@ -60,6 +60,9 @@ function operationLabel(operation: TaskOperationRead): string {
     case 'show.refresh_metadata':
     case 'episode.refresh_metadata':
       return 'Metadata refresh'
+    case 'show.rename_files':
+    case 'local_media_profile.rename_files':
+      return 'File Rename'
     case 'show.redownload_episodes':
       return 'Re-download'
     case 'movie.refresh_extras':
@@ -69,6 +72,16 @@ function operationLabel(operation: TaskOperationRead): string {
     default:
       return operation.title || 'Operation'
   }
+}
+
+function fileRenameSuccessMessage(operation: TaskOperationRead, title: string): string {
+  const renamed = (resultNumber(operation, 'files_renamed') ?? 0)
+    + (resultNumber(operation, 'files_recovered') ?? 0)
+  const unchanged = resultNumber(operation, 'files_unchanged') ?? 0
+  const considered = resultNumber(operation, 'files_considered') ?? (renamed + unchanged)
+  if (considered === 0) return `No existing files needed renaming for ${title}`
+  const unchangedDetail = unchanged > 0 ? `; ${unchanged} already matched` : ''
+  return `File Rename finished for ${title}: ${renamed} ${plural(renamed, 'file')} renamed${unchangedDetail}`
 }
 
 function successMessage(operation: TaskOperationRead): string {
@@ -94,6 +107,12 @@ function successMessage(operation: TaskOperationRead): string {
     case 'episode.refresh_metadata': {
       const episodeTitle = contextString(operation, 'episode_title') || operation.title
       return `Metadata refresh completed for ${episodeTitle}`
+    }
+    case 'show.rename_files':
+      return fileRenameSuccessMessage(operation, showTitle)
+    case 'local_media_profile.rename_files': {
+      const profileName = contextString(operation, 'local_media_profile_name') || operation.title
+      return fileRenameSuccessMessage(operation, profileName)
     }
     case 'show.redownload_episodes': {
       const files = resultNumber(operation, 'episode_files') ?? 0
@@ -163,8 +182,19 @@ async function invalidateForOperation(queryClient: QueryClient, operation: TaskO
     }
   }
 
-  if (operation.kind === 'show.redownload_episodes') {
+  if (
+    operation.kind === 'show.redownload_episodes'
+    || operation.kind === 'show.rename_files'
+    || operation.kind === 'local_media_profile.rename_files'
+  ) {
     invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+  }
+
+  if (operation.kind === 'local_media_profile.rename_files') {
+    invalidations.push(
+      queryClient.invalidateQueries({queryKey: ['localMediaProfiles']}),
+      queryClient.invalidateQueries({queryKey: ['localMediaProfile']}),
+    )
   }
 
   if (operation.kind === 'episode.refresh_metadata') {

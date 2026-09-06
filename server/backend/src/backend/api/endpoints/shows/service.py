@@ -9,6 +9,8 @@ from backend.api.models.show import *
 from fastapi import HTTPException
 
 from backend.db.models import DownloadProfileBase, Episode, Show
+from backend.db.models.media_download import EpisodeMediaDownload
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import (
@@ -18,10 +20,17 @@ from task_manager.scheduler.operations import (
 
 from .events import ShowAdded
 from .operations import (
+    ShowFileRenameOperation,
     ShowIndexOperation,
     ShowMetadataRefreshOperation,
     ShowRedownloadOperation,
     ShowSyncOperation,
+)
+
+
+_PHYSICAL_ARTIFACT_STATUSES = (
+    MediaDownloadArtifactStatus.AVAILABLE.value,
+    MediaDownloadArtifactStatus.CORRUPTED.value,
 )
 
 
@@ -159,6 +168,92 @@ def request_show_metadata_refresh(
     return {
         "queued": bool(episodes),
         "episodes_queued": len(episodes),
+        "operation_id": operation.id,
+    }
+
+
+def request_show_file_rename(
+        s: Session,
+        show_slug: str,
+        download_profile_id: int | None,
+) -> dict[str, bool | int | str]:
+    """Rename existing episode files for one or every Download Profile on a show."""
+    show = (
+        s.query(Show)
+        .filter_by(slug=show_slug)
+        .one_or_none()
+    )
+    if show is None:
+        raise HTTPException(status_code=404, detail="Show not found")
+
+    attached_profiles = (
+        s.query(DownloadProfileBase)
+        .filter_by(show_id=show.id)
+        .order_by(DownloadProfileBase.id.asc())
+        .all()
+    )
+    if not attached_profiles:
+        raise HTTPException(status_code=422, detail="This show has no Download Profiles")
+
+    if download_profile_id is None:
+        selected_profiles = attached_profiles
+    else:
+        selected_profile = next(
+            (profile for profile in attached_profiles if profile.id == download_profile_id),
+            None,
+        )
+        if selected_profile is None:
+            raise HTTPException(status_code=422, detail="Download Profile is not attached to this show")
+        selected_profiles = [selected_profile]
+
+    selected_profile_count = len(selected_profiles)
+    selected_local_media_profile_ids = {
+        profile.local_media_profile_id
+        for profile in selected_profiles
+    }
+    episodes = (
+        s.query(Episode)
+        .join(EpisodeMediaDownload, EpisodeMediaDownload.media_item_id == Episode.id)
+        .filter(
+            Episode.show_id == show.id,
+            EpisodeMediaDownload.local_media_profile_id.in_(selected_local_media_profile_ids),
+            EpisodeMediaDownload.artifact_status.in_(_PHYSICAL_ARTIFACT_STATUSES),
+        )
+        .distinct()
+        .order_by(Episode.id.asc())
+        .all()
+    )
+
+    operation = create_operation(
+        s,
+        ShowFileRenameOperation(
+            show,
+            episodes,
+            download_profile_id=download_profile_id,
+            selected_profile_count=selected_profile_count,
+        ),
+    )
+    if not episodes:
+        complete_operation(
+            s,
+            operation.id,
+            summary=f"No existing files to rename in {show.title}",
+            data={
+                "files_renamed": 0,
+                "files_unchanged": 0,
+                "files_recovered": 0,
+                "files_considered": 0,
+            },
+        )
+    else:
+        for episode in episodes:
+            queue_operation_target_dispatch(s, operation.id, f"episode:{episode.id}")
+
+    s.flush()
+    return {
+        "queued": bool(episodes),
+        "episodes_queued": len(episodes),
+        "download_profiles_queued": selected_profile_count,
         "operation_id": operation.id,
     }
 

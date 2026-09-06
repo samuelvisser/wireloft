@@ -7,6 +7,9 @@ from backend.types.episode_types import EpisodePublishStatus
 from task_manager.events.transactional import queue_event
 
 
+EPISODE_IDENTIFIER_CHANGED_EVENT = "episode.identifier_changed"
+
+
 def episode_event_payload(
         *,
         episode: Episode,
@@ -26,6 +29,24 @@ def episode_event_payload(
         "old_status": old_status,
         "status": episode.publish_status,
     }
+
+
+def queue_episode_identifier_changed_event(
+        s: Session,
+        *,
+        episode: Episode,
+        show: Show,
+        old_identifier: str,
+) -> None:
+    """Queue the system-wide event emitted when an existing episode identifier changes."""
+    event_data = episode_event_payload(episode=episode, show=show)
+    event_data.update({
+        "old_episode_identifier": old_identifier,
+        # The Rename File worker uses this to avoid touching files whose templates
+        # cannot be affected by an identifier change.
+        "identifier_fields_only": True,
+    })
+    queue_event(s, EPISODE_IDENTIFIER_CHANGED_EVENT, event_data)
 
 
 def queue_episode_status_events(

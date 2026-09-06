@@ -69,6 +69,9 @@ export default function ShowPage() {
   const [syncStarting, setSyncStarting] = useState(false)
   const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)
   const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
+  const [fileRenameConfirm, setFileRenameConfirm] = useState(false)
+  const [fileRenameStarting, setFileRenameStarting] = useState(false)
+  const [fileRenameProfileId, setFileRenameProfileId] = useState('')
   const [redownloadConfirm, setRedownloadConfirm] = useState(false)
   const [redownloadStarting, setRedownloadStarting] = useState(false)
   const [redownloadProfileId, setRedownloadProfileId] = useState('')
@@ -80,10 +83,12 @@ export default function ShowPage() {
   const operationResourceId = show?.id ?? null
   const syncOperation = useActiveOperation('show.sync', 'show', operationResourceId)
   const metadataRefreshOperation = useActiveOperation('show.refresh_metadata', 'show', operationResourceId)
+  const fileRenameOperation = useActiveOperation('show.rename_files', 'show', operationResourceId)
   const redownloadOperation = useActiveOperation('show.redownload_episodes', 'show', operationResourceId)
   const manualSyncing = syncOperation !== undefined
   const syncBusy = syncStarting || manualSyncing
   const metadataRefreshBusy = metadataRefreshStarting || metadataRefreshOperation !== undefined
+  const fileRenameBusy = fileRenameStarting || fileRenameOperation !== undefined
   const redownloadBusy = redownloadStarting || redownloadOperation !== undefined
 
   useEffect(() => {
@@ -202,6 +207,21 @@ export default function ShowPage() {
       : undefined
   const downloadProfileStateUnknown = downloadProfilesLoading && downloadProfiles === undefined
   const downloadProfileStateFailed = Boolean(downloadProfilesError) && downloadProfiles === undefined
+  const fileRenameDisabledReason = fileRenameStarting
+    ? `WireLoft is starting File Rename for ${show.title}.`
+    : fileRenameOperation
+      ? fileRenameOperation.status === 'WAITING'
+        ? fileRenameOperation.message || OPERATION_WAITING_MESSAGE
+        : `File Rename is running for ${show.title}.${fileRenameOperation.progressTotal > 0
+          ? ` ${fileRenameOperation.progressCurrent}/${fileRenameOperation.progressTotal} episodes have finished.`
+          : ''}`
+      : downloadProfileStateUnknown
+        ? 'WireLoft is still checking which Download Profiles are attached to this show.'
+        : downloadProfileStateFailed
+          ? 'WireLoft could not determine which Download Profiles are attached to this show.'
+          : attachedDownloadProfiles.length === 0
+            ? `No Download Profiles are attached to ${show.title}.`
+            : undefined
   const redownloadDisabledReason = redownloadStarting
     ? `WireLoft is starting a delete and re-download operation for ${show.title}.`
     : redownloadOperation
@@ -318,6 +338,64 @@ export default function ShowPage() {
       toast.error(`Could not start metadata refresh for ${show.title}`)
     } finally {
       setMetadataRefreshStarting(false)
+    }
+  }
+
+  const openFileRenameConfirm = () => {
+    if (downloadProfileStateUnknown) {
+      toast('WireLoft is still checking the Download Profiles attached to this show')
+      return
+    }
+    if (downloadProfileStateFailed) {
+      toast.error('Could not determine which Download Profiles are attached to this show')
+      return
+    }
+    if (!attachedDownloadProfiles.length) {
+      toast(`There are no Download Profiles attached to ${show.title}`)
+      return
+    }
+    setFileRenameProfileId(
+      attachedDownloadProfiles.length > 1 ? 'all' : String(attachedDownloadProfiles[0].id),
+    )
+    setFileRenameConfirm(true)
+  }
+
+  const renameFiles = async () => {
+    if (fileRenameBusy || !fileRenameProfileId) return
+
+    setFileRenameStarting(true)
+    try {
+      const base = (window as any).appConfig?.API_URL || '/api'
+      const response = await fetch(`${base}/shows/${encodeURIComponent(id)}/rename-files`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          downloadProfileId: fileRenameProfileId === 'all' ? null : Number(fileRenameProfileId),
+        }),
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+      const result = await response.json()
+      if (typeof result?.operationId !== 'string' || !result.operationId) {
+        throw new Error('File Rename request did not return an operation ID')
+      }
+
+      const episodeCount = typeof result?.episodesQueued === 'number' ? result.episodesQueued : 0
+      const profileCount = typeof result?.downloadProfilesQueued === 'number'
+        ? result.downloadProfilesQueued
+        : (fileRenameProfileId === 'all' ? attachedDownloadProfiles.length : 1)
+      setFileRenameConfirm(false)
+      await qc.invalidateQueries({queryKey: ['operations']})
+      if (episodeCount > 0) {
+        toast.success(
+          `File Rename started for ${episodeCount} ${episodeCount === 1 ? 'episode' : 'episodes'} in ${show.title} using ${profileCount} ${profileCount === 1 ? 'Download Profile' : 'Download Profiles'}`,
+        )
+      }
+    } catch {
+      toast.error(`Could not start File Rename for ${show.title}`)
+    } finally {
+      setFileRenameStarting(false)
     }
   }
 
@@ -473,6 +551,15 @@ export default function ShowPage() {
                   progress: metadataRefreshOperation ? (metadataRefreshOperation.progress ?? 0) : undefined,
                   controls: operationControls(metadataRefreshOperation?.id, 'metadata refresh'),
                   onSelect: () => setMetadataRefreshConfirm(true),
+                },
+                {
+                  label: 'File Rename',
+                  icon: ['fas', 'pen-to-square'],
+                  disabled: fileRenameDisabledReason !== undefined,
+                  disabledReason: fileRenameDisabledReason,
+                  progress: fileRenameOperation ? (fileRenameOperation.progress ?? 0) : undefined,
+                  controls: operationControls(fileRenameOperation?.id, 'File Rename'),
+                  onSelect: openFileRenameConfirm,
                 },
                 {
                   label: 'Delete and re-download all episodes',
@@ -673,6 +760,72 @@ export default function ShowPage() {
                 onClick={() => void refreshAllMetadata()}
               >
                 {metadataRefreshBusy ? 'Starting…' : 'Refresh metadata'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fileRenameConfirm && (
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onClick={() => {
+            if (!fileRenameBusy) setFileRenameConfirm(false)
+          }}
+        >
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="file-rename-title"
+            aria-describedby="file-rename-desc"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-icon" aria-hidden>
+                <FontAwesomeIcon icon={['fas', 'pen-to-square']} />
+              </div>
+              <h2 id="file-rename-title" className="modal-title">File Rename</h2>
+            </div>
+            <p id="file-rename-desc" className="modal-text">
+              Rename existing episode files in "{show.title}" so their paths match the current Local Media Profile output templates. Choose which Download Profile to apply.
+            </p>
+            <div className="form-row">
+              <label htmlFor="file-rename-profile">Download Profile</label>
+              <select
+                id="file-rename-profile"
+                className="input"
+                value={fileRenameProfileId}
+                disabled={fileRenameBusy}
+                onChange={(event) => setFileRenameProfileId(event.target.value)}
+              >
+                {attachedDownloadProfiles.length > 1 && (
+                  <option value="all">All Download Profiles</option>
+                )}
+                {attachedDownloadProfiles.map((profile) => (
+                  <option key={profile.id} value={String(profile.id)}>
+                    {`${profile.type === 'series' ? 'Series' : 'Podcast'} · ${preferredFormatLabel(profile.localMediaProfilePreferredFormat)} · Profile #${profile.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn"
+                disabled={fileRenameBusy}
+                onClick={() => setFileRenameConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={fileRenameBusy || !fileRenameProfileId}
+                onClick={() => void renameFiles()}
+              >
+                {fileRenameBusy ? 'Starting…' : 'Rename files'}
               </button>
             </div>
           </div>

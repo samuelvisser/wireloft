@@ -15,6 +15,7 @@ from backend.types.media_types import MediaType
 from dailywire_api.dw_api.client import MiddlewareClient
 from dailywire_api.records import DwEpisodeRecord
 from task_manager.events.transactional import queue_event
+from .events import queue_episode_identifier_changed_event
 from .identifier import EpisodeWithIdentifier
 from .metadata import METADATA_REFRESH_REQUESTED_EVENT, metadata_is_final_for_new_episode
 from .no_show import is_no_show_today_title
@@ -52,6 +53,7 @@ def upsert_episode(
         .one_or_none()
     )
     was_created = episode is None
+    old_episode_identifier = episode.episode_identifier if episode is not None else None
 
     if was_created:
         # Create new (only pass fields that exist on the SQLAlchemy model)
@@ -81,6 +83,18 @@ def upsert_episode(
         episode.is_no_show_today = is_no_show_today_title(ep.title)
 
     s.flush()
+
+    if (
+        not was_created
+        and old_episode_identifier is not None
+        and old_episode_identifier != episode.episode_identifier
+    ):
+        queue_episode_identifier_changed_event(
+            s,
+            episode=episode,
+            show=show,
+            old_identifier=old_episode_identifier,
+        )
 
     # A newly discovered episode that is already final can skip the live monitor,
     # so explicitly ask the metadata worker to schedule its remaining checks.
