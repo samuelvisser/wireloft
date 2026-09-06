@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import ShowIndexingProgress from '../../components/ShowIndexingProgress/ShowIndexingProgress'
 import ShowSyncLogModal from '../../components/ShowSyncLogModal/ShowSyncLogModal'
@@ -632,145 +633,83 @@ export default function ShowPage() {
         onSyncNow={syncNow}
       />
 
-      {metadataRefreshConfirm && (
-        <div
-          className="modal-overlay"
-          role="presentation"
-          onClick={() => {
-            if (!metadataRefreshBusy) setMetadataRefreshConfirm(false)
-          }}
-        >
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="refresh-metadata-title"
-            aria-describedby="refresh-metadata-desc"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div className="modal-icon" aria-hidden>
-                <FontAwesomeIcon icon={['fas', 'arrows-rotate']} />
-              </div>
-              <h2 id="refresh-metadata-title" className="modal-title">Refresh all metadata</h2>
-            </div>
-            <p id="refresh-metadata-desc" className="modal-text">
-              Refresh metadata for every episode in "{show.title}"? This can take a while and is usually not needed.
-            </p>
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
-                disabled={metadataRefreshBusy}
-                onClick={() => setMetadataRefreshConfirm(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={metadataRefreshBusy}
-                onClick={() => void refreshAllMetadata()}
-              >
-                {metadataRefreshBusy ? 'Starting…' : 'Refresh metadata'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={metadataRefreshConfirm}
+        title="Refresh all metadata"
+        onDismiss={() => {
+          if (!metadataRefreshBusy) setMetadataRefreshConfirm(false)
+        }}
+        icon={['fas', 'arrows-rotate']}
+        dismissOnOverlayClick={!metadataRefreshBusy}
+        cancelButton={{disabled: metadataRefreshBusy}}
+        confirmButton={{
+          label: metadataRefreshBusy ? 'Starting…' : 'Refresh metadata',
+          onClick: refreshAllMetadata,
+          className: 'btn btn-primary',
+          disabled: metadataRefreshBusy,
+        }}
+      >
+        <p>
+          Refresh metadata for every episode in "{show.title}"? This can take a while and is usually not needed.
+        </p>
+      </ConfirmDialog>
 
-      {redownloadConfirm && (
-        <div
-          className="modal-overlay"
-          role="presentation"
-          onClick={() => {
-            if (!redownloadBusy) setRedownloadConfirm(false)
-          }}
-        >
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="redownload-title"
-            aria-describedby="redownload-desc"
-            onClick={(e) => e.stopPropagation()}
+      <ConfirmDialog
+        open={redownloadConfirm}
+        title="Delete and re-download all episodes"
+        onDismiss={() => {
+          if (!redownloadBusy) setRedownloadConfirm(false)
+        }}
+        icon={['fas', 'arrows-rotate']}
+        iconTone="danger"
+        dismissOnOverlayClick={!redownloadBusy}
+        cancelButton={{disabled: redownloadBusy}}
+        confirmButton={{
+          label: redownloadBusy ? 'Starting…' : 'Delete and re-download',
+          onClick: redownloadAllEpisodes,
+          className: 'btn btn-danger',
+          disabled: redownloadBusy || !redownloadProfileId,
+        }}
+      >
+        <p>
+          This deletes the existing episode files selected below and downloads them again. This can take a long time,
+          use significant bandwidth, and is usually not needed.
+        </p>
+        <div className="form-row">
+          <label htmlFor="redownload-profile">Download Profile</label>
+          <select
+            id="redownload-profile"
+            className="input"
+            value={redownloadProfileId}
+            disabled={redownloadBusy}
+            onChange={(event) => setRedownloadProfileId(event.target.value)}
           >
-            <div className="modal-header">
-              <div className="modal-icon danger" aria-hidden>
-                <FontAwesomeIcon icon={['fas', 'arrows-rotate']} />
-              </div>
-              <h2 id="redownload-title" className="modal-title">Delete and re-download all episodes</h2>
-            </div>
-            <p id="redownload-desc" className="modal-text">
-              This deletes the existing episode files selected below and downloads them again. This can take a long time, use significant bandwidth, and is usually not needed.
-            </p>
-            <div className="form-row">
-              <label htmlFor="redownload-profile">Download Profile</label>
-              <select
-                id="redownload-profile"
-                className="input"
-                value={redownloadProfileId}
-                disabled={redownloadBusy}
-                onChange={(event) => setRedownloadProfileId(event.target.value)}
-              >
-                {attachedDownloadProfiles.length > 1 && (
-                  <option value="all">All Download Profiles</option>
-                )}
-                {attachedDownloadProfiles.map((profile) => (
-                  <option key={profile.id} value={String(profile.id)}>
-                    {`${profile.type === 'series' ? 'Series' : 'Podcast'} · ${preferredFormatLabel(profile.localMediaProfilePreferredFormat)} · Profile #${profile.id}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
-                disabled={redownloadBusy}
-                onClick={() => setRedownloadConfirm(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                disabled={redownloadBusy || !redownloadProfileId}
-                onClick={() => void redownloadAllEpisodes()}
-              >
-                {redownloadBusy ? 'Starting…' : 'Delete and re-download'}
-              </button>
-            </div>
-          </div>
+            {attachedDownloadProfiles.length > 1 && (
+              <option value="all">All Download Profiles</option>
+            )}
+            {attachedDownloadProfiles.map((profile) => (
+              <option key={profile.id} value={String(profile.id)}>
+                {`${profile.type === 'series' ? 'Series' : 'Podcast'} · ${preferredFormatLabel(profile.localMediaProfilePreferredFormat)} · Profile #${profile.id}`}
+              </option>
+            ))}
+          </select>
         </div>
-      )}
+      </ConfirmDialog>
 
-      {confirm && (
-        <div className="modal-overlay" role="presentation" onClick={closeConfirm}>
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-title"
-            aria-describedby="delete-desc"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div className="modal-icon danger" aria-hidden>
-                <FontAwesomeIcon icon={['fas', 'trash']} />
-              </div>
-              <h2 id="delete-title" className="modal-title">Delete show</h2>
-            </div>
-            <p id="delete-desc" className="modal-text">
-              Are you sure you want to delete "{show.title}"? This action cannot be undone.
-            </p>
-            <div className="modal-actions">
-              <button type="button" className="btn" onClick={closeConfirm}>Cancel</button>
-              <button type="button" className="btn btn-danger" onClick={onConfirmDelete}>Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={confirm}
+        title="Delete show"
+        onDismiss={closeConfirm}
+        icon={['fas', 'trash']}
+        iconTone="danger"
+        confirmButton={{
+          label: 'Delete',
+          onClick: onConfirmDelete,
+          className: 'btn btn-danger',
+        }}
+      >
+        <p>Are you sure you want to delete "{show.title}"? This action cannot be undone.</p>
+      </ConfirmDialog>
     </section>
   )
 }
