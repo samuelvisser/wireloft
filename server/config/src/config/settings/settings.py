@@ -16,16 +16,6 @@ from config.settings.submodels import *
 
 TIMEZONE_ENVIRONMENT_VARIABLE = "TZ"
 _ENVIRONMENT_VALUE_MISSING = object()
-_LEGACY_ENV_ALIASES = {
-    "WL_NEW_EPISODE_SCHEDULE__MONITOR_EPISODE_CRON": (
-        "monitor_pending_episode_cron",
-        "monitorPendingEpisodeCron",
-    ),
-    "WL_NEW_EPISODE_SCHEDULE__CLEANUP_EPISODES_STUCK_WITHOUT_MEDIA_CRON": (
-        "monitor_no_usable_media_episode_cron",
-        "monitorNoUsableMediaEpisodeCron",
-    ),
-}
 
 
 def get_app_version() -> str:
@@ -39,34 +29,6 @@ def get_app_version() -> str:
     if not isinstance(version, str) or not version:
         raise RuntimeError(f"WireLoft version is missing from {manifest}")
     return version
-
-
-class _AliasNormalizingYamlSource(YamlConfigSettingsSource):
-    def __call__(self):
-        data = super().__call__()
-        schedule = data.get("newEpisodeSchedule") or data.get("new_episode_schedule")
-        if isinstance(schedule, dict):
-            if (
-                "monitorPendingEpisodeCron" not in schedule
-                and "monitor_pending_episode_cron" not in schedule
-            ):
-                legacy = schedule.get(
-                    "monitorEpisodeCron",
-                    schedule.get("monitor_episode_cron"),
-                )
-                if legacy is not None:
-                    schedule["monitorPendingEpisodeCron"] = legacy
-            if (
-                "monitorNoUsableMediaEpisodeCron" not in schedule
-                and "monitor_no_usable_media_episode_cron" not in schedule
-            ):
-                legacy = schedule.get(
-                    "cleanupEpisodesStuckWithoutMediaCron",
-                    schedule.get("cleanup_episodes_stuck_without_media_cron"),
-                )
-                if legacy is not None:
-                    schedule["monitorNoUsableMediaEpisodeCron"] = legacy
-        return normalize_settings_source_keys(data, self.settings_cls)
 
 
 def _environment_value(source, name: str) -> Any:
@@ -90,17 +52,6 @@ def environment_settings_source_data(source, settings_cls) -> dict[str, Any]:
     timezone = _environment_value(source, TIMEZONE_ENVIRONMENT_VARIABLE)
     if timezone is not _ENVIRONMENT_VALUE_MISSING:
         data["timezone"] = timezone
-
-    # Renamed worker settings remain backwards compatible for existing installs.
-    # Canonical new environment variables always win if both forms are present.
-    schedule = data.setdefault("newEpisodeSchedule", {})
-    if isinstance(schedule, dict):
-        for legacy_name, (target_field, target_alias) in _LEGACY_ENV_ALIASES.items():
-            if target_field in schedule or target_alias in schedule:
-                continue
-            legacy_value = _environment_value(source, legacy_name)
-            if legacy_value is not _ENVIRONMENT_VALUE_MISSING:
-                schedule[target_field] = legacy_value
 
     return data
 
@@ -156,7 +107,6 @@ class AppSettings(SettingsBase):
         metadata_refresh_intervals="15m,30m,1h,3h,6h,24h,3d",
     ))
     episode_status_timing: EpisodeStatusTiming = Field(default=EpisodeStatusTiming(
-        published_countdown_after_minutes=20,
         published_final_after_minutes=3 * 60,
         dw_processing_max_minutes=60,
         no_usable_media_delete_after_minutes=4 * 60,
@@ -216,7 +166,7 @@ class AppSettings(SettingsBase):
         file_secret_settings,
     ):
         # kwargs > environment (WL_* plus TZ) > .env > config.yml > file secrets > defaults
-        yaml_source = _AliasNormalizingYamlSource(settings_cls)
+        yaml_source = YamlConfigSettingsSource(settings_cls)
 
         def normalized(source):
             return lambda: normalize_settings_source_keys(source(), settings_cls)
@@ -228,6 +178,6 @@ class AppSettings(SettingsBase):
             normalized(init_settings),
             normalized_environment(env_settings),
             normalized_environment(dotenv_settings),
-            yaml_source,
+            normalized(yaml_source),
             normalized(file_secret_settings),
         )
