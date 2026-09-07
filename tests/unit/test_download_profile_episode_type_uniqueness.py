@@ -90,7 +90,6 @@ def _make_episode(session: Session, show):
         duration=100,
         publish_status="published_final",
         sharing_url="https://example.test/episode-1",
-        is_no_show_today=False,
     )
     session.add_all([season, episode])
     session.flush()

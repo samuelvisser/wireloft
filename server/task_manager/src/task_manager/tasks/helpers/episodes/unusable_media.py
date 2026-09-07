@@ -13,9 +13,6 @@ from .quarantine import quarantine_episode_identifier
 NO_USABLE_MEDIA_REASON_META_KEY = "no_usable_media.reason"
 NO_USABLE_MEDIA_SINCE_META_KEY = "no_usable_media.since"
 
-_LEGACY_REASON_META_KEY = "dw_processing.reason"
-_LEGACY_SINCE_META_KEY = "dw_processing.since"
-
 
 class NoUsableMediaReason(StrEnum):
     NOT_FOUND = "not_found"
@@ -30,31 +27,10 @@ def _ensure_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _raw_reason(episode: Episode) -> str | None:
-    return episode.get_meta(NO_USABLE_MEDIA_REASON_META_KEY) or episode.get_meta(_LEGACY_REASON_META_KEY)
-
-
-def _raw_since(episode: Episode) -> str | None:
-    return episode.get_meta(NO_USABLE_MEDIA_SINCE_META_KEY) or episode.get_meta(_LEGACY_SINCE_META_KEY)
-
-
 def _remove_tracking_keys(episode: Episode) -> None:
-    keys = {
-        NO_USABLE_MEDIA_REASON_META_KEY,
-        NO_USABLE_MEDIA_SINCE_META_KEY,
-        _LEGACY_REASON_META_KEY,
-        _LEGACY_SINCE_META_KEY,
-    }
+    keys = {NO_USABLE_MEDIA_REASON_META_KEY, NO_USABLE_MEDIA_SINCE_META_KEY}
     for item in list(episode.meta_items):
         if item.key in keys:
-            episode.meta_items.remove(item)
-
-
-def _remove_legacy_tracking_keys(episode: Episode) -> None:
-    """Discard superseded processing metadata without replacing canonical rows."""
-    legacy_keys = {_LEGACY_REASON_META_KEY, _LEGACY_SINCE_META_KEY}
-    for item in list(episode.meta_items):
-        if item.key in legacy_keys:
             episode.meta_items.remove(item)
 
 
@@ -76,7 +52,6 @@ def mark_episode_no_usable_media(
     # violating Metadata's (parent_table, parent_id, key) unique constraint.
     episode.set_meta(NO_USABLE_MEDIA_REASON_META_KEY, reason.value)
     episode.set_meta(NO_USABLE_MEDIA_SINCE_META_KEY, observed_at.isoformat())
-    _remove_legacy_tracking_keys(episode)
 
     episode.publish_status = EpisodePublishStatus.NO_USABLE_MEDIA.value
     episode.metadata_is_final = False
@@ -89,7 +64,7 @@ def clear_episode_no_usable_media_tracking(episode: Episode) -> None:
 
 
 def episode_no_usable_media_reason(episode: Episode) -> NoUsableMediaReason | None:
-    raw = _raw_reason(episode)
+    raw = episode.get_meta(NO_USABLE_MEDIA_REASON_META_KEY)
     if not raw:
         return None
     try:
@@ -99,7 +74,7 @@ def episode_no_usable_media_reason(episode: Episode) -> NoUsableMediaReason | No
 
 
 def episode_no_usable_media_since(episode: Episode) -> datetime | None:
-    raw = _raw_since(episode)
+    raw = episode.get_meta(NO_USABLE_MEDIA_SINCE_META_KEY)
     if not raw:
         return None
     try:

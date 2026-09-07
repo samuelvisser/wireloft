@@ -3,14 +3,13 @@ from typing import Optional, TYPE_CHECKING
 
 from .MediaItemBase import MediaItemBase
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Boolean, ForeignKey, UniqueConstraint, func
-from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy import Boolean, ForeignKey, UniqueConstraint
 
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
-from backend.utils.episode_slug import NO_SHOW_TODAY_SLUG_FRAGMENT, is_no_show_today_slug
+from backend.utils.episode_slug import is_no_show_today_slug
 
 if TYPE_CHECKING:
     from backend.db.models import Show, Season
@@ -51,19 +50,10 @@ class Episode(MediaItemBase, HasMetadataMixin, HasTaskResourcesMixin):
     show: Mapped["Show"] = relationship(back_populates="episodes")
     season: Mapped["Season"] = relationship(back_populates="episodes")
 
-    @hybrid_property
+    @property
     def is_no_show_today(self) -> bool:
-        """Internal compatibility property derived from the stable Daily Wire slug."""
+        """Whether the stable Daily Wire slug marks this as a No Show Today placeholder."""
         return is_no_show_today_slug(self.slug)
-
-    @is_no_show_today.setter
-    def is_no_show_today(self, _value: bool | None) -> None:
-        """Accept legacy constructor kwargs without persisting duplicate state."""
-        return None
-
-    @is_no_show_today.expression
-    def is_no_show_today(cls):
-        return func.lower(cls.slug).contains(NO_SHOW_TODAY_SLUG_FRAGMENT)
 
     @property
     def early_delete_available(self) -> bool:
