@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 
@@ -69,6 +69,51 @@ def _mark_missing(session, episode, *, hours_ago: int):
 
 def _patch_no_token(monkeypatch, service):
     monkeypatch.setattr(service, "DeviceAuthClient", lambda: Mock(get_token=lambda: None))
+
+
+def test_mark_no_usable_media_refreshes_existing_metadata_rows(db_session):
+    from backend.db.models.Metadata import Metadata
+    from task_manager.tasks.helpers.episodes.unusable_media import (
+        NO_USABLE_MEDIA_REASON_META_KEY,
+        NO_USABLE_MEDIA_SINCE_META_KEY,
+        NoUsableMediaReason,
+        episode_no_usable_media_reason,
+        episode_no_usable_media_since,
+        mark_episode_no_usable_media,
+    )
+
+    show = _make_show(db_session)
+    episode = _make_episode(db_session, show)
+    first_seen = datetime.now(timezone.utc) - timedelta(hours=5)
+
+    mark_episode_no_usable_media(
+        db_session,
+        episode,
+        reason=NoUsableMediaReason.NOT_FOUND,
+        now=first_seen,
+    )
+    db_session.commit()
+    original_since = episode_no_usable_media_since(episode)
+
+    mark_episode_no_usable_media(
+        db_session,
+        episode,
+        reason=NoUsableMediaReason.NO_SHOW_TODAY,
+        now=datetime.now(timezone.utc),
+    )
+    db_session.commit()
+
+    rows = list(db_session.scalars(
+        select(Metadata).where(
+            Metadata.parent_table == "episodes",
+            Metadata.parent_id == episode.id,
+            Metadata.key.in_({NO_USABLE_MEDIA_REASON_META_KEY, NO_USABLE_MEDIA_SINCE_META_KEY}),
+        )
+    ))
+    assert sum(row.key == NO_USABLE_MEDIA_REASON_META_KEY for row in rows) == 1
+    assert sum(row.key == NO_USABLE_MEDIA_SINCE_META_KEY for row in rows) == 1
+    assert episode_no_usable_media_reason(episode) is NoUsableMediaReason.NO_SHOW_TODAY
+    assert episode_no_usable_media_since(episode) == original_since
 
 
 def test_monitor_deletes_only_expired_episode_that_still_404s(db_session, monkeypatch):

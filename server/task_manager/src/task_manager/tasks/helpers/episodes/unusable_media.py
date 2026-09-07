@@ -50,6 +50,14 @@ def _remove_tracking_keys(episode: Episode) -> None:
             episode.meta_items.remove(item)
 
 
+def _remove_legacy_tracking_keys(episode: Episode) -> None:
+    """Discard superseded processing metadata without replacing canonical rows."""
+    legacy_keys = {_LEGACY_REASON_META_KEY, _LEGACY_SINCE_META_KEY}
+    for item in list(episode.meta_items):
+        if item.key in legacy_keys:
+            episode.meta_items.remove(item)
+
+
 def mark_episode_no_usable_media(
     s: Session,
     episode: Episode,
@@ -62,9 +70,14 @@ def mark_episode_no_usable_media(
     observed_at = current_since or _ensure_utc(now or datetime.now(timezone.utc))
 
     quarantine_episode_identifier(s, episode)
-    _remove_tracking_keys(episode)
+
+    # Update canonical metadata in place. Removing and re-adding the same keys in
+    # one flush can make SQLAlchemy issue the INSERT before the orphan DELETE,
+    # violating Metadata's (parent_table, parent_id, key) unique constraint.
     episode.set_meta(NO_USABLE_MEDIA_REASON_META_KEY, reason.value)
     episode.set_meta(NO_USABLE_MEDIA_SINCE_META_KEY, observed_at.isoformat())
+    _remove_legacy_tracking_keys(episode)
+
     episode.publish_status = EpisodePublishStatus.NO_USABLE_MEDIA.value
     episode.metadata_is_final = False
     s.flush()
