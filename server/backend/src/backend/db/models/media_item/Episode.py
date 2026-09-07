@@ -2,13 +2,15 @@ from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
 from .MediaItemBase import MediaItemBase
-from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
-from sqlalchemy import Boolean, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Boolean, ForeignKey, UniqueConstraint, func
+from sqlalchemy.ext.hybrid import hybrid_property
 
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
+from backend.utils.episode_slug import NO_SHOW_TODAY_SLUG_FRAGMENT, is_no_show_today_slug
 
 if TYPE_CHECKING:
     from backend.db.models import Show, Season
@@ -44,19 +46,32 @@ class Episode(MediaItemBase, HasMetadataMixin, HasTaskResourcesMixin):
     published_date: Mapped[Optional[datetime]]
     scheduled_date: Mapped[Optional[datetime]]
     redownloaded_date: Mapped[Optional[datetime]]
-    is_no_show_today: Mapped[Optional[bool]]
 
     # Relationships
     show: Mapped["Show"] = relationship(back_populates="episodes")
     season: Mapped["Season"] = relationship(back_populates="episodes")
 
-    @validates("is_no_show_today")
-    def _keep_no_show_status_unusable(self, _key: str, value: Optional[bool]) -> Optional[bool]:
-        """Keep the model invariant that a known placeholder is never playable."""
-        if value:
-            self.publish_status = EpisodePublishStatus.NO_USABLE_MEDIA.value
-            self.metadata_is_final = False
-        return value
+    @hybrid_property
+    def is_no_show_today(self) -> bool:
+        """Internal compatibility property derived from the stable Daily Wire slug."""
+        return is_no_show_today_slug(self.slug)
+
+    @is_no_show_today.setter
+    def is_no_show_today(self, _value: bool | None) -> None:
+        """Accept legacy constructor kwargs without persisting duplicate state."""
+        return None
+
+    @is_no_show_today.expression
+    def is_no_show_today(cls):
+        return func.lower(cls.slug).contains(NO_SHOW_TODAY_SLUG_FRAGMENT)
+
+    @property
+    def early_delete_available(self) -> bool:
+        """Whether the latest Daily Wire verification reported this episode missing."""
+        return (
+            self.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value
+            and self.get_meta("no_usable_media.reason") == "not_found"
+        )
 
     def __repr__(self) -> str:
         return f"<Episode(id={self.id}, slug={self.slug}, show_id={self.show_id}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

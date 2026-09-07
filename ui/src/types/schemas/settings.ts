@@ -49,14 +49,15 @@ const SchedulerSettingsSchema = z.object({
 
 const TrackNewEpisodeScheduleSchema = z.object({
     findEpisodesCron: z.string(),
-    monitorEpisodeCron: z.string(),
-    cleanupEpisodesStuckWithoutMediaCron: z.string(),
+    monitorPendingEpisodeCron: z.string(),
+    monitorNoUsableMediaEpisodeCron: z.string(),
     metadataRefreshIntervals: z.string(),
 })
 
 const EpisodeStatusTimingSchema = z.object({
     publishedCountdownAfterMinutes: z.number(),
     publishedFinalAfterMinutes: z.number(),
+    dwProcessingMaxMinutes: z.number(),
     noUsableMediaDeleteAfterMinutes: z.number(),
 })
 
@@ -144,13 +145,14 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
     }),
     newEpisodeSchedule: TrackNewEpisodeScheduleSchema.extend({
         findEpisodesCron: cronExpression,
-        monitorEpisodeCron: cronExpression,
-        cleanupEpisodesStuckWithoutMediaCron: cronExpression,
+        monitorPendingEpisodeCron: cronExpression,
+        monitorNoUsableMediaEpisodeCron: cronExpression,
         metadataRefreshIntervals,
     }),
     episodeStatusTiming: EpisodeStatusTimingSchema.extend({
         publishedCountdownAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
         publishedFinalAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
+        dwProcessingMaxMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
         noUsableMediaDeleteAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
     }),
     downloadSettings: DownloadSettingsSchema.extend({
@@ -168,8 +170,8 @@ const WORKER_CRON_MINIMUM_MESSAGE = 'This worker runs more often than the config
 
 export const SettingsServerErrors = createServerErrorMapper({
     'values.newEpisodeSchedule.findEpisodesCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
-    'values.newEpisodeSchedule.monitorEpisodeCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
-    'values.newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
+    'values.newEpisodeSchedule.monitorPendingEpisodeCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
+    'values.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
     'values.downloadSettings.verifyDownloadsCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
     'values.fileWatcher.scanCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
 })
@@ -200,11 +202,12 @@ export const SETTINGS_FIELD_PATHS = [
     'scheduler.defaultMaxRetries',
     'scheduler.retryBackoffSeconds',
     'newEpisodeSchedule.findEpisodesCron',
-    'newEpisodeSchedule.monitorEpisodeCron',
-    'newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron',
+    'newEpisodeSchedule.monitorPendingEpisodeCron',
+    'newEpisodeSchedule.monitorNoUsableMediaEpisodeCron',
     'newEpisodeSchedule.metadataRefreshIntervals',
     'episodeStatusTiming.publishedCountdownAfterMinutes',
     'episodeStatusTiming.publishedFinalAfterMinutes',
+    'episodeStatusTiming.dwProcessingMaxMinutes',
     'episodeStatusTiming.noUsableMediaDeleteAfterMinutes',
     'downloadSettings.verifyDownloadsCron',
     'downloadSettings.maxConcurrentDownloads',

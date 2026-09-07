@@ -16,6 +16,16 @@ from config.settings.submodels import *
 
 TIMEZONE_ENVIRONMENT_VARIABLE = "TZ"
 _ENVIRONMENT_VALUE_MISSING = object()
+_LEGACY_ENV_ALIASES = {
+    "WL_NEW_EPISODE_SCHEDULE__MONITOR_EPISODE_CRON": (
+        "monitor_pending_episode_cron",
+        "monitorPendingEpisodeCron",
+    ),
+    "WL_NEW_EPISODE_SCHEDULE__CLEANUP_EPISODES_STUCK_WITHOUT_MEDIA_CRON": (
+        "monitor_no_usable_media_episode_cron",
+        "monitorNoUsableMediaEpisodeCron",
+    ),
+}
 
 
 def get_app_version() -> str:
@@ -33,7 +43,30 @@ def get_app_version() -> str:
 
 class _AliasNormalizingYamlSource(YamlConfigSettingsSource):
     def __call__(self):
-        return normalize_settings_source_keys(super().__call__(), self.settings_cls)
+        data = super().__call__()
+        schedule = data.get("newEpisodeSchedule") or data.get("new_episode_schedule")
+        if isinstance(schedule, dict):
+            if (
+                "monitorPendingEpisodeCron" not in schedule
+                and "monitor_pending_episode_cron" not in schedule
+            ):
+                legacy = schedule.get(
+                    "monitorEpisodeCron",
+                    schedule.get("monitor_episode_cron"),
+                )
+                if legacy is not None:
+                    schedule["monitorPendingEpisodeCron"] = legacy
+            if (
+                "monitorNoUsableMediaEpisodeCron" not in schedule
+                and "monitor_no_usable_media_episode_cron" not in schedule
+            ):
+                legacy = schedule.get(
+                    "cleanupEpisodesStuckWithoutMediaCron",
+                    schedule.get("cleanup_episodes_stuck_without_media_cron"),
+                )
+                if legacy is not None:
+                    schedule["monitorNoUsableMediaEpisodeCron"] = legacy
+        return normalize_settings_source_keys(data, self.settings_cls)
 
 
 def _environment_value(source, name: str) -> Any:
@@ -57,6 +90,17 @@ def environment_settings_source_data(source, settings_cls) -> dict[str, Any]:
     timezone = _environment_value(source, TIMEZONE_ENVIRONMENT_VARIABLE)
     if timezone is not _ENVIRONMENT_VALUE_MISSING:
         data["timezone"] = timezone
+
+    # Renamed worker settings remain backwards compatible for existing installs.
+    # Canonical new environment variables always win if both forms are present.
+    schedule = data.setdefault("newEpisodeSchedule", {})
+    if isinstance(schedule, dict):
+        for legacy_name, (target_field, target_alias) in _LEGACY_ENV_ALIASES.items():
+            if target_field in schedule or target_alias in schedule:
+                continue
+            legacy_value = _environment_value(source, legacy_name)
+            if legacy_value is not _ENVIRONMENT_VALUE_MISSING:
+                schedule[target_field] = legacy_value
 
     return data
 
@@ -107,13 +151,14 @@ class AppSettings(SettingsBase):
     ))
     new_episode_schedule: TrackNewEpisodeSchedule = Field(default=TrackNewEpisodeSchedule(
         find_episodes_cron="*/30 * * * *",
-        monitor_episode_cron="*/2 * * * *",
-        cleanup_episodes_stuck_without_media_cron="0 * * * *",
+        monitor_pending_episode_cron="*/2 * * * *",
+        monitor_no_usable_media_episode_cron="*/20 * * * *",
         metadata_refresh_intervals="15m,30m,1h,3h,6h,24h,3d",
     ))
     episode_status_timing: EpisodeStatusTiming = Field(default=EpisodeStatusTiming(
         published_countdown_after_minutes=20,
         published_final_after_minutes=3 * 60,
+        dw_processing_max_minutes=60,
         no_usable_media_delete_after_minutes=4 * 60,
     ))
     download_settings: DownloadSettings = Field(default=DownloadSettings(
@@ -154,8 +199,8 @@ class AppSettings(SettingsBase):
         validate_worker_cron_settings(
             min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
             find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
-            monitor_episode_cron=self.new_episode_schedule.monitor_episode_cron,
-            cleanup_episodes_stuck_without_media_cron=self.new_episode_schedule.cleanup_episodes_stuck_without_media_cron,
+            monitor_pending_episode_cron=self.new_episode_schedule.monitor_pending_episode_cron,
+            monitor_no_usable_media_episode_cron=self.new_episode_schedule.monitor_no_usable_media_episode_cron,
             verify_downloads_cron=self.download_settings.verify_downloads_cron,
             file_watcher_scan_cron=self.file_watcher.scan_cron,
         )

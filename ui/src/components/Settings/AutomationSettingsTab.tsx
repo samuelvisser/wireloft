@@ -98,49 +98,56 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                                 This cron schedule determines how often WireLoft will search for new episodes across all shows.
                                 It is recommended to set this to a value that is not too frequent, as it can impact performance.
                             </p>
+                            <p>
+                                Before treating a new slug as a new episode, WireLoft can conservatively reconcile it onto the
+                                sole matching pending episode. This covers Daily Wire changing a slug before publication.
+                            </p>
                         </ReadMore>
                     }
                 />
                 <CronEditor
-                    id="settings-monitor-episode-cron"
+                    id="settings-monitor-pending-episode-cron"
                     label="Monitor pending episodes"
-                    value={draft.newEpisodeSchedule.monitorEpisodeCron}
-                    error={errorFor('newEpisodeSchedule.monitorEpisodeCron')}
-                    environmentVariable={environmentVariableFor('newEpisodeSchedule.monitorEpisodeCron')}
+                    value={draft.newEpisodeSchedule.monitorPendingEpisodeCron}
+                    error={errorFor('newEpisodeSchedule.monitorPendingEpisodeCron')}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.monitorPendingEpisodeCron')}
                     onChange={(value) => updateDraft((next) => {
-                        next.newEpisodeSchedule.monitorEpisodeCron = value
+                        next.newEpisodeSchedule.monitorPendingEpisodeCron = value
                     })}
                     help={
-                        <ReadMore summary={<span>Monitors currently live, scheduled or processing episodes.</span>}>
+                        <ReadMore summary={<span>Monitors scheduled, delayed, live, processing and countdown episodes.</span>}>
                             <p>
-                                This cron schedule determines how often WireLoft will monitor an episode after the <code>Find new episodes</code> worker
-                                found it. As long as the episode has not reached its final published state, WireLoft checks for lifecycle and metadata changes frequently.
+                                This cron schedule determines how often WireLoft monitors an episode after the <code>Find new episodes</code> worker
+                                found it. It owns only the pending publication lifecycle.
+                            </p>
+                            <p>
+                                Once an episode becomes final, metadata refresh takes over. If it enters <code>no_usable_media</code>,
+                                the dedicated no-usable-media monitor takes over instead.
                             </p>
                             <p>
                                 This worker is expected to run quite frequently. Make sure to not set it to run more often than once every two minutes.
                             </p>
-                            <p>
-                                If Daily Wire temporarily returns a 404 for an indexed episode, WireLoft marks it <code>no_usable_media</code> and continues monitoring it instead of exposing unusable media.
-                            </p>
                         </ReadMore>
                     }
                 />
                 <CronEditor
-                    id="settings-cleanup-episodes-stuck-without-media-cron"
-                    label="Clean up episodes stuck without media"
-                    value={draft.newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron}
-                    error={errorFor('newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron')}
-                    environmentVariable={environmentVariableFor('newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron')}
+                    id="settings-monitor-no-usable-media-episode-cron"
+                    label="Monitor episodes without usable media"
+                    value={draft.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron}
+                    error={errorFor('newEpisodeSchedule.monitorNoUsableMediaEpisodeCron')}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.monitorNoUsableMediaEpisodeCron')}
                     onChange={(value) => updateDraft((next) => {
-                        next.newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron = value
+                        next.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron = value
                     })}
                     help={
-                        <ReadMore summary={<span>Cleans up Daily Wire entries that remain unusable for too long.</span>}>
+                        <ReadMore summary={<span>Rechecks every quarantined episode for recovery or confirmed removal.</span>}>
                             <p>
-                                WireLoft marks <code>No Show Today</code> placeholders and episodes whose Daily Wire detail endpoint returns 404 as <code>no_usable_media</code>. This is distinct from <code>dw_processing</code>, which means Daily Wire is still producing otherwise valid media.
+                                WireLoft rechecks all <code>no_usable_media</code> episodes on this schedule, regardless of why
+                                they entered quarantine. A responding Daily Wire episode remains stored until usable media returns.
                             </p>
                             <p>
-                                This worker periodically verifies <code>no_usable_media</code> entries. It only deletes one automatically after both the episode and the current unusable-media incident have reached the configured deletion delay below.
+                                Automatic deletion is only possible when Daily Wire currently returns 404 and the continuous
+                                quarantine delay below has elapsed.
                             </p>
                         </ReadMore>
                     }
@@ -181,7 +188,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.episodeStatusTiming.publishedCountdownAfterMinutes = value
                     })}
-                    help="When a scheduled episode may first be treated as published while final media is still processing."
+                    help="Existing publication timing setting retained for compatibility."
                 />
                 <DurationField
                     id="settings-published-final"
@@ -193,20 +200,31 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.episodeStatusTiming.publishedFinalAfterMinutes = value
                     })}
-                    help="Absolute fallback from publishedAt: after this many minutes WireLoft treats an otherwise ambiguous episode as published final. A current 404 or No Show Today placeholder remains no_usable_media instead."
+                    help="Measured from Daily Wire publishedAt. Only an episode whose current remote state is still published-with-countdown is forced to published final after this threshold."
                 />
-                <NumberField
+                <DurationField
+                    id="settings-dw-processing-max"
+                    label="Daily Wire processing safeguard"
+                    value={draft.episodeStatusTiming.dwProcessingMaxMinutes}
+                    backendUnit="minutes"
+                    error={errorFor('episodeStatusTiming.dwProcessingMaxMinutes')}
+                    environmentVariable={environmentVariableFor('episodeStatusTiming.dwProcessingMaxMinutes')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.episodeStatusTiming.dwProcessingMaxMinutes = value
+                    })}
+                    help="Measured from Daily Wire publishedAt. If the short-metadata/long-HLS processing signature remains after this threshold, WireLoft quarantines the episode as no_usable_media."
+                />
+                <DurationField
                     id="settings-no-usable-media-delete-after"
                     label="No usable media deletion delay"
                     value={draft.episodeStatusTiming.noUsableMediaDeleteAfterMinutes}
-                    min={0}
-                    unit="minutes"
+                    backendUnit="minutes"
                     error={errorFor('episodeStatusTiming.noUsableMediaDeleteAfterMinutes')}
                     environmentVariable={environmentVariableFor('episodeStatusTiming.noUsableMediaDeleteAfterMinutes')}
                     onChange={(value) => updateDraft((next) => {
                         next.episodeStatusTiming.noUsableMediaDeleteAfterMinutes = value
                     })}
-                    help="How long a No Show Today placeholder or continuously missing Daily Wire episode must remain in no_usable_media before automatic cleanup may delete it. Set to 0 to make it eligible on the next cleanup run."
+                    help="How long the continuous no_usable_media state must last before a current Daily Wire 404 may be deleted. A successful Daily Wire response is never automatically deleted."
                 />
             </SettingsDisclosure>
         </>

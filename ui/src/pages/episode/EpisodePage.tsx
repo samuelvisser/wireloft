@@ -46,7 +46,7 @@ function formatBytes(n: number | null | undefined) {
 }
 
 function formatDurationMinutes(minutes: number) {
-    if (minutes === 0) return '0 minutes (the next cleanup run)'
+    if (minutes === 0) return '0 minutes (the next monitor run)'
     const hours = Math.floor(minutes / 60)
     const remainingMinutes = minutes % 60
     const parts: string[] = []
@@ -268,7 +268,7 @@ export default function EpisodePage() {
     const publishStatus = String(episode.publishStatus)
     const statusLabel = PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus
     const isLive = publishStatus === 'live' || publishStatus === EpisodePublishStatus.live
-    const hasNoUsableMedia = publishStatus === 'no_usable_media'
+    const earlyDeleteAvailable = episode.earlyDeleteAvailable === true
     const isDownloadable = (
         publishStatus === 'published_final' || publishStatus === EpisodePublishStatus.publishedFinal
     )
@@ -344,7 +344,10 @@ export default function EpisodePage() {
             }
 
             setEarlyDeleteConfirm(false)
-            await qc.invalidateQueries({queryKey: ['operations']})
+            await Promise.all([
+                qc.invalidateQueries({queryKey: ['operations']}),
+                qc.invalidateQueries({queryKey: ['episode', episode.slug]}),
+            ])
             toast.success('Early delete started')
         } catch {
             toast.error('Could not start early delete')
@@ -388,7 +391,7 @@ export default function EpisodePage() {
                                         : undefined,
                                     onSelect: () => void refreshMetadata(),
                                 },
-                                ...(hasNoUsableMedia ? [{
+                                ...(earlyDeleteAvailable ? [{
                                     label: 'Early Delete',
                                     icon: ['fas', 'trash'] as [string, string],
                                     tone: 'danger' as const,
@@ -457,7 +460,7 @@ export default function EpisodePage() {
                 )}
             </article>
 
-            {earlyDeleteAfterMinutes !== undefined && (
+            {earlyDeleteAvailable && earlyDeleteAfterMinutes !== undefined && (
                 <ConfirmDialog
                     open={earlyDeleteConfirm}
                     title="Early Delete"
@@ -475,14 +478,14 @@ export default function EpisodePage() {
                         disabled: earlyDeleteBusy,
                     }}>
                     <p>
-                        This episode is marked by WireLoft as unusable for downloading or streaming.
+                        Daily Wire currently returns 404 for this episode, so WireLoft cannot recover media from its current slug.
                     </p>
                     <p>
-                        This could have various reasons, but could be temporary. Therefore, WireLoft keeps it around for
-                        {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> before it auto-deletes it.
+                        WireLoft will normally keep checking it and only delete it automatically after
+                        {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> in the continuous <code>no_usable_media</code> state.
                     </p>
                     <p>
-                        If you want though, you can delete it early now. This is a permanent action and cannot be undone.
+                        Deleting early skips that waiting period, but WireLoft will still re-check Daily Wire and will refuse to delete the local record if the episode has returned.
                     </p>
                 </ConfirmDialog>
             )}

@@ -175,7 +175,7 @@ def setup_triggers_from_registry() -> None:
 
     # Episode monitoring is a dynamic recurring schedule rather than a one-shot
     # task trigger. Its lifecycle is still driven entirely through domain events.
-    from task_manager.tasks.workers.monitor_episode_worker.scheduling import (
+    from task_manager.tasks.workers.monitor_pending_episode.scheduling import (
         register_monitor_event_handlers,
     )
 

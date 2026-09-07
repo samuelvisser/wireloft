@@ -38,7 +38,7 @@ def test_app_settings_exposes_default_metadata_refresh_intervals():
 
     assert (
         AppSettings().new_episode_schedule.metadata_refresh_intervals
-        == "5m,15m,30m,1h,3h,6h,24h"
+        == "15m,30m,1h,3h,6h,24h,3d"
     )
 
 
@@ -71,7 +71,7 @@ def test_new_episode_metadata_finality_uses_last_interval(monkeypatch):
 
 
 def test_remaining_metadata_checks_are_anchored_to_publish_time(monkeypatch):
-    from task_manager.tasks.workers.refresh_episode_metadata_worker import scheduling
+    from task_manager.tasks.workers.refresh_episode_metadata import scheduling
 
     class FakeScheduler:
         def __init__(self):
@@ -106,6 +106,10 @@ def test_remaining_metadata_checks_are_anchored_to_publish_time(monkeypatch):
         job.kwargs["scheduled_offset_seconds"]
         for job in scheduler.jobs.values()
     } == {10800, 21600, 86400}
+    assert all(
+        job.kwargs["def_key"] == "refresh_episode_metadata"
+        for job in scheduler.jobs.values()
+    )
 
 
 def test_metadata_worker_uses_registry_trigger_metadata_without_manual_ids():
@@ -113,9 +117,8 @@ def test_metadata_worker_uses_registry_trigger_metadata_without_manual_ids():
     import task_manager.tasks  # noqa: F401
     from task_manager.scheduler.registry import get_task
     from task_manager.tasks.helpers.episodes.metadata import METADATA_REFRESH_REQUESTED_EVENT
-    from task_manager.tasks.workers.monitor_episode_worker.scheduling import MONITOR_COMPLETED_EVENT
 
-    meta, worker = get_task("refresh_episode_metadata_worker")
+    meta, worker = get_task("refresh_episode_metadata")
     events = {
         trigger.event_name
         for trigger in meta.triggers
@@ -125,7 +128,6 @@ def test_metadata_worker_uses_registry_trigger_metadata_without_manual_ids():
     assert events == {
         "app.startup",
         METADATA_REFRESH_REQUESTED_EVENT,
-        MONITOR_COMPLETED_EVENT,
     }
     parameters = inspect.signature(worker).parameters
     assert "refresh" in parameters
@@ -190,7 +192,7 @@ def test_episode_metadata_refresh_creates_operation_and_queues_worker(monkeypatc
     assert created[0]["kind"] == "episode.refresh_metadata"
     assert created[0]["resource_id"] == episode.id
     target = created[0]["targets"][0]
-    assert target.task_key == "refresh_episode_metadata_worker"
+    assert target.task_key == "refresh_episode_metadata"
     assert target.task_kwargs == {"refresh": True}
     assert queued == [("operation-episode-refresh", target.resolved_slot_key())]
 
@@ -258,6 +260,7 @@ def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(mon
     }
     assert created[0]["kind"] == "show.refresh_metadata"
     assert [target.resource_id for target in created[0]["targets"]] == [1, 2, 3]
+    assert all(target.task_key == "refresh_episode_metadata" for target in created[0]["targets"])
     assert all(target.task_kwargs == {"refresh": True} for target in created[0]["targets"])
     assert queued == [
         ("operation-show-refresh", "episode:1"),
@@ -270,7 +273,7 @@ def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(mon
 
 def test_startup_metadata_recovery_skips_live_and_active_operation_targets(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.workers.refresh_episode_metadata_worker import service
+    from task_manager.tasks.workers.refresh_episode_metadata import service
 
     final_episode = SimpleNamespace(
         id=31,
@@ -309,7 +312,7 @@ def test_startup_metadata_recovery_skips_live_and_active_operation_targets(monke
 
     assert queued == [
         {
-            "def_key": "refresh_episode_metadata_worker",
+            "def_key": "refresh_episode_metadata",
             "resource_type": "episode",
             "resource_id": final_episode.id,
             "refresh": True,
@@ -317,9 +320,9 @@ def test_startup_metadata_recovery_skips_live_and_active_operation_targets(monke
     ]
 
 
-def test_explicit_metadata_refresh_fetches_non_final_episode(monkeypatch):
+def test_explicit_metadata_refresh_does_not_take_ownership_of_non_final_episode(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.workers.refresh_episode_metadata_worker import service
+    from task_manager.tasks.workers.refresh_episode_metadata import service
 
     episode = SimpleNamespace(
         id=21,
@@ -329,15 +332,9 @@ def test_explicit_metadata_refresh_fetches_non_final_episode(monkeypatch):
     refreshed: list[int] = []
 
     class FakeSession:
-        def __init__(self):
-            self.commits = 0
-
         def get(self, model, episode_id):
             assert episode_id == episode.id
             return episode
-
-        def commit(self):
-            self.commits += 1
 
     session = FakeSession()
     monkeypatch.setattr(
@@ -347,14 +344,12 @@ def test_explicit_metadata_refresh_fetches_non_final_episode(monkeypatch):
     )
 
     did_refresh = asyncio.run(
-        service.run_refresh_episode_metadata_worker(
+        service.run_refresh_episode_metadata(
             session,
             episode_id=episode.id,
             refresh=True,
         )
     )
 
-    assert did_refresh is True
-    assert refreshed == [episode.id]
-    assert episode.metadata_is_final is False
-    assert session.commits == 1
+    assert did_refresh is False
+    assert refreshed == []
