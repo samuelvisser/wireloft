@@ -470,8 +470,6 @@ All cron strings use standard five-field cron syntax (`minute hour day-of-month 
 </tbody>
 </table>
 
-Existing configurations using <code>newEpisodeSchedule.monitorEpisodeCron</code> / <code>WL_NEW_EPISODE_SCHEDULE__MONITOR_EPISODE_CRON</code> or <code>newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron</code> / <code>WL_NEW_EPISODE_SCHEDULE__CLEANUP_EPISODES_STUCK_WITHOUT_MEDIA_CRON</code> are still accepted as compatibility aliases. New configuration written by WireLoft uses the canonical names above.
-
 ---
 
 ## Episode lifecycle timing
@@ -488,20 +486,12 @@ Daily Wire exposes authoritative scheduled/live states, while WireLoft derives t
 </thead>
 <tbody>
 <tr>
-<td><code>episodeStatusTiming.publishedCountdownAfterMinutes</code></td>
-<td><code>WL_EPISODE_STATUS_TIMING__PUBLISHED_COUNTDOWN_AFTER_MINUTES</code></td>
-<td><code>20</code></td>
-</tr>
-<tr>
-<td colspan="3">Existing publication-timing setting retained for compatibility. It is not reused as the Daily Wire processing timeout.</td>
-</tr>
-<tr>
 <td><code>episodeStatusTiming.publishedFinalAfterMinutes</code></td>
 <td><code>WL_EPISODE_STATUS_TIMING__PUBLISHED_FINAL_AFTER_MINUTES</code></td>
 <td><code>180</code></td>
 </tr>
 <tr>
-<td colspan="3">Minutes after Daily Wire's <code>publishedAt</code> timestamp after which a response that still classifies as <code>published_with_countdown</code> is forced to <code>published_final</code>. This safeguard does not override scheduled, delayed, live, or <code>no_usable_media</code> states. Must be at least the countdown threshold.</td>
+<td colspan="3">Minutes after Daily Wire's <code>publishedAt</code> timestamp after which a response that still classifies as <code>published_with_countdown</code> is forced to <code>published_final</code>. This safeguard does not override scheduled, delayed, live, or <code>no_usable_media</code> states.</td>
 </tr>
 <tr>
 <td><code>episodeStatusTiming.dwProcessingMaxMinutes</code></td>
@@ -678,7 +668,6 @@ newEpisodeSchedule:
   metadataRefreshIntervals: 15m,30m,1h,3h,6h,24h,3d
 
 episodeStatusTiming:
-  publishedCountdownAfterMinutes: 20
   publishedFinalAfterMinutes: 180
   dwProcessingMaxMinutes: 60
   noUsableMediaDeleteAfterMinutes: 240

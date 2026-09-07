@@ -175,18 +175,6 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                 description="Fallback and cleanup thresholds used while Daily Wire episode state is settling."
             >
                 <DurationField
-                    id="settings-published-countdown"
-                    label="Countdown publication threshold"
-                    value={draft.episodeStatusTiming.publishedCountdownAfterMinutes}
-                    backendUnit="minutes"
-                    error={errorFor('episodeStatusTiming.publishedCountdownAfterMinutes')}
-                    environmentVariable={environmentVariableFor('episodeStatusTiming.publishedCountdownAfterMinutes')}
-                    onChange={(value) => updateDraft((next) => {
-                        next.episodeStatusTiming.publishedCountdownAfterMinutes = value
-                    })}
-                    help="Existing publication timing setting retained for compatibility."
-                />
-                <DurationField
                     id="settings-published-final"
                     label="Final publication threshold"
                     value={draft.episodeStatusTiming.publishedFinalAfterMinutes}

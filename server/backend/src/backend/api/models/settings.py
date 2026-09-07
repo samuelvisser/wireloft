@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.triggers.cron import CronTrigger
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 from pydantic_core import PydanticCustomError
 
@@ -49,7 +49,6 @@ SettingFieldPath = Literal[
     "newEpisodeSchedule.monitorPendingEpisodeCron",
     "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
-    "episodeStatusTiming.publishedCountdownAfterMinutes",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "episodeStatusTiming.dwProcessingMaxMinutes",
     "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
@@ -95,7 +94,6 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "newEpisodeSchedule.monitorPendingEpisodeCron",
     "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
-    "episodeStatusTiming.publishedCountdownAfterMinutes",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "episodeStatusTiming.dwProcessingMaxMinutes",
     "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
@@ -229,20 +227,9 @@ class TrackNewEpisodeScheduleValue(_SettingsValueModel):
 
 
 class EpisodeStatusTimingValue(_SettingsValueModel):
-    published_countdown_after_minutes: int = Field(ge=0)
     published_final_after_minutes: int = Field(ge=0)
     dw_processing_max_minutes: int = Field(ge=0)
     no_usable_media_delete_after_minutes: int = Field(ge=0)
-
-    @field_validator("published_final_after_minutes")
-    @classmethod
-    def _final_must_not_precede_countdown(cls, value: int, info: ValidationInfo):
-        countdown = info.data.get("published_countdown_after_minutes")
-        if isinstance(countdown, int) and value < countdown:
-            raise ValueError(
-                "Final publication timing must be at least as long as countdown publication timing"
-            )
-        return value
 
 
 class DownloadSettingsValue(_SettingsValueModel):

@@ -135,6 +135,54 @@ def _rollback_head_for_quarantine(connection, *, episode_id: int, show_id: int, 
         _set_meta(connection, "shows", show_id, "ep_id.latest_ep_date", str(new_head))
 
 
+def _task_definition_id(connection, key: str) -> int | None:
+    return connection.execute(
+        sa.text("SELECT id FROM task_definitions WHERE key=:key"),
+        {"key": key},
+    ).scalar_one_or_none()
+
+
+def _migrate_task_key(connection, old: str, new: str) -> None:
+    """Rename one task key while preserving history if both definitions exist.
+
+    A database can already contain the new definition when code using the renamed
+    worker was started before this Alembic revision was applied. In that case a
+    direct UPDATE violates task_definitions.key's unique constraint. Preserve the
+    older/source definition id, move all runs and schedules from the duplicate new
+    row onto it, remove the duplicate, then apply the canonical key.
+    """
+    old_id = _task_definition_id(connection, old)
+    new_id = _task_definition_id(connection, new)
+
+    if old_id is not None:
+        if new_id is not None and new_id != old_id:
+            connection.execute(
+                sa.text("UPDATE task_runs SET definition_id=:old_id WHERE definition_id=:new_id"),
+                {"old_id": old_id, "new_id": new_id},
+            )
+            connection.execute(
+                sa.text("UPDATE task_schedules SET definition_id=:old_id WHERE definition_id=:new_id"),
+                {"old_id": old_id, "new_id": new_id},
+            )
+            connection.execute(
+                sa.text("DELETE FROM task_definitions WHERE id=:new_id"),
+                {"new_id": new_id},
+            )
+        connection.execute(
+            sa.text("UPDATE task_definitions SET key=:new WHERE id=:old_id"),
+            {"old_id": old_id, "new": new},
+        )
+
+    connection.execute(
+        sa.text("UPDATE task_operation_targets SET task_key=:new WHERE task_key=:old"),
+        {"old": old, "new": new},
+    )
+    connection.execute(
+        sa.text("UPDATE task_operation_targets SET slot_key=REPLACE(slot_key,:old,:new) WHERE slot_key LIKE :pattern"),
+        {"old": old, "new": new, "pattern": f"%{old}%"},
+    )
+
+
 def _quarantine_existing_no_usable_rows(connection) -> None:
     rows = list(connection.execute(sa.text(
         "SELECT e.id,e.show_id,e.season_id,e.episode_identifier,s.episode_identifier "
@@ -169,12 +217,7 @@ def _quarantine_existing_no_usable_rows(connection) -> None:
 def upgrade() -> None:
     connection = op.get_bind()
     for old, new in _TASK_RENAMES.items():
-        connection.execute(sa.text("UPDATE task_definitions SET key=:new WHERE key=:old"), {"old": old, "new": new})
-        connection.execute(sa.text("UPDATE task_operation_targets SET task_key=:new WHERE task_key=:old"), {"old": old, "new": new})
-        connection.execute(
-            sa.text("UPDATE task_operation_targets SET slot_key=REPLACE(slot_key,:old,:new) WHERE slot_key LIKE :pattern"),
-            {"old": old, "new": new, "pattern": f"%{old}%"},
-        )
+        _migrate_task_key(connection, old, new)
     _quarantine_existing_no_usable_rows(connection)
     with op.batch_alter_table("episodes") as batch:
         batch.drop_column("is_no_show_today")
@@ -188,9 +231,4 @@ def downgrade() -> None:
         "UPDATE episodes SET is_no_show_today = CASE WHEN lower(slug) LIKE '%no-show-today%' THEN 1 ELSE 0 END"
     ))
     for old, new in _TASK_RENAMES.items():
-        connection.execute(sa.text("UPDATE task_definitions SET key=:old WHERE key=:new"), {"old": old, "new": new})
-        connection.execute(sa.text("UPDATE task_operation_targets SET task_key=:old WHERE task_key=:new"), {"old": old, "new": new})
-        connection.execute(
-            sa.text("UPDATE task_operation_targets SET slot_key=REPLACE(slot_key,:new,:old) WHERE slot_key LIKE :pattern"),
-            {"old": old, "new": new, "pattern": f"%{new}%"},
-        )
+        _migrate_task_key(connection, new, old)

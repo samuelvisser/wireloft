@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
-from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 
 from config.security.passwords import derive_admin_password_client_value, hash_password_scrypt
 from config.settings.base import SubmodelBase
@@ -273,11 +273,6 @@ class TrackNewEpisodeSchedule(SubmodelBase):
 
 
 class EpisodeStatusTiming(SubmodelBase):
-    published_countdown_after_minutes: int = Field(
-        ...,
-        ge=0,
-        description="Delay in minutes after dw reports the episode as published we can assume it actually is",
-    )
     published_final_after_minutes: int = Field(
         ...,
         ge=0,
@@ -293,16 +288,6 @@ class EpisodeStatusTiming(SubmodelBase):
         ge=0,
         description="Minutes an episode may remain in no_usable_media before a current Daily Wire 404 may be deleted",
     )
-
-    @field_validator("published_final_after_minutes")
-    @classmethod
-    def _final_must_not_precede_countdown(cls, value: int, info: ValidationInfo):
-        countdown = info.data.get("published_countdown_after_minutes")
-        if isinstance(countdown, int) and value < countdown:
-            raise ValueError(
-                "Final publication timing must be at least as long as countdown publication timing"
-            )
-        return value
 
 
 class FilenameRestrictionMode(StrEnum):

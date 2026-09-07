@@ -55,7 +55,6 @@ const TrackNewEpisodeScheduleSchema = z.object({
 })
 
 const EpisodeStatusTimingSchema = z.object({
-    publishedCountdownAfterMinutes: z.number(),
     publishedFinalAfterMinutes: z.number(),
     dwProcessingMaxMinutes: z.number(),
     noUsableMediaDeleteAfterMinutes: z.number(),
@@ -150,7 +149,6 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         metadataRefreshIntervals,
     }),
     episodeStatusTiming: EpisodeStatusTimingSchema.extend({
-        publishedCountdownAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
         publishedFinalAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
         dwProcessingMaxMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
         noUsableMediaDeleteAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
@@ -205,7 +203,6 @@ export const SETTINGS_FIELD_PATHS = [
     'newEpisodeSchedule.monitorPendingEpisodeCron',
     'newEpisodeSchedule.monitorNoUsableMediaEpisodeCron',
     'newEpisodeSchedule.metadataRefreshIntervals',
-    'episodeStatusTiming.publishedCountdownAfterMinutes',
     'episodeStatusTiming.publishedFinalAfterMinutes',
     'episodeStatusTiming.dwProcessingMaxMinutes',
     'episodeStatusTiming.noUsableMediaDeleteAfterMinutes',
