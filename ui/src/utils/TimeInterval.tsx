@@ -300,7 +300,7 @@ export default function TimeInterval({
                                 min={0}
                                 step={unit === backendUnit ? step : 1}
                                 value={draftParts[unit]}
-                                style={unit === 'minutes' || unit === 'seconds' ? {textAlign: 'left'} : undefined}
+                                style={{textAlign: 'left'}}
                                 onChange={onUnitChange(unit)}
                                 onFocus={onFocus(unit)}
                                 onClick={onClick(unit)}
