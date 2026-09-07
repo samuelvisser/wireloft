@@ -91,18 +91,66 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
     assert payload["new_episode_identifier"] == "ep.2500"
 
 
-def test_download_profile_worker_subscribes_to_identifier_changes():
+def test_identifier_change_has_dedicated_download_profile_worker():
     from task_manager.tasks.helpers.episodes.events import EPISODE_IDENTIFIER_CHANGED_EVENT
-    from task_manager.tasks.workers.download_profile_worker import download_profile_worker
+    from task_manager.tasks.workers.download_profile_worker import (
+        download_profile_identifier_change_worker,
+        download_profile_worker,
+    )
     from task_manager.tasks.workers.redownload_show_episodes_worker import redownload_show_episodes_worker
 
-    event_names = {
+    regular_event_names = {
         trigger.event_name
         for trigger in download_profile_worker._task_meta.triggers
         if trigger.trigger_type == "event"
     }
-    assert EPISODE_IDENTIFIER_CHANGED_EVENT in event_names
+    identifier_event_names = {
+        trigger.event_name
+        for trigger in download_profile_identifier_change_worker._task_meta.triggers
+        if trigger.trigger_type == "event"
+    }
+
+    assert EPISODE_IDENTIFIER_CHANGED_EVENT not in regular_event_names
+    assert identifier_event_names == {EPISODE_IDENTIFIER_CHANGED_EVENT}
+    assert download_profile_identifier_change_worker._task_meta.allowed_resource_types == ("episode",)
     assert "episode" in redownload_show_episodes_worker._task_meta.allowed_resource_types
+
+
+def test_identifier_change_worker_delegates_to_handler(monkeypatch):
+    from task_manager.tasks.workers.download_profile_worker import identifier_change_entrypoint
+
+    session = object()
+    handled = Mock()
+
+    class SessionContext:
+        def __enter__(self):
+            return session
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+    monkeypatch.setattr(identifier_change_entrypoint, "db_session", SessionContext)
+    monkeypatch.setattr(
+        identifier_change_entrypoint,
+        "handle_episode_identifier_changed",
+        handled,
+    )
+
+    asyncio.run(
+        identifier_change_entrypoint.download_profile_identifier_change_worker(
+            resource_id=42,
+            old_episode_identifier="ep-extra.2500.1",
+            new_episode_identifier="ep.2500",
+            progress=None,
+        )
+    )
+
+    handled.assert_called_once_with(
+        session,
+        episode_id=42,
+        old_episode_identifier="ep-extra.2500.1",
+        new_episode_identifier="ep.2500",
+    )
 
 
 def test_identifier_change_redownloads_only_affected_profile_paths(monkeypatch):

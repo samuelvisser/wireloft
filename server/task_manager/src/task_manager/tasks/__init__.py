@@ -3,7 +3,10 @@ from .workers.debug_ep_details import debug_ep_details
 from .workers.download_episode import download_episode
 from .workers.download_movie import download_movie
 from .workers.refresh_movie_extras import refresh_movie_extras
-from .workers.download_profile_worker import download_profile_worker
+from .workers.download_profile_worker import (
+    download_profile_identifier_change_worker,
+    download_profile_worker,
+)
 from .workers.download_series_thumbnail import download_series_thumbnail
 from .workers.monitor_episode_worker import monitor_episode_worker
 from .workers.refresh_episode_metadata_worker import refresh_episode_metadata_worker
@@ -19,6 +22,7 @@ __all__ = [
     "download_movie",
     "refresh_movie_extras",
     "download_profile_worker",
+    "download_profile_identifier_change_worker",
     "download_series_thumbnail",
     "monitor_episode_worker",
     "refresh_episode_metadata_worker",
