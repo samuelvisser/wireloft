@@ -14,8 +14,7 @@ from backend.utils.helpers import generate_uuid
 # ---------- Strict input (create/update) ----------
 class _EpisodeAPIBaseIn(RequestBase):
     """Fields for requests: validate here if needed."""
-    # Fields in the episodes' table. Absolute instants must include a timezone;
-    # the database boundary normalizes them to UTC before persistence.
+    # Fields in the episodes' table
     publish_status: EpisodePublishStatus
     went_live_date: Optional[AwareDatetime]
     published_date: Optional[AwareDatetime]

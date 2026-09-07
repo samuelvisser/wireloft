@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import func, UniqueConstraint
+from sqlalchemy import func
 
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime

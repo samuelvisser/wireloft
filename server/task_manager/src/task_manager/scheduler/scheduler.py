@@ -20,8 +20,7 @@ WATCHDOG_EXECUTOR_ALIAS = "watchdog"
 
 def get_trigger(name: str, args: dict):
     trigger_args = dict(args)
-    # WireLoft has one wall-clock timezone. Ignore any legacy per-trigger
-    # timezone so all schedules follow the configured application timezone.
+    # Legacy: remove timezone from trigger, we use the WireLoft TZ timezone
     trigger_args.pop("timezone", None)
     app_timezone = get_settings().timezone
 
@@ -34,7 +33,7 @@ def get_trigger(name: str, args: dict):
         run_date = trigger_args.pop("run_date", None)
         if isinstance(run_date, str):
             run_date = datetime.fromisoformat(run_date)
-        return DateTrigger(run_date=run_date, timezone=app_timezone, **trigger_args)
+        return DateTrigger(run_date=run_date, timezone=app_timezone)
     raise ValueError(f"Unknown trigger: {name}")
 
 
