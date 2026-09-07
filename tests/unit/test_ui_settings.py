@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+
 import pytest
 import yaml
 from pydantic import ValidationError
@@ -20,6 +22,23 @@ def test_settings_use_one_config_yml(tmp_path, monkeypatch):
     monkeypatch.setenv("WL_CONFIG_FILE", str(config_path))
 
     assert get_config_path() == config_path
+
+
+def test_yaml_settings_source_is_registered_and_reads_config(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.yml"
+    config_path.write_text("logLevel: DEBUG\n", encoding="utf-8")
+    monkeypatch.delenv("WL_LOG_LEVEL", raising=False)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        settings = _point_settings_at(config_path, monkeypatch)
+
+    assert settings.log_level == "DEBUG"
+    assert not any(
+        "yaml_file" in str(warning.message)
+        and "no YamlConfigSettingsSource source is configured" in str(warning.message)
+        for warning in caught
+    )
 
 
 def test_settings_api_contract_excludes_admin_and_literal_secrets():

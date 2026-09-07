@@ -31,6 +31,13 @@ def get_app_version() -> str:
     return version
 
 
+class _NormalizingYamlSource(YamlConfigSettingsSource):
+    """Load config.yml through Pydantic's registered YAML source and normalize aliases."""
+
+    def __call__(self) -> dict[str, Any]:
+        return normalize_settings_source_keys(super().__call__(), self.settings_cls)
+
+
 def _environment_value(source, name: str) -> Any:
     """Read one variable from an environment or dotenv settings source."""
     for key, value in getattr(source, "env_vars", {}).items():
@@ -166,7 +173,7 @@ class AppSettings(SettingsBase):
         file_secret_settings,
     ):
         # kwargs > environment (WL_* plus TZ) > .env > config.yml > file secrets > defaults
-        yaml_source = YamlConfigSettingsSource(settings_cls)
+        yaml_source = _NormalizingYamlSource(settings_cls)
 
         def normalized(source):
             return lambda: normalize_settings_source_keys(source(), settings_cls)
@@ -178,6 +185,6 @@ class AppSettings(SettingsBase):
             normalized(init_settings),
             normalized_environment(env_settings),
             normalized_environment(dotenv_settings),
-            normalized(yaml_source),
+            yaml_source,
             normalized(file_secret_settings),
         )
