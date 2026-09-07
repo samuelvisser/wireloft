@@ -38,6 +38,7 @@ def metadata_watch_expired(
         *,
         now: datetime | None = None,
 ) -> bool:
+    """Whether the last configured metadata refresh offset has already passed."""
     deadline = metadata_watch_deadline(published_date)
     if deadline is None:
         return True
@@ -51,6 +52,7 @@ def metadata_is_final_for_new_episode(
         *,
         now: datetime | None = None,
 ) -> bool:
+    """Choose the initial persistent metadata-finality state for a new episode."""
     status = (
         publish_status.value
         if isinstance(publish_status, EpisodePublishStatus)
