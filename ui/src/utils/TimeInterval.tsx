@@ -210,9 +210,12 @@ export default function TimeInterval({
         justFocusedUnit.current = unit
     }
 
-    const onMouseUp = (unit: TimeUnit): MouseEventHandler<HTMLInputElement> => (event) => {
+    const onClick = (unit: TimeUnit): MouseEventHandler<HTMLInputElement> => (event) => {
         if (justFocusedUnit.current !== unit) return
-        event.preventDefault()
+
+        // Re-select after the click instead of preventing mouseup. Native number-input
+        // spinners use mouseup to stop their press-and-hold repeat behavior.
+        event.currentTarget.select()
         justFocusedUnit.current = null
     }
 
@@ -300,7 +303,7 @@ export default function TimeInterval({
                                 style={unit === 'minutes' || unit === 'seconds' ? {textAlign: 'left'} : undefined}
                                 onChange={onUnitChange(unit)}
                                 onFocus={onFocus(unit)}
-                                onMouseUp={onMouseUp(unit)}
+                                onClick={onClick(unit)}
                                 disabled={disabled}
                                 aria-label={UNIT_LABELS[unit]}
                                 aria-invalid={ariaInvalid || undefined}
