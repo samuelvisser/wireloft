@@ -1,7 +1,7 @@
 """Add show scope to Show Local Media Profiles.
 
 Revision ID: e3a1b5c7d902
-Revises: b7e2c4d9a601
+Revises: a4d7c2e9f610
 """
 
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 revision = "e3a1b5c7d902"
-down_revision = "b7e2c4d9a601"
+down_revision = "a4d7c2e9f610"
 branch_labels = None
 depends_on = None
 
