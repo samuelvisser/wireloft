@@ -147,7 +147,6 @@ def _recover_episode(s: Session, episode: Episode, detail) -> bool:
 
 def _target_result(
     *,
-    title: str,
     episode_id: int,
     outcome: str,
     recovered_status: EpisodePublishStatus | None,
@@ -156,6 +155,7 @@ def _target_result(
     recovered: int,
     removed: int,
 ) -> TaskResult:
+    """Return machine-readable facts for one targeted verification."""
     data: dict[str, str | int] = {
         "episode_id": episode_id,
         "outcome": outcome,
@@ -168,19 +168,10 @@ def _target_result(
     if episode_slug:
         data["episode_slug"] = episode_slug
 
-    if outcome == "recovered":
-        summary = f"Recovered {title}"
-    elif outcome == "replaced":
-        summary = f"Removed stale {title}; its replacement is available"
-    elif outcome == "deleted":
-        summary = f"Deleted {title}"
-    elif outcome == "retained":
-        summary = f"{title} remains in no usable media"
-    elif outcome == "unverified":
-        summary = f"Could not verify {title}"
-    else:
-        summary = f"{title} no longer needs no-usable-media verification"
-    return TaskResult(summary=summary, data=data)
+    return TaskResult(
+        summary="No-usable-media episode verification completed",
+        data=data,
+    )
 
 
 async def run_monitor_no_usable_media_episode(
@@ -211,7 +202,6 @@ async def run_monitor_no_usable_media_episode(
         update_progress(progress, 100, message)
         if episode_id is not None:
             return _target_result(
-                title="Episode",
                 episode_id=episode_id,
                 outcome="already_resolved",
                 recovered_status=None,
@@ -230,7 +220,6 @@ async def run_monitor_no_usable_media_episode(
     client = MiddlewareClient(access_token=access_token)
     now = datetime.now(timezone.utc)
     removed = recovered = verified = 0
-    target_title = candidates[0].title if episode_id is not None else None
     target_outcome: str | None = None
     target_recovered_status: EpisodePublishStatus | None = None
     target_slug: str | None = candidates[0].slug if episode_id is not None else None
@@ -317,7 +306,6 @@ async def run_monitor_no_usable_media_episode(
 
     if episode_id is not None:
         return _target_result(
-            title=target_title or "Episode",
             episode_id=episode_id,
             outcome=target_outcome or "already_resolved",
             recovered_status=target_recovered_status,

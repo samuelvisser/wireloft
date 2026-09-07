@@ -98,6 +98,32 @@ def _patch_no_token(monkeypatch, service):
     monkeypatch.setattr(service, "DeviceAuthClient", lambda: Mock(get_token=lambda: None))
 
 
+def test_target_result_contains_facts_not_ui_copy():
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
+
+    for outcome in ("recovered", "replaced", "deleted", "retained", "unverified", "already_resolved"):
+        result = service._target_result(
+            episode_id=42,
+            outcome=outcome,
+            recovered_status=EpisodePublishStatus.PUBLISHED_FINAL,
+            episode_slug="canonical-slug",
+            verified=1,
+            recovered=1,
+            removed=0,
+        )
+        assert result.summary == "No-usable-media episode verification completed"
+        assert result.data == {
+            "episode_id": 42,
+            "outcome": outcome,
+            "verified": 1,
+            "recovered": 1,
+            "removed": 0,
+            "publish_status": EpisodePublishStatus.PUBLISHED_FINAL.value,
+            "episode_slug": "canonical-slug",
+        }
+
+
 def test_mark_no_usable_media_refreshes_existing_metadata_rows(db_session):
     from backend.db.models.Metadata import Metadata
     from task_manager.tasks.helpers.episodes.unusable_media import (

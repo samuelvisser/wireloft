@@ -116,7 +116,10 @@ function successMessage(operation: TaskOperationRead): string {
           : `Recovered ${episodeTitle}`
       }
       if (outcome === 'deleted') return `Deleted ${episodeTitle}`
-      return operation.result?.summary || `Early delete completed for ${episodeTitle}`
+      if (outcome === 'retained') return `${episodeTitle} remains in No usable media state`
+      if (outcome === 'unverified') return `Could not verify ${episodeTitle}; it was not deleted`
+      if (outcome === 'already_resolved') return `${episodeTitle} no longer needs No usable media verification`
+      return `Early delete completed for ${episodeTitle}`
     }
     case 'show.redownload_episodes': {
       const files = resultNumber(operation, 'episode_files') ?? 0
