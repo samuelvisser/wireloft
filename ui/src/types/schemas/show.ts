@@ -112,7 +112,6 @@ export type ShowUpdatePayloadOut = z.output<typeof ShowUpdatePayloadSchema>;
 export const ShowReadSchema = z.looseObject({
     id: z.int(),
     uuid: z.string(),
-    dwId: z.string(),
     slug: z.string(),
     membershipLevel: z.union([z.enum(DwMembershipLevelReg.values), z.string()]),
     type: z.union([z.enum(ShowTypeReg.values), z.string()]),
@@ -120,16 +119,16 @@ export const ShowReadSchema = z.looseObject({
     authorSlug: z.string(),
     title: z.string(),
     description: z.string(),
-    sharing_url: z.string(),
-    backgroundImagePath: z.string().optional(),
-    logoImagePath: z.string().optional(),
+    sharingUrl: z.string(),
+    backgroundImagePath: z.string().nullable().optional(),
+    logoImagePath: z.string().nullable().optional(),
 
     authorName: z.string(),
-    authorHeadshotPath: z.string().optional(),
+    authorHeadshotPath: z.string().nullable().optional(),
 
-    thumbnailLandscapePath: z.string().optional(),
-    thumbnailPortraitPath: z.string().optional(),
-    thumbnailSquarePath: z.string().optional(),
+    thumbnailLandscapePath: z.string().nullable().optional(),
+    thumbnailPortraitPath: z.string().nullable().optional(),
+    thumbnailSquarePath: z.string().nullable().optional(),
 
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
