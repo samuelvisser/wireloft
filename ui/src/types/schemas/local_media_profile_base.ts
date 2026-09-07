@@ -1,4 +1,5 @@
 import {z} from 'zod'
+import {ApiDateTimeSchema} from "./datetime";
 
 
 // ---------- Strict request (create/update) ----------
@@ -28,6 +29,6 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     outputTemplate: z.string(),
     preferredFormat: z.string(),
     appendMediaTypeToFilename: z.boolean().optional().default(false),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    createdAt: ApiDateTimeSchema,
+    updatedAt: ApiDateTimeSchema,
 })
