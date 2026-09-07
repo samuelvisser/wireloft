@@ -121,10 +121,8 @@ def _reserve_not_usable_number(s: Session, episode: Episode) -> int:
     """Atomically reserve the next per-show quarantine identifier number.
 
     Pending-episode workers run independently and can quarantine several episodes
-    from the same show at once. Reading the metadata counter into Python before
-    incrementing lets every session observe the same value. SQLite's upsert is a
-    single write statement, so competing sessions serialize on the database write
-    lock and each receives a distinct number.
+    from the same show at once. Here, we increment the not usable number counter
+    using SQLite's upsert, making sure it is unique.
     """
     # Flush any ORM-side metadata first so the Core upsert sees the transaction's
     # complete state. This remains part of the caller's transaction and rolls back
