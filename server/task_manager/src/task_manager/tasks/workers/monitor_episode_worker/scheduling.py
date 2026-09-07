@@ -1,16 +1,20 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 from typing import Any
 
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy.orm import Session
 
+from backend.db.models import Episode, Show
+from backend.types.episode_types import EpisodePublishStatus
 from config import get_settings
 from task_manager.events.registry import WireloftEventLinker
+from task_manager.events.transactional import queue_event
 from task_manager.scheduler.executor import execute_task
 from task_manager.scheduler.scheduler import start_scheduler
+from ...helpers.episodes.events import episode_event_payload
 
 
 logger = logging.getLogger(__name__)
@@ -19,25 +23,15 @@ MONITOR_REQUESTED_EVENT = "episode.monitor_requested"
 MONITOR_COMPLETED_EVENT = "episode.monitor_completed"
 
 
-def monitor_job_id(show_slug: str, episode_identifier: str) -> str:
-    """Return a stable, APScheduler-safe id for one logical episode monitor."""
-    identity = f"{show_slug}\0{episode_identifier}".encode()
-    digest = hashlib.sha256(identity).hexdigest()[:20]
-    return f"auto-monitor-episode-{digest}"
+def monitor_job_id(resource_id: int) -> str:
+    """Return the stable APScheduler id for one episode monitor."""
+    return f"auto-monitor-episode-{resource_id}"
 
 
-def schedule_episode_monitor(
-        *,
-        show_slug: str,
-        episode_slug: str,
-        season_id: int,
-        episode_identifier: str,
-        episode_index: int,
-        resource_id: int | None = None,
-) -> str:
+def schedule_episode_monitor(*, resource_id: int) -> str:
     """Create or refresh the recurring monitor job for one episode."""
     scheduler = start_scheduler()
-    job_id = monitor_job_id(show_slug, episode_identifier)
+    job_id = monitor_job_id(resource_id)
     trigger = CronTrigger.from_crontab(
         get_settings().new_episode_schedule.monitor_episode_cron,
         timezone=get_settings().timezone,
@@ -51,29 +45,19 @@ def schedule_episode_monitor(
             "resource_id": resource_id,
             "schedule_id": None,
             "max_retries": 0,
-            "slug": episode_slug,
-            "show_slug": show_slug,
-            "season_id": season_id,
-            "episode_identifier": episode_identifier,
-            "episode_index": episode_index,
         },
         id=job_id,
         replace_existing=True,
         coalesce=True,
         max_instances=1,
     )
-    logger.info(
-        "Scheduled monitor job %s for %s (%s)",
-        job_id,
-        episode_slug,
-        episode_identifier,
-    )
+    logger.info("Scheduled monitor job %s for episode %s", job_id, resource_id)
     return job_id
 
 
-def remove_episode_monitor(*, show_slug: str, episode_identifier: str) -> None:
+def remove_episode_monitor(*, resource_id: int) -> None:
     """Remove the recurring monitor job after the episode becomes final."""
-    job_id = monitor_job_id(show_slug, episode_identifier)
+    job_id = monitor_job_id(resource_id)
     try:
         start_scheduler().remove_job(job_id)
         logger.info("Removed completed episode monitor job %s", job_id)
@@ -83,43 +67,54 @@ def remove_episode_monitor(*, show_slug: str, episode_identifier: str) -> None:
         pass
 
 
-def _handle_monitor_requested(**event_data: Any) -> None:
-    required = (
-        "show_slug",
-        "slug",
-        "season_id",
-        "episode_identifier",
-        "episode_index",
+def queue_monitor_completion_if_settled(
+        s: Session,
+        *,
+        episode: Episode,
+        show: Show,
+        old_status: str | None,
+) -> bool:
+    """Queue monitor completion when this episode no longer needs polling.
+
+    Scheduler identity is based on the immutable local episode id. Metadata such as
+    the Daily Wire slug or WireLoft episode identifier may change while a monitor is
+    active without requiring the APScheduler job to be re-keyed.
+    """
+    should_continue = (
+        episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value
+        and not episode.is_no_show_today
     )
-    missing = [key for key in required if event_data.get(key) is None]
-    if missing:
-        logger.error(
-            "Cannot schedule episode monitor; event is missing: %s",
-            ", ".join(missing),
-        )
+    if should_continue:
+        return False
+
+    queue_event(
+        s,
+        MONITOR_COMPLETED_EVENT,
+        episode_event_payload(
+            episode=episode,
+            show=show,
+            old_status=old_status,
+        ),
+    )
+    return True
+
+
+def _handle_monitor_requested(**event_data: Any) -> None:
+    resource_id = event_data.get("resource_id")
+    if resource_id is None:
+        logger.error("Cannot schedule episode monitor; event is missing resource_id")
         return
 
-    schedule_episode_monitor(
-        show_slug=str(event_data["show_slug"]),
-        episode_slug=str(event_data["slug"]),
-        season_id=int(event_data["season_id"]),
-        episode_identifier=str(event_data["episode_identifier"]),
-        episode_index=int(event_data["episode_index"]),
-        resource_id=event_data.get("resource_id"),
-    )
+    schedule_episode_monitor(resource_id=int(resource_id))
 
 
 def _handle_monitor_completed(**event_data: Any) -> None:
-    show_slug = event_data.get("show_slug")
-    episode_identifier = event_data.get("episode_identifier")
-    if show_slug is None or episode_identifier is None:
-        logger.error("Cannot remove episode monitor; completion event is incomplete")
+    resource_id = event_data.get("resource_id")
+    if resource_id is None:
+        logger.error("Cannot remove episode monitor; completion event is missing resource_id")
         return
 
-    remove_episode_monitor(
-        show_slug=str(show_slug),
-        episode_identifier=str(episode_identifier),
-    )
+    remove_episode_monitor(resource_id=int(resource_id))
 
 
 def register_monitor_event_handlers() -> None:

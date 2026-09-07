@@ -34,14 +34,7 @@ def test_recurring_episode_monitor_disables_task_retries(monkeypatch):
         ),
     )
 
-    scheduling.schedule_episode_monitor(
-        show_slug="test-show",
-        episode_slug="live-episode",
-        season_id=11,
-        episode_identifier="ep.101",
-        episode_index=2,
-        resource_id=501,
-    )
+    scheduling.schedule_episode_monitor(resource_id=501)
 
     assert scheduler.job is not None
     assert scheduler.job["kwargs"]["max_retries"] == 0
