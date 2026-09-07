@@ -3,10 +3,12 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import Integer, cast, func, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
+from backend.db.models.Metadata import Metadata
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.show_types import EpisodeIdentifier
 
@@ -115,6 +117,46 @@ def rollback_identifier_head(s: Session, episode: Episode, previous_identifier: 
         _rollback_date_head(s, episode, previous_identifier)
 
 
+def _reserve_not_usable_number(s: Session, episode: Episode) -> int:
+    """Atomically reserve the next per-show quarantine identifier number.
+
+    Pending-episode workers run independently and can quarantine several episodes
+    from the same show at once. Reading the metadata counter into Python before
+    incrementing lets every session observe the same value. SQLite's upsert is a
+    single write statement, so competing sessions serialize on the database write
+    lock and each receives a distinct number.
+    """
+    # Flush any ORM-side metadata first so the Core upsert sees the transaction's
+    # complete state. This remains part of the caller's transaction and rolls back
+    # together with the episode transition if anything later fails.
+    s.flush()
+
+    statement = (
+        sqlite_insert(Metadata)
+        .values(
+            parent_table="shows",
+            parent_id=episode.show_id,
+            key=_NOT_USABLE_COUNTER_KEY,
+            value="1",
+        )
+        .on_conflict_do_update(
+            index_elements=[Metadata.parent_table, Metadata.parent_id, Metadata.key],
+            set_={
+                "value": cast(Metadata.value, Integer) + 1,
+                "updated_at": func.now(),
+            },
+        )
+        .returning(Metadata.value)
+    )
+    current = int(s.execute(statement).scalar_one())
+
+    # The Show relationship may have been eagerly loaded before another worker
+    # advanced the counter. Force the next metadata access in this transaction to
+    # see the value reserved by the database rather than that stale collection.
+    s.expire(episode.show, ["meta_items"])
+    return current
+
+
 def quarantine_episode_identifier(s: Session, episode: Episode) -> bool:
     """Move an episode out of the canonical identifier namespace without file side effects."""
     if episode.episode_identifier.startswith("not-usable."):
@@ -122,8 +164,7 @@ def quarantine_episode_identifier(s: Session, episode: Episode) -> bool:
 
     previous_identifier = episode.episode_identifier
     episode.set_meta(PREVIOUS_IDENTIFIER_META_KEY, previous_identifier)
-    current = int(episode.show.get_meta(_NOT_USABLE_COUNTER_KEY) or 0) + 1
-    episode.show.set_meta(_NOT_USABLE_COUNTER_KEY, str(current))
+    current = _reserve_not_usable_number(s, episode)
     episode.episode_identifier = f"not-usable.{current}"
     s.flush()
     rollback_identifier_head(s, episode, previous_identifier)
