@@ -1,7 +1,7 @@
 """Harden episode release lifecycle and rename lifecycle tasks.
 
 Revision ID: e6a9c1f4b203
-Revises: b7e2c4d9a601
+Revises: e3a8f4c9b102
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 
 revision = "e6a9c1f4b203"
-down_revision = "b7e2c4d9a601"
+down_revision = "e3a8f4c9b102"
 branch_labels = None
 depends_on = None
 
