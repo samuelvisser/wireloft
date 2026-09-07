@@ -58,10 +58,10 @@ function formatDurationMinutes(minutes: number) {
 }
 
 function ProfileDownloadRow({
-    profile,
-    download,
-    episodeSlug,
-}: {
+                                profile,
+                                download,
+                                episodeSlug,
+                            }: {
     profile: LocalMediaProfileRead
     download?: MediaDownloadViewRead
     episodeSlug: string
@@ -473,8 +473,7 @@ export default function EpisodePage() {
                         onClick: earlyDelete,
                         className: 'btn btn-danger',
                         disabled: earlyDeleteBusy,
-                    }}
-                >
+                    }}>
                     <p>
                         This episode is marked by WireLoft as unusable for downloading or streaming.
                     </p>
