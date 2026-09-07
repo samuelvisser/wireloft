@@ -9,8 +9,10 @@ import {
     ToggleField,
 } from './SettingsControls'
 import ReadMore from "../../utils/ReadMore";
+import {formatDurationMinutes} from "../../utils/formatting";
 
 export default function AutomationSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
+
     return (
         <>
             <SettingsSection
@@ -117,7 +119,8 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                                 found it.
                             </p>
                             <p>
-                                This worker is expected to run quite frequently. Make sure to not set it to run more often than once every two minutes.
+                                This worker is expected to run quite frequently. Make sure to not set it to run more often than once every two
+                                minutes.
                             </p>
                             <p>
                                 Once an episode becomes final, <code>Metadata refresh</code> takes over. If it enters <code>no_usable_media</code>,
@@ -143,7 +146,9 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                             </p>
                             <p>
                                 If this worker finds that the episode has usable media once again, it is restored and automatically
-                                picked up by download- and stream profiles.
+                                picked up by download- and stream profiles. If
+                                after {' '}{formatDurationMinutes(draft.episodeStatusTiming.noUsableMediaDeleteAfterMinutes)} the
+                                episode still did not return to The Daily Wire, it is deleted.
                             </p>
                         </ReadMore>
                     }
@@ -160,13 +165,15 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     help={
                         <ReadMore summary={<span>Intervals to refresh episode metadata after it is published.</span>}>
                             <p>
-                                While a Daily Wire episode is live, WireLoft closely monitors it for status, title and thumbnail updates. After publication, these targeted metadata refreshes keep reconciling late Daily Wire changes, including corrected episode numbers.
+                                While a Daily Wire episode is live, WireLoft closely monitors it for status, title and thumbnail updates. After
+                                publication, these targeted metadata refreshes keep reconciling late Daily Wire changes, including corrected episode
+                                numbers.
                             </p>
                             <p>
                                 Value is a list of comma-separated offsets after publication. Use s, m, h or d, for example: 120s,30m,3h,2d
                             </p>
                         </ReadMore>
-                    } wide
+                    }
                 />
             </SettingsSection>
 
@@ -184,7 +191,22 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.episodeStatusTiming.publishedFinalAfterMinutes = value
                     })}
-                    help="Measured from Daily Wire publishedAt. Only an episode whose current remote state is still published-with-countdown is forced to published final after this threshold."
+                    help={
+                        <ReadMore summary={<span>Set to published final if still at published with countdown after this duration.</span>}>
+                            <p>
+                                Usually, WireLoft can determine an episode's status accurately. However, sometimes it might get stuck in <code>published
+                                with countdown</code>.
+                                If your download profiles are setup to only download <code>published final</code> episodes, this means they still skip
+                                it. This setting acts
+                                as a safety net to ensure <code>published with countdown</code> episodes eventually will always be considered <code>published
+                                final</code>,
+                                even if the conventional method of detecting this change failed.
+                            </p>
+                            <p>
+                                This duration is measured starting from the time the episode was published.
+                            </p>
+                        </ReadMore>
+                    }
                 />
                 <DurationField
                     id="settings-dw-processing-max"
@@ -196,7 +218,20 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.episodeStatusTiming.dwProcessingMaxMinutes = value
                     })}
-                    help="Measured from Daily Wire publishedAt. If the short-metadata/long-HLS processing signature remains after this threshold, WireLoft quarantines the episode as no_usable_media."
+                    help={
+                        <ReadMore summary={<span>Set to no usable media if still at DW processing after this duration.</span>}>
+                            <p>
+                                Usually, WireLoft can determine an episode's status accurately. However, sometimes it might get stuck in <code>DW
+                                processing</code>.
+                                This setting acts as a safety net to ensure <code>DW processing</code> episodes will be considered <code>no usable
+                                media</code> if
+                                this duration elapsed without a change in <code>DW processing</code> status.
+                            </p>
+                            <p>
+                                This duration is measured starting from the time the episode was published.
+                            </p>
+                        </ReadMore>
+                    }
                 />
                 <DurationField
                     id="settings-no-usable-media-delete-after"
@@ -208,7 +243,18 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     onChange={(value) => updateDraft((next) => {
                         next.episodeStatusTiming.noUsableMediaDeleteAfterMinutes = value
                     })}
-                    help="How long the continuous no_usable_media state must last before a current Daily Wire 404 may be deleted. A successful Daily Wire response is never automatically deleted."
+                    help={
+                        <ReadMore summary={<span>How long an episode may remain in no usable media state before it is deleted.</span>}>
+                            <p>
+                                An episode is considered in <code>no usable media</code> if it contains no media, its media is corrupted,
+                                or if it returns <code>404</code> from The Daily Wire. In all of these case, this might be a temporary issue.
+                                However, if it remains in this state after this duration, it may be deleted from WireLoft.
+                            </p>
+                            <p>
+                                This duration is measured starting from the time the episode was marked as <code>no usable media</code>.
+                            </p>
+                        </ReadMore>
+                    }
                 />
             </SettingsDisclosure>
         </>

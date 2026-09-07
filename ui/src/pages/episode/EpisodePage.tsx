@@ -18,44 +18,10 @@ import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
+import {formatBytes, formatDate, formatDurationMinutes} from "../../utils/formatting";
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
-
-function formatDate(value: Date | string | null | undefined) {
-    if (!value) return '—'
-    const d = value instanceof Date ? value : new Date(value)
-    try {
-        return new Intl.DateTimeFormat(undefined, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        }).format(d)
-    } catch {
-        return d?.toString() ?? ''
-    }
-}
-
-function formatBytes(n: number | null | undefined) {
-    if (!n && n !== 0) return ''
-    if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GiB`
-    if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MiB`
-    return `${Math.round(n / 1024)} KiB`
-}
-
-function formatDurationMinutes(minutes: number) {
-    if (minutes === 0) return '0 minutes (the next monitor run)'
-    const hours = Math.floor(minutes / 60)
-    const remainingMinutes = minutes % 60
-    const parts: string[] = []
-    if (hours > 0) parts.push(`${hours} ${hours === 1 ? 'hour' : 'hours'}`)
-    if (remainingMinutes > 0) {
-        parts.push(`${remainingMinutes} ${remainingMinutes === 1 ? 'minute' : 'minutes'}`)
-    }
-    return parts.join(' ')
-}
 
 function ProfileDownloadRow({
                                 profile,
@@ -268,7 +234,7 @@ export default function EpisodePage() {
     const publishStatus = String(episode.publishStatus)
     const statusLabel = PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus
     const isLive = publishStatus === 'live' || publishStatus === EpisodePublishStatus.live
-    const earlyDeleteAvailable = episode.earlyDeleteAvailable === true
+    const earlyDeleteAvailable = episode.earlyDeleteAvailable
     const isDownloadable = (
         publishStatus === 'published_final' || publishStatus === EpisodePublishStatus.publishedFinal
     )
@@ -485,7 +451,8 @@ export default function EpisodePage() {
                         {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> in the continuous <code>no_usable_media</code> state.
                     </p>
                     <p>
-                        Deleting early skips that waiting period, but WireLoft will still re-check Daily Wire and will refuse to delete the local record if the episode has returned.
+                        Deleting early skips that waiting period. However, if it turns out this episode slug returned to The Daily Wire, WireLoft
+                        will refuse to delete it.
                     </p>
                 </ConfirmDialog>
             )}
