@@ -98,10 +98,6 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                                 This cron schedule determines how often WireLoft will search for new episodes across all shows.
                                 It is recommended to set this to a value that is not too frequent, as it can impact performance.
                             </p>
-                            <p>
-                                Before treating a new slug as a new episode, WireLoft can conservatively reconcile it onto the
-                                sole matching pending episode. This covers Daily Wire changing a slug before publication.
-                            </p>
                         </ReadMore>
                     }
                 />
@@ -118,14 +114,14 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         <ReadMore summary={<span>Monitors scheduled, delayed, live, processing and countdown episodes.</span>}>
                             <p>
                                 This cron schedule determines how often WireLoft monitors an episode after the <code>Find new episodes</code> worker
-                                found it. It owns only the pending publication lifecycle.
-                            </p>
-                            <p>
-                                Once an episode becomes final, metadata refresh takes over. If it enters <code>no_usable_media</code>,
-                                the dedicated no-usable-media monitor takes over instead.
+                                found it.
                             </p>
                             <p>
                                 This worker is expected to run quite frequently. Make sure to not set it to run more often than once every two minutes.
+                            </p>
+                            <p>
+                                Once an episode becomes final, <code>Metadata refresh</code> takes over. If it enters <code>no_usable_media</code>,
+                                the dedicated <code>No-usable-media monitor</code> takes over instead.
                             </p>
                         </ReadMore>
                     }
@@ -140,14 +136,14 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         next.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron = value
                     })}
                     help={
-                        <ReadMore summary={<span>Rechecks every quarantined episode for recovery or confirmed removal.</span>}>
+                        <ReadMore summary={<span>Rechecks every episode without usable media for recovery or confirmed removal.</span>}>
                             <p>
                                 WireLoft rechecks all <code>no_usable_media</code> episodes on this schedule, regardless of why
-                                they entered quarantine. A responding Daily Wire episode remains stored until usable media returns.
+                                they entered quarantine.
                             </p>
                             <p>
-                                Automatic deletion is only possible when Daily Wire currently returns 404 and the continuous
-                                quarantine delay below has elapsed.
+                                If this worker finds that the episode has usable media once again, it is restored and automatically
+                                picked up by download- and stream profiles.
                             </p>
                         </ReadMore>
                     }

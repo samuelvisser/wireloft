@@ -34,6 +34,11 @@ def get_dw_episodes_by_seasons(
     prefetched_by_season: dict[int, list[DwEpisodeRecord]] | None = None,
     vacated_identifiers: set[str] | None = None,
 ) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
+    """
+    Fetch all episodes for the given *local* seasons.
+
+    Returns a mapping in descending order
+    """
     return _scan_seasons(
         client,
         show=show,
@@ -64,6 +69,11 @@ def get_dw_episodes_since_ep(
     prefetched_by_season: dict[int, list[DwEpisodeRecord]] | None = None,
     vacated_identifiers: set[str] | None = None,
 ) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
+    """
+    Fetch episodes strictly *after* the given final episode, across *all* remote seasons that follow it.
+
+    Returns a mapping in descending order
+    """
     if since_episode is not None:
         index = next((i for i, season in enumerate(seasons) if season.slug == since_episode.season.slug), -1) + 1
         seasons_to_scan = seasons[:index]
