@@ -1,5 +1,7 @@
 import {z} from "zod";
 
+import {ApiDateTimeSchema} from "./datetime";
+
 
 export const MediaDownloadArtifactStatus = [
     'absent',
@@ -8,13 +10,6 @@ export const MediaDownloadArtifactStatus = [
     'corrupted',
 ] as const
 export type MediaDownloadArtifactStatus = typeof MediaDownloadArtifactStatus[number]
-
-// SQLite does not preserve timezone information for DateTime columns, even
-// though WireLoft writes these values in UTC. Accept both representations and
-// interpret unqualified persisted timestamps as UTC rather than browser-local.
-const DatabaseDateTimeSchema = z.iso.datetime({local: true}).transform((value) =>
-    new Date(/(?:Z|[+-]\d\d:\d\d)$/i.test(value) ? value : `${value}Z`),
-)
 
 
 // ---------- Strict request (create/update) ----------
@@ -43,9 +38,9 @@ export const MediaDownloadReadSchema = z.looseObject({
     automaticRetrySuppressed: z.boolean(),
     downloadedBytes: z.int().nullable(),
     formatDownloaded: z.string().nullable(),
-    downloadedAt: DatabaseDateTimeSchema.nullable(),
-    createdAt: DatabaseDateTimeSchema,
-    updatedAt: DatabaseDateTimeSchema,
+    downloadedAt: ApiDateTimeSchema.nullable(),
+    createdAt: ApiDateTimeSchema,
+    updatedAt: ApiDateTimeSchema,
 })
 export type MediaDownloadRead = z.infer<typeof MediaDownloadReadSchema>;
 
@@ -67,8 +62,8 @@ export const MediaDownloadViewReadSchema = MediaDownloadReadSchema.extend({
     latestTaskStatus: z.string().nullable(),
     latestTaskError: z.string().nullable(),
     latestTaskIsRedownload: z.boolean().nullable(),
-    latestTaskStartedAt: DatabaseDateTimeSchema.nullable(),
-    latestTaskFinishedAt: DatabaseDateTimeSchema.nullable(),
+    latestTaskStartedAt: ApiDateTimeSchema.nullable(),
+    latestTaskFinishedAt: ApiDateTimeSchema.nullable(),
 })
 export type MediaDownloadDomainViewRead = z.infer<typeof MediaDownloadViewReadSchema>;
 

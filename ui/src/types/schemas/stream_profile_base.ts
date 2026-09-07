@@ -1,5 +1,6 @@
 import {z} from 'zod'
 import {EpisodeTypeReg} from '../episode'
+import {ApiDateTimeSchema} from './datetime'
 import {RssStreamProfileReadSchema} from './rss_stream_profile'
 
 export const StreamProfileReadSchema = z.looseObject({
@@ -12,8 +13,8 @@ export const StreamProfileReadSchema = z.looseObject({
     requireExactMatch: z.boolean(),
     epIdTypeList: z.array(z.union([z.enum(EpisodeTypeReg.values), z.string()])),
     type: z.enum(['rss']),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    createdAt: ApiDateTimeSchema,
+    updatedAt: ApiDateTimeSchema,
 })
 export type StreamProfileRead = z.infer<typeof StreamProfileReadSchema>
 
@@ -21,7 +22,6 @@ export type StreamProfileRead = z.infer<typeof StreamProfileReadSchema>
 export const StreamProfileReadViewSchema = StreamProfileReadSchema.extend({
     showTitle: z.string(),
     showSlug: z.string(),
-    // Concrete implementation payload
     streamProfileImpl: RssStreamProfileReadSchema,
 })
 export type StreamProfileReadView = z.infer<typeof StreamProfileReadViewSchema>

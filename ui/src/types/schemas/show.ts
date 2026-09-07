@@ -1,6 +1,7 @@
 import {z} from "zod";
 import {EpisodeIdentifierReg, ShowTypeReg} from "../show";
 import {DwMembershipLevelReg} from "../dailywire_user_info";
+import {ApiDateTimeSchema} from "./datetime";
 
 
 /** Ensure https:// if a scheme is missing */
@@ -130,8 +131,8 @@ export const ShowReadSchema = z.looseObject({
     thumbnailPortraitPath: z.string().optional(),
     thumbnailSquarePath: z.string().optional(),
 
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    createdAt: ApiDateTimeSchema,
+    updatedAt: ApiDateTimeSchema,
 })
 export type ShowRead = z.infer<typeof ShowReadSchema>;
 

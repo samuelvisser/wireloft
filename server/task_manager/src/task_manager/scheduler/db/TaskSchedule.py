@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional, Literal
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String, JSON, func
+from sqlalchemy import Enum as SAEnum, ForeignKey, String, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
+from backend.db.datetime_types import UTCDateTime
 from task_manager.scheduler.db import TaskDefinition
 from task_manager.scheduler.types import ResourceType
 
@@ -22,13 +23,12 @@ class TaskSchedule(Base):
     resource_type: Mapped[ResourceType] = mapped_column(SAEnum(ResourceType), index=True)
     trigger: Mapped[Literal["cron", "interval", "date"]] = mapped_column(String(20))
     trigger_args: Mapped[dict] = mapped_column(JSON)
-    timezone: Mapped[Optional[str]]
-    next_run_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    next_run_time: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
     active: Mapped[bool] = mapped_column(default=True, index=True)
     max_retries: Mapped[Optional[int]] = mapped_column(comment="Retry policy override for runs spawned by this schedule")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now(), onupdate=func.now())
 
     # Relationships
     definition: Mapped[TaskDefinition] = relationship()

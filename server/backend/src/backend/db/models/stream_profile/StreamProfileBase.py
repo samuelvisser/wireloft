@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, func, ForeignKey, JSON
+from sqlalchemy import func, ForeignKey, JSON
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
+from backend.db.datetime_types import UTCDateTime
 from backend.types.download_profile_types import EpIdType
 from backend.types.stream_profile_types import StreamProfileType
 from backend.utils.helpers import generate_stream_profile_token
@@ -50,10 +51,10 @@ class StreamProfileBase(Base):
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCDateTime(), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UTCDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     # Relationships

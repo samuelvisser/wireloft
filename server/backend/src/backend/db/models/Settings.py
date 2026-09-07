@@ -1,8 +1,9 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, false, func
+from sqlalchemy import Boolean, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.db import Base
+from backend.db.datetime_types import UTCDateTime
 
 
 class Settings(Base):
@@ -17,10 +18,10 @@ class Settings(Base):
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCDateTime(), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UTCDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     def __repr__(self):

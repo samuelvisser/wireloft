@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {EpisodePublishStatus} from "../episode";
+import {ApiDateTimeSchema} from "./datetime";
 
 
 // ---------- Strict request (create/update) ----------
@@ -48,12 +49,12 @@ export const EpisodeReadSchema = z.looseObject({
     thumbnailLandscapePath: z.string().optional(),
     thumbnailPortraitPath: z.string().optional(),
     thumbnailSquarePath: z.string().optional(),
-    wentLiveDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
-    publishedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
-    redownloadedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
-    downloadedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
+    wentLiveDate: ApiDateTimeSchema.optional(),
+    publishedDate: ApiDateTimeSchema.optional(),
+    redownloadedDate: ApiDateTimeSchema.optional(),
+    downloadedDate: ApiDateTimeSchema.optional(),
     isNoShowToday: z.boolean().nullable().optional(),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    createdAt: ApiDateTimeSchema,
+    updatedAt: ApiDateTimeSchema,
 })
 export type EpisodeRead = z.infer<typeof EpisodeReadSchema>

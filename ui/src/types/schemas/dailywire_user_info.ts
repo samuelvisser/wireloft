@@ -1,5 +1,6 @@
 import {z} from 'zod'
 import {DwMembershipLevelReg} from "../dailywire_user_info";
+import {ApiDateTimeSchema} from './datetime'
 
 export const DailywireUserInfoReadSchema = z.looseObject({
     personId: z.string(),
@@ -11,6 +12,6 @@ export const DailywireUserInfoReadSchema = z.looseObject({
     avatar: z.string(),
     accessLevel: z.union([z.enum(DwMembershipLevelReg.Enum), z.string()]),
     planType: z.union([z.enum(DwMembershipLevelReg.Enum), z.string()]),
-    accountCreatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    accountCreatedAt: ApiDateTimeSchema,
 })
 export type DailywireUserInfoRead = z.infer<typeof DailywireUserInfoReadSchema>

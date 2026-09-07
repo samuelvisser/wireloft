@@ -2,9 +2,10 @@ from datetime import datetime
 from typing import List, Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import DateTime, func, UniqueConstraint
+from sqlalchemy import func, UniqueConstraint
 
 from backend.db import Base
+from backend.db.datetime_types import UTCDateTime
 from backend.types.media_types import MediaType
 
 if TYPE_CHECKING:
@@ -32,10 +33,10 @@ class MediaItemBase(Base):
     thumbnail_square_path: Mapped[Optional[str]]
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCDateTime(), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UTCDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     # Relationships

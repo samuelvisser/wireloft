@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, JSON
+from sqlalchemy import Date, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.types.media_types import MediaType
 
@@ -39,6 +40,7 @@ class Movie(MediaItemBase, HasTaskResourcesMixin):
         nullable=False,
     )
 
+    # A release date is calendar data, not an instant; keep it timezone-free.
     release_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     release_date_source: Mapped[Optional[str]]
     release_date_source_id: Mapped[Optional[str]]
@@ -48,7 +50,7 @@ class Movie(MediaItemBase, HasTaskResourcesMixin):
         nullable=False,
     )
     release_date_lookup_attempted_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         nullable=True,
     )
     release_date_lookup_error: Mapped[Optional[str]]

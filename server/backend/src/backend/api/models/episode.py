@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional, Union
 from datetime import datetime
 
-from pydantic import computed_field
+from pydantic import AwareDatetime, computed_field
 
 from backend.api.models.base import ResponseBase, RequestBase
 from backend.types.episode_types import EpisodePublishStatus
@@ -14,16 +14,17 @@ from backend.utils.helpers import generate_uuid
 # ---------- Strict input (create/update) ----------
 class _EpisodeAPIBaseIn(RequestBase):
     """Fields for requests: validate here if needed."""
-    # Fields in the episodes' table
+    # Fields in the episodes' table. Absolute instants must include a timezone;
+    # the database boundary normalizes them to UTC before persistence.
     publish_status: EpisodePublishStatus
-    went_live_date: Optional[datetime]
-    published_date: Optional[datetime]
-    redownloaded_date: Optional[datetime]
+    went_live_date: Optional[AwareDatetime]
+    published_date: Optional[AwareDatetime]
+    redownloaded_date: Optional[AwareDatetime]
 
     # Fields in the media_items table
     title: str
     description: str
-    downloaded_date: Optional[datetime]
+    downloaded_date: Optional[AwareDatetime]
 
 
 class EpisodeAPICreate(_EpisodeAPIBaseIn):

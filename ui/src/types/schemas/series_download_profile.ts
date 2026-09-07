@@ -42,7 +42,5 @@ export const SeriesDownloadProfileReadSchema = DownloadProfileSchemaResponse.saf
     type: z.literal('series'),
     seasons: z.array(SeasonReadSchema),
     includeUpcomingSeasons: z.boolean(),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
 })
 export type SeriesDownloadProfileRead = z.infer<typeof SeriesDownloadProfileReadSchema>

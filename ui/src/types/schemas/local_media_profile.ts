@@ -1,6 +1,7 @@
 import {z} from "zod";
 import {createServerErrorMapper} from "../../utils/serverMessageMap";
 import {MoviePreferredFormatReg, PreferredFormatReg} from "../local_media_profile";
+import {ApiDateTimeSchema} from "./datetime";
 
 export const LocalMediaProfileServerErrors = createServerErrorMapper({
     name: {unique_violation: "Name is already taken."},
@@ -88,7 +89,7 @@ export const LocalMediaProfileReadSchema = z.looseObject({
     outputTemplate: z.string(),
     preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
     appendMediaTypeToFilename: z.boolean().optional().default(false),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    createdAt: ApiDateTimeSchema,
+    updatedAt: ApiDateTimeSchema,
 })
 export type LocalMediaProfileRead = z.infer<typeof LocalMediaProfileReadSchema>;

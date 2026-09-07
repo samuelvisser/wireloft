@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, JSON, func
+from sqlalchemy import Enum as SAEnum, ForeignKey, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
+from backend.db.datetime_types import UTCDateTime
 from task_manager.scheduler.types import ResourceType, TaskStatus
 
 if TYPE_CHECKING:
@@ -15,7 +16,6 @@ if TYPE_CHECKING:
 
 class TaskRun(Base):
     """ A TaskRun represents one execution attempt of one registered worker """
-
 
     __tablename__ = "task_runs"
 
@@ -34,16 +34,15 @@ class TaskRun(Base):
     attempt_count: Mapped[int] = mapped_column(default=0)
     max_retries: Mapped[int] = mapped_column(default=0)
     last_error: Mapped[Optional[str]]
-    next_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    next_retry_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
 
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+    finished_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
     runtime_ms: Mapped[Optional[int]]
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now(), onupdate=func.now())
 
-    # Relationships
     operation_links: Mapped[list["TaskOperationRun"]] = relationship(
         back_populates="task_run",
         cascade="all, delete-orphan",

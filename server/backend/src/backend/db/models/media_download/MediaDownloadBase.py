@@ -2,10 +2,11 @@ from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Boolean, DateTime, String, Text, func, UniqueConstraint
+from sqlalchemy import Boolean, String, Text, func, UniqueConstraint
 from sqlalchemy.sql.schema import ForeignKey
 
 from backend.db import Base
+from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_types import MediaType
@@ -61,13 +62,13 @@ class MediaDownloadBase(HasTaskResourcesMixin, Base):
     # after a successful download attempt.
     downloaded_bytes: Mapped[Optional[int]]
     format_downloaded: Mapped[Optional[str]]
-    downloaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    downloaded_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCDateTime(), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UTCDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     # Relationships

@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Index, func
+from sqlalchemy import Boolean, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
+from backend.db.datetime_types import UTCDateTime
 from backend.types.local_media_profile_types import LocalMediaProfileType
 
 if TYPE_CHECKING:
@@ -48,10 +49,10 @@ class LocalMediaProfileBase(Base):
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCDateTime(), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UTCDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     download_profiles: Mapped[list["DownloadProfileBase"]] = relationship(

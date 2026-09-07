@@ -1,5 +1,6 @@
 import {z} from 'zod'
 import {createServerErrorMapper} from '../../utils/serverMessageMap'
+import {ApiDateTimeSchema} from './datetime'
 
 
 const CryptoFileSettingsSchema = z.object({
@@ -17,7 +18,6 @@ const DailyWireAPISettingsSchema = z.object({
 })
 
 const MovieMetadataSettingsSchema = z.object({
-    // The API never returns the stored secret. This is a write-only replacement value.
     tmdbReadAccessToken: z.string(),
     tmdbReadAccessTokenConfigured: z.boolean(),
     tmdbApiBaseUrl: z.string(),
@@ -232,6 +232,6 @@ export const SettingsReadSchema = z.object({
     values: SettingsValuesSchema,
     configuredFields: z.array(SettingsFieldPathSchema),
     environmentOverrides: z.record(z.string(), z.string()),
-    updatedAt: z.iso.datetime().nullable().transform((value) => value ? new Date(value) : null),
+    updatedAt: ApiDateTimeSchema.nullable(),
 })
 export type SettingsRead = z.infer<typeof SettingsReadSchema>

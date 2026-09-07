@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 import importlib
@@ -13,6 +14,8 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from config import get_settings
+
+from .datetime_types import UTCDateTime
 
 
 logger = logging.getLogger(__name__)
@@ -31,6 +34,7 @@ naming_convention = {
 
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=naming_convention)
+    type_annotation_map = {datetime: UTCDateTime()}
 
 
 _engine: Optional[Engine] = None
