@@ -4,12 +4,11 @@ from typing import Optional
 
 from config import get_settings
 from controller.db_utils import db_session
-from task_manager.scheduler.registry import task, on_cron, on_event
-from ..fetch_new_episodes.service import SHOW_INDEXED_EVENT
-from .service import run_download_profile_worker
-from task_manager.scheduler.registry import on_event, task
+from task_manager.scheduler.registry import on_cron, on_event, task
 from ...helpers.episodes.events import EPISODE_IDENTIFIER_CHANGED_EVENT
+from ..fetch_new_episodes.service import SHOW_INDEXED_EVENT
 from .identifier_changes import handle_episode_identifier_changed
+from .service import run_download_profile_worker
 
 
 @on_event(
