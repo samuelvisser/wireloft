@@ -68,11 +68,16 @@ def _episode_type_prefix(episode: Episode) -> str:
 
 
 def _episode_recency_key(episode: Episode) -> tuple[datetime, int]:
-    return episode.published_date or episode.went_live_date or datetime.min, episode.id or 0
+    return (
+        episode.published_date
+        or episode.went_live_date
+        or datetime.min.replace(tzinfo=timezone.utc),
+        episode.id or 0,
+    )
 
 
-def _utc_now_naive() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def get_download_profile_episodes(
@@ -96,7 +101,7 @@ def get_download_profile_episodes(
 
     cutoff: Optional[datetime] = None
     if is_podcast and profile.download_days_in_past > 0:
-        cutoff = _utc_now_naive() - timedelta(days=profile.download_days_in_past)
+        cutoff = _utc_now() - timedelta(days=profile.download_days_in_past)
 
     allowed_season_ids: Optional[set[int]] = None
     max_chosen_season_index: Optional[int] = None
@@ -261,7 +266,7 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
     elif profile.download_days_in_past > 0:
         if not profile.delete_older_episodes:
             return 0
-        cutoff = _utc_now_naive() - timedelta(days=profile.download_days_in_past)
+        cutoff = _utc_now() - timedelta(days=profile.download_days_in_past)
         rows = list(s.execute(
             select(EpisodeMediaDownload)
             .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
