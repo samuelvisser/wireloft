@@ -5,6 +5,7 @@ from typing import Optional
 from config import get_settings
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import on_cron, on_event, task
+from task_manager.scheduler.results import TaskResult
 from .service import run_monitor_no_usable_media_episode
 
 
@@ -30,11 +31,11 @@ async def monitor_no_usable_media_episode(
     episode_id: Optional[int] = None,
     force: bool = False,
     progress=None,
-) -> None:
+) -> TaskResult:
     settings = get_settings()
     show_id = None if resource_id in {None, 0} else resource_id
     with db_session() as s:
-        await run_monitor_no_usable_media_episode(
+        return await run_monitor_no_usable_media_episode(
             s,
             show_id=show_id,
             show_slug=slug,

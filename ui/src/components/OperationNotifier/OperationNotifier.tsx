@@ -9,6 +9,7 @@ import {
 import {useQueryClient, type QueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 import {type TaskOperationRead} from '../../types/schemas/operation'
+import {PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {refreshFrontendPuller, useFrontendPuller} from '../../lib/puller'
 
 const ACTIVE_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
@@ -39,6 +40,11 @@ async function markSeen(operationId: string): Promise<void> {
 
 function contextString(operation: TaskOperationRead, key: string): string | undefined {
   const value = operation.context?.[key]
+  return typeof value === 'string' && value ? value : undefined
+}
+
+function resultString(operation: TaskOperationRead, key: string): string | undefined {
+  const value = operation.result?.data?.[key]
   return typeof value === 'string' && value ? value : undefined
 }
 
@@ -99,7 +105,18 @@ function successMessage(operation: TaskOperationRead): string {
     }
     case 'episode.early_delete': {
       const episodeTitle = contextString(operation, 'episode_title') || operation.title
-      return `Deleted ${episodeTitle}`
+      const outcome = resultString(operation, 'outcome')
+      if (outcome === 'recovered' || outcome === 'replaced') {
+        const publishStatus = resultString(operation, 'publish_status')
+        const statusLabel = publishStatus
+          ? (PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus)
+          : undefined
+        return statusLabel
+          ? `Recovered ${episodeTitle} to ${statusLabel} state`
+          : `Recovered ${episodeTitle}`
+      }
+      if (outcome === 'deleted') return `Deleted ${episodeTitle}`
+      return operation.result?.summary || `Early delete completed for ${episodeTitle}`
     }
     case 'show.redownload_episodes': {
       const files = resultNumber(operation, 'episode_files') ?? 0
@@ -149,6 +166,7 @@ function taskLedgerQueryMatchesOperation(queryKey: readonly unknown[], operation
 async function invalidateForOperation(queryClient: QueryClient, operation: TaskOperationRead) {
   const showSlug = contextString(operation, 'show_slug')
   const episodeSlug = contextString(operation, 'episode_slug')
+  const resultEpisodeSlug = resultString(operation, 'episode_slug')
   const movieSlug = contextString(operation, 'movie_slug')
   const invalidations: Promise<unknown>[] = [
     queryClient.invalidateQueries({
@@ -176,6 +194,9 @@ async function invalidateForOperation(queryClient: QueryClient, operation: TaskO
   if (operation.kind.startsWith('episode.')) {
     if (episodeSlug) {
       invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
+    }
+    if (resultEpisodeSlug && resultEpisodeSlug !== episodeSlug) {
+      invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', resultEpisodeSlug]}))
     }
     if (showSlug) {
       invalidations.push(queryClient.invalidateQueries({queryKey: ['episodes', showSlug]}))

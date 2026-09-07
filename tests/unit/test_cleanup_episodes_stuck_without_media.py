@@ -44,6 +44,33 @@ def _make_episode(session, show, *, slug="episode", identifier="ep.2"):
     return episode
 
 
+def _make_replacement_episode(session, original, *, slug="canonical-slug"):
+    from backend.db.models import Episode
+    from backend.types.episode_types import EpisodePublishStatus
+    from backend.utils.helpers import generate_uuid
+    from task_manager.tasks.helpers.episodes.quarantine import PREVIOUS_IDENTIFIER_META_KEY
+
+    previous_identifier = original.get_meta(PREVIOUS_IDENTIFIER_META_KEY)
+    assert previous_identifier
+    replacement = Episode(
+        uuid=generate_uuid(),
+        type="episode",
+        show=original.show,
+        season=original.season,
+        index=original.index + 1,
+        episode_identifier=previous_identifier,
+        slug=slug,
+        title=original.title,
+        duration=100.0,
+        publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
+        sharing_url=f"https://example.test/{slug}",
+        published_date=original.published_date,
+    )
+    session.add(replacement)
+    session.flush()
+    return replacement
+
+
 @pytest.fixture
 def db_session():
     import backend.db.models  # noqa: F401
@@ -180,10 +207,94 @@ def test_force_delete_still_requires_fresh_404(db_session, monkeypatch):
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_monitor_no_usable_media_episode(
+    result = asyncio.run(service.run_monitor_no_usable_media_episode(
         db_session, episode_id=episode_id, force=True, delete_after_minutes=240,
     ))
     assert db_session.get(Episode, episode_id) is not None
+    assert result.data["outcome"] == "retained"
+    assert result.data["removed"] == 0
+
+
+def test_force_delete_reports_recovery_and_new_status(db_session, monkeypatch):
+    from backend.db.models import Episode
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
+
+    show = _make_show(db_session)
+    episode = _make_episode(db_session, show)
+    _mark_missing(db_session, episode, hours_ago=1)
+    episode_id = episode.id
+    detail = SimpleNamespace(slug=episode.slug)
+
+    class FakeClient:
+        def __init__(self, access_token=None): pass
+        def get_episode_details(self, slug, *, require_member_exclusive): return detail
+
+    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+    _patch_no_token(monkeypatch, service)
+    monkeypatch.setattr(
+        service,
+        "observe_episode_detail",
+        lambda _detail, *, inspect_static_media: SimpleNamespace(
+            status=EpisodePublishStatus.PUBLISHED_FINAL,
+            has_usable_media=True,
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "resolve_episode_status",
+        lambda _detail, *, snapshot: SimpleNamespace(status=EpisodePublishStatus.PUBLISHED_FINAL),
+    )
+    monkeypatch.setattr(service, "update_episode_from_dailywire", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "reconcile_episode_identifier", lambda *_args, **_kwargs: None)
+
+    result = asyncio.run(service.run_monitor_no_usable_media_episode(
+        db_session, episode_id=episode_id, force=True, delete_after_minutes=240,
+    ))
+
+    stored = db_session.get(Episode, episode_id)
+    assert stored is not None
+    assert stored.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
+    assert result.data["outcome"] == "recovered"
+    assert result.data["publish_status"] == EpisodePublishStatus.PUBLISHED_FINAL.value
+    assert result.data["episode_slug"] == episode.slug
+    assert result.data["recovered"] == 1
+    assert result.data["removed"] == 0
+
+
+def test_force_delete_reports_replacement_as_recovered_state(db_session, monkeypatch):
+    from backend.db.models import Episode
+    from backend.types.episode_types import EpisodePublishStatus
+    from dailywire_api.dw_api.client import MiddlewareAPIError
+    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
+
+    show = _make_show(db_session)
+    episode = _make_episode(db_session, show, slug="wrong-slug")
+    _mark_missing(db_session, episode, hours_ago=1)
+    episode_id = episode.id
+    replacement = _make_replacement_episode(db_session, episode, slug="canonical-slug")
+    replacement_id = replacement.id
+    db_session.commit()
+
+    class FakeClient:
+        def __init__(self, access_token=None): pass
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            raise MiddlewareAPIError("not found", status_code=404)
+
+    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+    _patch_no_token(monkeypatch, service)
+    result = asyncio.run(service.run_monitor_no_usable_media_episode(
+        db_session, episode_id=episode_id, force=True, delete_after_minutes=240,
+    ))
+
+    assert db_session.get(Episode, episode_id) is None
+    stored_replacement = db_session.get(Episode, replacement_id)
+    assert stored_replacement is not None
+    assert stored_replacement.slug == "canonical-slug"
+    assert result.data["outcome"] == "replaced"
+    assert result.data["publish_status"] == EpisodePublishStatus.PUBLISHED_FINAL.value
+    assert result.data["episode_slug"] == "canonical-slug"
+    assert result.data["removed"] == 1
 
 
 def test_force_delete_removes_target_immediately_when_it_still_404s(db_session, monkeypatch):
@@ -202,10 +313,13 @@ def test_force_delete_removes_target_immediately_when_it_still_404s(db_session, 
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_monitor_no_usable_media_episode(
+    result = asyncio.run(service.run_monitor_no_usable_media_episode(
         db_session, episode_id=episode_id, force=True, delete_after_minutes=240,
     ))
     assert db_session.get(Episode, episode_id) is None
+    assert result.data["outcome"] == "deleted"
+    assert result.data["removed"] == 1
+    assert result.data["recovered"] == 0
 
 
 def test_force_delete_requires_specific_episode(db_session):

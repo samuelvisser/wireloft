@@ -13,11 +13,12 @@ from backend.types.episode_types import EpisodePublishStatus
 from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from dailywire_authorisation import DeviceAuthClient
 from task_manager.events.transactional import queue_event
+from task_manager.scheduler.results import TaskResult
 from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.episodes.metadata import METADATA_REFRESH_REQUESTED_EVENT, update_episode_from_dailywire
 from ...helpers.episodes.no_show import is_no_show_today_slug
-from ...helpers.episodes.quarantine import restore_quarantined_identifier
+from ...helpers.episodes.quarantine import PREVIOUS_IDENTIFIER_META_KEY, restore_quarantined_identifier
 from ...helpers.episodes.same_episode import PENDING_EPISODE_STATUSES
 from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
 from ...helpers.episodes.unusable_media import (
@@ -43,6 +44,21 @@ def _delete_episode(s: Session, episode: Episode) -> None:
     queue_event(s, "episode.deleted", episode_event_payload(episode=episode, show=episode.show))
     s.delete(episode)
     s.commit()
+
+
+def _replacement_for_quarantined_episode(s: Session, episode: Episode) -> Episode | None:
+    """Return a healthy row that reclaimed this quarantined row's canonical identifier."""
+    previous_identifier = episode.get_meta(PREVIOUS_IDENTIFIER_META_KEY)
+    if not previous_identifier:
+        return None
+    return s.scalar(
+        select(Episode).where(
+            Episode.show_id == episode.show_id,
+            Episode.id != episode.id,
+            Episode.episode_identifier == previous_identifier,
+            Episode.publish_status != EpisodePublishStatus.NO_USABLE_MEDIA.value,
+        ).limit(1)
+    )
 
 
 def _reason_for_unusable_detail(detail, observed_status: EpisodePublishStatus) -> NoUsableMediaReason:
@@ -129,6 +145,44 @@ def _recover_episode(s: Session, episode: Episode, detail) -> bool:
     return True
 
 
+def _target_result(
+    *,
+    title: str,
+    episode_id: int,
+    outcome: str,
+    recovered_status: EpisodePublishStatus | None,
+    episode_slug: str | None,
+    verified: int,
+    recovered: int,
+    removed: int,
+) -> TaskResult:
+    data: dict[str, str | int] = {
+        "episode_id": episode_id,
+        "outcome": outcome,
+        "verified": verified,
+        "recovered": recovered,
+        "removed": removed,
+    }
+    if recovered_status is not None:
+        data["publish_status"] = recovered_status.value
+    if episode_slug:
+        data["episode_slug"] = episode_slug
+
+    if outcome == "recovered":
+        summary = f"Recovered {title}"
+    elif outcome == "replaced":
+        summary = f"Removed stale {title}; its replacement is available"
+    elif outcome == "deleted":
+        summary = f"Deleted {title}"
+    elif outcome == "retained":
+        summary = f"{title} remains in no usable media"
+    elif outcome == "unverified":
+        summary = f"Could not verify {title}"
+    else:
+        summary = f"{title} no longer needs no-usable-media verification"
+    return TaskResult(summary=summary, data=data)
+
+
 async def run_monitor_no_usable_media_episode(
     s: Session,
     *,
@@ -138,7 +192,7 @@ async def run_monitor_no_usable_media_episode(
     force: bool = False,
     delete_after_minutes: int = DEFAULT_NO_USABLE_MEDIA_DELETE_AFTER_MINUTES,
     progress=None,
-) -> None:
+) -> TaskResult:
     """Verify quarantined episodes, recover usable media, or delete confirmed 404s."""
     if force and episode_id is None:
         raise ValueError("Early Delete requires a specific episode_id")
@@ -153,19 +207,41 @@ async def run_monitor_no_usable_media_episode(
 
     candidates = list(s.scalars(stmt))
     if not candidates:
-        update_progress(progress, 100, "No no-usable-media episodes to verify")
-        return
+        message = "No no-usable-media episodes to verify"
+        update_progress(progress, 100, message)
+        if episode_id is not None:
+            return _target_result(
+                title="Episode",
+                episode_id=episode_id,
+                outcome="already_resolved",
+                recovered_status=None,
+                episode_slug=None,
+                verified=0,
+                recovered=0,
+                removed=0,
+            )
+        return TaskResult(
+            summary=message,
+            data={"verified": 0, "recovered": 0, "removed": 0},
+        )
 
     tokens = DeviceAuthClient().get_token()
     access_token = tokens.access_token if tokens else None
     client = MiddlewareClient(access_token=access_token)
     now = datetime.now(timezone.utc)
-    removed = recovered = 0
+    removed = recovered = verified = 0
+    target_title = candidates[0].title if episode_id is not None else None
+    target_outcome: str | None = None
+    target_recovered_status: EpisodePublishStatus | None = None
+    target_slug: str | None = candidates[0].slug if episode_id is not None else None
 
     for index, episode in enumerate(candidates, start=1):
+        is_target = episode_id == episode.id
         require_member_exclusive = _membership(episode.show)
         if require_member_exclusive and access_token is None:
             logger.warning("Cannot verify premium episode %s without a valid token", episode.slug)
+            if is_target:
+                target_outcome = "unverified"
             continue
 
         try:
@@ -176,7 +252,10 @@ async def run_monitor_no_usable_media_episode(
         except MiddlewareAPIError as exc:
             if exc.status_code != 404:
                 logger.warning("Could not verify no-usable-media episode %s: %s", episode.slug, exc)
+                if is_target:
+                    target_outcome = "unverified"
                 continue
+            verified += 1
             mark_episode_no_usable_media(
                 s,
                 episode,
@@ -185,21 +264,44 @@ async def run_monitor_no_usable_media_episode(
             )
             s.commit()
             if force or _incident_expired(episode, now=now, minutes=delete_after_minutes):
+                replacement = _replacement_for_quarantined_episode(s, episode) if is_target else None
+                replacement_status = (
+                    EpisodePublishStatus(replacement.publish_status)
+                    if replacement is not None
+                    else None
+                )
+                replacement_slug = replacement.slug if replacement is not None else None
                 logger.info("Deleting confirmed-404 episode %s", episode.slug)
                 _delete_episode(s, episode)
                 removed += 1
+                if is_target:
+                    target_outcome = "replaced" if replacement is not None else "deleted"
+                    target_recovered_status = replacement_status
+                    target_slug = replacement_slug
+            elif is_target:
+                target_outcome = "retained"
         else:
+            verified += 1
             try:
                 if _recover_episode(s, episode, detail):
                     recovered += 1
+                    if is_target:
+                        target_outcome = "recovered"
+                        target_recovered_status = EpisodePublishStatus(episode.publish_status)
+                        target_slug = episode.slug
                 else:
                     s.commit()
+                    if is_target:
+                        target_outcome = "retained"
+                        target_slug = episode.slug
             except Exception:
                 s.rollback()
                 logger.exception(
                     "Could not verify media usability for episode %s; leaving it quarantined",
                     episode.slug,
                 )
+                if is_target:
+                    target_outcome = "unverified"
 
         update_progress(
             progress,
@@ -207,8 +309,25 @@ async def run_monitor_no_usable_media_episode(
             f"Verified {index}/{len(candidates)} no-usable-media episode(s); recovered {recovered}, removed {removed}",
         )
 
-    update_progress(
-        progress,
-        100,
-        f"Verified {len(candidates)} no-usable-media episode(s); recovered {recovered}, removed {removed}",
+    message = (
+        f"Verified {len(candidates)} no-usable-media episode(s); "
+        f"recovered {recovered}, removed {removed}"
+    )
+    update_progress(progress, 100, message)
+
+    if episode_id is not None:
+        return _target_result(
+            title=target_title or "Episode",
+            episode_id=episode_id,
+            outcome=target_outcome or "already_resolved",
+            recovered_status=target_recovered_status,
+            episode_slug=target_slug,
+            verified=verified,
+            recovered=recovered,
+            removed=removed,
+        )
+
+    return TaskResult(
+        summary=message,
+        data={"verified": verified, "recovered": recovered, "removed": removed},
     )
