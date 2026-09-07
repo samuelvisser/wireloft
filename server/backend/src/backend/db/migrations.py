@@ -7,7 +7,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from alembic.script.revision import ResolutionError
+from alembic.script.revision import RangeNotAncestorError, ResolutionError, RevisionError
 from alembic.util import CommandError
 from sqlalchemy import inspect as sa_inspect
 
@@ -89,7 +89,7 @@ def validate_database_migration_state() -> None:
     for revision in current:
         try:
             scripts.get_revision(revision)
-        except ResolutionError as exc:
+        except (CommandError, ResolutionError) as exc:
             raise DatabaseMigrationError(
                 f"Database '{get_db_path()}' references unknown Alembic revision '{revision}'."
             ) from exc
@@ -125,8 +125,51 @@ def upgrade_database() -> None:
     require_database_current()
 
 
+def _is_relative_downgrade(revision: str) -> bool:
+    return revision.startswith("-") and revision[1:].isdigit()
+
+
+def _validate_downgrade_target(revision: str) -> None:
+    """Verify the target is reachable by downgrading from the DB's current path."""
+    current = get_current_revisions()
+    if not current:
+        raise DatabaseMigrationError(
+            f"Database '{get_db_path()}' has no current Alembic revision to downgrade."
+        )
+
+    if len(current) > 1 and _is_relative_downgrade(revision):
+        current_label = ", ".join(current)
+        raise DatabaseMigrationError(
+            f"Database has multiple current Alembic revisions ({current_label}). "
+            f"Relative downgrade '{revision}' is ambiguous; specify an explicit target revision."
+        )
+
+    current_label = ", ".join(current)
+    try:
+        # Start traversal at the revision(s) actually stored in the database, not
+        # at the script directory's global head(s). Unrelated Alembic branches
+        # therefore do not prevent recovery of the branch this database is on.
+        list(
+            _script_directory().iterate_revisions(
+                current,
+                revision,
+                select_for_downgrade=True,
+            )
+        )
+    except RangeNotAncestorError as exc:
+        raise DatabaseMigrationError(
+            f"Cannot downgrade database from {current_label} to '{revision}': "
+            "the requested revision is not an ancestor of the database's current revision(s)."
+        ) from exc
+    except (CommandError, RevisionError) as exc:
+        raise DatabaseMigrationError(
+            f"Cannot downgrade database from {current_label} to '{revision}': {exc}"
+        ) from exc
+
+
 def downgrade_database(revision: str) -> None:
     validate_database_migration_state()
+    _validate_downgrade_target(revision)
     try:
         command.downgrade(get_alembic_config(), revision)
     except CommandError as exc:

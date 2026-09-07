@@ -18,11 +18,14 @@ from backend.db.migrations import (
     check_database,
     create_revision,
     downgrade_database,
+    get_current_revisions,
     get_database_status,
+    get_head_revisions,
     initialize_database,
     require_database_current,
     show_history,
     upgrade_database,
+    validate_database_migration_state,
 )
 from config.registry import get_settings
 from .config import PROJECT_ROOT
@@ -200,17 +203,27 @@ def _handle_db_command(args: argparse.Namespace) -> None:
 
     if args.db_command == "downgrade":
         downgrade_database(args.revision)
-        current, _head = get_database_status()
+        current = get_current_revisions()
         current_label = ", ".join(current) if current else "base / not initialized"
         print(f"Database downgraded to: {current_label} ({get_db_path()})")
         return
 
     if args.db_command == "current":
-        current, head = get_database_status()
+        validate_database_migration_state()
+        current = get_current_revisions()
+        heads = get_head_revisions()
         current_label = ", ".join(current) if current else "base / not initialized"
-        status = "up to date" if current == (head,) else "upgrade required"
-        print(f"Current database revision: {current_label}")
-        print(f"Latest WireLoft revision:  {head}")
+        head_label = ", ".join(heads) if heads else "none"
+        current_noun = "revision" if len(current) <= 1 else "revisions"
+        head_noun = "revision" if len(heads) == 1 else "revisions"
+        if len(heads) > 1:
+            status = f"multiple Alembic heads ({len(heads)})"
+        elif heads and current == (heads[0],):
+            status = "up to date"
+        else:
+            status = "upgrade required"
+        print(f"Current database {current_noun}: {current_label}")
+        print(f"Latest WireLoft {head_noun}:  {head_label}")
         print(f"Status: {status}")
         return
 
