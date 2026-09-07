@@ -2,27 +2,27 @@ from enum import Enum
 
 
 class EpisodePublishStatus(Enum):
-    # DW API returns the episode as scheduled
+    # Daily Wire explicitly reports the episode as scheduled.
     SCHEDULED = "scheduled"
 
-    # DW API officially returns as delayed
-    # This is different from the scheduled time being in the past but the episode not being live yet
+    # Daily Wire reports PUBLISHED while but its slug contains delayed-start,
+    # meaning this episode is delayed.
     DELAYED = "delayed"
 
-    # DW API returns as live
+    # Daily Wire explicitly reports the episode as live.
     LIVE = "live"
 
-    # WireLoft knows about the episode, but Daily Wire currently exposes no usable media for it.
-    # Examples include No Show Today placeholders and episode-detail requests that return 404.
+    # WireLoft quarantines the episode because Daily Wire currently exposes no settled usable media.
     NO_USABLE_MEDIA = "no_usable_media"
 
-    # DW API returns as published, but with the same ID as when it was live. This means the episode is not
-    # yet ready to be downloaded.
+    # Daily Wire reports PUBLISHED while metadata duration is still below 12 seconds,
+    # but the actual HLS playlist is already longer than 12 seconds.
     DW_PROCESSING = "dw_processing"
 
-    # DW API returns as published with a new ID. This means the episode is ready to be downloaded, but likely
-    # still contains the same content as when it was live
+    # Daily Wire reports PUBLISHED with settled usable media, but the episode is
+    # still not marked downloadable and therefore still represents countdown media.
     PUBLISHED_WITH_COUNTDOWN = "published_with_countdown"
 
-    # The episode file size changed, meaning it was edited by DW likely meaning it now no longer contains the countdown
+    # Daily Wire reports PUBLISHED with settled usable media, and the episode is downloadable,
+    # or WireLoft's countdown-only final safeguard has elapsed.
     PUBLISHED_FINAL = "published_final"

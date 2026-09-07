@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -11,15 +12,13 @@ from sqlalchemy.orm import Session
 
 # ---------- detection ----------
 
-def test_is_no_show_today_title_matches_case_insensitively():
-    from task_manager.tasks.helpers.episodes.no_show import is_no_show_today_title
+def test_no_show_today_detection_uses_slug_only():
+    from backend.utils.episode_slug import is_no_show_today_slug
 
-    assert is_no_show_today_title("The Matt Walsh Show - No Show Today") is True
-    assert is_no_show_today_title("no show today") is True
-    assert is_no_show_today_title("NO SHOW TODAY") is True
-    assert is_no_show_today_title("The Matt Walsh Show - Episode 1809") is False
-    assert is_no_show_today_title("") is False
-    assert is_no_show_today_title(None) is False
+    assert is_no_show_today_slug("matt-walsh-1809-no-show-today") is True
+    assert is_no_show_today_slug("MATT-WALSH-1809-NO-SHOW-TODAY") is True
+    assert is_no_show_today_slug("matt-walsh-1809") is False
+    assert is_no_show_today_slug(None) is False
 
 
 # ---------- shared fixtures ----------
@@ -63,7 +62,6 @@ def _make_episode(
         ep_id,
         title,
         index,
-        is_no_show_today=False,
         publish_status="published_final",
         published_at=None,
 ):
@@ -84,7 +82,6 @@ def _make_episode(
         publish_status=publish_status,
         sharing_url=f"https://example.test/{slug}",
         published_date=published_at,
-        is_no_show_today=is_no_show_today,
     )
     session.add(episode)
     session.flush()
@@ -156,11 +153,50 @@ def _dw_episode_detail(slug: str, title: str):
     )
 
 
+def _patch_no_token(monkeypatch, service):
+    monkeypatch.setattr(
+        service,
+        "DeviceAuthClient",
+        lambda: Mock(get_token=lambda: None),
+    )
+
+
+def _patch_usable_hls(monkeypatch):
+    from task_manager.tasks.helpers.episodes import status
+
+    monkeypatch.setattr(
+        status,
+        "get_vod_info",
+        lambda _url: SimpleNamespace(seconds=100),
+    )
+
+
 # ---------- no-show state normalization ----------
 
-def test_upsert_episode_marks_no_show_today_as_no_usable_media(db_session):
-    from backend.types.episode_types import EpisodePublishStatus
+def test_title_alone_does_not_make_episode_no_show_today(db_session):
     from task_manager.tasks.helpers.episodes.save import upsert_episode
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = upsert_episode(
+        db_session,
+        show=show,
+        season=season,
+        ep=_dw_episode_record("matt-walsh-1809", "The Matt Walsh Show - No Show Today"),
+        index_value=1,
+        ep_id="ep.1809",
+    )
+
+    assert episode.is_no_show_today is False
+
+
+def test_slug_marks_no_show_today_without_persisted_boolean(db_session):
+    from backend.db.models import Episode
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.helpers.episodes.save import (
+        resolve_dw_episodes,
+        save_resolved_episodes_per_season_asc,
+    )
     from task_manager.tasks.helpers.episodes.unusable_media import (
         NoUsableMediaReason,
         episode_no_usable_media_reason,
@@ -168,80 +204,59 @@ def test_upsert_episode_marks_no_show_today_as_no_usable_media(db_session):
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-    ep = _dw_episode_record(
-        "matt-walsh-ep-1809-no-show-today",
-        "The Matt Walsh Show - No Show Today",
+    record = _dw_episode_record("matt-walsh-1809-no-show-today", "Ordinary title")
+    [resolved] = resolve_dw_episodes(
+        episodes=[("ep.1809", record)],
+        client=object(),
+        require_member_exclusive=False,
     )
 
-    episode = upsert_episode(
+    assert resolved.status is EpisodePublishStatus.NO_USABLE_MEDIA
+    assert resolved.unusable_media_reason is NoUsableMediaReason.NO_SHOW_TODAY
+
+    _, saved = save_resolved_episodes_per_season_asc(
         db_session,
         show=show,
         season=season,
-        ep=ep,
-        index_value=1,
-        ep_id="ep.1809",
+        episodes=[resolved],
+        start_index=1,
     )
-
+    episode = saved[0].episode
     assert episode.is_no_show_today is True
-    assert episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value
-    assert episode.metadata_is_final is False
+    assert episode.episode_identifier == "not-usable.1"
+    assert episode.get_meta("no_usable_media.previous_identifier") == "ep.1809"
     assert episode_no_usable_media_reason(episode) is NoUsableMediaReason.NO_SHOW_TODAY
+    assert "is_no_show_today" not in Episode.__table__.columns.keys()
 
 
-def test_upsert_episode_does_not_flag_a_real_episode(db_session):
-    from task_manager.tasks.helpers.episodes.save import upsert_episode
+def test_episode_api_does_not_return_is_no_show_today(db_session):
+    from backend.api.models.episode import EpisodeAPIRead
+    from task_manager.tasks.helpers.episodes.save import (
+        resolve_dw_episodes,
+        save_resolved_episodes_per_season_asc,
+    )
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-    ep = _dw_episode_record("matt-walsh-ep-1810", "Episode 1810: The Real Deal")
-
-    episode = upsert_episode(
+    [resolved] = resolve_dw_episodes(
+        episodes=[("ep.1", _dw_episode_record("test-show-1-no-show-today", "Anything"))],
+        client=object(),
+        require_member_exclusive=False,
+    )
+    _, saved = save_resolved_episodes_per_season_asc(
         db_session,
         show=show,
         season=season,
-        ep=ep,
-        index_value=1,
-        ep_id="ep.1810",
+        episodes=[resolved],
+        start_index=1,
     )
 
-    assert episode.is_no_show_today is False
+    payload = EpisodeAPIRead.model_validate(saved[0].episode).model_dump(by_alias=True)
+    assert "isNoShowToday" not in payload
+    assert payload["earlyDeleteAvailable"] is False
 
 
-def test_upsert_episode_reflags_on_update(db_session):
-    from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes.save import upsert_episode
-
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
-
-    ep = _dw_episode_record("matt-walsh-ep-1809", "Episode 1809")
-    episode = upsert_episode(
-        db_session,
-        show=show,
-        season=season,
-        ep=ep,
-        index_value=1,
-        ep_id="ep.1809",
-    )
-    assert episode.is_no_show_today is False
-
-    renamed = _dw_episode_record(
-        "matt-walsh-ep-1809",
-        "The Matt Walsh Show - No Show Today",
-    )
-    episode = upsert_episode(
-        db_session,
-        show=show,
-        season=season,
-        ep=renamed,
-        index_value=1,
-        ep_id="ep.1809",
-    )
-    assert episode.is_no_show_today is True
-    assert episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value
-
-
-# ---------- profile eligibility is generic ----------
+# ---------- profile eligibility remains generic ----------
 
 def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
     from backend.db.models.download_profile import PodcastDownloadProfile
@@ -305,23 +320,20 @@ def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
     assert processing_ep.slug not in slugs
 
 
-# ---------- stale NO_USABLE_MEDIA cleanup ----------
+# ---------- no-usable-media monitoring ----------
 
-def _mark_unusable_at(episode, reason, observed_at):
+def _mark_unusable_at(session, episode, reason, observed_at):
     from task_manager.tasks.helpers.episodes.unusable_media import mark_episode_no_usable_media
 
-    mark_episode_no_usable_media(episode, reason=reason, now=observed_at)
-
-
-def _patch_no_token(monkeypatch, service):
-    monkeypatch.setattr(
-        service,
-        "DeviceAuthClient",
-        lambda: Mock(get_token=lambda: None),
+    mark_episode_no_usable_media(
+        session,
+        episode,
+        reason=reason,
+        now=observed_at,
     )
 
 
-def test_cleanup_keeps_recent_no_show_today(db_session, monkeypatch):
+def test_monitor_keeps_recent_no_show_today(db_session, monkeypatch):
     from backend.db.models import Episode
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
     from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
@@ -333,43 +345,18 @@ def test_cleanup_keeps_recent_no_show_today(db_session, monkeypatch):
         db_session,
         show,
         season,
-        slug="ep-no-show",
+        slug="ep-no-show-today",
         ep_id="aux.1",
         title="No Show Today",
         index=1,
-        is_no_show_today=True,
         published_at=(now - timedelta(hours=1)).replace(tzinfo=None),
     )
-    _mark_unusable_at(episode, NoUsableMediaReason.NO_SHOW_TODAY, now - timedelta(hours=1))
-    db_session.commit()
-    episode_id = episode.id
-
-    _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
-
-    assert db_session.get(Episode, episode_id) is not None
-
-
-def test_cleanup_deletes_no_show_after_four_hour_grace(db_session, monkeypatch):
-    from backend.db.models import Episode
-    from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
-    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
-
-    now = datetime.now(timezone.utc)
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
-    episode = _make_episode(
+    _mark_unusable_at(
         db_session,
-        show,
-        season,
-        slug="ep-no-show",
-        ep_id="aux.1",
-        title="No Show Today",
-        index=1,
-        is_no_show_today=True,
-        published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
+        episode,
+        NoUsableMediaReason.NO_SHOW_TODAY,
+        now - timedelta(hours=1),
     )
-    _mark_unusable_at(episode, NoUsableMediaReason.NO_SHOW_TODAY, now - timedelta(hours=5))
     db_session.commit()
     episode_id = episode.id
 
@@ -378,16 +365,57 @@ def test_cleanup_deletes_no_show_after_four_hour_grace(db_session, monkeypatch):
             pass
 
         def get_episode_details(self, slug, *, require_member_exclusive):
-            return _dw_episode_detail(slug, "The Test Show - No Show Today")
+            return _dw_episode_detail(slug, "No Show Today")
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
     asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
-    assert db_session.get(Episode, episode_id) is None
+    assert db_session.get(Episode, episode_id) is not None
 
 
-def test_cleanup_preserves_no_show_that_became_real_episode(db_session, monkeypatch):
+def test_monitor_keeps_old_no_show_today_while_dailywire_still_returns_it(db_session, monkeypatch):
+    from backend.db.models import Episode
+    from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
+    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
+
+    now = datetime.now(timezone.utc)
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="ep-no-show-today",
+        ep_id="aux.1",
+        title="No Show Today",
+        index=1,
+        published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
+    )
+    _mark_unusable_at(
+        db_session,
+        episode,
+        NoUsableMediaReason.NO_SHOW_TODAY,
+        now - timedelta(hours=5),
+    )
+    db_session.commit()
+    episode_id = episode.id
+
+    class FakeClient:
+        def __init__(self, access_token=None):
+            pass
+
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            return _dw_episode_detail(slug, "No Show Today")
+
+    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+    _patch_no_token(monkeypatch, service)
+    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
+
+    assert db_session.get(Episode, episode_id) is not None
+
+
+def test_monitor_recovers_no_show_placeholder_that_became_real_episode(db_session, monkeypatch):
     from backend.db.models import Episode
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
@@ -400,14 +428,18 @@ def test_cleanup_preserves_no_show_that_became_real_episode(db_session, monkeypa
         db_session,
         show,
         season,
-        slug="ep-no-show",
-        ep_id="aux.1",
+        slug="ep-no-show-today",
+        ep_id="ep.1",
         title="No Show Today",
         index=1,
-        is_no_show_today=True,
         published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
     )
-    _mark_unusable_at(episode, NoUsableMediaReason.NO_SHOW_TODAY, now - timedelta(hours=5))
+    _mark_unusable_at(
+        db_session,
+        episode,
+        NoUsableMediaReason.NO_SHOW_TODAY,
+        now - timedelta(hours=5),
+    )
     db_session.commit()
     episode_id = episode.id
 
@@ -416,19 +448,22 @@ def test_cleanup_preserves_no_show_that_became_real_episode(db_session, monkeypa
             pass
 
         def get_episode_details(self, slug, *, require_member_exclusive):
-            return _dw_episode_detail(slug, "Episode 1: A Real Episode")
+            return _dw_episode_detail("ep-real", "Episode 1: A Real Episode")
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
+    _patch_usable_hls(monkeypatch)
     asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
     stored = db_session.get(Episode, episode_id)
     assert stored is not None
+    assert stored.slug == "ep-real"
     assert stored.is_no_show_today is False
     assert stored.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
+    assert stored.episode_identifier == "ep.1"
 
 
-def test_cleanup_deletes_continuous_404_after_four_hours(db_session, monkeypatch):
+def test_monitor_deletes_continuous_404_after_four_hours(db_session, monkeypatch):
     from backend.db.models import Episode
     from dailywire_api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
@@ -447,7 +482,12 @@ def test_cleanup_deletes_continuous_404_after_four_hours(db_session, monkeypatch
         index=1,
         published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
     )
-    _mark_unusable_at(episode, NoUsableMediaReason.NOT_FOUND, now - timedelta(hours=5))
+    _mark_unusable_at(
+        db_session,
+        episode,
+        NoUsableMediaReason.NOT_FOUND,
+        now - timedelta(hours=5),
+    )
     db_session.commit()
     episode_id = episode.id
 
@@ -460,14 +500,14 @@ def test_cleanup_deletes_continuous_404_after_four_hours(db_session, monkeypatch
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
-
     asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
     assert db_session.get(Episode, episode_id) is None
 
 
-def test_cleanup_does_not_verify_404_until_incident_is_four_hours_old(db_session, monkeypatch):
+def test_monitor_verifies_recent_404_but_does_not_delete_it(db_session, monkeypatch):
     from backend.db.models import Episode
+    from dailywire_api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
     from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
@@ -484,21 +524,33 @@ def test_cleanup_does_not_verify_404_until_incident_is_four_hours_old(db_session
         index=1,
         published_at=(now - timedelta(hours=10)).replace(tzinfo=None),
     )
-    _mark_unusable_at(episode, NoUsableMediaReason.NOT_FOUND, now - timedelta(hours=1))
+    _mark_unusable_at(
+        db_session,
+        episode,
+        NoUsableMediaReason.NOT_FOUND,
+        now - timedelta(hours=1),
+    )
     db_session.commit()
     episode_id = episode.id
+    calls = Mock()
 
-    client = Mock()
-    monkeypatch.setattr(service, "MiddlewareClient", lambda access_token=None: client)
+    class FakeClient:
+        def __init__(self, access_token=None):
+            pass
+
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            calls(slug)
+            raise MiddlewareAPIError("HTTP error 404: episode not found", status_code=404)
+
+    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
-
     asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
-    client.get_episode_details.assert_not_called()
+    calls.assert_called_once_with("temporarily-missing")
     assert db_session.get(Episode, episode_id) is not None
 
 
-def test_cleanup_keeps_episode_when_404_endpoint_recovers(db_session, monkeypatch):
+def test_monitor_recovers_episode_when_404_endpoint_has_usable_media(db_session, monkeypatch):
     from backend.db.models import Episode
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.helpers.episodes.unusable_media import (
@@ -520,7 +572,12 @@ def test_cleanup_keeps_episode_when_404_endpoint_recovers(db_session, monkeypatc
         index=1,
         published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
     )
-    _mark_unusable_at(episode, NoUsableMediaReason.NOT_FOUND, now - timedelta(hours=5))
+    _mark_unusable_at(
+        db_session,
+        episode,
+        NoUsableMediaReason.NOT_FOUND,
+        now - timedelta(hours=5),
+    )
     db_session.commit()
     episode_id = episode.id
 
@@ -533,16 +590,17 @@ def test_cleanup_keeps_episode_when_404_endpoint_recovers(db_session, monkeypatc
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
-
+    _patch_usable_hls(monkeypatch)
     asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
     stored = db_session.get(Episode, episode_id)
     assert stored is not None
     assert stored.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
     assert episode_no_usable_media_reason(stored) is None
+    assert stored.episode_identifier == "ep.1"
 
 
-def test_cleanup_ignores_genuine_dw_processing(db_session, monkeypatch):
+def test_monitor_ignores_genuine_dw_processing(db_session, monkeypatch):
     from backend.db.models import Episode
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
@@ -566,20 +624,18 @@ def test_cleanup_ignores_genuine_dw_processing(db_session, monkeypatch):
     called = Mock()
     monkeypatch.setattr(service, "MiddlewareClient", called)
     _patch_no_token(monkeypatch, service)
-
     asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
     assert db_session.get(Episode, episode_id) is not None
     called.assert_not_called()
 
 
-def test_cleanup_noop_when_nothing_is_unusable(db_session, monkeypatch):
+def test_monitor_noop_when_nothing_is_unusable(db_session, monkeypatch):
     from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
     called = Mock()
     monkeypatch.setattr(service, "MiddlewareClient", called)
     _patch_no_token(monkeypatch, service)
-
     asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
 
     called.assert_not_called()

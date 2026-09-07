@@ -444,20 +444,20 @@ All cron strings use standard five-field cron syntax (`minute hour day-of-month 
 <td colspan="3">Searches managed shows for new episodes every 30 minutes by default.</td>
 </tr>
 <tr>
-<td><code>newEpisodeSchedule.monitorEpisodeCron</code></td>
-<td><code>WL_NEW_EPISODE_SCHEDULE__MONITOR_EPISODE_CRON</code></td>
+<td><code>newEpisodeSchedule.monitorPendingEpisodeCron</code></td>
+<td><code>WL_NEW_EPISODE_SCHEDULE__MONITOR_PENDING_EPISODE_CRON</code></td>
 <td><code>*/2 * * * *</code></td>
 </tr>
 <tr>
-<td colspan="3">Rechecks episodes that exist but are not yet considered fully published every two minutes by default.</td>
+<td colspan="3">Rechecks scheduled, delayed, live, Daily Wire-processing, and published-with-countdown episodes every two minutes by default. Once an episode becomes final or enters <code>no_usable_media</code>, this worker relinquishes ownership.</td>
 </tr>
 <tr>
-<td><code>newEpisodeSchedule.cleanupEpisodesStuckWithoutMediaCron</code></td>
-<td><code>WL_NEW_EPISODE_SCHEDULE__CLEANUP_EPISODES_STUCK_WITHOUT_MEDIA_CRON</code></td>
-<td><code>0 * * * *</code></td>
+<td><code>newEpisodeSchedule.monitorNoUsableMediaEpisodeCron</code></td>
+<td><code>WL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON</code></td>
+<td><code>*/20 * * * *</code></td>
 </tr>
 <tr>
-<td colspan="3">Runs cleanup once per hour by default for episodes stuck without usable media, including persistent <code>No Show Today</code> placeholders or continuously missing Daily Wire episodes after the configured deletion delay.</td>
+<td colspan="3">Rechecks all <code>no_usable_media</code> episodes every 20 minutes by default. A successful Daily Wire response is kept locally until usable media returns; automatic deletion is only possible after a current 404 and the configured quarantine delay.</td>
 </tr>
 <tr>
 <td><code>newEpisodeSchedule.metadataRefreshIntervals</code></td>
@@ -470,12 +470,11 @@ All cron strings use standard five-field cron syntax (`minute hour day-of-month 
 </tbody>
 </table>
 
-
 ---
 
 ## Episode lifecycle timing
 
-Daily Wire can report an episode as published before the media has fully transitioned away from a live/countdown version, and it can temporarily expose entries with no usable media. WireLoft represents the latter as <code>no_usable_media</code>, separately from genuine <code>dw_processing</code>.
+Daily Wire exposes authoritative scheduled/live states, while WireLoft derives the later processing/countdown/final states from the detail response and media playlist. Safety timers are applied only after that remote snapshot has been classified; they do not override explicit scheduled, delayed, or live states.
 
 <table>
 <thead>
@@ -487,20 +486,20 @@ Daily Wire can report an episode as published before the media has fully transit
 </thead>
 <tbody>
 <tr>
-<td><code>episodeStatusTiming.publishedCountdownAfterMinutes</code></td>
-<td><code>WL_EPISODE_STATUS_TIMING__PUBLISHED_COUNTDOWN_AFTER_MINUTES</code></td>
-<td><code>20</code></td>
-</tr>
-<tr>
-<td colspan="3">Safety fallback: usually WireLoft can very accurately determine episode status. If something seems to be hanging, this is the fallback. Minutes after Daily Wire reports publication before WireLoft may treat the episode as being in the published/countdown stage. Minimum 0.</td>
-</tr>
-<tr>
 <td><code>episodeStatusTiming.publishedFinalAfterMinutes</code></td>
 <td><code>WL_EPISODE_STATUS_TIMING__PUBLISHED_FINAL_AFTER_MINUTES</code></td>
 <td><code>180</code></td>
 </tr>
 <tr>
-<td colspan="3">Safety fallback: usually WireLoft can very accurately determine episode status. If something seems to be hanging, this is the fallback. Minutes after publication before WireLoft can safely treat the episode as final/past the countdown stage. Must be at least the countdown threshold.</td>
+<td colspan="3">Minutes after Daily Wire's <code>publishedAt</code> timestamp after which a response that still classifies as <code>published_with_countdown</code> is forced to <code>published_final</code>. This safeguard does not override scheduled, delayed, live, or <code>no_usable_media</code> states.</td>
+</tr>
+<tr>
+<td><code>episodeStatusTiming.dwProcessingMaxMinutes</code></td>
+<td><code>WL_EPISODE_STATUS_TIMING__DW_PROCESSING_MAX_MINUTES</code></td>
+<td><code>60</code> (1 hour)</td>
+</tr>
+<tr>
+<td colspan="3">Maximum time after Daily Wire's <code>publishedAt</code> timestamp that an episode may remain in the known <code>dw_processing</code> signature (metadata duration below 12 seconds while the HLS playlist is longer than 12 seconds). After this threshold it enters <code>no_usable_media</code>. Because the clock is anchored to <code>publishedAt</code>, restarting WireLoft does not extend it.</td>
 </tr>
 <tr>
 <td><code>episodeStatusTiming.noUsableMediaDeleteAfterMinutes</code></td>
@@ -508,13 +507,12 @@ Daily Wire can report an episode as published before the media has fully transit
 <td><code>240</code> (4 hours)</td>
 </tr>
 <tr>
-<td colspan="3">How long an episode must remain in <code>no_usable_media</code> during the same placeholder/404 incident before automatic cleanup may delete it. Both the episode and the unusable-media incident must be at least this old. Set to <code>0</code> to make the episode eligible on the next cleanup run. The episode Actions menu can use <strong>Early Delete</strong> to bypass this delay for one <code>no_usable_media</code> episode.</td>
+<td colspan="3">How long the episode must continuously remain in <code>no_usable_media</code> before a current Daily Wire 404 may be automatically deleted. Changing the reason for quarantine does not reset this clock. A successful Daily Wire response is never deleted just because the timer elapsed. <strong>Early Delete</strong> bypasses only this waiting period and still performs a fresh 404 check before deleting.</td>
 </tr>
 </tbody>
 </table>
 
-The countdown and final thresholds are safety fallbacks for normal publication. The separate no-usable-media deletion delay prevents WireLoft from destroying an episode during a transient Daily Wire 404 or placeholder state. Normal <code>dw_processing</code> episodes are not subject to this cleanup delay.
-
+A <code>No Show Today</code> placeholder is recognized from the Daily Wire slug (<code>no-show-today</code>) and remains <code>no_usable_media</code> while that slug is still returned. The no-usable-media monitor also requires settled usable media before recovery: a media playlist must exist, Daily Wire metadata duration must be greater than 12 seconds, and the actual HLS duration must be greater than 12 seconds.
 
 ---
 
@@ -665,11 +663,13 @@ scheduler:
 
 newEpisodeSchedule:
   findEpisodesCron: "*/15 * * * *"
+  monitorPendingEpisodeCron: "*/2 * * * *"
+  monitorNoUsableMediaEpisodeCron: "*/20 * * * *"
   metadataRefreshIntervals: 15m,30m,1h,3h,6h,24h,3d
 
 episodeStatusTiming:
-  publishedCountdownAfterMinutes: 20
   publishedFinalAfterMinutes: 180
+  dwProcessingMaxMinutes: 60
   noUsableMediaDeleteAfterMinutes: 240
 
 downloadSettings:

@@ -18,44 +18,10 @@ import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
+import {formatBytes, formatDate, formatDurationMinutes} from "../../utils/formatting";
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
-
-function formatDate(value: Date | string | null | undefined) {
-    if (!value) return '—'
-    const d = value instanceof Date ? value : new Date(value)
-    try {
-        return new Intl.DateTimeFormat(undefined, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        }).format(d)
-    } catch {
-        return d?.toString() ?? ''
-    }
-}
-
-function formatBytes(n: number | null | undefined) {
-    if (!n && n !== 0) return ''
-    if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GiB`
-    if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MiB`
-    return `${Math.round(n / 1024)} KiB`
-}
-
-function formatDurationMinutes(minutes: number) {
-    if (minutes === 0) return '0 minutes (the next cleanup run)'
-    const hours = Math.floor(minutes / 60)
-    const remainingMinutes = minutes % 60
-    const parts: string[] = []
-    if (hours > 0) parts.push(`${hours} ${hours === 1 ? 'hour' : 'hours'}`)
-    if (remainingMinutes > 0) {
-        parts.push(`${remainingMinutes} ${remainingMinutes === 1 ? 'minute' : 'minutes'}`)
-    }
-    return parts.join(' ')
-}
 
 function ProfileDownloadRow({
                                 profile,
@@ -268,7 +234,7 @@ export default function EpisodePage() {
     const publishStatus = String(episode.publishStatus)
     const statusLabel = PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus
     const isLive = publishStatus === 'live' || publishStatus === EpisodePublishStatus.live
-    const hasNoUsableMedia = publishStatus === 'no_usable_media'
+    const earlyDeleteAvailable = episode.earlyDeleteAvailable
     const isDownloadable = (
         publishStatus === 'published_final' || publishStatus === EpisodePublishStatus.publishedFinal
     )
@@ -344,7 +310,10 @@ export default function EpisodePage() {
             }
 
             setEarlyDeleteConfirm(false)
-            await qc.invalidateQueries({queryKey: ['operations']})
+            await Promise.all([
+                qc.invalidateQueries({queryKey: ['operations']}),
+                qc.invalidateQueries({queryKey: ['episode', episode.slug]}),
+            ])
             toast.success('Early delete started')
         } catch {
             toast.error('Could not start early delete')
@@ -388,7 +357,7 @@ export default function EpisodePage() {
                                         : undefined,
                                     onSelect: () => void refreshMetadata(),
                                 },
-                                ...(hasNoUsableMedia ? [{
+                                ...(earlyDeleteAvailable ? [{
                                     label: 'Early Delete',
                                     icon: ['fas', 'trash'] as [string, string],
                                     tone: 'danger' as const,
@@ -457,7 +426,7 @@ export default function EpisodePage() {
                 )}
             </article>
 
-            {earlyDeleteAfterMinutes !== undefined && (
+            {earlyDeleteAvailable && earlyDeleteAfterMinutes !== undefined && (
                 <ConfirmDialog
                     open={earlyDeleteConfirm}
                     title="Early Delete"
@@ -475,14 +444,15 @@ export default function EpisodePage() {
                         disabled: earlyDeleteBusy,
                     }}>
                     <p>
-                        This episode is marked by WireLoft as unusable for downloading or streaming.
+                        Daily Wire currently returns 404 for this episode, so WireLoft cannot recover media from its current slug.
                     </p>
                     <p>
-                        This could have various reasons, but could be temporary. Therefore, WireLoft keeps it around for
-                        {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> before it auto-deletes it.
+                        WireLoft will normally keep checking it and only delete it automatically after
+                        {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> in the continuous <code>no_usable_media</code> state.
                     </p>
                     <p>
-                        If you want though, you can delete it early now. This is a permanent action and cannot be undone.
+                        Deleting early skips that waiting period. However, if it turns out this episode slug returned to The Daily Wire, WireLoft
+                        will refuse to delete it.
                     </p>
                 </ConfirmDialog>
             )}

@@ -1,219 +1,31 @@
-from __future__ import annotations
-
-import logging
-from typing import Optional
-
-from sqlalchemy.orm import Session
-
-from backend.db.models import Episode, Show
-from backend.types.episode_types import EpisodePublishStatus
-from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
-from dailywire_api.types.user_info import DwMembershipLevel
-
-from ._helpers import save_status_metadata
-from .scheduling import queue_monitor_completion_if_settled
-from ...helpers.episodes.events import queue_episode_status_events
-from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
-from ...helpers.episodes.metadata import metadata_watch_expired, update_episode_from_dailywire
-from ...helpers.episodes.unusable_media import (
-    NoUsableMediaReason,
-    clear_episode_no_usable_media_tracking,
-    mark_episode_no_usable_media,
-)
-from ...helpers.episodes.status import get_publish_status_from_dw_detail
-from ...helpers.shows.get import get_show_from_params
+from task_manager.tasks.helpers.episodes.status import EpisodeRemoteSnapshot, get_publish_status_from_dw_detail
+from task_manager.tasks.workers.monitor_pending_episode import scheduling as _pending_scheduling
+from task_manager.tasks.workers.monitor_pending_episode import service as _service
+from . import scheduling as _legacy_scheduling
 
 
-logger = logging.getLogger(__name__)
+MiddlewareClient = _service.MiddlewareClient
+_try_reconcile_slug_after_404 = _service._try_reconcile_slug_after_404
 
 
-async def run_monitor_episode_worker(
-        s: Session,
-        *,
-        episode_id: Optional[int] = None,
-        episode_slug: Optional[str] = None,
-        show_id: Optional[int] = None,
-        show_slug: Optional[str] = None,
-        season_id: Optional[int] = None,
-        episode_identifier: Optional[str] = None,
-        episode_index: Optional[int] = None,
-) -> EpisodePublishStatus:
-    """Refresh one already-indexed non-final episode until its lifecycle settles."""
-    print(f"Starting monitor_episode_worker for {episode_slug or episode_id}")
+async def run_monitor_episode_worker(*args, **kwargs):
+    """Legacy import adapter for the renamed pending worker."""
+    _service.MiddlewareClient = MiddlewareClient
+    _service._try_reconcile_slug_after_404 = _try_reconcile_slug_after_404
+    _pending_scheduling.queue_event = _legacy_scheduling.queue_event
 
-    show = get_show_from_params(
-        s,
-        episode_id=episode_id,
-        episode_slug=episode_slug,
-        show_id=show_id,
-        show_slug=show_slug,
-    )
-    if show is None:
-        raise ValueError("Show not found; provide a valid show_slug or show_id")
-
-    db_episode = _find_episode(
-        s,
-        show=show,
-        episode_id=episode_id,
-        episode_slug=episode_slug,
-        episode_identifier=episode_identifier,
-    )
-    if db_episode is None:
-        raise ValueError(
-            "Monitored episode not found in database; "
-            "fetch_new_episodes must index it before monitoring"
+    def compatibility_resolver(detail, **_kwargs):
+        return EpisodeRemoteSnapshot(
+            status=get_publish_status_from_dw_detail(detail),
+            has_usable_media=True,
         )
 
-    client = MiddlewareClient()
+    original_resolver = _service.resolve_episode_status
+    _service.resolve_episode_status = compatibility_resolver
     try:
-        dw_episode = client.get_episode_details(
-            db_episode.slug,
-            require_member_exclusive=(
-                show.membership_level != DwMembershipLevel.FREE.value
-            ),
-        )
-    except MiddlewareAPIError as exc:
-        if exc.status_code != 404:
-            raise
-
-        # A list entry whose detail endpoint currently 404s has no usable media.
-        # Keep it under the monitor lifecycle, but use the dedicated status rather
-        # than conflating this with genuine Daily Wire processing. Repeated 404s
-        # preserve the first-observed timestamp for the cleanup worker.
-        old_status = db_episode.publish_status
-        new_status = EpisodePublishStatus.NO_USABLE_MEDIA
-        mark_episode_no_usable_media(
-            db_episode,
-            reason=NoUsableMediaReason.NOT_FOUND,
-        )
-        s.flush()
-        queue_episode_status_events(
-            s,
-            episode=db_episode,
-            show=show,
-            old_status=old_status,
-            new_status=new_status,
-            was_created=False,
-        )
-        s.commit()
-
-        logger.info(
-            "Daily Wire returned 404 for monitored episode %s; status %s -> %s",
-            db_episode.slug,
-            old_status,
-            new_status.value,
-        )
-        print(
-            f"monitor_episode_worker completed for {db_episode.slug}: "
-            f"{new_status.value} (Daily Wire returned 404)"
-        )
-        return new_status
-
-    new_status = get_publish_status_from_dw_detail(dw_episode)
-    old_status = db_episode.publish_status
-
-    update_episode_from_dailywire(db_episode, dw_episode)
-    if new_status is EpisodePublishStatus.NO_USABLE_MEDIA:
-        mark_episode_no_usable_media(
-            db_episode,
-            reason=NoUsableMediaReason.NO_SHOW_TODAY,
-        )
-    else:
-        db_episode.publish_status = new_status.value
-        clear_episode_no_usable_media_tracking(db_episode)
-        if new_status is EpisodePublishStatus.PUBLISHED_FINAL:
-            # This poll itself is a fresh metadata check. If the entire configured
-            # settling window has already elapsed, no follow-up work is required.
-            db_episode.metadata_is_final = metadata_watch_expired(db_episode.published_date)
-        else:
-            db_episode.metadata_is_final = False
-
-    # Use the exact same authoritative reconciliation path as metadata refresh.
-    # Daily Wire sometimes changes episodeNumber while an episode is still live or
-    # processing, so waiting for the post-publication metadata worker can leave the
-    # row misclassified for the entire pre-publication lifecycle. The old status is
-    # passed explicitly so a correction made on the first publication transition
-    # is not mistaken for a post-publication identifier change.
-    if not db_episode.is_no_show_today:
-        reconcile_episode_identifier(
-            s,
-            db_episode,
-            dw_episode,
-            previous_publish_status=old_status,
-        )
-    s.flush()
-
-    save_status_metadata(
-        s,
-        episode=db_episode,
-        dw_episode=dw_episode,
-        status=new_status,
-    )
-
-    queue_episode_status_events(
-        s,
-        episode=db_episode,
-        show=show,
-        old_status=old_status,
-        new_status=new_status,
-        was_created=False,
-    )
-    queue_monitor_completion_if_settled(
-        s,
-        episode=db_episode,
-        show=show,
-        old_status=old_status,
-    )
-
-    s.commit()
-
-    logger.info(
-        "Episode %s status: %s -> %s",
-        db_episode.slug,
-        old_status,
-        new_status.value,
-    )
-    print(
-        f"monitor_episode_worker completed for {db_episode.slug}: "
-        f"{new_status.value}"
-    )
-    return new_status
+        return await _service.run_monitor_pending_episode(*args, **kwargs)
+    finally:
+        _service.resolve_episode_status = original_resolver
 
 
-def _find_episode(
-        s: Session,
-        *,
-        show: Show,
-        episode_id: int | None,
-        episode_slug: str | None,
-        episode_identifier: str | None,
-) -> Episode | None:
-    if episode_id is not None:
-        episode = (
-            s.query(Episode)
-            .filter(Episode.id == episode_id)
-            .one_or_none()
-        )
-        if episode is not None:
-            return episode
-
-    if episode_slug is not None:
-        episode = (
-            s.query(Episode)
-            .filter(Episode.show_id == show.id, Episode.slug == episode_slug)
-            .one_or_none()
-        )
-        if episode is not None:
-            return episode
-
-    if episode_identifier is None:
-        return None
-
-    return (
-        s.query(Episode)
-        .filter(
-            Episode.show_id == show.id,
-            Episode.episode_identifier == episode_identifier,
-        )
-        .one_or_none()
-    )
+__all__ = ["run_monitor_episode_worker"]

@@ -3,24 +3,22 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import StrEnum
 
+from sqlalchemy.orm import Session
+
 from backend.db.models import Episode
 from backend.types.episode_types import EpisodePublishStatus
+from .quarantine import quarantine_episode_identifier
 
 
 NO_USABLE_MEDIA_REASON_META_KEY = "no_usable_media.reason"
 NO_USABLE_MEDIA_SINCE_META_KEY = "no_usable_media.since"
 
-# Development builds before NO_USABLE_MEDIA existed stored the same incident
-# information under dw_processing.*. Read and clear those keys so existing rows
-# move cleanly to the dedicated status without treating genuine DW processing as
-# an unusable-media incident.
-_LEGACY_REASON_META_KEY = "dw_processing.reason"
-_LEGACY_SINCE_META_KEY = "dw_processing.since"
-
 
 class NoUsableMediaReason(StrEnum):
     NOT_FOUND = "not_found"
     NO_SHOW_TODAY = "no_show_today"
+    PROCESSING_TIMEOUT = "processing_timeout"
+    MEDIA_UNUSABLE = "media_unusable"
 
 
 def _ensure_utc(value: datetime) -> datetime:
@@ -29,66 +27,44 @@ def _ensure_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _raw_reason(episode: Episode) -> str | None:
-    return (
-        episode.get_meta(NO_USABLE_MEDIA_REASON_META_KEY)
-        or episode.get_meta(_LEGACY_REASON_META_KEY)
-    )
-
-
-def _raw_since(episode: Episode) -> str | None:
-    return (
-        episode.get_meta(NO_USABLE_MEDIA_SINCE_META_KEY)
-        or episode.get_meta(_LEGACY_SINCE_META_KEY)
-    )
-
-
 def _remove_tracking_keys(episode: Episode) -> None:
-    keys = {
-        NO_USABLE_MEDIA_REASON_META_KEY,
-        NO_USABLE_MEDIA_SINCE_META_KEY,
-        _LEGACY_REASON_META_KEY,
-        _LEGACY_SINCE_META_KEY,
-    }
+    keys = {NO_USABLE_MEDIA_REASON_META_KEY, NO_USABLE_MEDIA_SINCE_META_KEY}
     for item in list(episode.meta_items):
         if item.key in keys:
             episode.meta_items.remove(item)
 
 
 def mark_episode_no_usable_media(
-        episode: Episode,
-        *,
-        reason: NoUsableMediaReason,
-        now: datetime | None = None,
+    s: Session,
+    episode: Episode,
+    *,
+    reason: NoUsableMediaReason,
+    now: datetime | None = None,
 ) -> None:
-    """Move an episode into NO_USABLE_MEDIA and remember why/when.
-
-    Repeated observations of the same reason preserve the original timestamp so
-    cleanup can distinguish a transient 404 from an episode that has really been
-    unavailable for hours. A different reason starts a fresh grace period.
-    """
-    current_reason = episode_no_usable_media_reason(episode)
+    """Enter/refresh NO_USABLE_MEDIA while preserving one continuous state clock."""
     current_since = episode_no_usable_media_since(episode)
-    observed_at = (
-        current_since
-        if current_reason is reason and current_since is not None
-        else _ensure_utc(now or datetime.now(timezone.utc))
-    )
+    observed_at = current_since or _ensure_utc(now or datetime.now(timezone.utc))
 
-    _remove_tracking_keys(episode)
+    quarantine_episode_identifier(s, episode)
+
+    # Update canonical metadata in place. Removing and re-adding the same keys in
+    # one flush can make SQLAlchemy issue the INSERT before the orphan DELETE,
+    # violating Metadata's (parent_table, parent_id, key) unique constraint.
     episode.set_meta(NO_USABLE_MEDIA_REASON_META_KEY, reason.value)
     episode.set_meta(NO_USABLE_MEDIA_SINCE_META_KEY, observed_at.isoformat())
+
     episode.publish_status = EpisodePublishStatus.NO_USABLE_MEDIA.value
     episode.metadata_is_final = False
+    s.flush()
 
 
 def clear_episode_no_usable_media_tracking(episode: Episode) -> None:
-    """Forget an unusable-media incident once Daily Wire exposes usable media."""
+    """Forget only the incident reason/clock after a successful recovery."""
     _remove_tracking_keys(episode)
 
 
 def episode_no_usable_media_reason(episode: Episode) -> NoUsableMediaReason | None:
-    raw = _raw_reason(episode)
+    raw = episode.get_meta(NO_USABLE_MEDIA_REASON_META_KEY)
     if not raw:
         return None
     try:
@@ -98,7 +74,7 @@ def episode_no_usable_media_reason(episode: Episode) -> NoUsableMediaReason | No
 
 
 def episode_no_usable_media_since(episode: Episode) -> datetime | None:
-    raw = _raw_since(episode)
+    raw = episode.get_meta(NO_USABLE_MEDIA_SINCE_META_KEY)
     if not raw:
         return None
     try:
