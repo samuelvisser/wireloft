@@ -17,6 +17,7 @@ from backend.db.migrations import (
     DatabaseMigrationError,
     check_database,
     create_revision,
+    downgrade_database,
     get_database_status,
     initialize_database,
     require_database_current,
@@ -53,6 +54,16 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     ):
         command_parser = db_subparsers.add_parser(command_name, help=help_text)
         command_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
+
+    downgrade_parser = db_subparsers.add_parser(
+        "downgrade",
+        help="Downgrade the database to an Alembic revision",
+    )
+    downgrade_parser.add_argument(
+        "revision",
+        help="Target Alembic revision or relative step such as -1",
+    )
+    downgrade_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
 
     revision_parser = db_subparsers.add_parser(
         "revision",
@@ -185,6 +196,13 @@ def _handle_db_command(args: argparse.Namespace) -> None:
         upgrade_database()
         _current, head = get_database_status()
         print(f"Database upgraded to: {head} ({get_db_path()})")
+        return
+
+    if args.db_command == "downgrade":
+        downgrade_database(args.revision)
+        current, _head = get_database_status()
+        current_label = ", ".join(current) if current else "base / not initialized"
+        print(f"Database downgraded to: {current_label} ({get_db_path()})")
         return
 
     if args.db_command == "current":

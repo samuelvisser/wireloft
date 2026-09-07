@@ -125,6 +125,14 @@ def upgrade_database() -> None:
     require_database_current()
 
 
+def downgrade_database(revision: str) -> None:
+    validate_database_migration_state()
+    try:
+        command.downgrade(get_alembic_config(), revision)
+    except CommandError as exc:
+        raise DatabaseMigrationError(str(exc)) from exc
+
+
 def check_database() -> None:
     """Verify both the DB revision and ORM-to-migration schema synchronization."""
     require_database_current()
