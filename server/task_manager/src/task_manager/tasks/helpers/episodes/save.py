@@ -104,6 +104,7 @@ def upsert_episode(
 
     s.flush()
 
+    # Queue the metadata worker if this episode is final but it's metadata is not settled yet
     if (
         was_created
         and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
@@ -309,6 +310,15 @@ def save_dw_episodes_per_season_asc(s: Session, *,
                                     client: MiddlewareClient,
                                     require_member_exclusive: bool,
                                     always_resolve_details: bool = False) -> tuple[int, list[SavedEpisode]]:
+    """
+    Saves new episodes found via The Daily Wire API to WireLoft
+
+    :param always_resolve_details: false when initially indexing episodes as it requires a separate DW API request for each episode.
+     If there are already settled episodes, this will usually be true resulting in all available detail for episodes to be requested.
+    :return: current index of saved episodes, and list of saved episodes
+    """
+
+
     try:
         resolved = resolve_dw_episodes(
             episodes=episodes,

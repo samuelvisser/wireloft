@@ -261,9 +261,6 @@ async def _fetch_show(
                 start_index=current_index,
                 client=client,
                 require_member_exclusive=require_member_exclusive,
-                # Existing libraries discover only a small incremental tail. Resolve
-                # each new item's detail endpoint even if the age fallback already
-                # says "final" so a current 404 can still force DW_PROCESSING.
                 always_resolve_details=latest_final_episode is not None,
             )
         except Exception as exc:
@@ -342,6 +339,7 @@ def _queue_monitor_requests(s: Session, requests) -> None:
 
 
 def _queue_show_indexed(s: Session, *, show: Show, indexed_count: int) -> None:
+    """Announce a completed index only after its database commit succeeds."""
     queue_event(s, SHOW_INDEXED_EVENT, {
         "resource_id": show.id,
         "id": show.id,
@@ -360,6 +358,7 @@ def _completion_message(indexed_count: int, monitor_count: int) -> str:
 
 
 def _print_dry_run_report(show: Show, ep_map_asc, identifier_max_values: IdentifierMaxValues) -> None:
+    """Print the episodes and identifiers a real run would have saved."""
     total = count_total_episodes(ep_map_asc)
     print(f"\n=== DRY RUN: '{show.slug}' — {total} new episode(s), nothing saved ===")
     for season_id, ep_list in ep_map_asc.items():
