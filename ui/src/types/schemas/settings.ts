@@ -1,5 +1,6 @@
 import {z} from 'zod'
 import {createServerErrorMapper} from '../../utils/serverMessageMap'
+import {ApiDateTimeSchema} from './datetime'
 
 
 const CryptoFileSettingsSchema = z.object({
@@ -17,7 +18,6 @@ const DailyWireAPISettingsSchema = z.object({
 })
 
 const MovieMetadataSettingsSchema = z.object({
-    // The API never returns the stored secret. This is a write-only replacement value.
     tmdbReadAccessToken: z.string(),
     tmdbReadAccessTokenConfigured: z.boolean(),
     tmdbApiBaseUrl: z.string(),
@@ -49,14 +49,15 @@ const SchedulerSettingsSchema = z.object({
 
 const TrackNewEpisodeScheduleSchema = z.object({
     findEpisodesCron: z.string(),
-    monitorEpisodeCron: z.string(),
-    checkNoShowTodayCron: z.string(),
+    monitorPendingEpisodeCron: z.string(),
+    monitorNoUsableMediaEpisodeCron: z.string(),
     metadataRefreshIntervals: z.string(),
 })
 
 const EpisodeStatusTimingSchema = z.object({
-    publishedCountdownAfterMinutes: z.number(),
     publishedFinalAfterMinutes: z.number(),
+    dwProcessingMaxMinutes: z.number(),
+    noUsableMediaDeleteAfterMinutes: z.number(),
 })
 
 export const FilenameRestrictionModeSchema = z.enum(['unrestricted', 'windows', 'restricted'])
@@ -124,38 +125,39 @@ const metadataRefreshIntervals = z.string().refine((value) => {
 
 export const SettingsFormSchema = SettingsValuesSchema.extend({
     loginSession: SessionSettingsSchema.extend({
-        ttlSeconds: requiredNumber().int().min(60, 'Must be at least 60.'),
+        ttlSeconds: requiredNumber().int().min(60, 'Must be at least 60 seconds.'),
     }),
     movieMetadata: MovieMetadataSettingsSchema.extend({
-        requestTimeoutSeconds: requiredNumber().min(1, 'Must be at least 1.'),
+        requestTimeoutSeconds: requiredNumber().min(1, 'Must be at least 1 second.'),
         maxRetries: requiredNumber().int().min(0, 'Must be 0 or greater.').max(5, 'Must be 5 or less.'),
     }),
     dwTimeout: TimeoutSettingsSchema.extend({
-        minFastRequestMs: requiredNumber().int().min(0, 'Must be 0 or greater.'),
+        minFastRequestMs: requiredNumber().int().min(0, 'Must be 0 milliseconds or greater.'),
         maxFastRequests: requiredNumber().int().min(1, 'Must be at least 1.'),
-        minSlowRequestMs: requiredNumber().int().min(0, 'Must be 0 or greater.'),
+        minSlowRequestMs: requiredNumber().int().min(0, 'Must be 0 milliseconds or greater.'),
     }),
     scheduler: SchedulerSettingsSchema.extend({
         maxWorkers: requiredNumber().int().min(1, 'Must be at least 1.'),
-        stalledTaskTimeoutMinutes: requiredNumber().int().min(1, 'Must be at least 1.'),
+        stalledTaskTimeoutMinutes: requiredNumber().int().min(1, 'Must be at least 1 minute.'),
         defaultMaxRetries: requiredNumber().int().min(0, 'Must be 0 or greater.'),
-        retryBackoffSeconds: requiredNumber().min(0, 'Must be 0 or greater.'),
+        retryBackoffSeconds: requiredNumber().min(0, 'Must be 0 seconds or greater.'),
     }),
     newEpisodeSchedule: TrackNewEpisodeScheduleSchema.extend({
         findEpisodesCron: cronExpression,
-        monitorEpisodeCron: cronExpression,
-        checkNoShowTodayCron: cronExpression,
+        monitorPendingEpisodeCron: cronExpression,
+        monitorNoUsableMediaEpisodeCron: cronExpression,
         metadataRefreshIntervals,
     }),
     episodeStatusTiming: EpisodeStatusTimingSchema.extend({
-        publishedCountdownAfterMinutes: requiredNumber().int().min(0, 'Must be 0 or greater.'),
-        publishedFinalAfterMinutes: requiredNumber().int().min(0, 'Must be 0 or greater.'),
+        publishedFinalAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
+        dwProcessingMaxMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
+        noUsableMediaDeleteAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
     }),
     downloadSettings: DownloadSettingsSchema.extend({
         verifyDownloadsCron: cronExpression,
         maxConcurrentDownloads: requiredNumber().int().min(1, 'Must be at least 1.'),
         maxDownloadAttempts: requiredNumber().int().min(1, 'Must be at least 1.'),
-        downloadTimeoutSeconds: requiredNumber().int().min(1, 'Must be at least 1.'),
+        downloadTimeoutSeconds: requiredNumber().int().min(1, 'Must be at least 1 second.'),
     }),
     fileWatcher: FileWatcherSettingsSchema.extend({
         scanCron: cronExpression,
@@ -166,8 +168,8 @@ const WORKER_CRON_MINIMUM_MESSAGE = 'This worker runs more often than the config
 
 export const SettingsServerErrors = createServerErrorMapper({
     'values.newEpisodeSchedule.findEpisodesCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
-    'values.newEpisodeSchedule.monitorEpisodeCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
-    'values.newEpisodeSchedule.checkNoShowTodayCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
+    'values.newEpisodeSchedule.monitorPendingEpisodeCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
+    'values.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
     'values.downloadSettings.verifyDownloadsCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
     'values.fileWatcher.scanCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
 })
@@ -198,11 +200,12 @@ export const SETTINGS_FIELD_PATHS = [
     'scheduler.defaultMaxRetries',
     'scheduler.retryBackoffSeconds',
     'newEpisodeSchedule.findEpisodesCron',
-    'newEpisodeSchedule.monitorEpisodeCron',
-    'newEpisodeSchedule.checkNoShowTodayCron',
+    'newEpisodeSchedule.monitorPendingEpisodeCron',
+    'newEpisodeSchedule.monitorNoUsableMediaEpisodeCron',
     'newEpisodeSchedule.metadataRefreshIntervals',
-    'episodeStatusTiming.publishedCountdownAfterMinutes',
     'episodeStatusTiming.publishedFinalAfterMinutes',
+    'episodeStatusTiming.dwProcessingMaxMinutes',
+    'episodeStatusTiming.noUsableMediaDeleteAfterMinutes',
     'downloadSettings.verifyDownloadsCron',
     'downloadSettings.maxConcurrentDownloads',
     'downloadSettings.maxDownloadAttempts',
@@ -229,6 +232,6 @@ export const SettingsReadSchema = z.object({
     values: SettingsValuesSchema,
     configuredFields: z.array(SettingsFieldPathSchema),
     environmentOverrides: z.record(z.string(), z.string()),
-    updatedAt: z.iso.datetime().nullable().transform((value) => value ? new Date(value) : null),
+    updatedAt: ApiDateTimeSchema.nullable(),
 })
 export type SettingsRead = z.infer<typeof SettingsReadSchema>

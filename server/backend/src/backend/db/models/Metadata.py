@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, func, Index, UniqueConstraint
+from sqlalchemy import func, Index, UniqueConstraint
 from sqlalchemy.orm import mapped_column, Mapped
 
 from backend.db import Base
+from backend.db.datetime_types import UTCDateTime
 
 
 # Metadata table adds metadata to any record in the database
@@ -23,12 +24,11 @@ class Metadata(Base):
     value: Mapped[str]
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCDateTime(), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UTCDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     def __repr__(self):
         return f"<Metadata(id={self.id}, parent_table={self.parent_table}, parent_id={self.parent_id}, key={self.key}, value={self.value}, created_at={self.created_at}, updated_at={self.updated_at})>"
-

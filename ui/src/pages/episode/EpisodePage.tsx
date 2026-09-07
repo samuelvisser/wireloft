@@ -6,6 +6,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
+import {useSettings} from '../../lib/settings'
 import {isShowLocalMediaProfileAvailableFor, PreferredFormatReg} from '../../types/local_media_profile'
 import {MediaDownloadStatusReg} from '../../types/media_download'
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
@@ -15,39 +16,18 @@ import {getErrorMessageFromResponse} from '../../utils/helpers'
 import ProgressBar from '../../components/common/ProgressBar'
 import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
+import {formatBytes, formatDate, formatDurationMinutes} from "../../utils/formatting";
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
 
-function formatDate(value: Date | string | null | undefined) {
-    if (!value) return '—'
-    const d = value instanceof Date ? value : new Date(value)
-    try {
-        return new Intl.DateTimeFormat(undefined, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        }).format(d)
-    } catch {
-        return d?.toString() ?? ''
-    }
-}
-
-function formatBytes(n: number | null | undefined) {
-    if (!n && n !== 0) return ''
-    if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GiB`
-    if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MiB`
-    return `${Math.round(n / 1024)} KiB`
-}
-
 function ProfileDownloadRow({
-    profile,
-    download,
-    episodeSlug,
-}: {
+                                profile,
+                                download,
+                                episodeSlug,
+                            }: {
     profile: LocalMediaProfileRead
     download?: MediaDownloadViewRead
     episodeSlug: string
@@ -171,18 +151,27 @@ export default function EpisodePage() {
     const {id: showId, episodeId} = useParams()
     const qc = useQueryClient()
     const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
+    const [earlyDeleteConfirm, setEarlyDeleteConfirm] = useState(false)
+    const [earlyDeleteStarting, setEarlyDeleteStarting] = useState(false)
 
     const {data: show, isLoading, error} = useShow(showId)
     const {data: episode, isLoading: isLoadingEpisode} = useEpisode(episodeId)
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads} = useEpisodeDownloads(episodeId)
+    const settingsQuery = useSettings()
     const showProfiles = profiles?.filter((profile) => isShowLocalMediaProfileAvailableFor(profile, show?.type))
     const metadataRefreshOperation = useActiveOperation(
         'episode.refresh_metadata',
         'episode',
         episode?.id ?? null,
     )
+    const earlyDeleteOperation = useActiveOperation(
+        'episode.early_delete',
+        'episode',
+        episode?.id ?? null,
+    )
     const metadataRefreshBusy = metadataRefreshStarting || metadataRefreshOperation !== undefined
+    const earlyDeleteBusy = earlyDeleteStarting || earlyDeleteOperation !== undefined
 
     if (!showId) {
         return (
@@ -245,9 +234,20 @@ export default function EpisodePage() {
     const publishStatus = String(episode.publishStatus)
     const statusLabel = PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus
     const isLive = publishStatus === 'live' || publishStatus === EpisodePublishStatus.live
-    const isDownloadable = !episode.isNoShowToday && (
+    const earlyDeleteAvailable = episode.earlyDeleteAvailable
+    const isDownloadable = (
         publishStatus === 'published_final' || publishStatus === EpisodePublishStatus.publishedFinal
     )
+    const earlyDeleteAfterMinutes = settingsQuery.data?.values.episodeStatusTiming.noUsableMediaDeleteAfterMinutes
+    const earlyDeleteDisabledReason = earlyDeleteStarting
+        ? 'WireLoft is starting an early delete for this episode.'
+        : earlyDeleteOperation
+            ? 'An early delete is already running for this episode.'
+            : settingsQuery.error
+                ? 'WireLoft could not load the automatic deletion delay.'
+                : earlyDeleteAfterMinutes === undefined
+                    ? 'WireLoft is loading the automatic deletion delay.'
+                    : undefined
 
     const coverUrl: string = episode.thumbnailLandscapePath
         || episode.backgroundImagePath
@@ -288,6 +288,40 @@ export default function EpisodePage() {
         }
     }
 
+    const earlyDelete = async () => {
+        if (earlyDeleteBusy) return
+
+        setEarlyDeleteStarting(true)
+        try {
+            const base = (window as any).appConfig?.API_URL || '/api'
+            const response = await fetch(
+                `${base}/episodes/${encodeURIComponent(episode.slug)}/early-delete`,
+                {method: 'POST', credentials: 'include'},
+            )
+            if (!response.ok) {
+                const {error: message} = await getErrorMessageFromResponse(response)
+                toast.error(message || 'Could not start early delete')
+                return
+            }
+
+            const result = await response.json()
+            if (typeof result?.operationId !== 'string' || !result.operationId) {
+                throw new Error('Early delete request did not return an operation ID')
+            }
+
+            setEarlyDeleteConfirm(false)
+            await Promise.all([
+                qc.invalidateQueries({queryKey: ['operations']}),
+                qc.invalidateQueries({queryKey: ['episode', episode.slug]}),
+            ])
+            toast.success('Early delete started')
+        } catch {
+            toast.error('Could not start early delete')
+        } finally {
+            setEarlyDeleteStarting(false)
+        }
+    }
+
     return (
         <section className="view episode-view" aria-labelledby="episode-title">
             <article className="episode-details" aria-label="Episode details">
@@ -323,6 +357,18 @@ export default function EpisodePage() {
                                         : undefined,
                                     onSelect: () => void refreshMetadata(),
                                 },
+                                ...(earlyDeleteAvailable ? [{
+                                    label: 'Early Delete',
+                                    icon: ['fas', 'trash'] as [string, string],
+                                    tone: 'danger' as const,
+                                    separatorBefore: true,
+                                    disabled: earlyDeleteDisabledReason !== undefined,
+                                    disabledReason: earlyDeleteDisabledReason,
+                                    progress: earlyDeleteOperation
+                                        ? (earlyDeleteOperation.progress ?? 0)
+                                        : undefined,
+                                    onSelect: () => setEarlyDeleteConfirm(true),
+                                }] : []),
                             ]}
                         />
                     </div>
@@ -380,7 +426,38 @@ export default function EpisodePage() {
                 )}
             </article>
 
-            <style>{`
+            {earlyDeleteAvailable && earlyDeleteAfterMinutes !== undefined && (
+                <ConfirmDialog
+                    open={earlyDeleteConfirm}
+                    title="Early Delete"
+                    onDismiss={() => {
+                        if (!earlyDeleteBusy) setEarlyDeleteConfirm(false)
+                    }}
+                    icon={['fas', 'trash']}
+                    iconTone="danger"
+                    dismissOnOverlayClick={!earlyDeleteBusy}
+                    cancelButton={{disabled: earlyDeleteBusy}}
+                    confirmButton={{
+                        label: earlyDeleteBusy ? 'Deleting…' : 'Delete now',
+                        onClick: earlyDelete,
+                        className: 'btn btn-danger',
+                        disabled: earlyDeleteBusy,
+                    }}>
+                    <p>
+                        Daily Wire currently returns 404 for this episode, so WireLoft cannot recover media from its current slug.
+                    </p>
+                    <p>
+                        WireLoft will normally keep checking it and only delete it automatically after
+                        {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> in the continuous <code>no_usable_media</code> state.
+                    </p>
+                    <p>
+                        Deleting early skips that waiting period. However, if it turns out this episode slug returned to The Daily Wire, WireLoft
+                        will refuse to delete it.
+                    </p>
+                </ConfirmDialog>
+            )}
+
+            <style type="text/css">{`
         .episode-view { padding-top: 0; }
         .episode-details { width: min(100%, 980px); margin: 0 auto; }
         .episode-breadcrumb { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; color: var(--muted, #777); font-size: 0.9rem; }

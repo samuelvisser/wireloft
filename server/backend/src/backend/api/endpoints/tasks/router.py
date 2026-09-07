@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Query
+from pydantic import AwareDatetime
 
 from task_manager.scheduler.types import ResourceType, TaskStatus
 
@@ -74,7 +74,7 @@ def ledger(
         resource_type: ResourceType | None = None,
         resource_id: list[int] | None = Query(default=None),
         status: list[TaskStatus] | None = Query(default=None),
-        started_after: datetime | None = None,
+        started_after: AwareDatetime | None = None,
         order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
         order: Literal["asc", "desc"] = "desc",
         offset: int = Query(default=0, ge=0),

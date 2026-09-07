@@ -8,7 +8,7 @@ from task_manager.scheduler.operations import OperationTargetSpec
 
 
 _FETCH_EPISODES_TASK_KEY = "fetch_new_episodes"
-_REFRESH_METADATA_TASK_KEY = "refresh_episode_metadata_worker"
+_REFRESH_METADATA_TASK_KEY = "refresh_episode_metadata"
 _REDOWNLOAD_TASK_KEY = "redownload_show_episodes_worker"
 
 

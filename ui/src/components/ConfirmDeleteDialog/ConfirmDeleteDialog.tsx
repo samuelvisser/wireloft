@@ -1,10 +1,11 @@
 import {forwardRef, useCallback, useImperativeHandle, useState} from 'react'
-import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {QueryKey, useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 
-// Reusable confirmation dialog that encapsulates deletion logic AND manages
-// its own open/close state. Use via ref: confirmRef.current?.open(item)
+import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
+
+// Reusable deletion helper built on the generic ConfirmDialog. Use via ref:
+// confirmRef.current?.open(item)
 
 export type ConfirmDeleteDialogRef = {
     open: (item: any) => void
@@ -24,7 +25,7 @@ type ConfirmDeleteDialogProps = {
 }
 
 const ConfirmDeleteDialog = forwardRef<ConfirmDeleteDialogRef, ConfirmDeleteDialogProps>(function ConfirmDeleteDialog(props, ref) {
-    const { title, subjectProp, deleteRequest, invalidateQueries, inUseMessage } = props
+    const {title, subjectProp, deleteRequest, invalidateQueries, inUseMessage} = props
     const qc = useQueryClient()
     const [item, setItem] = useState<any | null>(null)
 
@@ -64,7 +65,6 @@ const ConfirmDeleteDialog = forwardRef<ConfirmDeleteDialogRef, ConfirmDeleteDial
                 return
             }
 
-            // Invalidate caller-provided queries
             const keysInput = invalidateQueries
             if (keysInput) {
                 const isListOfKeys = Array.isArray(keysInput) && (keysInput as any[]).every(Array.isArray)
@@ -87,30 +87,20 @@ const ConfirmDeleteDialog = forwardRef<ConfirmDeleteDialogRef, ConfirmDeleteDial
         : String((item as any)?.[subjectProp] ?? '')
 
     return (
-        <div className="modal-overlay" role="presentation" onClick={close}>
-            <div
-                className="modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="delete-title"
-                aria-describedby="delete-desc"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="modal-header">
-                    <div className="modal-icon danger" aria-hidden>
-                        <FontAwesomeIcon icon={['fas', 'trash']}/>
-                    </div>
-                    <h2 id="delete-title" className="modal-title">{title}</h2>
-                </div>
-                <p id="delete-desc" className="modal-text">
-                    Are you sure you want to delete "{subject}"? This action cannot be undone.
-                </p>
-                <div className="modal-actions">
-                    <button type="button" className="btn" onClick={close}>Cancel</button>
-                    <button type="button" className="btn btn-danger" onClick={onConfirmDelete}>Delete</button>
-                </div>
-            </div>
-        </div>
+        <ConfirmDialog
+            open
+            title={title}
+            onDismiss={close}
+            icon={['fas', 'trash']}
+            iconTone="danger"
+            confirmButton={{
+                label: 'Delete',
+                onClick: onConfirmDelete,
+                className: 'btn btn-danger',
+            }}
+        >
+            <p>Are you sure you want to delete "{subject}"? This action cannot be undone.</p>
+        </ConfirmDialog>
     )
 })
 

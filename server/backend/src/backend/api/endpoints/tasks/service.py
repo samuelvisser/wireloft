@@ -37,17 +37,15 @@ def create_schedule(body) -> dict:
         td = s.execute(select(TaskDefinition).where(TaskDefinition.key == body.definition_key)).scalar_one()
         sch = TaskSchedule(
             definition_id=td.id,
-            resource_type=body.resource_type,  # Enum validated by Pydantic layer
+            resource_type=body.resource_type,
             resource_id=body.resource_id,
             trigger=body.trigger,
             trigger_args=body.trigger_args,
-            timezone=None,
             active=True,
             max_retries=body.max_retries,
         )
         s.add(sch)
         s.flush()
-        # schedule with APS
         job_id = schedule_job(
             schedule_id=sch.id,
             def_key=td.key,
@@ -99,7 +97,7 @@ def _schedule_to_dict(sch: TaskSchedule, def_key: str) -> dict:
         "trigger": sch.trigger,
         "trigger_args": sch.trigger_args,
         "active": sch.active,
-        "next_run_time": sch.next_run_time.isoformat() if sch.next_run_time else None,
+        "next_run_time": sch.next_run_time,
         "max_retries": sch.max_retries,
     }
 
@@ -136,8 +134,8 @@ def list_runs(
                 "attempt_count": r.attempt_count,
                 "max_retries": r.max_retries,
                 "last_error": r.last_error,
-                "started_at": r.started_at.isoformat() if r.started_at else None,
-                "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                "started_at": r.started_at,
+                "finished_at": r.finished_at,
                 "runtime_ms": r.runtime_ms,
             }
             for r, def_key in rows
@@ -208,8 +206,8 @@ def list_ledger(
                 "last_error": run.last_error,
                 "inputs": inputs,
                 "result": run.result,
-                "started_at": run.started_at.isoformat() if run.started_at else None,
-                "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+                "started_at": run.started_at,
+                "finished_at": run.finished_at,
                 "runtime_ms": run.runtime_ms,
             })
 

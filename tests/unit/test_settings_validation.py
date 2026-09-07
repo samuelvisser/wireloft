@@ -41,11 +41,19 @@ def test_runtime_settings_reject_unsafe_scheduler_limits():
         )
 
 
-def test_runtime_settings_reject_final_episode_timing_before_countdown():
+def test_runtime_settings_default_no_usable_media_delete_delay_is_four_hours():
+    timing = EpisodeStatusTiming(
+        published_final_after_minutes=180,
+    )
+
+    assert timing.no_usable_media_delete_after_minutes == 240
+
+
+def test_runtime_settings_reject_negative_no_usable_media_delete_delay():
     with pytest.raises(ValidationError):
         EpisodeStatusTiming(
-            published_countdown_after_minutes=20,
-            published_final_after_minutes=10,
+            published_final_after_minutes=180,
+            no_usable_media_delete_after_minutes=-1,
         )
 
 
@@ -72,29 +80,6 @@ def test_settings_api_rejects_invalid_runtime_cron_on_the_edited_field():
 
     assert any(
         error["loc"] == ("values", "newEpisodeSchedule", "findEpisodesCron")
-        for error in exc_info.value.errors()
-    )
-
-
-def test_settings_api_routes_cross_field_timing_error_to_final_field():
-    from backend.api.models.settings import SettingsAPIUpdate
-
-    values = _settings_api_values()
-    values["episodeStatusTiming"]["publishedCountdownAfterMinutes"] = 20
-    values["episodeStatusTiming"]["publishedFinalAfterMinutes"] = 10
-
-    with pytest.raises(ValidationError) as exc_info:
-        SettingsAPIUpdate.model_validate({
-            "values": values,
-            "changedFields": ["episodeStatusTiming.publishedFinalAfterMinutes"],
-        })
-
-    assert any(
-        error["loc"] == (
-            "values",
-            "episodeStatusTiming",
-            "publishedFinalAfterMinutes",
-        )
         for error in exc_info.value.errors()
     )
 

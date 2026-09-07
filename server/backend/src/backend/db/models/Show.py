@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING, TypeAlias
 
-from sqlalchemy import DateTime, func
+from sqlalchemy import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
+from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 
@@ -37,10 +38,10 @@ class Show(Base, HasMetadataMixin, HasTaskResourcesMixin):
     thumbnail_square_path: Mapped[Optional[str]]
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCDateTime(), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UTCDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     # Relationships

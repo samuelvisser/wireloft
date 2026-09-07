@@ -29,7 +29,7 @@ def _monitor_event(
         slug: str,
         identifier: str,
         episode_index: int,
-        resource_id: int | None = None,
+        resource_id: int,
 ) -> dict:
     return {
         "resource_id": resource_id,
@@ -66,45 +66,40 @@ def test_monitor_events_create_independent_idempotent_cron_jobs(monkeypatch):
         slug="live-one",
         identifier="ep.100",
         episode_index=100,
+        resource_id=501,
     )
     second = _monitor_event(
         slug="live-two",
         identifier="ep.101",
         episode_index=101,
+        resource_id=502,
     )
     emit_event(scheduling.MONITOR_REQUESTED_EVENT, first)
     emit_event(scheduling.MONITOR_REQUESTED_EVENT, second)
     wait_for_events()
 
-    first_job_id = scheduling.monitor_job_id("test-show", "ep.100")
-    second_job_id = scheduling.monitor_job_id("test-show", "ep.101")
+    first_job_id = scheduling.monitor_job_id(501)
+    second_job_id = scheduling.monitor_job_id(502)
     assert set(scheduler.jobs) == {first_job_id, second_job_id}
     assert scheduler.jobs[first_job_id]["max_instances"] == 1
     assert scheduler.jobs[first_job_id]["coalesce"] is True
     assert "minute='*/7'" in str(scheduler.jobs[first_job_id]["trigger"])
-    assert (
-        scheduler.jobs[first_job_id]["kwargs"]["slug"]
-        == "live-one"
-    )
+    assert scheduler.jobs[first_job_id]["kwargs"]["resource_id"] == 501
+    assert "slug" not in scheduler.jobs[first_job_id]["kwargs"]
+    assert "episode_identifier" not in scheduler.jobs[first_job_id]["kwargs"]
 
-    # A later fetch refreshes the same logical job and can attach its local id.
+    # Mutable Daily Wire/WireLoft metadata does not change the scheduler identity.
     emit_event(
         scheduling.MONITOR_REQUESTED_EVENT,
-        {**first, "resource_id": 501},
+        {**first, "episode_identifier": "ep-extra.100.1"},
     )
     wait_for_events()
     assert len(scheduler.jobs) == 2
-    assert (
-        scheduler.jobs[first_job_id]["kwargs"]["resource_id"]
-        == 501
-    )
+    assert set(scheduler.jobs) == {first_job_id, second_job_id}
 
     emit_event(
         scheduling.MONITOR_COMPLETED_EVENT,
-        {
-            "show_slug": "test-show",
-            "episode_identifier": "ep.100",
-        },
+        {"resource_id": 501},
     )
     wait_for_events()
     assert set(scheduler.jobs) == {second_job_id}
@@ -202,7 +197,7 @@ def _episode_detail(slug: str, episode_number: str = "103.00", *, status: str = 
         **_episode_record(
             slug,
             episode_number,
-            datetime(2026, 7, 22, 13, tzinfo=timezone.utc),
+            datetime.now(timezone.utc),
             status=status,
         ).model_dump(mode="python", by_alias=False),
         audio_url="https://example.test/audio.mp3",
@@ -242,7 +237,7 @@ def test_monitor_updates_and_completes_one_episode(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.helpers.episodes import events as episode_events
     from task_manager.tasks.helpers.episodes.save import upsert_episode
-    from task_manager.tasks.workers.monitor_episode_worker import service
+    from task_manager.tasks.workers.monitor_episode_worker import scheduling, service
     from task_manager.tasks.workers.monitor_episode_worker.scheduling import (
         MONITOR_COMPLETED_EVENT,
     )
@@ -262,7 +257,7 @@ def test_monitor_updates_and_completes_one_episode(monkeypatch):
         ep=_episode_record(
             detail.slug,
             "103.00",
-            datetime(2026, 7, 22, 13, tzinfo=timezone.utc),
+            datetime.now(timezone.utc),
         ).model_copy(
             update={"publish_status": EpisodePublishStatus.SCHEDULED.value},
             deep=True,
@@ -291,7 +286,7 @@ def test_monitor_updates_and_completes_one_episode(monkeypatch):
         "get_publish_status_from_dw_detail",
         lambda episode: next(statuses),
     )
-    monkeypatch.setattr(service, "queue_event", queued)
+    monkeypatch.setattr(scheduling, "queue_event", queued)
     monkeypatch.setattr(episode_events, "queue_event", queued)
 
     result = asyncio.run(
@@ -462,7 +457,7 @@ def test_fetch_saves_non_final_episode_and_requests_monitor(monkeypatch):
     live = _episode_record(
         "live-episode",
         "101.00",
-        datetime(2026, 7, 23, 10, tzinfo=timezone.utc),
+        datetime.now(timezone.utc),
     )
     live_detail = _episode_detail(live.slug, "101.00")
 
@@ -482,7 +477,6 @@ def test_fetch_saves_non_final_episode_and_requests_monitor(monkeypatch):
         )
     )
 
-    # The non-final episode is indexed immediately, with its real remote status
     episode = (
         session.query(Episode)
         .filter(Episode.slug == live.slug)
@@ -547,7 +541,7 @@ def test_fetch_rerun_requeues_monitor_without_reidentifying(monkeypatch):
     live = _episode_record(
         "live-episode",
         "101.00",
-        datetime(2026, 7, 23, 10, tzinfo=timezone.utc),
+        datetime.now(timezone.utc),
     )
     live_detail = _episode_detail(live.slug, "101.00")
 
@@ -563,9 +557,6 @@ def test_fetch_rerun_requeues_monitor_without_reidentifying(monkeypatch):
     asyncio.run(service.run_fetch_new_episodes(session, show_slug=show.slug))
     queued.reset_mock()
 
-    # Second run: same remote state. The still-live episode must keep its row,
-    # identifier and index, and its monitor must be requested again (monitor jobs
-    # are in-memory only, so a fetch after a restart has to restore them).
     asyncio.run(service.run_fetch_new_episodes(session, show_slug=show.slug))
 
     episodes = (

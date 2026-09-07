@@ -78,9 +78,6 @@ def update_episode_from_dailywire(
         "metadata_is_final",
     }
     model_fields = set(Episode.__mapper__.attrs.keys())
-    for field, value in dw_episode.model_dump(
-            mode="python",
-            by_alias=False,
-    ).items():
+    for field, value in dw_episode.model_dump(mode="python", by_alias=False).items():
         if field in model_fields and field not in protected_fields:
             setattr(episode, field, value)

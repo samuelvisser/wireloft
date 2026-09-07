@@ -68,11 +68,16 @@ def _episode_type_prefix(episode: Episode) -> str:
 
 
 def _episode_recency_key(episode: Episode) -> tuple[datetime, int]:
-    return episode.published_date or episode.went_live_date or datetime.min, episode.id or 0
+    return (
+        episode.published_date
+        or episode.went_live_date
+        or datetime.min.replace(tzinfo=timezone.utc),
+        episode.id or 0,
+    )
 
 
-def _utc_now_naive() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def get_download_profile_episodes(
@@ -96,7 +101,7 @@ def get_download_profile_episodes(
 
     cutoff: Optional[datetime] = None
     if is_podcast and profile.download_days_in_past > 0:
-        cutoff = _utc_now_naive() - timedelta(days=profile.download_days_in_past)
+        cutoff = _utc_now() - timedelta(days=profile.download_days_in_past)
 
     allowed_season_ids: Optional[set[int]] = None
     max_chosen_season_index: Optional[int] = None
@@ -109,11 +114,12 @@ def get_download_profile_episodes(
 
     eligible: list[Episode] = []
     for episode in candidates:
-        if episode.is_no_show_today:
-            continue
         if _episode_type_prefix(episode) not in allowed_types:
             continue
 
+        # Publication status is the single eligibility authority. NO_USABLE_MEDIA
+        # and DW_PROCESSING are both naturally excluded because neither is a
+        # downloadable publication state, with no placeholder-specific exception.
         publish_status = episode.publish_status
         if publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
             pass
@@ -196,8 +202,6 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
     if existing.download_profile_id != profile.id:
         existing.download_profile_id = profile.id
 
-    # The operation graph is the sole authority for whether an attempt is
-    # queued/running. Never infer that from MediaDownload domain state.
     if get_active_media_download_operation(s, existing.id) is not None:
         s.flush()
         return DownloadAction(existing.id, False)
@@ -215,8 +219,6 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         s.flush()
         return DownloadAction(existing.id, True, is_redownload=True)
 
-    # absent/missing/corrupted all mean the profile still wants an artifact but
-    # none is currently healthy. A new SYSTEM operation is the only requeue state.
     prepare_media_download_artifact(existing)
     existing.file_path = target_path
     s.flush()
@@ -257,9 +259,6 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
         if profile.delete_older_episodes:
             rows = candidates
         else:
-            # Even when completed old files are retained, a not-yet-produced
-            # artifact outside latest-N must be removed so its queued/running
-            # operation is canceled by the MediaDownload relationship cascade.
             rows = [
                 row for row in candidates
                 if row.artifact_status == MediaDownloadArtifactStatus.ABSENT.value
@@ -267,7 +266,7 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
     elif profile.download_days_in_past > 0:
         if not profile.delete_older_episodes:
             return 0
-        cutoff = _utc_now_naive() - timedelta(days=profile.download_days_in_past)
+        cutoff = _utc_now() - timedelta(days=profile.download_days_in_past)
         rows = list(s.execute(
             select(EpisodeMediaDownload)
             .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)

@@ -53,7 +53,7 @@ def _make_season(session, show, *, index=1, slug="season-1", name="One"):
     return season
 
 
-def _make_episode(session, show, season, *, slug, index, published_at=None, is_no_show_today=False):
+def _make_episode(session, show, season, *, slug, index, published_at=None, publish_status="published_final"):
     from backend.db.models import Episode
     from backend.utils.helpers import generate_uuid
 
@@ -68,10 +68,9 @@ def _make_episode(session, show, season, *, slug, index, published_at=None, is_n
         title=f"Episode {index}",
         description=f"Description {index}",
         duration=1800.0,
-        publish_status="published_final",
+        publish_status=publish_status,
         sharing_url=f"https://example.test/{slug}",
         published_date=published_at,
-        is_no_show_today=is_no_show_today,
     )
     session.add(episode)
     session.flush()
@@ -290,7 +289,7 @@ def test_get_feed_items_dailywire_only_includes_episodes_without_downloads(db_se
         slug="no-show-today",
         index=3,
         published_at=now + timedelta(days=1),
-        is_no_show_today=True,
+        publish_status="no_usable_media",
     )
     _make_episode(db_session, other_show, other_season, slug="other", index=1, published_at=now)
 

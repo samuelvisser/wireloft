@@ -3,6 +3,7 @@ import ReadMore from '../../utils/ReadMore'
 import CronEditor from './CronEditor'
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {
+    DurationField,
     NumberField,
     SelectField,
     SettingsDisclosure,
@@ -93,12 +94,11 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     })}
                     help="Maximum automatic attempts before a download is marked as failed."
                 />
-                <NumberField
+                <DurationField
                     id="settings-download-timeout"
                     label="Download timeout"
                     value={draft.downloadSettings.downloadTimeoutSeconds}
-                    min={1}
-                    unit="seconds"
+                    backendUnit="seconds"
                     error={errorFor('downloadSettings.downloadTimeoutSeconds')}
                     environmentVariable={environmentVariableFor('downloadSettings.downloadTimeoutSeconds')}
                     onChange={(value) => updateDraft((next) => {

@@ -1,5 +1,6 @@
 import {z} from "zod";
 import {MovieExtraTypeSchema} from './dailywire_catalog'
+import {ApiDateTimeSchema} from './datetime'
 
 
 export const MovieExtraCreateSchema = z.object({
@@ -30,20 +31,19 @@ export const MovieExtraReadSchema = z.looseObject({
     title: z.string(),
     movieExtraType: MovieExtraTypeSchema,
     description: z.string().nullable(),
-    downloadedDate: z.iso.datetime().transform((s) => new Date(s)).nullable(),
+    downloadedDate: ApiDateTimeSchema.nullable(),
     duration: z.number(),
     backgroundImagePath: z.string().nullable(),
     thumbnailLandscapePath: z.string().nullable(),
     thumbnailPortraitPath: z.string().nullable(),
     thumbnailSquarePath: z.string().nullable(),
     sharingUrl: z.string().nullable(),
-    publishedDate: z.iso.datetime().transform((s) => new Date(s)).nullable(),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    publishedDate: ApiDateTimeSchema.nullable(),
+    createdAt: ApiDateTimeSchema,
+    updatedAt: ApiDateTimeSchema,
 })
 export type MovieExtraRead = z.infer<typeof MovieExtraReadSchema>;
 
-// ---------- Strict request (create/update) ----------
 const MovieBaseSchema = z.object({
     title: z.string(),
     extendedTitle: z.string().nullable().optional(),
@@ -63,7 +63,6 @@ const MovieBaseSchema = z.object({
     availableFor: z.array(z.string()).default([]),
 })
 
-
 export const MovieCreateSchema = MovieBaseSchema.extend({
     dwId: z.string().nullable().optional(),
     slug: z.string(),
@@ -73,14 +72,10 @@ export const MovieCreateSchema = MovieBaseSchema.extend({
 export type MovieCreateIn = z.input<typeof MovieCreateSchema>;
 export type MovieCreateOut = z.output<typeof MovieCreateSchema>;
 
-
-export const MovieUpdateSchema = MovieBaseSchema.extend({
-})
+export const MovieUpdateSchema = MovieBaseSchema.extend({})
 export type MovieUpdateIn = z.input<typeof MovieUpdateSchema>;
 export type MovieUpdateOut = z.output<typeof MovieUpdateSchema>;
 
-
-// ------------ Lenient response (read) ------------
 export const MovieReadSchema = z.looseObject({
     id: z.int(),
     uuid: z.string(),
@@ -89,7 +84,7 @@ export const MovieReadSchema = z.looseObject({
     title: z.string(),
     extendedTitle: z.string().nullable().optional(),
     description: z.string().nullable().optional(),
-    downloadedDate: z.iso.datetime().transform((s) => new Date(s)).nullable().optional(),
+    downloadedDate: ApiDateTimeSchema.nullable().optional(),
     duration: z.number(),
     backgroundImagePath: z.string().nullable(),
     thumbnailLandscapePath: z.string().nullable(),
@@ -102,16 +97,17 @@ export const MovieReadSchema = z.looseObject({
     matureRating: z.string().nullable(),
     isDownloadable: z.boolean().nullable(),
     availableFor: z.array(z.string()),
-    releaseDate: z.iso.date().transform((s) => new Date(`${s}T00:00:00Z`)).nullable(),
+    // Calendar dates stay calendar dates. Do not invent midnight or a timezone.
+    releaseDate: z.iso.date().nullable(),
     releaseDateSource: z.string().nullable(),
     releaseDateSourceId: z.string().nullable(),
     releaseDateLookupStatus: z.string(),
-    releaseDateLookupAttemptedAt: z.iso.datetime().transform((s) => new Date(s)).nullable(),
+    releaseDateLookupAttemptedAt: ApiDateTimeSchema.nullable(),
     releaseDateLookupError: z.string().nullable(),
     officialTrailerId: z.int().nullable(),
     officialTrailer: MovieExtraReadSchema.nullable(),
     movieExtras: z.array(MovieExtraReadSchema),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    createdAt: ApiDateTimeSchema,
+    updatedAt: ApiDateTimeSchema,
 })
 export type MovieRead = z.infer<typeof MovieReadSchema>;

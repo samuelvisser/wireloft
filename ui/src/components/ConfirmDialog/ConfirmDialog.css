@@ -1,0 +1,17 @@
+.confirm-dialog-content {
+    margin: 8px 0 16px;
+}
+
+.confirm-dialog-content p {
+    margin-top: 0;
+    margin-bottom: 0;
+    color: var(--muted);
+}
+
+.confirm-dialog-content p + p {
+    margin-top: 0.5lh;
+}
+
+.confirm-dialog-content > p + :not(p) {
+    margin-top: 16px;
+}

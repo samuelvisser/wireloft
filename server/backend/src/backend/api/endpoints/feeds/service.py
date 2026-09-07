@@ -17,6 +17,7 @@ from backend.db.models import Episode, LocalMediaProfile, RssStreamProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import (
     DEFAULT_RSS_DW_VIDEO_METHOD,
@@ -28,6 +29,10 @@ from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 logger = logging.getLogger(__name__)
 
 _AVAILABLE_ARTIFACT_STATUS = MediaDownloadArtifactStatus.AVAILABLE.value
+_UNAVAILABLE_PUBLISH_STATUSES = {
+    EpisodePublishStatus.NO_USABLE_MEDIA.value,
+    EpisodePublishStatus.DW_PROCESSING.value,
+}
 _VIDEO_HEIGHTS = {
     PreferredFormat.FORMAT_4K.value: 2160,
     PreferredFormat.FORMAT_1080P.value: 1080,
@@ -129,7 +134,7 @@ def get_feed_items(
     episodes = (
         s.query(Episode)
         .filter(Episode.show_id == profile.show_id)
-        .filter(Episode.is_no_show_today.is_not(True))
+        .filter(Episode.publish_status.notin_(_UNAVAILABLE_PUBLISH_STATUSES))
         .all()
     )
 
@@ -196,6 +201,10 @@ def get_media_for_episode(
         raise HTTPException(status_code=404, detail="Episode not found")
     if not _profile_allows_episode(profile, episode):
         raise HTTPException(status_code=404, detail="Episode not included in this feed")
+    if episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
+        raise HTTPException(status_code=404, detail="Episode has no usable media")
+    if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
+        raise HTTPException(status_code=404, detail="Episode media is still processing")
 
     best = None
     if profile.use_downloads:
@@ -216,7 +225,7 @@ def get_media_for_episode(
 
     if best is not None:
         return episode, best
-    if profile.use_dw_stream and episode.is_no_show_today is not True:
+    if profile.use_dw_stream:
         return episode, None
 
     raise HTTPException(

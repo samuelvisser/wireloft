@@ -2,16 +2,16 @@ import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClien
 import {useEffect, useMemo} from 'react'
 import {saveProfilesToStorage, saveShowsToStorage} from './cache'
 import {useFrontendPuller} from './puller'
-import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
-import {PodcastDownloadProfileRead} from "../types/schemas/podcast_download_profile";
-import {SeriesDownloadProfileRead} from "../types/schemas/series_download_profile";
-import {DownloadProfileRead} from "../types/schemas/download_profile_base";
-import {DownloadProfileReadView} from "../types/schemas/download_profile_view";
-import {StreamProfileRead, StreamProfileReadView} from "../types/schemas/stream_profile_base";
-import {ShowRead, ShowReadView} from "../types/schemas/show";
-import {EpisodeRead} from "../types/schemas/episode";
-import {SeasonRead} from "../types/schemas/season";
-import {RssStreamProfileRead} from "../types/schemas/rss_stream_profile";
+import {LocalMediaProfileRead, LocalMediaProfileReadSchema} from "../types/schemas/local_media_profile";
+import {PodcastDownloadProfileRead, PodcastDownloadProfileReadSchema} from "../types/schemas/podcast_download_profile";
+import {SeriesDownloadProfileRead, SeriesDownloadProfileReadSchema} from "../types/schemas/series_download_profile";
+import {DownloadProfileRead, DownloadProfileReadSchema} from "../types/schemas/download_profile_base";
+import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
+import {StreamProfileRead, StreamProfileReadSchema, StreamProfileReadView, StreamProfileReadViewSchema} from "../types/schemas/stream_profile_base";
+import {ShowRead, ShowReadSchema, ShowReadView, ShowReadViewSchema} from "../types/schemas/show";
+import {EpisodeRead, EpisodeReadSchema} from "../types/schemas/episode";
+import {SeasonRead, SeasonReadSchema} from "../types/schemas/season";
+import {RssStreamProfileRead, RssStreamProfileReadSchema} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
 import {
@@ -21,7 +21,7 @@ import {
 } from "../types/schemas/media_download";
 import {TaskOperationRead} from "../types/schemas/operation";
 import {TaskLedgerPageReadSchema} from "../types/schemas/task";
-import {MovieRead} from "../types/schemas/movie";
+import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {
     DailywireCatalogRead,
     DailywireCatalogReadSchema,
@@ -37,10 +37,22 @@ async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
     return r.json() as Promise<T>
 }
 
+async function fetchParsed<T>(
+    url: string,
+    schema: {parse(value: unknown): T},
+    signal?: AbortSignal,
+): Promise<T> {
+    return schema.parse(await fetchJSON<unknown>(url, signal))
+}
+
 export function useLocalMediaProfiles() {
-    const result = useQuery<any[], Error, LocalMediaProfileRead[], readonly ['localMediaProfiles']>({
+    const result = useQuery<LocalMediaProfileRead[], Error, LocalMediaProfileRead[], readonly ['localMediaProfiles']>({
         queryKey: ['localMediaProfiles'] as const,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/local-media-profiles`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/local-media-profiles`,
+            LocalMediaProfileReadSchema.array(),
+            signal,
+        ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
@@ -51,54 +63,78 @@ export function useLocalMediaProfiles() {
 }
 
 export function usePodcastDownloadProfiles() {
-    return useQuery<any[], Error, PodcastDownloadProfileRead[], readonly ['podcastDownloadProfiles']>({
+    return useQuery<PodcastDownloadProfileRead[], Error, PodcastDownloadProfileRead[], readonly ['podcastDownloadProfiles']>({
         queryKey: ['podcastDownloadProfiles'] as const,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/podcast-download-profiles`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/podcast-download-profiles`,
+            PodcastDownloadProfileReadSchema.array(),
+            signal,
+        ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
 
 export function useSeriesDownloadProfiles() {
-    return useQuery<any[], Error, SeriesDownloadProfileRead[], readonly ['seriesDownloadProfiles']>({
+    return useQuery<SeriesDownloadProfileRead[], Error, SeriesDownloadProfileRead[], readonly ['seriesDownloadProfiles']>({
         queryKey: ['seriesDownloadProfiles'] as const,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/series-download-profiles`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/series-download-profiles`,
+            SeriesDownloadProfileReadSchema.array(),
+            signal,
+        ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
 
 export function useDownloadProfilesView() {
-    return useQuery<any[], Error, DownloadProfileReadView[], readonly ['downloadProfilesView']>({
+    return useQuery<DownloadProfileReadView[], Error, DownloadProfileReadView[], readonly ['downloadProfilesView']>({
         queryKey: ['downloadProfilesView'] as const,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/download-profiles/as-view`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/download-profiles/as-view`,
+            DownloadProfileReadViewSchema.array(),
+            signal,
+        ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
 
 export function useRssStreamProfiles() {
-    return useQuery<any[], Error, RssStreamProfileRead[], readonly ['rssStreamProfiles']>({
+    return useQuery<RssStreamProfileRead[], Error, RssStreamProfileRead[], readonly ['rssStreamProfiles']>({
         queryKey: ['rssStreamProfiles'] as const,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/rss-stream-profiles`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/rss-stream-profiles`,
+            RssStreamProfileReadSchema.array(),
+            signal,
+        ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
 
 export function useStreamProfilesView() {
-    return useQuery<any[], Error, StreamProfileReadView[], readonly ['streamProfilesView']>({
+    return useQuery<StreamProfileReadView[], Error, StreamProfileReadView[], readonly ['streamProfilesView']>({
         queryKey: ['streamProfilesView'] as const,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/stream-profiles/as-view`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/stream-profiles/as-view`,
+            StreamProfileReadViewSchema.array(),
+            signal,
+        ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
 
 export function useShows() {
-    const result = useQuery<any[], Error, ShowRead[], readonly ['shows']>({
+    const result = useQuery<ShowRead[], Error, ShowRead[], readonly ['shows']>({
         queryKey: ['shows'] as const,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/shows`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/shows`,
+            ShowReadSchema.array(),
+            signal,
+        ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
@@ -109,18 +145,26 @@ export function useShows() {
 }
 
 export function useShowsView() {
-    return useQuery<any[], Error, ShowReadView[], readonly ['showsView']>({
+    return useQuery<ShowReadView[], Error, ShowReadView[], readonly ['showsView']>({
         queryKey: ['showsView'] as const,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/shows/as-view`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/shows/as-view`,
+            ShowReadViewSchema.array(),
+            signal,
+        ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
 
 export function useMovies() {
-    return useQuery<any[], Error, MovieRead[], readonly ['movies']>({
+    return useQuery<MovieRead[], Error, MovieRead[], readonly ['movies']>({
         queryKey: ['movies'] as const,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/movies`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/movies`,
+            MovieReadSchema.array(),
+            signal,
+        ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
@@ -210,10 +254,14 @@ export function useDailywireMovie(slug?: string) {
 
 export function useShow(id?: string) {
     const qc = useQueryClient()
-    return useQuery<any, Error, ShowRead, readonly ['show', string | undefined]>({
+    return useQuery<ShowRead, Error, ShowRead, readonly ['show', string | undefined]>({
         queryKey: ['show', id] as const,
         enabled: !!id,
-        queryFn: ({signal}) => fetchJSON<any>(`${(window as any).appConfig.API_URL}/shows/${id}`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/shows/${id}`,
+            ShowReadSchema,
+            signal,
+        ),
         placeholderData: keepPreviousData,
         initialData: () => {
             if (!id) return undefined
@@ -225,13 +273,17 @@ export function useShow(id?: string) {
 }
 
 export function useEpisodes(showSlug?: string, opts?: { limit?: number }) {
-    return useQuery<any[], Error, EpisodeRead[], readonly ['episodes', string | undefined, number | undefined]>({
+    return useQuery<EpisodeRead[], Error, EpisodeRead[], readonly ['episodes', string | undefined, number | undefined]>({
         queryKey: ['episodes', showSlug, opts?.limit] as const,
         enabled: !!showSlug,
         queryFn: ({signal}) => {
             const base = (window as any).appConfig.API_URL
             const params = opts?.limit ? `?limit=${opts.limit}` : ''
-            return fetchJSON<any[]>(`${base}/episodes/by-show-slug/${showSlug}${params}`, signal)
+            return fetchParsed(
+                `${base}/episodes/by-show-slug/${showSlug}${params}`,
+                EpisodeReadSchema.array(),
+                signal,
+            )
         },
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
@@ -239,10 +291,14 @@ export function useEpisodes(showSlug?: string, opts?: { limit?: number }) {
 }
 
 export function useEpisode(episodeId?: string) {
-    return useQuery<any, Error, EpisodeRead, readonly ['episode', string | undefined]>({
+    return useQuery<EpisodeRead, Error, EpisodeRead, readonly ['episode', string | undefined]>({
         queryKey: ['episode', episodeId] as const,
         enabled: !!episodeId,
-        queryFn: ({signal}) => fetchJSON<any>(`${(window as any).appConfig.API_URL}/episodes/${episodeId}`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/episodes/${episodeId}`,
+            EpisodeReadSchema,
+            signal,
+        ),
         placeholderData: keepPreviousData,
     })
 }
@@ -301,30 +357,42 @@ export function useDailywireUserInfo() {
 }
 
 export function useShowSeasons(showSlug?: string) {
-    return useQuery<any[], Error, SeasonRead[], readonly ['seasons', string | undefined]>({
+    return useQuery<SeasonRead[], Error, SeasonRead[], readonly ['seasons', string | undefined]>({
         queryKey: ['seasons', showSlug] as const,
         enabled: !!showSlug,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/shows/${showSlug}/seasons`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/shows/${showSlug}/seasons`,
+            SeasonReadSchema.array(),
+            signal,
+        ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
 
 export function useDownloadProfilesByShowSlug(showSlug?: string) {
-    return useQuery<any[], Error, DownloadProfileRead[], readonly ['downloadProfilesByShowSlug', string | undefined]>({
+    return useQuery<DownloadProfileRead[], Error, DownloadProfileRead[], readonly ['downloadProfilesByShowSlug', string | undefined]>({
         queryKey: ['downloadProfilesByShowSlug', showSlug] as const,
         enabled: !!showSlug,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/download-profiles/by-show-slug/${showSlug}`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/download-profiles/by-show-slug/${showSlug}`,
+            DownloadProfileReadSchema.array(),
+            signal,
+        ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
 
 export function useStreamProfilesByShowSlug(showSlug?: string) {
-    return useQuery<any[], Error, StreamProfileRead[], readonly ['streamProfilesByShowSlug', string | undefined]>({
+    return useQuery<StreamProfileRead[], Error, StreamProfileRead[], readonly ['streamProfilesByShowSlug', string | undefined]>({
         queryKey: ['streamProfilesByShowSlug', showSlug] as const,
         enabled: !!showSlug,
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/stream-profiles/by-show-slug/${showSlug}`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/stream-profiles/by-show-slug/${showSlug}`,
+            StreamProfileReadSchema.array(),
+            signal,
+        ),
         placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
@@ -576,20 +644,32 @@ export function prefetchCoreData(qc: QueryClient) {
     void qc
         .prefetchQuery({
             queryKey: ['shows'],
-            queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/shows`, signal),
+            queryFn: ({signal}) => fetchParsed(
+                `${(window as any).appConfig.API_URL}/shows`,
+                ShowReadSchema.array(),
+                signal,
+            ),
         })
         .then(() => {
-            const shows = qc.getQueryData<any[]>(['shows'])
+            const shows = qc.getQueryData<ShowRead[]>(['shows'])
             if (shows) saveShowsToStorage(shows)
         })
     void qc.prefetchQuery({
         queryKey: ['movies'],
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/movies`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/movies`,
+            MovieReadSchema.array(),
+            signal,
+        ),
     })
     void qc
         .prefetchQuery({
             queryKey: ['localMediaProfiles'],
-            queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/local-media-profiles`, signal),
+            queryFn: ({signal}) => fetchParsed(
+                `${(window as any).appConfig.API_URL}/local-media-profiles`,
+                LocalMediaProfileReadSchema.array(),
+                signal,
+            ),
         })
         .then(() => {
             const profiles = qc.getQueryData<LocalMediaProfileRead[]>(['localMediaProfiles'])
@@ -597,22 +677,42 @@ export function prefetchCoreData(qc: QueryClient) {
         })
     void qc.prefetchQuery({
         queryKey: ['podcastDownloadProfiles'],
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/podcast-download-profiles`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/podcast-download-profiles`,
+            PodcastDownloadProfileReadSchema.array(),
+            signal,
+        ),
     })
     void qc.prefetchQuery({
         queryKey: ['seriesDownloadProfiles'],
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/series-download-profiles`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/series-download-profiles`,
+            SeriesDownloadProfileReadSchema.array(),
+            signal,
+        ),
     })
     void qc.prefetchQuery({
         queryKey: ['downloadProfilesView'],
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/download-profiles/as-view`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/download-profiles/as-view`,
+            DownloadProfileReadViewSchema.array(),
+            signal,
+        ),
     })
     void qc.prefetchQuery({
         queryKey: ['rssStreamProfiles'],
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/rss-stream-profiles`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/rss-stream-profiles`,
+            RssStreamProfileReadSchema.array(),
+            signal,
+        ),
     })
     void qc.prefetchQuery({
         queryKey: ['streamProfilesView'],
-        queryFn: ({signal}) => fetchJSON<any[]>(`${(window as any).appConfig.API_URL}/stream-profiles/as-view`, signal),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/stream-profiles/as-view`,
+            StreamProfileReadViewSchema.array(),
+            signal,
+        ),
     })
 }

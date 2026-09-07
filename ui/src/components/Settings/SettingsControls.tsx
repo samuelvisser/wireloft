@@ -1,23 +1,8 @@
 import type {ReactNode} from 'react'
 import Switch from 'react-switch'
+import TimeInterval from '../../utils/TimeInterval'
+import type {TimeUnit} from '../../utils/TimeInterval'
 
-
-export function humanizeSeconds(seconds: number): string {
-    if (!Number.isFinite(seconds)) return ''
-    if (seconds % 86_400 === 0) {
-        const days = seconds / 86_400
-        return `${days} day${days === 1 ? '' : 's'}`
-    }
-    if (seconds % 3_600 === 0) {
-        const hours = seconds / 3_600
-        return `${hours} hour${hours === 1 ? '' : 's'}`
-    }
-    if (seconds % 60 === 0) {
-        const minutes = seconds / 60
-        return `${minutes} minute${minutes === 1 ? '' : 's'}`
-    }
-    return `${seconds} seconds`
-}
 
 export function SettingsSection({
     title,
@@ -199,6 +184,56 @@ export function NumberField({
                 />
                 {unit ? <span>{unit}</span> : null}
             </div>
+            {error ? (
+                <div id={errorId} className="error" role="alert" aria-live="polite">
+                    {error}
+                </div>
+            ) : null}
+        </FieldShell>
+    )
+}
+
+export function DurationField({
+    id,
+    label,
+    value,
+    backendUnit,
+    onChange,
+    help,
+    error,
+    step = 1,
+    environmentVariable,
+}: {
+    id: string
+    label: string
+    value: number
+    backendUnit: TimeUnit
+    onChange: (value: number) => void
+    help?: ReactNode
+    error?: string
+    step?: number
+    environmentVariable?: string
+}) {
+    const errorId = `${id}-errors`
+
+    return (
+        <FieldShell
+            label={label}
+            htmlFor={`${id}-${backendUnit}`}
+            help={help}
+            environmentVariable={environmentVariable}
+        >
+            <TimeInterval
+                idPrefix={id}
+                value={value}
+                backendUnit={backendUnit}
+                onChange={onChange}
+                step={step}
+                disabled={Boolean(environmentVariable)}
+                className="settings-time-interval"
+                ariaInvalid={Boolean(error)}
+                ariaDescribedBy={error ? errorId : undefined}
+            />
             {error ? (
                 <div id={errorId} className="error" role="alert" aria-live="polite">
                     {error}

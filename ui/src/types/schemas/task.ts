@@ -1,6 +1,6 @@
 import {z} from "zod";
+import {ApiDateTimeStringSchema} from './datetime'
 
-// Task run shape as returned by the API (camelCase keys)
 export const TaskRunReadSchema = z.looseObject({
   id: z.int(),
   definitionKey: z.string(),
@@ -13,8 +13,8 @@ export const TaskRunReadSchema = z.looseObject({
   attemptCount: z.int(),
   maxRetries: z.int(),
   lastError: z.string().nullable().optional(),
-  startedAt: z.string().nullable().optional(),
-  finishedAt: z.string().nullable().optional(),
+  startedAt: ApiDateTimeStringSchema.nullable().optional(),
+  finishedAt: ApiDateTimeStringSchema.nullable().optional(),
   runtimeMs: z.number().nullable().optional(),
 });
 export type TaskRunRead = z.infer<typeof TaskRunReadSchema>;
@@ -29,8 +29,8 @@ export const TaskLedgerEntryReadSchema = z.looseObject({
   lastError: z.string().nullable().optional(),
   inputs: z.record(z.string(), z.unknown()),
   result: z.record(z.string(), z.unknown()).nullable().optional(),
-  startedAt: z.string().nullable().optional(),
-  finishedAt: z.string().nullable().optional(),
+  startedAt: ApiDateTimeStringSchema.nullable().optional(),
+  finishedAt: ApiDateTimeStringSchema.nullable().optional(),
   runtimeMs: z.number().nullable().optional(),
 });
 export type TaskLedgerEntryRead = z.infer<typeof TaskLedgerEntryReadSchema>;

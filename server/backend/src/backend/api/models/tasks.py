@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Optional, Literal
 
 from backend.api.models.base import ResponseBase, RequestBase
@@ -31,7 +32,7 @@ class TaskScheduleRead(ResponseBase):
     trigger: str
     trigger_args: dict
     active: bool
-    next_run_time: Optional[str]
+    next_run_time: Optional[datetime]
     max_retries: Optional[int]
 
 
@@ -47,8 +48,8 @@ class TaskRunRead(ResponseBase):
     attempt_count: int
     max_retries: int
     last_error: Optional[str]
-    started_at: Optional[str]
-    finished_at: Optional[str]
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
     runtime_ms: Optional[int]
 
 
@@ -64,8 +65,8 @@ class TaskLedgerEntryRead(ResponseBase):
     last_error: Optional[str]
     inputs: dict[str, Any]
     result: Optional[dict[str, Any]]
-    started_at: Optional[str]
-    finished_at: Optional[str]
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
     runtime_ms: Optional[int]
 
 

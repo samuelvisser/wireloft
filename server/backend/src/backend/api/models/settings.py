@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.triggers.cron import CronTrigger
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 from pydantic_core import PydanticCustomError
 
@@ -46,11 +46,12 @@ SettingFieldPath = Literal[
     "scheduler.defaultMaxRetries",
     "scheduler.retryBackoffSeconds",
     "newEpisodeSchedule.findEpisodesCron",
-    "newEpisodeSchedule.monitorEpisodeCron",
-    "newEpisodeSchedule.checkNoShowTodayCron",
+    "newEpisodeSchedule.monitorPendingEpisodeCron",
+    "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
-    "episodeStatusTiming.publishedCountdownAfterMinutes",
     "episodeStatusTiming.publishedFinalAfterMinutes",
+    "episodeStatusTiming.dwProcessingMaxMinutes",
+    "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
     "downloadSettings.verifyDownloadsCron",
     "downloadSettings.maxConcurrentDownloads",
     "downloadSettings.maxDownloadAttempts",
@@ -90,11 +91,12 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "scheduler.defaultMaxRetries",
     "scheduler.retryBackoffSeconds",
     "newEpisodeSchedule.findEpisodesCron",
-    "newEpisodeSchedule.monitorEpisodeCron",
-    "newEpisodeSchedule.checkNoShowTodayCron",
+    "newEpisodeSchedule.monitorPendingEpisodeCron",
+    "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
-    "episodeStatusTiming.publishedCountdownAfterMinutes",
     "episodeStatusTiming.publishedFinalAfterMinutes",
+    "episodeStatusTiming.dwProcessingMaxMinutes",
+    "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
     "downloadSettings.verifyDownloadsCron",
     "downloadSettings.maxConcurrentDownloads",
     "downloadSettings.maxDownloadAttempts",
@@ -210,31 +212,24 @@ class SchedulerSettingsValue(_SettingsValueModel):
 
 class TrackNewEpisodeScheduleValue(_SettingsValueModel):
     find_episodes_cron: str = Field(min_length=1)
-    monitor_episode_cron: str = Field(min_length=1)
-    check_no_show_today_cron: str = Field(min_length=1)
+    monitor_pending_episode_cron: str = Field(min_length=1)
+    monitor_no_usable_media_episode_cron: str = Field(min_length=1)
     metadata_refresh_intervals: str = Field(min_length=1)
 
     _validate_find_episodes_cron = field_validator("find_episodes_cron")(_validate_cron_expression)
-    _validate_monitor_episode_cron = field_validator("monitor_episode_cron")(_validate_cron_expression)
-    _validate_check_no_show_today_cron = field_validator("check_no_show_today_cron")(_validate_cron_expression)
+    _validate_monitor_pending_episode_cron = field_validator("monitor_pending_episode_cron")(_validate_cron_expression)
+    _validate_monitor_no_usable_media_episode_cron = field_validator(
+        "monitor_no_usable_media_episode_cron"
+    )(_validate_cron_expression)
     _validate_metadata_refresh_intervals = field_validator(
         "metadata_refresh_intervals"
     )(normalize_metadata_refresh_intervals)
 
 
 class EpisodeStatusTimingValue(_SettingsValueModel):
-    published_countdown_after_minutes: int = Field(ge=0)
     published_final_after_minutes: int = Field(ge=0)
-
-    @field_validator("published_final_after_minutes")
-    @classmethod
-    def _final_must_not_precede_countdown(cls, value: int, info: ValidationInfo):
-        countdown = info.data.get("published_countdown_after_minutes")
-        if isinstance(countdown, int) and value < countdown:
-            raise ValueError(
-                "Final publication timing must be at least as long as countdown publication timing"
-            )
-        return value
+    dw_processing_max_minutes: int = Field(ge=0)
+    no_usable_media_delete_after_minutes: int = Field(ge=0)
 
 
 class DownloadSettingsValue(_SettingsValueModel):
@@ -303,8 +298,8 @@ class SettingsValues(_SettingsValueModel):
             validate_worker_cron_settings(
                 min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
                 find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
-                monitor_episode_cron=self.new_episode_schedule.monitor_episode_cron,
-                check_no_show_today_cron=self.new_episode_schedule.check_no_show_today_cron,
+                monitor_pending_episode_cron=self.new_episode_schedule.monitor_pending_episode_cron,
+                monitor_no_usable_media_episode_cron=self.new_episode_schedule.monitor_no_usable_media_episode_cron,
                 verify_downloads_cron=self.download_settings.verify_downloads_cron,
                 file_watcher_scan_cron=self.file_watcher.scan_cron,
             )
