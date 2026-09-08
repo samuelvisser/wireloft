@@ -105,15 +105,36 @@ def _reconcile(download: MediaDownloadBase, *, verify_file_size: bool) -> bool:
             f"Expected a file at '{path}' but found something else",
         )
 
+    identity_updated = False
+    if not _has_complete_identity(download):
+        try:
+            identity = inspect_artifact(path)
+        except FileNotFoundError:
+            return _apply_problem(
+                download,
+                MediaDownloadArtifactStatus.MISSING,
+                f"File not found at '{path}'",
+            )
+        except (OSError, ValueError) as exc:
+            return _apply_problem(
+                download,
+                MediaDownloadArtifactStatus.MISSING,
+                f"Could not check '{path}': {exc}",
+            )
+        _set_identity(download, identity)
+        identity_updated = True
+
     problem = _size_problem(download, size=path_stat.st_size, verify_file_size=verify_file_size)
     if problem is not None:
         status, message = problem
-        return _apply_problem(download, status, message)
+        changed = _apply_problem(download, status, message)
+        return changed or identity_updated
 
-    identity_updated = _refresh_filesystem_identity_if_content_matches(
-        download,
-        path_stat=path_stat,
-    )
+    if not identity_updated:
+        identity_updated = _refresh_filesystem_identity_if_content_matches(
+            download,
+            path_stat=path_stat,
+        )
 
     if download.artifact_status in _PROBLEM_STATUSES:
         logger.info("file_watcher: media_download %s file is healthy again", download.id)
@@ -140,6 +161,15 @@ def _size_problem(
             f"{download.downloaded_bytes} recorded when it finished downloading"
         )
     return None
+
+
+def _has_complete_identity(download: MediaDownloadBase) -> bool:
+    return (
+        bool(download.artifact_stat_dev)
+        and bool(download.artifact_stat_ino)
+        and download.artifact_size_bytes is not None
+        and bool(download.artifact_fingerprint)
+    )
 
 
 def _refresh_filesystem_identity_if_content_matches(

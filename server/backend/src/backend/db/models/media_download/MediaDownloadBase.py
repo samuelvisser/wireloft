@@ -50,11 +50,12 @@ class MediaDownloadBase(HasTaskResourcesMixin, Base):
     )
     artifact_error: Mapped[Optional[str]] = mapped_column(Text)
 
-    # Filesystem identity is meaningful only after an artifact has existed, so
-    # a never-materialized ABSENT row may leave these NULL. The Alembic schema
-    # enforces that every non-ABSENT status has a complete tuple. st_dev/st_ino
-    # are decimal text rather than SQLite INTEGERs so unsigned filesystem IDs
-    # cannot overflow int64.
+    # Filesystem identity exists only when WireLoft has successfully inspected a
+    # physical artifact. ABSENT rows therefore have no identity, and a MISSING
+    # row discovered while the file is unavailable may also have none. AVAILABLE
+    # and CORRUPTED artifacts always carry the complete tuple. st_dev/st_ino are
+    # decimal text rather than SQLite INTEGERs so unsigned filesystem IDs cannot
+    # overflow int64.
     artifact_stat_dev: Mapped[Optional[str]] = mapped_column(String(32))
     artifact_stat_ino: Mapped[Optional[str]] = mapped_column(String(32))
     artifact_size_bytes: Mapped[Optional[int]] = mapped_column(BigInteger)

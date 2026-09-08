@@ -24,7 +24,7 @@ _FINGERPRINT_SAMPLE_SIZE = 64 * 1024
 _FINGERPRINT_VERSION = b"wireloft-artifact-v1\0"
 _IDENTITY_CONSTRAINT = "ck_media_downloads_artifact_identity_complete"
 _IDENTITY_CHECK = (
-    "artifact_status = 'absent' OR ("
+    "artifact_status IN ('absent', 'missing') OR ("
     "artifact_stat_dev IS NOT NULL AND length(artifact_stat_dev) > 0 AND "
     "artifact_stat_ino IS NOT NULL AND length(artifact_stat_ino) > 0 AND "
     "artifact_size_bytes IS NOT NULL AND artifact_size_bytes >= 0 AND "
@@ -74,6 +74,12 @@ def _inspect_artifact(path: str) -> tuple[str, str, int, str]:
         )
 
 
+def _missing_error(path: str, exc: OSError | ValueError) -> str:
+    if isinstance(exc, FileNotFoundError):
+        return f"File not found at '{path}'"
+    return f"Could not check '{path}': {exc}"
+
+
 def upgrade() -> None:
     connection = op.get_bind()
     downloads = connection.execute(
@@ -83,21 +89,19 @@ def upgrade() -> None:
         )
     ).mappings().all()
 
-    # Preflight every existing persistent artifact before making any schema
-    # change. If one is already inconsistent, fail without leaving a partially
-    # applied SQLite migration behind.
     identities: list[tuple[int, str, str, int, str]] = []
+    missing_artifacts: list[tuple[int, str]] = []
     for download in downloads:
         download_id = download["id"]
         path = download["file_path"]
         try:
             stat_dev, stat_ino, size_bytes, fingerprint = _inspect_artifact(path)
         except (OSError, ValueError) as exc:
-            raise RuntimeError(
-                f"Cannot backfill artifact identity for media download {download_id} "
-                f"at {path!r}: {exc}. Restore, remove, or redownload the inconsistent "
-                "artifact before retrying this migration."
-            ) from exc
+            # FileWatcher already models an unavailable filesystem artifact as
+            # persistent MISSING state. An upgrade must not be blocked merely
+            # because a user already has a missing/unreadable file recorded.
+            missing_artifacts.append((download_id, _missing_error(path, exc)))
+            continue
         identities.append((download_id, stat_dev, stat_ino, size_bytes, fingerprint))
 
     with op.batch_alter_table("media_downloads") as batch:
@@ -121,6 +125,20 @@ def upgrade() -> None:
                 "stat_ino": stat_ino,
                 "size_bytes": size_bytes,
                 "fingerprint": fingerprint,
+                "download_id": download_id,
+            },
+        )
+
+    for download_id, error in missing_artifacts:
+        connection.execute(
+            sa.text(
+                "UPDATE media_downloads SET "
+                "artifact_status = 'missing', "
+                "artifact_error = :error "
+                "WHERE id = :download_id"
+            ),
+            {
+                "error": error,
                 "download_id": download_id,
             },
         )

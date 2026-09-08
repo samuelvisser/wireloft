@@ -92,8 +92,8 @@ def test_migration_backfills_existing_download_and_enforces_identity(migration_d
                 )
             )
 
-    # A desired download has no physical artifact yet, so ABSENT is the one
-    # legitimate state in which the identity tuple remains NULL.
+    # Desired downloads and already-missing artifacts have no inspectable file,
+    # so these states legitimately allow the identity tuple to remain NULL.
     with engine.begin() as connection:
         connection.execute(
             text(
@@ -103,18 +103,43 @@ def test_migration_backfills_existing_download_and_enforces_identity(migration_d
                 "('episode', 3, 1, '/tmp/not-downloaded.m4a', 'absent', 0)"
             )
         )
+        connection.execute(
+            text(
+                "INSERT INTO media_downloads "
+                "(type, media_item_id, local_media_profile_id, file_path, artifact_status, "
+                "automatic_retry_suppressed) VALUES "
+                "('episode', 4, 1, '/tmp/already-missing.m4a', 'missing', 0)"
+            )
+        )
 
 
-def test_migration_preflights_missing_existing_artifact_before_schema_change(migration_database, tmp_path):
+def test_migration_marks_missing_existing_artifact_instead_of_blocking_upgrade(migration_database, tmp_path):
     _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
+    from backend.db.migrations import get_alembic_config, get_current_revisions
 
     command.upgrade(get_alembic_config(), _PREVIOUS_REVISION)
     missing = tmp_path / "already-missing.m4a"
-    _insert_available_download(engine, missing)
+    download_id = _insert_available_download(engine, missing)
 
-    with pytest.raises(RuntimeError, match="Cannot backfill artifact identity"):
-        command.upgrade(get_alembic_config(), _ARTIFACT_IDENTITY_REVISION)
+    command.upgrade(get_alembic_config(), _ARTIFACT_IDENTITY_REVISION)
+
+    assert get_current_revisions() == (_ARTIFACT_IDENTITY_REVISION,)
+    with engine.connect() as connection:
+        row = connection.execute(
+            text(
+                "SELECT artifact_status, artifact_error, artifact_stat_dev, artifact_stat_ino, "
+                "artifact_size_bytes, artifact_fingerprint "
+                "FROM media_downloads WHERE id = :download_id"
+            ),
+            {"download_id": download_id},
+        ).mappings().one()
+
+    assert row["artifact_status"] == "missing"
+    assert "File not found" in row["artifact_error"]
+    assert row["artifact_stat_dev"] is None
+    assert row["artifact_stat_ino"] is None
+    assert row["artifact_size_bytes"] is None
+    assert row["artifact_fingerprint"] is None
 
     column_names = {column["name"] for column in inspect(engine).get_columns("media_downloads")}
-    assert "artifact_fingerprint" not in column_names
+    assert "artifact_fingerprint" in column_names
