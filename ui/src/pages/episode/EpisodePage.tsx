@@ -7,6 +7,7 @@ import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
 import {useSettings} from '../../lib/settings'
+import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {isShowLocalMediaProfileAvailableFor, PreferredFormatReg} from '../../types/local_media_profile'
 import {MediaDownloadStatusReg} from '../../types/media_download'
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
@@ -22,6 +23,8 @@ import {formatBytes, formatDate, formatDurationMinutes} from "../../utils/format
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
+
+const OPERATION_STARTING_MESSAGE = 'This task is starting...'
 
 function ProfileDownloadRow({
                                 profile,
@@ -150,6 +153,7 @@ function ProfileDownloadRow({
 export default function EpisodePage() {
     const {id: showId, episodeId} = useParams()
     const qc = useQueryClient()
+    const startOperation = useStartOperation()
     const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
     const [earlyDeleteConfirm, setEarlyDeleteConfirm] = useState(false)
     const [earlyDeleteStarting, setEarlyDeleteStarting] = useState(false)
@@ -240,7 +244,7 @@ export default function EpisodePage() {
     )
     const earlyDeleteAfterMinutes = settingsQuery.data?.values.episodeStatusTiming.noUsableMediaDeleteAfterMinutes
     const earlyDeleteDisabledReason = earlyDeleteStarting
-        ? 'WireLoft is starting an early delete for this episode.'
+        ? OPERATION_STARTING_MESSAGE
         : earlyDeleteOperation
             ? 'An early delete is already running for this episode.'
             : settingsQuery.error
@@ -264,25 +268,14 @@ export default function EpisodePage() {
         setMetadataRefreshStarting(true)
         try {
             const base = (window as any).appConfig?.API_URL || '/api'
-            const response = await fetch(
+            await startOperation(
                 `${base}/episodes/${encodeURIComponent(episode.slug)}/refresh-metadata`,
-                {method: 'POST', credentials: 'include'},
+                {method: 'POST'},
             )
-            if (!response.ok) {
-                const {error: message} = await getErrorMessageFromResponse(response)
-                toast.error(message || 'Could not start metadata refresh')
-                return
-            }
-
-            const result = await response.json()
-            if (typeof result?.operationId !== 'string' || !result.operationId) {
-                throw new Error('Metadata refresh request did not return an operation ID')
-            }
-
-            await qc.invalidateQueries({queryKey: ['operations']})
             toast.success('Metadata refresh started')
-        } catch {
-            toast.error('Could not start metadata refresh')
+        } catch (error) {
+            const detail = error instanceof OperationStartError ? error.message : undefined
+            toast.error(detail || 'Could not start metadata refresh')
         } finally {
             setMetadataRefreshStarting(false)
         }
@@ -294,29 +287,17 @@ export default function EpisodePage() {
         setEarlyDeleteStarting(true)
         try {
             const base = (window as any).appConfig?.API_URL || '/api'
-            const response = await fetch(
+            await startOperation(
                 `${base}/episodes/${encodeURIComponent(episode.slug)}/early-delete`,
-                {method: 'POST', credentials: 'include'},
+                {method: 'POST'},
             )
-            if (!response.ok) {
-                const {error: message} = await getErrorMessageFromResponse(response)
-                toast.error(message || 'Could not start early delete')
-                return
-            }
-
-            const result = await response.json()
-            if (typeof result?.operationId !== 'string' || !result.operationId) {
-                throw new Error('Early delete request did not return an operation ID')
-            }
 
             setEarlyDeleteConfirm(false)
-            await Promise.all([
-                qc.invalidateQueries({queryKey: ['operations']}),
-                qc.invalidateQueries({queryKey: ['episode', episode.slug]}),
-            ])
+            await qc.invalidateQueries({queryKey: ['episode', episode.slug]})
             toast.success('Early delete started')
-        } catch {
-            toast.error('Could not start early delete')
+        } catch (error) {
+            const detail = error instanceof OperationStartError ? error.message : undefined
+            toast.error(detail || 'Could not start early delete')
         } finally {
             setEarlyDeleteStarting(false)
         }
@@ -348,7 +329,7 @@ export default function EpisodePage() {
                                     icon: ['fas', 'arrows-rotate'],
                                     disabled: metadataRefreshBusy,
                                     disabledReason: metadataRefreshStarting
-                                        ? 'WireLoft is starting a metadata refresh for this episode.'
+                                        ? OPERATION_STARTING_MESSAGE
                                         : metadataRefreshOperation
                                             ? 'A metadata refresh is already running for this episode.'
                                             : undefined,

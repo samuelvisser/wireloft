@@ -12,7 +12,7 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import ShowIndexingProgress from '../../components/ShowIndexingProgress/ShowIndexingProgress'
 import ShowSyncLogModal from '../../components/ShowSyncLogModal/ShowSyncLogModal'
-import {OperationControlError, type OperationControlAction, useControlOperation} from '../../lib/operations'
+import {OperationControlError, type OperationControlAction, useControlOperation, useStartOperation} from '../../lib/operations'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import {loadEpisodesFromStorage, removeEpisodesFromStorage, saveEpisodesToStorage} from '../../lib/cache'
 import './ShowPage.css'
@@ -27,12 +27,14 @@ function preferredFormatLabel(value?: string | null) {
 }
 
 const EPISODE_SKELETON_COUNT = 12
+const OPERATION_STARTING_MESSAGE = 'This task is starting...'
 const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
 
 export default function ShowPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const startOperation = useStartOperation()
   const controlOperation = useControlOperation()
   const PAGE_SIZE = 25
 
@@ -186,14 +188,14 @@ export default function ShowPage() {
   const episodesViewLoading = episodesInitialLoading || seasonViewLoading
 
   const syncDisabledReason = syncStarting
-    ? `WireLoft is starting a sync for ${show.title}.`
+    ? OPERATION_STARTING_MESSAGE
     : syncOperation
       ? syncOperation.status === 'WAITING'
         ? syncOperation.message || OPERATION_WAITING_MESSAGE
         : `A sync is running for ${show.title}.`
       : undefined
   const metadataRefreshDisabledReason = metadataRefreshStarting
-    ? `WireLoft is starting a metadata refresh for ${show.title}.`
+    ? OPERATION_STARTING_MESSAGE
     : metadataRefreshOperation
       ? metadataRefreshOperation.status === 'WAITING'
         ? metadataRefreshOperation.message || OPERATION_WAITING_MESSAGE
@@ -204,7 +206,7 @@ export default function ShowPage() {
   const downloadProfileStateUnknown = downloadProfilesLoading && downloadProfiles === undefined
   const downloadProfileStateFailed = Boolean(downloadProfilesError) && downloadProfiles === undefined
   const redownloadDisabledReason = redownloadStarting
-    ? `WireLoft is starting a delete and re-download operation for ${show.title}.`
+    ? OPERATION_STARTING_MESSAGE
     : redownloadOperation
       ? redownloadOperation.status === 'WAITING'
         ? redownloadOperation.message || OPERATION_WAITING_MESSAGE
@@ -270,18 +272,7 @@ export default function ShowPage() {
     setSyncStarting(true)
     try {
       const base = (window as any).appConfig?.API_URL || '/api'
-      const response = await fetch(`${base}/shows/${encodeURIComponent(id)}/sync`, {
-        method: 'POST',
-        credentials: 'include',
-      })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
-      const result = await response.json()
-      if (typeof result?.operationId !== 'string' || !result.operationId) {
-        throw new Error('Sync request did not return an operation ID')
-      }
-
-      await qc.invalidateQueries({queryKey: ['operations']})
+      await startOperation(`${base}/shows/${encodeURIComponent(id)}/sync`, {method: 'POST'})
       toast.success(`Sync started for ${show.title}`)
     } catch {
       toast.error(`Could not start sync for ${show.title}`)
@@ -296,20 +287,13 @@ export default function ShowPage() {
     setMetadataRefreshStarting(true)
     try {
       const base = (window as any).appConfig?.API_URL || '/api'
-      const response = await fetch(`${base}/shows/${encodeURIComponent(id)}/refresh-metadata`, {
-        method: 'POST',
-        credentials: 'include',
-      })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
-      const result = await response.json()
-      const count = typeof result?.episodesQueued === 'number' ? result.episodesQueued : total
-      if (typeof result?.operationId !== 'string' || !result.operationId) {
-        throw new Error('Metadata refresh request did not return an operation ID')
-      }
+      const result = await startOperation(
+        `${base}/shows/${encodeURIComponent(id)}/refresh-metadata`,
+        {method: 'POST'},
+      )
+      const count = typeof result.episodesQueued === 'number' ? result.episodesQueued : total
 
       setMetadataRefreshConfirm(false)
-      await qc.invalidateQueries({queryKey: ['operations']})
       if (count > 0) {
         toast.success(
           `Metadata refresh started for ${count} ${count === 1 ? 'episode' : 'episodes'} in ${show.title}`,
@@ -347,26 +331,18 @@ export default function ShowPage() {
     setRedownloadStarting(true)
     try {
       const base = (window as any).appConfig?.API_URL || '/api'
-      const response = await fetch(`${base}/shows/${encodeURIComponent(id)}/redownload-episodes`, {
+      const result = await startOperation(`${base}/shows/${encodeURIComponent(id)}/redownload-episodes`, {
         method: 'POST',
-        credentials: 'include',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           downloadProfileId: redownloadProfileId === 'all' ? null : Number(redownloadProfileId),
         }),
       })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
-      const result = await response.json()
-      if (typeof result?.operationId !== 'string' || !result.operationId) {
-        throw new Error('Re-download request did not return an operation ID')
-      }
-
-      const profileCount = typeof result?.downloadProfilesQueued === 'number'
+      const profileCount = typeof result.downloadProfilesQueued === 'number'
         ? result.downloadProfilesQueued
         : (redownloadProfileId === 'all' ? attachedDownloadProfiles.length : 1)
       setRedownloadConfirm(false)
-      await qc.invalidateQueries({queryKey: ['operations']})
       toast.success(
         `Re-download started for ${show.title} using ${profileCount} ${profileCount === 1 ? 'Download Profile' : 'Download Profiles'}`,
       )
