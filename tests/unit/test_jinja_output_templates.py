@@ -145,14 +145,33 @@ def test_jinja_validation_reports_syntax_and_unknown_variables():
         )
 
 
-def test_legacy_placeholders_are_canonicalized_without_changing_jinja_blocks():
-    from backend.utils.output_template import upgrade_legacy_output_template
-
-    assert upgrade_legacy_output_template(
-        "/downloads/{show}/{% if year %}{{ year }}{% endif %}/{episode}.ext"
-    ) == (
-        "/downloads/{{ show }}/{% if year %}{{ year }}{% endif %}/{{ episode }}.ext"
+def test_single_brace_placeholders_are_rejected_instead_of_upgraded():
+    from backend.api.models.local_media_profile import LocalMediaProfileAPICreate
+    from backend.utils.output_template import (
+        SHOW_OUTPUT_TEMPLATE_FIELDS,
+        validate_output_template_fields,
     )
+
+    old_style = "/downloads/{show}/{episode}.ext"
+    with pytest.raises(ValueError, match="Jinja syntax"):
+        validate_output_template_fields(
+            old_style,
+            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        )
+
+    with pytest.raises(ValueError, match="Jinja syntax"):
+        LocalMediaProfileAPICreate.model_validate({
+            "type": "show",
+            "name": "Old style",
+            "outputTemplate": old_style,
+            "preferredFormat": "format_audio_only",
+        })
+
+    compact_jinja = "/downloads/{{show}}/{{episode}}.ext"
+    assert validate_output_template_fields(
+        compact_jinja,
+        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+    ) == compact_jinja
 
 
 def test_template_sources_use_only_ten_latest_episodes_and_fallback_for_empty_movies():

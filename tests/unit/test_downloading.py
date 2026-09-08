@@ -173,19 +173,19 @@ def test_resolve_episode_output_path(tmp_path, monkeypatch):
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
 
     path = resolve_episode_output_path(
-        "/downloads/audio/{show}/{season}/{ep_id} - {episode}.ext",
+        "/downloads/audio/{{ show }}/{{ season }}/{{ episode_identifier }} - {{ episode }}.ext",
         episode=episode,
         extension="m4a",
     )
     assert path == tmp_path.resolve() / "audio" / "test-show" / "season-2026" / "ep.101 - test-episode-101.m4a"
 
     # Unsafe characters in substitutions never escape into the path structure
-    titled = resolve_episode_output_path("/downloads/{title}.ext", episode=episode, extension="ts")
+    titled = resolve_episode_output_path("/downloads/{{ title }}.ext", episode=episode, extension="ts")
     assert titled.parent == tmp_path.resolve()
     assert "/" not in titled.name and "<" not in titled.name
 
     # Without a known extension the template's .ext marker is kept
-    pending = resolve_episode_output_path("/downloads/{show}/{episode}.ext", episode=episode)
+    pending = resolve_episode_output_path("/downloads/{{ show }}/{{ episode }}.ext", episode=episode)
     assert pending.name == "test-episode-101.ext"
 
     session.close()
@@ -209,7 +209,7 @@ def test_create_episode_download_enforces_one_per_profile(monkeypatch, tmp_path)
     profile = LocalMediaProfile(
         slug="audio",
         name="Audio",
-        output_template="/downloads/{show}/{episode}.ext",
+        output_template="/downloads/{{ show }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
     session.add(profile)
@@ -422,7 +422,7 @@ def _db_with_episode_and_download(video_local_media_profile=True):
     profile = LocalMediaProfile(
         slug="video-1080p" if video_local_media_profile else "audio",
         name="Video 1080p" if video_local_media_profile else "Audio",
-        output_template="/downloads/{show}/{episode}.ext",
+        output_template="/downloads/{{ show }}/{{ episode }}.ext",
         preferred_format="format_1080p" if video_local_media_profile else "format_audio_only",
     )
     session.add(profile)

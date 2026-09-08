@@ -66,7 +66,7 @@ def _make_local_media_profile(session):
     profile = LocalMediaProfile(
         slug="episode-limit-audio",
         name="Episode limit audio",
-        output_template="/downloads/{show}/{episode}.ext",
+        output_template="/downloads/{{ show }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
     session.add(profile)

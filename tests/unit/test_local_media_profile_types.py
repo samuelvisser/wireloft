@@ -28,7 +28,7 @@ def test_local_media_profile_models_are_polymorphic_and_unique_by_type() -> None
 
     session, engine = _new_session()
     shared_settings = {
-        "output_template": "/downloads/library/{title}.ext",
+        "output_template": "/downloads/library/{{ title }}.ext",
         "preferred_format": "format_1080p",
     }
     show_profile = ShowLocalMediaProfile(
@@ -72,7 +72,7 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
         LocalMediaProfileAPICreate(
             type="movie",
             name="Movie audio",
-            output_template="/downloads/movies/{movie_slug}.ext",
+            output_template="/downloads/movies/{{ movie_slug }}.ext",
             preferred_format="format_audio_only",
         )
 
@@ -80,7 +80,7 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
         LocalMediaProfileAPICreate(
             type="movie",
             name="Wrong movie template",
-            output_template="/downloads/movies/{episode}.ext",
+            output_template="/downloads/movies/{{ episode }}.ext",
             preferred_format="format_720p",
         )
 
@@ -88,7 +88,7 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
         LocalMediaProfileAPICreate(
             type="show",
             name="Wrong show template",
-            output_template="/downloads/shows/{movie_slug}.ext",
+            output_template="/downloads/shows/{{ movie_slug }}.ext",
             preferred_format="format_audio_only",
         )
 
@@ -99,7 +99,7 @@ def test_local_media_profile_service_allows_same_settings_across_types_only() ->
 
     session, engine = _new_session()
     common = {
-        "output_template": "/downloads/library/{title}.ext",
+        "output_template": "/downloads/library/{{ title }}.ext",
         "preferred_format": "format_1080p",
     }
     show = create_local_media_profile(
@@ -147,7 +147,7 @@ def test_movie_output_template_uses_movie_metadata(tmp_path: Path, monkeypatch) 
     )
 
     result = resolve_movie_output_path(
-        "/downloads/{movie_author}/{movie_extended_title} [{movie_dw_id}] [{rating}]/{movie_slug}.ext",
+        "/downloads/{{ movie_author }}/{{ movie_extended_title }} [{{ movie_dw_id }}] [{{ rating }}]/{{ movie_slug }}.ext",
         movie=movie,
         extension="mp4",
     )
@@ -183,13 +183,13 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
     show_profile = ShowLocalMediaProfile(
         slug="shows",
         name="Shows",
-        output_template="/downloads/shows/{show}/{episode}.ext",
+        output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
         preferred_format="format_1080p",
     )
     movie_profile = MovieLocalMediaProfile(
         slug="movies",
         name="Movies",
-        output_template="/downloads/movies/{movie_slug}.ext",
+        output_template="/downloads/movies/{{ movie_slug }}.ext",
         preferred_format="format_1080p",
     )
     show = Show(

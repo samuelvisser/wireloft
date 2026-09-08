@@ -27,6 +27,8 @@ Every profile has a Jinja output template. The template:
 - must end with `.ext`;
 - may only reference variables valid for that media type.
 
+Template variables must use Jinja expression syntax such as `{{ show_title }}`. Single-brace forms such as `{show_title}` are not supported.
+
 `.ext` is a WireLoft placeholder: the actual extension is selected from the media format produced by the download.
 
 Example:

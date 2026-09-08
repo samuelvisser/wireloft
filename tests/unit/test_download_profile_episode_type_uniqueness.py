@@ -46,7 +46,7 @@ def _make_local_media_profile(session: Session, slug: str):
     profile = LocalMediaProfile(
         slug=slug,
         name=slug,
-        output_template="/downloads/{show}/{episode}.ext",
+        output_template="/downloads/{{ show }}/{{ episode }}.ext",
         preferred_format="format_1080p",
     )
     session.add(profile)

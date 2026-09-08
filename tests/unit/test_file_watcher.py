@@ -50,7 +50,7 @@ def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes |
     profile = LocalMediaProfile(
         slug="audio",
         name="Audio",
-        output_template="/downloads/{show}/{episode}.ext",
+        output_template="/downloads/{{ show }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
     session.add_all([show, season, episode, profile])

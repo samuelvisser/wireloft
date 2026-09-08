@@ -24,7 +24,7 @@ def _resolve(tmp_path, monkeypatch, mode: FilenameRestrictionMode, title: str = 
     monkeypatch.setattr(settings.download_settings, "filename_restriction_mode", mode)
 
     path = resolve_movie_output_path(
-        "/downloads/Fïlms: Collection/{title}.ext",
+        "/downloads/Fïlms: Collection/{{ title }}.ext",
         movie=_movie(title),
         extension="mp4",
     )
@@ -62,7 +62,7 @@ def test_windows_mode_protects_reserved_device_names(tmp_path, monkeypatch):
     )
 
     path = resolve_movie_output_path(
-        "/downloads/{title}.ext",
+        "/downloads/{{ title }}.ext",
         movie=_movie("CON"),
         extension="mp4",
     )
