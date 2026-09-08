@@ -12,6 +12,7 @@ from sqlalchemy.exc import StatementError
 from backend.api.datetime import api_datetime, api_timezone_payload
 from backend.api.models.base import ResponseBase
 from backend.db.datetime_types import UTCDateTime
+from dailywire_api.records import DwShowRecord
 from task_manager.scheduler.db import TaskSchedule
 from task_manager.scheduler import scheduler as scheduler_module
 from task_manager.tasks.helpers.episodes.metadata import ensure_utc
@@ -107,7 +108,7 @@ def test_api_datetime_rejects_naive_values() -> None:
         api_datetime(datetime(2026, 9, 7, 13, 0))
 
 
-def test_non_response_base_payloads_use_configured_timezone(monkeypatch) -> None:
+def test_timezone_payload_uses_field_names_for_response_revalidation(monkeypatch) -> None:
     monkeypatch.setattr(
         "backend.api.datetime.get_settings",
         lambda: SimpleNamespace(timezone="Europe/Amsterdam"),
@@ -119,8 +120,51 @@ def test_non_response_base_payloads_use_configured_timezone(monkeypatch) -> None
     )
     payload = api_timezone_payload(response)
 
-    assert payload["occurredAt"] == "2026-09-07T15:00:00+02:00"
-    assert payload["releaseDate"] == date(2026, 9, 7)
+    assert payload["occurred_at"] == "2026-09-07T15:00:00+02:00"
+    assert payload["release_date"] == date(2026, 9, 7)
+
+
+def test_dailywire_show_payload_round_trips_after_timezone_preparation(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "backend.api.datetime.get_settings",
+        lambda: SimpleNamespace(timezone="Europe/Amsterdam"),
+    )
+
+    published_at = datetime(2026, 9, 7, 13, 0, tzinfo=timezone.utc)
+    show = DwShowRecord.model_validate(
+        {
+            "show": {
+                "id": "show-1",
+                "slug": "example-show",
+                "title": "Example Show",
+                "sharingURL": "https://www.dailywire.com/show/example-show",
+                "latestEpisode": {
+                    "id": "episode-1",
+                    "slug": "example-episode",
+                    "title": "Example Episode",
+                    "duration": 60,
+                    "sharingURL": "https://www.dailywire.com/episode/example-episode",
+                    "status": "published",
+                    "isDownloadable": True,
+                    "publishedAt": published_at,
+                },
+            },
+            "selectedSeason": {
+                "id": "season-1",
+                "name": "2026",
+                "slug": "2026",
+            },
+        }
+    )
+
+    payload = api_timezone_payload(show)
+
+    assert payload["dw_id"] == "show-1"
+    assert payload["latest_episode"]["published_date"] == "2026-09-07T15:00:00+02:00"
+
+    validated = DwShowRecord.model_validate(payload)
+    assert validated.dw_id == "show-1"
+    assert validated.latest_episode.published_date == published_at
 
 
 def test_runtime_episode_datetime_normalization_rejects_naive_values() -> None:

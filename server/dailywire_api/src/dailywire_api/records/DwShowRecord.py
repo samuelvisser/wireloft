@@ -117,9 +117,10 @@ class DwShowRecord(BaseRecord):
         if not isinstance(data, dict):
             return data
 
-        normalized_data = {}
-        if "show" in data and isinstance(data["show"], dict):
-            normalized_data = data["show"]
+        if "show" not in data or not isinstance(data["show"], dict):
+            return data
+
+        normalized_data = dict(data["show"])
 
         if "selectedSeason" in data and isinstance(data["selectedSeason"], dict):
             normalized_data["latest_season"] = data["selectedSeason"]
