@@ -354,7 +354,6 @@ export default function ShowPage() {
         }),
       })
 
-      const result = await response.json()
       if (typeof result?.operationId !== 'string' || !result.operationId) {
         throw new Error('Re-download request did not return an operation ID')
       }
