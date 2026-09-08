@@ -30,6 +30,11 @@ from .operations import (
 )
 from .results import TaskResult
 from config import get_settings
+from config.network import (
+    NO_INTERNET_CONNECTION_MESSAGE,
+    NoInternetConnectionError,
+    is_no_internet_error,
+)
 from dailywire_api.dw_api.client import slow_request_cooldown_observer
 from dailywire_downloader import DownloadCancelled
 from task_manager.scheduler import scheduler
@@ -510,7 +515,12 @@ def execute_task(
     except (TaskCancellationRequested, DownloadCancelled) as exc:
         cancellation_reason = str(exc) or "Canceled"
     except Exception as exc:
-        worker_error = exc
+        if is_no_internet_error(exc):
+            logger.warning(NO_INTERNET_CONNECTION_MESSAGE)
+            worker_error = NoInternetConnectionError()
+            worker_error.__cause__ = exc
+        else:
+            worker_error = exc
 
     runtime_ms = int((time.perf_counter() - started_perf) * 1000)
     retry_at, terminal_error = _finalize_execution(

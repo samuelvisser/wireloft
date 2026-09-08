@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode, Show
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
+from config.network import NoInternetConnectionError, is_no_internet_error
 from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from dailywire_authorisation import DeviceAuthClient
 from task_manager.events.transactional import queue_event
@@ -239,6 +240,11 @@ async def run_monitor_no_usable_media_episode(
                 require_member_exclusive=require_member_exclusive,
             )
         except MiddlewareAPIError as exc:
+            # Once the host itself is offline, trying every quarantined episode only
+            # creates duplicate failures and keeps a DB-backed worker occupied longer.
+            if is_no_internet_error(exc):
+                s.rollback()
+                raise NoInternetConnectionError() from exc
             if exc.status_code != 404:
                 logger.warning("Could not verify no-usable-media episode %s: %s", episode.slug, exc)
                 if is_target:
@@ -283,8 +289,10 @@ async def run_monitor_no_usable_media_episode(
                     if is_target:
                         target_outcome = "retained"
                         target_slug = episode.slug
-            except Exception:
+            except Exception as exc:
                 s.rollback()
+                if is_no_internet_error(exc):
+                    raise NoInternetConnectionError() from exc
                 logger.exception(
                     "Could not verify media usability for episode %s; leaving it quarantined",
                     episode.slug,

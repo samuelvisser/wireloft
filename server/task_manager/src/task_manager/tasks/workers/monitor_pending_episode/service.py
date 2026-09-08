@@ -77,26 +77,50 @@ def _find_episode(
     )
 
 
+def _reload_episode_and_show(
+    s: Session,
+    *,
+    episode_id: int,
+    show_id: int,
+) -> tuple[Episode, Show]:
+    show = s.get(Show, show_id)
+    episode = s.get(Episode, episode_id)
+    if show is None or episode is None:
+        raise ValueError("Pending episode or show was removed while it was being refreshed")
+    return episode, show
+
+
 def _try_reconcile_slug_after_404(
     s: Session,
     *,
     client: MiddlewareClient,
     show: Show,
     episode: Episode,
-) -> bool:
-    """Try the same conservative pending-slug reconciliation used by discovery."""
+) -> str | None:
+    """Try the same conservative pending-slug reconciliation used by discovery.
+
+    Remote requests deliberately run outside a database transaction. This worker
+    can fan out across many pending episodes, so retaining one checked-out
+    connection per request can otherwise exhaust the pool during an outage.
+    """
     membership_plan, _ = _membership_plan(show)
-    show_page = client.get_show_page(show.slug, membership_plan=membership_plan)
+    show_id = show.id
+    episode_id = episode.id
+    show_slug = show.slug
+    season_slug = episode.season.slug
+    s.rollback()
+
+    show_page = client.get_show_page(show_slug, membership_plan=membership_plan)
     remote_season = next(
-        (candidate for candidate in show_page.seasons if candidate.slug == episode.season.slug),
+        (candidate for candidate in show_page.seasons if candidate.slug == season_slug),
         None,
     )
     if remote_season is None:
-        return False
+        return None
 
     records = fetch_all_episodes_paginated(
         client,
-        show.slug,
+        show_slug,
         ByShowSeason(
             season_dw_id=remote_season.dw_id,
             membership_plan=membership_plan,
@@ -104,13 +128,25 @@ def _try_reconcile_slug_after_404(
             order_by="CreatedAt_ASC",
         ),
     )
+
+    episode, show = _reload_episode_and_show(
+        s,
+        episode_id=episode_id,
+        show_id=show_id,
+    )
     reconciled = reconcile_single_pending_episode_slug(
         s,
         show=show,
         season=episode.season,
         remote_records=records,
     )
-    return reconciled is not None and reconciled.id == episode.id
+    if reconciled is None or reconciled.id != episode.id:
+        s.rollback()
+        return None
+
+    reconciled_slug = reconciled.slug
+    s.commit()
+    return reconciled_slug
 
 
 def _no_usable_reason(detail, *, observed_status: EpisodePublishStatus) -> NoUsableMediaReason:
@@ -207,48 +243,89 @@ async def run_monitor_pending_episode(
         s.commit()
         return EpisodePublishStatus(old_status)
 
+    episode_db_id = episode.id
+    show_db_id = show.id
+    request_slug = episode.slug
     _, require_member_exclusive = _membership_plan(show)
     client = MiddlewareClient()
+
+    # A SELECT starts an ORM transaction. Release it before DNS/HTTP/HLS work so
+    # concurrent episode monitors cannot consume the whole DB pool while offline.
+    s.rollback()
     try:
         detail = client.get_episode_details(
-            episode.slug,
+            request_slug,
             require_member_exclusive=require_member_exclusive,
         )
     except MiddlewareAPIError as exc:
         if exc.status_code != 404:
             raise
 
-        if not _try_reconcile_slug_after_404(
+        episode, show = _reload_episode_and_show(
+            s,
+            episode_id=episode_db_id,
+            show_id=show_db_id,
+        )
+        reconciled_slug = _try_reconcile_slug_after_404(
             s,
             client=client,
             show=show,
             episode=episode,
-        ):
+        )
+        if reconciled_slug is None:
+            episode, show = _reload_episode_and_show(
+                s,
+                episode_id=episode_db_id,
+                show_id=show_db_id,
+            )
             return _quarantine_404(
                 s,
                 episode=episode,
                 show=show,
-                old_status=old_status,
+                old_status=episode.publish_status,
             )
 
         try:
             detail = client.get_episode_details(
-                episode.slug,
+                reconciled_slug,
                 require_member_exclusive=require_member_exclusive,
             )
         except MiddlewareAPIError as reconciled_exc:
             if reconciled_exc.status_code != 404:
                 raise
+            episode, show = _reload_episode_and_show(
+                s,
+                episode_id=episode_db_id,
+                show_id=show_db_id,
+            )
             return _quarantine_404(
                 s,
                 episode=episode,
                 show=show,
-                old_status=old_status,
+                old_status=episode.publish_status,
             )
 
+    # Media inspection can itself fetch HLS manifests. Keep that I/O outside the
+    # ORM transaction as well, then reload current rows before applying the result.
     observed = observe_episode_detail(detail)
     resolved = resolve_episode_status(detail, snapshot=observed)
     new_status = resolved.status
+
+    episode, show = _reload_episode_and_show(
+        s,
+        episode_id=episode_db_id,
+        show_id=show_db_id,
+    )
+    old_status = episode.publish_status
+    if old_status not in PENDING_EPISODE_STATUSES:
+        queue_monitor_completion_if_settled(
+            s,
+            episode=episode,
+            show=show,
+            old_status=old_status,
+        )
+        s.commit()
+        return EpisodePublishStatus(old_status)
 
     update_episode_from_dailywire(episode, detail)
     if new_status is EpisodePublishStatus.NO_USABLE_MEDIA:

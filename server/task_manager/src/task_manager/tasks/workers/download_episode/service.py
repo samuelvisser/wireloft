@@ -16,6 +16,7 @@ from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
+from config.network import is_no_internet_error
 from dailywire_downloader import (
     DownloadCancelled,
     DownloadError,
@@ -182,7 +183,9 @@ def _download_with_url_refresh(
             task_progress=task_progress,
             cancellation=cancellation,
         )
-    except MediaUnavailableError:
+    except MediaUnavailableError as exc:
+        if is_no_internet_error(exc):
+            raise
         if refreshed:
             raise
         logger.info("Stored media URL for %s unusable; refreshing from Daily Wire", episode.slug)
@@ -225,6 +228,12 @@ def _attempt_download(
 ) -> _AttemptResult:
     """Probe the URL, pick what to fetch, and download it to its final path."""
     profile = download.local_media_profile
+    preferred_format = profile.preferred_format
+    output_template = profile.output_template
+
+    # Probe may block on DNS/HTTP. Everything it needs is now a plain value, so
+    # release the ORM transaction before touching the network.
+    s.rollback()
     _ensure_not_cancelled(cancellation)
     info = probe(url)
     _ensure_not_cancelled(cancellation)
@@ -237,9 +246,9 @@ def _attempt_download(
         use_hls = info.kind is MediaKind.HLS_MEDIA
     else:
         if info.kind is MediaKind.HLS_MASTER:
-            requested_height = FORMAT_HEIGHTS.get(profile.preferred_format)
+            requested_height = FORMAT_HEIGHTS.get(preferred_format)
             if requested_height is None:
-                raise DownloadError(f"Unsupported preferred format '{profile.preferred_format}'")
+                raise DownloadError(f"Unsupported preferred format '{preferred_format}'")
             rendition = select_rendition(info.renditions, requested_height)
             source_url = rendition.url
             format_downloaded = rendition.resolution or "video"
@@ -256,12 +265,13 @@ def _attempt_download(
     remux_video = not want_audio and use_hls and get_settings().download_settings.remux_video_to_mp4
     extension = "mp4" if remux_video else info.suggested_extension
     destination = resolve_episode_output_path(
-        profile.output_template,
+        output_template,
         episode=episode,
         extension=extension,
     )
 
-    # The expected artifact location is domain data, not execution state.
+    # The expected artifact location is domain data, not execution state. Commit
+    # it before the long transfer so that phase also owns no DB connection.
     download.file_path = str(destination)
     s.commit()
 

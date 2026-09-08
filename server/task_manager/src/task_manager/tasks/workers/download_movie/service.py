@@ -143,34 +143,57 @@ def _download_movie_media(
     cancellation,
 ) -> tuple[DownloadResult, str]:
     _ensure_not_cancelled(cancellation)
+
+    is_extra = isinstance(media, MovieExtra)
+    download_id = download.id
+    movie_id = movie.id
+    media_id = media.id
+    movie_slug = movie.slug
+    movie_title = movie.title
+    movie_duration = movie.duration
+    official_trailer_id = movie.official_trailer_id
+    extra_slug = media.slug if is_extra else None
+    extra_title = media.title if is_extra else None
+    profile = download.local_media_profile
+    preferred_format = profile.preferred_format
+    output_template = profile.output_template
+
+    # Authentication, playback lookup and probing may all block on the internet.
+    # Snapshot the required local values and release the transaction first.
+    session.rollback()
     tokens = DeviceAuthClient().get_token()
     client = MiddlewareClient(access_token=tokens.access_token if tokens else None)
-    if isinstance(media, MovieExtra):
-        source_playback_url = _movie_extra_playback_url(client, movie=movie, extra=media)
+    if is_extra:
+        source_playback_url = _movie_extra_playback_url(
+            client,
+            movie_slug=movie_slug,
+            official_trailer_id=official_trailer_id,
+            extra_id=media_id,
+            extra_slug=extra_slug,
+            extra_title=extra_title,
+        )
         _ensure_not_cancelled(cancellation)
     else:
-        playback = client.get_movie_playback(movie.slug)
+        playback = client.get_movie_playback(movie_slug)
         _ensure_not_cancelled(cancellation)
         if not playback.has_video or not playback.video_url:
-            raise MediaUnavailableError(f"Daily Wire provides no playable video for '{movie.title}'")
+            raise MediaUnavailableError(f"Daily Wire provides no playable video for '{movie_title}'")
         source_playback_url = playback.video_url
         if playback.trailer_url and source_playback_url == playback.trailer_url:
             raise MediaUnavailableError(
-                f"The connected Daily Wire account does not provide access to the full movie '{movie.title}'"
+                f"The connected Daily Wire account does not provide access to the full movie '{movie_title}'"
             )
-        if movie.duration and playback.duration and playback.duration < movie.duration * 0.5:
+        if movie_duration and playback.duration and playback.duration < movie_duration * 0.5:
             raise MediaUnavailableError(
-                f"Daily Wire returned only a preview for '{movie.title}', not the full movie"
+                f"Daily Wire returned only a preview for '{movie_title}', not the full movie"
             )
 
     info = probe(source_playback_url)
     _ensure_not_cancelled(cancellation)
     if info.kind is MediaKind.HLS_MASTER:
-        requested_height = FORMAT_HEIGHTS.get(download.local_media_profile.preferred_format)
+        requested_height = FORMAT_HEIGHTS.get(preferred_format)
         if requested_height is None:
-            raise DownloadError(
-                f"Unsupported preferred format '{download.local_media_profile.preferred_format}'"
-            )
+            raise DownloadError(f"Unsupported preferred format '{preferred_format}'")
         rendition = select_rendition(info.renditions, requested_height)
         source_url = rendition.url
         format_downloaded = rendition.resolution or "video"
@@ -186,8 +209,16 @@ def _download_movie_media(
 
     remux = use_hls and get_settings().download_settings.remux_video_to_mp4
     extension = "mp4" if remux else info.suggested_extension
+
+    # Re-enter the DB only after all pre-download network discovery is complete.
+    download = session.get(MediaDownloadBase, download_id)
+    movie = session.get(Movie, movie_id)
+    media = session.get(MovieExtra if is_extra else Movie, media_id)
+    if download is None or movie is None or media is None:
+        raise DownloadCancelled("Movie download resources were deleted while resolving playback")
+
     destination = resolve_movie_output_path(
-        download.local_media_profile.output_template,
+        output_template,
         movie=movie,
         media_item=media,
         extension=extension,
@@ -222,22 +253,28 @@ def _download_movie_media(
 def _movie_extra_playback_url(
     client: MiddlewareClient,
     *,
-    movie: Movie,
-    extra: MovieExtra,
+    movie_slug: str,
+    official_trailer_id: int | None,
+    extra_id: int,
+    extra_slug: str | None,
+    extra_title: str | None,
 ) -> str:
+    if not extra_slug:
+        raise MediaUnavailableError(f"Movie extra {extra_id} has no Daily Wire slug")
+
     try:
-        playback = client.get_movie_extra_playback(extra.slug)
+        playback = client.get_movie_extra_playback(extra_slug)
         source_url = playback.video_url
     except Exception:
-        if movie.official_trailer_id != extra.id:
+        if official_trailer_id != extra_id:
             raise
         source_url = None
 
-    if not source_url and movie.official_trailer_id == extra.id:
-        source_url = client.get_movie_playback(movie.slug).trailer_url
+    if not source_url and official_trailer_id == extra_id:
+        source_url = client.get_movie_playback(movie_slug).trailer_url
     if not source_url:
         raise MediaUnavailableError(
-            f"Daily Wire provides no playable video for movie extra '{extra.title}'"
+            f"Daily Wire provides no playable video for movie extra '{extra_title or extra_slug}'"
         )
     return source_url
 

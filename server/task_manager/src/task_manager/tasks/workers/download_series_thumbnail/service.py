@@ -23,15 +23,19 @@ async def run_download_series_thumbnail(s: Session, *, resource_id: int, progres
     # Resolve target directory from media profile template
     target_dir = ensure_dir_from_template(dps.local_media_profile.output_template)
     show = dps.show
+    show_id = show.id
     url = pick_thumbnail_url(show)
     if not url:
-        raise ValueError(f"Show id={show.id} has no thumbnail path set")
+        raise ValueError(f"Show id={show_id} has no thumbnail path set")
 
     # Require absolute URL to download
     if not (url.startswith("http://") or url.startswith("https://")):
-        raise ValueError(f"Thumbnail path for show id={show.id} is not an absolute URL: {url}")
+        raise ValueError(f"Thumbnail path for show id={show_id} is not an absolute URL: {url}")
 
-    # Download
+    # All ORM data needed by the request is now a plain value. Release the SELECT
+    # transaction before waiting on DNS/HTTP so an outage cannot pin a pool slot.
+    s.rollback()
+
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
 

@@ -14,9 +14,23 @@ from apscheduler.triggers.date import DateTrigger
 
 from backend.db.datetime_types import utc_datetime
 from config import get_settings
+from config.network import is_no_internet_error
 
 _scheduler: Optional[AsyncIOScheduler] = None
 WATCHDOG_EXECUTOR_ALIAS = "watchdog"
+
+
+def _execute_task_job(**kwargs) -> None:
+    """Run one task without turning an expected internet outage into an APScheduler traceback."""
+    from .executor import execute_task  # local import to avoid cycles
+
+    try:
+        execute_task(**kwargs)
+    except Exception as exc:
+        if not is_no_internet_error(exc):
+            raise
+        # execute_task already persisted and logged the normalized outage. Returning
+        # normally here prevents APScheduler from printing the exception traceback.
 
 
 def get_trigger(name: str, args: dict):
@@ -113,10 +127,9 @@ def shutdown_scheduler(wait: bool = True) -> None:
 
 
 def schedule_job(*, schedule_id: int, def_key: str, resource_type: str, resource_id: int, trigger: str, trigger_args: dict) -> str:
-    from .executor import execute_task  # local import to avoid cycles
     sch = start_scheduler()
     job = sch.add_job(
-        execute_task,
+        _execute_task_job,
         trigger=get_trigger(trigger, trigger_args),
         kwargs=dict(def_key=def_key, resource_type=resource_type, resource_id=resource_id, schedule_id=schedule_id),
         replace_existing=True,
@@ -228,11 +241,10 @@ def cancel_pending_operation_jobs(
 
 
 def schedule_retry(*, def_key: str, resource_type: str, resource_id: int, run_id: int, run_at: datetime) -> str:
-    from .executor import execute_task
     sch = start_scheduler()
     run_at = utc_datetime(run_at)
     job = sch.add_job(
-        execute_task,
+        _execute_task_job,
         trigger=DateTrigger(run_date=run_at),
         kwargs=dict(def_key=def_key, resource_type=resource_type, resource_id=resource_id, schedule_id=None, run_id=run_id),
         replace_existing=False,
@@ -260,7 +272,6 @@ def trigger_now(
     Child tasks started from inside a worker automatically remain associated with
     the same high-level operation unless the caller explicitly overrides it.
     """
-    from .executor import execute_task
     from .operation_context import current_operation_ids
 
     sch = start_scheduler()
@@ -279,7 +290,7 @@ def trigger_now(
         execution_kwargs["operation_slot"] = operation_slot
 
     job = sch.add_job(
-        execute_task,
+        _execute_task_job,
         trigger=DateTrigger(run_date=datetime.now(tz=sch.timezone)),
         kwargs=execution_kwargs,
         replace_existing=False,
