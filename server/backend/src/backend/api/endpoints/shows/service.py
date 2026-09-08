@@ -109,6 +109,7 @@ def update_show(s: Session, show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
+    # Apply changes and flush
     update_database_fields(show, body)
     s.flush()
 
@@ -201,6 +202,41 @@ def request_show_metadata_refresh(
     }
 
 
+def request_show_episode_redownload(
+        s: Session,
+        show_slug: str,
+        local_media_profile_id: int | None,
+) -> dict[str, bool | int | str]:
+    """Queue replacement downloads for existing show artifacts in the selected profile scope."""
+    show = (
+        s.query(Show)
+        .filter_by(slug=show_slug)
+        .one_or_none()
+    )
+    if show is None:
+        raise HTTPException(status_code=404, detail="Show not found")
+
+    selected_profile_ids = _selected_show_local_media_profiles(
+        s,
+        show=show,
+        local_media_profile_id=local_media_profile_id,
+    )
+    operation = create_operation(
+        s,
+        ShowRedownloadOperation(
+            show,
+            local_media_profile_id=local_media_profile_id,
+            selected_profile_count=len(selected_profile_ids),
+        ),
+    )
+    queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
+    return {
+        "queued": True,
+        "local_media_profiles_queued": len(selected_profile_ids),
+        "operation_id": operation.id,
+    }
+
+
 def request_show_file_rename(
         s: Session,
         show_slug: str,
@@ -266,37 +302,3 @@ def request_show_file_rename(
         "operation_id": operation.id,
     }
 
-
-def request_show_episode_redownload(
-        s: Session,
-        show_slug: str,
-        local_media_profile_id: int | None,
-) -> dict[str, bool | int | str]:
-    """Queue replacement downloads for existing show artifacts in the selected profile scope."""
-    show = (
-        s.query(Show)
-        .filter_by(slug=show_slug)
-        .one_or_none()
-    )
-    if show is None:
-        raise HTTPException(status_code=404, detail="Show not found")
-
-    selected_profile_ids = _selected_show_local_media_profiles(
-        s,
-        show=show,
-        local_media_profile_id=local_media_profile_id,
-    )
-    operation = create_operation(
-        s,
-        ShowRedownloadOperation(
-            show,
-            local_media_profile_id=local_media_profile_id,
-            selected_profile_count=len(selected_profile_ids),
-        ),
-    )
-    queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
-    return {
-        "queued": True,
-        "local_media_profiles_queued": len(selected_profile_ids),
-        "operation_id": operation.id,
-    }
