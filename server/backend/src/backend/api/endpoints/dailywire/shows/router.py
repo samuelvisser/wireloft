@@ -4,19 +4,9 @@ from fastapi import APIRouter, Query, HTTPException
 
 from backend.api.datetime import api_timezone_payload
 from dailywire_api.records import DwShowRecord
-from dailywire_api.records.DwShowRecord import ProbableShowType
-from .service import get_show, get_show_type_classifications
+from .service import get_show
 
 router = APIRouter(prefix="/shows", tags=["DailyWire Shows"])
-
-
-@router.post("/classifications", response_model=dict[str, ProbableShowType])
-def show_type_classifications(show_slugs: list[str]):
-    """Classify catalog shows with the same best-effort model used by Add Show."""
-    try:
-        return get_show_type_classifications(show_slugs)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
 
 
 @router.get("/{show_slug}", response_model=DwShowRecord)

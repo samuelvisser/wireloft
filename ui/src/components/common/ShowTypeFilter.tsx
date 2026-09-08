@@ -1,6 +1,6 @@
 import {ShowTypeReg, ShowTypeValue} from '../../types/show'
 
-export const DEFAULT_SHOW_TYPE_FILTER = new Set<ShowTypeValue>(ShowTypeReg.values)
+const DEFAULT_SHOW_TYPE_FILTER = new Set<ShowTypeValue>(ShowTypeReg.values)
 
 export function createDefaultShowTypeFilter(): Set<ShowTypeValue> {
     return new Set(DEFAULT_SHOW_TYPE_FILTER)
@@ -12,21 +12,12 @@ function setsEqual(a: ReadonlySet<ShowTypeValue>, b: ReadonlySet<ShowTypeValue>)
     return true
 }
 
-export function isDefaultShowTypeFilter(selectedTypes: ReadonlySet<ShowTypeValue>): boolean {
-    return setsEqual(selectedTypes, DEFAULT_SHOW_TYPE_FILTER)
-}
-
 export function matchesShowTypeFilter(
     type: unknown,
     selectedTypes: ReadonlySet<ShowTypeValue>,
 ): boolean {
     const normalized = ShowTypeReg.normalize(type)
-    if (normalized !== null) return selectedTypes.has(normalized)
-
-    // Daily Wire's existing best-effort classifier can return "unknown". An
-    // unclassified show belongs to either filter option rather than inventing a
-    // second classification rule here. It is only hidden when both are disabled.
-    return selectedTypes.size > 0
+    return normalized !== null && selectedTypes.has(normalized)
 }
 
 type ShowTypeFilterProps = {
@@ -60,7 +51,7 @@ export default function ShowTypeFilter({
                     {option.label}
                 </button>
             ))}
-            {!isDefaultShowTypeFilter(selectedTypes) && (
+            {!setsEqual(selectedTypes, DEFAULT_SHOW_TYPE_FILTER) && (
                 <button
                     type="button"
                     className="filter-chip-reset"

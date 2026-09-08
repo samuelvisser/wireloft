@@ -4,11 +4,6 @@ import {useNavigate, useSearchParams} from 'react-router-dom'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
-import ShowTypeFilter, {
-    createDefaultShowTypeFilter,
-    isDefaultShowTypeFilter,
-    matchesShowTypeFilter,
-} from '../components/common/ShowTypeFilter'
 import {useDailywireMovieCatalog, useDailywireShowCatalog, useMovies, useShows} from '../lib/queries'
 import {
     DailywireCatalogMovieRead,
@@ -43,8 +38,6 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
     const [grouping, setGrouping] = useState<ShowGrouping>('host')
     const [search, setSearch] = useState('')
     const [debouncedSearch, setDebouncedSearch] = useState('')
-    const [showTypeFilter, setShowTypeFilter] = useState(createDefaultShowTypeFilter)
-    const [showTypesBySlug, setShowTypesBySlug] = useState<Record<string, string>>({})
     useEffect(() => {
         const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250)
         return () => window.clearTimeout(timer)
@@ -71,103 +64,20 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
         () => movieCatalog.data?.pages.flatMap((page) => page.items) || [],
         [movieCatalog.data],
     )
-    const showTypeFilterIsDefault = isDefaultShowTypeFilter(showTypeFilter)
-    const shouldClassifyShows = activeType === 'shows' && !showTypeFilterIsDefault && showTypeFilter.size > 0
-    const showSlugsNeedingClassification = useMemo(
-        () => shouldClassifyShows
-            ? shows
-                .filter((show) => !localShowsBySlug.has(show.slug) && !(show.slug in showTypesBySlug))
-                .map((show) => show.slug)
-            : [],
-        [localShowsBySlug, shouldClassifyShows, shows, showTypesBySlug],
-    )
-    const showClassificationKey = showSlugsNeedingClassification.join('\n')
-    const showClassificationPending = showSlugsNeedingClassification.length > 0
-
-    useEffect(() => {
-        if (!showClassificationKey) return
-
-        const showSlugs = showClassificationKey.split('\n')
-        const controller = new AbortController()
-
-        void (async () => {
-            let classifications: Record<string, string> = Object.fromEntries(
-                showSlugs.map((slug) => [slug, 'unknown']),
-            )
-            try {
-                const base = (window as any).appConfig.API_URL
-                const response = await fetch(`${base}/dailywire/shows/classifications`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(showSlugs),
-                    signal: controller.signal,
-                })
-                if (!response.ok) throw new Error(`HTTP ${response.status}`)
-                const payload = await response.json()
-                if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-                    classifications = Object.fromEntries(showSlugs.map((slug) => {
-                        const value = (payload as Record<string, unknown>)[slug]
-                        return [slug, typeof value === 'string' ? value : 'unknown']
-                    }))
-                }
-            } catch {
-                if (controller.signal.aborted) return
-            }
-            setShowTypesBySlug((current) => ({...current, ...classifications}))
-        })()
-
-        return () => controller.abort()
-    }, [showClassificationKey])
-
-    const filteredShows = useMemo(() => {
-        if (showTypeFilterIsDefault) return shows
-        if (showTypeFilter.size === 0) return []
-        return shows.filter((show) => {
-            const localType = localShowsBySlug.get(show.slug)?.type
-            if (localType !== undefined) {
-                return matchesShowTypeFilter(localType, showTypeFilter)
-            }
-
-            // A missing entry means probable_show_type has not been fetched yet; it is
-            // not the same thing as the classifier explicitly returning "unknown".
-            // Unknown matches either selected type, while pending rows wait for the
-            // existing Daily Wire classifier before participating in the filter.
-            if (!(show.slug in showTypesBySlug)) return false
-            return matchesShowTypeFilter(showTypesBySlug[show.slug], showTypeFilter)
-        })
-    }, [localShowsBySlug, showTypeFilter, showTypeFilterIsDefault, showTypesBySlug, shows])
-    const groupedShows = useMemo(() => groupShows(filteredShows, grouping), [filteredShows, grouping])
+    const groupedShows = useMemo(() => groupShows(shows, grouping), [grouping, shows])
 
     const activeQuery = activeType === 'shows' ? showCatalog : movieCatalog
-    const hasCatalogItems = activeType === 'shows' ? shows.length > 0 : movies.length > 0
-    const hasItems = activeType === 'shows' ? filteredShows.length > 0 : movies.length > 0
-    const showFilterExcludesAll = activeType === 'shows' && showTypeFilter.size === 0
+    const hasItems = activeType === 'shows' ? shows.length > 0 : movies.length > 0
     const loadMoreRef = useRef<HTMLDivElement | null>(null)
     useEffect(() => {
         const node = loadMoreRef.current
-        if (
-            !node
-            || !activeQuery.hasNextPage
-            || activeQuery.isFetchingNextPage
-            || activeQuery.isFetchNextPageError
-            || showFilterExcludesAll
-            || showClassificationPending
-        ) return
+        if (!node || !activeQuery.hasNextPage || activeQuery.isFetchingNextPage || activeQuery.isFetchNextPageError) return
         const observer = new IntersectionObserver((entries) => {
             if (entries[0]?.isIntersecting) void activeQuery.fetchNextPage()
         }, {rootMargin: '600px'})
         observer.observe(node)
         return () => observer.disconnect()
-    }, [
-        activeQuery.fetchNextPage,
-        activeQuery.hasNextPage,
-        activeQuery.isFetchNextPageError,
-        activeQuery.isFetchingNextPage,
-        activeType,
-        showClassificationPending,
-        showFilterExcludesAll,
-    ])
+    }, [activeQuery.fetchNextPage, activeQuery.hasNextPage, activeQuery.isFetchNextPageError, activeQuery.isFetchingNextPage, activeType])
 
     const chooseType = (type: MediaType) => {
         setActiveType(type)
@@ -214,13 +124,6 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                 )}
             </div>
             <MediaTypeTabs activeType={activeType} onChange={chooseType} ariaLabel="Browse media type"/>
-            {activeType === 'shows' && (
-                <ShowTypeFilter
-                    selectedTypes={showTypeFilter}
-                    onChange={setShowTypeFilter}
-                    ariaLabel="Filter Daily Wire shows by type"
-                />
-            )}
             <div className="browse-toolbar">
                 <label className="browse-search">
                     <span className="sr-only">Search {activeType}</span>
@@ -235,16 +138,12 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                 )}
             </div>
 
-            {activeQuery.isPending && !hasCatalogItems ? <p>Loading the Daily Wire catalog…</p> : activeQuery.error && !hasCatalogItems ? (
+            {activeQuery.isPending && !hasItems ? <p>Loading the Daily Wire catalog…</p> : activeQuery.error && !hasItems ? (
                 <div className="form-error-card" role="alert">Could not load the Daily Wire catalog: {activeQuery.error.message}</div>
-            ) : activeType === 'shows' && showClassificationPending && !hasItems ? (
-                <p>Filtering Daily Wire shows…</p>
             ) : !hasItems ? (
                 <div className="catalog-empty">
                     <FontAwesomeIcon icon={['fas', 'magnifying-glass']}/>
-                    <p>{activeType === 'shows' && !showTypeFilterIsDefault
-                        ? 'No shows match the selected filters.'
-                        : `No ${activeType} match your search.`}</p>
+                    <p>No {activeType} match your search.</p>
                 </div>
             ) : activeType === 'shows' ? (
                 <div className="catalog-groups">
@@ -295,11 +194,9 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                 </div>
             )}
 
-            {activeQuery.hasNextPage && !activeQuery.isFetchNextPageError && !showFilterExcludesAll && (
-                <div ref={loadMoreRef} className="catalog-load-more" aria-live="polite" aria-busy={activeQuery.isFetchingNextPage || showClassificationPending}>
-                    {showClassificationPending && activeType === 'shows'
-                        ? <><FontAwesomeIcon icon={['fas', 'circle-notch']} spin/> Filtering shows…</>
-                        : activeQuery.isFetchingNextPage && <><FontAwesomeIcon icon={['fas', 'circle-notch']} spin/> Loading more {activeType}…</>}
+            {activeQuery.hasNextPage && !activeQuery.isFetchNextPageError && (
+                <div ref={loadMoreRef} className="catalog-load-more" aria-live="polite" aria-busy={activeQuery.isFetchingNextPage}>
+                    {activeQuery.isFetchingNextPage && <><FontAwesomeIcon icon={['fas', 'circle-notch']} spin/> Loading more {activeType}…</>}
                 </div>
             )}
             {activeQuery.isFetchNextPageError && (
