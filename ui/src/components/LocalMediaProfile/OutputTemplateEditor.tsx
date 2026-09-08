@@ -3,6 +3,7 @@ import {useQuery} from '@tanstack/react-query'
 import CodeMirror from '@uiw/react-codemirror'
 import {
     autocompletion,
+    pickedCompletion,
     startCompletion,
     type Completion,
     type CompletionContext,
@@ -87,7 +88,18 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             label: variable.name,
             type: 'variable',
             detail: variable.description,
-            apply: variable.name,
+            apply: (view, completion, from, to) => {
+                const variableStart = view.state.sliceDoc(0, from).lastIndexOf('{{')
+                const replaceFrom = variableStart >= 0 ? variableStart + 2 : from
+                const closingBraces = /^\s*}}/.exec(view.state.sliceDoc(to))
+                const replaceTo = closingBraces ? to + closingBraces[0].length : to
+                const insert = ` ${variable.name} }}`
+                view.dispatch({
+                    changes: {from: replaceFrom, to: replaceTo, insert},
+                    selection: {anchor: replaceFrom + insert.length},
+                    annotations: pickedCompletion.of(completion),
+                })
+            },
         })),
         [variables],
     )
