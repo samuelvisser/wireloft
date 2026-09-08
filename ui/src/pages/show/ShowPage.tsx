@@ -508,7 +508,7 @@ export default function ShowPage() {
                   onSelect: () => setMetadataRefreshConfirm(true),
                 },
                 {
-                  label: 'File Rename',
+                  label: 'Rename all episode files',
                   icon: ['fas', 'file-pen'],
                   disabled: fileRenameDisabledReason !== undefined,
                   disabledReason: fileRenameDisabledReason,
@@ -749,8 +749,8 @@ export default function ShowPage() {
         }}
       >
         <p>
-          This deletes all existing episode files that belong to this show and the Local Media Profile selected below,
-          and re-downloads them. This can take a long time, use significant bandwidth, and is usually not needed.
+          Delete existing episode files in "{show.title}" and re- download them.
+          This can take a long time, use significant bandwidth, and is usually not needed.
         </p>
         <div className="form-row">
           <label htmlFor="redownload-profile">Local Media Profile</label>
