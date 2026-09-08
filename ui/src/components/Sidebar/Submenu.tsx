@@ -34,9 +34,11 @@ export default function Submenu({label, icon, items}: SubmenuProps) {
   const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' ? window.matchMedia('(max-width: 900px)').matches : false)
   const [fixedTop, setFixedTop] = useState<number>(0)
 
+  // Keep active submenus expanded in the persistent desktop sidebar. On mobile,
+  // selecting a child should be allowed to collapse the dropdown after navigation.
   useEffect(() => {
-    if (isAnyActive) setOpen(true)
-  }, [isAnyActive])
+    if (isAnyActive && !isMobile) setOpen(true)
+  }, [isAnyActive, isMobile])
 
   // Keep isMobile in sync with viewport
   useEffect(() => {
@@ -114,7 +116,15 @@ export default function Submenu({label, icon, items}: SubmenuProps) {
             )
           }
           return (
-            <NavLink key={item.path} to={item.path} className={({isActive}) => 'nav-item child' + (isActive ? ' active' : '')} role="menuitem">
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({isActive}) => 'nav-item child' + (isActive ? ' active' : '')}
+              role="menuitem"
+              onClick={() => {
+                if (isMobile) setOpen(false)
+              }}
+            >
               <span className="icon" aria-hidden>
                 <FontAwesomeIcon icon={item.icon} />
               </span>
