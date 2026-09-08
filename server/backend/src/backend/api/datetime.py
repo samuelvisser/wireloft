@@ -37,10 +37,7 @@ def api_timezone_payload(value: Any) -> Any:
     if isinstance(value, datetime):
         return api_datetime(value)
     if isinstance(value, BaseModel):
-        # This is an intermediate validation payload, not the final JSON output.
-        # Serialization aliases are not necessarily valid input aliases (for
-        # example, ``dw_id`` serializes as ``dwId`` but validates from ``id``), so
-        # preserve Python field names until FastAPI applies the response model.
+        # This is a validation payload, we should not use aliases before FastAPI applies the response model
         return api_timezone_payload(value.model_dump(mode="python", by_alias=False))
     if isinstance(value, dict):
         return {key: api_timezone_payload(item) for key, item in value.items()}

@@ -159,7 +159,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     onChange={(checked) => updateDraft((next) => {
                         next.fileWatcher.enabled = checked
                     })}
-                    help="Scans tracked download paths for files moved, removed or otherwise changed outside WireLoft."
+                    help="Scans tracked downloads for files missing, renamed or otherwise changed outside WireLoft."
                 />
                 <CronEditor
                     id="settings-file-watcher-cron"
