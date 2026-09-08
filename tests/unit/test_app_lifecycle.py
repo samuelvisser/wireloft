@@ -1,9 +1,38 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
+import sys
 import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock
+
+
+def test_backend_factory_imports_without_eager_worker_registration_cycle():
+    """Reproduce backend startup in a fresh interpreter.
+
+    Importing one task helper used to initialize every worker through package
+    ``__init__`` files. ``refresh_movie_extras`` then imported the movies API
+    while media-download routing was only partially initialized, producing the
+    circular import seen under Uvicorn's spawned reload worker.
+    """
+    code = """
+from task_manager.scheduler.registry import all_definitions
+import task_manager.tasks
+assert all_definitions() == []
+from backend.app import create_app
+create_app()
+task_manager.tasks.load_all_tasks()
+assert 'refresh_movie_extras' in {definition.key for definition in all_definitions()}
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_app_factory_is_side_effect_free_and_lifespan_owns_controller(monkeypatch):

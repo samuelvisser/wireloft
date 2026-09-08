@@ -6,9 +6,11 @@ import inspect
 import sys
 from typing import Any, Dict, Optional
 
-# Import motherboard tasks to ensure they are registered
-import task_manager.tasks  # noqa: F401
+from task_manager.tasks import load_all_tasks
 from task_manager.scheduler.registry import all_definitions, get_task
+
+# CLI commands operate directly on the registry, so populate it deliberately.
+load_all_tasks()
 
 
 class CLIProgress:

@@ -254,8 +254,12 @@ def start_controller() -> None:
             return
 
         try:
-            # Import workers so their decorators populate the registry.
-            import task_manager.tasks  # noqa: F401
+            # Register workers only when the controller is actually starting.
+            # Importing task helpers during API router construction must remain
+            # side-effect free or worker -> API dependencies can form cycles.
+            from task_manager.tasks import load_all_tasks
+            load_all_tasks()
+
             from task_manager.scheduler.operations import recover_pending_operations
             from task_manager.scheduler.registry import run_recovery_dispatchers, sync_registry_to_db
             from task_manager.scheduler.scheduler import start_scheduler

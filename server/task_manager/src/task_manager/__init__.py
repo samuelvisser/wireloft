@@ -21,6 +21,6 @@ Public entrypoints:
 Note: This package expects the main app to have configured the database via backend.db.configure_db().
 """
 
-# Subpackages are intentionally not imported here. Importing task_manager must be
-# side-effect free; the controller imports task_manager.tasks during app startup
-# when task registration is actually required.
+# Subpackages are intentionally not imported here. Importing task_manager or a
+# specific task helper must be side-effect free; controller startup explicitly
+# calls task_manager.tasks.load_all_tasks() when task registration is required.
