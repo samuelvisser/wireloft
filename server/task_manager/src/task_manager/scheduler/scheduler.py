@@ -30,8 +30,6 @@ def get_trigger(name: str, args: dict):
     if name == "interval":
         return IntervalTrigger(timezone=app_timezone, **trigger_args)
     if name == "date":
-        # Persistent schedules express wall-clock times in WireLoft's configured
-        # timezone. A timezone-aware run_date still preserves its absolute instant.
         run_date = trigger_args.pop("run_date", None)
         if isinstance(run_date, str):
             run_date = datetime.fromisoformat(run_date)

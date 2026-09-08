@@ -10,8 +10,8 @@ from backend.db.datetime_types import utc_datetime
 from config import get_settings
 
 
-def configured_datetime(value: datetime) -> datetime:
-    """Return an instant in WireLoft's configured wall-clock timezone.
+def tz_datetime(value: datetime) -> datetime:
+    """Return an instant in WireLoft's TZ timezone.
 
     Runtime values must already identify an absolute instant. Legacy naive SQLite
     values are made aware when they cross the database type boundary, so seeing a
@@ -23,7 +23,7 @@ def configured_datetime(value: datetime) -> datetime:
 
 def api_datetime(value: datetime) -> str:
     """Serialize an instant with WireLoft's configured UTC offset."""
-    return configured_datetime(value).isoformat()
+    return tz_datetime(value).isoformat()
 
 
 def api_timezone_payload(value: Any) -> Any:
