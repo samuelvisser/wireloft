@@ -66,18 +66,18 @@ class ShowRedownloadOperation(_ShowOperation):
         self,
         show: Show,
         *,
-        download_profile_id: int | None,
+        local_media_profile_id: int | None,
         selected_profile_count: int,
     ) -> None:
         super().__init__(show)
-        self.download_profile_id = download_profile_id
+        self.local_media_profile_id = local_media_profile_id
         self.selected_profile_count = selected_profile_count
 
     def task_kwargs(self) -> dict[str, object]:
-        return {"download_profile_id": self.download_profile_id}
+        return {"local_media_profile_id": self.local_media_profile_id}
 
     def context(self) -> dict[str, object]:
         return {
             **super().context(),
-            "download_profiles_requested": self.selected_profile_count,
+            "local_media_profiles_requested": self.selected_profile_count,
         }

@@ -8,7 +8,7 @@ from backend.api.helpers import update_database_fields
 from backend.api.models.show import *
 from fastapi import HTTPException
 
-from backend.db.models import DownloadProfileBase, Episode, Show
+from backend.db.models import Episode, EpisodeMediaDownload, Show
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import (
@@ -166,9 +166,9 @@ def request_show_metadata_refresh(
 def request_show_episode_redownload(
         s: Session,
         show_slug: str,
-        download_profile_id: int | None,
+        local_media_profile_id: int | None,
 ) -> dict[str, bool | int | str]:
-    """Queue a destructive re-download for one or every Download Profile on a show."""
+    """Queue replacement downloads for existing episode media on a show."""
     show = (
         s.query(Show)
         .filter_by(slug=show_slug)
@@ -177,37 +177,41 @@ def request_show_episode_redownload(
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
-    attached_profiles = (
-        s.query(DownloadProfileBase)
-        .filter_by(show_id=show.id)
-        .order_by(DownloadProfileBase.id.asc())
-        .all()
-    )
-    if not attached_profiles:
-        raise HTTPException(status_code=422, detail="This show has no Download Profiles")
-
-    if download_profile_id is None:
-        selected_profile_count = len(attached_profiles)
-    else:
-        selected_profile = next(
-            (profile for profile in attached_profiles if profile.id == download_profile_id),
-            None,
+    local_media_profile_ids = [
+        profile_id
+        for (profile_id,) in (
+            s.query(EpisodeMediaDownload.local_media_profile_id)
+            .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+            .filter(Episode.show_id == show.id)
+            .distinct()
+            .order_by(EpisodeMediaDownload.local_media_profile_id.asc())
+            .all()
         )
-        if selected_profile is None:
-            raise HTTPException(status_code=422, detail="Download Profile is not attached to this show")
+    ]
+    if not local_media_profile_ids:
+        raise HTTPException(status_code=422, detail="This show has no downloaded episodes")
+
+    if local_media_profile_id is None:
+        selected_profile_count = len(local_media_profile_ids)
+    elif local_media_profile_id not in local_media_profile_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="Local Media Profile has no downloaded episodes for this show",
+        )
+    else:
         selected_profile_count = 1
 
     operation = create_operation(
         s,
         ShowRedownloadOperation(
             show,
-            download_profile_id=download_profile_id,
+            local_media_profile_id=local_media_profile_id,
             selected_profile_count=selected_profile_count,
         ),
     )
     queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
     return {
         "queued": True,
-        "download_profiles_queued": selected_profile_count,
+        "local_media_profiles_queued": selected_profile_count,
         "operation_id": operation.id,
     }

@@ -22,12 +22,12 @@ def handle_episode_identifier_changed(
         old_episode_identifier: str,
         new_episode_identifier: str,
 ) -> int:
-    """Queue targeted re-downloads for identifier-sensitive Download Profiles.
+    """Queue targeted re-downloads for identifier-sensitive profiles.
 
-    A Download Profile is affected only when it still includes this exact episode
-    under its current rules and its Local Media Profile actually references one of
-    the identifier-derived path variables. Profiles sharing one Local Media Profile
-    are de-duplicated because they point at the same persistent artifact/path.
+    Download Profiles determine whether an identifier change should cause an
+    automatic replacement. Once selected, the replacement itself targets the
+    persistent artifact by Local Media Profile, so manually created media rows and
+    Download Profile provenance are never rewritten by the re-download worker.
     """
     if episode_id is None:
         return 0
@@ -40,7 +40,7 @@ def handle_episode_identifier_changed(
         )
         return 0
 
-    profile_ids_by_local_media_profile: dict[int, int] = {}
+    local_media_profile_ids: set[int] = set()
     profiles = resolve_target_profiles(
         s,
         resource_type="episode",
@@ -65,15 +65,11 @@ def handle_episode_identifier_changed(
         if not (fields & _IDENTIFIER_PATH_FIELDS):
             continue
 
-        profile_ids_by_local_media_profile.setdefault(
-            profile.local_media_profile_id,
-            profile.id,
-        )
+        local_media_profile_ids.add(profile.local_media_profile_id)
 
-    profile_ids = list(profile_ids_by_local_media_profile.values())
-    if not profile_ids:
+    if not local_media_profile_ids:
         logger.info(
-            "Episode %s identifier changed %s -> %s; no eligible identifier-sensitive Download Profiles",
+            "Episode %s identifier changed %s -> %s; no eligible identifier-sensitive Local Media Profiles",
             episode.id,
             old_episode_identifier,
             new_episode_identifier,
@@ -83,13 +79,13 @@ def handle_episode_identifier_changed(
     # End this event worker's read transaction before the newly scheduled workers
     # open independent sessions and potentially cancel/replace active downloads.
     s.rollback()
-    for profile_id in profile_ids:
+    for local_media_profile_id in sorted(local_media_profile_ids):
         trigger_now(
             def_key=_REDOWNLOAD_TASK_KEY,
             resource_type="episode",
             resource_id=episode_id,
             max_retries=0,
-            download_profile_id=profile_id,
+            local_media_profile_id=local_media_profile_id,
         )
 
     logger.info(
@@ -97,6 +93,6 @@ def handle_episode_identifier_changed(
         episode_id,
         old_episode_identifier,
         new_episode_identifier,
-        len(profile_ids),
+        len(local_media_profile_ids),
     )
-    return len(profile_ids)
+    return len(local_media_profile_ids)

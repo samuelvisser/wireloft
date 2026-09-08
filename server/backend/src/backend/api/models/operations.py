@@ -20,7 +20,7 @@ class ShowMetadataOperationAccepted(TaskOperationAccepted):
 
 
 class ShowRedownloadOperationAccepted(TaskOperationAccepted):
-    download_profiles_queued: int
+    local_media_profiles_queued: int
 
 
 class EpisodeMetadataOperationAccepted(TaskOperationAccepted):
