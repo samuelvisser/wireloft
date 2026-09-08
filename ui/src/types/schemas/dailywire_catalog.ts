@@ -47,6 +47,10 @@ export const MovieExtraTypeSchema = z.enum([
 ])
 export type MovieExtraType = z.infer<typeof MovieExtraTypeSchema>
 
+const DailywireMovieExtraImagesSchema = z.looseObject({
+    extraThumbnailImage: nullableString,
+})
+
 export const DailywireMovieExtraReadSchema = z.looseObject({
     dwId: nullableString,
     slug: z.string(),
@@ -56,19 +60,103 @@ export const DailywireMovieExtraReadSchema = z.looseObject({
     sharingUrl: nullableString,
     publishedDate: ApiDateTimeStringSchema.nullable(),
     duration: z.number(),
+    availableFor: z.array(z.string()),
+    images: DailywireMovieExtraImagesSchema,
     backgroundImagePath: nullableString,
     thumbnailLandscapePath: nullableString,
     thumbnailPortraitPath: nullableString,
     thumbnailSquarePath: nullableString,
+    continueWatchingEntityId: nullableString,
+    continueWatchingEntityType: nullableString,
+    muxDrmToken: nullableString,
+    muxPlaybackId: nullableString,
+    muxPlaybackToken: nullableString,
+    playbackPolicy: nullableString,
+    trailerUrl: nullableString,
 })
 export type DailywireMovieExtraRead = z.infer<typeof DailywireMovieExtraReadSchema>
+
+const DailywireMovieImagesSchema = z.looseObject({
+    movieAppBackgroundImage: nullableString,
+    movieLogoImage: nullableString,
+    movieOttBackgroundImage: nullableString,
+    moviePosterImage: nullableString,
+    movieThumbnailImage: nullableString,
+    movieWebBackgroundImage: nullableString,
+})
+
+export const DailywireMovieCastAndCrewReadSchema = z.looseObject({
+    name: z.string(),
+    imageSize: nullableString,
+    imageUrl: nullableString,
+    info: nullableString,
+    roleText: nullableString,
+})
+export type DailywireMovieCastAndCrewRead = z.infer<typeof DailywireMovieCastAndCrewReadSchema>
+
+const DailywireMovieHostImagesSchema = z.looseObject({
+    hostAppBackgroundImage: nullableString,
+    hostImage1x1: nullableString,
+    hostLogoImage: nullableString,
+    hostOttBackgroundImage: nullableString,
+    hostWebBackgroundImage: nullableString,
+})
+
+export const DailywireMovieHostReadSchema = z.looseObject({
+    images: DailywireMovieHostImagesSchema,
+    dwId: nullableString,
+    name: z.string(),
+    slug: z.string(),
+})
+export type DailywireMovieHostRead = z.infer<typeof DailywireMovieHostReadSchema>
+
+const DailywireRelatedContentImagesSchema = z.looseObject({
+    movieAppBackgroundImage: nullableString,
+    movieLogoImage: nullableString,
+    movieOttBackgroundImage: nullableString,
+    moviePosterImage: nullableString,
+    movieThumbnailImage: nullableString,
+    movieWebBackgroundImage: nullableString,
+    showLogoImage: nullableString,
+    showOttBackgroundImage: nullableString,
+    showOttEpisodeBackgroundImage: nullableString,
+    showPosterImage: nullableString,
+    showThumbnailImage: nullableString,
+    showWebBackgroundImage: nullableString,
+})
+
+export const DailywireRelatedContentReadSchema = z.looseObject({
+    images: DailywireRelatedContentImagesSchema,
+    contentType: z.string(),
+    publishedAt: ApiDateTimeStringSchema.nullable(),
+    slug: z.string(),
+    title: z.string(),
+})
+export type DailywireRelatedContentRead = z.infer<typeof DailywireRelatedContentReadSchema>
 
 export const DailywireMovieReadSchema = DailywireCatalogMovieReadSchema.extend({
     duration: z.number(),
     sharingUrl: z.string(),
     matureRating: nullableString,
+    hasVideo: z.boolean(),
     isDownloadable: z.boolean(),
+    status: z.string(),
+    publishedAt: ApiDateTimeStringSchema.nullable(),
+    background: nullableString,
+    byline: nullableString,
+    language: nullableString,
+    originCountry: nullableString,
+    images: DailywireMovieImagesSchema,
     availableFor: z.array(z.string()),
+    castAndCrew: z.array(DailywireMovieCastAndCrewReadSchema),
+    directedBy: z.array(z.string()),
+    genres: z.array(z.unknown()),
+    hosts: z.array(DailywireMovieHostReadSchema),
+    moreLikeThis: z.array(DailywireRelatedContentReadSchema),
+    productionCompanies: z.array(z.unknown()),
+    shopItems: z.array(z.unknown()),
+    starring: z.array(z.string()),
+    writtenBy: z.array(z.string()),
     isUpcoming: z.boolean(),
     expectedReleaseDate: z.iso.date().nullable(),
     movieExtras: z.array(DailywireMovieExtraReadSchema),

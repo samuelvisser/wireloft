@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import Date, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -32,13 +32,43 @@ class Movie(MediaItemBase, HasTaskResourcesMixin):
     logo_image_path: Mapped[Optional[str]]
     mature_rating: Mapped[Optional[str]]
 
+    # Canonical Daily Wire movie-page metadata. Structured collections are kept
+    # as JSON because they are descriptive snapshots owned by the parent movie,
+    # not independent WireLoft resources.
+    has_video: Mapped[bool] = mapped_column(default=False, server_default="0", nullable=False)
     is_downloadable: Mapped[Optional[bool]]
+    status: Mapped[Optional[str]]
+    published_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    background: Mapped[Optional[str]]
+    byline: Mapped[Optional[str]]
+    language: Mapped[Optional[str]]
+    origin_country: Mapped[Optional[str]]
+    images: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        default=dict,
+        server_default="{}",
+        nullable=False,
+    )
     available_for: Mapped[list[str]] = mapped_column(
         JSON,
         default=list,
         server_default="[]",
         nullable=False,
     )
+    cast_and_crew: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        default=list,
+        server_default="[]",
+        nullable=False,
+    )
+    directed_by: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    genres: Mapped[list[Any]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    hosts: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    more_like_this: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    production_companies: Mapped[list[Any]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    shop_items: Mapped[list[Any]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    starring: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    written_by: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
 
     # A release date is calendar data, not an instant; keep it timezone-free.
     release_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)

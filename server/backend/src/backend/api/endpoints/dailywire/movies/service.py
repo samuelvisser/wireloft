@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 import logging
 
 from pydantic import ValidationError
 
 from backend.app import db_session
 from backend.db.models import Movie
-from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
+from dailywire_api.dw_api.client import MiddlewareAPIError
+from dailywire_api.dw_api.movie import MovieMiddlewareClient
 from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
 from dailywire_authorisation import DeviceAuthClient
 
@@ -24,13 +25,7 @@ def _aware_datetime(value: datetime | None) -> datetime | None:
 
 
 def _indexed_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
-    """Return a Daily-Wire-shaped record from WireLoft's persisted movie data.
-
-    Once a movie has been indexed, opening its page or starting another download
-    normally does not depend on a fresh Daily Wire metadata request. Movies that
-    are not yet downloadable are the exception: their remote availability can
-    change when an upcoming release goes live.
-    """
+    """Return a Daily-Wire-shaped record from persisted movie metadata."""
     with db_session() as s:
         movie = s.query(Movie).filter(Movie.slug == movie_slug).one_or_none()
         if movie is None:
@@ -48,6 +43,7 @@ def _indexed_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
                 sharing_url=extra.sharing_url,
                 published_date=_aware_datetime(extra.published_date),
                 duration=float(extra.duration or 0),
+                available_for=list(extra.available_for or []),
                 background_image_path=extra.background_image_path,
                 thumbnail_landscape_path=extra.thumbnail_landscape_path,
                 thumbnail_portrait_path=extra.thumbnail_portrait_path,
@@ -61,24 +57,14 @@ def _indexed_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
             if movie.official_trailer_id is not None
             else None
         )
-        # ``None`` means legacy/unknown availability, not permission to download.
-        # Returning False forces one live check, which can promote a released
-        # movie to downloadable without ever exposing a speculative download.
-        downloadable = bool(movie.is_downloadable)
-        duration = float(movie.duration or 0)
-        is_upcoming = (
-            not downloadable
-            and (
-                duration <= 0
-                or (movie.release_date is not None and movie.release_date >= date.today())
-            )
-        )
         return DwMovieRecord(
             dw_id=movie.dw_id or "",
             slug=movie.slug,
             title=movie.title,
             extended_title=movie.extended_title,
             description=movie.description,
+            duration=float(movie.duration or 0),
+            sharing_url=movie.sharing_url or f"https://www.dailywire.com/videos/{movie.slug}",
             author_name=movie.author_name,
             author_slug=movie.author_slug,
             background_image_path=movie.background_image_path,
@@ -86,32 +72,34 @@ def _indexed_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
             thumbnail_landscape_path=movie.thumbnail_landscape_path,
             thumbnail_portrait_path=movie.thumbnail_portrait_path,
             thumbnail_square_path=movie.thumbnail_square_path,
-            duration=duration,
-            sharing_url=movie.sharing_url or f"https://www.dailywire.com/videos/{movie.slug}",
             mature_rating=movie.mature_rating,
-            is_downloadable=downloadable,
+            has_video=bool(movie.has_video),
+            is_downloadable=bool(movie.is_downloadable),
+            status=movie.status or "unknown",
+            published_at=_aware_datetime(movie.published_at),
+            background=movie.background,
+            byline=movie.byline,
+            language=movie.language,
+            origin_country=movie.origin_country,
+            images=dict(movie.images or {}),
             available_for=list(movie.available_for or []),
-            is_upcoming=is_upcoming,
-            expected_release_date=movie.release_date if is_upcoming else None,
+            cast_and_crew=list(movie.cast_and_crew or []),
+            directed_by=list(movie.directed_by or []),
+            genres=list(movie.genres or []),
+            hosts=list(movie.hosts or []),
+            more_like_this=list(movie.more_like_this or []),
+            production_companies=list(movie.production_companies or []),
+            shop_items=list(movie.shop_items or []),
+            starring=list(movie.starring or []),
+            written_by=list(movie.written_by or []),
             movie_extras=extras,
             trailer=trailer,
         )
 
 
 def _catalog_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
-    """Build a minimal movie detail record from the cached browse catalog.
-
-    The catalog endpoint is independent from the movie-detail endpoint and is
-    cached by WireLoft for five minutes. This fallback is intentionally only used
-    to render a page; it is not authoritative enough to persist a new movie or
-    start its first download because the catalog lacks detailed entitlement and
-    movie-extra metadata. Therefore it must never advertise the full movie as
-    downloadable merely because the detailed availability request failed.
-    """
-    summary = next(
-        (movie for movie in get_catalog().movies if movie.slug == movie_slug),
-        None,
-    )
+    """Build a conservative detail record from the cached browse catalog."""
+    summary = next((movie for movie in get_catalog().movies if movie.slug == movie_slug), None)
     if summary is None:
         return None
 
@@ -120,7 +108,9 @@ def _catalog_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
         duration=0,
         sharing_url=f"https://www.dailywire.com/videos/{movie_slug}",
         mature_rating=None,
+        has_video=False,
         is_downloadable=False,
+        status="unknown",
         available_for=[],
         movie_extras=[],
         trailer=None,
@@ -129,7 +119,7 @@ def _catalog_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
 
 def _live_movie(movie_slug: str) -> DwMovieRecord:
     tokens = DeviceAuthClient().get_token()
-    client = MiddlewareClient(
+    client = MovieMiddlewareClient(
         access_token=tokens.access_token if tokens else None,
         pace_requests=False,
     )
@@ -139,11 +129,9 @@ def _live_movie(movie_slug: str) -> DwMovieRecord:
 def get_movie_for_action(movie_slug: str) -> DwMovieRecord:
     """Return authoritative metadata for indexing/downloading a movie.
 
-    Downloadable indexed movies can use their persisted metadata. Indexed movies
-    that are currently unavailable are refreshed live first, because that is how
-    WireLoft discovers that an upcoming movie has become available. If Daily Wire
-    is temporarily unreachable, their persisted metadata still lets extras remain
-    usable. A new movie always requires the full Daily Wire detail response.
+    Scheduled or otherwise unavailable indexed movies are refreshed live so their
+    release transition is discovered. Released downloadable movies may use the
+    persisted canonical movie-page snapshot for low-latency actions.
     """
     indexed: DwMovieRecord | None = None
     try:
@@ -151,7 +139,7 @@ def get_movie_for_action(movie_slug: str) -> DwMovieRecord:
     except Exception:
         logger.exception("Failed to read indexed movie metadata for %s", movie_slug)
 
-    if indexed is not None and indexed.is_downloadable:
+    if indexed is not None and indexed.status == "published" and indexed.is_downloadable:
         return indexed
 
     try:
@@ -159,8 +147,7 @@ def get_movie_for_action(movie_slug: str) -> DwMovieRecord:
     except (MiddlewareAPIError, ValidationError) as exc:
         if indexed is not None:
             logger.warning(
-                "Daily Wire movie detail failed for unavailable indexed movie %s; "
-                "serving persisted metadata instead: %s",
+                "Daily Wire movie detail failed for indexed movie %s; serving persisted metadata instead: %s",
                 movie_slug,
                 exc,
             )
@@ -169,14 +156,7 @@ def get_movie_for_action(movie_slug: str) -> DwMovieRecord:
 
 
 def get_movie(movie_slug: str) -> DwMovieRecord:
-    """Return movie data for the user-facing movie page.
-
-    Indexed downloadable movies render entirely from WireLoft's database. An
-    indexed unavailable movie is checked live so its release can be discovered,
-    with its database record as an outage fallback. Non-indexed movies use the
-    live Daily Wire detail endpoint, with the cached browse catalog as a read-only
-    fallback when that detail endpoint returns a transient/server or schema error.
-    """
+    """Return movie data for the user-facing movie page."""
     try:
         return get_movie_for_action(movie_slug)
     except (MiddlewareAPIError, ValidationError) as exc:
@@ -195,5 +175,4 @@ def get_movie(movie_slug: str) -> DwMovieRecord:
                     exc,
                 )
                 return catalog_movie
-
         raise

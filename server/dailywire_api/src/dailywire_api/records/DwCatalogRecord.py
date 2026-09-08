@@ -1,39 +1,19 @@
 from __future__ import annotations
 
-import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Literal, Optional
 
-from pydantic import AliasChoices, AliasPath, AwareDatetime, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    AliasPath,
+    AwareDatetime,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from .BaseRecord import BaseRecord
-
-
-_UPCOMING_MARKER_RE = re.compile(
-    r"\b(?:coming|premieres?|premiering)\b|\bwatch\s+exclusively\b",
-    re.IGNORECASE,
-)
-_UPCOMING_DATE_RE = re.compile(
-    r"\b(?:coming|premieres?|premiering|available|watch(?:\s+exclusively)?)\b"
-    r"[^.!?\n]{0,160}?"
-    r"\b(?P<month>january|february|march|april|may|june|july|august|september|october|november|december)"
-    r"\s+(?P<day>\d{1,2})(?:st|nd|rd|th)?(?:,\s*(?P<year>\d{4}))?\b",
-    re.IGNORECASE,
-)
-_MONTH_NUMBERS = {
-    "january": 1,
-    "february": 2,
-    "march": 3,
-    "april": 4,
-    "may": 5,
-    "june": 6,
-    "july": 7,
-    "august": 8,
-    "september": 9,
-    "october": 10,
-    "november": 11,
-    "december": 12,
-}
 
 
 def _normalize_catalog_title(title: object, description: object) -> str:
@@ -50,70 +30,6 @@ def _normalize_catalog_title(title: object, description: object) -> str:
         normalized = normalized.split(" | ", 1)[0].strip()
 
     return normalized or original
-
-
-def _expected_release_date(description: object, *, today: Optional[date] = None) -> Optional[date]:
-    """Extract a conservative Daily Wire availability date from upcoming copy.
-
-    The movie-detail API does not currently expose a structured release date for
-    upcoming movies. It does, however, put dates such as ``September 16`` in text
-    like ``Coming exclusively to The Daily Wire, September 16``. Only dates that
-    occur in explicit upcoming/availability wording are considered so unrelated
-    dates in a synopsis are not mistaken for a release date.
-    """
-    text = str(description or "").strip()
-    match = _UPCOMING_DATE_RE.search(text)
-    if match is None:
-        return None
-
-    month = _MONTH_NUMBERS[match.group("month").casefold()]
-    day = int(match.group("day"))
-    year_text = match.group("year")
-    reference = today or date.today()
-
-    try:
-        if year_text:
-            return date(int(year_text), month, day)
-
-        candidate = date(reference.year, month, day)
-        # A recently passed advertised date can simply mean Daily Wire has not
-        # flipped the movie live yet. Only roll to the next year when the date is
-        # clearly from the previous season.
-        if candidate < reference - timedelta(days=120):
-            candidate = date(reference.year + 1, month, day)
-        return candidate
-    except ValueError:
-        return None
-
-
-def _movie_release_reference_date(data: dict[str, Any]) -> date:
-    """Use the newest extra publication date to anchor year-less release copy.
-
-    This keeps an archived Daily Wire response stable over time. For example, a
-    2026 trailer saying only ``September 16`` should still resolve to 2026 when a
-    test or re-index runs in 2027.
-    """
-    values = data.get("movie_extras", data.get("movieExtras", [])) or []
-    published_dates: list[date] = []
-    for extra in values:
-        published = (
-            extra.published_date
-            if isinstance(extra, DwMovieExtraRecord)
-            else extra.get("published_date", extra.get("publishedAt"))
-            if isinstance(extra, dict)
-            else None
-        )
-        if isinstance(published, datetime):
-            published_dates.append(published.date())
-        elif isinstance(published, str) and published.strip():
-            normalized = published.strip()
-            if normalized.endswith(("Z", "z")):
-                normalized = normalized[:-1] + "+00:00"
-            try:
-                published_dates.append(datetime.fromisoformat(normalized).date())
-            except ValueError:
-                pass
-    return max(published_dates, default=date.today())
 
 
 class _CatalogTitleRecord(BaseRecord):
@@ -171,24 +87,110 @@ MovieExtraTypeValue = Literal[
 ]
 
 
-class DwMovieExtraRecord(BaseRecord):
-    dw_id: Optional[str] = None
+class DwMovieImagesRecord(BaseRecord):
+    movie_app_background_image: Optional[str] = None
+    movie_logo_image: Optional[str] = None
+    movie_ott_background_image: Optional[str] = None
+    movie_poster_image: Optional[str] = None
+    movie_thumbnail_image: Optional[str] = None
+    movie_web_background_image: Optional[str] = None
+
+
+class DwMovieExtraImagesRecord(BaseRecord):
+    extra_thumbnail_image: Optional[str] = None
+
+
+class DwMovieCastAndCrewRecord(BaseRecord):
+    name: str
+    image_size: Optional[str] = None
+    image_url: Optional[str] = None
+    info: Optional[str] = None
+    role_text: Optional[str] = None
+
+
+class DwMovieHostImagesRecord(BaseRecord):
+    host_app_background_image: Optional[str] = None
+    host_image_1x1: Optional[str] = None
+    host_logo_image: Optional[str] = None
+    host_ott_background_image: Optional[str] = None
+    host_web_background_image: Optional[str] = None
+
+
+class DwMovieHostRecord(BaseRecord):
+    images: DwMovieHostImagesRecord = Field(default_factory=DwMovieHostImagesRecord)
+    dw_id: Optional[str] = Field(
+        validation_alias=AliasChoices("pid", "id", "dwID", "dwId"),
+        default=None,
+    )
+    name: str
+    slug: str
+
+
+class DwRelatedContentImagesRecord(BaseRecord):
+    movie_app_background_image: Optional[str] = None
+    movie_logo_image: Optional[str] = None
+    movie_ott_background_image: Optional[str] = None
+    movie_poster_image: Optional[str] = None
+    movie_thumbnail_image: Optional[str] = None
+    movie_web_background_image: Optional[str] = None
+    show_logo_image: Optional[str] = None
+    show_ott_background_image: Optional[str] = None
+    show_ott_episode_background_image: Optional[str] = None
+    show_poster_image: Optional[str] = None
+    show_thumbnail_image: Optional[str] = None
+    show_web_background_image: Optional[str] = None
+
+
+class DwRelatedContentRecord(BaseRecord):
+    images: DwRelatedContentImagesRecord = Field(default_factory=DwRelatedContentImagesRecord)
+    content_type: str
+    published_at: Optional[AwareDatetime] = None
     slug: str
     title: str
-    movie_extra_type: MovieExtraTypeValue
+
+
+class DwMovieExtraRecord(BaseRecord):
+    dw_id: Optional[str] = Field(
+        validation_alias=AliasChoices("pid", "id", "dwID", "dwId"),
+        default=None,
+    )
+    slug: str
+    title: str
+    movie_extra_type: MovieExtraTypeValue = "other"
     description: Optional[str] = None
     sharing_url: Optional[str] = None
-    published_date: Optional[AwareDatetime] = Field(validation_alias="publishedAt", default=None)
+    published_date: Optional[AwareDatetime] = Field(
+        validation_alias=AliasChoices("publishedAt", "publishedDate", "published_date"),
+        default=None,
+    )
     duration: float = 0
+    available_for: list[str] = Field(default_factory=list)
+    images: DwMovieExtraImagesRecord = Field(default_factory=DwMovieExtraImagesRecord)
     background_image_path: Optional[str] = None
-    thumbnail_landscape_path: Optional[str] = None
+    thumbnail_landscape_path: Optional[str] = Field(
+        validation_alias=AliasChoices(
+            "thumbnailLandscapePath",
+            AliasPath("images", "extra_thumbnail_image"),
+        ),
+        default=None,
+    )
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
+
+    # The dedicated trailer object enriches the matching extra with fresh
+    # playback data. Retain it in the API record, but never persist signed tokens.
+    continue_watching_entity_id: Optional[str] = None
+    continue_watching_entity_type: Optional[str] = None
+    mux_drm_token: Optional[str] = None
+    mux_playback_id: Optional[str] = None
+    mux_playback_token: Optional[str] = None
+    playback_policy: Optional[str] = None
+    trailer_url: Optional[str] = None
 
     @field_validator("published_date", mode="before")
     @classmethod
     def assume_utc_for_naive_dailywire_timestamp(cls, value: Any) -> Any:
-        """Daily Wire sometimes omits the UTC suffix from movie-extra timestamps."""
+        """Daily Wire has historically omitted UTC suffixes on some extra dates."""
         if isinstance(value, datetime):
             return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
         if not isinstance(value, str) or not value.strip():
@@ -256,60 +258,111 @@ class DwCatalogMovieRecord(_CatalogTitleRecord):
 
 
 class DwMovieRecord(DwCatalogMovieRecord):
-    duration: float = 0
+    # getMoviePage uses pid for the entity ID and runtime for the feature length.
+    # Keep WireLoft's established names as normalized aliases while retaining the
+    # richer structured fields below.
+    dw_id: str = Field(validation_alias=AliasChoices("pid", "id", "dwID", "dwId"))
+    duration: float = Field(validation_alias=AliasChoices("runtime", "duration"), default=0)
     sharing_url: str
-    mature_rating: Optional[str] = None
-    is_downloadable: bool = True
+    mature_rating: Optional[str] = Field(
+        validation_alias=AliasChoices("rating", "matureRating"),
+        default=None,
+    )
+    author_name: Optional[str] = Field(
+        validation_alias=AliasChoices(
+            "authorName",
+            AliasPath("hosts", 0, "name"),
+            AliasPath("host", "name"),
+            AliasPath("author", "name"),
+        ),
+        default=None,
+    )
+    author_slug: Optional[str] = Field(
+        validation_alias=AliasChoices(
+            "authorSlug",
+            AliasPath("hosts", 0, "slug"),
+            AliasPath("host", "slug"),
+            AliasPath("author", "slug"),
+        ),
+        default=None,
+    )
+    background_image_path: Optional[str] = Field(
+        validation_alias=AliasChoices(
+            "backgroundImage",
+            "backgroundImagePath",
+            AliasPath("images", "movie_web_background_image"),
+            AliasPath("images", "movie_app_background_image"),
+        ),
+        default=None,
+    )
+    logo_image_path: Optional[str] = Field(
+        validation_alias=AliasChoices(
+            "logoImage",
+            "logoImagePath",
+            AliasPath("images", "movie_logo_image"),
+        ),
+        default=None,
+    )
+    thumbnail_landscape_path: Optional[str] = Field(
+        validation_alias=AliasChoices(
+            "thumbnailLandscapePath",
+            AliasPath("images", "movie_thumbnail_image"),
+        ),
+        default=None,
+    )
+    thumbnail_portrait_path: Optional[str] = Field(
+        validation_alias=AliasChoices(
+            "thumbnailPortraitPath",
+            AliasPath("images", "movie_poster_image"),
+        ),
+        default=None,
+    )
+    thumbnail_square_path: Optional[str] = None
+
+    has_video: bool = False
+    is_downloadable: bool = False
+    images: DwMovieImagesRecord = Field(default_factory=DwMovieImagesRecord)
+    background: Optional[str] = None
+    byline: Optional[str] = None
+    language: Optional[str] = None
+    origin_country: Optional[str] = None
+    published_at: Optional[AwareDatetime] = None
+    status: str = "unknown"
     available_for: list[str] = Field(default_factory=list)
-    is_upcoming: bool = False
-    expected_release_date: Optional[date] = None
-    movie_extras: list[DwMovieExtraRecord] = Field(default_factory=list)
-    # Kept as the dedicated trailer field consumed by the prominent movie-page
-    # actions. It points to the selected trailer item in movie_extras.
+    cast_and_crew: list[DwMovieCastAndCrewRecord] = Field(default_factory=list)
+    directed_by: list[str] = Field(default_factory=list)
+    movie_extras: list[DwMovieExtraRecord] = Field(
+        validation_alias=AliasChoices("extras", "movieExtras", "movie_extras"),
+        default_factory=list,
+    )
+    # The supplied samples do not reveal the element schema for these currently
+    # empty collections. Retain their JSON losslessly until Daily Wire exposes an
+    # example that can be modeled more narrowly.
+    genres: list[Any] = Field(default_factory=list)
+    hosts: list[DwMovieHostRecord] = Field(default_factory=list)
+    more_like_this: list[DwRelatedContentRecord] = Field(default_factory=list)
+    production_companies: list[Any] = Field(default_factory=list)
+    shop_items: list[Any] = Field(default_factory=list)
+    starring: list[str] = Field(default_factory=list)
+    written_by: list[str] = Field(default_factory=list)
     trailer: Optional[DwMovieExtraRecord] = None
 
-    @model_validator(mode="before")
+    @field_validator("duration", mode="before")
     @classmethod
-    def infer_upcoming_metadata(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
+    def normalize_runtime(cls, value: Any) -> float:
+        return 0 if value is None else value
 
-        explicit_upcoming = "is_upcoming" in data or "isUpcoming" in data
-        explicit_release_date = (
-            "expected_release_date" in data or "expectedReleaseDate" in data
-        )
-        raw_downloadable = data.get("is_downloadable", data.get("isDownloadable", True))
-        try:
-            duration = float(data.get("duration") or 0)
-        except (TypeError, ValueError):
-            duration = 0
-        description = data.get("description")
-        release_year_reference = _movie_release_reference_date(data)
-        inferred_release_date = _expected_release_date(
-            description,
-            today=release_year_reference,
-        )
-        has_upcoming_copy = bool(_UPCOMING_MARKER_RE.search(str(description or "")))
-        inferred_upcoming = (
-            not bool(raw_downloadable)
-            and has_upcoming_copy
-            and (
-                duration <= 0
-                or (
-                    inferred_release_date is not None
-                    and inferred_release_date >= date.today()
-                )
-            )
-        )
+    @computed_field(return_type=bool)
+    @property
+    def is_upcoming(self) -> bool:
+        return self.status.casefold() == "scheduled"
 
-        updates: dict[str, Any] = {}
-        if not explicit_upcoming:
-            updates["is_upcoming"] = inferred_upcoming
-        if not explicit_release_date:
-            updates["expected_release_date"] = (
-                inferred_release_date if inferred_upcoming else None
-            )
-        return {**data, **updates} if updates else data
+    @computed_field(return_type=Optional[date])
+    @property
+    def expected_release_date(self) -> Optional[date]:
+        if not self.is_upcoming or self.published_at is None:
+            return None
+        return self.published_at.date()
 
 
 class DwMoviePlaybackRecord(BaseRecord):

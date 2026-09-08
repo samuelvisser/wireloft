@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
@@ -38,6 +38,12 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     sharing_url: Mapped[Optional[str]]
     published_date: Mapped[Optional[datetime]]
+    available_for: Mapped[list[str]] = mapped_column(
+        JSON,
+        default=list,
+        server_default="[]",
+        nullable=False,
+    )
 
     movie: Mapped["Movie"] = relationship(
         back_populates="movie_extras",

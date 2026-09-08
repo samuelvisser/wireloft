@@ -15,7 +15,7 @@ from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_movie_output_path
 from config import get_settings
-from dailywire_api.dw_api.client import MiddlewareClient
+from dailywire_api.dw_api.movie import MovieMiddlewareClient
 from dailywire_authorisation import DeviceAuthClient
 from dailywire_downloader import (
     DownloadCancelled,
@@ -144,11 +144,15 @@ def _download_movie_media(
 ) -> tuple[DownloadResult, str]:
     _ensure_not_cancelled(cancellation)
     tokens = DeviceAuthClient().get_token()
-    client = MiddlewareClient(access_token=tokens.access_token if tokens else None)
+    client = MovieMiddlewareClient(access_token=tokens.access_token if tokens else None)
     if isinstance(media, MovieExtra):
         source_playback_url = _movie_extra_playback_url(client, movie=movie, extra=media)
         _ensure_not_cancelled(cancellation)
     else:
+        # getMoviePage does not expose the full feature's signed playback URL in
+        # the current API response. Keep the existing playback lookup here until
+        # Daily Wire's replacement playback endpoint is identified; all movie
+        # metadata and trailer playback now come from getMoviePage.
         playback = client.get_movie_playback(movie.slug)
         _ensure_not_cancelled(cancellation)
         if not playback.has_video or not playback.video_url:
@@ -220,7 +224,7 @@ def _download_movie_media(
 
 
 def _movie_extra_playback_url(
-    client: MiddlewareClient,
+    client: MovieMiddlewareClient,
     *,
     movie: Movie,
     extra: MovieExtra,
@@ -234,7 +238,8 @@ def _movie_extra_playback_url(
         source_url = None
 
     if not source_url and movie.official_trailer_id == extra.id:
-        source_url = client.get_movie_playback(movie.slug).trailer_url
+        movie_page = client.get_movie_page(movie.slug)
+        source_url = movie_page.trailer.trailer_url if movie_page.trailer else None
     if not source_url:
         raise MediaUnavailableError(
             f"Daily Wire provides no playable video for movie extra '{extra.title}'"

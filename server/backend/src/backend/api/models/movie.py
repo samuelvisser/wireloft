@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Optional
 from datetime import date, datetime
+from typing import Any, Optional
 
 from pydantic import AwareDatetime, Field, computed_field
 
@@ -29,14 +29,30 @@ class _MovieAPIBaseIn(RequestBase):
     author_slug: Optional[str] = None
     logo_image_path: Optional[str] = None
     mature_rating: Optional[str] = None
+    has_video: bool = False
     is_downloadable: Optional[bool] = True
+    status: Optional[str] = None
+    published_at: Optional[AwareDatetime] = None
+    background: Optional[str] = None
+    byline: Optional[str] = None
+    language: Optional[str] = None
+    origin_country: Optional[str] = None
+    images: dict[str, Any] = Field(default_factory=dict)
     available_for: list[str] = Field(default_factory=list)
+    cast_and_crew: list[dict[str, Any]] = Field(default_factory=list)
+    directed_by: list[str] = Field(default_factory=list)
+    genres: list[Any] = Field(default_factory=list)
+    hosts: list[dict[str, Any]] = Field(default_factory=list)
+    more_like_this: list[dict[str, Any]] = Field(default_factory=list)
+    production_companies: list[Any] = Field(default_factory=list)
+    shop_items: list[Any] = Field(default_factory=list)
+    starring: list[str] = Field(default_factory=list)
+    written_by: list[str] = Field(default_factory=list)
 
 
 class MovieAPICreate(_MovieAPIBaseIn):
     """Request body for creating a movie."""
 
-    # Fields in the media_items table
     slug: str
     dw_id: Optional[str] = None
     movie_extras: list[MovieExtraAPICreate] = Field(default_factory=list)
@@ -59,7 +75,6 @@ class MovieAPIUpdate(_MovieAPIBaseIn):
 class _MovieAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, no constraints."""
 
-    # Fields in the media_items table
     id: int
     uuid: str
     slug: str
@@ -78,8 +93,25 @@ class _MovieAPIBaseOut(ResponseBase):
     author_slug: Optional[str]
     logo_image_path: Optional[str]
     mature_rating: Optional[str]
+    has_video: bool
     is_downloadable: Optional[bool]
+    status: Optional[str]
+    published_at: Optional[datetime]
+    background: Optional[str]
+    byline: Optional[str]
+    language: Optional[str]
+    origin_country: Optional[str]
+    images: dict[str, Any]
     available_for: list[str]
+    cast_and_crew: list[dict[str, Any]]
+    directed_by: list[str]
+    genres: list[Any]
+    hosts: list[dict[str, Any]]
+    more_like_this: list[dict[str, Any]]
+    production_companies: list[Any]
+    shop_items: list[Any]
+    starring: list[str]
+    written_by: list[str]
     release_date: Optional[date]
     release_date_source: Optional[str]
     release_date_source_id: Optional[str]

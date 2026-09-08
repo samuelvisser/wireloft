@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import AwareDatetime, computed_field
+from pydantic import AwareDatetime, Field, computed_field
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.types.media_types import MovieExtraType
@@ -24,6 +24,7 @@ class _MovieExtraAPIBaseIn(RequestBase):
     slug: str
     sharing_url: Optional[str] = None
     published_date: Optional[AwareDatetime] = None
+    available_for: list[str] = Field(default_factory=list)
 
 
 class MovieExtraAPICreate(_MovieExtraAPIBaseIn):
@@ -56,5 +57,6 @@ class MovieExtraAPIRead(ResponseBase):
     slug: str
     sharing_url: Optional[str]
     published_date: Optional[datetime]
+    available_for: list[str]
     created_at: datetime
     updated_at: datetime

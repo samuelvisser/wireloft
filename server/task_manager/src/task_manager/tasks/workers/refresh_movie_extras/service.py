@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from backend.api.endpoints.movie_extras.service import sync_movie_extras
 from backend.api.endpoints.movies.service import sync_dailywire_movie_metadata
 from backend.db.models import Movie
-from dailywire_api.dw_api.client import MiddlewareClient
+from dailywire_api.dw_api.movie import MovieMiddlewareClient
 from dailywire_authorisation import DeviceAuthClient
 
 
@@ -20,18 +20,17 @@ async def run_refresh_movie_extras(
         raise ValueError(f"Movie {movie_id} was deleted before its extras could be refreshed")
 
     if progress is not None:
-        progress.set(10, f"Fetching extras for '{movie.title}'")
+        progress.set(10, f"Fetching metadata for '{movie.title}'")
 
     tokens = DeviceAuthClient().get_token()
-    client = MiddlewareClient(access_token=tokens.access_token if tokens else None)
+    client = MovieMiddlewareClient(access_token=tokens.access_token if tokens else None)
     movie_data = client.get_movie_page(movie.slug)
 
     if progress is not None:
         progress.set(65, f"Indexing {len(movie_data.movie_extras)} movie extra(s)")
 
-    # The same refresh also captures the transition from an upcoming movie to a
-    # released one, because Daily Wire changes isDownloadable/duration on the
-    # parent movie independently of the Extras tab.
+    # The canonical movie page contains both the parent movie metadata and extras,
+    # so one refresh captures status/release changes and newly published extras.
     sync_dailywire_movie_metadata(session, movie=movie, movie_data=movie_data)
     added = sync_movie_extras(
         session,

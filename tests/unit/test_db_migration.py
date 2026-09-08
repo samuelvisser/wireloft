@@ -10,7 +10,14 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "f2c7a4e8b901"
+HEAD_REVISION = "a8e4c1d7f203"
+ARTIFACT_IDENTITY_REVISION = "c1f7b9e4d205"
+SHOW_PROFILE_SCOPE_REVISION = "e3a1b5c7d902"
+EPISODE_CANONICAL_REVISION = "a4d7c2e9f610"
+EPISODE_RELEASE_REVISION = "e6a9c1f4b203"
+DATETIME_CONTRACT_REVISION = "e3a8f4c9b102"
+DROP_DOWNLOAD_ATTEMPTS_REVISION = "b7e2c4d9a601"
+DOWNLOAD_EXECUTION_REVISION = "f2c7a4e8b901"
 TASK_OPERATIONS_REVISION = "d4f0a9c2e713"
 WIRELOFT_1_0_REVISION = "c8d4e2f1a7b9"
 BASE_REVISION = "0001"
@@ -176,8 +183,25 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "author_slug",
         "logo_image_path",
         "mature_rating",
+        "has_video",
         "is_downloadable",
+        "status",
+        "published_at",
+        "background",
+        "byline",
+        "language",
+        "origin_country",
+        "images",
         "available_for",
+        "cast_and_crew",
+        "directed_by",
+        "genres",
+        "hosts",
+        "more_like_this",
+        "production_companies",
+        "shop_items",
+        "starring",
+        "written_by",
         "release_date",
         "release_date_source",
         "release_date_source_id",
@@ -196,6 +220,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "slug",
         "sharing_url",
         "published_date",
+        "available_for",
     }
 
     movie_indexes = {index["name"]: index for index in inspector.get_indexes("movies")}
@@ -283,7 +308,16 @@ def test_upgrade_from_main_baseline_preserves_movie_rows(migration_database):
         movie = session.query(Movie).one()
         assert movie.id == movie_id
         assert movie.slug == "a-movie"
+        assert movie.has_video is False
+        assert movie.status is None
+        assert movie.images == {}
         assert movie.available_for == []
+        assert movie.cast_and_crew == []
+        assert movie.directed_by == []
+        assert movie.hosts == []
+        assert movie.more_like_this == []
+        assert movie.starring == []
+        assert movie.written_by == []
         assert movie.release_date is None
         assert movie.release_date_lookup_status == "pending"
         assert movie.movie_extras == []
@@ -503,7 +537,7 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
     check_database()
 
 
-def test_migration_history_is_linear_through_universal_download_execution():
+def test_migration_history_is_linear_through_movie_page_metadata():
     from backend.db.migrations import get_alembic_config, get_head_revisions
 
     scripts = ScriptDirectory.from_config(get_alembic_config())
@@ -511,11 +545,16 @@ def test_migration_history_is_linear_through_universal_download_execution():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, TASK_OPERATIONS_REVISION),
+        (HEAD_REVISION, ARTIFACT_IDENTITY_REVISION),
+        (ARTIFACT_IDENTITY_REVISION, SHOW_PROFILE_SCOPE_REVISION),
+        (SHOW_PROFILE_SCOPE_REVISION, EPISODE_CANONICAL_REVISION),
+        (EPISODE_CANONICAL_REVISION, EPISODE_RELEASE_REVISION),
+        (EPISODE_RELEASE_REVISION, DATETIME_CONTRACT_REVISION),
+        (DATETIME_CONTRACT_REVISION, DROP_DOWNLOAD_ATTEMPTS_REVISION),
+        (DROP_DOWNLOAD_ATTEMPTS_REVISION, DOWNLOAD_EXECUTION_REVISION),
+        (DOWNLOAD_EXECUTION_REVISION, TASK_OPERATIONS_REVISION),
         (TASK_OPERATIONS_REVISION, WIRELOFT_1_0_REVISION),
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Move download execution state into TaskRun/TaskOperation."
-    assert revisions[1].doc == "Add durable task operations and structured task results."
-    assert revisions[2].doc == "WireLoft 1.0."
+    assert revisions[0].doc == "Persist canonical Daily Wire movie-page metadata."

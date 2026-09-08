@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from datetime import timezone
+from typing import Any, Optional
+
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from fastapi import HTTPException
 
+from backend.api.endpoints.movie_extras.service import create_movie_extra, sync_movie_extras
 from backend.api.helpers import update_database_fields
 from backend.api.models.movie import *
 from backend.api.models.movie_extra import MovieExtraAPICreate
 from backend.db.models.media_download import MediaDownloadBase
 from backend.db.models.media_item import Movie
-from backend.api.endpoints.movie_extras.service import create_movie_extra, sync_movie_extras
 from backend.integrations.tmdb import MovieReleaseLookupResult, lookup_movie_release_metadata
 from dailywire_api.records import DwMovieRecord
 from task_manager.scheduler.operations import (
@@ -20,36 +23,24 @@ from task_manager.scheduler.operations import (
 
 
 _REFRESH_MOVIE_EXTRAS_TASK_KEY = "refresh_movie_extras"
+_DAILYWIRE_RELEASE_SOURCE = "dailywire"
 
 
 def get_movies_list(s: Session) -> list[MovieAPIRead]:
-    items = (
-        s.query(Movie)
-        .order_by(Movie.title.asc())
-        .all()
-    )
+    items = s.query(Movie).order_by(Movie.title.asc()).all()
     return [MovieAPIRead.model_validate(it) for it in items]
 
 
 def get_movie(s: Session, movie_slug: str) -> MovieAPIRead:
-    item = (
-        s.query(Movie)
-        .filter(Movie.slug == movie_slug)
-        .one_or_none()
-    )
+    item = s.query(Movie).filter(Movie.slug == movie_slug).one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Movie not found")
-
     return MovieAPIRead.model_validate(item)
 
 
 def request_movie_extras_refresh(s: Session, movie_slug: str) -> dict[str, bool | str]:
     """Queue a UI-visible movie-extra refresh through the TaskOperation pipeline."""
-    movie: Optional[Movie] = (
-        s.query(Movie)
-        .filter(Movie.slug == movie_slug)
-        .one_or_none()
-    )
+    movie: Optional[Movie] = s.query(Movie).filter(Movie.slug == movie_slug).one_or_none()
     if movie is None:
         raise HTTPException(status_code=404, detail="Movie not found")
 
@@ -65,16 +56,9 @@ def request_movie_extras_refresh(s: Session, movie_slug: str) -> dict[str, bool 
         resource_id=movie.id,
         title=movie.title,
         targets=[target],
-        context={
-            "movie_slug": movie.slug,
-            "movie_title": movie.title,
-        },
+        context={"movie_slug": movie.slug, "movie_title": movie.title},
     )
-    queue_operation_target_dispatch(
-        s,
-        operation.id,
-        target.resolved_slot_key(),
-    )
+    queue_operation_target_dispatch(s, operation.id, target.resolved_slot_key())
     return {"queued": True, "operation_id": operation.id}
 
 
@@ -88,7 +72,9 @@ def _apply_movie_release_lookup(item: Movie, lookup: MovieReleaseLookupResult) -
 
 
 def ensure_movie_release_metadata(s: Session, item: Movie) -> None:
-    """Run at most one configured release-date lookup for a persisted movie."""
+    """Run at most one TMDB lookup when Daily Wire supplied no release instant."""
+    if item.release_date_source == _DAILYWIRE_RELEASE_SOURCE:
+        return
     if item.release_date_lookup_attempted_at is not None:
         return
 
@@ -97,9 +83,6 @@ def ensure_movie_release_metadata(s: Session, item: Movie) -> None:
         description=item.description,
         duration_seconds=item.duration,
     )
-    # A missing token is not counted as an attempt. This lets a movie that was
-    # indexed before TMDB was configured receive its one lookup the next time
-    # a download path indexes it.
     if lookup is None:
         return
 
@@ -109,13 +92,14 @@ def ensure_movie_release_metadata(s: Session, item: Movie) -> None:
 
 def retry_movie_release_metadata(s: Session, movie_slug: str) -> MovieAPIRead:
     """Retry a transient TMDB lookup failure for an already-persisted movie."""
-    item: Optional[Movie] = (
-        s.query(Movie)
-        .filter(Movie.slug == movie_slug)
-        .one_or_none()
-    )
+    item: Optional[Movie] = s.query(Movie).filter(Movie.slug == movie_slug).one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Movie not found")
+    if item.release_date_source == _DAILYWIRE_RELEASE_SOURCE:
+        raise HTTPException(
+            status_code=409,
+            detail="Daily Wire already supplies this movie's release date",
+        )
     if item.release_date_lookup_status != "error":
         raise HTTPException(
             status_code=409,
@@ -152,11 +136,7 @@ def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
 
     if body.official_trailer_slug is not None:
         official_trailer = next(
-            (
-                extra
-                for extra in item.movie_extras
-                if extra.slug == body.official_trailer_slug
-            ),
+            (extra for extra in item.movie_extras if extra.slug == body.official_trailer_slug),
             None,
         )
         if official_trailer is None:
@@ -164,11 +144,17 @@ def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
         item.official_trailer = official_trailer
         s.flush()
 
-    # Movie, extras and any calling operation remain in the caller's single
-    # transaction. Services flush only; routers own commit and rollback. The
-    # Daily Wire browser indexing performs release metadata enrichment in
-    # index_dailywire_movie, not for arbitrary direct API-created movies.
     return MovieAPIRead.model_validate(item)
+
+
+def _json_value(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json", by_alias=False)
+    return value
+
+
+def _json_list(values: list[Any]) -> list[Any]:
+    return [_json_value(value) for value in values]
 
 
 def sync_dailywire_movie_metadata(
@@ -177,13 +163,7 @@ def sync_dailywire_movie_metadata(
     movie: Movie,
     movie_data: DwMovieRecord,
 ) -> None:
-    """Refresh mutable facts explicitly supplied by Daily Wire.
-
-    This is especially important for upcoming movies. Daily Wire initially marks
-    them unavailable with zero duration, then later flips those fields when the
-    full film is published. ``model_fields_set`` prevents a partial upstream
-    response from replacing previously known facts with Pydantic defaults.
-    """
+    """Refresh the canonical metadata returned by Daily Wire getMoviePage."""
     scalar_fields = (
         "dw_id",
         "title",
@@ -199,24 +179,47 @@ def sync_dailywire_movie_metadata(
         "author_slug",
         "logo_image_path",
         "mature_rating",
+        "has_video",
         "is_downloadable",
+        "status",
+        "published_at",
+        "background",
+        "byline",
+        "language",
+        "origin_country",
     )
-    supplied_fields = movie_data.model_fields_set
     for field in scalar_fields:
-        if field in supplied_fields:
-            setattr(movie, field, getattr(movie_data, field))
-    if "available_for" in supplied_fields:
-        movie.available_for = list(movie_data.available_for)
+        setattr(movie, field, getattr(movie_data, field))
+
+    movie.images = movie_data.images.model_dump(mode="json", by_alias=False)
+    movie.available_for = list(movie_data.available_for)
+    movie.cast_and_crew = _json_list(movie_data.cast_and_crew)
+    movie.directed_by = list(movie_data.directed_by)
+    movie.genres = _json_list(movie_data.genres)
+    movie.hosts = _json_list(movie_data.hosts)
+    movie.more_like_this = _json_list(movie_data.more_like_this)
+    movie.production_companies = _json_list(movie_data.production_companies)
+    movie.shop_items = _json_list(movie_data.shop_items)
+    movie.starring = list(movie_data.starring)
+    movie.written_by = list(movie_data.written_by)
+
+    # getMoviePage's publishedAt is the authoritative movie publication instant.
+    # Keep the existing calendar release_date field in sync for output templates
+    # and older API consumers, while recording that TMDB was not needed.
+    if movie_data.published_at is not None:
+        movie.release_date = movie_data.published_at.date()
+        movie.release_date_source = _DAILYWIRE_RELEASE_SOURCE
+        movie.release_date_source_id = movie_data.dw_id
+        movie.release_date_lookup_status = "matched"
+        movie.release_date_lookup_attempted_at = None
+        movie.release_date_lookup_error = None
+
     s.flush()
 
 
 def index_dailywire_movie(s: Session, movie_data: DwMovieRecord) -> tuple[Movie, bool]:
     """Persist a Daily Wire movie and all currently known extras without downloading it."""
-    item: Optional[Movie] = (
-        s.query(Movie)
-        .filter(Movie.slug == movie_data.slug)
-        .one_or_none()
-    )
+    item: Optional[Movie] = s.query(Movie).filter(Movie.slug == movie_data.slug).one_or_none()
     created = item is None
     if item is None:
         result = create_movie(s, _movie_create_from_dailywire(movie_data))
@@ -224,12 +227,7 @@ def index_dailywire_movie(s: Session, movie_data: DwMovieRecord) -> tuple[Movie,
         if item is None:
             raise RuntimeError("Movie creation did not produce a persisted Movie record")
 
-    # Do this for both new and existing rows. Upcoming movies change their core
-    # availability metadata at release time, not just their list of extras.
     sync_dailywire_movie_metadata(s, movie=item, movie_data=movie_data)
-
-    # Keep this idempotent so the explicit Add action and every direct download
-    # path also pick up extras that appeared since the movie was first indexed.
     sync_movie_extras(
         s,
         movie=item,
@@ -237,7 +235,7 @@ def index_dailywire_movie(s: Session, movie_data: DwMovieRecord) -> tuple[Movie,
         official_trailer=movie_data.trailer,
     )
 
-    if item.release_date_lookup_attempted_at is None:
+    if item.release_date is None:
         ensure_movie_release_metadata(s, item)
     return item, created
 
@@ -257,6 +255,7 @@ def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
             thumbnail_landscape_path=extra.thumbnail_landscape_path,
             thumbnail_portrait_path=extra.thumbnail_portrait_path,
             thumbnail_square_path=extra.thumbnail_square_path,
+            available_for=list(extra.available_for),
         )
         for extra in movie_data.movie_extras
     ]
@@ -277,19 +276,32 @@ def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
         author_slug=movie_data.author_slug,
         logo_image_path=movie_data.logo_image_path,
         mature_rating=movie_data.mature_rating,
+        has_video=movie_data.has_video,
         is_downloadable=movie_data.is_downloadable,
-        available_for=movie_data.available_for,
+        status=movie_data.status,
+        published_at=movie_data.published_at,
+        background=movie_data.background,
+        byline=movie_data.byline,
+        language=movie_data.language,
+        origin_country=movie_data.origin_country,
+        images=movie_data.images.model_dump(mode="json", by_alias=False),
+        available_for=list(movie_data.available_for),
+        cast_and_crew=_json_list(movie_data.cast_and_crew),
+        directed_by=list(movie_data.directed_by),
+        genres=_json_list(movie_data.genres),
+        hosts=_json_list(movie_data.hosts),
+        more_like_this=_json_list(movie_data.more_like_this),
+        production_companies=_json_list(movie_data.production_companies),
+        shop_items=_json_list(movie_data.shop_items),
+        starring=list(movie_data.starring),
+        written_by=list(movie_data.written_by),
         movie_extras=movie_extras,
         official_trailer_slug=(movie_data.trailer.slug if movie_data.trailer else None),
     )
 
 
 def update_movie(s: Session, movie_slug: str, body: MovieAPIUpdate) -> MovieAPIRead:
-    item: Optional[Movie] = (
-        s.query(Movie)
-        .filter(Movie.slug == movie_slug)
-        .one_or_none()
-    )
+    item: Optional[Movie] = s.query(Movie).filter(Movie.slug == movie_slug).one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Movie not found")
 
@@ -299,25 +311,14 @@ def update_movie(s: Session, movie_slug: str, body: MovieAPIUpdate) -> MovieAPIR
 
 
 def delete_movie(s: Session, movie_slug: str) -> MovieAPIRead:
-    item = (
-        s.query(Movie)
-        .filter(Movie.slug == movie_slug)
-        .one_or_none()
-    )
+    item = s.query(Movie).filter(Movie.slug == movie_slug).one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Movie not found")
 
     payload = MovieAPIRead.model_validate(item)
-
-    # Route every Movie and MovieExtra download through the normal deletion
-    # service before removing their media records. Active downloads are thereby
-    # cancelled and their partial artifacts removed, while completed files are
-    # deliberately left on disk.
     media_item_ids = [item.id, *(extra.id for extra in item.movie_extras)]
     download_ids = list(s.scalars(
-        select(MediaDownloadBase.id).where(
-            MediaDownloadBase.media_item_id.in_(media_item_ids),
-        )
+        select(MediaDownloadBase.id).where(MediaDownloadBase.media_item_id.in_(media_item_ids))
     ))
     from backend.api.endpoints.media_downloads.service import delete_media_download
     for download_id in download_ids:

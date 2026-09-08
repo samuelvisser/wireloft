@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -46,14 +48,19 @@ def test_upcoming_movie_allows_extras_but_not_full_movie(tmp_path, monkeypatch):
         dw_id="movie-1",
         slug="upcoming-movie",
         title="Upcoming Movie | Final Trailer",
-        description="Coming exclusively to The Daily Wire, September 16.",
+        description="Upcoming movie description.",
         duration=0,
         sharing_url="https://www.dailywire.com/videos/upcoming-movie",
+        status="scheduled",
+        published_at=datetime(2026, 9, 16, 5, 8, tzinfo=timezone.utc),
+        has_video=False,
         is_downloadable=False,
         movie_extras=[trailer],
         trailer=trailer,
     )
     body = MovieDownloadAPICreate(local_media_profile_id=profile.id)
+
+    assert movie_data.is_upcoming is True
 
     with pytest.raises(HTTPException) as exc_info:
         create_movie_download(session, movie_data, body)
