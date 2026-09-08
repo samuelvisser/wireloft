@@ -35,10 +35,22 @@ Authorization: Bearer {{access_token}}
 GET https://middleware-prod.dailywire.com/middleware/v4/getVideoPage?slug=run-hide-fight-infidels
 Authorization: Bearer {{access_token}}
 
-
 ### Get video details: Run Hide Fight infidels
 GET https://middleware-prod.dailywire.com/middleware/v2/getVideo?slug=run-hide-fight-infidels
 Authorization: Bearer {{access_token}}
+
+
+### GetMoviePage
+GET https://middleware-prod.dailywire.com/middleware/v4/getMoviePage?slug=run-hide-fight-infidels
+Authorization: Bearer {{access_token}}
+
+### GetMoviePage
+GET https://middleware-prod.dailywire.com/middleware/v4/getMoviePage?slug=run-hide-fight
+Authorization: Bearer {{access_token}}
+
+### Extra's clip
+GET https://middleware-prod.dailywire.com/middleware/v4/getClip?slug=shut-in-official-trailer
+
 
 
 ### Get movie details: Am I racist
