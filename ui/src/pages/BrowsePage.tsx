@@ -82,6 +82,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
         [localShowsBySlug, shouldClassifyShows, shows, showTypesBySlug],
     )
     const showClassificationKey = showSlugsNeedingClassification.join('\n')
+    const showClassificationPending = showSlugsNeedingClassification.length > 0
 
     useEffect(() => {
         if (!showClassificationKey) return
@@ -123,10 +124,17 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
         if (showTypeFilterIsDefault) return shows
         if (showTypeFilter.size === 0) return []
         return shows.filter((show) => {
-            // Indexed WireLoft shows have a deterministic stored type. For catalog-only
-            // shows, use DwShowRecord.probable_show_type, exactly like the Add Show wizard.
             const localType = localShowsBySlug.get(show.slug)?.type
-            return matchesShowTypeFilter(localType ?? showTypesBySlug[show.slug], showTypeFilter)
+            if (localType !== undefined) {
+                return matchesShowTypeFilter(localType, showTypeFilter)
+            }
+
+            // A missing entry means probable_show_type has not been fetched yet; it is
+            // not the same thing as the classifier explicitly returning "unknown".
+            // Unknown matches either selected type, while pending rows wait for the
+            // existing Daily Wire classifier before participating in the filter.
+            if (!(show.slug in showTypesBySlug)) return false
+            return matchesShowTypeFilter(showTypesBySlug[show.slug], showTypeFilter)
         })
     }, [localShowsBySlug, showTypeFilter, showTypeFilterIsDefault, showTypesBySlug, shows])
     const groupedShows = useMemo(() => groupShows(filteredShows, grouping), [filteredShows, grouping])
@@ -144,6 +152,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
             || activeQuery.isFetchingNextPage
             || activeQuery.isFetchNextPageError
             || showFilterExcludesAll
+            || showClassificationPending
         ) return
         const observer = new IntersectionObserver((entries) => {
             if (entries[0]?.isIntersecting) void activeQuery.fetchNextPage()
@@ -156,6 +165,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
         activeQuery.isFetchNextPageError,
         activeQuery.isFetchingNextPage,
         activeType,
+        showClassificationPending,
         showFilterExcludesAll,
     ])
 
@@ -227,6 +237,8 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
 
             {activeQuery.isPending && !hasCatalogItems ? <p>Loading the Daily Wire catalog…</p> : activeQuery.error && !hasCatalogItems ? (
                 <div className="form-error-card" role="alert">Could not load the Daily Wire catalog: {activeQuery.error.message}</div>
+            ) : activeType === 'shows' && showClassificationPending && !hasItems ? (
+                <p>Filtering Daily Wire shows…</p>
             ) : !hasItems ? (
                 <div className="catalog-empty">
                     <FontAwesomeIcon icon={['fas', 'magnifying-glass']}/>
@@ -284,8 +296,10 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
             )}
 
             {activeQuery.hasNextPage && !activeQuery.isFetchNextPageError && !showFilterExcludesAll && (
-                <div ref={loadMoreRef} className="catalog-load-more" aria-live="polite" aria-busy={activeQuery.isFetchingNextPage}>
-                    {activeQuery.isFetchingNextPage && <><FontAwesomeIcon icon={['fas', 'circle-notch']} spin/> Loading more {activeType}…</>}
+                <div ref={loadMoreRef} className="catalog-load-more" aria-live="polite" aria-busy={activeQuery.isFetchingNextPage || showClassificationPending}>
+                    {showClassificationPending && activeType === 'shows'
+                        ? <><FontAwesomeIcon icon={['fas', 'circle-notch']} spin/> Filtering shows…</>
+                        : activeQuery.isFetchingNextPage && <><FontAwesomeIcon icon={['fas', 'circle-notch']} spin/> Loading more {activeType}…</>}
                 </div>
             )}
             {activeQuery.isFetchNextPageError && (
