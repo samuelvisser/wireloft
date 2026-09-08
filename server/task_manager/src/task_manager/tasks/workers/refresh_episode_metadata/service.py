@@ -68,19 +68,14 @@ async def run_refresh_episode_metadata(
             WlDwMembershipLevel.WL_ANY.value,
         }
 
-        # The initial ORM reads auto-begin a transaction and therefore keep one
-        # QueuePool connection checked out. A show-wide metadata refresh can fan
-        # out to many workers at once, so never hold that connection while the
-        # worker waits for Daily Wire. There are no pending writes at this point.
+        # Before calling The Daily Wire API, release the db transaction so others can use it
         s.rollback()
         detail = _fetch_episode_from_dailywire(
             episode_slug=episode_slug,
             require_member_exclusive=require_member_exclusive,
         )
 
-        # The episode can change while the network request is in flight. Reload it
-        # before applying the response so stale metadata cannot overwrite a newer
-        # lifecycle decision made by another worker.
+        # In case the episode changed during the API call, reload it here
         episode = s.get(Episode, episode_id)
         if episode is None:
             return False
