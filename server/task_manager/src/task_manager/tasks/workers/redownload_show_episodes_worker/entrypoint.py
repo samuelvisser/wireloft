@@ -20,7 +20,7 @@ async def redownload_show_episodes_worker(
         resource_id: int | None = None,
         resource_type: str | None = None,
         progress=None,
-        download_profile_id: int | None = None,
+        local_media_profile_id: int | None = None,
 ) -> TaskResult:
     """Run an explicitly requested show-wide or targeted episode re-download."""
     is_episode = resource_type == "episode"
@@ -29,12 +29,12 @@ async def redownload_show_episodes_worker(
             s,
             show_id=None if is_episode else resource_id,
             episode_id=resource_id if is_episode else None,
-            download_profile_id=download_profile_id,
+            local_media_profile_id=local_media_profile_id,
             progress=progress,
         )
 
     count = int(result.get("episode_files", 0))
-    profile_count = int(result.get("download_profiles", 0))
+    profile_count = int(result.get("local_media_profiles", 0))
     target_title = str(
         result.get("episode_title")
         or result.get("show_title")
@@ -48,6 +48,6 @@ async def redownload_show_episodes_worker(
         data={
             **result,
             "episode_files": count,
-            "download_profiles": profile_count,
+            "local_media_profiles": profile_count,
         },
     )

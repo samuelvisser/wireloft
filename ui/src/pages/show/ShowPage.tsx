@@ -58,12 +58,12 @@ export default function ShowPage() {
     if (seasonsPlaceholder) return []
     return [...(seasonsData ?? [])].sort((a, b) => b.index - a.index)
   }, [seasonsData, seasonsPlaceholder])
-  const { data: downloads } = useMediaDownloadsView()
   const {
-    data: downloadProfiles,
-    isLoading: downloadProfilesLoading,
-    error: downloadProfilesError,
-  } = useDownloadProfilesView()
+    data: downloads,
+    isLoading: downloadsLoading,
+    error: downloadsError,
+  } = useMediaDownloadsView()
+  const { data: downloadProfiles } = useDownloadProfilesView()
   const { data: streamProfiles } = useStreamProfilesView()
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
   const [confirm, setConfirm] = useState(false)
@@ -72,7 +72,7 @@ export default function ShowPage() {
   const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
   const [redownloadConfirm, setRedownloadConfirm] = useState(false)
   const [redownloadStarting, setRedownloadStarting] = useState(false)
-  const [redownloadProfileId, setRedownloadProfileId] = useState('')
+  const [redownloadLocalMediaProfileId, setRedownloadLocalMediaProfileId] = useState('')
   const [syncLogOpen, setSyncLogOpen] = useState(false)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
@@ -112,6 +112,19 @@ export default function ShowPage() {
     () => (streamProfiles ?? []).filter((profile) => profile.showSlug === id),
     [streamProfiles, id],
   )
+  const redownloadLocalMediaProfiles = useMemo(() => {
+    const profiles = new Map<number, {id: number; name: string; preferredFormat: string | null}>()
+    for (const download of downloads ?? []) {
+      if (download.type !== 'episode' || download.showSlug !== id) continue
+      if (profiles.has(download.localMediaProfileId)) continue
+      profiles.set(download.localMediaProfileId, {
+        id: download.localMediaProfileId,
+        name: download.localMediaProfileName?.trim() || `Local Media Profile #${download.localMediaProfileId}`,
+        preferredFormat: download.preferredFormat ?? null,
+      })
+    }
+    return [...profiles.values()].sort((left, right) => left.name.localeCompare(right.name))
+  }, [downloads, id])
   const displayedEpisodes = useMemo(() => {
     if (!isSeries) return episodes
     if (selectedSeasonId === null) return []
@@ -201,20 +214,20 @@ export default function ShowPage() {
           ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} episodes have finished.`
           : ''}`
       : undefined
-  const downloadProfileStateUnknown = downloadProfilesLoading && downloadProfiles === undefined
-  const downloadProfileStateFailed = Boolean(downloadProfilesError) && downloadProfiles === undefined
+  const downloadStateUnknown = downloadsLoading && downloads === undefined
+  const downloadStateFailed = Boolean(downloadsError) && downloads === undefined
   const redownloadDisabledReason = redownloadStarting
     ? `WireLoft is starting a delete and re-download operation for ${show.title}.`
     : redownloadOperation
       ? redownloadOperation.status === 'WAITING'
         ? redownloadOperation.message || OPERATION_WAITING_MESSAGE
         : `A delete and re-download operation is running for ${show.title}.`
-      : downloadProfileStateUnknown
-        ? 'WireLoft is still checking which Download Profiles are attached to this show.'
-        : downloadProfileStateFailed
-          ? 'WireLoft could not determine which Download Profiles are attached to this show.'
-          : attachedDownloadProfiles.length === 0
-            ? `No Download Profiles are attached to ${show.title}.`
+      : downloadStateUnknown
+        ? 'WireLoft is still checking for downloaded episodes in this show.'
+        : downloadStateFailed
+          ? 'WireLoft could not determine whether this show has downloaded episodes.'
+          : redownloadLocalMediaProfiles.length === 0
+            ? `No downloaded episodes exist for ${show.title}.`
             : undefined
 
   const controlTaskOperation = async (
@@ -323,26 +336,26 @@ export default function ShowPage() {
   }
 
   const openRedownloadConfirm = () => {
-    if (downloadProfileStateUnknown) {
-      toast('WireLoft is still checking the Download Profiles attached to this show')
+    if (downloadStateUnknown) {
+      toast('WireLoft is still checking for downloaded episodes in this show')
       return
     }
-    if (downloadProfileStateFailed) {
-      toast.error('Could not determine which Download Profiles are attached to this show')
+    if (downloadStateFailed) {
+      toast.error('Could not determine whether this show has downloaded episodes')
       return
     }
-    if (!attachedDownloadProfiles.length) {
-      toast(`There are no Download Profiles attached to ${show.title}`)
+    if (!redownloadLocalMediaProfiles.length) {
+      toast(`There are no downloaded episodes in ${show.title}`)
       return
     }
-    setRedownloadProfileId(
-      attachedDownloadProfiles.length > 1 ? 'all' : String(attachedDownloadProfiles[0].id),
+    setRedownloadLocalMediaProfileId(
+      redownloadLocalMediaProfiles.length > 1 ? 'all' : String(redownloadLocalMediaProfiles[0].id),
     )
     setRedownloadConfirm(true)
   }
 
   const redownloadAllEpisodes = async () => {
-    if (redownloadBusy || !redownloadProfileId) return
+    if (redownloadBusy || !redownloadLocalMediaProfileId) return
 
     setRedownloadStarting(true)
     try {
@@ -352,7 +365,9 @@ export default function ShowPage() {
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-          downloadProfileId: redownloadProfileId === 'all' ? null : Number(redownloadProfileId),
+          localMediaProfileId: redownloadLocalMediaProfileId === 'all'
+            ? null
+            : Number(redownloadLocalMediaProfileId),
         }),
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -362,13 +377,13 @@ export default function ShowPage() {
         throw new Error('Re-download request did not return an operation ID')
       }
 
-      const profileCount = typeof result?.downloadProfilesQueued === 'number'
-        ? result.downloadProfilesQueued
-        : (redownloadProfileId === 'all' ? attachedDownloadProfiles.length : 1)
+      const profileCount = typeof result?.localMediaProfilesQueued === 'number'
+        ? result.localMediaProfilesQueued
+        : (redownloadLocalMediaProfileId === 'all' ? redownloadLocalMediaProfiles.length : 1)
       setRedownloadConfirm(false)
       await qc.invalidateQueries({queryKey: ['operations']})
       toast.success(
-        `Re-download started for ${show.title} using ${profileCount} ${profileCount === 1 ? 'Download Profile' : 'Download Profiles'}`,
+        `Re-download started for ${show.title} using ${profileCount} ${profileCount === 1 ? 'Local Media Profile' : 'Local Media Profiles'}`,
       )
     } catch {
       toast.error(`Could not start re-download for ${show.title}`)
@@ -668,7 +683,7 @@ export default function ShowPage() {
           label: redownloadBusy ? 'Starting…' : 'Delete and re-download',
           onClick: redownloadAllEpisodes,
           className: 'btn btn-danger',
-          disabled: redownloadBusy || !redownloadProfileId,
+          disabled: redownloadBusy || !redownloadLocalMediaProfileId,
         }}
       >
         <p>
@@ -676,20 +691,20 @@ export default function ShowPage() {
           use significant bandwidth, and is usually not needed.
         </p>
         <div className="form-row">
-          <label htmlFor="redownload-profile">Download Profile</label>
+          <label htmlFor="redownload-profile">Local Media Profile</label>
           <select
             id="redownload-profile"
             className="input"
-            value={redownloadProfileId}
+            value={redownloadLocalMediaProfileId}
             disabled={redownloadBusy}
-            onChange={(event) => setRedownloadProfileId(event.target.value)}
+            onChange={(event) => setRedownloadLocalMediaProfileId(event.target.value)}
           >
-            {attachedDownloadProfiles.length > 1 && (
-              <option value="all">All Download Profiles</option>
+            {redownloadLocalMediaProfiles.length > 1 && (
+              <option value="all">All Local Media Profiles</option>
             )}
-            {attachedDownloadProfiles.map((profile) => (
+            {redownloadLocalMediaProfiles.map((profile) => (
               <option key={profile.id} value={String(profile.id)}>
-                {`${profile.type === 'series' ? 'Series' : 'Podcast'} · ${preferredFormatLabel(profile.localMediaProfilePreferredFormat)} · Profile #${profile.id}`}
+                {`${profile.name} · ${preferredFormatLabel(profile.preferredFormat)}`}
               </option>
             ))}
           </select>

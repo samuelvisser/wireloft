@@ -219,7 +219,10 @@ def test_identifier_change_redownloads_only_affected_profile_paths(monkeypatch):
 
     assert count == 2
     assert session.rollbacks == 1
-    assert [call.kwargs["download_profile_id"] for call in triggered.call_args_list] == [1, 2]
+    assert [
+        call.kwargs["local_media_profile_id"]
+        for call in triggered.call_args_list
+    ] == [10, 11]
     for call in triggered.call_args_list:
         assert call.kwargs["def_key"] == "redownload_show_episodes_worker"
         assert call.kwargs["resource_type"] == "episode"
@@ -238,8 +241,8 @@ def test_redownload_worker_can_target_one_episode(monkeypatch):
         title="Test Episode",
         show=show,
     )
-    profile = SimpleNamespace(id=9)
-    prepared_inputs: list[list[tuple[object, object]]] = []
+    download = SimpleNamespace(id=99, local_media_profile_id=9)
+    prepared_inputs: list[list[object]] = []
 
     class FakeSession:
         def get(self, model, resource_id):
@@ -259,19 +262,12 @@ def test_redownload_worker_can_target_one_episode(monkeypatch):
     monkeypatch.setattr(service.asyncio, "sleep", no_sleep)
     monkeypatch.setattr(
         service,
-        "_selected_profiles",
-        lambda *_args, **_kwargs: [profile],
-    )
-    monkeypatch.setattr(
-        service,
-        "get_download_profile_episodes",
-        lambda _session, candidate_profile, *, only_episode: (
-            [only_episode] if candidate_profile is profile else []
-        ),
+        "_selected_downloads",
+        lambda *_args, **_kwargs: [download],
     )
 
-    def prepare(_session, targets):
-        prepared_inputs.append(list(targets))
+    def prepare(_session, downloads):
+        prepared_inputs.append(list(downloads))
         return [SimpleNamespace(operation_id="operation-1")]
 
     monkeypatch.setattr(service, "_prepare_redownloads", prepare)
@@ -281,11 +277,11 @@ def test_redownload_worker_can_target_one_episode(monkeypatch):
         service.run_redownload_show_episodes_worker(
             FakeSession(),
             episode_id=episode.id,
-            download_profile_id=profile.id,
+            local_media_profile_id=download.local_media_profile_id,
         )
     )
 
-    assert prepared_inputs == [[(episode, profile)]]
+    assert prepared_inputs == [[download]]
     assert result["episode_id"] == episode.id
     assert result["episode_files"] == 1
-    assert result["download_profiles"] == 1
+    assert result["local_media_profiles"] == 1

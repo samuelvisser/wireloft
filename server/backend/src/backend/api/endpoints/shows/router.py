@@ -100,13 +100,13 @@ def show_metadata_refresh(show_slug: str):
     status_code=status.HTTP_202_ACCEPTED,
 )
 def show_redownload_episodes(show_slug: str, body: ShowRedownloadEpisodesAPIRequest):
-    """Delete and re-download episodes through one or every attached Download Profile."""
+    """Delete and re-download existing episode media through Local Media Profiles."""
     with db_session() as s:
         try:
             result = request_show_episode_redownload(
                 s,
                 show_slug,
-                body.download_profile_id,
+                body.local_media_profile_id,
             )
             s.commit()
             return result
