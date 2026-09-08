@@ -18,7 +18,7 @@ def upgrade() -> None:
     with op.batch_alter_table("media_downloads") as batch:
         batch.add_column(sa.Column("artifact_status", sa.String(length=24), nullable=False, server_default="absent"))
         batch.add_column(sa.Column("artifact_error", sa.Text(), nullable=True))
-        batch.add_column(sa.Column("automatic_retry_suppressed", sa.Boolean(), nullable=False, server_default=sa.text("0")))
+        batch.add_column(sa.Column("automatic_retry_suppressed", sa.Boolean(), nullable=False, server_default=sa.false()))
         batch.add_column(sa.Column("downloaded_at", sa.DateTime(timezone=True), nullable=True))
         batch.create_index("ix_media_downloads_artifact_status", ["artifact_status"], unique=False)
 
@@ -37,8 +37,8 @@ def upgrade() -> None:
                     ELSE NULL
                 END,
                 automatic_retry_suppressed = CASE
-                    WHEN download_status = 'cancelled' THEN 1
-                    ELSE 0
+                    WHEN download_status = 'cancelled' THEN TRUE
+                    ELSE FALSE
                 END,
                 downloaded_at = CASE
                     WHEN download_status IN ('downloaded', 'redownloaded') THEN finished_at
@@ -77,7 +77,7 @@ def downgrade() -> None:
                     WHEN artifact_status = 'available' THEN 'downloaded'
                     WHEN artifact_status = 'missing' THEN 'missing'
                     WHEN artifact_status = 'corrupted' THEN 'corrupted'
-                    WHEN automatic_retry_suppressed = 1 THEN 'cancelled'
+                    WHEN automatic_retry_suppressed IS TRUE THEN 'cancelled'
                     ELSE 'error'
                 END,
                 progress = CASE WHEN artifact_status = 'available' THEN 100 ELSE 0 END,

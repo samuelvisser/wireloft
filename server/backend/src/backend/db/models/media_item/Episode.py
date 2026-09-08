@@ -3,7 +3,7 @@ from typing import Optional, TYPE_CHECKING
 
 from .MediaItemBase import MediaItemBase
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Boolean, ForeignKey, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, UniqueConstraint, true
 
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
@@ -36,7 +36,7 @@ class Episode(MediaItemBase, HasMetadataMixin, HasTaskResourcesMixin):
         Boolean,
         nullable=False,
         default=True,
-        server_default="1",
+        server_default=true(),
     )
     video_url: Mapped[Optional[str]]
     audio_url: Mapped[Optional[str]]

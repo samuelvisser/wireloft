@@ -92,9 +92,9 @@ def _rollback_head_for_quarantine(connection, *, episode_id: int, show_id: int, 
         if not match:
             return
         season_number, number = int(match.group(1)), int(match.group(2))
+        seasons = sa.table("seasons", sa.column("id"), sa.column("index"))
         actual_season = connection.execute(
-            sa.text("SELECT `index` FROM seasons WHERE id=:season_id"),
-            {"season_id": season_id},
+            sa.select(seasons.c.index).where(seasons.c.id == season_id)
         ).scalar_one_or_none()
         if actual_season != season_number:
             return
@@ -228,7 +228,7 @@ def downgrade() -> None:
     with op.batch_alter_table("episodes") as batch:
         batch.add_column(sa.Column("is_no_show_today", sa.Boolean(), nullable=True))
     connection.execute(sa.text(
-        "UPDATE episodes SET is_no_show_today = CASE WHEN lower(slug) LIKE '%no-show-today%' THEN 1 ELSE 0 END"
+        "UPDATE episodes SET is_no_show_today = CASE WHEN lower(slug) LIKE '%no-show-today%' THEN TRUE ELSE FALSE END"
     ))
     for old, new in _TASK_RENAMES.items():
         _migrate_task_key(connection, new, old)

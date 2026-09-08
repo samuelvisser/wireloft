@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Boolean, String, Text, func, UniqueConstraint
+from sqlalchemy import Boolean, String, Text, false, func, UniqueConstraint
 from sqlalchemy.sql.schema import ForeignKey
 
 from backend.db import Base
@@ -55,7 +55,7 @@ class MediaDownloadBase(HasTaskResourcesMixin, Base):
     automatic_retry_suppressed: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
-        server_default="0",
+        server_default=false(),
     )
 
     # Facts about the currently available artifact. They are only replaced

@@ -12,7 +12,8 @@ from typing import Optional
 import uvicorn
 from sqlalchemy import text
 
-from backend.db import configure_db, get_db_path, get_engine, seed_db
+from backend.db import configure_db, get_engine, seed_db
+from backend.db.core import get_database_label, get_sqlite_database_path
 from backend.db.migrations import (
     DatabaseMigrationError,
     check_database,
@@ -27,8 +28,17 @@ from backend.db.migrations import (
     upgrade_database,
     validate_database_migration_state,
 )
-from config.registry import get_settings
 from .config import PROJECT_ROOT
+
+
+def _add_database_options(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--db", dest="db", help="Path to a SQLite database file")
+    group.add_argument(
+        "--database-url",
+        dest="database_url",
+        help="SQLAlchemy database URL (overrides the configured database URL for this command)",
+    )
 
 
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -39,7 +49,7 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True, help="Command to execute")
 
     run_parser = subparsers.add_parser("run", help="Start the backend API server")
-    run_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
+    _add_database_options(run_parser)
     run_parser.add_argument("--host", default="127.0.0.1", help="Host to bind when running server")
     run_parser.add_argument("--port", type=int, default=5001, help="Port to bind when running server")
     run_parser.add_argument("--debug", action="store_true", help="Enable debug/reload mode")
@@ -56,7 +66,7 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         ("seed", "Seed the database with demo data"),
     ):
         command_parser = db_subparsers.add_parser(command_name, help=help_text)
-        command_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
+        _add_database_options(command_parser)
 
     downgrade_parser = db_subparsers.add_parser(
         "downgrade",
@@ -66,30 +76,25 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         "revision",
         help="Target Alembic revision or relative step such as -1",
     )
-    downgrade_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
+    _add_database_options(downgrade_parser)
 
     revision_parser = db_subparsers.add_parser(
         "revision",
         help="Generate an Alembic revision from ORM model changes",
     )
-    revision_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
+    _add_database_options(revision_parser)
     revision_parser.add_argument("-m", "--message", required=True, help="Migration description")
 
     subparsers.add_parser("stop", help="Stop all running backend-api processes")
     return parser.parse_args(argv)
 
 
-def _get_db_path(args: argparse.Namespace) -> Path:
-    if hasattr(args, "db") and args.db:
-        return Path(args.db)
-    return get_settings().database_path
-
-
 def _validate_db_health() -> None:
-    if not get_db_path().exists():
+    sqlite_path = get_sqlite_database_path()
+    if sqlite_path is not None and not sqlite_path.exists():
         print(
-            f"Database file not found: {get_db_path()}\n"
-            "Run 'backend-api db init' to initialize the schema, or provide --db to set the path.",
+            f"Database file not found: {sqlite_path}\n"
+            "Run 'backend-api db init' to initialize the schema, or configure another database.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -183,7 +188,13 @@ def _stop_backend() -> None:
 
 
 def _configure_database_for_args(args: argparse.Namespace) -> None:
-    os.environ["WL_DATABASE_PATH"] = str(_get_db_path(args))
+    database_url = getattr(args, "database_url", None)
+    database_path = getattr(args, "db", None)
+    if database_url:
+        os.environ["WL_DATABASE_URL"] = database_url
+    elif database_path:
+        os.environ["WL_DATABASE_URL"] = ""
+        os.environ["WL_DATABASE_PATH"] = database_path
     configure_db()
 
 
@@ -192,20 +203,20 @@ def _handle_db_command(args: argparse.Namespace) -> None:
 
     if args.db_command == "init":
         initialize_database()
-        print(f"Initialized database at: {get_db_path()}")
+        print(f"Initialized database at: {get_database_label()}")
         return
 
     if args.db_command == "upgrade":
         upgrade_database()
         _current, head = get_database_status()
-        print(f"Database upgraded to: {head} ({get_db_path()})")
+        print(f"Database upgraded to: {head} ({get_database_label()})")
         return
 
     if args.db_command == "downgrade":
         downgrade_database(args.revision)
         current = get_current_revisions()
         current_label = ", ".join(current) if current else "base / not initialized"
-        print(f"Database downgraded to: {current_label} ({get_db_path()})")
+        print(f"Database downgraded to: {current_label} ({get_database_label()})")
         return
 
     if args.db_command == "current":
@@ -243,7 +254,7 @@ def _handle_db_command(args: argparse.Namespace) -> None:
     if args.db_command == "seed":
         require_database_current()
         seed_db()
-        print(f"Seeded database at: {get_db_path()}")
+        print(f"Seeded database at: {get_database_label()}")
         return
 
     raise RuntimeError(f"Unsupported database command: {args.db_command}")
