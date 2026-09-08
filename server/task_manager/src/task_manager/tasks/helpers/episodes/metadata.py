@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from backend.db.datetime_types import utc_datetime
 from backend.db.models import Episode
 from backend.types.episode_types import EpisodePublishStatus
 from config import get_settings
@@ -13,10 +14,12 @@ METADATA_REFRESH_REQUESTED_EVENT = "episode.metadata_refresh_requested"
 
 
 def ensure_utc(value: datetime) -> datetime:
-    """Return a timezone-aware UTC datetime, treating legacy naive values as UTC."""
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+    """Normalize one timezone-aware instant to UTC.
+
+    Runtime episode lifecycle data must never infer an offset for a naive value.
+    Legacy SQLite rows are normalized by ``UTCDateTime`` when they are read.
+    """
+    return utc_datetime(value)
 
 
 def metadata_refresh_offsets_seconds() -> tuple[int, ...]:

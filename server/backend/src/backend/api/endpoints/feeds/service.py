@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import mimetypes
 import re
-from datetime import timezone
 from email.utils import format_datetime
 from pathlib import Path
 from typing import Literal, Optional
@@ -13,6 +12,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
 
 from .cached_video import get_cached_mp4_size
+from backend.db.datetime_types import utc_datetime
 from backend.db.models import Episode, LocalMediaProfile, RssStreamProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.dailywire_user_info import WlDwMembershipLevel
@@ -178,9 +178,7 @@ def get_feed_items(
             or episode.went_live_date
             or episode.created_at
         )
-        if value.tzinfo is not None:
-            value = value.astimezone(timezone.utc).replace(tzinfo=None)
-        return value
+        return utc_datetime(value)
 
     items.sort(key=sort_key, reverse=True)
     return items[:profile.max_items] if profile.max_items > 0 else items
@@ -359,9 +357,7 @@ def _append_item(
         or episode.created_at
     )
     if pub_date is not None:
-        if pub_date.tzinfo is None:
-            pub_date = pub_date.replace(tzinfo=timezone.utc)
-        _sub_text(item, "pubDate", format_datetime(pub_date))
+        _sub_text(item, "pubDate", format_datetime(utc_datetime(pub_date)))
 
     media_url = f"{media_base_url}/episodes/{episode.slug}"
     if download is not None:

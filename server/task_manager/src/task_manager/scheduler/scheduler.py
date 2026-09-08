@@ -12,6 +12,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
 
+from backend.db.datetime_types import utc_datetime
 from config import get_settings
 
 _scheduler: Optional[AsyncIOScheduler] = None
@@ -29,7 +30,8 @@ def get_trigger(name: str, args: dict):
     if name == "interval":
         return IntervalTrigger(timezone=app_timezone, **trigger_args)
     if name == "date":
-        # args may include run_date as ISO8601 string or datetime
+        # Persistent schedules express wall-clock times in WireLoft's configured
+        # timezone. A timezone-aware run_date still preserves its absolute instant.
         run_date = trigger_args.pop("run_date", None)
         if isinstance(run_date, str):
             run_date = datetime.fromisoformat(run_date)
@@ -230,6 +232,7 @@ def cancel_pending_operation_jobs(
 def schedule_retry(*, def_key: str, resource_type: str, resource_id: int, run_id: int, run_at: datetime) -> str:
     from .executor import execute_task
     sch = start_scheduler()
+    run_at = utc_datetime(run_at)
     job = sch.add_job(
         execute_task,
         trigger=DateTrigger(run_date=run_at),

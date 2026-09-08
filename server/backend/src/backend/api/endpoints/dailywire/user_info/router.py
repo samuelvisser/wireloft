@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+from backend.api.datetime import api_timezone_payload
 from dailywire_api.records import DwUserInfo
 from .service import get_user_info
 
@@ -17,7 +18,7 @@ def user_info():
     Proxies the DailyWire middleware API, returning 502 if upstream is unavailable.
     """
     try:
-        return get_user_info()
+        return api_timezone_payload(get_user_info())
     except Exception as e:
         if str(e).lower().__contains__("no valid access token"):
             raise HTTPException(status_code=401, detail=str(e))

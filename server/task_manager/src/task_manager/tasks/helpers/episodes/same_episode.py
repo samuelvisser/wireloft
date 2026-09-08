@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from datetime import timezone
 from typing import Sequence
 
 from sqlalchemy import select
@@ -11,6 +10,7 @@ from backend.db.models import Episode, Season, Show
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.show_types import EpisodeIdentifier
 from dailywire_api.records import DwEpisodeRecord
+from .metadata import ensure_utc
 
 
 PENDING_EPISODE_STATUSES = {
@@ -36,12 +36,8 @@ def pending_episodes_for_show(s: Session, show_id: int) -> list[Episode]:
 def _same_publication_time(local: Episode, remote: DwEpisodeRecord) -> bool:
     if local.published_date is None or remote.published_date is None:
         return False
-    left = local.published_date
-    right = remote.published_date
-    if left.tzinfo is not None:
-        left = left.astimezone(timezone.utc).replace(tzinfo=None)
-    if right.tzinfo is not None:
-        right = right.astimezone(timezone.utc).replace(tzinfo=None)
+    left = ensure_utc(local.published_date)
+    right = ensure_utc(remote.published_date)
     return abs((left - right).total_seconds()) <= 60
 
 

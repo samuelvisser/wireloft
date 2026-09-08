@@ -9,10 +9,12 @@ import pytest
 from sqlalchemy import Column, Integer, MetaData, Table, create_engine, select
 from sqlalchemy.exc import StatementError
 
+from backend.api.datetime import api_datetime, api_timezone_payload
 from backend.api.models.base import ResponseBase
 from backend.db.datetime_types import UTCDateTime
 from task_manager.scheduler.db import TaskSchedule
 from task_manager.scheduler import scheduler as scheduler_module
+from task_manager.tasks.helpers.episodes.metadata import ensure_utc
 
 
 class _TimestampResponse(ResponseBase):
@@ -100,6 +102,32 @@ def test_api_datetime_uses_dst_offset_from_configured_timezone(monkeypatch) -> N
     assert payload["occurredAt"] == "2026-01-07T14:00:00+01:00"
 
 
+def test_api_datetime_rejects_naive_values() -> None:
+    with pytest.raises(ValueError, match="must include a timezone"):
+        api_datetime(datetime(2026, 9, 7, 13, 0))
+
+
+def test_non_response_base_payloads_use_configured_timezone(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "backend.api.datetime.get_settings",
+        lambda: SimpleNamespace(timezone="Europe/Amsterdam"),
+    )
+
+    response = _TimestampResponse(
+        occurred_at=datetime(2026, 9, 7, 13, 0, tzinfo=timezone.utc),
+        release_date=date(2026, 9, 7),
+    )
+    payload = api_timezone_payload(response)
+
+    assert payload["occurredAt"] == "2026-09-07T15:00:00+02:00"
+    assert payload["releaseDate"] == date(2026, 9, 7)
+
+
+def test_runtime_episode_datetime_normalization_rejects_naive_values() -> None:
+    with pytest.raises(ValueError, match="must include a timezone"):
+        ensure_utc(datetime(2026, 9, 7, 13, 0))
+
+
 def test_scheduler_uses_application_timezone(monkeypatch) -> None:
     monkeypatch.setattr(
         scheduler_module,
@@ -116,6 +144,23 @@ def test_scheduler_uses_application_timezone(monkeypatch) -> None:
     assert str(cron_trigger.timezone) == "Europe/Amsterdam"
     assert str(date_trigger.timezone) == "Europe/Amsterdam"
     assert date_trigger.run_date.utcoffset().total_seconds() == 2 * 60 * 60
+
+
+def test_scheduler_preserves_aware_date_trigger_instant(monkeypatch) -> None:
+    monkeypatch.setattr(
+        scheduler_module,
+        "get_settings",
+        lambda: SimpleNamespace(timezone="Europe/Amsterdam"),
+    )
+
+    date_trigger = scheduler_module.get_trigger(
+        "date",
+        {"run_date": "2026-09-07T14:00:00Z"},
+    )
+
+    assert date_trigger.run_date.astimezone(timezone.utc) == datetime(
+        2026, 9, 7, 14, 0, tzinfo=timezone.utc
+    )
 
 
 def test_task_schedule_has_no_per_schedule_timezone() -> None:

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
 from backend.types.episode_types import EpisodePublishStatus
+from .metadata import ensure_utc
 from .quarantine import quarantine_episode_identifier
 
 
@@ -19,12 +20,6 @@ class NoUsableMediaReason(StrEnum):
     NO_SHOW_TODAY = "no_show_today"
     PROCESSING_TIMEOUT = "processing_timeout"
     MEDIA_UNUSABLE = "media_unusable"
-
-
-def _ensure_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 def _remove_tracking_keys(episode: Episode) -> None:
@@ -43,7 +38,7 @@ def mark_episode_no_usable_media(
 ) -> None:
     """Enter/refresh NO_USABLE_MEDIA while preserving one continuous state clock."""
     current_since = episode_no_usable_media_since(episode)
-    observed_at = current_since or _ensure_utc(now or datetime.now(timezone.utc))
+    observed_at = current_since or ensure_utc(now or datetime.now(timezone.utc))
 
     quarantine_episode_identifier(s, episode)
 
@@ -78,6 +73,6 @@ def episode_no_usable_media_since(episode: Episode) -> datetime | None:
     if not raw:
         return None
     try:
-        return _ensure_utc(datetime.fromisoformat(raw))
+        return ensure_utc(datetime.fromisoformat(raw))
     except ValueError:
         return None

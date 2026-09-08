@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import Integer, cast, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -11,6 +11,7 @@ from backend.db.models import Episode
 from backend.db.models.Metadata import Metadata
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.show_types import EpisodeIdentifier
+from .metadata import ensure_utc
 
 
 PREVIOUS_IDENTIFIER_META_KEY = "no_usable_media.previous_identifier"
@@ -22,11 +23,7 @@ _EXTRA_SEASONAL_RE_TEMPLATE = r"^ep-extra\.S%02dE%02d\.(\d+)$"
 
 
 def _utc_timestamp(value: datetime) -> int:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    else:
-        value = value.astimezone(timezone.utc)
-    return int(value.timestamp())
+    return int(ensure_utc(value).timestamp())
 
 
 def _identifiers_for_show(s: Session, episode: Episode) -> list[str]:
