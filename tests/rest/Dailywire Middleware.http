@@ -36,7 +36,11 @@ GET https://middleware-prod.dailywire.com/middleware/v4/getVideoPage?slug=run-hi
 Authorization: Bearer {{access_token}}
 
 ### Get video details: Run Hide Fight infidels
-GET https://middleware-prod.dailywire.com/middleware/v2/getVideo?slug=run-hide-fight-infidels
+GET https://middleware-prod.dailywire.com/middleware/v2/getVideo?slug=shut-in
+Authorization: Bearer {{access_token}}
+
+### Get video details: Run Hide Fight infidels
+OPTIONS https://middleware-prod.dailywire.com/middleware/v2/getVideo?slug=shut-in
 Authorization: Bearer {{access_token}}
 
 
@@ -56,7 +60,6 @@ GET https://middleware-prod.dailywire.com/middleware/v4/getClip?slug=shut-in-off
 ### Get movie details: Am I racist
 GET https://middleware-prod.dailywire.com/middleware/v4/getVideoPage?slug=am-i-racist
 Authorization: Bearer {{access_token}}
-
 
 ### Get movie details: Bonhoeffer
 GET https://middleware-prod.dailywire.com/middleware/v4/getVideoPage?slug=bonhoeffer-pastor-spy-assassin
