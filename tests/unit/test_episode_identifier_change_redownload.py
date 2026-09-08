@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 
 def _fake_episode(*, status: str, identifier: str = "ep-extra.2500.1"):
@@ -42,9 +42,6 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
         fake_reconcile,
     )
 
-    # Reproduce the monitor ordering: fresh Daily Wire state has already moved the
-    # row to final before identifier reconciliation, while the captured old status
-    # still says LIVE. This is the initial publication, not a post-publication edit.
     episode.publish_status = EpisodePublishStatus.PUBLISHED_FINAL.value
     assert identifier_reconciliation.reconcile_episode_identifier(
         object(),
@@ -57,8 +54,6 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
         for call in queued.call_args_list
     )
 
-    # Remember that the row was published, then simulate Daily Wire temporarily
-    # regressing it to processing before another identifier correction.
     episode.episode_identifier = "ep-extra.2500.1"
     episode.publish_status = EpisodePublishStatus.DW_PROCESSING.value
     events.queue_episode_status_events(
@@ -91,36 +86,33 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
     assert payload["new_episode_identifier"] == "ep.2500"
 
 
-def test_identifier_change_has_dedicated_download_profile_worker():
+def test_identifier_change_is_handled_by_rename_worker():
     from task_manager.tasks.helpers.episodes.events import EPISODE_IDENTIFIER_CHANGED_EVENT
-    from task_manager.tasks.workers.download_profile_worker import (
-        download_profile_identifier_change_worker,
-        download_profile_worker,
-    )
-    from task_manager.tasks.workers.redownload_show_episodes_worker import redownload_show_episodes_worker
+    from task_manager.tasks.workers.download_profile_worker import download_profile_worker
+    from task_manager.tasks.workers.rename_file_worker import rename_file_worker
 
     regular_event_names = {
         trigger.event_name
         for trigger in download_profile_worker._task_meta.triggers
         if trigger.trigger_type == "event"
     }
-    identifier_event_names = {
+    rename_event_names = {
         trigger.event_name
-        for trigger in download_profile_identifier_change_worker._task_meta.triggers
+        for trigger in rename_file_worker._task_meta.triggers
         if trigger.trigger_type == "event"
     }
 
     assert EPISODE_IDENTIFIER_CHANGED_EVENT not in regular_event_names
-    assert identifier_event_names == {EPISODE_IDENTIFIER_CHANGED_EVENT}
-    assert download_profile_identifier_change_worker._task_meta.allowed_resource_types == ("episode",)
-    assert "episode" in redownload_show_episodes_worker._task_meta.allowed_resource_types
+    assert rename_event_names == {EPISODE_IDENTIFIER_CHANGED_EVENT}
+    assert rename_file_worker._task_meta.allowed_resource_types == ("episode",)
+    assert rename_file_worker._task_meta.default_max_retries == 2
 
 
-def test_identifier_change_worker_delegates_to_handler(monkeypatch):
-    from task_manager.tasks.workers.download_profile_worker import identifier_change_entrypoint
+def test_identifier_change_event_limits_rename_to_identifier_fields(monkeypatch):
+    from task_manager.tasks.workers.rename_file_worker import entrypoint
 
     session = object()
-    handled = Mock()
+    run = AsyncMock()
 
     class SessionContext:
         def __enter__(self):
@@ -129,159 +121,19 @@ def test_identifier_change_worker_delegates_to_handler(monkeypatch):
         def __exit__(self, exc_type, exc_value, traceback):
             return False
 
-    monkeypatch.setattr(identifier_change_entrypoint, "db_session", SessionContext)
-    monkeypatch.setattr(
-        identifier_change_entrypoint,
-        "handle_episode_identifier_changed",
-        handled,
-    )
+    monkeypatch.setattr(entrypoint, "db_session", SessionContext)
+    monkeypatch.setattr(entrypoint, "run_rename_file_worker", run)
 
-    asyncio.run(
-        identifier_change_entrypoint.download_profile_identifier_change_worker(
-            resource_id=42,
-            old_episode_identifier="ep-extra.2500.1",
-            new_episode_identifier="ep.2500",
-            progress=None,
-        )
-    )
-
-    handled.assert_called_once_with(
-        session,
-        episode_id=42,
+    asyncio.run(entrypoint.rename_file_worker(
+        resource_id=42,
         old_episode_identifier="ep-extra.2500.1",
         new_episode_identifier="ep.2500",
-    )
+    ))
 
-
-def test_identifier_change_redownloads_only_affected_profile_paths(monkeypatch):
-    from task_manager.tasks.workers.download_profile_worker import identifier_changes
-
-    episode, _ = _fake_episode(status="published_final", identifier="ep.2500")
-
-    def local_profile(profile_id: int, template: str):
-        return SimpleNamespace(id=profile_id, output_template=template)
-
-    shared_lmp = local_profile(10, "/downloads/{show}/{episode_identifier}.ext")
-    profiles = [
-        SimpleNamespace(id=1, local_media_profile_id=10, local_media_profile=shared_lmp),
-        SimpleNamespace(
-            id=2,
-            local_media_profile_id=11,
-            local_media_profile=local_profile(11, "/downloads/{{ show }}/{{ episode_label }}.ext"),
-        ),
-        SimpleNamespace(
-            id=3,
-            local_media_profile_id=12,
-            local_media_profile=local_profile(12, "/downloads/{show}/{episode_title}.ext"),
-        ),
-        SimpleNamespace(
-            id=4,
-            local_media_profile_id=13,
-            local_media_profile=local_profile(13, "/downloads/{show}/{episode_identifier}.ext"),
-        ),
-        # A second Download Profile sharing the first Local Media Profile points at
-        # the same artifact/path and must not schedule a second destructive job.
-        SimpleNamespace(id=5, local_media_profile_id=10, local_media_profile=shared_lmp),
-    ]
-
-    class FakeSession:
-        def __init__(self):
-            self.rollbacks = 0
-
-        def get(self, _model, resource_id):
-            return episode if resource_id == episode.id else None
-
-        def rollback(self):
-            self.rollbacks += 1
-
-    session = FakeSession()
-    triggered = Mock()
-    monkeypatch.setattr(
-        identifier_changes,
-        "resolve_target_profiles",
-        lambda *_args, **_kwargs: profiles,
-    )
-    monkeypatch.setattr(
-        identifier_changes,
-        "get_download_profile_episodes",
-        lambda _session, profile, *, only_episode: (
-            [] if profile.id == 4 else [only_episode]
-        ),
-    )
-    monkeypatch.setattr(identifier_changes, "trigger_now", triggered)
-
-    count = identifier_changes.handle_episode_identifier_changed(
+    run.assert_awaited_once_with(
         session,
-        episode_id=episode.id,
-        old_episode_identifier="ep-extra.2500.1",
-        new_episode_identifier=episode.episode_identifier,
+        episode_id=42,
+        local_media_profile_id=None,
+        identifier_fields_only=True,
+        progress=None,
     )
-
-    assert count == 2
-    assert session.rollbacks == 1
-    assert [
-        call.kwargs["local_media_profile_id"]
-        for call in triggered.call_args_list
-    ] == [10, 11]
-    for call in triggered.call_args_list:
-        assert call.kwargs["def_key"] == "redownload_show_episodes_worker"
-        assert call.kwargs["resource_type"] == "episode"
-        assert call.kwargs["resource_id"] == episode.id
-        assert call.kwargs["max_retries"] == 0
-
-
-def test_redownload_worker_can_target_one_episode(monkeypatch):
-    from backend.db.models import Episode
-    from task_manager.tasks.workers.redownload_show_episodes_worker import service
-
-    show = SimpleNamespace(id=7, slug="test-show", title="Test Show")
-    episode = SimpleNamespace(
-        id=42,
-        slug="test-episode",
-        title="Test Episode",
-        show=show,
-    )
-    download = SimpleNamespace(id=99, local_media_profile_id=9)
-    prepared_inputs: list[list[object]] = []
-
-    class FakeSession:
-        def get(self, model, resource_id):
-            if model is Episode and resource_id == episode.id:
-                return episode
-            return None
-
-        def rollback(self):
-            pass
-
-        def expire_all(self):
-            pass
-
-    async def no_sleep(_seconds):
-        return None
-
-    monkeypatch.setattr(service.asyncio, "sleep", no_sleep)
-    monkeypatch.setattr(
-        service,
-        "_selected_downloads",
-        lambda *_args, **_kwargs: [download],
-    )
-
-    def prepare(_session, downloads):
-        prepared_inputs.append(list(downloads))
-        return [SimpleNamespace(operation_id="operation-1")]
-
-    monkeypatch.setattr(service, "_prepare_redownloads", prepare)
-    monkeypatch.setattr(service, "_check_targets", lambda *_args: (1, 100, None))
-
-    result = asyncio.run(
-        service.run_redownload_show_episodes_worker(
-            FakeSession(),
-            episode_id=episode.id,
-            local_media_profile_id=download.local_media_profile_id,
-        )
-    )
-
-    assert prepared_inputs == [[download]]
-    assert result["episode_id"] == episode.id
-    assert result["episode_files"] == 1
-    assert result["local_media_profiles"] == 1

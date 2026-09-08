@@ -68,6 +68,9 @@ function operationLabel(operation: TaskOperationRead): string {
       return 'Metadata refresh'
     case 'episode.early_delete':
       return 'Early delete'
+    case 'show.rename_files':
+    case 'local_media_profile.rename_files':
+      return 'File Rename'
     case 'show.redownload_episodes':
       return 'Re-download'
     case 'movie.refresh_extras':
@@ -77,6 +80,16 @@ function operationLabel(operation: TaskOperationRead): string {
     default:
       return operation.title || 'Operation'
   }
+}
+
+function fileRenameSuccessMessage(operation: TaskOperationRead, title: string): string {
+  const renamed = (resultNumber(operation, 'files_renamed') ?? 0)
+    + (resultNumber(operation, 'files_recovered') ?? 0)
+  const unchanged = resultNumber(operation, 'files_unchanged') ?? 0
+  const considered = resultNumber(operation, 'files_considered') ?? (renamed + unchanged)
+  if (considered === 0) return `No existing files needed renaming for ${title}`
+  const unchangedDetail = unchanged > 0 ? `; ${unchanged} already matched` : ''
+  return `File Rename finished for ${title}: ${renamed} ${plural(renamed, 'file')} renamed${unchangedDetail}`
 }
 
 function successMessage(operation: TaskOperationRead): string {
@@ -121,12 +134,18 @@ function successMessage(operation: TaskOperationRead): string {
       if (outcome === 'already_resolved') return `${episodeTitle} no longer needs No usable media verification`
       return `Early delete completed for ${episodeTitle}`
     }
+    case 'show.rename_files':
+      return fileRenameSuccessMessage(operation, showTitle)
+    case 'local_media_profile.rename_files': {
+      const profileName = contextString(operation, 'local_media_profile_name') || operation.title
+      return fileRenameSuccessMessage(operation, profileName)
+    }
     case 'show.redownload_episodes': {
       const files = resultNumber(operation, 'episode_files') ?? 0
-      const profiles = resultNumber(operation, 'download_profiles')
+      const profiles = resultNumber(operation, 'local_media_profiles')
       const profileDetail = profiles === undefined
         ? ''
-        : ` using ${profiles} ${plural(profiles, 'Download Profile')}`
+        : ` using ${profiles} ${plural(profiles, 'Local Media Profile')}`
       return `Re-download finished for ${showTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
     }
     case 'media.download':
@@ -190,8 +209,19 @@ async function invalidateForOperation(queryClient: QueryClient, operation: TaskO
     }
   }
 
-  if (operation.kind === 'show.redownload_episodes') {
+  if (
+    operation.kind === 'show.redownload_episodes'
+    || operation.kind === 'show.rename_files'
+    || operation.kind === 'local_media_profile.rename_files'
+  ) {
     invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+  }
+
+  if (operation.kind === 'local_media_profile.rename_files') {
+    invalidations.push(
+      queryClient.invalidateQueries({queryKey: ['localMediaProfiles']}),
+      queryClient.invalidateQueries({queryKey: ['localMediaProfile']}),
+    )
   }
 
   if (operation.kind.startsWith('episode.')) {
@@ -239,9 +269,6 @@ export default function OperationNotifier({children}: {children: ReactNode}) {
   const {data: pullData} = useFrontendPuller()
   const operations = pullData?.operations ?? []
 
-  // If another browser acknowledges a terminal operation before this browser
-  // observes the terminal snapshot, it disappears from the pull. Remembering the
-  // active snapshot still lets this browser refresh the affected ordinary queries.
   useEffect(() => {
     if (!pullData) return
 
@@ -259,9 +286,6 @@ export default function OperationNotifier({children}: {children: ReactNode}) {
     previousActiveRef.current = currentActive
   }, [operations, pullData, queryClient])
 
-  // Every terminal operation stays in the generic pull until a frontend has
-  // processed the domain-data refresh it implies. UI operations additionally get
-  // a toast; automated/API work is acknowledged silently after invalidation.
   useEffect(() => {
     for (const operation of operations) {
       if (

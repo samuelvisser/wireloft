@@ -10,9 +10,11 @@ from .service import (
     delete_show,
     request_show_sync,
     request_show_metadata_refresh,
+    request_show_file_rename,
     request_show_episode_redownload,
 )
 from ...models.operations import (
+    ShowFileRenameOperationAccepted,
     ShowMetadataOperationAccepted,
     ShowRedownloadOperationAccepted,
     TaskOperationAccepted,
@@ -21,6 +23,7 @@ from ...models.show import (
     ShowAPIRead,
     ShowAPICreate,
     ShowAPIUpdate,
+    ShowFileRenameAPIRequest,
     ShowRedownloadEpisodesAPIRequest,
 )
 from backend.app import db_session
@@ -95,12 +98,33 @@ def show_metadata_refresh(show_slug: str):
 
 
 @router.post(
+    "/{show_slug}/rename-files",
+    response_model=ShowFileRenameOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def show_rename_files(show_slug: str, body: ShowFileRenameAPIRequest):
+    """Rename existing show files for one or every Local Media Profile in use."""
+    with db_session() as s:
+        try:
+            result = request_show_file_rename(
+                s,
+                show_slug,
+                body.local_media_profile_id,
+            )
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post(
     "/{show_slug}/redownload-episodes",
     response_model=ShowRedownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
 def show_redownload_episodes(show_slug: str, body: ShowRedownloadEpisodesAPIRequest):
-    """Delete and re-download existing episode media through Local Media Profiles."""
+    """Delete and re-download existing show files for one or every Local Media Profile in use."""
     with db_session() as s:
         try:
             result = request_show_episode_redownload(

@@ -8,7 +8,9 @@ from backend.api.helpers import update_database_fields
 from backend.api.models.show import *
 from fastapi import HTTPException
 
-from backend.db.models import Episode, EpisodeMediaDownload, Show
+from backend.db.models import Episode, Show
+from backend.db.models.media_download import EpisodeMediaDownload
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import (
@@ -18,11 +20,49 @@ from task_manager.scheduler.operations import (
 
 from .events import ShowAdded
 from .operations import (
+    ShowFileRenameOperation,
     ShowIndexOperation,
     ShowMetadataRefreshOperation,
     ShowRedownloadOperation,
     ShowSyncOperation,
 )
+
+
+_PHYSICAL_ARTIFACT_STATUSES = (
+    MediaDownloadArtifactStatus.AVAILABLE.value,
+    MediaDownloadArtifactStatus.CORRUPTED.value,
+)
+
+
+def _show_local_media_profile_ids(s: Session, show_id: int) -> list[int]:
+    rows = (
+        s.query(EpisodeMediaDownload.local_media_profile_id)
+        .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+        .filter(Episode.show_id == show_id)
+        .distinct()
+        .order_by(EpisodeMediaDownload.local_media_profile_id.asc())
+        .all()
+    )
+    return [profile_id for (profile_id,) in rows]
+
+
+def _selected_show_local_media_profiles(
+        s: Session,
+        *,
+        show: Show,
+        local_media_profile_id: int | None,
+) -> list[int]:
+    profile_ids = _show_local_media_profile_ids(s, show.id)
+    if not profile_ids:
+        raise HTTPException(status_code=422, detail="This show has no episode downloads")
+    if local_media_profile_id is None:
+        return profile_ids
+    if local_media_profile_id not in profile_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="Local Media Profile has no downloads for this show",
+        )
+    return [local_media_profile_id]
 
 
 def get_shows_list(s: Session) -> list[ShowAPIRead]:
@@ -48,7 +88,6 @@ def get_show(s: Session, show_slug: str) -> ShowAPIRead:
 
 
 def create_show(s: Session, body: ShowAPICreate) -> ShowAPIRead:
-    # Build model from validated Pydantic data
     data = body.model_dump(by_alias=True)
 
     show = Show(**data)
@@ -70,7 +109,6 @@ def update_show(s: Session, show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
-    # Apply changes and flush
     update_database_fields(show, body)
     s.flush()
 
@@ -163,12 +201,12 @@ def request_show_metadata_refresh(
     }
 
 
-def request_show_episode_redownload(
+def request_show_file_rename(
         s: Session,
         show_slug: str,
         local_media_profile_id: int | None,
 ) -> dict[str, bool | int | str]:
-    """Queue replacement downloads for existing episode media on a show."""
+    """Rename existing show artifacts for one or every Local Media Profile in use."""
     show = (
         s.query(Show)
         .filter_by(slug=show_slug)
@@ -177,41 +215,88 @@ def request_show_episode_redownload(
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
-    local_media_profile_ids = [
-        profile_id
-        for (profile_id,) in (
-            s.query(EpisodeMediaDownload.local_media_profile_id)
-            .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
-            .filter(Episode.show_id == show.id)
-            .distinct()
-            .order_by(EpisodeMediaDownload.local_media_profile_id.asc())
-            .all()
+    selected_profile_ids = _selected_show_local_media_profiles(
+        s,
+        show=show,
+        local_media_profile_id=local_media_profile_id,
+    )
+    episodes = (
+        s.query(Episode)
+        .join(EpisodeMediaDownload, EpisodeMediaDownload.media_item_id == Episode.id)
+        .filter(
+            Episode.show_id == show.id,
+            EpisodeMediaDownload.local_media_profile_id.in_(selected_profile_ids),
+            EpisodeMediaDownload.artifact_status.in_(_PHYSICAL_ARTIFACT_STATUSES),
         )
-    ]
-    if not local_media_profile_ids:
-        raise HTTPException(status_code=422, detail="This show has no downloaded episodes")
+        .distinct()
+        .order_by(Episode.id.asc())
+        .all()
+    )
 
-    if local_media_profile_id is None:
-        selected_profile_count = len(local_media_profile_ids)
-    elif local_media_profile_id not in local_media_profile_ids:
-        raise HTTPException(
-            status_code=422,
-            detail="Local Media Profile has no downloaded episodes for this show",
+    operation = create_operation(
+        s,
+        ShowFileRenameOperation(
+            show,
+            episodes,
+            local_media_profile_id=local_media_profile_id,
+            selected_profile_count=len(selected_profile_ids),
+        ),
+    )
+    if not episodes:
+        complete_operation(
+            s,
+            operation.id,
+            summary=f"No existing files to rename in {show.title}",
+            data={
+                "files_renamed": 0,
+                "files_unchanged": 0,
+                "files_recovered": 0,
+                "files_considered": 0,
+            },
         )
     else:
-        selected_profile_count = 1
+        for episode in episodes:
+            queue_operation_target_dispatch(s, operation.id, f"episode:{episode.id}")
 
+    s.flush()
+    return {
+        "queued": bool(episodes),
+        "episodes_queued": len(episodes),
+        "local_media_profiles_queued": len(selected_profile_ids),
+        "operation_id": operation.id,
+    }
+
+
+def request_show_episode_redownload(
+        s: Session,
+        show_slug: str,
+        local_media_profile_id: int | None,
+) -> dict[str, bool | int | str]:
+    """Queue replacement downloads for existing show artifacts in the selected profile scope."""
+    show = (
+        s.query(Show)
+        .filter_by(slug=show_slug)
+        .one_or_none()
+    )
+    if show is None:
+        raise HTTPException(status_code=404, detail="Show not found")
+
+    selected_profile_ids = _selected_show_local_media_profiles(
+        s,
+        show=show,
+        local_media_profile_id=local_media_profile_id,
+    )
     operation = create_operation(
         s,
         ShowRedownloadOperation(
             show,
             local_media_profile_id=local_media_profile_id,
-            selected_profile_count=selected_profile_count,
+            selected_profile_count=len(selected_profile_ids),
         ),
     )
     queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
     return {
         "queued": True,
-        "local_media_profiles_queued": selected_profile_count,
+        "local_media_profiles_queued": len(selected_profile_ids),
         "operation_id": operation.id,
     }

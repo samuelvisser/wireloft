@@ -1,9 +1,11 @@
-import {useCallback, useEffect, useRef, useState} from 'react'
+import {type FormEvent, useCallback, useEffect, useRef, useState} from 'react'
 import {useNavigate, useParams} from 'react-router-dom'
 import LocalMediaProfileForm from '../../components/LocalMediaProfile/LocalMediaProfileForm'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {useForm, UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
+import {toast} from 'react-hot-toast'
 import {
     LocalMediaProfileRead,
     LocalMediaProfileUpdateIn,
@@ -20,6 +22,7 @@ import {
 import {WithRoot} from '../../types/form'
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import {LocalMediaProfileTypeReg} from '../../types/local_media_profile'
+import {useStartOperation} from '../../lib/operations'
 import {
     clearLocalMediaProfileDraft,
     editLocalMediaProfileDraftKey,
@@ -31,8 +34,11 @@ export default function EditLocalMediaProfilePage() {
     const navigate = useNavigate()
     const {slug} = useParams<{ slug: string }>()
     const qc = useQueryClient()
+    const startOperation = useStartOperation()
     const initializedSlug = useRef<string | undefined>(undefined)
+    const renameDecisionRef = useRef<boolean | null>(null)
     const [draftReady, setDraftReady] = useState(false)
+    const [renameTemplateConfirm, setRenameTemplateConfirm] = useState(false)
 
     const {data: profile, isLoading, error} = useQuery<LocalMediaProfileRead | undefined>({
         queryKey: ['localMediaProfile', slug],
@@ -125,15 +131,36 @@ export default function EditLocalMediaProfilePage() {
     }
 
     const submitFn = async (data: LocalMediaProfileUpdateOut) => {
-        return fetch(`${(window as any).appConfig.API_URL}/local-media-profiles/${data.slug}`, {
-            method: 'PATCH',
-            headers: {'Content-Type': 'application/json'},
-            credentials: 'include',
-            body: JSON.stringify(data),
-        })
+        try {
+            const response = await fetch(`${(window as any).appConfig.API_URL}/local-media-profiles/${data.slug}`, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'include',
+                body: JSON.stringify(data),
+            })
+            if (!response.ok) renameDecisionRef.current = null
+            return response
+        } catch (submitError) {
+            renameDecisionRef.current = null
+            throw submitError
+        }
     }
 
     const onSuccess = async () => {
+        if (renameDecisionRef.current) {
+            try {
+                const base = (window as any).appConfig?.API_URL || '/api'
+                await startOperation(
+                    `${base}/local-media-profiles/${encodeURIComponent(slug)}/rename-files`,
+                    {method: 'POST'},
+                )
+            } catch (renameError) {
+                const detail = renameError instanceof Error ? `: ${renameError.message}` : ''
+                toast.error(`Profile saved, but File Rename could not be started${detail}`)
+            }
+        }
+
+        renameDecisionRef.current = null
         await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
         await qc.invalidateQueries({queryKey: ['localMediaProfile', slug]})
         clearLocalMediaProfileDraft(editLocalMediaProfileDraftKey(slug))
@@ -145,6 +172,24 @@ export default function EditLocalMediaProfilePage() {
         mode: 'update',
     })
 
+    const onFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+        const outputTemplateChanged = (
+            profile.type === 'show'
+            && form.getValues('outputTemplate') !== profile.outputTemplate
+        )
+        if (outputTemplateChanged && renameDecisionRef.current === null) {
+            void form.handleSubmit(() => setRenameTemplateConfirm(true))(event)
+            return
+        }
+        void onUpdate(event)
+    }
+
+    const continueTemplateSave = (renameFiles: boolean) => {
+        renameDecisionRef.current = renameFiles
+        setRenameTemplateConfirm(false)
+        void onUpdate()
+    }
+
     const {formState: {isSubmitting}} = form
 
     return (
@@ -153,7 +198,7 @@ export default function EditLocalMediaProfilePage() {
                 <h1 id="edit-media-profile-title">Edit local media profile</h1>
             </div>
 
-            <form className="form" onSubmit={onUpdate} noValidate>
+            <form className="form" onSubmit={onFormSubmit} noValidate>
                 <div className="form-row">
                     <label>Profile type</label>
                     <div style={{padding: '6px 0'}}>{LocalMediaProfileTypeReg.getLabelLoose(profile.type)}</div>
@@ -166,6 +211,32 @@ export default function EditLocalMediaProfilePage() {
                     <input type="submit" className="btn btn-primary" value="Save changes" disabled={isSubmitting}/>
                 </div>
             </form>
+
+            <ConfirmDialog
+                open={renameTemplateConfirm}
+                title="Rename existing files?"
+                onDismiss={() => {
+                    if (!isSubmitting) setRenameTemplateConfirm(false)
+                }}
+                dismissOnOverlayClick={!isSubmitting}
+                cancelButton={{
+                    label: 'Save without renaming',
+                    disabled: isSubmitting,
+                    onClick: () => continueTemplateSave(false),
+                }}
+                confirmButton={{
+                    label: isSubmitting ? 'Saving…' : 'Save and rename files',
+                    disabled: isSubmitting,
+                    onClick: () => continueTemplateSave(true),
+                }}
+            >
+                <p>
+                    The output template changed. WireLoft can rename every existing episode file that uses this Local Media Profile so its path matches the new template.
+                </p>
+                <p>
+                    Close this dialog to keep editing, or save without moving existing files and run File Rename later from a show's Actions menu.
+                </p>
+            </ConfirmDialog>
         </section>
     )
 }
