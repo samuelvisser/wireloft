@@ -10,6 +10,7 @@ from backend.db.models import Episode
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
+from dailywire_api.records import DwEpisodeDetailRecord
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
 from task_manager.scheduler.executor import trigger_now
@@ -61,7 +62,30 @@ async def run_refresh_episode_metadata(
     did_refresh = False
     if refresh:
         did_refresh = True
-        if not _refresh_episode_from_dailywire(s, episode):
+        episode_slug = episode.slug
+        require_member_exclusive = episode.show.membership_level not in {
+            WlDwMembershipLevel.FREE.value,
+            WlDwMembershipLevel.WL_ANY.value,
+        }
+
+        # Before calling The Daily Wire API, release the db transaction so others can use it
+        s.rollback()
+        detail = _fetch_episode_from_dailywire(
+            episode_slug=episode_slug,
+            require_member_exclusive=require_member_exclusive,
+        )
+
+        # In case the episode changed during the API call, reload it here
+        episode = s.get(Episode, episode_id)
+        if episode is None:
+            return False
+        if episode.metadata_is_final:
+            remove_episode_metadata_jobs(episode.id)
+            return False
+        if episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
+            return False
+
+        if not _refresh_episode_from_dailywire(s, episode, detail):
             episode.metadata_is_final = False
             s.commit()
             remove_episode_metadata_jobs(episode.id)
@@ -129,23 +153,33 @@ def _no_usable_reason(detail, observed_status: EpisodePublishStatus) -> NoUsable
     return NoUsableMediaReason.MEDIA_UNUSABLE
 
 
-def _refresh_episode_from_dailywire(s: Session, episode: Episode) -> bool:
-    """Refresh final metadata; return False when lifecycle ownership transfers."""
-    show = episode.show
-    old_status = episode.publish_status
+def _fetch_episode_from_dailywire(
+    *,
+    episode_slug: str,
+    require_member_exclusive: bool,
+) -> DwEpisodeDetailRecord | None:
+    """Fetch one Daily Wire snapshot without any database transaction open."""
     client = MiddlewareClient()
-    require_member_exclusive = show.membership_level not in {
-        WlDwMembershipLevel.FREE.value,
-        WlDwMembershipLevel.WL_ANY.value,
-    }
     try:
-        detail = client.get_episode_details(
-            episode.slug,
+        return client.get_episode_details(
+            episode_slug,
             require_member_exclusive=require_member_exclusive,
         )
     except MiddlewareAPIError as exc:
         if exc.status_code != 404:
             raise
+        return None
+
+
+def _refresh_episode_from_dailywire(
+    s: Session,
+    episode: Episode,
+    detail: DwEpisodeDetailRecord | None,
+) -> bool:
+    """Apply one fetched snapshot; return False when lifecycle ownership transfers."""
+    show = episode.show
+    old_status = episode.publish_status
+    if detail is None:
         new_status = EpisodePublishStatus.NO_USABLE_MEDIA
         mark_episode_no_usable_media(s, episode, reason=NoUsableMediaReason.NOT_FOUND)
         queue_episode_status_events(
