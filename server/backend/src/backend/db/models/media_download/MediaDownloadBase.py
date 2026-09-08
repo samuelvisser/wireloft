@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Boolean, String, Text, func, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, String, Text, func, UniqueConstraint
 from sqlalchemy.sql.schema import ForeignKey
 
 from backend.db import Base
@@ -49,6 +49,17 @@ class MediaDownloadBase(HasTaskResourcesMixin, Base):
         index=True,
     )
     artifact_error: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Filesystem identity is meaningful only after an artifact has existed, so
+    # a never-materialized ABSENT row may leave these NULL. The Alembic schema
+    # enforces that every non-ABSENT status has a complete tuple. st_dev/st_ino
+    # are decimal text rather than SQLite INTEGERs so unsigned filesystem IDs
+    # cannot overflow int64.
+    artifact_stat_dev: Mapped[Optional[str]] = mapped_column(String(32))
+    artifact_stat_ino: Mapped[Optional[str]] = mapped_column(String(32))
+    artifact_size_bytes: Mapped[Optional[int]] = mapped_column(BigInteger)
+    artifact_fingerprint: Mapped[Optional[str]] = mapped_column(String(64))
+
     # A user cancellation prevents an automatic Download Profile sweep from
     # immediately recreating the same operation. An explicit Retry/Download
     # request clears this flag. This is user intent, not execution state.

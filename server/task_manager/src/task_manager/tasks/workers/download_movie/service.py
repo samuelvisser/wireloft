@@ -11,6 +11,7 @@ from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.types.media_types import MediaType
+from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_movie_output_path
 from config import get_settings
@@ -93,7 +94,12 @@ async def run_download_movie(
             raise DownloadCancelled("Media download was deleted while the worker was running")
         _ensure_not_cancelled(progress)
 
+        artifact_identity = inspect_artifact(result.path)
         download.file_path = result.path
+        download.artifact_stat_dev = artifact_identity.stat_dev
+        download.artifact_stat_ino = artifact_identity.stat_ino
+        download.artifact_size_bytes = artifact_identity.size_bytes
+        download.artifact_fingerprint = artifact_identity.fingerprint
         download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
         download.artifact_error = None
         download.automatic_retry_suppressed = False

@@ -9,7 +9,7 @@ A download is associated with:
 - a media item such as an episode, movie, or movie extra;
 - a Local Media Profile, which determines format and output path;
 - status/progress information;
-- the final path and recorded size when the download completes.
+- the final path and recorded artifact identity when the download completes.
 
 WireLoft can keep multiple local variants of the same episode because different Local Media Profiles represent different formats/output destinations.
 
@@ -78,11 +78,13 @@ The file watcher is enabled by default and scans every ten minutes:
 
 Its job is to reconcile WireLoft's recorded downloaded files with the filesystem.
 
-### Missing files
+### Missing and renamed files
 
-If the path stored on a download record no longer exists, WireLoft can recognize that the local media is missing rather than continuing to present the record as a healthy file.
+If the path stored on a download record no longer exists, WireLoft first checks that file's original directory for a rename. It uses filesystem device/inode identity where useful and confirms/falls back to a lightweight sampled content fingerprint, so the same behavior also works on SMB/NFS-style mounts where filesystem identifiers can be unstable.
 
-The watcher tracks the **known path**, not arbitrary filesystem identity. If you manually rename or move a managed file outside WireLoft, the original path can therefore be marked missing.
+If exactly one matching file is found, WireLoft updates the recorded path. It deliberately does not search other directories. Files should be moved to a different directory by changing the Local Media Profile output template so WireLoft performs the move itself.
+
+If no unique same-directory match exists, the artifact is marked missing.
 
 ### File-size verification
 
@@ -95,7 +97,7 @@ fileWatcher:
 
 WireLoft also treats a file as corrupted when it is empty or smaller than the size recorded when the download completed.
 
-This is a lightweight integrity check, not a cryptographic checksum. A same-size damaged file is outside what this setting proves.
+This remains a lightweight integrity check, not continuous full-file checksum verification. The sampled fingerprint used for rename identity is not used to re-hash every healthy file on every watcher run.
 
 ## Filename compatibility
 

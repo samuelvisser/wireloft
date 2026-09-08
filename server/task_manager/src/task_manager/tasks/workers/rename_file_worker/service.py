@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.output_template import output_template_fields, resolve_episode_output_path
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.progress import update_progress
@@ -117,7 +118,7 @@ async def run_rename_file_worker(
                 )
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), str(destination))
-            download.file_path = str(destination)
+            _record_artifact_location(download, destination)
             # The filesystem cannot participate in the SQL transaction. Persist
             # every completed move immediately so later failures cannot roll the
             # database path back behind already-moved files.
@@ -126,7 +127,7 @@ async def run_rename_file_worker(
         elif destination.exists():
             # A previous attempt can be interrupted after shutil.move() but before
             # its database commit. Treat that exact state as successful recovery.
-            download.file_path = str(destination)
+            _record_artifact_location(download, destination)
             s.commit()
             recovered += 1
         else:
@@ -156,3 +157,12 @@ async def run_rename_file_worker(
             "files_considered": total,
         },
     )
+
+
+def _record_artifact_location(download: EpisodeMediaDownload, path: Path) -> None:
+    identity = inspect_artifact(path)
+    download.file_path = str(path)
+    download.artifact_stat_dev = identity.stat_dev
+    download.artifact_stat_ino = identity.stat_ino
+    download.artifact_size_bytes = identity.size_bytes
+    download.artifact_fingerprint = identity.fingerprint

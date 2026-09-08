@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
 
 import pytest
 from sqlalchemy import create_engine
@@ -14,6 +16,7 @@ def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes |
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.utils.artifact_identity import inspect_artifact
     from backend.utils.helpers import generate_uuid
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
@@ -57,16 +60,26 @@ def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes |
     session.commit()
 
     file_path = tmp_path / file_name
+    identity = None
     if write_bytes is not None:
         file_path.write_bytes(write_bytes)
+        identity = inspect_artifact(file_path)
 
     download = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        artifact_status=(
+            MediaDownloadArtifactStatus.AVAILABLE.value
+            if identity is not None
+            else MediaDownloadArtifactStatus.ABSENT.value
+        ),
         file_path=str(file_path),
         downloaded_bytes=len(write_bytes) if write_bytes is not None else None,
+        artifact_stat_dev=identity.stat_dev if identity else None,
+        artifact_stat_ino=identity.stat_ino if identity else None,
+        artifact_size_bytes=identity.size_bytes if identity else None,
+        artifact_fingerprint=identity.fingerprint if identity else None,
     )
     session.add(download)
     session.commit()
@@ -107,7 +120,6 @@ def test_deleted_file_is_flagged_missing(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
     session, engine, _show, _episode, download = _db_with_download(tmp_path)
-    import os
     os.remove(download.file_path)
 
     _run(session)
@@ -119,17 +131,97 @@ def test_deleted_file_is_flagged_missing(tmp_path):
     engine.dispose()
 
 
-def test_renamed_away_file_is_flagged_missing(tmp_path):
-    """A file moved/renamed outside WireLoft is indistinguishable from a deletion."""
+def test_same_directory_rename_is_reconciled_by_filesystem_identity(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
     session, engine, _show, _episode, download = _db_with_download(tmp_path)
-    import os
-    os.rename(download.file_path, tmp_path / "renamed-by-user.m4a")
+    renamed = tmp_path / "renamed-by-user.m4a"
+    os.rename(download.file_path, renamed)
 
     _run(session)
 
+    assert download.file_path == str(renamed)
+    assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+    assert download.artifact_error is None
+
+    session.close()
+    engine.dispose()
+
+
+def test_same_directory_rename_falls_back_to_fingerprint_for_unstable_filesystem_ids(tmp_path):
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine, _show, _episode, download = _db_with_download(tmp_path)
+    # Simulate an SMB/NFS reconnect or mount where the same file no longer has
+    # the device/inode values recorded when it was downloaded.
+    download.artifact_stat_dev = "999999999999"
+    download.artifact_stat_ino = "888888888888"
+    session.commit()
+
+    renamed = tmp_path / "renamed-on-network-share.m4a"
+    os.rename(download.file_path, renamed)
+
+    _run(session)
+
+    assert download.file_path == str(renamed)
+    assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+    assert download.artifact_error is None
+    assert download.artifact_stat_dev == str(os.stat(renamed).st_dev)
+    assert download.artifact_stat_ino == str(os.stat(renamed).st_ino)
+
+    session.close()
+    engine.dispose()
+
+
+def test_rename_to_different_directory_is_not_followed(tmp_path):
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine, _show, _episode, download = _db_with_download(tmp_path)
+    other_directory = tmp_path / "elsewhere"
+    other_directory.mkdir()
+    moved = other_directory / "episode.m4a"
+    os.rename(download.file_path, moved)
+
+    _run(session)
+
+    assert download.file_path != str(moved)
     assert download.artifact_status == MediaDownloadArtifactStatus.MISSING.value
+
+    session.close()
+    engine.dispose()
+
+
+def test_same_size_different_file_is_not_mistaken_for_rename(tmp_path):
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=b"hello world")
+    original = download.file_path
+    os.remove(original)
+    (tmp_path / "different.m4a").write_bytes(b"HELLO WORLD")
+
+    _run(session)
+
+    assert download.file_path == original
+    assert download.artifact_status == MediaDownloadArtifactStatus.MISSING.value
+
+    session.close()
+    engine.dispose()
+
+
+def test_ambiguous_fingerprint_matches_are_not_guessed(tmp_path):
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine, _show, _episode, download = _db_with_download(tmp_path)
+    original = download.file_path
+    shutil.copyfile(original, tmp_path / "copy-a.m4a")
+    shutil.copyfile(original, tmp_path / "copy-b.m4a")
+    os.remove(original)
+
+    _run(session)
+
+    assert download.file_path == original
+    assert download.artifact_status == MediaDownloadArtifactStatus.MISSING.value
+    assert "multiple files" in download.artifact_error
 
     session.close()
     engine.dispose()
@@ -221,7 +313,6 @@ def test_absent_artifacts_are_never_touched(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
     session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=None)
-    download.artifact_status = MediaDownloadArtifactStatus.ABSENT.value
     download.file_path = str(tmp_path / "not-written-yet.m4a")
     session.commit()
 
@@ -229,6 +320,7 @@ def test_absent_artifacts_are_never_touched(tmp_path):
 
     assert download.artifact_status == MediaDownloadArtifactStatus.ABSENT.value
     assert download.artifact_error is None
+    assert download.artifact_fingerprint is None
 
     session.close()
     engine.dispose()
@@ -241,7 +333,6 @@ def test_disabled_file_watcher_skips_everything(tmp_path, monkeypatch):
     monkeypatch.setattr(get_settings().file_watcher, "enabled", False)
 
     session, engine, _show, _episode, download = _db_with_download(tmp_path)
-    import os
     os.remove(download.file_path)
 
     _run(session)
@@ -258,8 +349,8 @@ def test_scan_can_be_scoped_to_one_show(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.utils.artifact_identity import inspect_artifact
     from backend.utils.helpers import generate_uuid
-    import os
 
     session, engine, show, _episode, download = _db_with_download(tmp_path)
 
@@ -293,6 +384,7 @@ def test_scan_can_be_scoped_to_one_show(tmp_path):
     profile = session.get(LocalMediaProfile, download.local_media_profile_id)
     other_file = tmp_path / "other-episode.m4a"
     other_file.write_bytes(b"content")
+    other_identity = inspect_artifact(other_file)
     other_download = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
         media_item_id=None,
@@ -300,6 +392,10 @@ def test_scan_can_be_scoped_to_one_show(tmp_path):
         artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
         file_path=str(other_file),
         downloaded_bytes=7,
+        artifact_stat_dev=other_identity.stat_dev,
+        artifact_stat_ino=other_identity.stat_ino,
+        artifact_size_bytes=other_identity.size_bytes,
+        artifact_fingerprint=other_identity.fingerprint,
     )
     session.add_all([other_show, other_season, other_episode])
     session.commit()
