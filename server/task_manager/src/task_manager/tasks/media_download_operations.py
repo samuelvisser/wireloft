@@ -22,6 +22,7 @@ from task_manager.scheduler.operations import (
 )
 from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import OperationSource, OperationStatus, ResourceType, TaskStatus
+from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
 logger = logging.getLogger(__name__)
@@ -41,15 +42,26 @@ _ACTIVE_RUN_STATUSES = (
 
 
 def prepare_media_download_artifact(
+    session: Session,
     download: MediaDownloadBase,
     *,
     remove_existing_artifacts: bool = True,
 ) -> None:
     """Prepare domain state for an attempt without encoding any execution state."""
     if remove_existing_artifacts:
-        remove_download_artifacts(download.file_path)
+        resolved_path = None
+        if download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
+            resolved_path = resolve_media_download_file(session, download)
+        remove_download_artifacts(
+            str(resolved_path) if resolved_path is not None else download.file_path
+        )
+
     download.artifact_status = MediaDownloadArtifactStatus.ABSENT.value
     download.artifact_error = None
+    download.artifact_stat_dev = None
+    download.artifact_stat_ino = None
+    download.artifact_size_bytes = None
+    download.artifact_fingerprint = None
     download.automatic_retry_suppressed = False
     download.downloaded_bytes = None
     download.format_downloaded = None

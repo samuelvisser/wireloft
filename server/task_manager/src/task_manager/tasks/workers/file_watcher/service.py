@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
 
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -85,6 +86,61 @@ async def run_file_watcher(
 
     updated = _apply_reconciliations(s, changes)
     print(f"file_watcher completed: checked {len(downloads)} artifact(s), updated {updated}")
+
+
+def resolve_media_download_file(
+    s: Session,
+    download: MediaDownloadBase,
+    *,
+    verify_file_size: bool | None = None,
+    release_read_transaction: bool = False,
+) -> Path | None:
+    """Return the current physical file, reconciling the artifact first when needed.
+
+    This is the shared entrypoint for code that wants to consume an existing
+    downloaded artifact. It deliberately uses the same reconciliation path as the
+    scheduled FileWatcher, including same-directory rename discovery, identity
+    refresh, missing/corrupted state transitions, and guarded database writeback.
+
+    Read-only callers may set ``release_read_transaction`` so a transaction opened
+    only to load the artifact is committed before any potentially slow filesystem
+    I/O. The helper refuses to do that when SQLAlchemy still has pending ORM
+    mutations, preserving ownership of wider write transactions.
+    """
+    if download.artifact_status == MediaDownloadArtifactStatus.ABSENT.value:
+        return None
+
+    if release_read_transaction:
+        _release_clean_read_transaction(s)
+
+    if verify_file_size is None:
+        verify_file_size = get_settings().file_watcher.verify_file_size
+
+    updates = _reconcile(download, verify_file_size=verify_file_size)
+    if updates and not _apply_reconciliation_with_transaction(s, download, updates):
+        return None
+
+    path = Path(download.file_path)
+    try:
+        return path if path.is_file() else None
+    except OSError:
+        return None
+
+
+def _release_clean_read_transaction(s: Session) -> bool:
+    """End a caller's read transaction without expiring already-loaded objects."""
+    if not s.in_transaction():
+        return True
+    if s.new or s.dirty or s.deleted:
+        return False
+
+    expire_on_commit = s.expire_on_commit
+    s.expire_on_commit = False
+    try:
+        s.commit()
+    finally:
+        s.expire_on_commit = expire_on_commit
+    return True
 
 
 def _reconcile(
@@ -357,6 +413,52 @@ def _changed_values(
     }
 
 
+def _apply_reconciliation_with_transaction(
+    s: Session,
+    original: MediaDownloadBase,
+    values: _ArtifactUpdates,
+) -> bool:
+    if s.in_transaction():
+        return _apply_reconciliation(s, original, values)
+
+    expire_on_commit = s.expire_on_commit
+    s.expire_on_commit = False
+    try:
+        with s.begin():
+            return _apply_reconciliation(s, original, values)
+    finally:
+        s.expire_on_commit = expire_on_commit
+
+
+def _apply_reconciliation(
+    s: Session,
+    original: MediaDownloadBase,
+    values: _ArtifactUpdates,
+) -> bool:
+    table = MediaDownloadBase.__table__
+    guards = [
+        _matches_snapshot_value(table.c[field], getattr(original, field))
+        for field in _ARTIFACT_GUARD_FIELDS
+    ]
+    stmt = (
+        table.update()
+        .where(table.c.id == original.id, *guards)
+        .values(**values)
+    )
+    result = s.execute(stmt)
+    if result.rowcount != 1:
+        logger.info(
+            "file_watcher: skipped stale result for media_download %s because the row changed while filesystem checks were running",
+            original.id,
+        )
+        return False
+
+    _log_applied_change(original, values)
+    for field, value in values.items():
+        set_committed_value(original, field, value)
+    return True
+
+
 def _apply_reconciliations(
     s: Session,
     changes: list[tuple[MediaDownloadBase, _ArtifactUpdates]],
@@ -365,28 +467,15 @@ def _apply_reconciliations(
         return 0
 
     updated = 0
-    table = MediaDownloadBase.__table__
-    with s.begin():
-        for original, values in changes:
-            guards = [
-                _matches_snapshot_value(table.c[field], getattr(original, field))
-                for field in _ARTIFACT_GUARD_FIELDS
-            ]
-            stmt = (
-                table.update()
-                .where(table.c.id == original.id, *guards)
-                .values(**values)
-            )
-            result = s.execute(stmt)
-            if result.rowcount == 1:
-                updated += 1
-                _log_applied_change(original, values)
-            else:
-                logger.info(
-                    "file_watcher: skipped stale result for media_download %s because the row changed while filesystem checks were running",
-                    original.id,
-                )
-
+    expire_on_commit = s.expire_on_commit
+    s.expire_on_commit = False
+    try:
+        with s.begin():
+            for original, values in changes:
+                if _apply_reconciliation(s, original, values):
+                    updated += 1
+    finally:
+        s.expire_on_commit = expire_on_commit
     return updated
 
 

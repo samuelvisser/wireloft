@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.output_template import resolve_episode_output_path
 from task_manager.scheduler.db import TaskOperation
 from task_manager.scheduler.operation_control import cancel_operation
@@ -17,6 +18,7 @@ from task_manager.tasks.media_download_operations import (
     get_active_media_download_operation,
     prepare_media_download_artifact,
 )
+from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
 _POLL_INTERVAL_SECONDS = 0.5
@@ -100,7 +102,13 @@ def _prepare_redownloads(
             episode=episode,
         ))
 
-        prepare_media_download_artifact(download)
+        if download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
+            resolve_media_download_file(
+                s,
+                download,
+                release_read_transaction=True,
+            )
+        prepare_media_download_artifact(s, download)
         download.file_path = target_path
         s.flush()
 

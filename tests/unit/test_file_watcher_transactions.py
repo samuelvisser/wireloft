@@ -5,7 +5,8 @@ import os
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, inspect as sa_inspect
+from sqlalchemy import create_engine
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 
@@ -92,7 +93,7 @@ def _enable_file_watcher(monkeypatch: pytest.MonkeyPatch):
     yield
 
 
-def test_filesystem_checks_use_detached_models_without_database_transaction(tmp_path, monkeypatch):
+def test_filesystem_checks_run_without_database_transaction(tmp_path, monkeypatch):
     from backend.db.models.media_download import MediaDownloadBase
     from task_manager.tasks.workers.file_watcher import service
 
@@ -131,10 +132,8 @@ def test_stale_filesystem_result_does_not_overwrite_newer_download(tmp_path, mon
     replacement_path = tmp_path / "replacement.m4a"
 
     def reconcile_while_download_changes(download, *, verify_file_size):
-        updates = original_reconcile(download, verify_file_size=verify_file_size)
-        assert updates["artifact_status"] == MediaDownloadArtifactStatus.MISSING.value
-        assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
-        assert sa_inspect(download).detached
+        reconciled = original_reconcile(download, verify_file_size=verify_file_size)
+        assert reconciled["artifact_status"] == MediaDownloadArtifactStatus.MISSING.value
         assert not session.in_transaction()
 
         replacement_path.write_bytes(b"newer completed download")
@@ -152,7 +151,7 @@ def test_stale_filesystem_result_does_not_overwrite_newer_download(tmp_path, mon
             current.artifact_fingerprint = replacement_identity.fingerprint
             concurrent_session.commit()
 
-        return updates
+        return reconciled
 
     monkeypatch.setattr(service, "_reconcile", reconcile_while_download_changes)
 
@@ -164,6 +163,56 @@ def test_stale_filesystem_result_does_not_overwrite_newer_download(tmp_path, mon
         assert current.file_path == str(replacement_path)
         assert current.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
         assert current.artifact_error is None
+
+    session.close()
+    engine.dispose()
+
+
+def test_resolve_media_download_file_reconciles_and_persists_manual_rename(tmp_path, monkeypatch):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from task_manager.tasks.workers.file_watcher import service
+
+    session, engine, download_id, file_path = _db_with_download(tmp_path)
+    download = session.get(EpisodeMediaDownload, download_id)
+    assert download is not None
+
+    renamed = tmp_path / "manually-renamed.m4a"
+    os.rename(file_path, renamed)
+    download.artifact_status = MediaDownloadArtifactStatus.MISSING.value
+    download.artifact_error = "File not found"
+    session.commit()
+
+    original_reconcile = service._reconcile
+    checked_without_transaction = False
+
+    def reconcile_without_transaction(current, *, verify_file_size):
+        nonlocal checked_without_transaction
+        checked_without_transaction = True
+        assert not session.in_transaction()
+        return original_reconcile(current, verify_file_size=verify_file_size)
+
+    monkeypatch.setattr(service, "_reconcile", reconcile_without_transaction)
+
+    resolved = service.resolve_media_download_file(
+        session,
+        download,
+        release_read_transaction=True,
+    )
+
+    assert checked_without_transaction
+    assert resolved == renamed
+    assert download.file_path == str(renamed)
+    assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+    assert download.artifact_error is None
+    assert not session.in_transaction()
+
+    with Session(engine) as verify_session:
+        persisted = verify_session.get(EpisodeMediaDownload, download_id)
+        assert persisted is not None
+        assert persisted.file_path == str(renamed)
+        assert persisted.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+        assert persisted.artifact_error is None
 
     session.close()
     engine.dispose()

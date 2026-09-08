@@ -86,6 +86,8 @@ If exactly one matching file is found, WireLoft updates the recorded path. It de
 
 If no unique same-directory match exists, the artifact is marked missing.
 
+The same reconciliation path is also used on demand whenever WireLoft needs an existing downloaded file. RSS delivery, file renaming, replacement/re-download flows, and retention/deletion therefore attempt same-directory rename recovery before treating the recorded path as unavailable. A successfully recovered path is persisted before the caller continues using the file.
+
 ### File-size verification
 
 With the default:
@@ -117,9 +119,9 @@ See [[Download-Profiles]].
 
 ## RSS interaction
 
-RSS profiles that enable **Use Downloads** search healthy completed/redownloaded files for the best local match. If a suitable file is found, it is served directly.
+RSS profiles that enable **Use Downloads** search local artifact records for the best match. Before a candidate is rejected as unavailable, WireLoft reconciles its recorded path through the same file-watcher logic, so a same-directory manual rename can be recovered and served immediately.
 
-A missing/corrupt/nonmatching local file can therefore change RSS behavior:
+If no suitable local file can be resolved:
 
 - with Daily Wire fallback enabled, the feed can still stream remotely;
 - with downloads-only mode, the episode may no longer have an available enclosure.
