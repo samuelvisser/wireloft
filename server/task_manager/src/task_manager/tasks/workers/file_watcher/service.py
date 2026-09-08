@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 import logging
 import os
 import stat
@@ -14,7 +14,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.artifact_identity import ArtifactIdentity, inspect_artifact
 from config import get_settings
 
-from ._helpers import TrackedDownloadSnapshot, get_tracked_downloads
+from ._helpers import get_tracked_downloads
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,17 @@ _PROBLEM_STATUSES = (
 )
 _MIN_SIZE_RATIO = 0.5
 _TEMPORARY_SUFFIXES = (".part", ".rawts")
+_ARTIFACT_GUARD_FIELDS = (
+    "file_path",
+    "artifact_status",
+    "artifact_error",
+    "downloaded_bytes",
+    "artifact_stat_dev",
+    "artifact_stat_ino",
+    "artifact_size_bytes",
+    "artifact_fingerprint",
+)
+_ArtifactUpdates = dict[str, str | int | None]
 
 
 @dataclass(frozen=True)
@@ -43,10 +54,10 @@ async def run_file_watcher(
     """Reconcile persistent MediaDownload artifact facts with the filesystem.
 
     Database access is intentionally split from filesystem access. The watcher
-    first copies the required database facts into detached snapshots and closes
-    that read transaction. All potentially slow local/SMB/NFS filesystem work
-    then runs without a database transaction. A final short write transaction
-    applies results only when the database row still matches the snapshot.
+    loads MediaDownload ORM objects, detaches them, and closes the read
+    transaction before any potentially slow local/SMB/NFS filesystem work.
+    Reconciliation returns only proposed field updates, leaving each detached
+    model unchanged so its original values can guard the final short write.
     """
     settings = get_settings().file_watcher
     if not settings.enabled:
@@ -56,119 +67,135 @@ async def run_file_watcher(
     print("Starting file_watcher")
     downloads = get_tracked_downloads(s, show_id=show_id, show_slug=show_slug)
 
-    # SELECT starts SQLAlchemy's implicit transaction. End it before any stat,
-    # directory scan, or fingerprint read can block on a local/network filesystem.
-    # The detached dataclass snapshots remain usable without the Session.
-    s.commit()
-
-    changes: list[tuple[TrackedDownloadSnapshot, TrackedDownloadSnapshot]] = []
+    # SELECT starts SQLAlchemy's implicit transaction. Detach the fully loaded
+    # MediaDownload objects before ending that transaction so their scalar
+    # values remain available without any chance of lazy database access.
     for download in downloads:
-        reconciled = _reconcile(
+        s.expunge(download)
+    s.rollback()
+
+    changes: list[tuple[MediaDownloadBase, _ArtifactUpdates]] = []
+    for download in downloads:
+        updates = _reconcile(
             download,
             verify_file_size=settings.verify_file_size,
         )
-        if reconciled != download:
-            changes.append((download, reconciled))
+        if updates:
+            changes.append((download, updates))
 
     updated = _apply_reconciliations(s, changes)
     print(f"file_watcher completed: checked {len(downloads)} artifact(s), updated {updated}")
 
 
 def _reconcile(
-    download: TrackedDownloadSnapshot,
+    download: MediaDownloadBase,
     *,
     verify_file_size: bool,
-) -> TrackedDownloadSnapshot:
+) -> _ArtifactUpdates:
     path = download.file_path
     try:
         path_stat = os.stat(path)
     except FileNotFoundError:
         renamed, rename_error = _find_same_directory_rename(download)
         if renamed is not None:
-            reconciled = replace(download, file_path=renamed.path)
-            reconciled = _set_identity(reconciled, renamed.identity)
+            values: _ArtifactUpdates = {
+                "file_path": renamed.path,
+                **_identity_values(renamed.identity),
+            }
             problem = _size_problem(
-                reconciled,
+                download,
+                path=renamed.path,
                 size=renamed.identity.size_bytes,
                 verify_file_size=verify_file_size,
             )
             if problem is None:
-                return replace(
-                    reconciled,
+                values.update(
                     artifact_status=_HEALTHY_STATUS,
                     artifact_error=None,
                 )
-            status, message = problem
-            return _apply_problem(reconciled, status, message)
+            else:
+                status, message = problem
+                values.update(
+                    artifact_status=status.value,
+                    artifact_error=message,
+                )
+            return _changed_values(download, values)
 
         message = f"File not found at '{path}'"
         if rename_error:
             message = f"{message}; {rename_error}"
-        return _apply_problem(download, MediaDownloadArtifactStatus.MISSING, message)
+        return _problem_updates(download, MediaDownloadArtifactStatus.MISSING, message)
     except OSError as exc:
-        return _apply_problem(
+        return _problem_updates(
             download,
             MediaDownloadArtifactStatus.MISSING,
             f"Could not check '{path}': {exc}",
         )
 
     if not stat.S_ISREG(path_stat.st_mode):
-        return _apply_problem(
+        return _problem_updates(
             download,
             MediaDownloadArtifactStatus.CORRUPTED,
             f"Expected a file at '{path}' but found something else",
         )
 
-    reconciled = download
-    if not _has_complete_identity(reconciled):
+    values: _ArtifactUpdates = {}
+    identity_was_missing = not _has_complete_identity(download)
+    if identity_was_missing:
         try:
             identity = inspect_artifact(path)
         except FileNotFoundError:
-            return _apply_problem(
-                reconciled,
+            return _problem_updates(
+                download,
                 MediaDownloadArtifactStatus.MISSING,
                 f"File not found at '{path}'",
             )
         except (OSError, ValueError) as exc:
-            return _apply_problem(
-                reconciled,
+            return _problem_updates(
+                download,
                 MediaDownloadArtifactStatus.MISSING,
                 f"Could not check '{path}': {exc}",
             )
-        reconciled = _set_identity(reconciled, identity)
+        values.update(_identity_values(identity))
 
     problem = _size_problem(
-        reconciled,
+        download,
+        path=path,
         size=path_stat.st_size,
         verify_file_size=verify_file_size,
     )
     if problem is not None:
         status, message = problem
-        return _apply_problem(reconciled, status, message)
+        values.update(
+            artifact_status=status.value,
+            artifact_error=message,
+        )
+        return _changed_values(download, values)
 
-    if reconciled == download:
-        reconciled = _refresh_filesystem_identity_if_content_matches(
-            reconciled,
-            path_stat=path_stat,
+    if not identity_was_missing:
+        values.update(
+            _refresh_filesystem_identity_if_content_matches(
+                download,
+                path_stat=path_stat,
+            )
         )
 
-    if reconciled.artifact_status in _PROBLEM_STATUSES:
-        return replace(
-            reconciled,
+    if download.artifact_status in _PROBLEM_STATUSES:
+        values.update(
             artifact_status=_HEALTHY_STATUS,
             artifact_error=None,
         )
 
-    return reconciled
+    return _changed_values(download, values)
 
 
 def _size_problem(
-    download: TrackedDownloadSnapshot,
+    download: MediaDownloadBase,
     *,
+    path: str,
     size: int,
     verify_file_size: bool,
 ) -> Optional[tuple[MediaDownloadArtifactStatus, str]]:
-    path = download.file_path
     if size == 0:
         return MediaDownloadArtifactStatus.CORRUPTED, f"File at '{path}' is empty"
 
@@ -180,7 +207,7 @@ def _size_problem(
     return None
 
 
-def _has_complete_identity(download: TrackedDownloadSnapshot) -> bool:
+def _has_complete_identity(download: MediaDownloadBase) -> bool:
     return (
         bool(download.artifact_stat_dev)
         and bool(download.artifact_stat_ino)
@@ -190,34 +217,36 @@ def _has_complete_identity(download: TrackedDownloadSnapshot) -> bool:
 
 
 def _refresh_filesystem_identity_if_content_matches(
-    download: TrackedDownloadSnapshot,
+    download: MediaDownloadBase,
     *,
     path_stat: os.stat_result,
-) -> TrackedDownloadSnapshot:
+) -> _ArtifactUpdates:
     """Refresh volatile filesystem IDs only when durable identity still matches."""
     stat_dev = str(path_stat.st_dev)
     stat_ino = str(path_stat.st_ino)
     if stat_dev == download.artifact_stat_dev and stat_ino == download.artifact_stat_ino:
-        return download
+        return {}
     if path_stat.st_size != download.artifact_size_bytes:
-        return download
+        return {}
 
     try:
         identity = inspect_artifact(download.file_path)
     except (OSError, ValueError):
-        return download
+        return {}
     if identity.fingerprint != download.artifact_fingerprint:
-        return download
+        return {}
 
-    return replace(
+    return _changed_values(
         download,
-        artifact_stat_dev=identity.stat_dev,
-        artifact_stat_ino=identity.stat_ino,
+        {
+            "artifact_stat_dev": identity.stat_dev,
+            "artifact_stat_ino": identity.stat_ino,
+        },
     )
 
 
 def _find_same_directory_rename(
-    download: TrackedDownloadSnapshot,
+    download: MediaDownloadBase,
 ) -> tuple[Optional[_RenamedArtifact], Optional[str]]:
     original = Path(download.file_path)
     parent = original.parent
@@ -268,7 +297,7 @@ def _find_same_directory_rename(
 
 
 def _inspect_matching_candidate(
-    download: TrackedDownloadSnapshot,
+    download: MediaDownloadBase,
     candidate_path: str,
 ) -> Optional[_RenamedArtifact]:
     try:
@@ -283,7 +312,7 @@ def _inspect_matching_candidate(
 
 
 def _fingerprint_matches(
-    download: TrackedDownloadSnapshot,
+    download: MediaDownloadBase,
     candidates: list[tuple[str, os.stat_result]],
 ) -> list[_RenamedArtifact]:
     matches: list[_RenamedArtifact] = []
@@ -294,36 +323,43 @@ def _fingerprint_matches(
     return matches
 
 
-def _set_identity(
-    download: TrackedDownloadSnapshot,
-    identity: ArtifactIdentity,
-) -> TrackedDownloadSnapshot:
-    return replace(
-        download,
-        artifact_stat_dev=identity.stat_dev,
-        artifact_stat_ino=identity.stat_ino,
-        artifact_size_bytes=identity.size_bytes,
-        artifact_fingerprint=identity.fingerprint,
-    )
+def _identity_values(identity: ArtifactIdentity) -> _ArtifactUpdates:
+    return {
+        "artifact_stat_dev": identity.stat_dev,
+        "artifact_stat_ino": identity.stat_ino,
+        "artifact_size_bytes": identity.size_bytes,
+        "artifact_fingerprint": identity.fingerprint,
+    }
 
 
-def _apply_problem(
-    download: TrackedDownloadSnapshot,
+def _problem_updates(
+    download: MediaDownloadBase,
     status: MediaDownloadArtifactStatus,
     message: str,
-) -> TrackedDownloadSnapshot:
-    if download.artifact_status == status.value and download.artifact_error == message:
-        return download
-    return replace(
+) -> _ArtifactUpdates:
+    return _changed_values(
         download,
-        artifact_status=status.value,
-        artifact_error=message,
+        {
+            "artifact_status": status.value,
+            "artifact_error": message,
+        },
     )
+
+
+def _changed_values(
+    download: MediaDownloadBase,
+    values: _ArtifactUpdates,
+) -> _ArtifactUpdates:
+    return {
+        field: value
+        for field, value in values.items()
+        if getattr(download, field) != value
+    }
 
 
 def _apply_reconciliations(
     s: Session,
-    changes: list[tuple[TrackedDownloadSnapshot, TrackedDownloadSnapshot]],
+    changes: list[tuple[MediaDownloadBase, _ArtifactUpdates]],
 ) -> int:
     if not changes:
         return 0
@@ -331,34 +367,20 @@ def _apply_reconciliations(
     updated = 0
     table = MediaDownloadBase.__table__
     with s.begin():
-        for original, reconciled in changes:
+        for original, values in changes:
+            guards = [
+                _matches_snapshot_value(table.c[field], getattr(original, field))
+                for field in _ARTIFACT_GUARD_FIELDS
+            ]
             stmt = (
                 table.update()
-                .where(
-                    table.c.id == original.id,
-                    _matches_snapshot_value(table.c.file_path, original.file_path),
-                    _matches_snapshot_value(table.c.artifact_status, original.artifact_status),
-                    _matches_snapshot_value(table.c.artifact_error, original.artifact_error),
-                    _matches_snapshot_value(table.c.downloaded_bytes, original.downloaded_bytes),
-                    _matches_snapshot_value(table.c.artifact_stat_dev, original.artifact_stat_dev),
-                    _matches_snapshot_value(table.c.artifact_stat_ino, original.artifact_stat_ino),
-                    _matches_snapshot_value(table.c.artifact_size_bytes, original.artifact_size_bytes),
-                    _matches_snapshot_value(table.c.artifact_fingerprint, original.artifact_fingerprint),
-                )
-                .values(
-                    file_path=reconciled.file_path,
-                    artifact_status=reconciled.artifact_status,
-                    artifact_error=reconciled.artifact_error,
-                    artifact_stat_dev=reconciled.artifact_stat_dev,
-                    artifact_stat_ino=reconciled.artifact_stat_ino,
-                    artifact_size_bytes=reconciled.artifact_size_bytes,
-                    artifact_fingerprint=reconciled.artifact_fingerprint,
-                )
+                .where(table.c.id == original.id, *guards)
+                .values(**values)
             )
             result = s.execute(stmt)
             if result.rowcount == 1:
                 updated += 1
-                _log_applied_change(original, reconciled)
+                _log_applied_change(original, values)
             else:
                 logger.info(
                     "file_watcher: skipped stale result for media_download %s because the row changed while filesystem checks were running",
@@ -374,33 +396,49 @@ def _matches_snapshot_value(column, value):
     return column == value
 
 
+def _result_value(
+    original: MediaDownloadBase,
+    values: _ArtifactUpdates,
+    field: str,
+):
+    if field in values:
+        return values[field]
+    return getattr(original, field)
+
+
 def _log_applied_change(
-    original: TrackedDownloadSnapshot,
-    reconciled: TrackedDownloadSnapshot,
+    original: MediaDownloadBase,
+    values: _ArtifactUpdates,
 ) -> None:
-    if original.file_path != reconciled.file_path:
+    file_path = _result_value(original, values, "file_path")
+    artifact_status = _result_value(original, values, "artifact_status")
+    artifact_error = _result_value(original, values, "artifact_error")
+    artifact_stat_dev = _result_value(original, values, "artifact_stat_dev")
+    artifact_stat_ino = _result_value(original, values, "artifact_stat_ino")
+
+    if original.file_path != file_path:
         logger.info(
             "file_watcher: media_download %s renamed %s -> %s",
             original.id,
             original.file_path,
-            reconciled.file_path,
+            file_path,
         )
 
-    if reconciled.artifact_status in _PROBLEM_STATUSES and (
-        original.artifact_status != reconciled.artifact_status
-        or original.artifact_error != reconciled.artifact_error
+    if artifact_status in _PROBLEM_STATUSES and (
+        original.artifact_status != artifact_status
+        or original.artifact_error != artifact_error
     ):
         logger.warning(
             "file_watcher: media_download %s -> %s (%s)",
             original.id,
-            reconciled.artifact_status,
-            reconciled.artifact_error,
+            artifact_status,
+            artifact_error,
         )
-    elif original.artifact_status in _PROBLEM_STATUSES and reconciled.artifact_status == _HEALTHY_STATUS:
+    elif original.artifact_status in _PROBLEM_STATUSES and artifact_status == _HEALTHY_STATUS:
         logger.info("file_watcher: media_download %s file is healthy again", original.id)
     elif (
-        original.artifact_stat_dev != reconciled.artifact_stat_dev
-        or original.artifact_stat_ino != reconciled.artifact_stat_ino
+        original.artifact_stat_dev != artifact_stat_dev
+        or original.artifact_stat_ino != artifact_stat_ino
     ):
         logger.info(
             "file_watcher: refreshed filesystem identity for media_download %s",

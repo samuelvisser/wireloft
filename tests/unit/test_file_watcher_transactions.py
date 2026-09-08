@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 
@@ -92,7 +92,8 @@ def _enable_file_watcher(monkeypatch: pytest.MonkeyPatch):
     yield
 
 
-def test_filesystem_checks_run_without_database_transaction(tmp_path, monkeypatch):
+def test_filesystem_checks_use_detached_models_without_database_transaction(tmp_path, monkeypatch):
+    from backend.db.models.media_download import MediaDownloadBase
     from task_manager.tasks.workers.file_watcher import service
 
     session, engine, _download_id, _file_path = _db_with_download(tmp_path)
@@ -102,6 +103,8 @@ def test_filesystem_checks_run_without_database_transaction(tmp_path, monkeypatc
     def reconcile_without_transaction(download, *, verify_file_size):
         nonlocal checked
         checked = True
+        assert isinstance(download, MediaDownloadBase)
+        assert sa_inspect(download).detached
         assert not session.in_transaction()
         return original_reconcile(download, verify_file_size=verify_file_size)
 
@@ -128,8 +131,10 @@ def test_stale_filesystem_result_does_not_overwrite_newer_download(tmp_path, mon
     replacement_path = tmp_path / "replacement.m4a"
 
     def reconcile_while_download_changes(download, *, verify_file_size):
-        reconciled = original_reconcile(download, verify_file_size=verify_file_size)
-        assert reconciled.artifact_status == MediaDownloadArtifactStatus.MISSING.value
+        updates = original_reconcile(download, verify_file_size=verify_file_size)
+        assert updates["artifact_status"] == MediaDownloadArtifactStatus.MISSING.value
+        assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+        assert sa_inspect(download).detached
         assert not session.in_transaction()
 
         replacement_path.write_bytes(b"newer completed download")
@@ -147,7 +152,7 @@ def test_stale_filesystem_result_does_not_overwrite_newer_download(tmp_path, mon
             current.artifact_fingerprint = replacement_identity.fingerprint
             concurrent_session.commit()
 
-        return reconciled
+        return updates
 
     monkeypatch.setattr(service, "_reconcile", reconcile_while_download_changes)
 
