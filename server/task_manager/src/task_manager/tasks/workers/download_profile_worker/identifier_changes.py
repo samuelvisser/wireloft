@@ -22,9 +22,9 @@ def handle_episode_identifier_changed(
         old_episode_identifier: str,
         new_episode_identifier: str,
 ) -> int:
-    """Queue targeted re-downloads for identifier-sensitive Local Media Profiles.
+    """Queue targeted re-downloads for identifier-sensitive profiles.
 
-    Download Profiles still determine whether an identifier change should cause an
+    Download Profiles determine whether an identifier change should cause an
     automatic replacement. Once selected, the replacement itself targets the
     persistent artifact by Local Media Profile, so manually created media rows and
     Download Profile provenance are never rewritten by the re-download worker.

@@ -687,8 +687,8 @@ export default function ShowPage() {
         }}
       >
         <p>
-          This deletes the existing episode files selected below and downloads them again. This can take a long time,
-          use significant bandwidth, and is usually not needed.
+          This deletes all existing episode files that belong to this show and the Local Media Profile selected below,
+          and re-downloads them. This can take a long time, use significant bandwidth, and is usually not needed.
         </p>
         <div className="form-row">
           <label htmlFor="redownload-profile">Local Media Profile</label>
