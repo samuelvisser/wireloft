@@ -1,8 +1,8 @@
 import {z} from 'zod';
 import {EpisodePublishStatus} from "../episode";
+import {ApiDateTimeSchema} from "./datetime";
 
 
-// ---------- Strict request (create/update) ----------
 const EpisodeBaseSchema = z.object({
     publishStatus: z.enum(EpisodePublishStatus),
     wentLiveDate: z.date().optional(),
@@ -13,7 +13,6 @@ const EpisodeBaseSchema = z.object({
     downloadedDate: z.date().optional(),
 })
 
-
 export const EpisodeCreateSchema = EpisodeBaseSchema.extend({
     showId: z.int(),
     index: z.number(),
@@ -23,19 +22,13 @@ export const EpisodeCreateSchema = EpisodeBaseSchema.extend({
 export type EpisodeCreateIn = z.input<typeof EpisodeCreateSchema>
 export type EpisodeCreateOut = z.output<typeof EpisodeCreateSchema>
 
-
-export const EpisodeUpdateSchema = EpisodeBaseSchema.extend({
-    dwId: z.string().optional(),
-})
+export const EpisodeUpdateSchema = EpisodeBaseSchema.extend({dwId: z.string().optional()})
 export type EpisodeUpdateIn = z.input<typeof EpisodeUpdateSchema>
 export type EpisodeUpdateOut = z.output<typeof EpisodeUpdateSchema>
 
-
-// ------------ Lenient response (read) ------------
 export const EpisodeReadSchema = z.looseObject({
     id: z.int(),
     uuid: z.string(),
-    dwId: z.string().optional(),
     showId: z.int(),
     seasonId: z.int(),
     index: z.number(),
@@ -43,17 +36,20 @@ export const EpisodeReadSchema = z.looseObject({
     slug: z.string(),
     title: z.string(),
     publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),
+    earlyDeleteAvailable: z.boolean().optional().default(false),
     description: z.string(),
-    backgroundImagePath: z.string().optional(),
-    thumbnailLandscapePath: z.string().optional(),
-    thumbnailPortraitPath: z.string().optional(),
-    thumbnailSquarePath: z.string().optional(),
-    wentLiveDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
-    publishedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
-    redownloadedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
-    downloadedDate: z.iso.datetime().transform((s) => new Date(s)).optional(),
-    isNoShowToday: z.boolean().nullable().optional(),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    sharingUrl: z.string(),
+    duration: z.number(),
+    backgroundImagePath: z.string().nullable().optional(),
+    thumbnailLandscapePath: z.string().nullable().optional(),
+    thumbnailPortraitPath: z.string().nullable().optional(),
+    thumbnailSquarePath: z.string().nullable().optional(),
+    wentLiveDate: ApiDateTimeSchema.nullable().optional(),
+    publishedDate: ApiDateTimeSchema.nullable().optional(),
+    scheduledDate: ApiDateTimeSchema.nullable().optional(),
+    redownloadedDate: ApiDateTimeSchema.nullable().optional(),
+    downloadedDate: ApiDateTimeSchema.nullable().optional(),
+    createdAt: ApiDateTimeSchema,
+    updatedAt: ApiDateTimeSchema,
 })
 export type EpisodeRead = z.infer<typeof EpisodeReadSchema>

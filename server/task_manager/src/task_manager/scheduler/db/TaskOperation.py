@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, Integer, JSON, String, Text, func
+from sqlalchemy import Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
+from backend.db.datetime_types import UTCDateTime
 
 if TYPE_CHECKING:
     from .TaskOperationRun import TaskOperationRun
@@ -36,17 +37,16 @@ class TaskOperation(Base):
     context: Mapped[Optional[dict]] = mapped_column(JSON)
     error: Mapped[Optional[str]] = mapped_column(Text)
 
-    notification_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    notification_seen_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), index=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+    finished_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
     )
 
-    # Relationships
     targets: Mapped[list["TaskOperationTarget"]] = relationship(
         back_populates="operation",
         cascade="all, delete-orphan",

@@ -1,5 +1,7 @@
 import {z} from "zod";
 
+import {ApiDateTimeSchema} from "./datetime";
+
 
 // ---------- Strict request (create/update) ----------
 const SeasonBaseSchema = z.object({
@@ -15,7 +17,6 @@ export type SeasonCreateIn = z.input<typeof SeasonCreateSchema>;
 export type SeasonCreateOut = z.output<typeof SeasonCreateSchema>;
 
 
-// Schema for seasons without external relations, allowing for dynamic insertion
 export const SeasonDetachedSchema = SeasonCreateSchema.omit({
     showId: true,
     index: true,
@@ -38,7 +39,7 @@ export const SeasonReadSchema = z.looseObject({
     index: z.int(),
     name: z.string(),
     slug: z.string(),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    createdAt: ApiDateTimeSchema,
+    updatedAt: ApiDateTimeSchema,
 })
 export type SeasonRead = z.infer<typeof SeasonReadSchema>;

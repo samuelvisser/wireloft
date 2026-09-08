@@ -48,10 +48,16 @@ class ShowAPIUpdate(_ShowAPIBaseIn):
     pass
 
 
-class ShowRedownloadEpisodesAPIRequest(RequestBase):
-    """Select one Download Profile, or every attached profile when omitted."""
+class ShowFileRenameAPIRequest(RequestBase):
+    """Select one Local Media Profile, or every profile with existing episode media."""
 
-    download_profile_id: Optional[int] = Field(default=None, gt=0)
+    local_media_profile_id: Optional[int] = Field(default=None, gt=0)
+
+
+class ShowRedownloadEpisodesAPIRequest(RequestBase):
+    """Select one Local Media Profile, or every profile with existing episode media."""
+
+    local_media_profile_id: Optional[int] = Field(default=None, gt=0)
 
 
 # ---------- Lenient output (read) ----------

@@ -44,7 +44,7 @@ export default function FrontendPuller({children}: {children: ReactNode}) {
     staleTime: 0,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
     refetchInterval: (current) => (
       current.state.data?.mode === 'fast'
         ? FRONTEND_PULLER_FAST_MS

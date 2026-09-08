@@ -9,6 +9,7 @@ import {
 import {useQueryClient, type QueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 import {type TaskOperationRead} from '../../types/schemas/operation'
+import {PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {refreshFrontendPuller, useFrontendPuller} from '../../lib/puller'
 
 const ACTIVE_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
@@ -42,6 +43,11 @@ function contextString(operation: TaskOperationRead, key: string): string | unde
   return typeof value === 'string' && value ? value : undefined
 }
 
+function resultString(operation: TaskOperationRead, key: string): string | undefined {
+  const value = operation.result?.data?.[key]
+  return typeof value === 'string' && value ? value : undefined
+}
+
 function resultNumber(operation: TaskOperationRead, key: string): number | undefined {
   const value = operation.result?.data?.[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
@@ -60,6 +66,11 @@ function operationLabel(operation: TaskOperationRead): string {
     case 'show.refresh_metadata':
     case 'episode.refresh_metadata':
       return 'Metadata refresh'
+    case 'episode.early_delete':
+      return 'Early delete'
+    case 'show.rename_files':
+    case 'local_media_profile.rename_files':
+      return 'File Rename'
     case 'show.redownload_episodes':
       return 'Re-download'
     case 'movie.refresh_extras':
@@ -69,6 +80,16 @@ function operationLabel(operation: TaskOperationRead): string {
     default:
       return operation.title || 'Operation'
   }
+}
+
+function fileRenameSuccessMessage(operation: TaskOperationRead, title: string): string {
+  const renamed = (resultNumber(operation, 'files_renamed') ?? 0)
+    + (resultNumber(operation, 'files_recovered') ?? 0)
+  const unchanged = resultNumber(operation, 'files_unchanged') ?? 0
+  const considered = resultNumber(operation, 'files_considered') ?? (renamed + unchanged)
+  if (considered === 0) return `No existing files needed renaming for ${title}`
+  const unchangedDetail = unchanged > 0 ? `; ${unchanged} already matched` : ''
+  return `File Rename finished for ${title}: ${renamed} ${plural(renamed, 'file')} renamed${unchangedDetail}`
 }
 
 function successMessage(operation: TaskOperationRead): string {
@@ -95,12 +116,36 @@ function successMessage(operation: TaskOperationRead): string {
       const episodeTitle = contextString(operation, 'episode_title') || operation.title
       return `Metadata refresh completed for ${episodeTitle}`
     }
+    case 'episode.early_delete': {
+      const episodeTitle = contextString(operation, 'episode_title') || operation.title
+      const outcome = resultString(operation, 'outcome')
+      if (outcome === 'recovered' || outcome === 'replaced') {
+        const publishStatus = resultString(operation, 'publish_status')
+        const statusLabel = publishStatus
+          ? (PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus)
+          : undefined
+        return statusLabel
+          ? `Recovered ${episodeTitle} to ${statusLabel} state`
+          : `Recovered ${episodeTitle}`
+      }
+      if (outcome === 'deleted') return `Deleted ${episodeTitle}`
+      if (outcome === 'retained') return `${episodeTitle} remains in No usable media state`
+      if (outcome === 'unverified') return `Could not verify ${episodeTitle}; it was not deleted`
+      if (outcome === 'already_resolved') return `${episodeTitle} no longer needs No usable media verification`
+      return `Early delete completed for ${episodeTitle}`
+    }
+    case 'show.rename_files':
+      return fileRenameSuccessMessage(operation, showTitle)
+    case 'local_media_profile.rename_files': {
+      const profileName = contextString(operation, 'local_media_profile_name') || operation.title
+      return fileRenameSuccessMessage(operation, profileName)
+    }
     case 'show.redownload_episodes': {
       const files = resultNumber(operation, 'episode_files') ?? 0
-      const profiles = resultNumber(operation, 'download_profiles')
+      const profiles = resultNumber(operation, 'local_media_profiles')
       const profileDetail = profiles === undefined
         ? ''
-        : ` using ${profiles} ${plural(profiles, 'Download Profile')}`
+        : ` using ${profiles} ${plural(profiles, 'Local Media Profile')}`
       return `Re-download finished for ${showTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
     }
     case 'media.download':
@@ -128,11 +173,28 @@ function terminalMessage(operation: TaskOperationRead): string {
   return `${label} failed for ${operation.title}${operation.error ? `: ${operation.error}` : ''}`
 }
 
+function taskLedgerQueryMatchesOperation(queryKey: readonly unknown[], operation: TaskOperationRead): boolean {
+  if (queryKey[0] !== 'taskLedger') return false
+
+  const resourceType = queryKey[2]
+  if (resourceType !== undefined && resourceType !== operation.resourceType) return false
+
+  const resourceFilter = queryKey[3]
+  if (resourceFilter === undefined || operation.resourceId == null) return true
+  if (typeof resourceFilter === 'number') return resourceFilter === operation.resourceId
+  return Array.isArray(resourceFilter) && resourceFilter.includes(operation.resourceId)
+}
+
 async function invalidateForOperation(queryClient: QueryClient, operation: TaskOperationRead) {
   const showSlug = contextString(operation, 'show_slug')
   const episodeSlug = contextString(operation, 'episode_slug')
+  const resultEpisodeSlug = resultString(operation, 'episode_slug')
   const movieSlug = contextString(operation, 'movie_slug')
-  const invalidations: Promise<unknown>[] = []
+  const invalidations: Promise<unknown>[] = [
+    queryClient.invalidateQueries({
+      predicate: (query) => taskLedgerQueryMatchesOperation(query.queryKey, operation),
+    }),
+  ]
 
   if (operation.kind.startsWith('show.')) {
     invalidations.push(
@@ -147,13 +209,27 @@ async function invalidateForOperation(queryClient: QueryClient, operation: TaskO
     }
   }
 
-  if (operation.kind === 'show.redownload_episodes') {
+  if (
+    operation.kind === 'show.redownload_episodes'
+    || operation.kind === 'show.rename_files'
+    || operation.kind === 'local_media_profile.rename_files'
+  ) {
     invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
   }
 
-  if (operation.kind === 'episode.refresh_metadata') {
+  if (operation.kind === 'local_media_profile.rename_files') {
+    invalidations.push(
+      queryClient.invalidateQueries({queryKey: ['localMediaProfiles']}),
+      queryClient.invalidateQueries({queryKey: ['localMediaProfile']}),
+    )
+  }
+
+  if (operation.kind.startsWith('episode.')) {
     if (episodeSlug) {
       invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
+    }
+    if (resultEpisodeSlug && resultEpisodeSlug !== episodeSlug) {
+      invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', resultEpisodeSlug]}))
     }
     if (showSlug) {
       invalidations.push(queryClient.invalidateQueries({queryKey: ['episodes', showSlug]}))
@@ -169,12 +245,6 @@ async function invalidateForOperation(queryClient: QueryClient, operation: TaskO
 
   if (operation.kind === 'media.download') {
     invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
-    if (operation.resourceId != null) {
-      invalidations.push(queryClient.invalidateQueries({
-        queryKey: ['mediaDownloadAttempts', operation.resourceId],
-        exact: true,
-      }))
-    }
     if (episodeSlug) {
       invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
     }
@@ -199,9 +269,6 @@ export default function OperationNotifier({children}: {children: ReactNode}) {
   const {data: pullData} = useFrontendPuller()
   const operations = pullData?.operations ?? []
 
-  // If another browser acknowledges a terminal operation before this browser
-  // observes the terminal snapshot, it disappears from the pull. Remembering the
-  // active snapshot still lets this browser refresh the affected ordinary queries.
   useEffect(() => {
     if (!pullData) return
 
@@ -219,9 +286,6 @@ export default function OperationNotifier({children}: {children: ReactNode}) {
     previousActiveRef.current = currentActive
   }, [operations, pullData, queryClient])
 
-  // Every terminal operation stays in the generic pull until a frontend has
-  // processed the domain-data refresh it implies. UI operations additionally get
-  // a toast; automated/API work is acknowledged silently after invalidation.
   useEffect(() => {
     for (const operation of operations) {
       if (

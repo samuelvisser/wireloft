@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, HTTPException
 
+from backend.api.datetime import api_timezone_payload
 from dailywire_api.records import DwShowRecord
 from .service import get_show
 
@@ -21,7 +22,7 @@ def show_detail(
     Returns 502 if upstream API is unavailable or returns an error.
     """
     try:
-        return get_show(show_slug, membership_plan=membership_plan)
+        return api_timezone_payload(get_show(show_slug, membership_plan=membership_plan))
     except Exception as e:
         # Map any unhandled error to a 502 Bad Gateway since we're proxying upstream
         raise HTTPException(status_code=502, detail=str(e))

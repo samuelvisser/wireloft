@@ -82,8 +82,8 @@ def validate_worker_cron_settings(
     *,
     min_slow_request_ms: int,
     find_episodes_cron: str,
-    monitor_episode_cron: str,
-    check_no_show_today_cron: str,
+    monitor_pending_episode_cron: str,
+    monitor_no_usable_media_episode_cron: str,
     verify_downloads_cron: str,
     file_watcher_scan_cron: str,
 ) -> None:
@@ -95,13 +95,13 @@ def validate_worker_cron_settings(
         ),
         (
             "Monitor pending episodes",
-            ("new_episode_schedule", "monitor_episode_cron"),
-            monitor_episode_cron,
+            ("new_episode_schedule", "monitor_pending_episode_cron"),
+            monitor_pending_episode_cron,
         ),
         (
-            "Check no-show-today episodes",
-            ("new_episode_schedule", "check_no_show_today_cron"),
-            check_no_show_today_cron,
+            "Monitor no-usable-media episodes",
+            ("new_episode_schedule", "monitor_no_usable_media_episode_cron"),
+            monitor_no_usable_media_episode_cron,
         ),
         (
             "Verify downloads",

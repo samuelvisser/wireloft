@@ -73,7 +73,11 @@ export default function EditDownloadProfilePage() {
         }
     }, [downloadProfile, form])
 
-    const mediaProfileReg = useLocalMediaProfileSelectRegistry(mediaProfiles, 'show')
+    const mediaProfileReg = useLocalMediaProfileSelectRegistry(
+        mediaProfiles,
+        'show',
+        mode === 'podcast' || mode === 'series' ? mode : undefined,
+    )
     const selectedLocalMediaProfileId = form.watch('localMediaProfileId')
 
     const disabledEpisodeTypes = useMemo(() => {

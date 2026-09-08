@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from backend.api.helpers import update_database_fields
 from backend.api.models.episode import *
 from backend.db.models.media_item import Episode
+from backend.types.episode_types import EpisodePublishStatus
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
@@ -17,7 +18,8 @@ from task_manager.scheduler.operations import (
 
 
 METADATA_REFRESH_REQUESTED_EVENT = "episode.metadata_refresh_requested"
-_METADATA_REFRESH_TASK_KEY = "refresh_episode_metadata_worker"
+_METADATA_REFRESH_TASK_KEY = "refresh_episode_metadata"
+_EARLY_DELETE_TASK_KEY = "monitor_no_usable_media_episode"
 
 
 def get_episodes_by_show_list(s: Session, show_slug: str, limit: int | None = None) -> list[EpisodeAPIRead]:
@@ -101,6 +103,58 @@ def request_episode_metadata_refresh(
     return {
         "queued": True,
         "episode_id": episode.id,
+        "operation_id": operation.id,
+    }
+
+
+def request_episode_early_delete(
+        s: Session,
+        episode_slug: str,
+) -> dict[str, bool | str]:
+    """Queue an immediate no-usable-media verification for a confirmed missing episode."""
+    episode = (
+        s.query(Episode)
+        .filter_by(slug=episode_slug)
+        .one_or_none()
+    )
+    if episode is None:
+        raise HTTPException(status_code=404, detail="Episode not found")
+    if not episode.early_delete_available:
+        raise HTTPException(
+            status_code=409,
+            detail="Early Delete is only available after Daily Wire has returned 404 for this episode",
+        )
+
+    show = episode.show
+    target = OperationTargetSpec(
+        task_key=_EARLY_DELETE_TASK_KEY,
+        resource_type="show",
+        resource_id=episode.show_id,
+        task_kwargs={
+            "episode_id": episode.id,
+            "force": True,
+        },
+        slot_key=f"{_EARLY_DELETE_TASK_KEY}:episode:{episode.id}:force",
+    )
+    operation = create_operation(
+        s,
+        kind="episode.early_delete",
+        resource_type="episode",
+        resource_id=episode.id,
+        title=episode.title,
+        targets=[target],
+        context={
+            "episode_slug": episode.slug,
+            "episode_title": episode.title,
+            "show_id": episode.show_id,
+            "show_slug": show.slug if show is not None else None,
+            "show_title": show.title if show is not None else None,
+        },
+    )
+    queue_operation_target_dispatch(s, operation.id, target.resolved_slot_key())
+    s.flush()
+    return {
+        "queued": True,
         "operation_id": operation.id,
     }
 

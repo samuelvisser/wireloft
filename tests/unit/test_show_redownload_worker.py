@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,9 +23,9 @@ def _session() -> tuple[Session, object]:
 
 
 def _library(session: Session, tmp_path: Path):
-    from backend.db.models import Episode, LocalMediaProfile, PodcastDownloadProfile, Season, Show
+    from backend.db.models import Episode, LocalMediaProfile, Season, Show
     from backend.db.models.media_download import EpisodeMediaDownload
-    from backend.types.download_profile_types import EpIdType, MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
@@ -56,220 +57,225 @@ def _library(session: Session, tmp_path: Path):
         sharing_url="https://example.test/episode-1",
         published_date=datetime(2026, 9, 1, 12, 0, 0),
     )
-    local_profile = LocalMediaProfile(
+    audio_profile = LocalMediaProfile(
         slug="audio",
         name="Audio",
         output_template="/downloads/{{ show }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
-    profile = PodcastDownloadProfile(
-        show=show,
-        local_media_profile=local_profile,
-        type="podcast",
-        enable_profile=True,
-        ep_id_type_list=[EpIdType.EP.value],
-        download_with_countdown=False,
-        redownload_final=False,
-        download_days_in_past=0,
-        download_episode_count=0,
-        delete_older_episodes=False,
-    )
-    old_path = tmp_path / "old" / "episode-1.m4a"
-    old_path.parent.mkdir(parents=True)
-    old_path.write_bytes(b"old")
-    download = EpisodeMediaDownload(
-        type=MediaType.EPISODE.value,
-        media_item_id=episode.id,
-        local_media_profile_id=local_profile.id,
-        download_profile=profile,
-        download_status=MediaDownloadStatus.DOWNLOADED.value,
-        file_path=str(old_path),
-        progress=100,
-        downloaded_bytes=3,
-        format_downloaded="audio",
-        downloaded_publish_status="published_final",
-        is_redownload_attempt=False,
-    )
-    session.add_all([show, season, episode, local_media_profile := local_profile, profile])
-    session.flush()
-    download.media_item_id = episode.id
-    download.local_media_profile_id = local_media_profile.id
-    session.add(download)
-    session.commit()
-    return show, episode, profile, download, old_path
-
-
-def test_show_redownload_request_targets_one_or_all_profiles(monkeypatch, tmp_path):
-    from backend.api.endpoints.shows import service
-    from backend.db.models import LocalMediaProfile, PodcastDownloadProfile
-    from backend.types.download_profile_types import EpIdType
-    from task_manager.scheduler.db import TaskOperationTarget
-
-    session, engine = _session()
-    show, _episode, profile, _download, _old_path = _library(session, tmp_path)
-    second_local = LocalMediaProfile(
+    video_profile = LocalMediaProfile(
         slug="video",
         name="Video",
         output_template="/downloads/{{ show }}/video/{{ episode }}.ext",
         preferred_format="format_1080p",
     )
-    second_profile = PodcastDownloadProfile(
-        show=show,
-        local_media_profile=second_local,
-        type="podcast",
-        enable_profile=True,
-        ep_id_type_list=[EpIdType.EP.value],
-        download_with_countdown=False,
-        redownload_final=False,
-        download_days_in_past=0,
-        download_episode_count=0,
-        delete_older_episodes=False,
+    unused_profile = LocalMediaProfile(
+        slug="unused",
+        name="Unused",
+        output_template="/downloads/{{ show }}/unused/{{ episode }}.ext",
+        preferred_format="format_720p",
     )
-    session.add_all([second_local, second_profile])
+    session.add_all([show, season, episode, audio_profile, video_profile, unused_profile])
+    session.flush()
+
+    audio_path = tmp_path / "old" / "episode-1.m4a"
+    video_path = tmp_path / "old" / "episode-1.mp4"
+    audio_path.parent.mkdir(parents=True)
+    audio_path.write_bytes(b"audio")
+    video_path.write_bytes(b"video")
+
+    audio_download = EpisodeMediaDownload(
+        type=MediaType.EPISODE.value,
+        media_item_id=episode.id,
+        local_media_profile_id=audio_profile.id,
+        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        file_path=str(audio_path),
+        downloaded_bytes=5,
+        format_downloaded="audio",
+        downloaded_at=datetime(2026, 9, 2, 12, 0, 0),
+        downloaded_publish_status="published_final",
+    )
+    video_download = EpisodeMediaDownload(
+        type=MediaType.EPISODE.value,
+        media_item_id=episode.id,
+        local_media_profile_id=video_profile.id,
+        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        file_path=str(video_path),
+        downloaded_bytes=5,
+        format_downloaded="video",
+        downloaded_at=datetime(2026, 9, 2, 12, 0, 0),
+        downloaded_publish_status="published_final",
+    )
+    session.add_all([audio_download, video_download])
     session.commit()
-
-    queued: list[tuple[str, dict]] = []
-    monkeypatch.setattr(service, "queue_event", lambda _s, name, data: queued.append((name, data)))
-
-    result = service.request_show_episode_redownload(session, show.slug, None)
-    assert result["queued"] is True
-    assert result["download_profiles_queued"] == 2
-    UUID(result["operation_id"])
-    assert queued[-1][1]["download_profile_id"] is None
-    assert "manual_request_id" not in queued[-1][1]
-
-    all_target = session.query(TaskOperationTarget).filter_by(
-        operation_id=result["operation_id"]
-    ).one()
-    assert all_target.task_key == "redownload_show_episodes_worker"
-    assert all_target.task_kwargs == {"download_profile_id": None}
-
-    result = service.request_show_episode_redownload(session, show.slug, profile.id)
-    assert result["download_profiles_queued"] == 1
-    UUID(result["operation_id"])
-    assert queued[-1][1]["download_profile_id"] == profile.id
-
-    with pytest.raises(HTTPException) as exc:
-        service.request_show_episode_redownload(session, show.slug, 999999)
-    assert exc.value.status_code == 422
-
-    session.close()
-    engine.dispose()
-
-
-def test_target_episode_profiles_does_not_deduplicate(monkeypatch):
-    from task_manager.tasks.workers.redownload_show_episodes_worker import _helpers
-
-    episode = SimpleNamespace(id=10)
-    profile_a = SimpleNamespace(id=1)
-    profile_b = SimpleNamespace(id=2)
-    monkeypatch.setattr(
-        _helpers,
-        "get_download_profile_episodes",
-        lambda _session, _profile: [episode],
+    return (
+        show,
+        episode,
+        audio_profile,
+        video_profile,
+        unused_profile,
+        audio_download,
+        video_download,
+        audio_path,
     )
 
-    targets = _helpers._target_episode_profiles(object(), [profile_a, profile_b])
 
-    assert targets == [(episode, profile_a), (episode, profile_b)]
+def test_show_redownload_request_uses_existing_local_media_profiles(tmp_path):
+    from backend.api.endpoints.shows import service
+    from backend.db.models import DownloadProfileBase
+    from task_manager.scheduler.db import TaskOperationTarget
+
+    session, engine = _session()
+    try:
+        (
+            show,
+            _episode,
+            audio_profile,
+            _video_profile,
+            unused_profile,
+            _audio_download,
+            _video_download,
+            _audio_path,
+        ) = _library(session, tmp_path)
+
+        # These rows are intentionally manual: no Download Profile exists at all.
+        assert session.query(DownloadProfileBase).count() == 0
+
+        result = service.request_show_episode_redownload(session, show.slug, None)
+        assert result["queued"] is True
+        assert result["local_media_profiles_queued"] == 2
+        UUID(str(result["operation_id"]))
+
+        all_target = session.query(TaskOperationTarget).filter_by(
+            operation_id=result["operation_id"]
+        ).one()
+        assert all_target.task_key == "redownload_show_episodes_worker"
+        assert all_target.task_kwargs == {"local_media_profile_id": None}
+
+        selected = service.request_show_episode_redownload(
+            session,
+            show.slug,
+            audio_profile.id,
+        )
+        assert selected["local_media_profiles_queued"] == 1
+        selected_target = session.query(TaskOperationTarget).filter_by(
+            operation_id=selected["operation_id"]
+        ).one()
+        assert selected_target.task_kwargs == {
+            "local_media_profile_id": audio_profile.id,
+        }
+
+        with pytest.raises(HTTPException) as exc:
+            service.request_show_episode_redownload(
+                session,
+                show.slug,
+                unused_profile.id,
+            )
+        assert exc.value.status_code == 422
+    finally:
+        session.close()
+        engine.dispose()
 
 
-def test_redownload_worker_replaces_existing_file_and_generation(monkeypatch, tmp_path):
+def test_redownload_worker_preserves_manual_download_provenance(monkeypatch, tmp_path):
     from backend.db.models.media_download import EpisodeMediaDownload
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from config import get_settings
+    from task_manager.scheduler.db import TaskOperation
     from task_manager.tasks.workers.redownload_show_episodes_worker import _helpers
 
     session, engine = _session()
-    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
-    _show, episode, profile, download, old_path = _library(session, tmp_path)
-    original_generation = download.attempt_generation
+    try:
+        monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+        monkeypatch.setattr(
+            _helpers,
+            "dispatch_queued_media_download_operations",
+            lambda _session: 0,
+        )
+        (
+            _show,
+            _episode,
+            _audio_profile,
+            _video_profile,
+            _unused_profile,
+            audio_download,
+            _video_download,
+            audio_path,
+        ) = _library(session, tmp_path)
 
-    targets = _helpers._target_episode_profiles(session, [profile])
-    prepared = _helpers._prepare_redownloads(session, targets)
+        assert audio_download.download_profile_id is None
+        prepared = _helpers._prepare_redownloads(session, [audio_download])
 
-    assert len(prepared) == 1
-    session.expire_all()
-    refreshed = session.get(EpisodeMediaDownload, download.id)
-    assert refreshed is not None
-    assert refreshed.attempt_generation == original_generation + 1
-    assert refreshed.download_status == MediaDownloadStatus.PENDING.value
-    assert refreshed.progress == 0
-    assert refreshed.downloaded_bytes is None
-    assert refreshed.format_downloaded is None
-    assert refreshed.downloaded_publish_status is None
-    assert refreshed.is_redownload_attempt is True
-    assert refreshed.download_profile_id == profile.id
-    assert refreshed.file_path == str((tmp_path / "test-show" / "episode-1.ext").resolve())
-    assert not old_path.exists()
+        assert len(prepared) == 1
+        session.expire_all()
+        refreshed = session.get(EpisodeMediaDownload, audio_download.id)
+        assert refreshed is not None
+        assert refreshed.download_profile_id is None
+        assert refreshed.artifact_status == MediaDownloadArtifactStatus.ABSENT.value
+        assert refreshed.downloaded_bytes is None
+        assert refreshed.format_downloaded is None
+        assert refreshed.downloaded_at is None
+        assert refreshed.downloaded_publish_status is None
+        assert refreshed.file_path == str((tmp_path / "test-show" / "episode-1.ext").resolve())
+        assert not audio_path.exists()
 
-    session.close()
-    engine.dispose()
+        operation = session.get(TaskOperation, prepared[0].operation_id)
+        assert operation is not None
+        assert operation.context["local_media_profile_id"] == refreshed.local_media_profile_id
+        assert operation.context["is_redownload"] is True
+    finally:
+        session.close()
+        engine.dispose()
 
 
-def test_redownload_worker_uses_cancel_workflow_for_active_download(monkeypatch, tmp_path):
-    from backend.api.endpoints.media_downloads.service import cancel_media_download as real_cancel_media_download
-    from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadAttempt
-    from backend.types.download_profile_types import MediaDownloadStatus
-    from config import get_settings
-    from task_manager.tasks.workers.redownload_show_episodes_worker import _helpers
+def test_redownload_worker_targets_existing_media_rows(monkeypatch, tmp_path):
+    from task_manager.tasks.workers.redownload_show_episodes_worker import service
 
     session, engine = _session()
-    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
-    _show, _episode, profile, download, old_path = _library(session, tmp_path)
-    partial_path = Path(str(old_path) + ".part")
-    partial_path.write_bytes(b"partial")
-    download.download_status = MediaDownloadStatus.DOWNLOADING.value
-    download.progress = 42
-    download.started_at = datetime(2026, 9, 3, 23, 30, 0)
-    session.commit()
-    original_generation = download.attempt_generation
+    try:
+        (
+            show,
+            _episode,
+            audio_profile,
+            _video_profile,
+            _unused_profile,
+            audio_download,
+            _video_download,
+            _audio_path,
+        ) = _library(session, tmp_path)
+        prepared_inputs: list[list[object]] = []
 
-    cancelled_ids: list[int] = []
+        async def no_sleep(_seconds):
+            return None
 
-    def tracked_cancel(current_session: Session, media_download_id: int):
-        cancelled_ids.append(media_download_id)
-        return real_cancel_media_download(current_session, media_download_id)
+        monkeypatch.setattr(service.asyncio, "sleep", no_sleep)
 
-    monkeypatch.setattr(_helpers, "cancel_media_download", tracked_cancel)
+        def prepare(_session, downloads):
+            prepared_inputs.append(list(downloads))
+            return [SimpleNamespace(operation_id="operation-1")]
 
-    targets = _helpers._target_episode_profiles(session, [profile])
-    prepared = _helpers._prepare_redownloads(session, targets)
+        monkeypatch.setattr(service, "_prepare_redownloads", prepare)
+        monkeypatch.setattr(service, "_check_targets", lambda *_args: (1, 100, None))
 
-    assert len(prepared) == 1
-    assert cancelled_ids == [download.id]
-    session.expire_all()
-    refreshed = session.get(EpisodeMediaDownload, download.id)
-    assert refreshed is not None
-    # cancel_media_download invalidates the active attempt, then retry_media_download
-    # creates the fresh generation that the re-download worker will queue.
-    assert refreshed.attempt_generation == original_generation + 2
-    assert refreshed.download_status == MediaDownloadStatus.PENDING.value
-    assert refreshed.progress == 0
-    assert not old_path.exists()
-    assert not partial_path.exists()
+        result = asyncio.run(
+            service.run_redownload_show_episodes_worker(
+                session,
+                show_id=show.id,
+                local_media_profile_id=audio_profile.id,
+            )
+        )
 
-    cancellation = (
-        session.query(MediaDownloadAttempt)
-        .filter_by(media_download_id=download.id)
-        .order_by(MediaDownloadAttempt.id.desc())
-        .first()
-    )
-    assert cancellation is not None
-    assert cancellation.status == MediaDownloadStatus.CANCELLED.value
-
-    session.close()
-    engine.dispose()
+        assert [[download.id for download in group] for group in prepared_inputs] == [
+            [audio_download.id]
+        ]
+        assert result["episode_files"] == 1
+        assert result["local_media_profiles"] == 1
+    finally:
+        session.close()
+        engine.dispose()
 
 
-def test_redownload_worker_registers_show_event():
-    from backend.api.endpoints.shows.service import SHOW_REDOWNLOAD_EPISODES_REQUESTED_EVENT
+def test_redownload_worker_is_not_automatically_retried():
     from task_manager.tasks.workers.redownload_show_episodes_worker import redownload_show_episodes_worker
 
-    event_names = {
-        trigger.event_name
-        for trigger in redownload_show_episodes_worker._task_meta.triggers
-        if trigger.trigger_type == "event"
-    }
-    assert SHOW_REDOWNLOAD_EPISODES_REQUESTED_EVENT in event_names
     assert redownload_show_episodes_worker._task_meta.default_max_retries == 0

@@ -9,6 +9,12 @@ class LocalMediaProfileType(str, Enum):
     BASE = "base"
 
 
+class ShowLocalMediaProfileScope(str, Enum):
+    BOTH = "both"
+    PODCAST = "podcast"
+    SERIES = "series"
+
+
 class PreferredFormat(str, Enum):
     FORMAT_4K = 'format_4k'
     FORMAT_1080P = 'format_1080p'

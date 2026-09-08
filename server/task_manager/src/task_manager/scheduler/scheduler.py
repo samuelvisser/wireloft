@@ -12,6 +12,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
 
+from backend.db.datetime_types import utc_datetime
 from config import get_settings
 
 _scheduler: Optional[AsyncIOScheduler] = None
@@ -19,16 +20,20 @@ WATCHDOG_EXECUTOR_ALIAS = "watchdog"
 
 
 def get_trigger(name: str, args: dict):
+    trigger_args = dict(args)
+    # Legacy: remove timezone from trigger, we use the WireLoft TZ timezone
+    trigger_args.pop("timezone", None)
+    app_timezone = get_settings().timezone
+
     if name == "cron":
-        return CronTrigger(**args)
+        return CronTrigger(timezone=app_timezone, **trigger_args)
     if name == "interval":
-        return IntervalTrigger(**args)
+        return IntervalTrigger(timezone=app_timezone, **trigger_args)
     if name == "date":
-        # args may include run_date as ISO8601 string or datetime
-        run_date = args.get("run_date")
+        run_date = trigger_args.pop("run_date", None)
         if isinstance(run_date, str):
             run_date = datetime.fromisoformat(run_date)
-        return DateTrigger(run_date=run_date)
+        return DateTrigger(run_date=run_date, timezone=app_timezone)
     raise ValueError(f"Unknown trigger: {name}")
 
 
@@ -225,6 +230,7 @@ def cancel_pending_operation_jobs(
 def schedule_retry(*, def_key: str, resource_type: str, resource_id: int, run_id: int, run_at: datetime) -> str:
     from .executor import execute_task
     sch = start_scheduler()
+    run_at = utc_datetime(run_at)
     job = sch.add_job(
         execute_task,
         trigger=DateTrigger(run_date=run_at),

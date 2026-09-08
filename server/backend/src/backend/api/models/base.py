@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, AliasGenerator
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel, to_snake
+
+from backend.api.datetime import api_datetime
 
 
 class ResponseBase(BaseModel):
@@ -16,8 +20,10 @@ class ResponseBase(BaseModel):
         populate_by_name=True,
         from_attributes=True,
         extra='ignore',
-        use_enum_values=True
+        use_enum_values=True,
+        json_encoders={datetime: api_datetime},
     )
+
 
 class RequestBase(BaseModel):
     """Base class for API request models with camelCase input and snake_case serialization."""

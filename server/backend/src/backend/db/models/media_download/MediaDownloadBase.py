@@ -1,11 +1,12 @@
 from datetime import datetime
-from typing import List, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Boolean, DateTime, String, Text, func, UniqueConstraint
+from sqlalchemy import Boolean, String, Text, func, UniqueConstraint
 from sqlalchemy.sql.schema import ForeignKey
 
 from backend.db import Base
+from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_types import MediaType
@@ -13,7 +14,6 @@ from backend.types.media_types import MediaType
 if TYPE_CHECKING:
     from backend.db.models.media_item import MediaItemBase
     from backend.db.models import LocalMediaProfileBase
-    from .MediaDownloadAttempt import MediaDownloadAttempt
 
 
 class MediaDownloadBase(HasTaskResourcesMixin, Base):
@@ -62,24 +62,18 @@ class MediaDownloadBase(HasTaskResourcesMixin, Base):
     # after a successful download attempt.
     downloaded_bytes: Mapped[Optional[int]]
     format_downloaded: Mapped[Optional[str]]
-    downloaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    downloaded_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCDateTime(), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UTCDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     # Relationships
     media: Mapped["MediaItemBase"] = relationship(back_populates="downloads")
     local_media_profile: Mapped["LocalMediaProfileBase"] = relationship(back_populates="media_downloads")
-    # Historical audit only. Live execution state is never read from this table.
-    attempts: Mapped[List["MediaDownloadAttempt"]] = relationship(
-        back_populates="media_download",
-        cascade="all, delete-orphan",
-        order_by="MediaDownloadAttempt.id.desc()",
-    )
 
     def __repr__(self) -> str:
         return (

@@ -1,4 +1,5 @@
 import {z} from 'zod'
+import {ApiDateTimeStringSchema} from './datetime'
 
 export const TaskOperationResultSchema = z.looseObject({
   summary: z.string(),
@@ -20,11 +21,11 @@ export const TaskOperationReadSchema = z.looseObject({
   result: TaskOperationResultSchema.nullable().optional(),
   context: z.record(z.string(), z.unknown()).nullable().optional(),
   error: z.string().nullable().optional(),
-  notificationSeenAt: z.string().nullable().optional(),
-  startedAt: z.string().nullable().optional(),
-  finishedAt: z.string().nullable().optional(),
-  createdAt: z.string().nullable().optional(),
-  updatedAt: z.string().nullable().optional(),
+  notificationSeenAt: ApiDateTimeStringSchema.nullable().optional(),
+  startedAt: ApiDateTimeStringSchema.nullable().optional(),
+  finishedAt: ApiDateTimeStringSchema.nullable().optional(),
+  createdAt: ApiDateTimeStringSchema.nullable().optional(),
+  updatedAt: ApiDateTimeStringSchema.nullable().optional(),
 })
 
 export type TaskOperationResult = z.infer<typeof TaskOperationResultSchema>

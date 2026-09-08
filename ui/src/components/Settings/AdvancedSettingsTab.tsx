@@ -1,5 +1,5 @@
 import type {SettingsTabProps} from './SettingsTabTypes'
-import {NumberField, SettingsDisclosure, SettingsSection, TextField} from './SettingsControls'
+import {DurationField, NumberField, SettingsDisclosure, SettingsSection, TextField} from './SettingsControls'
 
 const TMDB_LOGO_URL = 'https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_2-d537fb228cf3ded904ef09b136fe3fec72548ebc1fea3fbbd1ad9e36364db38b.svg'
 
@@ -54,18 +54,16 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                     placeholder="en-US"
                     help="Language supplied to TMDB while matching movie metadata."
                 />
-                <NumberField
+                <DurationField
                     id="settings-tmdb-timeout"
                     label="Request timeout"
                     value={draft.movieMetadata.requestTimeoutSeconds}
+                    backendUnit="seconds"
                     error={errorFor('movieMetadata.requestTimeoutSeconds')}
                     environmentVariable={environmentVariableFor('movieMetadata.requestTimeoutSeconds')}
                     onChange={(value) => updateDraft((next) => {
                         next.movieMetadata.requestTimeoutSeconds = value
                     })}
-                    min={1}
-                    step={1}
-                    unit="seconds"
                 />
                 <NumberField
                     id="settings-tmdb-retries"

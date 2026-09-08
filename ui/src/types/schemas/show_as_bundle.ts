@@ -1,14 +1,14 @@
-import {ShowCreatePayloadSchema} from "./show";
-import {PodcastDownloadProfileCreateSchema} from "./podcast_download_profile";
-import {SeriesDownloadProfileCreateSchema} from "./series_download_profile";
+import {ShowCreatePayloadSchema} from './show'
+import {PodcastDownloadProfileCreateSchema} from './podcast_download_profile'
+import {SeriesDownloadProfileCreateSchema} from './series_download_profile'
 import {
     ShowLocalMediaProfileCreateSchema,
     ShowLocalMediaProfileUpdateSchema,
-} from "./local_media_profile";
-import {RssStreamProfileCreateSchema} from "./rss_stream_profile";
-import {z} from "zod";
-import {SeasonDetachedSchema} from "./season";
-import {EpisodeTypeReg} from "../episode";
+} from './show_local_media_profile'
+import {RssStreamProfileCreateSchema} from './rss_stream_profile'
+import {z} from 'zod'
+import {SeasonDetachedSchema} from './season'
+import {EpisodeTypeReg} from '../episode'
 
 
 export const PodcastDownloadProfileBundleSchema = PodcastDownloadProfileCreateSchema.omit({
@@ -46,7 +46,6 @@ export type DownloadProfileUnifiedCreateOut = z.output<typeof DownloadProfileUni
 
 
 export const LocalMediaProfileCreateUnionSchema = ShowLocalMediaProfileCreateSchema.extend({
-    type: z.literal('show').default('show'),
     op: z.literal('create_new').default('create_new'),
 })
 export type LocalMediaProfileCreateUnionIn = z.input<typeof LocalMediaProfileCreateUnionSchema>

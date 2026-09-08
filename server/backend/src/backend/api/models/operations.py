@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Optional
 
 from backend.api.models.base import ResponseBase
@@ -18,8 +19,17 @@ class ShowMetadataOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
 
 
+class ShowFileRenameOperationAccepted(TaskOperationAccepted):
+    episodes_queued: int
+    local_media_profiles_queued: int
+
+
+class LocalMediaProfileFileRenameOperationAccepted(TaskOperationAccepted):
+    episodes_queued: int
+
+
 class ShowRedownloadOperationAccepted(TaskOperationAccepted):
-    download_profiles_queued: int
+    local_media_profiles_queued: int
 
 
 class EpisodeMetadataOperationAccepted(TaskOperationAccepted):
@@ -41,8 +51,8 @@ class TaskOperationRead(ResponseBase):
     result: Optional[dict[str, Any]]
     context: Optional[dict[str, Any]]
     error: Optional[str]
-    notification_seen_at: Optional[str]
-    started_at: Optional[str]
-    finished_at: Optional[str]
-    created_at: Optional[str]
-    updated_at: Optional[str]
+    notification_seen_at: Optional[datetime]
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]

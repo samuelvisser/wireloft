@@ -1,6 +1,7 @@
 import type {SettingsTabProps} from './SettingsTabTypes'
 import CronEditor from './CronEditor'
 import {
+    DurationField,
     NumberField,
     SettingsDisclosure,
     SettingsSection,
@@ -8,8 +9,10 @@ import {
     ToggleField,
 } from './SettingsControls'
 import ReadMore from "../../utils/ReadMore";
+import {formatDurationMinutes} from "../../utils/formatting";
 
 export default function AutomationSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
+
     return (
         <>
             <SettingsSection
@@ -39,12 +42,11 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     })}
                     help="Upper bound for parallel background task workers."
                 />
-                <NumberField
+                <DurationField
                     id="settings-scheduler-stalled-timeout"
                     label="Stalled task timeout"
                     value={draft.scheduler.stalledTaskTimeoutMinutes}
-                    min={1}
-                    unit="minutes"
+                    backendUnit="minutes"
                     error={errorFor('scheduler.stalledTaskTimeoutMinutes')}
                     environmentVariable={environmentVariableFor('scheduler.stalledTaskTimeoutMinutes')}
                     onChange={(value) => updateDraft((next) => {
@@ -64,13 +66,12 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     })}
                     help="Used when a task or schedule does not specify its own retry count."
                 />
-                <NumberField
+                <DurationField
                     id="settings-scheduler-backoff"
                     label="Retry backoff"
                     value={draft.scheduler.retryBackoffSeconds}
-                    min={0}
+                    backendUnit="seconds"
                     step={0.5}
-                    unit="seconds"
                     error={errorFor('scheduler.retryBackoffSeconds')}
                     environmentVariable={environmentVariableFor('scheduler.retryBackoffSeconds')}
                     onChange={(value) => updateDraft((next) => {
@@ -103,47 +104,51 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     }
                 />
                 <CronEditor
-                    id="settings-monitor-episode-cron"
+                    id="settings-monitor-pending-episode-cron"
                     label="Monitor pending episodes"
-                    value={draft.newEpisodeSchedule.monitorEpisodeCron}
-                    error={errorFor('newEpisodeSchedule.monitorEpisodeCron')}
-                    environmentVariable={environmentVariableFor('newEpisodeSchedule.monitorEpisodeCron')}
+                    value={draft.newEpisodeSchedule.monitorPendingEpisodeCron}
+                    error={errorFor('newEpisodeSchedule.monitorPendingEpisodeCron')}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.monitorPendingEpisodeCron')}
                     onChange={(value) => updateDraft((next) => {
-                        next.newEpisodeSchedule.monitorEpisodeCron = value
+                        next.newEpisodeSchedule.monitorPendingEpisodeCron = value
                     })}
                     help={
-                        <ReadMore summary={<span>Monitors currently live or scheduled episodes.</span>}>
+                        <ReadMore summary={<span>Monitors scheduled, delayed, live, processing and countdown episodes.</span>}>
                             <p>
-                                This cron schedule determines how often WireLoft will monitor an episode after the <code>Find new episodes</code> worker
-                                found it. As long as the episode is either scheduled or live, WireLoft checks on its status very frequently.
-                                This makes sure that any changes in it's status get picked up quickly, and the download- and stream profiles
-                                can serve you the episode as soon as possible.
+                                This cron schedule determines how often WireLoft monitors an episode after the <code>Find new episodes</code> worker
+                                found it.
                             </p>
                             <p>
-                                This worker is expected to run quite frequently. It is as lightweight as possible, should not impact performance much
-                                or annoying the Daily Wire API. Make sure to not set it to run more often than once every two minutes though.
+                                This worker is expected to run quite frequently. Make sure to not set it to run more often than once every two
+                                minutes.
                             </p>
                             <p>
-                                <code>Monitor pending episodes</code> never runs on episodes that are not pending.
+                                Once an episode becomes final, <code>Metadata refresh</code> takes over. If it enters <code>no_usable_media</code>,
+                                the dedicated <code>No-usable-media monitor</code> takes over instead.
                             </p>
                         </ReadMore>
                     }
                 />
                 <CronEditor
-                    id="settings-no-show-today-cron"
-                    label="Check no-show-today episodes"
-                    value={draft.newEpisodeSchedule.checkNoShowTodayCron}
-                    error={errorFor('newEpisodeSchedule.checkNoShowTodayCron')}
-                    environmentVariable={environmentVariableFor('newEpisodeSchedule.checkNoShowTodayCron')}
+                    id="settings-monitor-no-usable-media-episode-cron"
+                    label="Monitor episodes without usable media"
+                    value={draft.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron}
+                    error={errorFor('newEpisodeSchedule.monitorNoUsableMediaEpisodeCron')}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.monitorNoUsableMediaEpisodeCron')}
                     onChange={(value) => updateDraft((next) => {
-                        next.newEpisodeSchedule.checkNoShowTodayCron = value
+                        next.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron = value
                     })}
                     help={
-                        <ReadMore summary={<span>How often to check for no-show-today episodes.</span>}>
+                        <ReadMore summary={<span>Rechecks every episode without usable media for recovery or confirmed removal.</span>}>
                             <p>
-                                The Daily Wire does this annoying thing where they sometimes 'publish' an episode just to tell
-                                everyone there will not be any episodes today. This cron schedule runs infrequently and checks
-                                if any of the new episodes are no-show-today episodes. It removes them from WireLoft when found.
+                                WireLoft rechecks all <code>no_usable_media</code> episodes on this schedule, regardless of why
+                                they entered quarantine.
+                            </p>
+                            <p>
+                                If this worker finds that the episode has usable media once again, it is restored and automatically
+                                picked up by download- and stream profiles. If
+                                after {' '}{formatDurationMinutes(draft.episodeStatusTiming.noUsableMediaDeleteAfterMinutes)} the
+                                episode still did not return to The Daily Wire, it is deleted.
                             </p>
                         </ReadMore>
                     }
@@ -158,54 +163,98 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         next.newEpisodeSchedule.metadataRefreshIntervals = value
                     })}
                     help={
-                        <ReadMore summary={<span>Intervals to refresh episode metadata after its published.</span>}>
+                        <ReadMore summary={<span>Intervals to refresh episode metadata after it is published.</span>}>
                             <p>
-                                While a Daily Wire episode is live, WireLoft closely monitors it for any status updates, title changes or new
-                                thumbnails. When it is published, this metadata refresh is our next approach.
-                            </p>
-                            <p>
-                                Show episodes sometimes do not yet contain their final thumbnail even when they are fully published. Other times,
-                                their title might change a little after publication. For these cases,
-                                WireLoft automatically updates episode metadata at a couple intervals after its publication. Here, you can configure
-                                those intervals.
+                                While a Daily Wire episode is live, WireLoft closely monitors it for status, title and thumbnail updates. After
+                                publication, these targeted metadata refreshes keep reconciling late Daily Wire changes, including corrected episode
+                                numbers.
                             </p>
                             <p>
                                 Value is a list of comma-separated offsets after publication. Use s, m, h or d, for example: 120s,30m,3h,2d
                             </p>
                         </ReadMore>
-                    } wide
+                    }
                 />
             </SettingsSection>
 
             <SettingsDisclosure
-                title="Episode publication timing"
-                description="Thresholds used while a newly published episode is still settling on DailyWire."
+                title="Episode lifecycle timing"
+                description="Fallback and cleanup thresholds used while Daily Wire episode state is settling."
             >
-                <NumberField
-                    id="settings-published-countdown"
-                    label="Countdown publication threshold"
-                    value={draft.episodeStatusTiming.publishedCountdownAfterMinutes}
-                    min={0}
-                    unit="minutes"
-                    error={errorFor('episodeStatusTiming.publishedCountdownAfterMinutes')}
-                    environmentVariable={environmentVariableFor('episodeStatusTiming.publishedCountdownAfterMinutes')}
-                    onChange={(value) => updateDraft((next) => {
-                        next.episodeStatusTiming.publishedCountdownAfterMinutes = value
-                    })}
-                    help="When a scheduled episode may first be treated as published while final media is still processing."
-                />
-                <NumberField
+                <DurationField
                     id="settings-published-final"
                     label="Final publication threshold"
                     value={draft.episodeStatusTiming.publishedFinalAfterMinutes}
-                    min={0}
-                    unit="minutes"
+                    backendUnit="minutes"
                     error={errorFor('episodeStatusTiming.publishedFinalAfterMinutes')}
                     environmentVariable={environmentVariableFor('episodeStatusTiming.publishedFinalAfterMinutes')}
                     onChange={(value) => updateDraft((next) => {
                         next.episodeStatusTiming.publishedFinalAfterMinutes = value
                     })}
-                    help="Must be at least as long as the countdown publication threshold."
+                    help={
+                        <ReadMore summary={<span>Set to published final if still at published with countdown after this duration.</span>}>
+                            <p>
+                                Usually, WireLoft can determine an episode's status accurately. However, sometimes it might get stuck in <code>published
+                                with countdown</code>.
+                                If your download profiles are setup to only download <code>published final</code> episodes, this means they still skip
+                                it. This setting acts
+                                as a safety net to ensure <code>published with countdown</code> episodes eventually will always be considered <code>published
+                                final</code>,
+                                even if the conventional method of detecting this change failed.
+                            </p>
+                            <p>
+                                This duration is measured starting from the time the episode was published.
+                            </p>
+                        </ReadMore>
+                    }
+                />
+                <DurationField
+                    id="settings-dw-processing-max"
+                    label="Daily Wire processing safeguard"
+                    value={draft.episodeStatusTiming.dwProcessingMaxMinutes}
+                    backendUnit="minutes"
+                    error={errorFor('episodeStatusTiming.dwProcessingMaxMinutes')}
+                    environmentVariable={environmentVariableFor('episodeStatusTiming.dwProcessingMaxMinutes')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.episodeStatusTiming.dwProcessingMaxMinutes = value
+                    })}
+                    help={
+                        <ReadMore summary={<span>Set to no usable media if still at DW processing after this duration.</span>}>
+                            <p>
+                                Usually, WireLoft can determine an episode's status accurately. However, sometimes it might get stuck in <code>DW
+                                processing</code>.
+                                This setting acts as a safety net to ensure <code>DW processing</code> episodes will be considered <code>no usable
+                                media</code> if
+                                this duration elapsed without a change in <code>DW processing</code> status.
+                            </p>
+                            <p>
+                                This duration is measured starting from the time the episode was published.
+                            </p>
+                        </ReadMore>
+                    }
+                />
+                <DurationField
+                    id="settings-no-usable-media-delete-after"
+                    label="No usable media deletion delay"
+                    value={draft.episodeStatusTiming.noUsableMediaDeleteAfterMinutes}
+                    backendUnit="minutes"
+                    error={errorFor('episodeStatusTiming.noUsableMediaDeleteAfterMinutes')}
+                    environmentVariable={environmentVariableFor('episodeStatusTiming.noUsableMediaDeleteAfterMinutes')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.episodeStatusTiming.noUsableMediaDeleteAfterMinutes = value
+                    })}
+                    help={
+                        <ReadMore summary={<span>How long an episode may remain in no usable media state before it is deleted.</span>}>
+                            <p>
+                                An episode is considered in <code>no usable media</code> if it contains no media, its media is corrupted,
+                                or if it returns <code>404</code> from The Daily Wire. In all of these case, this might be a temporary issue.
+                                However, if it remains in this state after this duration, it may be deleted from WireLoft.
+                            </p>
+                            <p>
+                                This duration is measured starting from the time the episode was marked as <code>no usable media</code>.
+                            </p>
+                        </ReadMore>
+                    }
                 />
             </SettingsDisclosure>
         </>

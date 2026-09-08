@@ -31,8 +31,10 @@ def get_app_version() -> str:
     return version
 
 
-class _AliasNormalizingYamlSource(YamlConfigSettingsSource):
-    def __call__(self):
+class _NormalizingYamlSource(YamlConfigSettingsSource):
+    """Load config.yml through Pydantic's registered YAML source and normalize aliases."""
+
+    def __call__(self) -> dict[str, Any]:
         return normalize_settings_source_keys(super().__call__(), self.settings_cls)
 
 
@@ -100,20 +102,21 @@ class AppSettings(SettingsBase):
     ))
     scheduler: SchedulerSettings = Field(default=SchedulerSettings(
         enabled=True,
-        max_workers=5,
+        max_workers=15,
         stalled_task_timeout_minutes=20,
         default_max_retries=3,
         retry_backoff_seconds=5.0,
     ))
     new_episode_schedule: TrackNewEpisodeSchedule = Field(default=TrackNewEpisodeSchedule(
         find_episodes_cron="*/30 * * * *",
-        monitor_episode_cron="*/2 * * * *",
-        check_no_show_today_cron="0 */6 * * *",
-        metadata_refresh_intervals="5m,15m,30m,1h,3h,6h,24h",
+        monitor_pending_episode_cron="*/2 * * * *",
+        monitor_no_usable_media_episode_cron="*/20 * * * *",
+        metadata_refresh_intervals="15m,30m,1h,3h,6h,24h,3d",
     ))
     episode_status_timing: EpisodeStatusTiming = Field(default=EpisodeStatusTiming(
-        published_countdown_after_minutes=20,
-        published_final_after_minutes=3 * 60
+        published_final_after_minutes=3 * 60,
+        dw_processing_max_minutes=60,
+        no_usable_media_delete_after_minutes=4 * 60,
     ))
     download_settings: DownloadSettings = Field(default=DownloadSettings(
         verify_downloads_cron="0 */2 * * *",
@@ -153,8 +156,8 @@ class AppSettings(SettingsBase):
         validate_worker_cron_settings(
             min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
             find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
-            monitor_episode_cron=self.new_episode_schedule.monitor_episode_cron,
-            check_no_show_today_cron=self.new_episode_schedule.check_no_show_today_cron,
+            monitor_pending_episode_cron=self.new_episode_schedule.monitor_pending_episode_cron,
+            monitor_no_usable_media_episode_cron=self.new_episode_schedule.monitor_no_usable_media_episode_cron,
             verify_downloads_cron=self.download_settings.verify_downloads_cron,
             file_watcher_scan_cron=self.file_watcher.scan_cron,
         )
@@ -170,7 +173,7 @@ class AppSettings(SettingsBase):
         file_secret_settings,
     ):
         # kwargs > environment (WL_* plus TZ) > .env > config.yml > file secrets > defaults
-        yaml_source = _AliasNormalizingYamlSource(settings_cls)
+        yaml_source = _NormalizingYamlSource(settings_cls)
 
         def normalized(source):
             return lambda: normalize_settings_source_keys(source(), settings_cls)

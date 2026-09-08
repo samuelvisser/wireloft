@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from typing import Optional
+from datetime import datetime
+from typing import Literal, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from backend.db.core import get_session
 from task_manager.scheduler.db import TaskDefinition, TaskSchedule, TaskRun
 from task_manager.scheduler.scheduler import schedule_job, remove_job
 from task_manager.scheduler.executor import trigger_now as exec_trigger_now
+from task_manager.scheduler.types import ResourceType, TaskStatus
 
 
 def list_definitions() -> list[dict]:
@@ -35,17 +37,15 @@ def create_schedule(body) -> dict:
         td = s.execute(select(TaskDefinition).where(TaskDefinition.key == body.definition_key)).scalar_one()
         sch = TaskSchedule(
             definition_id=td.id,
-            resource_type=body.resource_type,  # Enum validated by Pydantic layer
+            resource_type=body.resource_type,
             resource_id=body.resource_id,
             trigger=body.trigger,
             trigger_args=body.trigger_args,
-            timezone=None,
             active=True,
             max_retries=body.max_retries,
         )
         s.add(sch)
         s.flush()
-        # schedule with APS
         job_id = schedule_job(
             schedule_id=sch.id,
             def_key=td.key,
@@ -97,7 +97,7 @@ def _schedule_to_dict(sch: TaskSchedule, def_key: str) -> dict:
         "trigger": sch.trigger,
         "trigger_args": sch.trigger_args,
         "active": sch.active,
-        "next_run_time": sch.next_run_time.isoformat() if sch.next_run_time else None,
+        "next_run_time": sch.next_run_time,
         "max_retries": sch.max_retries,
     }
 
@@ -134,12 +134,90 @@ def list_runs(
                 "attempt_count": r.attempt_count,
                 "max_retries": r.max_retries,
                 "last_error": r.last_error,
-                "started_at": r.started_at.isoformat() if r.started_at else None,
-                "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                "started_at": r.started_at,
+                "finished_at": r.finished_at,
                 "runtime_ms": r.runtime_ms,
             }
             for r, def_key in rows
         ]
+    finally:
+        s.close()
+
+
+def list_ledger(
+        *,
+        definition_key: str,
+        resource_type: str | None = None,
+        resource_ids: list[int] | None = None,
+        statuses: list[str] | None = None,
+        started_after: datetime | None = None,
+        order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
+        order: Literal["asc", "desc"] = "desc",
+        offset: int = 0,
+        limit: int = 50,
+) -> dict:
+    """Return paginated TaskRun history without worker-specific presentation data."""
+    s = get_session()
+    try:
+        filters = [TaskDefinition.key == definition_key]
+        if resource_type is not None:
+            filters.append(TaskRun.resource_type == ResourceType(resource_type))
+        if resource_ids:
+            filters.append(TaskRun.resource_id.in_(resource_ids))
+        if statuses:
+            filters.append(TaskRun.status.in_([TaskStatus(status) for status in statuses]))
+        if started_after is not None:
+            filters.append(TaskRun.started_at >= started_after)
+
+        total = int(s.execute(
+            select(func.count(TaskRun.id))
+            .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
+            .where(*filters)
+        ).scalar_one())
+
+        order_column = {
+            "started_at": TaskRun.started_at,
+            "finished_at": TaskRun.finished_at,
+            "created_at": TaskRun.created_at,
+        }[order_by]
+        ordering = order_column.asc() if order == "asc" else order_column.desc()
+        tie_breaker = TaskRun.id.asc() if order == "asc" else TaskRun.id.desc()
+
+        rows = s.execute(
+            select(TaskRun, TaskDefinition.key)
+            .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
+            .where(*filters)
+            .order_by(ordering, tie_breaker)
+            .offset(offset)
+            .limit(limit)
+        ).all()
+
+        items = []
+        for run, def_key in rows:
+            meta = run.meta if isinstance(run.meta, dict) else {}
+            inputs = meta.get("inputs") if isinstance(meta.get("inputs"), dict) else {}
+            items.append({
+                "id": run.id,
+                "definition_key": def_key,
+                "resource_type": run.resource_type.value if hasattr(run.resource_type, "value") else run.resource_type,
+                "resource_id": run.resource_id,
+                "status": run.status.value if hasattr(run.status, "value") else run.status,
+                "message": run.message,
+                "last_error": run.last_error,
+                "inputs": inputs,
+                "result": run.result,
+                "started_at": run.started_at,
+                "finished_at": run.finished_at,
+                "runtime_ms": run.runtime_ms,
+            })
+
+        return {
+            "items": items,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "has_more": offset + len(items) < total,
+        }
     finally:
         s.close()
 

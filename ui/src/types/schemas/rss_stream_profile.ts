@@ -2,6 +2,7 @@ import {z} from 'zod'
 import {EpisodeTypeReg} from "../episode";
 import {PreferredFormatReg} from "../local_media_profile";
 import {RssDwVideoMethodReg} from "../stream_profile";
+import {ApiDateTimeSchema} from "./datetime";
 
 // ---------- Strict request (create/update) ----------
 const RssStreamProfileBaseSchema = z.object({
@@ -15,8 +16,6 @@ const RssStreamProfileBaseSchema = z.object({
     maxItems: z.int().nonnegative().default(0),
 })
 
-// On create, feedUrl is optional: leave it blank to have WireLoft generate
-// one automatically once the profile (and its secret token) exists.
 export const RssStreamProfileCreateSchema = RssStreamProfileBaseSchema.extend({
     showId: z.int(),
     feedUrl: z.string().optional(),
@@ -30,7 +29,6 @@ export const RssStreamProfileUpdateSchema = RssStreamProfileBaseSchema.extend({
 export type RssStreamProfileUpdateIn = z.input<typeof RssStreamProfileUpdateSchema>
 export type RssStreamProfileUpdateOut = z.output<typeof RssStreamProfileUpdateSchema>
 
-// ------------ Lenient response (read) ------------
 export const RssStreamProfileReadSchema = z.looseObject({
     id: z.int(),
     showId: z.int(),
@@ -43,7 +41,7 @@ export const RssStreamProfileReadSchema = z.looseObject({
     dwVideoMethod: z.union([z.enum(RssDwVideoMethodReg.values), z.string()]),
     maxItems: z.number(),
     feedUrl: z.string(),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    createdAt: ApiDateTimeSchema,
+    updatedAt: ApiDateTimeSchema,
 })
 export type RssStreamProfileRead = z.infer<typeof RssStreamProfileReadSchema>

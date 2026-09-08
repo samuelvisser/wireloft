@@ -1,32 +1,40 @@
 // Simple localStorage persistence for React Query data we care about
 // Focuses on shows, show episodes, and local media profiles to prevent flicker on reload
 
-import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
-import {EpisodeRead} from "../types/schemas/episode";
+import {LocalMediaProfileRead, LocalMediaProfileReadSchema} from "../types/schemas/local_media_profile";
+import {EpisodeRead, EpisodeReadSchema} from "../types/schemas/episode";
+import {ShowRead, ShowReadSchema} from "../types/schemas/show";
 
 const STORAGE_PREFIX = 'wl_rq_v1:'
 const KEY_SHOWS = STORAGE_PREFIX + 'shows'
 const KEY_PROFILES = STORAGE_PREFIX + 'localMediaProfiles'
 const KEY_EPISODES_PREFIX = STORAGE_PREFIX + 'episodes:'
 
-function safeParse<T>(raw: string | null): T | undefined {
+function safeJsonParse(raw: string | null): unknown | undefined {
   if (!raw) return undefined
   try {
-    return JSON.parse(raw) as T
+    return JSON.parse(raw)
   } catch {
     return undefined
   }
+}
+
+function parseStored<T>(raw: string | null, schema: {safeParse(value: unknown): {success: boolean; data?: T}}): T | undefined {
+  const value = safeJsonParse(raw)
+  if (value === undefined) return undefined
+  const parsed = schema.safeParse(value)
+  return parsed.success ? parsed.data : undefined
 }
 
 function episodesStorageKey(showSlug: string) {
   return KEY_EPISODES_PREFIX + encodeURIComponent(showSlug)
 }
 
-export function loadShowsFromStorage(): any[] | undefined {
-  return safeParse<any[]>(localStorage.getItem(KEY_SHOWS))
+export function loadShowsFromStorage(): ShowRead[] | undefined {
+  return parseStored(localStorage.getItem(KEY_SHOWS), ShowReadSchema.array())
 }
 
-export function saveShowsToStorage(data: any[] | undefined) {
+export function saveShowsToStorage(data: ShowRead[] | undefined) {
   try {
     if (!data) {
       localStorage.removeItem(KEY_SHOWS)
@@ -40,7 +48,7 @@ export function saveShowsToStorage(data: any[] | undefined) {
 
 export function loadEpisodesFromStorage(showSlug?: string): EpisodeRead[] | undefined {
   if (!showSlug) return undefined
-  return safeParse<EpisodeRead[]>(localStorage.getItem(episodesStorageKey(showSlug)))
+  return parseStored(localStorage.getItem(episodesStorageKey(showSlug)), EpisodeReadSchema.array())
 }
 
 export function saveEpisodesToStorage(showSlug: string, data: EpisodeRead[] | undefined) {
@@ -64,8 +72,8 @@ export function removeEpisodesFromStorage(showSlug: string) {
   }
 }
 
-export function loadProfilesFromStorage(): any[] | undefined {
-  return safeParse<any[]>(localStorage.getItem(KEY_PROFILES))
+export function loadProfilesFromStorage(): LocalMediaProfileRead[] | undefined {
+  return parseStored(localStorage.getItem(KEY_PROFILES), LocalMediaProfileReadSchema.array())
 }
 
 export function saveProfilesToStorage(data: LocalMediaProfileRead[] | undefined) {

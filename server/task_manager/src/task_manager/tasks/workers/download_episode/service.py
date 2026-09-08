@@ -9,7 +9,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
-from backend.db.models.media_download import MediaDownloadAttempt, MediaDownloadBase
+from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.download_files import remove_download_artifacts
@@ -53,7 +53,6 @@ async def run_download_episode(
         progress=None,
 ) -> TaskResult:
     """Produce one episode artifact while TaskRun owns all changing execution state."""
-    started_at = datetime.now(timezone.utc)
     download: Optional[MediaDownloadBase] = s.get(MediaDownloadBase, media_download_id)
     if download is None:
         raise DownloadCancelled(f"Media download {media_download_id} was deleted before it started")
@@ -114,17 +113,6 @@ async def run_download_episode(
             if is_redownload:
                 episode.redownloaded_date = download.downloaded_at
 
-        _record_attempt(
-            s,
-            download,
-            is_redownload=is_redownload,
-            status="redownloaded" if is_redownload else "downloaded",
-            error_message=None,
-            downloaded_bytes=result.bytes_downloaded,
-            format_downloaded=result.format_downloaded,
-            started_at=started_at,
-            finished_at=download.downloaded_at,
-        )
         s.commit()
 
         # The executor owns the final 100% transition. Avoid a second progress
@@ -145,82 +133,14 @@ async def run_download_episode(
                 "is_redownload": is_redownload,
             },
         )
-    except DownloadCancelled as exc:
+    except DownloadCancelled:
         s.rollback()
         remove_download_artifacts(getattr(download, "file_path", None))
-        _record_terminal_attempt_if_present(
-            s,
-            media_download_id=media_download_id,
-            is_redownload=is_redownload,
-            status="cancelled",
-            error_message=_truncate_message(str(exc)),
-            started_at=started_at,
-        )
         raise
-    except Exception as exc:
+    except Exception:
         s.rollback()
         remove_download_artifacts(getattr(download, "file_path", None))
-        _record_terminal_attempt_if_present(
-            s,
-            media_download_id=media_download_id,
-            is_redownload=is_redownload,
-            status="error",
-            error_message=_truncate_message(str(exc)),
-            started_at=started_at,
-        )
         raise
-
-
-def _record_attempt(
-        s: Session,
-        download: MediaDownloadBase,
-        *,
-        is_redownload: bool,
-        status: str,
-        error_message: Optional[str],
-        downloaded_bytes: Optional[int],
-        format_downloaded: Optional[str],
-        started_at: datetime,
-        finished_at: datetime,
-) -> None:
-    """Append immutable attempt history; live state remains on TaskRun."""
-    s.add(MediaDownloadAttempt(
-        media_download_id=download.id,
-        is_redownload=is_redownload,
-        status=status,
-        error_message=error_message,
-        downloaded_bytes=downloaded_bytes,
-        format_downloaded=format_downloaded,
-        started_at=started_at,
-        finished_at=finished_at,
-    ))
-
-
-def _record_terminal_attempt_if_present(
-        s: Session,
-        *,
-        media_download_id: int,
-        is_redownload: bool,
-        status: str,
-        error_message: str,
-        started_at: datetime,
-) -> None:
-    """Record a failed/canceled attempt unless resource deletion removed its ledger owner."""
-    current = s.get(MediaDownloadBase, media_download_id)
-    if current is None:
-        return
-    _record_attempt(
-        s,
-        current,
-        is_redownload=is_redownload,
-        status=status,
-        error_message=error_message,
-        downloaded_bytes=None,
-        format_downloaded=None,
-        started_at=started_at,
-        finished_at=datetime.now(timezone.utc),
-    )
-    s.commit()
 
 
 def _download_with_url_refresh(

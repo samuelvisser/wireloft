@@ -25,20 +25,16 @@ def _session() -> tuple[Session, Engine]:
     return Session(engine), engine
 
 
-def test_factory_creates_operation_target_context_and_domain_event():
+def test_factory_creates_operation_target_and_context():
     from task_manager.scheduler.operation_factory import OperationDefinition, create_operation
 
     class IndexOperation(OperationDefinition[_Resource]):
         kind = "show.index"
         resource_type = "show"
         task = "test_worker"
-        event = "show.added"
 
         def context(self) -> dict[str, str]:
             return {"show_slug": self.resource.slug}
-
-        def event_payload(self) -> dict[str, str]:
-            return {"slug": self.resource.slug}
 
     session, engine = _session()
     try:
@@ -56,54 +52,13 @@ def test_factory_creates_operation_target_context_and_domain_event():
         assert operation.targets[0].task_key == "test_worker"
         assert operation.targets[0].resource_type == "show"
         assert operation.targets[0].resource_id == 42
-
-        pending = session.info["wireloft.pending_events"]
-        assert len(pending) == 1
-        assert pending[0].name == "show.added"
-        assert pending[0].data == {
-            "resource_id": 42,
-            "id": 42,
-            "slug": "test-show",
-        }
+        assert session.info.get("wireloft.pending_events", []) == []
     finally:
         session.close()
         engine.dispose()
 
 
-def test_dispatch_event_is_queued_when_target_needs_work():
-    from task_manager.scheduler.operation_factory import OperationDefinition, create_operation
-
-    class SyncOperation(OperationDefinition[_Resource]):
-        kind = "show.sync"
-        resource_type = "show"
-        task = "test_worker"
-        event = "show.sync_requested"
-        event_is_dispatch = True
-
-        def event_payload(self) -> dict[str, str]:
-            return {"slug": self.resource.slug}
-
-    session, engine = _session()
-    try:
-        create_operation(
-            session,
-            SyncOperation(_Resource(id=42, title="Test Show", slug="test-show")),
-        )
-
-        pending = session.info["wireloft.pending_events"]
-        assert len(pending) == 1
-        assert pending[0].name == "show.sync_requested"
-        assert pending[0].data == {
-            "resource_id": 42,
-            "id": 42,
-            "slug": "test-show",
-        }
-    finally:
-        session.close()
-        engine.dispose()
-
-
-def test_dispatch_event_is_skipped_when_compatible_work_is_already_running():
+def test_factory_coalesces_with_compatible_running_work_without_dispatching():
     from task_manager.scheduler.db import TaskDefinition, TaskRun
     from task_manager.scheduler.operation_factory import OperationDefinition, create_operation
     from task_manager.scheduler.types import OperationStatus, ResourceType, TaskStatus
@@ -112,8 +67,6 @@ def test_dispatch_event_is_skipped_when_compatible_work_is_already_running():
         kind = "show.sync"
         resource_type = "show"
         task = "test_worker"
-        event = "show.sync_requested"
-        event_is_dispatch = True
 
     session, engine = _session()
     try:

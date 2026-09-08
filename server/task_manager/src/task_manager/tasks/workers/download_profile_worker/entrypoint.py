@@ -4,7 +4,7 @@ from typing import Optional
 
 from config import get_settings
 from controller.db_utils import db_session
-from task_manager.scheduler.registry import task, on_cron, on_event
+from task_manager.scheduler.registry import on_cron, on_event, task
 from ..fetch_new_episodes.service import SHOW_INDEXED_EVENT
 from .service import run_download_profile_worker
 
@@ -57,10 +57,15 @@ async def download_profile_worker(
     Ensures the episodes requested by enabled Download Profiles are downloaded.
 
     ``resource_id`` is polymorphic: an episode id when triggered by an episode
-    publish event (checks just that episode), a show id (checks the whole show's
-    profiles), a specific download_profile id, or 0/None for a global sweep across
-    every enabled profile (cron, app.startup, or a manual "show"/"download_profile"
-    trigger). ``resource_type`` disambiguates which one it is.
+    publish event, a show id (checks the whole show's profiles), a specific
+    download_profile id, or 0/None for a global sweep across every enabled profile
+    (cron, app.startup, or a manual "show"/"download_profile" trigger).
+    ``resource_type`` defines which one it is.
     """
     with db_session() as s:
-        await run_download_profile_worker(s, resource_id=resource_id, resource_type=resource_type, progress=progress)
+        await run_download_profile_worker(
+            s,
+            resource_id=resource_id,
+            resource_type=resource_type,
+            progress=progress,
+        )

@@ -17,10 +17,6 @@ from .service import run_fetch_new_episodes
     event_name="show.added",
     resource_type="show",
 )
-@on_event(
-    event_name="show.sync_requested",
-    resource_type="show",
-)
 @on_cron(
     cron=get_settings().new_episode_schedule.find_episodes_cron,
     resource_type="show",

@@ -1,4 +1,5 @@
 import {z} from "zod";
+import {ApiDateTimeStringSchema} from "./datetime";
 
 
 // ---------- Lenient response (read) ----------
@@ -26,8 +27,8 @@ export const DailywireEpisodeReadSchema = z.object({
     thumbnailPortraitPath: z.string().nullable(),
     thumbnailSquarePath: z.string().nullable(),
 
-    publishedDate: z.string(),
-    scheduledDate: z.string().nullable(),
+    publishedDate: ApiDateTimeStringSchema,
+    scheduledDate: ApiDateTimeStringSchema.nullable(),
 });
 export type DailywireEpisodeRead = z.infer<typeof DailywireEpisodeReadSchema>;
 

@@ -2,6 +2,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 
+from backend.api.datetime import api_timezone_payload
 from dailywire_api.records import (
     DwCatalogMoviePageRecord,
     DwCatalogRecord,
@@ -21,7 +22,9 @@ def catalog_shows(
     grouping: Literal['host', 'alphabetical'] = 'host',
 ):
     try:
-        return get_catalog_shows(offset=offset, limit=limit, search=search, grouping=grouping)
+        return api_timezone_payload(
+            get_catalog_shows(offset=offset, limit=limit, search=search, grouping=grouping)
+        )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -33,7 +36,7 @@ def catalog_movies(
     search: str | None = None,
 ):
     try:
-        return get_catalog_movies(offset=offset, limit=limit, search=search)
+        return api_timezone_payload(get_catalog_movies(offset=offset, limit=limit, search=search))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -41,6 +44,6 @@ def catalog_movies(
 @router.get("", response_model=DwCatalogRecord)
 def catalog_detail():
     try:
-        return get_catalog()
+        return api_timezone_payload(get_catalog())
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

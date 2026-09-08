@@ -1,5 +1,6 @@
 import {z} from 'zod'
 import {EpisodeTypeReg} from "../episode";
+import {ApiDateTimeSchema} from "./datetime";
 
 
 // ---------- Strict request (create/update) ----------
@@ -25,10 +26,9 @@ export const DownloadProfileSchemaResponse = z.looseObject({
     localMediaProfileId: z.int(),
     enableProfile: z.boolean(),
     epIdTypeList: z.array(z.union([z.enum(EpisodeTypeReg.values), z.string()])),
-    createdAt: z.iso.datetime().transform((s) => new Date(s)),
-    updatedAt: z.iso.datetime().transform((s) => new Date(s)),
+    createdAt: ApiDateTimeSchema,
+    updatedAt: ApiDateTimeSchema,
 })
-
 
 export const DownloadProfileReadSchema = DownloadProfileSchemaResponse.safeExtend({
     type: z.enum(['podcast', 'series']),

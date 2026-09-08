@@ -5,9 +5,11 @@ from .MediaItemBase import MediaItemBase
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import Boolean, ForeignKey, UniqueConstraint
 
+from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
+from backend.utils.episode_slug import is_no_show_today_slug
 
 if TYPE_CHECKING:
     from backend.db.models import Show, Season
@@ -43,15 +45,23 @@ class Episode(MediaItemBase, HasMetadataMixin, HasTaskResourcesMixin):
     published_date: Mapped[Optional[datetime]]
     scheduled_date: Mapped[Optional[datetime]]
     redownloaded_date: Mapped[Optional[datetime]]
-    # Daily Wire publishes a placeholder entry titled "... - No Show Today" on
-    # days a show doesn't air: a real feed item, but with no media behind it.
-    # Never eligible for download, and (unlike a real episode) deleted locally
-    # once Daily Wire removes it - see check_no_show_today_episodes.
-    is_no_show_today: Mapped[Optional[bool]]
 
     # Relationships
     show: Mapped["Show"] = relationship(back_populates="episodes")
     season: Mapped["Season"] = relationship(back_populates="episodes")
+
+    @property
+    def is_no_show_today(self) -> bool:
+        """Whether the stable Daily Wire slug marks this as a No Show Today placeholder."""
+        return is_no_show_today_slug(self.slug)
+
+    @property
+    def early_delete_available(self) -> bool:
+        """Whether the latest Daily Wire verification reported this episode missing."""
+        return (
+            self.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value
+            and self.get_meta("no_usable_media.reason") == "not_found"
+        )
 
     def __repr__(self) -> str:
         return f"<Episode(id={self.id}, slug={self.slug}, show_id={self.show_id}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"
