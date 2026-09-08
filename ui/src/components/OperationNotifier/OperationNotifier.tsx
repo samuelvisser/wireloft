@@ -6,11 +6,12 @@ import {
   useMemo,
   useRef,
 } from 'react'
-import {useQueryClient, type QueryClient} from '@tanstack/react-query'
+import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 import {type TaskOperationRead} from '../../types/schemas/operation'
-import {PUBLISH_STATUS_LABELS} from '../../types/episode'
+import {invalidateForOperation} from '../../lib/operationInvalidation'
 import {refreshFrontendPuller, useFrontendPuller} from '../../lib/puller'
+import {type OperationNotificationDefinitions} from './OperationNotificationDefinitions'
 
 const ACTIVE_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'PARTIAL', 'FAILED', 'CANCELED'])
@@ -38,237 +39,60 @@ async function markSeen(operationId: string): Promise<void> {
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
 }
 
-function contextString(operation: TaskOperationRead, key: string): string | undefined {
-  const value = operation.context?.[key]
-  return typeof value === 'string' && value ? value : undefined
-}
-
-function resultString(operation: TaskOperationRead, key: string): string | undefined {
-  const value = operation.result?.data?.[key]
-  return typeof value === 'string' && value ? value : undefined
-}
-
 function resultNumber(operation: TaskOperationRead, key: string): number | undefined {
   const value = operation.result?.data?.[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-function plural(value: number, singular: string, pluralForm = `${singular}s`) {
-  return value === 1 ? singular : pluralForm
-}
+function terminalMessage(
+  operation: TaskOperationRead,
+  definitions: OperationNotificationDefinitions,
+): string {
+  const definition = definitions[operation.kind]
+  const label = definition?.label || operation.title || 'Operation'
 
-function operationLabel(operation: TaskOperationRead): string {
-  switch (operation.kind) {
-    case 'show.index':
-      return 'Show indexing'
-    case 'show.sync':
-      return 'Sync'
-    case 'show.refresh_metadata':
-    case 'episode.refresh_metadata':
-      return 'Metadata refresh'
-    case 'episode.early_delete':
-      return 'Early delete'
-    case 'show.rename_files':
-    case 'local_media_profile.rename_files':
-      return 'File Rename'
-    case 'show.redownload_episodes':
-      return 'Re-download'
-    case 'movie.refresh_extras':
-      return 'Movie extra refresh'
-    case 'media.download':
-      return 'Download'
-    default:
-      return operation.title || 'Operation'
+  if (operation.status === 'SUCCEEDED') {
+    return definition?.success?.(operation)
+      ?? operation.result?.summary
+      ?? operation.message
+      ?? `${operation.title} completed`
   }
-}
 
-function fileRenameSuccessMessage(operation: TaskOperationRead, title: string): string {
-  const renamed = (resultNumber(operation, 'files_renamed') ?? 0)
-    + (resultNumber(operation, 'files_recovered') ?? 0)
-  const unchanged = resultNumber(operation, 'files_unchanged') ?? 0
-  const considered = resultNumber(operation, 'files_considered') ?? (renamed + unchanged)
-  if (considered === 0) return `No existing files needed renaming for ${title}`
-  const unchangedDetail = unchanged > 0 ? `; ${unchanged} already matched` : ''
-  return `File Rename finished for ${title}: ${renamed} ${plural(renamed, 'file')} renamed${unchangedDetail}`
-}
-
-function successMessage(operation: TaskOperationRead): string {
-  const showTitle = contextString(operation, 'show_title') || operation.title
-
-  switch (operation.kind) {
-    case 'show.index': {
-      const count = resultNumber(operation, 'episodes_found')
-      return count === undefined
-        ? `Indexing finished for ${showTitle}`
-        : `Indexed ${showTitle}: ${count} ${plural(count, 'episode')} found`
-    }
-    case 'show.sync': {
-      const count = resultNumber(operation, 'episodes_found') ?? 0
-      return `Sync finished for ${showTitle}: ${count} new ${plural(count, 'episode')} found`
-    }
-    case 'show.refresh_metadata': {
-      const count = operation.progressTotal
-      return count === 0
-        ? `No episodes to refresh in ${showTitle}`
-        : `Metadata refresh completed for ${count} ${plural(count, 'episode')} in ${showTitle}`
-    }
-    case 'episode.refresh_metadata': {
-      const episodeTitle = contextString(operation, 'episode_title') || operation.title
-      return `Metadata refresh completed for ${episodeTitle}`
-    }
-    case 'episode.early_delete': {
-      const episodeTitle = contextString(operation, 'episode_title') || operation.title
-      const outcome = resultString(operation, 'outcome')
-      if (outcome === 'recovered' || outcome === 'replaced') {
-        const publishStatus = resultString(operation, 'publish_status')
-        const statusLabel = publishStatus
-          ? (PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus)
-          : undefined
-        return statusLabel
-          ? `Recovered ${episodeTitle} to ${statusLabel} state`
-          : `Recovered ${episodeTitle}`
-      }
-      if (outcome === 'deleted') return `Deleted ${episodeTitle}`
-      if (outcome === 'retained') return `${episodeTitle} remains in No usable media state`
-      if (outcome === 'unverified') return `Could not verify ${episodeTitle}; it was not deleted`
-      if (outcome === 'already_resolved') return `${episodeTitle} no longer needs No usable media verification`
-      return `Early delete completed for ${episodeTitle}`
-    }
-    case 'show.rename_files':
-      return fileRenameSuccessMessage(operation, showTitle)
-    case 'local_media_profile.rename_files': {
-      const profileName = contextString(operation, 'local_media_profile_name') || operation.title
-      return fileRenameSuccessMessage(operation, profileName)
-    }
-    case 'show.redownload_episodes': {
-      const files = resultNumber(operation, 'episode_files') ?? 0
-      const profiles = resultNumber(operation, 'local_media_profiles')
-      const profileDetail = profiles === undefined
-        ? ''
-        : ` using ${profiles} ${plural(profiles, 'Local Media Profile')}`
-      return `Re-download finished for ${showTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
-    }
-    case 'media.download':
-      return operation.result?.summary || `Downloaded ${operation.title}`
-    default:
-      return operation.result?.summary || operation.message || `${operation.title} completed`
-  }
-}
-
-function terminalMessage(operation: TaskOperationRead): string {
-  if (operation.status === 'SUCCEEDED') return successMessage(operation)
-
-  const label = operationLabel(operation)
   if (operation.status === 'PARTIAL') {
+    if (definition?.partial) return definition.partial(operation)
     const completed = resultNumber(operation, 'completed') ?? operation.progressCurrent
     const total = resultNumber(operation, 'total') ?? operation.progressTotal
     return `${label} partially completed for ${operation.title}: ${completed}/${total} tasks succeeded`
   }
+
   if (operation.status === 'CANCELED') {
+    if (definition?.canceled) return definition.canceled(operation)
     if (operation.message && operation.message !== 'Canceled by user') {
       return `${label} stopped for ${operation.title}: ${operation.message}`
     }
     return `${label} was canceled for ${operation.title}`
   }
+
+  if (definition?.failed) return definition.failed(operation)
   return `${label} failed for ${operation.title}${operation.error ? `: ${operation.error}` : ''}`
 }
 
-function taskLedgerQueryMatchesOperation(queryKey: readonly unknown[], operation: TaskOperationRead): boolean {
-  if (queryKey[0] !== 'taskLedger') return false
-
-  const resourceType = queryKey[2]
-  if (resourceType !== undefined && resourceType !== operation.resourceType) return false
-
-  const resourceFilter = queryKey[3]
-  if (resourceFilter === undefined || operation.resourceId == null) return true
-  if (typeof resourceFilter === 'number') return resourceFilter === operation.resourceId
-  return Array.isArray(resourceFilter) && resourceFilter.includes(operation.resourceId)
-}
-
-async function invalidateForOperation(queryClient: QueryClient, operation: TaskOperationRead) {
-  const showSlug = contextString(operation, 'show_slug')
-  const episodeSlug = contextString(operation, 'episode_slug')
-  const resultEpisodeSlug = resultString(operation, 'episode_slug')
-  const movieSlug = contextString(operation, 'movie_slug')
-  const invalidations: Promise<unknown>[] = [
-    queryClient.invalidateQueries({
-      predicate: (query) => taskLedgerQueryMatchesOperation(query.queryKey, operation),
-    }),
-  ]
-
-  if (operation.kind.startsWith('show.')) {
-    invalidations.push(
-      queryClient.invalidateQueries({queryKey: ['shows']}),
-      queryClient.invalidateQueries({queryKey: ['showsView']}),
-    )
-    if (showSlug) {
-      invalidations.push(
-        queryClient.invalidateQueries({queryKey: ['show', showSlug]}),
-        queryClient.invalidateQueries({queryKey: ['episodes', showSlug]}),
-      )
-    }
-  }
-
-  if (
-    operation.kind === 'show.redownload_episodes'
-    || operation.kind === 'show.rename_files'
-    || operation.kind === 'local_media_profile.rename_files'
-  ) {
-    invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
-  }
-
-  if (operation.kind === 'local_media_profile.rename_files') {
-    invalidations.push(
-      queryClient.invalidateQueries({queryKey: ['localMediaProfiles']}),
-      queryClient.invalidateQueries({queryKey: ['localMediaProfile']}),
-    )
-  }
-
-  if (operation.kind.startsWith('episode.')) {
-    if (episodeSlug) {
-      invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
-    }
-    if (resultEpisodeSlug && resultEpisodeSlug !== episodeSlug) {
-      invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', resultEpisodeSlug]}))
-    }
-    if (showSlug) {
-      invalidations.push(queryClient.invalidateQueries({queryKey: ['episodes', showSlug]}))
-    }
-  }
-
-  if (operation.kind.startsWith('movie.')) {
-    invalidations.push(queryClient.invalidateQueries({queryKey: ['movies']}))
-    if (movieSlug) {
-      invalidations.push(queryClient.invalidateQueries({queryKey: ['dailywireMovie', movieSlug]}))
-    }
-  }
-
-  if (operation.kind === 'media.download') {
-    invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
-    if (episodeSlug) {
-      invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
-    }
-    if (showSlug) {
-      invalidations.push(queryClient.invalidateQueries({queryKey: ['episodes', showSlug]}))
-    }
-    if (movieSlug) {
-      invalidations.push(
-        queryClient.invalidateQueries({queryKey: ['movies']}),
-        queryClient.invalidateQueries({queryKey: ['dailywireMovie', movieSlug]}),
-      )
-    }
-  }
-
-  await Promise.all(invalidations)
-}
-
-export default function OperationNotifier({children}: {children: ReactNode}) {
+export default function OperationNotifier({
+  children,
+  definitions,
+}: {
+  children: ReactNode
+  definitions: OperationNotificationDefinitions
+}) {
   const queryClient = useQueryClient()
   const handledRef = useRef(new Set<string>())
   const previousActiveRef = useRef(new Map<string, TaskOperationRead>())
   const {data: pullData} = useFrontendPuller()
   const operations = pullData?.operations ?? []
 
+  // If another browser acknowledges a terminal operation before this browser
+  // observes the terminal snapshot, it disappears from the pull. Remembering the
+  // active snapshot still lets this browser refresh the affected ordinary queries.
   useEffect(() => {
     if (!pullData) return
 
@@ -286,6 +110,9 @@ export default function OperationNotifier({children}: {children: ReactNode}) {
     previousActiveRef.current = currentActive
   }, [operations, pullData, queryClient])
 
+  // Every terminal operation stays in the generic pull until a frontend has
+  // processed the domain-data refresh it implies. UI operations additionally get
+  // a toast; automated/API work is acknowledged silently after invalidation.
   useEffect(() => {
     for (const operation of operations) {
       if (
@@ -297,7 +124,7 @@ export default function OperationNotifier({children}: {children: ReactNode}) {
 
       handledRef.current.add(operation.id)
       if (operation.source === 'UI' && !operation.notificationSeenAt) {
-        const message = terminalMessage(operation)
+        const message = terminalMessage(operation, definitions)
         if (operation.status === 'SUCCEEDED') {
           toast.success(message, {duration: 5000})
         } else if (operation.status === 'PARTIAL' || operation.status === 'CANCELED') {
@@ -320,7 +147,7 @@ export default function OperationNotifier({children}: {children: ReactNode}) {
         }
       })()
     }
-  }, [operations, queryClient])
+  }, [definitions, operations, queryClient])
 
   const value = useMemo<OperationContextValue>(() => ({
     operations,
