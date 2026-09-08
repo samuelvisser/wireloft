@@ -89,11 +89,14 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             type: 'variable',
             detail: variable.description,
             apply: (view, completion, from, to) => {
-                const closingBracesFollow = /^\s*}}/.test(view.state.sliceDoc(to))
-                const insert = `${variable.name}${closingBracesFollow ? '' : '}}'}`
+                const variableStart = view.state.sliceDoc(0, from).lastIndexOf('{{')
+                const replaceFrom = variableStart >= 0 ? variableStart + 2 : from
+                const closingBraces = /^\s*}}/.exec(view.state.sliceDoc(to))
+                const replaceTo = closingBraces ? to + closingBraces[0].length : to
+                const insert = ` ${variable.name} }}`
                 view.dispatch({
-                    changes: {from, to, insert},
-                    selection: {anchor: from + insert.length},
+                    changes: {from: replaceFrom, to: replaceTo, insert},
+                    selection: {anchor: replaceFrom + insert.length},
                     annotations: pickedCompletion.of(completion),
                 })
             },
