@@ -1,10 +1,14 @@
-import {useMemo} from 'react'
+import {useMemo, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import ShowIndexingProgress from '../components/ShowIndexingProgress/ShowIndexingProgress'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
+import ShowTypeFilter, {
+    createDefaultShowTypeFilter,
+    matchesShowTypeFilter,
+} from '../components/common/ShowTypeFilter'
 import {useDailywireCatalog, useMediaDownloadsView, useMovies, useShowsView} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 
@@ -15,6 +19,7 @@ function latestMovieDownload(downloads: MediaDownloadViewRead[] | undefined, slu
 export default function LibraryPage() {
     const navigate = useNavigate()
     const [params, setParams] = useSearchParams()
+    const [showTypeFilter, setShowTypeFilter] = useState(createDefaultShowTypeFilter)
     const {data: shows, isLoading: showsLoading, error: showsError} = useShowsView()
     const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
     const {data: dailywireCatalog} = useDailywireCatalog()
@@ -22,6 +27,10 @@ export default function LibraryPage() {
     const catalogMoviesBySlug = useMemo(
         () => new Map(dailywireCatalog?.movies.map((movie) => [movie.slug, movie]) ?? []),
         [dailywireCatalog],
+    )
+    const filteredShows = useMemo(
+        () => shows?.filter((show) => matchesShowTypeFilter(show.type, showTypeFilter)) ?? [],
+        [shows, showTypeFilter],
     )
     const hasShows = !!shows?.length
     const hasMovies = !!movies?.length
@@ -63,6 +72,14 @@ export default function LibraryPage() {
                 />
             )}
 
+            {activeType === 'shows' && hasShows && (
+                <ShowTypeFilter
+                    selectedTypes={showTypeFilter}
+                    onChange={setShowTypeFilter}
+                    ariaLabel="Filter library shows by type"
+                />
+            )}
+
             {loading && !hasShows && !hasMovies ? (
                 <p>Loading library…</p>
             ) : error && !hasShows && !hasMovies ? (
@@ -75,33 +92,40 @@ export default function LibraryPage() {
                     <button className="btn btn-primary" onClick={() => navigate(browseUrl)}>Browse Daily Wire</button>
                 </div>
             ) : activeType === 'shows' && hasShows ? (
-                <div className="library-show-list" role="list" aria-label="Shows">
-                    {shows!.map((show) => {
-                        const image = toImageUrl(
-                            show.thumbnailPortraitPath || show.thumbnailLandscapePath || show.logoImagePath || show.authorHeadshotPath,
-                        )
-                        return (
-                            <Link className="show-summary-card library-show-card" to={`/show/${show.slug}`} key={show.slug} role="listitem">
-                                <span className="show-summary-art">
-                                    {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={['fas', 'podcast']}/></span>}
-                                </span>
-                                <div className="show-summary-copy">
-                                    <span className="show-summary-title">{show.title}</span>
-                                    <span className="show-summary-author">{show.authorName || 'Daily Wire'}</span>
-                                    <span className="show-summary-meta">{show.episodeCount} episodes{show.years ? ` • ${show.years}` : ''}</span>
-                                    {show.description && <span className="show-summary-description">{show.description}</span>}
-                                    <ShowIndexingProgress
-                                        showId={show.id}
-                                        showSlug={show.slug}
-                                        pollForStart={show.episodeCount === 0}
-                                        className="library-show-indexing"
-                                    />
-                                </div>
-                                <FontAwesomeIcon icon={['fas', 'chevron-right']} aria-hidden="true"/>
-                            </Link>
-                        )
-                    })}
-                </div>
+                filteredShows.length > 0 ? (
+                    <div className="library-show-list" role="list" aria-label="Shows">
+                        {filteredShows.map((show) => {
+                            const image = toImageUrl(
+                                show.thumbnailPortraitPath || show.thumbnailLandscapePath || show.logoImagePath || show.authorHeadshotPath,
+                            )
+                            return (
+                                <Link className="show-summary-card library-show-card" to={`/show/${show.slug}`} key={show.slug} role="listitem">
+                                    <span className="show-summary-art">
+                                        {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={['fas', 'podcast']}/></span>}
+                                    </span>
+                                    <div className="show-summary-copy">
+                                        <span className="show-summary-title">{show.title}</span>
+                                        <span className="show-summary-author">{show.authorName || 'Daily Wire'}</span>
+                                        <span className="show-summary-meta">{show.episodeCount} episodes{show.years ? ` • ${show.years}` : ''}</span>
+                                        {show.description && <span className="show-summary-description">{show.description}</span>}
+                                        <ShowIndexingProgress
+                                            showId={show.id}
+                                            showSlug={show.slug}
+                                            pollForStart={show.episodeCount === 0}
+                                            className="library-show-indexing"
+                                        />
+                                    </div>
+                                    <FontAwesomeIcon icon={['fas', 'chevron-right']} aria-hidden="true"/>
+                                </Link>
+                            )
+                        })}
+                    </div>
+                ) : (
+                    <div className="catalog-empty">
+                        <FontAwesomeIcon icon={['fas', 'filter']}/>
+                        <p>No shows match the selected filters.</p>
+                    </div>
+                )
             ) : activeType === 'movies' && hasMovies ? (
                 <div className="movie-poster-grid" role="list" aria-label="Movies">
                     {movies!.map((movie) => {
