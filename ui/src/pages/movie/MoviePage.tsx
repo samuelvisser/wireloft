@@ -13,6 +13,7 @@ import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {MovieExtraType} from '../../types/schemas/dailywire_catalog'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
+import './MoviePage.css'
 
 type MovieExtraSummary = {
     id?: number
@@ -30,6 +31,18 @@ function formatDuration(seconds: number) {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.round((seconds % 3600) / 60)
     return hours ? `${hours}h ${minutes}m` : `${minutes}m`
+}
+
+function formatReleaseDate(value?: string | null) {
+    if (!value) return null
+    const parsed = new Date(`${value}T00:00:00Z`)
+    if (Number.isNaN(parsed.getTime())) return value
+    return parsed.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone: 'UTC',
+    })
 }
 
 export default function MoviePage() {
@@ -224,22 +237,35 @@ export default function MoviePage() {
 
     const hero = toImageUrl(movie.backgroundImagePath || movie.thumbnailLandscapePath || movie.thumbnailPortraitPath)
     const duration = formatDuration(movie.duration)
-    const officialTrailer: MovieExtraSummary | null = localMovie?.officialTrailer ?? movie.trailer ?? null
-    const movieExtras: MovieExtraSummary[] = localMovie?.movieExtras ?? movie.movieExtras
+    // Prefer fresh Daily Wire data. This matters for an indexed upcoming movie,
+    // where a newer trailer can appear before the local extras refresh runs.
+    const featuredTrailer: MovieExtraSummary | null = movie.trailer ?? localMovie?.officialTrailer ?? null
+    const movieExtras: MovieExtraSummary[] = movie.movieExtras.length
+        ? movie.movieExtras
+        : localMovie?.movieExtras ?? []
+    const expectedReleaseDate = formatReleaseDate(
+        movie.expectedReleaseDate ?? (movie.isUpcoming ? localMovie?.releaseDate : null),
+    )
 
     return (
         <section className="view movie-detail-view" aria-labelledby="movie-title">
             <div className="movie-hero" style={hero ? {backgroundImage: `linear-gradient(0deg, var(--bg) 0%, rgba(9,18,33,.15) 72%), url(${hero})`} : undefined}>
                 <div>
-                    <span className="movie-kicker"><FontAwesomeIcon icon={['fas', 'clapperboard']}/> Movie</span>
+                    <div className="movie-kicker-row">
+                        <span className="movie-kicker"><FontAwesomeIcon icon={['fas', 'clapperboard']}/> Movie</span>
+                        {movie.isUpcoming && <span className="movie-upcoming-badge">Upcoming</span>}
+                    </div>
                     <h1 id="movie-title">{movie.title}</h1>
                     <p>{[movie.authorName, duration, movie.matureRating].filter(Boolean).join(' • ')}</p>
+                    {movie.isUpcoming && expectedReleaseDate && (
+                        <p className="movie-expected-release">Expected release {expectedReleaseDate}</p>
+                    )}
                 </div>
             </div>
 
             <div className="movie-detail-actions">
-                {officialTrailer?.sharingUrl && (
-                    <a className="btn btn-secondary" href={officialTrailer.sharingUrl} target="_blank" rel="noreferrer">
+                {featuredTrailer?.sharingUrl && (
+                    <a className="btn btn-secondary" href={featuredTrailer.sharingUrl} target="_blank" rel="noreferrer">
                         <FontAwesomeIcon icon={['fas', 'play']}/> Watch trailer
                     </a>
                 )}
@@ -281,21 +307,35 @@ export default function MoviePage() {
 
                 <aside className="movie-download-panel" aria-labelledby="download-movie-title">
                     <h2 id="download-movie-title">Download movie media</h2>
-                    <p>Movies and extras use the same Movie Local Media Profile.</p>
+                    <p>
+                        {movie.isUpcoming
+                            ? 'The full movie is not available yet. Published extras can be downloaded now.'
+                            : 'Movies and extras use the same Movie Local Media Profile.'}
+                    </p>
                     {videoProfiles.length ? (
                         <>
                             <label htmlFor="movie-profile">Local Media Profile</label>
                             <select id="movie-profile" className="input" value={profileId} onChange={(event) => setProfileId(event.target.value)}>
                                 {videoProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
                             </select>
-                            <button className="btn btn-primary movie-download-button" type="button" onClick={() => void startMovieDownload()} disabled={submitting !== null || addingMovie || !movie.isDownloadable}>
-                                <FontAwesomeIcon icon={['fas', 'download']}/>
-                                {submitting === 'movie' ? 'Queuing…' : 'Download movie'}
-                            </button>
-                            {officialTrailer && (
-                                <button className="btn movie-download-button" type="button" onClick={() => void startExtraDownload(officialTrailer)} disabled={submitting !== null || addingMovie}>
+                            {movie.isDownloadable ? (
+                                <button className="btn btn-primary movie-download-button" type="button" onClick={() => void startMovieDownload()} disabled={submitting !== null || addingMovie}>
                                     <FontAwesomeIcon icon={['fas', 'download']}/>
-                                    {submitting === `extra:${officialTrailer.slug}` ? 'Queuing…' : 'Download trailer'}
+                                    {submitting === 'movie' ? 'Queuing…' : 'Download movie'}
+                                </button>
+                            ) : (
+                                <div className="movie-download-unavailable" role="status">
+                                    {movie.isUpcoming
+                                        ? expectedReleaseDate
+                                            ? `Full movie expected ${expectedReleaseDate}.`
+                                            : 'Full movie has not been released yet.'
+                                        : 'Daily Wire does not currently offer the full movie for download.'}
+                                </div>
+                            )}
+                            {featuredTrailer && (
+                                <button className="btn movie-download-button" type="button" onClick={() => void startExtraDownload(featuredTrailer)} disabled={submitting !== null || addingMovie}>
+                                    <FontAwesomeIcon icon={['fas', 'download']}/>
+                                    {submitting === `extra:${featuredTrailer.slug}` ? 'Queuing…' : 'Download trailer'}
                                 </button>
                             )}
                         </>
@@ -313,14 +353,14 @@ export default function MoviePage() {
                     <div className="movie-section-heading">
                         <div>
                             <h2 id="movie-extras-title">Extras</h2>
-                            <p>{localMovie ? 'Extras indexed in your WireLoft library.' : 'Extra content available for this movie.'}</p>
+                            <p>{localMovie ? 'Extras available for this movie.' : 'Extra content available for this movie.'}</p>
                         </div>
                         <span>{movieExtras.length}</span>
                     </div>
                     <div className="movie-extra-grid">
                         {movieExtras.map((extra) => {
                             const thumbnail = toImageUrl(extra.thumbnailLandscapePath || extra.backgroundImagePath)
-                            const isOfficial = officialTrailer?.slug === extra.slug
+                            const isFeatured = featuredTrailer?.slug === extra.slug
                             return (
                                 <article className="movie-extra-card" key={extra.id ?? extra.slug}>
                                     <div className="movie-extra-art">
@@ -334,7 +374,7 @@ export default function MoviePage() {
                                         <div>
                                             <strong>{extra.title}</strong>
                                             <small>
-                                                {[formatDuration(extra.duration), isOfficial ? 'Official trailer' : null].filter(Boolean).join(' • ') || 'Movie extra'}
+                                                {[formatDuration(extra.duration), isFeatured ? 'Featured trailer' : null].filter(Boolean).join(' • ') || 'Movie extra'}
                                             </small>
                                         </div>
                                         <div className="movie-extra-actions">

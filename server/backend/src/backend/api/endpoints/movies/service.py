@@ -171,6 +171,45 @@ def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
     return MovieAPIRead.model_validate(item)
 
 
+def sync_dailywire_movie_metadata(
+    s: Session,
+    *,
+    movie: Movie,
+    movie_data: DwMovieRecord,
+) -> None:
+    """Refresh mutable facts explicitly supplied by Daily Wire.
+
+    This is especially important for upcoming movies. Daily Wire initially marks
+    them unavailable with zero duration, then later flips those fields when the
+    full film is published. ``model_fields_set`` prevents a partial upstream
+    response from replacing previously known facts with Pydantic defaults.
+    """
+    scalar_fields = (
+        "dw_id",
+        "title",
+        "extended_title",
+        "description",
+        "duration",
+        "background_image_path",
+        "thumbnail_landscape_path",
+        "thumbnail_portrait_path",
+        "thumbnail_square_path",
+        "sharing_url",
+        "author_name",
+        "author_slug",
+        "logo_image_path",
+        "mature_rating",
+        "is_downloadable",
+    )
+    supplied_fields = movie_data.model_fields_set
+    for field in scalar_fields:
+        if field in supplied_fields:
+            setattr(movie, field, getattr(movie_data, field))
+    if "available_for" in supplied_fields:
+        movie.available_for = list(movie_data.available_for)
+    s.flush()
+
+
 def index_dailywire_movie(s: Session, movie_data: DwMovieRecord) -> tuple[Movie, bool]:
     """Persist a Daily Wire movie and all currently known extras without downloading it."""
     item: Optional[Movie] = (
@@ -184,6 +223,10 @@ def index_dailywire_movie(s: Session, movie_data: DwMovieRecord) -> tuple[Movie,
         item = s.get(Movie, result.id)
         if item is None:
             raise RuntimeError("Movie creation did not produce a persisted Movie record")
+
+    # Do this for both new and existing rows. Upcoming movies change their core
+    # availability metadata at release time, not just their list of extras.
+    sync_dailywire_movie_metadata(s, movie=item, movie_data=movie_data)
 
     # Keep this idempotent so the explicit Add action and every direct download
     # path also pick up extras that appeared since the movie was first indexed.

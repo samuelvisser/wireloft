@@ -69,6 +69,8 @@ export const DailywireMovieReadSchema = DailywireCatalogMovieReadSchema.extend({
     matureRating: nullableString,
     isDownloadable: z.boolean(),
     availableFor: z.array(z.string()),
+    isUpcoming: z.boolean(),
+    expectedReleaseDate: z.iso.date().nullable(),
     movieExtras: z.array(DailywireMovieExtraReadSchema),
     trailer: DailywireMovieExtraReadSchema.nullable().optional(),
 })
