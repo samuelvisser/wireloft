@@ -20,8 +20,13 @@ async function bootstrap() {
   // Load app config before anything renders
   await loadAppConfig()
 
-  // Fetch public config (app settings) before rendering
-  await loadPublicConfig()
+  // Public config only contains auxiliary frontend metadata. A temporary API
+  // failure must not prevent React from mounting and leave the page blank.
+  try {
+    await loadPublicConfig()
+  } catch (error) {
+    console.error('[publicConfig] Failed to load public config during bootstrap', error)
+  }
 
   // Restore cached data synchronously before initial render to prevent flashes
   const cachedShows = loadShowsFromStorage()
