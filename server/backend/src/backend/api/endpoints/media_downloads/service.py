@@ -28,6 +28,7 @@ from task_manager.tasks.media_download_operations import (
     get_active_media_download_operation,
     prepare_media_download_artifact,
 )
+from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
 _DOWNLOAD_TASK_KEYS = ("download_episode", "download_movie")
@@ -150,6 +151,11 @@ def _assert_no_active_attempt(s: Session, download: MediaDownloadBase) -> None:
         raise HTTPException(status_code=409, detail="This download already has an active operation")
 
 
+def _reconcile_existing_artifact(s: Session, download: MediaDownloadBase) -> None:
+    if download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
+        resolve_media_download_file(s, download)
+
+
 def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownloadAPICreate) -> EpisodeMediaDownload:
     episode: Optional[Episode] = s.query(Episode).filter(Episode.slug == episode_slug).one_or_none()
     if episode is None:
@@ -170,9 +176,10 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
     )
     if existing is not None:
         _assert_no_active_attempt(s, existing)
+        _reconcile_existing_artifact(s, existing)
         if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
             raise HTTPException(status_code=409, detail=f"Episode already has a downloaded file for profile '{profile.name}'")
-        prepare_media_download_artifact(existing)
+        prepare_media_download_artifact(s, existing)
         existing.file_path = str(resolve_episode_output_path(profile.output_template, episode=episode))
         s.flush()
         return existing
@@ -209,9 +216,10 @@ def create_movie_download(
     )
     if existing is not None:
         _assert_no_active_attempt(s, existing)
+        _reconcile_existing_artifact(s, existing)
         if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
             raise HTTPException(status_code=409, detail=f"Movie already has a downloaded file for profile '{profile.name}'")
-        prepare_media_download_artifact(existing)
+        prepare_media_download_artifact(s, existing)
         existing.file_path = str(resolve_movie_output_path(profile.output_template, movie=movie))
         s.flush()
         return existing
@@ -259,9 +267,10 @@ def create_movie_extra_download(
     )
     if existing is not None:
         _assert_no_active_attempt(s, existing)
+        _reconcile_existing_artifact(s, existing)
         if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
             raise HTTPException(status_code=409, detail=f"Movie extra already has a downloaded file for profile '{profile.name}'")
-        prepare_media_download_artifact(existing)
+        prepare_media_download_artifact(s, existing)
         existing.file_path = str(resolve_movie_output_path(profile.output_template, movie=movie, media_item=movie_extra))
         s.flush()
         return existing
@@ -299,7 +308,8 @@ def retry_media_download(s: Session, media_download_id: int) -> MediaDownloadBas
     if download is None:
         raise HTTPException(status_code=404, detail="Media download not found")
     _assert_no_active_attempt(s, download)
-    prepare_media_download_artifact(download)
+    _reconcile_existing_artifact(s, download)
+    prepare_media_download_artifact(s, download)
     s.flush()
     return download
 
@@ -329,9 +339,16 @@ def delete_media_download(s: Session, media_download_id: int) -> MediaDownloadAP
     item = s.query(MediaDownloadBase).filter_by(id=media_download_id).one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Media download not found")
+
+    resolved_path = None
+    if item.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
+        resolved_path = resolve_media_download_file(s, item)
+
     payload = MediaDownloadAPIRead.model_validate(item)
     if item.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value:
-        remove_download_artifacts(item.file_path)
+        remove_download_artifacts(
+            str(resolved_path) if resolved_path is not None else item.file_path
+        )
     s.delete(item)
     s.flush()
     return payload

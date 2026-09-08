@@ -22,6 +22,7 @@ from task_manager.tasks.media_download_operations import (
     prepare_media_download_artifact,
     remaining_media_download_budget,
 )
+from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 logger = logging.getLogger(__name__)
 
@@ -199,12 +200,17 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         s.flush()
         return DownloadAction(download.id, True)
 
-    if existing.download_profile_id != profile.id:
-        existing.download_profile_id = profile.id
-
     if get_active_media_download_operation(s, existing.id) is not None:
+        if existing.download_profile_id != profile.id:
+            existing.download_profile_id = profile.id
         s.flush()
         return DownloadAction(existing.id, False)
+
+    if existing.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
+        resolve_media_download_file(s, existing)
+
+    if existing.download_profile_id != profile.id:
+        existing.download_profile_id = profile.id
 
     if existing.automatic_retry_suppressed:
         s.flush()
@@ -214,12 +220,12 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         if not _wants_redownload(profile, episode, existing):
             s.flush()
             return DownloadAction(existing.id, False)
-        prepare_media_download_artifact(existing)
+        prepare_media_download_artifact(s, existing)
         existing.file_path = target_path
         s.flush()
         return DownloadAction(existing.id, True, is_redownload=True)
 
-    prepare_media_download_artifact(existing)
+    prepare_media_download_artifact(s, existing)
     existing.file_path = target_path
     s.flush()
     return DownloadAction(existing.id, True)
@@ -279,9 +285,18 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
     else:
         return 0
 
+    # This worker may already own flushed changes in its transaction. Reconcile
+    # through the shared FileWatcher path without taking ownership of that wider
+    # transaction, then delete the resolved physical artifact before its row.
+    resolved_paths: dict[int, Path | None] = {}
     for row in rows:
-        if row.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
-            _delete_download_file(row.file_path)
+        if row.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
+            resolved_paths[row.id] = resolve_media_download_file(s, row)
+
+    for row in rows:
+        resolved_path = resolved_paths.get(row.id)
+        if resolved_path is not None:
+            _delete_download_file(str(resolved_path))
         else:
             remove_download_artifacts(row.file_path)
         s.delete(row)

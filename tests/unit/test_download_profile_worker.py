@@ -143,7 +143,12 @@ def _completed_download(db_session, episode, lmp, profile, *, publish_status="pu
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
+    from backend.utils.artifact_identity import inspect_artifact
+    from config import get_settings
 
+    file_path = get_settings().download_settings.download_root / f"{episode.slug}-{lmp.id}.m4a"
+    file_path.write_bytes(b"completed media")
+    identity = inspect_artifact(file_path)
     download = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
@@ -151,10 +156,14 @@ def _completed_download(db_session, episode, lmp, profile, *, publish_status="pu
         download_profile_id=profile.id,
         artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
         downloaded_publish_status=publish_status,
-        file_path="/downloads/existing.m4a",
-        downloaded_bytes=123,
+        file_path=str(file_path),
+        downloaded_bytes=identity.size_bytes,
         format_downloaded="audio",
         downloaded_at=_now(),
+        artifact_stat_dev=identity.stat_dev,
+        artifact_stat_ino=identity.stat_ino,
+        artifact_size_bytes=identity.size_bytes,
+        artifact_fingerprint=identity.fingerprint,
     )
     db_session.add(download)
     db_session.commit()

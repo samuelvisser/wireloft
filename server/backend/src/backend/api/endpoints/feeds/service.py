@@ -24,11 +24,17 @@ from backend.types.stream_profile_types import (
     RssDwVideoMethod,
 )
 from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
+from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
 logger = logging.getLogger(__name__)
 
 _AVAILABLE_ARTIFACT_STATUS = MediaDownloadArtifactStatus.AVAILABLE.value
+_RECONCILABLE_ARTIFACT_STATUSES = (
+    MediaDownloadArtifactStatus.AVAILABLE.value,
+    MediaDownloadArtifactStatus.MISSING.value,
+    MediaDownloadArtifactStatus.CORRUPTED.value,
+)
 _UNAVAILABLE_PUBLISH_STATUSES = {
     EpisodePublishStatus.NO_USABLE_MEDIA.value,
     EpisodePublishStatus.DW_PROCESSING.value,
@@ -115,6 +121,34 @@ def _select_best_download(
     )
 
 
+def _select_best_resolvable_download(
+        s: Session,
+        downloads: list[EpisodeMediaDownload],
+        *,
+        preferred_format: str,
+        require_exact_match: bool,
+) -> Optional[EpisodeMediaDownload]:
+    """Pick the best local artifact that can actually be resolved on disk."""
+    remaining = list(downloads)
+    while remaining:
+        best = _select_best_download(
+            remaining,
+            preferred_format=preferred_format,
+            require_exact_match=require_exact_match,
+        )
+        if best is None:
+            return None
+        resolved = resolve_media_download_file(
+            s,
+            best,
+            release_read_transaction=True,
+        )
+        if resolved is not None and best.artifact_status == _AVAILABLE_ARTIFACT_STATUS:
+            return best
+        remaining.remove(best)
+    return None
+
+
 def _episode_type_prefix(episode: Episode) -> str:
     return episode.episode_identifier.split(".", 1)[0]
 
@@ -146,7 +180,7 @@ def get_feed_items(
             .options(joinedload(EpisodeMediaDownload.local_media_profile))
             .filter(Episode.show_id == profile.show_id)
             .filter(
-                EpisodeMediaDownload.artifact_status == _AVAILABLE_ARTIFACT_STATUS
+                EpisodeMediaDownload.artifact_status.in_(_RECONCILABLE_ARTIFACT_STATUSES)
             )
             .all()
         )
@@ -163,7 +197,8 @@ def get_feed_items(
 
         best = None
         if profile.use_downloads:
-            best = _select_best_download(
+            best = _select_best_resolvable_download(
+                s,
                 downloads_by_episode.get(episode.id, []),
                 preferred_format=profile.preferred_format,
                 require_exact_match=profile.require_exact_match,
@@ -211,11 +246,12 @@ def get_media_for_episode(
             .options(joinedload(EpisodeMediaDownload.local_media_profile))
             .filter(EpisodeMediaDownload.media_item_id == episode.id)
             .filter(
-                EpisodeMediaDownload.artifact_status == _AVAILABLE_ARTIFACT_STATUS
+                EpisodeMediaDownload.artifact_status.in_(_RECONCILABLE_ARTIFACT_STATUSES)
             )
             .all()
         )
-        best = _select_best_download(
+        best = _select_best_resolvable_download(
+            s,
             downloads,
             preferred_format=profile.preferred_format,
             require_exact_match=profile.require_exact_match,
@@ -362,11 +398,7 @@ def _append_item(
     media_url = f"{media_base_url}/episodes/{episode.slug}"
     if download is not None:
         file_path = Path(download.file_path)
-        length = (
-            file_path.stat().st_size
-            if file_path.is_file()
-            else (download.downloaded_bytes or 0)
-        )
+        length = download.artifact_size_bytes or download.downloaded_bytes or 0
         default_type = (
             "audio/mpeg" if _is_audio_download(download) else "video/mp4"
         )

@@ -18,8 +18,13 @@ TRACKED_ARTIFACT_STATUSES = (
 )
 
 
-def get_tracked_downloads(s: Session, *, show_id: Optional[int], show_slug: Optional[str]) -> list[MediaDownloadBase]:
-    """All persistent MediaDownload artifacts that should currently have a file."""
+def get_tracked_downloads(
+    s: Session,
+    *,
+    show_id: Optional[int],
+    show_slug: Optional[str],
+) -> list[MediaDownloadBase]:
+    """Load persistent artifacts that should currently have a file."""
     stmt = select(MediaDownloadBase).where(
         MediaDownloadBase.artifact_status.in_(TRACKED_ARTIFACT_STATUSES)
     )
@@ -31,6 +36,8 @@ def get_tracked_downloads(s: Session, *, show_id: Optional[int], show_slug: Opti
             .where(Show.slug == show_slug)
         )
     elif show_id:
-        stmt = stmt.join(Episode, Episode.id == MediaDownloadBase.media_item_id).where(Episode.show_id == show_id)
+        stmt = stmt.join(Episode, Episode.id == MediaDownloadBase.media_item_id).where(
+            Episode.show_id == show_id
+        )
 
     return list(s.execute(stmt.order_by(MediaDownloadBase.id)).scalars())

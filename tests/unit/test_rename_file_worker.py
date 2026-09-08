@@ -30,6 +30,7 @@ def _library(
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.utils.artifact_identity import inspect_artifact
 
     show = Show(
         uuid="show-uuid",
@@ -70,12 +71,17 @@ def _library(
     old_path = tmp_path / "legacy" / "episode.m4a"
     old_path.parent.mkdir(parents=True)
     old_path.write_bytes(b"media")
+    identity = inspect_artifact(old_path)
     download = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=local_profile.id,
         artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
         file_path=str(old_path),
+        artifact_stat_dev=identity.stat_dev,
+        artifact_stat_ino=identity.stat_ino,
+        artifact_size_bytes=identity.size_bytes,
+        artifact_fingerprint=identity.fingerprint,
     )
     session.add(download)
     session.commit()
@@ -102,6 +108,37 @@ def test_rename_file_worker_moves_manual_artifact_and_updates_path(monkeypatch, 
         assert download.download_profile_id is None
         assert expected.read_bytes() == b"media"
         assert not old_path.exists()
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_rename_file_worker_reconciles_manual_rename_before_template_rename(monkeypatch, tmp_path):
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from config import get_settings
+    from task_manager.tasks.workers.rename_file_worker.service import run_rename_file_worker
+
+    session, engine = _session()
+    try:
+        monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+        _show, episode, _local_profile, download, old_path = _library(session, tmp_path)
+        manually_renamed = old_path.with_name("renamed-by-user.m4a")
+        old_path.rename(manually_renamed)
+        download.artifact_status = MediaDownloadArtifactStatus.MISSING.value
+        download.artifact_error = "File not found"
+        session.commit()
+
+        result = asyncio.run(run_rename_file_worker(session, episode_id=episode.id))
+
+        expected = (tmp_path / "test-show" / "ep.2.m4a").resolve()
+        session.refresh(download)
+        assert result.data["files_renamed"] == 1
+        assert result.data["files_recovered"] == 0
+        assert download.file_path == str(expected)
+        assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+        assert download.artifact_error is None
+        assert expected.read_bytes() == b"media"
+        assert not manually_renamed.exists()
     finally:
         session.close()
         engine.dispose()
