@@ -49,12 +49,12 @@ export default function ShowPage() {
     ? (cachedEpisodes ?? [])
     : (episodesData ?? cachedEpisodes ?? [])
   const episodesInitialLoading = !hasCachedEpisodes && (episodesLoading || episodesPlaceholder)
-  const isSeries = show?.type === 'series'
+  const isSeasonal = show?.episodeIdentifier === 'seasonal'
   const {
     data: seasonsData,
     isLoading: seasonsLoading,
     isPlaceholderData: seasonsPlaceholder,
-  } = useShowSeasons(isSeries ? id : undefined)
+  } = useShowSeasons(isSeasonal ? id : undefined)
   const seasons = useMemo(() => {
     if (seasonsPlaceholder) return []
     return [...(seasonsData ?? [])].sort((a, b) => b.index - a.index)
@@ -99,7 +99,7 @@ export default function ShowPage() {
   }, [episodesData, episodesPlaceholder, id])
 
   useEffect(() => {
-    if (!isSeries || seasons.length === 0) {
+    if (!isSeasonal || seasons.length === 0) {
       setSelectedSeasonId(null)
       return
     }
@@ -108,7 +108,7 @@ export default function ShowPage() {
       if (current !== null && seasons.some((season) => season.id === current)) return current
       return seasons[0].id
     })
-  }, [isSeries, seasons])
+  }, [isSeasonal, seasons])
 
   const attachedDownloadProfiles = useMemo(
     () => (downloadProfiles ?? []).filter((profile) => profile.showSlug === id),
@@ -132,12 +132,14 @@ export default function ShowPage() {
     return [...profiles.values()].sort((left, right) => left.name.localeCompare(right.name))
   }, [downloads, id])
   const displayedEpisodes = useMemo(() => {
-    if (!isSeries) return episodes
+    if (!isSeasonal) return episodes
     if (selectedSeasonId === null) return []
-    return episodes.filter((episode) => episode.seasonId === selectedSeasonId)
-  }, [episodes, isSeries, selectedSeasonId])
+    return episodes
+      .filter((episode) => episode.seasonId === selectedSeasonId)
+      .sort((a, b) => a.index - b.index)
+  }, [episodes, isSeasonal, selectedSeasonId])
   const seasonViewLoading = Boolean(
-    isSeries && (
+    isSeasonal && (
       seasonsLoading
       || seasonsPlaceholder
       || (seasons.length > 0 && selectedSeasonId === null)
@@ -616,7 +618,7 @@ export default function ShowPage() {
           )}
         </header>
 
-        {isSeries && seasons.length > 0 && (
+        {isSeasonal && seasons.length > 0 && (
           <div className="show-season-filter" aria-label="Season selection">
             <label htmlFor="show-season">Season</label>
             <select
@@ -638,8 +640,8 @@ export default function ShowPage() {
           </div>
         )}
 
-        {isSeries && !seasonViewLoading && seasons.length === 0 ? (
-          <div className="show-season-empty" role="status">No seasons are available for this series.</div>
+        {isSeasonal && !seasonViewLoading && seasons.length === 0 ? (
+          <div className="show-season-empty" role="status">No seasons are available for this show.</div>
         ) : episodesViewLoading ? (
           <div className="episodes-grid" role="status" aria-label="Loading episodes" aria-busy="true">
             {Array.from({length: EPISODE_SKELETON_COUNT}, (_, index) => (
