@@ -35,7 +35,7 @@ def _indexed_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
         extras_by_id: dict[int, DwMovieExtraRecord] = {}
         for extra in movie.movie_extras:
             record = DwMovieExtraRecord(
-                dw_id=extra.dw_id,
+                dw_id=None,
                 slug=extra.slug,
                 title=extra.title,
                 movie_extra_type=extra.movie_extra_type,
@@ -58,7 +58,10 @@ def _indexed_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
             else None
         )
         return DwMovieRecord(
-            dw_id=movie.dw_id or "",
+            # Local snapshots deliberately do not retain Daily Wire entity IDs.
+            # The slug remains the canonical identity and any caller that truly
+            # needs a current DW ID must resolve it from the live API by slug.
+            dw_id="",
             slug=movie.slug,
             title=movie.title,
             extended_title=movie.extended_title,

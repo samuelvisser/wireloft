@@ -84,6 +84,22 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
             preferred_format="format_720p",
         )
 
+    with pytest.raises(ValidationError, match="dw_id"):
+        LocalMediaProfileAPICreate(
+            type="movie",
+            name="Rotating ID template",
+            output_template="/downloads/movies/{{ movie_title }}/{{ dw_id }}.ext",
+            preferred_format="format_1080p",
+        )
+
+    with pytest.raises(ValidationError, match="movie_dw_id"):
+        LocalMediaProfileAPICreate(
+            type="movie",
+            name="Rotating parent ID template",
+            output_template="/downloads/movies/{{ movie_dw_id }}/{{ title }}.ext",
+            preferred_format="format_1080p",
+        )
+
     with pytest.raises(ValidationError, match="movie"):
         LocalMediaProfileAPICreate(
             type="show",
@@ -138,7 +154,6 @@ def test_movie_output_template_uses_movie_metadata(tmp_path: Path, monkeypatch) 
         slug="a-movie",
         title="A Movie",
         extended_title="A Movie | A Daily Wire Original",
-        dw_id="movie-123",
         author_name="A Director",
         mature_rating="PG-13",
         description=None,
@@ -147,7 +162,7 @@ def test_movie_output_template_uses_movie_metadata(tmp_path: Path, monkeypatch) 
     )
 
     result = resolve_movie_output_path(
-        "/downloads/{{ movie_author }}/{{ movie_extended_title }} [{{ movie_dw_id }}] [{{ rating }}]/{{ movie_slug }}.ext",
+        "/downloads/{{ movie_author }}/{{ movie_extended_title }} [{{ rating }}]/{{ movie_slug }}.ext",
         movie=movie,
         extension="mp4",
     )
@@ -155,7 +170,7 @@ def test_movie_output_template_uses_movie_metadata(tmp_path: Path, monkeypatch) 
     assert result == (
         tmp_path
         / "A Director"
-        / "A Movie _ A Daily Wire Original [movie-123] [PG-13]"
+        / "A Movie _ A Daily Wire Original [PG-13]"
         / "a-movie.mp4"
     ).resolve()
 

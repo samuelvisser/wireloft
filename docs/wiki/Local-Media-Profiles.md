@@ -80,6 +80,8 @@ Date-related values can be empty when Daily Wire does not provide the correspond
 
 Movie templates distinguish the **parent movie** from the **actual downloaded media item**. This matters because a movie can have extras.
 
+Movie and movie-extra identity uses Daily Wire's stable slugs. Daily Wire entity IDs are not persisted because those IDs can change over time.
+
 ### Parent-movie values
 
 | Variable | Meaning |
@@ -87,7 +89,6 @@ Movie templates distinguish the **parent movie** from the **actual downloaded me
 | `movie_slug` | Parent movie slug |
 | `movie_title` | Parent movie title |
 | `movie_extended_title` | Parent movie extended title |
-| `movie_dw_id` | Parent Daily Wire ID |
 | `movie_author` | Parent author/creator value |
 | `movie_mature_rating` | Parent mature rating |
 | `movie_duration_seconds` | Parent duration in seconds |
@@ -104,7 +105,6 @@ These describe the main movie **or** the specific extra currently being download
 | `slug` | Item slug |
 | `title` | Item title |
 | `extended_title` | Item extended title |
-| `dw_id` | Item Daily Wire ID |
 | `author` | Item author when available |
 | `mature_rating` / `rating` | Item rating when available |
 | `duration_seconds` | Item duration |
@@ -116,7 +116,7 @@ These describe the main movie **or** the specific extra currently being download
 
 A Movie Local Media Profile must use at least one item-specific variable. Otherwise, the main movie and an extra could resolve to the same output path and overwrite each other.
 
-Good examples include `{{ title }}`, `{{ dw_id }}`, `{{ media_type }}`, or an item-specific date field.
+Good examples include `{{ title }}`, `{{ slug }}`, `{{ media_type }}`, or an item-specific date field.
 
 Example:
 

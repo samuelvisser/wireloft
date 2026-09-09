@@ -12,7 +12,6 @@ def _movie(title: str = "Amélie: Test?") -> SimpleNamespace:
         title=title,
         extended_title=None,
         duration=7200,
-        dw_id="movie-1",
         author_name="François",
         mature_rating="PG",
     )

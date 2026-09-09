@@ -163,9 +163,8 @@ def sync_dailywire_movie_metadata(
     movie: Movie,
     movie_data: DwMovieRecord,
 ) -> None:
-    """Refresh the canonical metadata returned by Daily Wire getMoviePage."""
+    """Refresh canonical getMoviePage metadata without persisting rotating DW IDs."""
     scalar_fields = (
-        "dw_id",
         "title",
         "extended_title",
         "description",
@@ -204,12 +203,11 @@ def sync_dailywire_movie_metadata(
     movie.written_by = list(movie_data.written_by)
 
     # getMoviePage's publishedAt is the authoritative movie publication instant.
-    # Keep the existing calendar release_date field in sync for output templates
-    # and older API consumers, while recording that TMDB was not needed.
+    # Record the source, but do not persist Daily Wire's rotating entity ID.
     if movie_data.published_at is not None:
         movie.release_date = movie_data.published_at.date()
         movie.release_date_source = _DAILYWIRE_RELEASE_SOURCE
-        movie.release_date_source_id = movie_data.dw_id
+        movie.release_date_source_id = None
         movie.release_date_lookup_status = "matched"
         movie.release_date_lookup_attempted_at = None
         movie.release_date_lookup_error = None
@@ -218,7 +216,7 @@ def sync_dailywire_movie_metadata(
 
 
 def index_dailywire_movie(s: Session, movie_data: DwMovieRecord) -> tuple[Movie, bool]:
-    """Persist a Daily Wire movie and all currently known extras without downloading it."""
+    """Persist a Daily Wire movie by stable slug and all currently known extras."""
     item: Optional[Movie] = s.query(Movie).filter(Movie.slug == movie_data.slug).one_or_none()
     created = item is None
     if item is None:
@@ -243,7 +241,6 @@ def index_dailywire_movie(s: Session, movie_data: DwMovieRecord) -> tuple[Movie,
 def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
     movie_extras = [
         MovieExtraAPICreate(
-            dw_id=extra.dw_id,
             slug=extra.slug,
             title=extra.title,
             movie_extra_type=extra.movie_extra_type,
@@ -261,7 +258,6 @@ def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
     ]
 
     return MovieAPICreate(
-        dw_id=movie_data.dw_id,
         slug=movie_data.slug,
         title=movie_data.title,
         extended_title=movie_data.extended_title,

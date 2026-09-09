@@ -88,7 +88,7 @@ def test_same_dailywire_clip_can_belong_to_multiple_movies() -> None:
         )
         assert len(rows) == 2
         assert {row.movie_id for row in rows} == {original.id, sequel.id}
-        assert {row.dw_id for row in rows} == {"f0f721fa-d187-4c16-8ccb-818fe794234c"}
+        assert all(not hasattr(row, "dw_id") for row in rows)
 
         # Re-reading the same parent page still updates its existing listing
         # instead of creating a third row.
@@ -102,6 +102,75 @@ def test_same_dailywire_clip_can_belong_to_multiple_movies() -> None:
         assert session.query(MovieExtra).filter(
             MovieExtra.slug == "run-hide-fight-infidels"
         ).count() == 2
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_rotating_dailywire_ids_do_not_change_persisted_movie_identity() -> None:
+    """Movies and extras are reidentified only by their stable slugs."""
+    import backend.db.models  # noqa: F401
+    from backend.api.endpoints.movies.service import index_dailywire_movie
+    from backend.db import Base
+    from backend.db.models import Movie, MovieExtra
+    from dailywire_api.records import DwMovieExtraRecord
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    try:
+        old_trailer = DwMovieExtraRecord(
+            dw_id="old-extra-id",
+            slug="a-movie-trailer",
+            title="Old trailer title",
+            movie_extra_type="trailer",
+            duration=60,
+        )
+        first = _movie_record(
+            dw_id="old-movie-id",
+            slug="a-movie",
+            title="A Movie",
+            extras=[old_trailer],
+        )
+        first.trailer = old_trailer
+
+        movie, created = index_dailywire_movie(session, first)
+        session.commit()
+        first_movie_id = movie.id
+        first_extra_id = movie.movie_extras[0].id
+
+        new_trailer = DwMovieExtraRecord(
+            dw_id="rotated-extra-id",
+            slug="a-movie-trailer",
+            title="Updated trailer title",
+            movie_extra_type="trailer",
+            duration=75,
+        )
+        second = _movie_record(
+            dw_id="rotated-movie-id",
+            slug="a-movie",
+            title="A Movie Updated",
+            extras=[new_trailer],
+        )
+        second.trailer = new_trailer
+
+        same_movie, created_again = index_dailywire_movie(session, second)
+        session.commit()
+
+        assert created is True
+        assert created_again is False
+        assert same_movie.id == first_movie_id
+        assert same_movie.title == "A Movie Updated"
+        assert session.query(Movie).count() == 1
+        assert session.query(MovieExtra).count() == 1
+        extra = session.query(MovieExtra).one()
+        assert extra.id == first_extra_id
+        assert extra.slug == "a-movie-trailer"
+        assert extra.title == "Updated trailer title"
+        assert extra.duration == 75
+        assert same_movie.official_trailer_id == extra.id
+        assert not hasattr(same_movie, "dw_id")
+        assert not hasattr(extra, "dw_id")
     finally:
         session.close()
         engine.dispose()
@@ -182,7 +251,7 @@ def test_downloading_one_extra_survives_another_movies_shared_clip(
         assert download.type == MediaType.MOVIE_EXTRA.value
 
         shared_rows = session.query(MovieExtra).filter(
-            MovieExtra.dw_id == "f0f721fa-d187-4c16-8ccb-818fe794234c"
+            MovieExtra.slug == "run-hide-fight-infidels"
         ).all()
         assert len(shared_rows) == 2
         assert len({row.movie_id for row in shared_rows}) == 2

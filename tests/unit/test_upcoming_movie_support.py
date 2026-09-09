@@ -195,7 +195,7 @@ def test_sync_dailywire_movie_metadata_persists_rich_movie_page(monkeypatch):
     assert movie.published_at == datetime(2026, 9, 16, 5, 8, tzinfo=timezone.utc)
     assert movie.release_date == date(2026, 9, 16)
     assert movie.release_date_source == "dailywire"
-    assert movie.release_date_source_id == "movie-1"
+    assert movie.release_date_source_id is None
     assert movie.release_date_lookup_status == "matched"
     assert movie.background == "Movie background copy"
     assert movie.byline == "A Daily Wire Original Film"
@@ -209,6 +209,8 @@ def test_sync_dailywire_movie_metadata_persists_rich_movie_page(monkeypatch):
     assert movie.starring == ["Lead Actor"]
     assert movie.written_by == ["Director Person"]
     assert movie.movie_extras[0].available_for == ["FREE", "ANONYMOUS"]
+    assert not hasattr(movie, "dw_id")
+    assert not hasattr(movie.movie_extras[0], "dw_id")
 
     session.close()
     engine.dispose()

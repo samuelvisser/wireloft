@@ -58,7 +58,6 @@ def test_movie_extra_output_uses_parent_movie_and_actual_media_fields(tmp_path: 
         slug="run-hide-fight",
         title="Run Hide Fight",
         extended_title="Run Hide Fight | A Daily Wire Original",
-        dw_id="movie-123",
         author_name="DailyWire+",
         mature_rating="TV-MA",
         description=None,
@@ -72,14 +71,13 @@ def test_movie_extra_output_uses_parent_movie_and_actual_media_fields(tmp_path: 
         movie_extra_type="trailer",
         slug="run-hide-fight-official-trailer",
         title="Run Hide Fight | Official Trailer",
-        dw_id="trailer-456",
         description=None,
         downloaded_date=None,
         duration=180,
     )
 
     result = resolve_movie_output_path(
-        "/downloads/movies/{{ movie_title }}/{{ title }}-{{ dw_id }}-{{ media_type }}.ext",
+        "/downloads/movies/{{ movie_title }}/{{ title }}-{{ slug }}-{{ media_type }}.ext",
         movie=movie,
         media_item=trailer,
         append_media_type_to_filename=False,
@@ -90,7 +88,7 @@ def test_movie_extra_output_uses_parent_movie_and_actual_media_fields(tmp_path: 
         tmp_path
         / "movies"
         / "Run Hide Fight"
-        / "Run Hide Fight _ Official Trailer-trailer-456-trailer.mp4"
+        / "Run Hide Fight _ Official Trailer-run-hide-fight-official-trailer-trailer.mp4"
     ).resolve()
 
 

@@ -36,23 +36,18 @@ def sync_movie_extras(
     extras: Sequence[DwMovieExtraRecord],
     official_trailer: Optional[DwMovieExtraRecord],
 ) -> int:
-    """Upsert the extras exposed on one Daily Wire movie page.
+    """Upsert the extras exposed on one Daily Wire movie page by stable slug.
 
-    Daily Wire can list the same underlying clip on multiple movie pages (for
-    example, a sequel teaser can also be promoted as an extra on the original
-    film). A MovieExtra therefore represents a clip *as listed for this parent
-    movie*: slug and Daily Wire ID identify it only within ``movie.movie_extras``.
-    Within that parent, slug remains the playback identifier and a non-empty
-    Daily Wire ID lets a later slug change update the existing logical listing.
+    Daily Wire entity IDs are intentionally ignored because they can rotate over
+    time. A MovieExtra represents the clip listing under this parent movie, and
+    its immutable slug is the only persisted upstream identity.
     """
     existing = list(movie.movie_extras)
     by_slug = {extra.slug: extra for extra in existing}
-    by_dw_id = {extra.dw_id: extra for extra in existing if extra.dw_id}
     added = 0
 
     for record in extras:
-        item = by_dw_id.get(record.dw_id) if record.dw_id else None
-        item = item or by_slug.get(record.slug)
+        item = by_slug.get(record.slug)
         if item is None:
             item = MovieExtra(
                 movie=movie,
@@ -67,7 +62,6 @@ def sync_movie_extras(
                 thumbnail_portrait_path=record.thumbnail_portrait_path,
                 thumbnail_square_path=record.thumbnail_square_path,
                 movie_extra_type=record.movie_extra_type,
-                dw_id=record.dw_id,
                 slug=record.slug,
                 sharing_url=record.sharing_url,
                 published_date=record.published_date,
@@ -85,23 +79,18 @@ def sync_movie_extras(
             item.thumbnail_portrait_path = record.thumbnail_portrait_path
             item.thumbnail_square_path = record.thumbnail_square_path
             item.movie_extra_type = record.movie_extra_type
-            item.dw_id = record.dw_id
-            item.slug = record.slug
             item.sharing_url = record.sharing_url
             item.published_date = record.published_date
             item.available_for = list(record.available_for)
 
         by_slug[item.slug] = item
-        if item.dw_id:
-            by_dw_id[item.dw_id] = item
 
     s.flush()
 
     if official_trailer is None:
         movie.official_trailer = None
     else:
-        official = by_dw_id.get(official_trailer.dw_id) if official_trailer.dw_id else None
-        official = official or by_slug.get(official_trailer.slug)
+        official = by_slug.get(official_trailer.slug)
         if official is None or official.movie_id != movie.id:
             raise ValueError("The official trailer is not present in this movie's extras")
         if official.movie_extra_type != MovieExtraType.TRAILER.value:

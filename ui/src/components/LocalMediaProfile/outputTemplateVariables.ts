@@ -43,8 +43,6 @@ const MOVIE_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'title', description: 'Downloaded item title'},
     {name: 'movie_extended_title', description: 'Parent movie full title'},
     {name: 'extended_title', description: 'Downloaded item full title'},
-    {name: 'movie_dw_id', description: 'Parent movie Daily Wire ID'},
-    {name: 'dw_id', description: 'Downloaded item Daily Wire ID'},
     {name: 'movie_author', description: 'Parent movie author or host'},
     {name: 'author', description: 'Downloaded item author'},
     {name: 'movie_mature_rating', description: 'Parent movie rating'},

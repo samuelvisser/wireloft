@@ -54,7 +54,6 @@ class MovieAPICreate(_MovieAPIBaseIn):
     """Request body for creating a movie."""
 
     slug: str
-    dw_id: Optional[str] = None
     movie_extras: list[MovieExtraAPICreate] = Field(default_factory=list)
     # The extra rows do not have database IDs until this request is persisted,
     # so create requests identify the official trailer by its stable DW slug.
@@ -87,7 +86,6 @@ class _MovieAPIBaseOut(ResponseBase):
     thumbnail_landscape_path: Optional[str]
     thumbnail_portrait_path: Optional[str]
     thumbnail_square_path: Optional[str]
-    dw_id: Optional[str]
     sharing_url: Optional[str]
     author_name: Optional[str]
     author_slug: Optional[str]

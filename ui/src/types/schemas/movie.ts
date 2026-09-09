@@ -4,7 +4,6 @@ import {ApiDateTimeSchema} from './datetime'
 
 
 export const MovieExtraCreateSchema = z.object({
-    dwId: z.string().nullable().optional(),
     slug: z.string(),
     title: z.string(),
     movieExtraType: MovieExtraTypeSchema,
@@ -27,7 +26,6 @@ export const MovieExtraReadSchema = z.looseObject({
     id: z.int(),
     movieId: z.int(),
     uuid: z.string(),
-    dwId: z.string().nullable(),
     slug: z.string(),
     title: z.string(),
     movieExtraType: MovieExtraTypeSchema,
@@ -83,7 +81,6 @@ const MovieBaseSchema = z.object({
 })
 
 export const MovieCreateSchema = MovieBaseSchema.extend({
-    dwId: z.string().nullable().optional(),
     slug: z.string(),
     movieExtras: z.array(MovieExtraCreateSchema).default([]),
     officialTrailerSlug: z.string().nullable().optional(),
@@ -98,7 +95,6 @@ export type MovieUpdateOut = z.output<typeof MovieUpdateSchema>;
 export const MovieReadSchema = z.looseObject({
     id: z.int(),
     uuid: z.string(),
-    dwId: z.string().nullable().optional(),
     slug: z.string(),
     title: z.string(),
     extendedTitle: z.string().nullable().optional(),

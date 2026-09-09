@@ -23,9 +23,8 @@ class Movie(MediaItemBase, HasTaskResourcesMixin):
 
     # Fields
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
-    slug: Mapped[str]
+    slug: Mapped[str] = mapped_column(index=True, unique=True)
     extended_title: Mapped[Optional[str]]
-    dw_id: Mapped[Optional[str]] = mapped_column(index=True, unique=True)
     sharing_url: Mapped[Optional[str]]
     author_name: Mapped[Optional[str]]
     author_slug: Mapped[Optional[str]]

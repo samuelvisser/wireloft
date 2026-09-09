@@ -408,9 +408,10 @@ def test_create_movie_download_persists_movie_and_uses_local_profile(tmp_path, m
     assert trailer.type == "movie_extra"
     assert trailer.movie_extra_type == "trailer"
     assert trailer.movie_id == movie.id
-    assert trailer.dw_id == "trailer-1"
     assert trailer.slug == "a-movie-trailer"
     assert trailer.duration == 90
+    assert not hasattr(movie, "dw_id")
+    assert not hasattr(trailer, "dw_id")
     assert isinstance(download, MovieMediaDownload)
     assert download.type == "movie"
     assert download.file_path == str(tmp_path / "A Movie" / "a-movie.ext")
@@ -436,20 +437,17 @@ def test_create_movie_supports_multiple_extras_in_one_transaction():
     session = sessionmaker(bind=engine)()
 
     result = create_movie(session, MovieAPICreate(
-        dw_id="movie-1",
         slug="a-movie",
         title="A Movie",
         sharing_url="https://example.test/a-movie",
         movie_extras=[
             MovieExtraAPICreate(
-                dw_id="trailer-1",
                 slug="a-movie-trailer",
                 title="Official Trailer",
                 movie_extra_type="trailer",
                 sharing_url="https://example.test/a-movie-trailer",
             ),
             MovieExtraAPICreate(
-                dw_id="interview-1",
                 slug="a-movie-interview",
                 title="Cast Interview",
                 movie_extra_type="interview",
@@ -518,6 +516,8 @@ def test_index_dailywire_movie_persists_movie_and_extras_without_downloads(monke
         "cast-interview",
     ]
     assert movie.official_trailer == movie.movie_extras[0]
+    assert not hasattr(movie, "dw_id")
+    assert all(not hasattr(extra, "dw_id") for extra in movie.movie_extras)
     assert session.query(MovieExtra).count() == 2
     assert session.query(MediaDownloadBase).count() == 0
 
@@ -548,7 +548,6 @@ def test_create_movie_extra_requires_an_existing_movie():
 
     with pytest.raises(HTTPException) as exc_info:
         create_movie_extra(session, 999, MovieExtraAPICreate(
-            dw_id="trailer-1",
             slug="orphan-trailer",
             title="Orphan Trailer",
             movie_extra_type="trailer",
@@ -635,7 +634,6 @@ def test_refresh_movie_extras_worker_adds_new_content_and_sets_official_trailer(
     movie = Movie(
         uuid="movie-refresh-uuid",
         type=MediaType.MOVIE.value,
-        dw_id="movie-1",
         slug="a-movie",
         title="A Movie",
         description=None,
@@ -647,7 +645,6 @@ def test_refresh_movie_extras_worker_adds_new_content_and_sets_official_trailer(
         type=MediaType.MOVIE_EXTRA.value,
         movie=movie,
         movie_extra_type="interview",
-        dw_id="interview-1",
         slug="cast-interview",
         title="Old interview title",
         description=None,
@@ -695,7 +692,7 @@ def test_refresh_movie_extras_worker_adds_new_content_and_sets_official_trailer(
             return movie_data
 
     monkeypatch.setattr(service, "DeviceAuthClient", FakeAuth)
-    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+    monkeypatch.setattr(service, "MovieMiddlewareClient", FakeClient)
 
     added = asyncio.run(service.run_refresh_movie_extras(session, movie_id=movie.id))
 

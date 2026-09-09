@@ -74,7 +74,6 @@ def test_movie_variables_separate_parent_movie_from_current_media() -> None:
         slug="parent-movie",
         title="Parent Movie",
         extended_title="Parent Movie | Extended",
-        dw_id="movie-123",
         author_name="Movie Author",
         mature_rating="PG-13",
         description=None,
@@ -89,7 +88,6 @@ def test_movie_variables_separate_parent_movie_from_current_media() -> None:
         movie_extra_type="trailer",
         slug="official-trailer",
         title="Official Trailer",
-        dw_id="extra-456",
         description=None,
         downloaded_date=None,
         duration=120.6,
@@ -101,6 +99,8 @@ def test_movie_variables_separate_parent_movie_from_current_media() -> None:
 
     assert movie_values.keys() == extra_values.keys() == MOVIE_OUTPUT_TEMPLATE_FIELDS
     assert "movie" not in movie_values
+    assert "movie_dw_id" not in movie_values
+    assert "dw_id" not in movie_values
     assert movie_values["movie_slug"] == movie_values["slug"] == "parent-movie"
     assert movie_values["movie_title"] == movie_values["title"] == "Parent Movie"
     assert movie_values["movie_year"] == movie_values["year"] == "2020"
@@ -111,8 +111,6 @@ def test_movie_variables_separate_parent_movie_from_current_media() -> None:
     assert extra_values["title"] == "Official Trailer"
     assert extra_values["movie_extended_title"] == "Parent Movie | Extended"
     assert extra_values["extended_title"] == "Official Trailer"
-    assert extra_values["movie_dw_id"] == "movie-123"
-    assert extra_values["dw_id"] == "extra-456"
     assert extra_values["movie_author"] == "Movie Author"
     assert extra_values["author"] == ""
     assert extra_values["movie_mature_rating"] == "PG-13"

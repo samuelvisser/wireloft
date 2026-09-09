@@ -20,15 +20,9 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     __mapper_args__ = {"polymorphic_identity": MediaType.MOVIE_EXTRA.value}
     __task_resource_types__ = ("movie_extra",)
     __table_args__ = (
-        # Daily Wire can surface the same clip as an extra for more than one
-        # movie (for example, a sequel teaser promoted on the original film).
-        # The row represents that parent/movie listing, so clip identity is only
-        # unique within one movie rather than across the whole catalog.
-        UniqueConstraint(
-            "movie_id",
-            "dw_id",
-            name="uq_movie_extras_movie_id_dw_id",
-        ),
+        # Daily Wire's clip IDs can rotate while slugs remain stable. A movie
+        # extra is therefore identified by its immutable slug within its parent
+        # movie, matching the episode identity policy used elsewhere in WireLoft.
         UniqueConstraint(
             "movie_id",
             "slug",
@@ -50,7 +44,6 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
         server_default=MovieExtraType.OTHER.value,
         nullable=False,
     )
-    dw_id: Mapped[Optional[str]] = mapped_column(index=True)
     slug: Mapped[str] = mapped_column(index=True)
     sharing_url: Mapped[Optional[str]]
     published_date: Mapped[Optional[datetime]]

@@ -22,7 +22,7 @@ from backend.utils.helpers import slugify
 
 _MOVIE_EXTRA_COLLISION_MESSAGE = (
     "Movie and movie-extra downloads could resolve to the same file. Include at least "
-    "one variable that describes the downloaded item, such as {{ title }}, {{ dw_id }}, "
+    "one variable that describes the downloaded item, such as {{ title }}, {{ slug }}, "
     "{{ duration_seconds }}, or {{ media_type }}."
 )
 

@@ -51,19 +51,12 @@ class MovieMiddlewareClient(MiddlewareClient):
 
         # The dedicated trailer object contains fresh playback fields but omits
         # some descriptive fields (notably availableFor) that exist on the same
-        # row in extras. Merge those sources instead of choosing one and losing
-        # information, then expose the same rich record in both locations.
+        # row in extras. Daily Wire entity IDs can rotate, so the immutable slug
+        # is the only identity used when merging those two API representations.
         if trailer is not None:
             matched = False
             for index, extra in enumerate(extras):
-                if (
-                    extra.slug == trailer.slug
-                    or (
-                        extra.dw_id is not None
-                        and trailer.dw_id is not None
-                        and extra.dw_id == trailer.dw_id
-                    )
-                ):
+                if extra.slug == trailer.slug:
                     trailer = trailer.model_copy(update={
                         "available_for": list(extra.available_for),
                     })

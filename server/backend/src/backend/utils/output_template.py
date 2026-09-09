@@ -40,16 +40,16 @@ SHOW_OUTPUT_TEMPLATE_FIELDS = frozenset({
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "movie_slug", "movie_title", "movie_extended_title", "movie_dw_id", "movie_author",
+    "movie_slug", "movie_title", "movie_extended_title", "movie_author",
     "movie_mature_rating", "movie_duration_seconds",
     "slug", "title", "extended_title",
-    "dw_id", "author", "mature_rating", "rating", "duration_seconds", "media_type",
+    "author", "mature_rating", "rating", "duration_seconds", "media_type",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS | MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS
 
 # These values describe the actual downloaded item rather than always describing
 # its owning movie. They are useful when making movie and extra paths distinct.
 MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "slug", "title", "extended_title", "dw_id", "author", "mature_rating", "rating",
+    "slug", "title", "extended_title", "author", "mature_rating", "rating",
     "duration_seconds", "media_type",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
@@ -222,7 +222,6 @@ def movie_output_template_values(
         item_slug = item.slug
         item_title = item.title
         item_extended_title = item.title
-        item_dw_id = getattr(item, "dw_id", None) or ""
         item_author = ""
         item_rating = ""
         item_duration_seconds = str(round(item.duration or 0))
@@ -231,7 +230,6 @@ def movie_output_template_values(
         item_slug = movie.slug
         item_title = movie.title
         item_extended_title = movie_extended_title
-        item_dw_id = movie.dw_id or ""
         item_author = movie.author_name or ""
         item_rating = movie.mature_rating or ""
         item_duration_seconds = movie_duration_seconds
@@ -246,7 +244,6 @@ def movie_output_template_values(
         "movie_slug": movie.slug,
         "movie_title": movie.title,
         "movie_extended_title": movie_extended_title,
-        "movie_dw_id": movie.dw_id or "",
         "movie_author": movie.author_name or "",
         "movie_mature_rating": movie.mature_rating or "",
         "movie_duration_seconds": movie_duration_seconds,
@@ -254,7 +251,6 @@ def movie_output_template_values(
         "slug": item_slug,
         "title": item_title,
         "extended_title": item_extended_title,
-        "dw_id": item_dw_id,
         "author": item_author,
         "mature_rating": item_rating,
         "rating": item_rating,

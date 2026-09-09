@@ -20,7 +20,6 @@ class _MovieExtraAPIBaseIn(RequestBase):
     thumbnail_landscape_path: Optional[str] = None
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
-    dw_id: Optional[str] = None
     slug: str
     sharing_url: Optional[str] = None
     published_date: Optional[AwareDatetime] = None
@@ -53,7 +52,6 @@ class MovieExtraAPIRead(ResponseBase):
     thumbnail_landscape_path: Optional[str]
     thumbnail_portrait_path: Optional[str]
     thumbnail_square_path: Optional[str]
-    dw_id: Optional[str]
     slug: str
     sharing_url: Optional[str]
     published_date: Optional[datetime]
