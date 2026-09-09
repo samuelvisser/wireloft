@@ -5,28 +5,19 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from alembic.script.revision import RangeNotAncestorError, ResolutionError, RevisionError
 from alembic.util import CommandError
 from sqlalchemy import Column, MetaData, String, Table, inspect as sa_inspect, select, text
+from sqlalchemy.engine import Connection
 
-from .alembic_version import (
-    LEGACY_VERSION_TABLE,
-    SETTINGS_VERSION_COLUMN,
-    SETTINGS_VERSION_TABLE,
-    VERSION_STORAGE_REVISION,
-    apply_settings_version_table,
-    migration_context_options,
-    settings_version_column_exists,
-    use_settings_version_storage,
-)
 from .core import get_db_path, get_engine
 
 
 ALEMBIC_DIR = Path(__file__).with_name("alembic")
-# Retained as the public constant for callers that still need the legacy name.
-ALEMBIC_VERSION_TABLE = LEGACY_VERSION_TABLE
+ALEMBIC_VERSION_TABLE = "alembic_version"
+SETTINGS_VERSION_TABLE = "settings"
+SETTINGS_VERSION_COLUMN = "alembic_version_num"
 
 
 class DatabaseMigrationError(RuntimeError):
@@ -59,13 +50,58 @@ def get_head_revision() -> str:
     return heads[0]
 
 
-def _migration_context(connection) -> MigrationContext:
-    context = MigrationContext.configure(
-        connection,
-        opts=migration_context_options(connection),
+def _legacy_version_table() -> Table:
+    return Table(
+        ALEMBIC_VERSION_TABLE,
+        MetaData(),
+        Column("version_num", String(32), primary_key=True, nullable=False),
     )
-    apply_settings_version_table(context)
-    return context
+
+
+def _settings_version_column_exists(connection: Connection) -> bool:
+    inspector = sa_inspect(connection)
+    if not inspector.has_table(SETTINGS_VERSION_TABLE):
+        return False
+    return SETTINGS_VERSION_COLUMN in {
+        column["name"] for column in inspector.get_columns(SETTINGS_VERSION_TABLE)
+    }
+
+
+def _legacy_revisions(connection: Connection) -> tuple[str, ...]:
+    return tuple(
+        connection.execute(
+            select(_legacy_version_table().c.version_num)
+        ).scalars()
+    )
+
+
+def _settings_revisions(connection: Connection) -> tuple[str, ...]:
+    if not _settings_version_column_exists(connection):
+        return ()
+    return tuple(
+        revision
+        for revision in connection.execute(
+            text(
+                f"SELECT {SETTINGS_VERSION_COLUMN} "
+                f"FROM {SETTINGS_VERSION_TABLE} "
+                f"WHERE {SETTINGS_VERSION_COLUMN} IS NOT NULL "
+                "ORDER BY id"
+            )
+        ).scalars()
+        if revision is not None
+    )
+
+
+def _stored_revisions(connection: Connection) -> tuple[str, ...]:
+    """Read the authoritative database revision without involving Alembic internals.
+
+    A temporary ``alembic_version`` table may exist while a migration command is
+    running or after an interrupted command. In that case it is authoritative;
+    otherwise the persistent revision lives on the singleton Settings row.
+    """
+    if sa_inspect(connection).has_table(ALEMBIC_VERSION_TABLE):
+        return _legacy_revisions(connection)
+    return _settings_revisions(connection)
 
 
 def get_current_revisions() -> tuple[str, ...]:
@@ -74,11 +110,7 @@ def get_current_revisions() -> tuple[str, ...]:
         return ()
 
     with get_engine().connect() as connection:
-        return tuple(
-            revision
-            for revision in _migration_context(connection).get_current_heads()
-            if revision is not None
-        )
+        return _stored_revisions(connection)
 
 
 def _database_tables() -> set[str]:
@@ -89,12 +121,12 @@ def _database_tables() -> set[str]:
 
 
 def _database_has_version_storage(tables: set[str]) -> bool:
-    if LEGACY_VERSION_TABLE in tables:
+    if ALEMBIC_VERSION_TABLE in tables:
         return True
     if SETTINGS_VERSION_TABLE not in tables:
         return False
     with get_engine().connect() as connection:
-        return settings_version_column_exists(connection)
+        return _settings_version_column_exists(connection)
 
 
 def validate_database_migration_state() -> None:
@@ -110,7 +142,7 @@ def validate_database_migration_state() -> None:
         )
 
     current = get_current_revisions()
-    application_tables = tables - {LEGACY_VERSION_TABLE}
+    application_tables = tables - {ALEMBIC_VERSION_TABLE}
     if application_tables and not current:
         raise DatabaseMigrationError(
             f"Database '{get_db_path()}' contains WireLoft tables but its Alembic revision is empty. "
@@ -148,39 +180,23 @@ def initialize_database() -> None:
     upgrade_database()
 
 
-def _legacy_version_table() -> Table:
-    return Table(
-        LEGACY_VERSION_TABLE,
-        MetaData(),
-        Column("version_num", String(32), primary_key=True, nullable=False),
-    )
+def _materialize_alembic_version_table() -> bool:
+    """Give Alembic its native version table for the duration of a DB command.
 
+    Alembic treats its version table as an implementation detail that it may
+    insert into, update, or delete from. The Settings table is application data,
+    so making Alembic operate on it directly is unsafe. WireLoft instead keeps
+    the revision persistently in Settings and materializes Alembic's normal table
+    only while an Alembic command is executing.
 
-def _activate_settings_version_storage() -> None:
-    """Move the final Alembic head from its legacy table onto Settings.
-
-    The d8 migration adds ``settings.alembic_version_num`` while Alembic is still
-    using its legacy table for that command. Moving the value after the command
-    finishes avoids changing Alembic's version table underneath a running
-    migration context.
+    Returns whether this call created the temporary table.
     """
     with get_engine().begin() as connection:
         inspector = sa_inspect(connection)
-        if not inspector.has_table(LEGACY_VERSION_TABLE):
-            return
-        if not settings_version_column_exists(connection):
-            return
-
-        revisions = tuple(
-            connection.execute(
-                select(_legacy_version_table().c.version_num)
-            ).scalars()
-        )
-        if len(revisions) != 1:
-            raise DatabaseMigrationError(
-                "Cannot move Alembic version tracking into settings unless the database "
-                f"has exactly one current revision; found {revisions}."
-            )
+        if inspector.has_table(ALEMBIC_VERSION_TABLE):
+            return False
+        if not _settings_version_column_exists(connection):
+            return False
 
         settings_rows = connection.execute(text(
             f"SELECT id, {SETTINGS_VERSION_COLUMN} "
@@ -189,14 +205,49 @@ def _activate_settings_version_storage() -> None:
         if len(settings_rows) != 1:
             raise DatabaseMigrationError(
                 "The settings table must contain exactly one application settings row "
-                "before Alembic version tracking can be stored there."
+                "before Alembic version tracking can be materialized."
             )
 
-        current_value = settings_rows[0][SETTINGS_VERSION_COLUMN]
-        revision = revisions[0]
-        if current_value not in (None, revision):
+        revision = settings_rows[0][SETTINGS_VERSION_COLUMN]
+        if revision is None:
             raise DatabaseMigrationError(
-                "settings.alembic_version_num disagrees with the legacy Alembic version table."
+                "settings.alembic_version_num is empty; refusing to guess the database revision."
+            )
+
+        version_table = _legacy_version_table()
+        version_table.create(connection)
+        connection.execute(version_table.insert().values(version_num=revision))
+        return True
+
+
+def _persist_settings_version_storage() -> None:
+    """Persist Alembic's resulting revision in Settings and remove its table.
+
+    Before revision d8 the Settings column does not exist, so the normal Alembic
+    table remains in place. At d8 and later, the final database contains only
+    ``settings.alembic_version_num``.
+    """
+    with get_engine().begin() as connection:
+        inspector = sa_inspect(connection)
+        if not inspector.has_table(ALEMBIC_VERSION_TABLE):
+            return
+        if not _settings_version_column_exists(connection):
+            return
+
+        revisions = _legacy_revisions(connection)
+        if len(revisions) != 1:
+            raise DatabaseMigrationError(
+                "WireLoft can only persist one current Alembic revision in settings; "
+                f"found {revisions}."
+            )
+
+        settings_rows = connection.execute(text(
+            f"SELECT id FROM {SETTINGS_VERSION_TABLE} ORDER BY id"
+        )).scalars().all()
+        if len(settings_rows) != 1:
+            raise DatabaseMigrationError(
+                "The settings table must contain exactly one application settings row "
+                "before Alembic version tracking can be persisted there."
             )
 
         connection.execute(
@@ -204,62 +255,24 @@ def _activate_settings_version_storage() -> None:
                 f"UPDATE {SETTINGS_VERSION_TABLE} "
                 f"SET {SETTINGS_VERSION_COLUMN} = :revision WHERE id = :settings_id"
             ),
-            {"revision": revision, "settings_id": settings_rows[0]["id"]},
+            {"revision": revisions[0], "settings_id": settings_rows[0]},
         )
         Table(
-            LEGACY_VERSION_TABLE,
+            ALEMBIC_VERSION_TABLE,
             MetaData(),
             autoload_with=connection,
         ).drop(connection)
 
 
-def _activate_legacy_version_storage() -> None:
-    """Prepare a downgrade across d8 without deleting the Settings row.
-
-    d8's downgrade removes ``settings.alembic_version_num``. Alembic therefore
-    has to switch back to its legacy table *before* that migration starts, so its
-    HeadMaintainer never tries to update a column the migration just removed.
-    """
-    with get_engine().begin() as connection:
-        inspector = sa_inspect(connection)
-        if inspector.has_table(LEGACY_VERSION_TABLE):
-            return
-        if not use_settings_version_storage(connection):
-            return
-
-        revisions = tuple(
-            connection.execute(
-                text(
-                    f"SELECT {SETTINGS_VERSION_COLUMN} "
-                    f"FROM {SETTINGS_VERSION_TABLE} "
-                    f"WHERE {SETTINGS_VERSION_COLUMN} IS NOT NULL"
-                )
-            ).scalars()
-        )
-        if len(revisions) != 1:
-            raise DatabaseMigrationError(
-                "Cannot move Alembic version tracking out of settings unless the database "
-                f"has exactly one current revision; found {revisions}."
-            )
-
-        version_table = _legacy_version_table()
-        version_table.create(connection)
-        connection.execute(
-            version_table.insert().values(version_num=revisions[0])
-        )
-
-
 def upgrade_database() -> None:
     validate_database_migration_state()
+    _materialize_alembic_version_table()
     try:
         command.upgrade(get_alembic_config(), "head")
     except CommandError as exc:
         raise DatabaseMigrationError(str(exc)) from exc
 
-    # A database upgrading from c5 (or an empty database) runs the command with
-    # Alembic's legacy table. d8 adds the Settings column, then this atomic handoff
-    # stores the final head there and removes the dedicated version table.
-    _activate_settings_version_storage()
+    _persist_settings_version_storage()
     require_database_current()
 
 
@@ -307,35 +320,41 @@ def _validate_downgrade_target(revision: str) -> list:
 
 def downgrade_database(revision: str) -> None:
     validate_database_migration_state()
-    downgrade_path = _validate_downgrade_target(revision)
-
-    # If this command will execute d8's downgrade, switch version storage first.
-    # The entire Alembic command then consistently uses the legacy table, even if
-    # it continues through older revisions in the same invocation.
-    if any(item.revision == VERSION_STORAGE_REVISION for item in downgrade_path):
-        _activate_legacy_version_storage()
-
+    _validate_downgrade_target(revision)
+    _materialize_alembic_version_table()
     try:
         command.downgrade(get_alembic_config(), revision)
     except CommandError as exc:
         raise DatabaseMigrationError(str(exc)) from exc
 
+    _persist_settings_version_storage()
+
 
 def check_database() -> None:
     """Verify both the DB revision and ORM-to-migration schema synchronization."""
     require_database_current()
+    materialized = _materialize_alembic_version_table()
     try:
         command.check(get_alembic_config())
     except CommandError as exc:
+        if materialized:
+            _persist_settings_version_storage()
         raise DatabaseMigrationError(str(exc)) from exc
+    if materialized:
+        _persist_settings_version_storage()
 
 
 def create_revision(message: str) -> None:
     require_database_current()
+    materialized = _materialize_alembic_version_table()
     try:
         command.revision(get_alembic_config(), message=message, autogenerate=True)
     except CommandError as exc:
+        if materialized:
+            _persist_settings_version_storage()
         raise DatabaseMigrationError(str(exc)) from exc
+    if materialized:
+        _persist_settings_version_storage()
 
 
 def get_database_status() -> tuple[tuple[str, ...], str]:
