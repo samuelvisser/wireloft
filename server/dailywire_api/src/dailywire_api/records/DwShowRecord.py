@@ -66,16 +66,9 @@ class DwShowRecord(BaseRecord):
         if "podcast" in self.slug.lower():
             return ProbableShowType.podcast
 
-        # Unknown if fewer than 5 episodes
-        total = len(self.latest_episodes or [])
-        if total <= 5:
-            return ProbableShowType.unknown
-
-        # Podcast if >= 40% of episode titles contain the exact substring "Ep. "
-        podcast_like = sum(1 for ep in self.latest_episodes if isinstance(ep, DwEpisodeRecord) and "Ep. " in (ep.title or ""))
-        ratio = podcast_like / total if total else 0
-        if ratio >= 0.4:
-            return ProbableShowType.podcast
+        # Series if it contains either 'extras' or 'all episodes' season
+        if any(s.slug in ("extras", "all-episodes") for s in (self.seasons or [])):
+            return ProbableShowType.series
 
         return ProbableShowType.series
 
