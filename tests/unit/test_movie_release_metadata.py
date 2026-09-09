@@ -249,7 +249,6 @@ def test_movie_release_date_condition_omits_unknown_metadata(tmp_path, monkeypat
         slug="a-movie",
         title="A Movie",
         description=None,
-        downloaded_date=None,
         duration=100,
         release_date_lookup_status="ambiguous",
         release_date_lookup_error="TMDB returned two equally likely matches",

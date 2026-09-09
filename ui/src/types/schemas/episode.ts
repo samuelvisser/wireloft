@@ -7,10 +7,8 @@ const EpisodeBaseSchema = z.object({
     publishStatus: z.enum(EpisodePublishStatus),
     wentLiveDate: z.date().optional(),
     publishedDate: z.date().optional(),
-    redownloadedDate: z.date().optional(),
     title: z.string(),
     description: z.string(),
-    downloadedDate: z.date().optional(),
 })
 
 export const EpisodeCreateSchema = EpisodeBaseSchema.extend({
@@ -47,8 +45,6 @@ export const EpisodeReadSchema = z.looseObject({
     wentLiveDate: ApiDateTimeSchema.nullable().optional(),
     publishedDate: ApiDateTimeSchema.nullable().optional(),
     scheduledDate: ApiDateTimeSchema.nullable().optional(),
-    redownloadedDate: ApiDateTimeSchema.nullable().optional(),
-    downloadedDate: ApiDateTimeSchema.nullable().optional(),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })

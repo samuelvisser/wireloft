@@ -111,13 +111,8 @@ async def run_download_episode(
         download.downloaded_at = datetime.now(timezone.utc)
 
         episode = s.get(Episode, download.media_item_id)
-        if episode is not None:
-            if hasattr(download, "downloaded_publish_status"):
-                download.downloaded_publish_status = episode.publish_status
-            if episode.downloaded_date is None:
-                episode.downloaded_date = download.downloaded_at
-            if is_redownload:
-                episode.redownloaded_date = download.downloaded_at
+        if episode is not None and hasattr(download, "downloaded_publish_status"):
+            download.downloaded_publish_status = episode.publish_status
 
         s.commit()
 

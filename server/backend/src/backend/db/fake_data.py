@@ -154,8 +154,6 @@ for i in range(1, 31):
         "status": _status_for(0, i),
         "went_live_date": random_datetime(),
         "published_date": random_datetime(),
-        "downloaded_date": random_datetime(),
-        "redownloaded_date": random_datetime(),
         "created_date": random_datetime(),
         "modified_date": random_datetime(),
     })
@@ -174,8 +172,6 @@ for i in range(1, 21):
         "status": _status_for(2, i),
         "went_live_date": random_datetime(),
         "published_date": random_datetime(),
-        "downloaded_date": random_datetime(),
-        "redownloaded_date": random_datetime(),
         "created_date": random_datetime(),
         "modified_date": random_datetime(),
     })
@@ -194,8 +190,6 @@ for i in range(1, 8):
         "status": _status_for(2, i),
         "went_live_date": random_datetime(),
         "published_date": random_datetime(),
-        "downloaded_date": random_datetime(),
-        "redownloaded_date": random_datetime(),
         "created_date": random_datetime(),
         "modified_date": random_datetime(),
     })

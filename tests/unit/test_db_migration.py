@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "c5a9e2f7b104"
+HEAD_REVISION = "d8f3a1c6b205"
+CONSOLIDATED_MEDIA_ITEM_REVISION = "c5a9e2f7b104"
 MOVIE_EXTRA_IDENTITY_REVISION = "c9f2d8a1b604"
 MOVIE_PAGE_METADATA_REVISION = "a8e4c1d7f203"
 ARTIFACT_IDENTITY_REVISION = "c1f7b9e4d205"
@@ -71,11 +72,10 @@ def test_fresh_database_upgrades_to_head(migration_database):
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
     assert {
-        "alembic_version",
         "shows",
-        "media_items_episodes",
-        "media_items_movies",
-        "media_items_movie_extras",
+        "media_items_episode",
+        "media_items_movie",
+        "media_items_movie_extra",
         "movie_extra_sources",
         "media_downloads",
         "media_downloads_movie",
@@ -90,7 +90,15 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "task_operation_targets",
         "task_operation_runs",
     } <= tables
-    assert {"episodes", "movies", "movie_extras"}.isdisjoint(tables)
+    assert {
+        "alembic_version",
+        "episodes",
+        "movies",
+        "movie_extras",
+        "media_items_episodes",
+        "media_items_movies",
+        "media_items_movie_extras",
+    }.isdisjoint(tables)
 
     task_run_columns = {column["name"] for column in inspector.get_columns("task_runs")}
     assert "result" in task_run_columns
@@ -124,7 +132,13 @@ def test_fresh_database_upgrades_to_head(migration_database):
     assert bool(settings_index["unique"])
 
     settings_columns = {column["name"] for column in inspector.get_columns("settings")}
-    assert "onboarding_completed" in settings_columns
+    assert settings_columns == {
+        "id",
+        "onboarding_completed",
+        "alembic_version_num",
+        "created_at",
+        "updated_at",
+    }
 
     media_item_columns = {
         column["name"] for column in inspector.get_columns("media_items")
@@ -133,17 +147,23 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "id",
         "uuid",
         "type",
-        "downloaded_date",
         "created_at",
         "updated_at",
     }
 
     episode_columns = {
         column["name"]
-        for column in inspector.get_columns("media_items_episodes")
+        for column in inspector.get_columns("media_items_episode")
     }
     assert "metadata_is_final" in episode_columns
+    assert "redownloaded_date" not in episode_columns
     assert CONTENT_METADATA_FIELDS <= episode_columns
+
+    series_season_columns = {
+        column["name"]
+        for column in inspector.get_columns("download_profile_series_seasons")
+    }
+    assert series_season_columns == {"download_profiles_series_id", "season_id"}
 
     stream_profile_columns = {column["name"] for column in inspector.get_columns("stream_profiles")}
     assert "ep_id_type_list" in stream_profile_columns
@@ -158,9 +178,11 @@ def test_fresh_database_upgrades_to_head(migration_database):
     assert "download_episode_count" in podcast_columns
 
     with engine.connect() as connection:
-        assert not bool(connection.execute(text(
-            "SELECT onboarding_completed FROM settings"
-        )).scalar_one())
+        settings = connection.execute(text(
+            "SELECT onboarding_completed, alembic_version_num FROM settings"
+        )).mappings().one()
+        assert not bool(settings["onboarding_completed"])
+        assert settings["alembic_version_num"] == HEAD_REVISION
         profiles = connection.execute(text(
             "SELECT type, slug, name, output_template, preferred_format, "
             "append_media_type_to_filename "
@@ -204,7 +226,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     movie_columns = {
         column["name"]
-        for column in inspector.get_columns("media_items_movies")
+        for column in inspector.get_columns("media_items_movie")
     }
     assert movie_columns == {
         "id",
@@ -261,7 +283,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     movie_extra_columns = {
         column["name"]
-        for column in inspector.get_columns("media_items_movie_extras")
+        for column in inspector.get_columns("media_items_movie_extra")
     }
     assert movie_extra_columns == {
         "id",
@@ -271,14 +293,14 @@ def test_fresh_database_upgrades_to_head(migration_database):
     }
     movie_extra_indexes = {
         index["name"]: index
-        for index in inspector.get_indexes("media_items_movie_extras")
+        for index in inspector.get_indexes("media_items_movie_extra")
     }
     assert "ix_movie_extras_dw_id" not in movie_extra_indexes
     assert "ix_movie_extras_slug" not in movie_extra_indexes
     assert not bool(movie_extra_indexes["ix_movie_extras_source_id"]["unique"])
     movie_extra_unique_constraints = {
         constraint["name"]: constraint
-        for constraint in inspector.get_unique_constraints("media_items_movie_extras")
+        for constraint in inspector.get_unique_constraints("media_items_movie_extra")
     }
     assert "uq_movie_extras_movie_id_dw_id" not in movie_extra_unique_constraints
     assert "uq_movie_extras_movie_id_slug" not in movie_extra_unique_constraints
@@ -287,7 +309,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
     ]["column_names"] == ["movie_id", "source_id"]
     source_fk = next(
         foreign_key
-        for foreign_key in inspector.get_foreign_keys("media_items_movie_extras")
+        for foreign_key in inspector.get_foreign_keys("media_items_movie_extra")
         if foreign_key["constrained_columns"] == ["source_id"]
     )
     assert source_fk["referred_table"] == "movie_extra_sources"
@@ -295,7 +317,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
 
     movie_indexes = {
         index["name"]: index
-        for index in inspector.get_indexes("media_items_movies")
+        for index in inspector.get_indexes("media_items_movie")
     }
     assert "ix_movies_dw_id" not in movie_indexes
 
@@ -356,7 +378,7 @@ def test_0001_is_the_main_branch_schema_baseline(migration_database):
 def test_upgrade_from_main_baseline_preserves_movie_rows(migration_database):
     _database_path, engine = migration_database
 
-    from backend.db.migrations import get_alembic_config, upgrade_database
+    from backend.db.migrations import downgrade_database, get_alembic_config, upgrade_database
     from backend.db.models import Movie
 
     command.upgrade(get_alembic_config(), BASE_REVISION)
@@ -400,7 +422,7 @@ def test_upgrade_from_main_baseline_preserves_movie_rows(migration_database):
         assert movie.movie_extras == []
         assert movie.official_trailer is None
 
-    command.downgrade(get_alembic_config(), BASE_REVISION)
+    downgrade_database(BASE_REVISION)
     inspector = inspect(engine)
     assert {column["name"] for column in inspector.get_columns("movies")} == {"id", "slug"}
     assert "media_downloads_movie" not in set(inspector.get_table_names())
@@ -554,10 +576,10 @@ def test_upgrade_from_0001_rejects_duplicate_profile_settings(migration_database
 def test_local_media_profile_migration_downgrades_to_0001(migration_database):
     _database_path, engine = migration_database
 
-    from backend.db.migrations import get_alembic_config, upgrade_database
+    from backend.db.migrations import downgrade_database, upgrade_database
 
     upgrade_database()
-    command.downgrade(get_alembic_config(), BASE_REVISION)
+    downgrade_database(BASE_REVISION)
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -568,6 +590,7 @@ def test_local_media_profile_migration_downgrades_to_0001(migration_database):
     assert "media_downloads_movie" not in tables
     assert "type" not in {column["name"] for column in inspector.get_columns("local_media_profiles")}
     assert {column["name"] for column in inspector.get_columns("movies")} == {"id", "slug"}
+    assert "alembic_version" in tables
 
 
 def test_upgrade_is_idempotent(migration_database):
@@ -615,7 +638,7 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
     check_database()
 
 
-def test_migration_history_is_linear_through_consolidated_media_items():
+def test_migration_history_is_linear_through_media_download_ownership():
     from backend.db.migrations import get_alembic_config, get_head_revisions
 
     scripts = ScriptDirectory.from_config(get_alembic_config())
@@ -623,7 +646,8 @@ def test_migration_history_is_linear_through_consolidated_media_items():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, MOVIE_EXTRA_IDENTITY_REVISION),
+        (HEAD_REVISION, CONSOLIDATED_MEDIA_ITEM_REVISION),
+        (CONSOLIDATED_MEDIA_ITEM_REVISION, MOVIE_EXTRA_IDENTITY_REVISION),
         (MOVIE_EXTRA_IDENTITY_REVISION, MOVIE_PAGE_METADATA_REVISION),
         (MOVIE_PAGE_METADATA_REVISION, ARTIFACT_IDENTITY_REVISION),
         (ARTIFACT_IDENTITY_REVISION, SHOW_PROFILE_SCOPE_REVISION),
@@ -637,6 +661,7 @@ def test_migration_history_is_linear_through_consolidated_media_items():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Consolidate media-item storage after movie-extra identity."
-    assert revisions[1].doc == "Scope movie-extra identity to its parent movie."
-    assert revisions[2].doc == "Persist canonical Daily Wire movie-page metadata."
+    assert revisions[0].doc == "Finalize media-item naming, download ownership, and database metadata."
+    assert revisions[1].doc == "Consolidate media-item storage after movie-extra identity."
+    assert revisions[2].doc == "Scope movie-extra identity to its parent movie."
+    assert revisions[3].doc == "Persist canonical Daily Wire movie-page metadata."

@@ -157,7 +157,6 @@ def test_movie_output_template_uses_movie_metadata(tmp_path: Path, monkeypatch) 
         author_name="A Director",
         mature_rating="PG-13",
         description=None,
-        downloaded_date=None,
         duration=5400,
     )
 

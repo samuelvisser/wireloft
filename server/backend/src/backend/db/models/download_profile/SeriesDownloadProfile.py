@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 association_table = Table(
     "download_profile_series_seasons",
     Base.metadata,
-    Column("series_download_profile_id", ForeignKey("download_profiles_series.id")),
+    Column("download_profiles_series_id", ForeignKey("download_profiles_series.id")),
     Column("season_id", ForeignKey("seasons.id")),
 )
 

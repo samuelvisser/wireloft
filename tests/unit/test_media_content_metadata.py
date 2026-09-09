@@ -21,7 +21,6 @@ def test_content_metadata_is_stored_by_concrete_owner_and_transparent_to_callers
             slug="movie-a",
             title="Movie A",
             description="Movie description",
-            downloaded_date=None,
             duration=5400,
             background_image_path="movie-background.jpg",
             thumbnail_landscape_path="movie-landscape.jpg",
@@ -44,7 +43,6 @@ def test_content_metadata_is_stored_by_concrete_owner_and_transparent_to_callers
             movie=movie,
             source=source,
             movie_extra_type="trailer",
-            downloaded_date=None,
         )
         session.add_all([movie, extra])
         session.commit()
@@ -63,17 +61,17 @@ def test_content_metadata_is_stored_by_concrete_owner_and_transparent_to_callers
             {column["name"] for column in inspector.get_columns("media_items")}
         )
         assert content_fields <= {
-            column["name"] for column in inspector.get_columns("media_items_episodes")
+            column["name"] for column in inspector.get_columns("media_items_episode")
         }
         assert content_fields <= {
-            column["name"] for column in inspector.get_columns("media_items_movies")
+            column["name"] for column in inspector.get_columns("media_items_movie")
         }
         assert content_fields <= {
             column["name"] for column in inspector.get_columns("movie_extra_sources")
         }
         assert {
             column["name"]
-            for column in inspector.get_columns("media_items_movie_extras")
+            for column in inspector.get_columns("media_items_movie_extra")
         } == {
             "id",
             "movie_id",
@@ -145,7 +143,6 @@ def test_movie_extra_constructor_routes_source_table_columns():
         type=MediaType.MOVIE_EXTRA.value,
         movie_id=7,
         movie_extra_type="trailer",
-        downloaded_date=None,
         slug="constructor-extra",
         title="Constructor Extra",
         description="Source-owned description",

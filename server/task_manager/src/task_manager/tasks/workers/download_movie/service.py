@@ -108,8 +108,6 @@ async def run_download_movie(
         download.downloaded_at = datetime.now(timezone.utc)
 
         media = session.get(MovieExtra if download.type == MediaType.MOVIE_EXTRA.value else Movie, download.media_item_id)
-        if media is not None:
-            media.downloaded_date = media.downloaded_date or download.downloaded_at
 
         session.commit()
 

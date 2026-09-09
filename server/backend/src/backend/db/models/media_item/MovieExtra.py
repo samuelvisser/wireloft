@@ -26,7 +26,7 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     Association proxies keep callers independent of that storage normalization.
     """
 
-    __tablename__ = "media_items_movie_extras"
+    __tablename__ = "media_items_movie_extra"
     __mapper_args__ = {
         "polymorphic_identity": MediaType.MOVIE_EXTRA.value,
         "polymorphic_load": "selectin",
@@ -42,7 +42,7 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     # Table fields
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE",
             name="fk_movie_extras_id_media_items",), primary_key=True)
-    movie_id: Mapped[int] = mapped_column(ForeignKey("media_items_movies.id",
+    movie_id: Mapped[int] = mapped_column(ForeignKey("media_items_movie.id",
             ondelete="CASCADE", name="fk_movie_extras_movie_id_movies",
         ), nullable=False)
     source_id: Mapped[int] = mapped_column(ForeignKey("movie_extra_sources.id", ondelete="RESTRICT", name="fk_movie_extras_source_id_movie_extra_sources",

@@ -26,7 +26,6 @@ def test_shared_source_owns_all_intrinsic_movie_extra_metadata() -> None:
             slug="movie-a",
             title="Movie A",
             description=None,
-            downloaded_date=None,
             duration=6000,
         )
         movie_b = Movie(
@@ -35,7 +34,6 @@ def test_shared_source_owns_all_intrinsic_movie_extra_metadata() -> None:
             slug="movie-b",
             title="Movie B",
             description=None,
-            downloaded_date=None,
             duration=6100,
         )
         session.add_all([movie_a, movie_b])
@@ -109,11 +107,11 @@ def test_shared_source_owns_all_intrinsic_movie_extra_metadata() -> None:
         inspector = inspect(engine)
         assert {
             column["name"]
-            for column in inspector.get_columns("media_items_movie_extras")
+            for column in inspector.get_columns("media_items_movie_extra")
         } == {"id", "movie_id", "source_id", "movie_extra_type"}
 
-        # MediaItemBase owns identity/download state only. Intrinsic clip metadata
-        # exists once, on MovieExtraSource, rather than being duplicated per placement.
+        # MediaItemBase owns identity only. Intrinsic clip metadata exists once,
+        # on MovieExtraSource, rather than being duplicated per placement.
         content_fields = {
             "title",
             "description",
@@ -159,7 +157,6 @@ def test_refreshing_one_parent_updates_global_metadata_for_every_placement() -> 
                 slug=f"movie-{index}",
                 title=f"Movie {index}",
                 description=None,
-                downloaded_date=None,
                 duration=5000,
             )
             for index in (1, 2)

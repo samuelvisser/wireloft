@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class Movie(MediaItemBase, MediaContentMetadataMixin, HasTaskResourcesMixin):
-    __tablename__ = "media_items_movies"
+    __tablename__ = "media_items_movie"
     __mapper_args__ = {
         "polymorphic_identity": MediaType.MOVIE.value,
         "polymorphic_load": "selectin",
@@ -100,7 +100,7 @@ class Movie(MediaItemBase, MediaContentMetadataMixin, HasTaskResourcesMixin):
 
     official_trailer_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey(
-            "media_items_movie_extras.id",
+            "media_items_movie_extra.id",
             ondelete="SET NULL",
             use_alter=True,
             name="fk_movies_official_trailer_id_movie_extras",

@@ -61,7 +61,6 @@ def test_movie_extra_output_uses_parent_movie_and_actual_media_fields(tmp_path: 
         author_name="DailyWire+",
         mature_rating="TV-MA",
         description=None,
-        downloaded_date=None,
         duration=6720,
     )
     trailer = MovieExtra(
@@ -72,7 +71,6 @@ def test_movie_extra_output_uses_parent_movie_and_actual_media_fields(tmp_path: 
         slug="run-hide-fight-official-trailer",
         title="Run Hide Fight | Official Trailer",
         description=None,
-        downloaded_date=None,
         duration=180,
     )
 
@@ -105,7 +103,6 @@ def test_movie_extra_type_suffix_is_added_before_extension(tmp_path: Path, monke
         slug="movie",
         title="Movie",
         description=None,
-        downloaded_date=None,
         duration=100,
     )
     interview = MovieExtra(
@@ -116,7 +113,6 @@ def test_movie_extra_type_suffix_is_added_before_extension(tmp_path: Path, monke
         slug="interview",
         title="Cast Interview",
         description=None,
-        downloaded_date=None,
         duration=10,
     )
 
@@ -143,7 +139,7 @@ def test_download_view_uses_movie_extra_as_media_identity_and_movie_as_parent() 
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
 
     engine = create_engine("sqlite:///:memory:")
@@ -163,7 +159,6 @@ def test_download_view_uses_movie_extra_as_media_identity_and_movie_as_parent() 
             slug="parent-movie",
             title="Parent Movie",
             description=None,
-            downloaded_date=None,
             duration=100,
         )
         trailer = MovieExtra(
@@ -174,7 +169,6 @@ def test_download_view_uses_movie_extra_as_media_identity_and_movie_as_parent() 
             slug="official-trailer",
             title="Official Trailer",
             description=None,
-            downloaded_date=None,
             duration=10,
         )
         session.add_all([profile, movie, trailer])
@@ -183,9 +177,8 @@ def test_download_view_uses_movie_extra_as_media_identity_and_movie_as_parent() 
             type=MediaType.MOVIE_EXTRA.value,
             media_item_id=trailer.id,
             local_media_profile_id=profile.id,
-            download_status=MediaDownloadStatus.PENDING.value,
+            artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
             file_path="/downloads/movies/Parent Movie/Official Trailer-trailer.ext",
-            progress=0,
         ))
         session.commit()
 
@@ -294,7 +287,6 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
             slug="am-i-racist",
             title="Am I Racist?",
             description=None,
-            downloaded_date=None,
             duration=6000,
             release_date=date(2024, 9, 13),
         )
@@ -306,7 +298,6 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
             slug="am-i-racist-official-trailer",
             title="Am I Racist? | Official Trailer",
             description=None,
-            downloaded_date=None,
             duration=120,
         )
         interview = MovieExtra(
@@ -317,7 +308,6 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
             slug="am-i-racist-interview",
             title="Am I Racist? | Interview",
             description=None,
-            downloaded_date=None,
             duration=300,
         )
         movie.official_trailer = stale_trailer

@@ -18,12 +18,10 @@ class _EpisodeAPIBaseIn(RequestBase):
     publish_status: EpisodePublishStatus
     went_live_date: Optional[AwareDatetime]
     published_date: Optional[AwareDatetime]
-    redownloaded_date: Optional[AwareDatetime]
 
-    # Reusable content metadata plus MediaItem placement state
+    # Reusable content metadata
     title: str
     description: str
-    downloaded_date: Optional[AwareDatetime]
 
 
 class EpisodeAPICreate(_EpisodeAPIBaseIn):
@@ -56,14 +54,12 @@ class _EpisodeAPIBaseOut(ResponseBase):
     went_live_date: Optional[datetime]
     published_date: Optional[datetime]
     scheduled_date: Optional[datetime]
-    redownloaded_date: Optional[datetime]
     sharing_url: str
     early_delete_available: bool = False
 
     title: str
     description: str
     duration: float
-    downloaded_date: Optional[datetime]
     uuid: str
     slug: str
     background_image_path: Optional[str]

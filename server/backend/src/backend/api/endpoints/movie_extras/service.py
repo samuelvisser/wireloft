@@ -89,7 +89,6 @@ def create_movie_extra(
         source=source,
         uuid=body.uuid,
         type=MediaType.MOVIE_EXTRA.value,
-        downloaded_date=body.downloaded_date,
         movie_extra_type=body.movie_extra_type,
     )
     s.add(item)
@@ -137,7 +136,6 @@ def sync_movie_extras(
                 source=source,
                 uuid=generate_uuid(),
                 type=MediaType.MOVIE_EXTRA.value,
-                downloaded_date=None,
                 movie_extra_type=movie_extra_type,
             )
             s.add(item)

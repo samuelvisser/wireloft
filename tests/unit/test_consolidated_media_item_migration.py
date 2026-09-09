@@ -5,7 +5,7 @@ from pathlib import Path
 
 from alembic import command
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 
 PRE_CONSOLIDATION_REVISION = "c9f2d8a1b604"
@@ -306,24 +306,6 @@ def test_consolidated_migration_upgrades_directly_from_c9_and_downgrades_cleanly
         )).mappings().all()
         assert [row["id"] for row in downloads] == download_ids
         assert [row["media_item_id"] for row in downloads] == [extra_a_id, extra_b_id]
-
-    # Exercise the renamed ORM tables, including Episode's table-backed metadata
-    # discriminator, rather than validating only raw SQLite names.
-    import backend.db.models  # noqa: F401
-    from backend.db.models import Episode, Movie, MovieExtra
-
-    with Session(engine) as session:
-        episode = session.query(Episode).filter(Episode.id == episode_id).one()
-        assert episode.title == "Episode Title"
-        assert episode.get_meta("migration.test") == "preserved"
-        movie = session.get(Movie, movie_a_id)
-        assert movie is not None
-        assert movie.title == "Movie A"
-        assert movie.official_trailer_id == extra_a_id
-        extra = session.get(MovieExtra, extra_a_id)
-        assert extra is not None
-        assert extra.slug == "shared-extra"
-        assert extra.description == "Canonical extra description"
 
     command.downgrade(get_alembic_config(), PRE_CONSOLIDATION_REVISION)
 

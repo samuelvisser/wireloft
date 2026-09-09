@@ -23,9 +23,8 @@ class _MovieAPIBaseIn(RequestBase):
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
 
-    # Movie-specific metadata and MediaItem placement state.
+    # Movie-specific metadata.
     extended_title: Optional[str] = None
-    downloaded_date: Optional[AwareDatetime] = None
     sharing_url: Optional[str] = None
     author_name: Optional[str] = None
     author_slug: Optional[str] = None
@@ -80,7 +79,6 @@ class _MovieAPIBaseOut(ResponseBase):
     title: str
     extended_title: Optional[str]
     description: Optional[str]
-    downloaded_date: Optional[datetime]
     duration: float
     background_image_path: Optional[str]
     thumbnail_landscape_path: Optional[str]

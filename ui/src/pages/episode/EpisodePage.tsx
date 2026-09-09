@@ -261,6 +261,12 @@ export default function EpisodePage() {
     const downloadByProfileId = new Map<number, MediaDownloadViewRead>(
         (downloads ?? []).map((d) => [d.localMediaProfileId, d]),
     )
+    const latestDownloadedAt = (downloads ?? []).reduce<Date | null>((latest, download) => {
+        if (download.artifactStatus !== 'available' || !download.downloadedAt) return latest
+        return latest === null || download.downloadedAt.getTime() > latest.getTime()
+            ? download.downloadedAt
+            : latest
+    }, null)
 
     const refreshMetadata = async () => {
         if (metadataRefreshBusy) return
@@ -363,12 +369,12 @@ export default function EpisodePage() {
                             <FontAwesomeIcon icon={['fas', 'calendar']} aria-hidden="true"/>
                             <span>Released {formatDate(episode.publishedDate)}</span>
                         </span>
-                        {episode.downloadedDate && (
+                        {latestDownloadedAt && (
                             <>
                                 <span className="episode-summary-separator" aria-hidden="true"/>
                                 <span className="episode-summary-item">
                                     <FontAwesomeIcon icon={['fas', 'circle-down']} aria-hidden="true"/>
-                                    <span>Downloaded {formatDate(episode.downloadedDate)}</span>
+                                    <span>Downloaded {formatDate(latestDownloadedAt)}</span>
                                 </span>
                             </>
                         )}

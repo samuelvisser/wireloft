@@ -37,7 +37,6 @@ def test_delete_movie_removes_nonexistent_artifact_work_and_preserves_available_
             slug="movie-to-delete",
             title="Movie To Delete",
             description=None,
-            downloaded_date=None,
             duration=100,
         )
         trailer = MovieExtra(
@@ -48,7 +47,6 @@ def test_delete_movie_removes_nonexistent_artifact_work_and_preserves_available_
             slug="movie-to-delete-trailer",
             title="Movie To Delete Trailer",
             description=None,
-            downloaded_date=None,
             duration=10,
         )
         session.add_all([active_profile, completed_profile, movie, trailer])

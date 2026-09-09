@@ -22,7 +22,7 @@ class Episode(
     HasMetadataMixin,
     HasTaskResourcesMixin,
 ):
-    __tablename__ = "media_items_episodes"
+    __tablename__ = "media_items_episode"
     __mapper_args__ = {
         "polymorphic_identity": MediaType.EPISODE.value,
         "polymorphic_load": "selectin",
@@ -67,7 +67,6 @@ class Episode(
     went_live_date: Mapped[Optional[datetime]]
     published_date: Mapped[Optional[datetime]]
     scheduled_date: Mapped[Optional[datetime]]
-    redownloaded_date: Mapped[Optional[datetime]]
 
     # Relationships
     show: Mapped["Show"] = relationship(back_populates="episodes")

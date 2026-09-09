@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, TYPE_CHECKING
 
 from sqlalchemy import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -16,9 +16,9 @@ class MediaItemBase(Base):
     """Polymorphic WireLoft identity for a downloadable media placement.
 
     Intrinsic descriptive metadata intentionally lives on concrete content owners
-    via MediaContentMetadataMixin. Keeping only identity/download state here lets
-    MovieExtra represent a parent-specific placement without storing fake copies
-    of metadata owned by its shared MovieExtraSource.
+    via MediaContentMetadataMixin. Download artifact state and timestamps live on
+    MediaDownload rows, so this base stays limited to media identity and lifecycle
+    timestamps shared by every placement.
     """
 
     __tablename__ = "media_items"
@@ -30,7 +30,6 @@ class MediaItemBase(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     uuid: Mapped[str] = mapped_column(index=True, unique=True)
     type: Mapped[str]
-    downloaded_date: Mapped[Optional[datetime]]
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()

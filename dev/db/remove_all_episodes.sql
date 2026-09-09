@@ -1,3 +1,3 @@
-DELETE FROM media_items_episodes WHERE show_id = :show_id;
+DELETE FROM media_items_episode WHERE show_id = :show_id;
 
 DELETE FROM metadata WHERE parent_table = 'shows' AND parent_id = :show_id;

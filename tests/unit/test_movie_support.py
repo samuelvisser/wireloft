@@ -637,7 +637,6 @@ def test_refresh_movie_extras_worker_adds_new_content_and_sets_official_trailer(
         slug="a-movie",
         title="A Movie",
         description=None,
-        downloaded_date=None,
         duration=5400,
     )
     existing = MovieExtra(
@@ -648,7 +647,6 @@ def test_refresh_movie_extras_worker_adds_new_content_and_sets_official_trailer(
         slug="cast-interview",
         title="Old interview title",
         description=None,
-        downloaded_date=None,
         duration=60,
     )
     session.add_all([movie, existing])

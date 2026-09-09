@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from alembic import context
 
+from backend.db.alembic_version import (
+    apply_settings_version_table,
+    migration_context_options,
+)
 from backend.db.core import Base, get_engine, load_database_models
 from config import get_settings
 
@@ -22,6 +26,9 @@ def _include_name(name: str | None, type_: str, _parent_names: dict[str, str]) -
 
 
 def run_migrations_offline() -> None:
+    # Offline SQL generation cannot inspect the target database to determine
+    # which side of the version-storage migration it is on, so it keeps the
+    # legacy Alembic version table. WireLoft's database CLI always runs online.
     context.configure(
         url=get_settings().database_url,
         target_metadata=target_metadata,
@@ -44,7 +51,9 @@ def run_migrations_online() -> None:
             render_as_batch=True,
             compare_type=True,
             include_name=_include_name,
+            **migration_context_options(connection),
         )
+        apply_settings_version_table(context.get_context())
 
         with context.begin_transaction():
             context.run_migrations()

@@ -14,7 +14,6 @@ class _MovieExtraAPIBaseIn(RequestBase):
     title: str
     movie_extra_type: MovieExtraType
     description: Optional[str] = None
-    downloaded_date: Optional[AwareDatetime] = None
     duration: float = 0
     background_image_path: Optional[str] = None
     thumbnail_landscape_path: Optional[str] = None
@@ -46,7 +45,6 @@ class MovieExtraAPIRead(ResponseBase):
     movie_extra_type: MovieExtraType
     title: str
     description: Optional[str]
-    downloaded_date: Optional[datetime]
     duration: float
     background_image_path: Optional[str]
     thumbnail_landscape_path: Optional[str]
