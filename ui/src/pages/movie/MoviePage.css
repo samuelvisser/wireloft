@@ -213,4 +213,13 @@
     .movie-media-download-progress-fill {
         background: rgba(96, 165, 250, 0.34);
     }
+
+    .movie-download-action-menu .action-menu-item-control {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .movie-download-action-menu .action-menu-item-control:hover,
+    .movie-download-action-menu .action-menu-item-control:focus-visible {
+        background: rgba(255, 255, 255, 0.16);
+    }
 }

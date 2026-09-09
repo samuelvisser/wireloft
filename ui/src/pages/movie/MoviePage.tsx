@@ -71,18 +71,23 @@ function MovieDownloadControl({
     onCancel,
 }: MovieDownloadControlProps) {
     const status = download ? String(download.downloadStatus) : null
-    const active = queueing || (status !== null && ACTIVE_DOWNLOAD_STATUSES.has(status))
     const downloaded = download?.artifactStatus === 'available'
-    const progress = queueing || status === 'pending'
-        ? 0
-        : Math.max(0, Math.min(100, download?.progress ?? 0))
+    const waitingForDownloadedLabel = !downloaded && (status === 'downloaded' || status === 'redownloaded')
+    const active = queueing || waitingForDownloadedLabel || (status !== null && ACTIVE_DOWNLOAD_STATUSES.has(status))
+    const progress = waitingForDownloadedLabel
+        ? 100
+        : queueing || status === 'pending'
+            ? 0
+            : Math.max(0, Math.min(100, download?.progress ?? 0))
     const activeLabel = queueing
         ? 'Queuing…'
-        : status === 'pending'
-            ? 'Queued…'
-            : status === 'local_processing'
-                ? 'Processing…'
-                : `${progress}%`
+        : waitingForDownloadedLabel
+            ? '100%'
+            : status === 'pending'
+                ? 'Queued…'
+                : status === 'local_processing'
+                    ? 'Processing…'
+                    : `${progress}%`
     const downloadedDetails = download && downloaded
         ? [
             download.formatDownloaded || download.preferredFormat,
