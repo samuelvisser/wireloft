@@ -41,13 +41,25 @@ def sync_movie_extras(
     Daily Wire entity IDs are intentionally ignored because they can rotate over
     time. A MovieExtra represents the clip listing under this parent movie, and
     its immutable slug is the only persisted upstream identity.
+
+    The dedicated ``official_trailer`` relationship is more authoritative than
+    the inferred extra type. Older WireLoft versions could persist a trailer as
+    ``scene`` or ``other`` (for example when Daily Wire described it generically
+    as a clip), so syncing must repair that classification instead of rejecting
+    the entire movie and blocking every extra download.
     """
     existing = list(movie.movie_extras)
     by_slug = {extra.slug: extra for extra in existing}
+    official_trailer_slug = official_trailer.slug if official_trailer is not None else None
     added = 0
 
     for record in extras:
         item = by_slug.get(record.slug)
+        movie_extra_type = (
+            MovieExtraType.TRAILER.value
+            if record.slug == official_trailer_slug
+            else record.movie_extra_type
+        )
         if item is None:
             item = MovieExtra(
                 movie=movie,
@@ -61,7 +73,7 @@ def sync_movie_extras(
                 thumbnail_landscape_path=record.thumbnail_landscape_path,
                 thumbnail_portrait_path=record.thumbnail_portrait_path,
                 thumbnail_square_path=record.thumbnail_square_path,
-                movie_extra_type=record.movie_extra_type,
+                movie_extra_type=movie_extra_type,
                 slug=record.slug,
                 sharing_url=record.sharing_url,
                 published_date=record.published_date,
@@ -78,7 +90,7 @@ def sync_movie_extras(
             item.thumbnail_landscape_path = record.thumbnail_landscape_path
             item.thumbnail_portrait_path = record.thumbnail_portrait_path
             item.thumbnail_square_path = record.thumbnail_square_path
-            item.movie_extra_type = record.movie_extra_type
+            item.movie_extra_type = movie_extra_type
             item.sharing_url = record.sharing_url
             item.published_date = record.published_date
             item.available_for = list(record.available_for)
@@ -93,8 +105,9 @@ def sync_movie_extras(
         official = by_slug.get(official_trailer.slug)
         if official is None or official.movie_id != movie.id:
             raise ValueError("The official trailer is not present in this movie's extras")
-        if official.movie_extra_type != MovieExtraType.TRAILER.value:
-            raise ValueError("The official trailer extra is not classified as a trailer")
+        # The API's dedicated trailer relationship is canonical. This also
+        # self-heals legacy rows that were persisted with an inferred type.
+        official.movie_extra_type = MovieExtraType.TRAILER.value
         movie.official_trailer = official
 
     s.flush()

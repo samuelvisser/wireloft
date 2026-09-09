@@ -257,3 +257,116 @@ def test_official_trailer_falls_back_to_canonical_movie_page() -> None:
         ("extra", "official-trailer"),
         ("movie_page", "parent-movie"),
     ]
+
+
+def test_movie_extra_download_repairs_legacy_official_trailer_classification(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A stale trailer type must not block downloads for every extra on a movie."""
+    from datetime import date
+
+    import backend.db.models  # noqa: F401
+    from backend.api.endpoints.media_downloads.service import create_movie_extra_download
+    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.db import Base
+    from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
+    from backend.db.models.media_download import MovieExtraMediaDownload
+    from backend.types.media_types import MediaType, MovieExtraType
+    from config import get_settings
+    from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
+
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    try:
+        profile = MovieLocalMediaProfile(
+            slug="movies",
+            name="Movies",
+            output_template="/downloads/movies/{{ movie_title }}/{{ slug }}.ext",
+            preferred_format="format_1080p",
+        )
+        movie = Movie(
+            uuid="legacy-movie-uuid",
+            type=MediaType.MOVIE.value,
+            slug="am-i-racist",
+            title="Am I Racist?",
+            description=None,
+            downloaded_date=None,
+            duration=6000,
+            release_date=date(2024, 9, 13),
+        )
+        stale_trailer = MovieExtra(
+            uuid="legacy-trailer-uuid",
+            type=MediaType.MOVIE_EXTRA.value,
+            movie=movie,
+            movie_extra_type=MovieExtraType.SCENE.value,
+            slug="am-i-racist-official-trailer",
+            title="Am I Racist? | Official Trailer",
+            description=None,
+            downloaded_date=None,
+            duration=120,
+        )
+        interview = MovieExtra(
+            uuid="legacy-interview-uuid",
+            type=MediaType.MOVIE_EXTRA.value,
+            movie=movie,
+            movie_extra_type=MovieExtraType.INTERVIEW.value,
+            slug="am-i-racist-interview",
+            title="Am I Racist? | Interview",
+            description=None,
+            downloaded_date=None,
+            duration=300,
+        )
+        movie.official_trailer = stale_trailer
+        session.add_all([profile, movie, stale_trailer, interview])
+        session.commit()
+
+        # This mirrors the persisted movie fallback that used to feed the stale
+        # inferred type back into index_dailywire_movie before every download.
+        remote_trailer = DwMovieExtraRecord(
+            dw_id="rotating-trailer-id",
+            slug=stale_trailer.slug,
+            title=stale_trailer.title,
+            movie_extra_type=MovieExtraType.SCENE.value,
+            duration=stale_trailer.duration,
+        )
+        remote_interview = DwMovieExtraRecord(
+            dw_id="rotating-interview-id",
+            slug=interview.slug,
+            title=interview.title,
+            movie_extra_type=MovieExtraType.INTERVIEW.value,
+            duration=interview.duration,
+        )
+        movie_data = DwMovieRecord(
+            dw_id="rotating-movie-id",
+            slug=movie.slug,
+            title=movie.title,
+            duration=movie.duration,
+            sharing_url="https://www.dailywire.com/videos/am-i-racist",
+            status="published",
+            has_video=True,
+            is_downloadable=True,
+            movie_extras=[remote_trailer, remote_interview],
+            trailer=remote_trailer,
+        )
+
+        download = create_movie_extra_download(
+            session,
+            movie_data,
+            remote_interview.slug,
+            MovieDownloadAPICreate(local_media_profile_id=profile.id),
+        )
+        session.commit()
+        session.refresh(stale_trailer)
+        session.refresh(movie)
+
+        assert isinstance(download, MovieExtraMediaDownload)
+        assert download.media_item_id == interview.id
+        assert stale_trailer.movie_extra_type == MovieExtraType.TRAILER.value
+        assert movie.official_trailer_id == stale_trailer.id
+    finally:
+        session.close()
+        engine.dispose()
