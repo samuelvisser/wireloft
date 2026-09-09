@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
@@ -50,14 +50,19 @@ export default function MoviePage() {
     const navigate = useNavigate()
     const queryClient = useQueryClient()
     const startOperation = useStartOperation()
-    const {data: movie, error} = useDailywireMovie(slug)
-    const {data: localMovies} = useMovies()
-    const {data: profiles} = useLocalMediaProfiles()
-    const {data: downloads} = useMovieDownloads(slug)
+    const {data: localMovies, error: localMoviesError} = useMovies()
     const localMovie = useMemo(
         () => localMovies?.find((item) => item.slug === slug),
         [localMovies, slug],
     )
+    const {
+        data: dailywireMovie,
+        error: dailywireMovieError,
+    } = useDailywireMovie(localMovies && !localMovie ? slug : undefined)
+    const movie = localMovie ?? dailywireMovie
+    const refreshAttemptedSlugs = useRef(new Set<string>())
+    const {data: profiles} = useLocalMediaProfiles()
+    const {data: downloads} = useMovieDownloads(slug)
     const refreshExtrasOperation = useActiveOperation(
         'movie.refresh_extras',
         'movie',
@@ -79,6 +84,37 @@ export default function MoviePage() {
     useEffect(() => {
         if (!profileId && videoProfiles[0]) setProfileId(String(videoProfiles[0].id))
     }, [profileId, videoProfiles])
+
+    useEffect(() => {
+        if (
+            !slug
+            || !localMovie
+            || (localMovie.status === 'published' && localMovie.isDownloadable)
+            || refreshAttemptedSlugs.current.has(slug)
+        ) return
+
+        refreshAttemptedSlugs.current.add(slug)
+        const controller = new AbortController()
+        const refresh = async () => {
+            try {
+                const response = await fetch(
+                    `${(window as any).appConfig.API_URL}/movies/${encodeURIComponent(slug)}/refresh`,
+                    {
+                        method: 'POST',
+                        credentials: 'include',
+                        signal: controller.signal,
+                    },
+                )
+                if (response.ok) {
+                    await queryClient.invalidateQueries({queryKey: ['movies']})
+                }
+            } catch {
+                // The persisted movie remains fully usable when Daily Wire is unavailable.
+            }
+        }
+        void refresh()
+        return () => controller.abort()
+    }, [localMovie, queryClient, slug])
 
     const startMovieDownload = async () => {
         if (!slug || !profileId || !movie) return
@@ -232,19 +268,17 @@ export default function MoviePage() {
         }
     }
 
-    if (!movie && !error) return <section className="view"><p>Loading movie…</p></section>
-    if (error || !movie) return <section className="view"><div className="form-error-card" role="alert">Could not load this movie: {error?.message || 'Movie not found'}</div></section>
+    const movieError = localMoviesError ?? dailywireMovieError
+    if (!movie && !movieError) return <section className="view"><p>Loading movie…</p></section>
+    if (movieError || !movie) return <section className="view"><div className="form-error-card" role="alert">Could not load this movie: {movieError?.message || 'Movie not found'}</div></section>
 
+    const isUpcoming = localMovie ? localMovie.status === 'scheduled' : dailywireMovie?.isUpcoming ?? false
     const hero = toImageUrl(movie.backgroundImagePath || movie.thumbnailLandscapePath || movie.thumbnailPortraitPath)
     const duration = formatDuration(movie.duration)
-    // Prefer fresh Daily Wire data. This matters for an indexed upcoming movie,
-    // where a newer trailer can appear before the local extras refresh runs.
-    const featuredTrailer: MovieExtraSummary | null = movie.trailer ?? localMovie?.officialTrailer ?? null
-    const movieExtras: MovieExtraSummary[] = movie.movieExtras.length
-        ? movie.movieExtras
-        : localMovie?.movieExtras ?? []
+    const featuredTrailer: MovieExtraSummary | null = localMovie?.officialTrailer ?? dailywireMovie?.trailer ?? null
+    const movieExtras: MovieExtraSummary[] = localMovie?.movieExtras ?? dailywireMovie?.movieExtras ?? []
     const expectedReleaseDate = formatReleaseDate(
-        movie.expectedReleaseDate ?? (movie.isUpcoming ? localMovie?.releaseDate : null),
+        localMovie ? (isUpcoming ? localMovie.releaseDate : null) : dailywireMovie?.expectedReleaseDate,
     )
 
     return (
@@ -253,11 +287,11 @@ export default function MoviePage() {
                 <div>
                     <div className="movie-kicker-row">
                         <span className="movie-kicker"><FontAwesomeIcon icon={['fas', 'clapperboard']}/> Movie</span>
-                        {movie.isUpcoming && <span className="movie-upcoming-badge">Upcoming</span>}
+                        {isUpcoming && <span className="movie-upcoming-badge">Upcoming</span>}
                     </div>
                     <h1 id="movie-title">{movie.title}</h1>
                     <p>{[movie.authorName, duration, movie.matureRating].filter(Boolean).join(' • ')}</p>
-                    {movie.isUpcoming && expectedReleaseDate && (
+                    {isUpcoming && expectedReleaseDate && (
                         <p className="movie-expected-release">Expected release {expectedReleaseDate}</p>
                     )}
                 </div>
@@ -308,7 +342,7 @@ export default function MoviePage() {
                 <aside className="movie-download-panel" aria-labelledby="download-movie-title">
                     <h2 id="download-movie-title">Download movie media</h2>
                     <p>
-                        {movie.isUpcoming
+                        {isUpcoming
                             ? 'The full movie is not available yet. Published extras can be downloaded now.'
                             : 'Movies and extras use the same Movie Local Media Profile.'}
                     </p>
@@ -325,7 +359,7 @@ export default function MoviePage() {
                                 </button>
                             ) : (
                                 <div className="movie-download-unavailable" role="status">
-                                    {movie.isUpcoming
+                                    {isUpcoming
                                         ? expectedReleaseDate
                                             ? `Full movie expected ${expectedReleaseDate}.`
                                             : 'Full movie has not been released yet.'

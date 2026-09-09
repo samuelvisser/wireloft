@@ -4,7 +4,10 @@ from .service import *
 from ...models.movie import *
 from ...models.media_download import MovieDownloadAPICreate
 from ...models.operations import MediaDownloadOperationAccepted, TaskOperationAccepted
-from ..dailywire.movies.service import get_movie_for_action as get_dailywire_movie
+from ..dailywire.movies.service import (
+    get_live_movie as get_live_dailywire_movie,
+    get_movie_for_action as get_dailywire_movie,
+)
 from ..media_downloads.service import create_movie_download, create_movie_extra_download
 from backend.app import db_session
 from task_manager.scheduler.types import OperationSource
@@ -139,6 +142,24 @@ def movie_release_metadata_retry(movie_slug: str):
     with db_session() as s:
         try:
             result = retry_movie_release_metadata(s, movie_slug)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post("/{movie_slug}/refresh", response_model=MovieAPIRead)
+def movie_refresh(movie_slug: str):
+    """Refresh an indexed movie from Daily Wire while callers keep rendering local data."""
+    try:
+        movie_data = get_live_dailywire_movie(movie_slug)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    with db_session() as s:
+        try:
+            result = refresh_dailywire_movie(s, movie_slug, movie_data)
             s.commit()
             return result
         except Exception:

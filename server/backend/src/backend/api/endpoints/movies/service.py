@@ -175,6 +175,25 @@ def sync_dailywire_movie_metadata(
     s.flush()
 
 
+def _sync_indexed_dailywire_movie(
+    s: Session,
+    *,
+    movie: Movie,
+    movie_data: DwMovieRecord,
+) -> None:
+    """Apply the latest canonical Daily Wire movie page to an existing movie."""
+    sync_dailywire_movie_metadata(s, movie=movie, movie_data=movie_data)
+    sync_movie_extras(
+        s,
+        movie=movie,
+        extras=movie_data.movie_extras,
+        official_trailer=movie_data.trailer,
+    )
+
+    if movie.release_date is None:
+        ensure_movie_release_metadata(s, movie)
+
+
 def index_dailywire_movie(s: Session, movie_data: DwMovieRecord) -> tuple[Movie, bool]:
     """Persist a Daily Wire movie by stable slug and all currently known extras."""
     item: Optional[Movie] = s.query(Movie).filter(Movie.slug == movie_data.slug).one_or_none()
@@ -185,17 +204,22 @@ def index_dailywire_movie(s: Session, movie_data: DwMovieRecord) -> tuple[Movie,
         if item is None:
             raise RuntimeError("Movie creation did not produce a persisted Movie record")
 
-    sync_dailywire_movie_metadata(s, movie=item, movie_data=movie_data)
-    sync_movie_extras(
-        s,
-        movie=item,
-        extras=movie_data.movie_extras,
-        official_trailer=movie_data.trailer,
-    )
-
-    if item.release_date is None:
-        ensure_movie_release_metadata(s, item)
+    _sync_indexed_dailywire_movie(s, movie=item, movie_data=movie_data)
     return item, created
+
+
+def refresh_dailywire_movie(
+    s: Session,
+    movie_slug: str,
+    movie_data: DwMovieRecord,
+) -> MovieAPIRead:
+    """Refresh a movie that is already indexed without ever creating a new row."""
+    item: Optional[Movie] = s.query(Movie).filter(Movie.slug == movie_slug).one_or_none()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Movie not found")
+
+    _sync_indexed_dailywire_movie(s, movie=item, movie_data=movie_data)
+    return MovieAPIRead.model_validate(item)
 
 
 def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:

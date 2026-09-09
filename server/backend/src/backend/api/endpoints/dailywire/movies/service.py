@@ -118,7 +118,8 @@ def _catalog_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
     )
 
 
-def _live_movie(movie_slug: str) -> DwMovieRecord:
+def get_live_movie(movie_slug: str) -> DwMovieRecord:
+    """Fetch the current canonical movie page directly from Daily Wire."""
     tokens = DeviceAuthClient().get_token()
     client = MovieMiddlewareClient(
         access_token=tokens.access_token if tokens else None,
@@ -144,7 +145,7 @@ def get_movie_for_action(movie_slug: str) -> DwMovieRecord:
         return indexed
 
     try:
-        return _live_movie(movie_slug)
+        return get_live_movie(movie_slug)
     except (MiddlewareAPIError, ValidationError) as exc:
         if indexed is not None:
             logger.warning(
