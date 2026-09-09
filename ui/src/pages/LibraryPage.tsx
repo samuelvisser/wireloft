@@ -1,4 +1,4 @@
-import {useMemo, useState} from 'react'
+import {useEffect, useMemo, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 
@@ -11,6 +11,36 @@ import ShowTypeFilter, {
 } from '../components/common/ShowTypeFilter'
 import {useMediaDownloadsView, useMovies, useShowsView} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
+import {ShowTypeReg, ShowTypeValue} from '../types/show'
+
+const LIBRARY_SHOW_TYPE_FILTER_STORAGE_KEY = 'libraryShowTypeFilter'
+
+function loadLibraryShowTypeFilter(): Set<ShowTypeValue> {
+    try {
+        const raw = localStorage.getItem(LIBRARY_SHOW_TYPE_FILTER_STORAGE_KEY)
+        if (raw === null) return createDefaultShowTypeFilter()
+
+        const parsed: unknown = JSON.parse(raw)
+        if (!Array.isArray(parsed)) return createDefaultShowTypeFilter()
+
+        const selectedTypes = parsed.filter(
+            (value): value is ShowTypeValue => (
+                typeof value === 'string'
+                && ShowTypeReg.values.includes(value as ShowTypeValue)
+            ),
+        )
+
+        // Preserve an intentionally empty filter, while rejecting stored data that
+        // only contains stale or otherwise invalid values.
+        if (parsed.length > 0 && selectedTypes.length === 0) {
+            return createDefaultShowTypeFilter()
+        }
+
+        return new Set(selectedTypes)
+    } catch {
+        return createDefaultShowTypeFilter()
+    }
+}
 
 function latestMovieDownload(downloads: MediaDownloadViewRead[] | undefined, slug: string) {
     return downloads?.find((download) => download.movieSlug === slug)
@@ -19,7 +49,7 @@ function latestMovieDownload(downloads: MediaDownloadViewRead[] | undefined, slu
 export default function LibraryPage() {
     const navigate = useNavigate()
     const [params, setParams] = useSearchParams()
-    const [showTypeFilter, setShowTypeFilter] = useState(createDefaultShowTypeFilter)
+    const [showTypeFilter, setShowTypeFilter] = useState(loadLibraryShowTypeFilter)
     const {data: shows, isLoading: showsLoading, error: showsError} = useShowsView()
     const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
     const {data: downloads} = useMediaDownloadsView()
@@ -29,6 +59,18 @@ export default function LibraryPage() {
     )
     const hasShows = !!shows?.length
     const hasMovies = !!movies?.length
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(
+                LIBRARY_SHOW_TYPE_FILTER_STORAGE_KEY,
+                JSON.stringify(Array.from(showTypeFilter)),
+            )
+        } catch {
+            // Storage can be unavailable in restricted browser contexts. The filter
+            // should still work normally for the current page session in that case.
+        }
+    }, [showTypeFilter])
 
     // The URL is the single source of truth for the selected library type, just
     // like on the Browse page. Never switch away from an explicitly requested
