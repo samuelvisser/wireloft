@@ -48,19 +48,18 @@ def _matches_search(title: str, author_name: str | None, search: str | None) -> 
     return not needle or needle in f"{title} {author_name or ''}".casefold()
 
 
-def _movie_summary_needs_canonical_art(movie: DwCatalogMovieRecord) -> bool:
-    """Whether the browse row may contain promotional rather than movie artwork.
+def catalog_movie_art_is_reliable(movie: DwCatalogMovieRecord) -> bool:
+    """Whether a browse row already contains the movie's real artwork.
 
-    Daily Wire's browse page can represent an unreleased movie with its currently
+    Daily Wire sometimes represents an unreleased movie with its currently
     promoted trailer. Those rows may omit a portrait entirely or carry a trailer
-    title/artwork even though the canonical getMoviePage record already has the
-    real movie poster. A normalized title differing from the upstream title is a
-    reliable indication that the browse row is such a promotional representation.
+    title/artwork even though the canonical getMoviePage record has the real
+    movie poster. If the catalog has a portrait and its upstream title did not
+    need normalization, its artwork is the preferred movie-card artwork.
     """
     extended_title = (movie.extended_title or '').strip()
-    return (
-        not movie.thumbnail_portrait_path
-        or bool(extended_title and extended_title != movie.title)
+    return bool(movie.thumbnail_portrait_path) and not (
+        extended_title and extended_title != movie.title
     )
 
 
@@ -129,7 +128,7 @@ def get_catalog_movies(*, offset: int, limit: int, search: str | None) -> DwCata
     movies.sort(key=lambda movie: movie.title.casefold())
 
     items = movies[offset:offset + limit]
-    if any(_movie_summary_needs_canonical_art(movie) for movie in items):
+    if any(not catalog_movie_art_is_reliable(movie) for movie in items):
         tokens = DeviceAuthClient().get_token()
         client = MovieMiddlewareClient(
             access_token=tokens.access_token if tokens else None,
@@ -137,7 +136,7 @@ def get_catalog_movies(*, offset: int, limit: int, search: str | None) -> DwCata
         )
         items = [
             _canonical_movie_summary(movie, client)
-            if _movie_summary_needs_canonical_art(movie)
+            if not catalog_movie_art_is_reliable(movie)
             else movie
             for movie in items
         ]

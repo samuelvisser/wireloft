@@ -12,7 +12,7 @@ from dailywire_api.dw_api.movie import MovieMiddlewareClient
 from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
 from dailywire_authorisation import DeviceAuthClient
 
-from ..catalog.service import get_catalog
+from ..catalog.service import catalog_movie_art_is_reliable, get_catalog
 
 
 logger = logging.getLogger(__name__)
@@ -115,14 +115,42 @@ def _catalog_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
     )
 
 
+def _prefer_reliable_catalog_poster(movie: DwMovieRecord) -> DwMovieRecord:
+    """Use the browse poster when that row is already the real movie representation.
+
+    getMoviePage remains authoritative for all other movie artwork and metadata.
+    Daily Wire can, however, expose the better portrait poster in the browse
+    catalog. Promotional browse rows are excluded with the same reliability rule
+    used by the Browse page itself.
+    """
+    try:
+        summary = next(
+            (item for item in get_catalog().movies if item.slug == movie.slug),
+            None,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Daily Wire catalog poster lookup failed for movie %s; keeping movie-page poster: %s",
+            movie.slug,
+            exc,
+        )
+        return movie
+
+    if summary is None or not catalog_movie_art_is_reliable(summary):
+        return movie
+
+    return movie.model_copy(update={"thumbnail_portrait_path": summary.thumbnail_portrait_path})
+
+
 def get_live_movie(movie_slug: str) -> DwMovieRecord:
-    """Fetch the current canonical movie page directly from Daily Wire."""
+    """Fetch current movie metadata and normalize its poster for persistence."""
     tokens = DeviceAuthClient().get_token()
     client = MovieMiddlewareClient(
         access_token=tokens.access_token if tokens else None,
         pace_requests=False,
     )
-    return client.get_movie_page(movie_slug)
+    movie = client.get_movie_page(movie_slug)
+    return _prefer_reliable_catalog_poster(movie)
 
 
 def get_movie_for_action(movie_slug: str) -> DwMovieRecord:
