@@ -52,8 +52,7 @@ def _movie_summary_needs_canonical_art(movie: DwCatalogMovieRecord) -> bool:
     """Whether the browse row may contain promotional rather than movie artwork.
 
     Daily Wire's browse page can represent an unreleased movie with its currently
-    promoted trailer. Those rows may omit a portrait entirely (making WireLoft
-    crop the landscape trailer thumbnail into a poster card) or carry a trailer
+    promoted trailer. Those rows may omit a portrait entirely or carry a trailer
     title/artwork even though the canonical getMoviePage record already has the
     real movie poster. A normalized title differing from the upstream title is a
     reliable indication that the browse row is such a promotional representation.

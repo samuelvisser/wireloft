@@ -80,8 +80,6 @@ Date-related values can be empty when Daily Wire does not provide the correspond
 
 Movie templates distinguish the **parent movie** from the **actual downloaded media item**. This matters because a movie can have extras.
 
-Movie and movie-extra identity uses Daily Wire's stable slugs. Daily Wire entity IDs are not persisted because those IDs can change over time.
-
 ### Parent-movie values
 
 | Variable | Meaning |

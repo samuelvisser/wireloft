@@ -23,37 +23,21 @@ class Episode(
     HasTaskResourcesMixin,
 ):
     __tablename__ = "media_items_episode"
-    __mapper_args__ = {
-        "polymorphic_identity": MediaType.EPISODE.value,
-        "polymorphic_load": "selectin",
-    }
+    __mapper_args__ = { "polymorphic_identity": MediaType.EPISODE.value, "polymorphic_load": "selectin"}
     __task_resource_types__ = ("episode",)
     __table_args__ = (
         UniqueConstraint("show_id", "index", name="uq_episode_show_index"),
         UniqueConstraint("show_id", "episode_identifier", name="uq_unique_episode_identifier_per_show"),
-        Index("ix_episodes_slug", "slug", unique=True),
         PrimaryKeyConstraint("id", "show_id", name="pk_episodes"),
     )
 
     # Fields
-    id: Mapped[int] = mapped_column(
-        ForeignKey(
-            "media_items.id",
-            ondelete="CASCADE",
-            name="fk_episodes_id_media_items",
-        ),
-        primary_key=True,
-    )
-    show_id: Mapped[int] = mapped_column(
-        ForeignKey("shows.id", name="fk_episodes_show_id_shows"),
-        primary_key=True,
-    )
-    season_id: Mapped[int] = mapped_column(
-        ForeignKey("seasons.id", name="fk_episodes_season_id_seasons")
-    )
+    id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
+    show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"),primary_key=True,)
+    season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
     index: Mapped[int]
     episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the show")
-    slug: Mapped[str]
+    slug: Mapped[str] = mapped_column(index=True, unique=True)
     publish_status: Mapped[str]
     metadata_is_final: Mapped[bool] = mapped_column(
         Boolean,

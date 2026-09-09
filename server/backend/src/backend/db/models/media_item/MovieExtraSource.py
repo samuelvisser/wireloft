@@ -64,6 +64,5 @@ class MovieExtraSource(MediaContentMetadataMixin, Base):
 
     def __repr__(self) -> str:
         return (
-            f"<MovieExtraSource(id={self.id}, slug={self.slug!r}, "
-            f"title={self.title!r})>"
+            f"<MovieExtraSource(id={self.id}, slug={self.slug!r}, title={self.title!r})>"
         )

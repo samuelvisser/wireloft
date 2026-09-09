@@ -19,30 +19,12 @@ if TYPE_CHECKING:
 
 class Movie(MediaItemBase, MediaContentMetadataMixin, HasTaskResourcesMixin):
     __tablename__ = "media_items_movie"
-    __mapper_args__ = {
-        "polymorphic_identity": MediaType.MOVIE.value,
-        "polymorphic_load": "selectin",
-    }
+    __mapper_args__ = {"polymorphic_identity": MediaType.MOVIE.value, "polymorphic_load": "selectin"}
     __task_resource_types__ = ("movie",)
-    __table_args__ = (
-        Index("ix_movies_slug", "slug", unique=True),
-        UniqueConstraint(
-            "official_trailer_id",
-            name="uq_movies_official_trailer_id",
-        ),
-        PrimaryKeyConstraint("id", name="pk_movies"),
-    )
 
     # Fields
-    id: Mapped[int] = mapped_column(
-        ForeignKey(
-            "media_items.id",
-            ondelete="CASCADE",
-            name="fk_movies_id_media_items",
-        ),
-        primary_key=True,
-    )
-    slug: Mapped[str]
+    id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
+    slug: Mapped[str] = mapped_column(index=True, unique=True)
     extended_title: Mapped[Optional[str]]
     sharing_url: Mapped[Optional[str]]
     author_name: Mapped[Optional[str]]
@@ -103,9 +85,8 @@ class Movie(MediaItemBase, MediaContentMetadataMixin, HasTaskResourcesMixin):
             "media_items_movie_extra.id",
             ondelete="SET NULL",
             use_alter=True,
-            name="fk_movies_official_trailer_id_movie_extras",
         ),
-        nullable=True,
+        unique=True,
     )
 
     # Relationships

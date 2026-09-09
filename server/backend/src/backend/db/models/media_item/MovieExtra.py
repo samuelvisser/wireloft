@@ -5,8 +5,6 @@ from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
     ForeignKey,
-    Index,
-    PrimaryKeyConstraint,
     UniqueConstraint,
     event,
     inspect as sa_inspect,
@@ -28,49 +26,45 @@ if TYPE_CHECKING:
 class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     """A movie-specific placement of one globally identified extra clip.
 
-    MovieExtra intentionally does not inherit MediaContentMetadataMixin. Its
-    source owns all intrinsic clip metadata, while this MediaItem owns only the
-    parent-specific placement/download identity and contextual classification.
-    Association proxies keep callers independent of that storage normalization.
+    MovieExtra records are unique within WireLoft in that the media it represents
+    might be shared over multiple movies. Therefore, MovieExtra does not directly represent
+    the media itself and intentionally does not use the MediaContentMetadataMixin.
+
+    A MovieExtra is always connected to a MovieExtraSource, which does represent the actual
+    media and is unique by its slug. To make this easier to use for callers, all fields in
+    MovieExtraSource are accessible through MovieExtra with association_proxy relations.
     """
 
     __tablename__ = "media_items_movie_extra"
-    __mapper_args__ = {
-        "polymorphic_identity": MediaType.MOVIE_EXTRA.value,
-        "polymorphic_load": "selectin",
-    }
+    __mapper_args__ = {"polymorphic_identity": MediaType.MOVIE_EXTRA.value, "polymorphic_load": "selectin"}
     __task_resource_types__ = ("movie_extra",)
     __table_args__ = (
-        UniqueConstraint("movie_id", "source_id", name="uq_movie_extras_movie_id_source_id"),
-        Index("ix_movie_extras_movie_id", "movie_id"),
-        Index("ix_movie_extras_source_id", "source_id"),
-        PrimaryKeyConstraint("id", name="pk_movie_extras"),
+        UniqueConstraint("movie_id", "source_id"),
     )
 
     # Table fields
     id: Mapped[int] = mapped_column(
         ForeignKey(
             "media_items.id",
-            ondelete="CASCADE",
-            name="fk_movie_extras_id_media_items",
+            ondelete="CASCADE"
         ),
         primary_key=True,
     )
     movie_id: Mapped[int] = mapped_column(
         ForeignKey(
             "media_items_movie.id",
-            ondelete="CASCADE",
-            name="fk_movie_extras_movie_id_movies",
+            ondelete="CASCADE"
         ),
         nullable=False,
+        index=True
     )
     source_id: Mapped[int] = mapped_column(
         ForeignKey(
             "movie_extra_sources.id",
-            ondelete="RESTRICT",
-            name="fk_movie_extras_source_id_movie_extra_sources",
+            ondelete="RESTRICT"
         ),
         nullable=False,
+        index=True
     )
     movie_extra_type: Mapped[str] = mapped_column(
         default=MovieExtraType.OTHER.value,

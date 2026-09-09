@@ -58,9 +58,6 @@ def _indexed_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
             else None
         )
         return DwMovieRecord(
-            # Local snapshots deliberately do not retain Daily Wire entity IDs.
-            # The slug remains the canonical identity and any caller that truly
-            # needs a current DW ID must resolve it from the live API by slug.
             dw_id="",
             slug=movie.slug,
             title=movie.title,

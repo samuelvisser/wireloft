@@ -13,13 +13,7 @@ if TYPE_CHECKING:
 
 
 class MediaItemBase(Base):
-    """Polymorphic WireLoft identity for a downloadable media placement.
-
-    Intrinsic descriptive metadata intentionally lives on concrete content owners
-    via MediaContentMetadataMixin. Download artifact state and timestamps live on
-    MediaDownload rows, so this base stays limited to media identity and lifecycle
-    timestamps shared by every placement.
-    """
+    """Polymorphic WireLoft identity for a downloadable media placement."""
 
     __tablename__ = "media_items"
     __mapper_args__ = {
