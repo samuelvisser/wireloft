@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, PrimaryKeyConstraint, UniqueConstraint
 from sqlalchemy.ext.associationproxy import AssociationProxy, association_proxy
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,7 +26,7 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     Association proxies keep callers independent of that storage normalization.
     """
 
-    __tablename__ = "movie_extras"
+    __tablename__ = "media_items_movie_extras"
     __mapper_args__ = {
         "polymorphic_identity": MediaType.MOVIE_EXTRA.value,
         "polymorphic_load": "selectin",
@@ -38,20 +38,33 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
             "source_id",
             name="uq_movie_extras_movie_id_source_id",
         ),
+        Index("ix_movie_extras_movie_id", "movie_id"),
+        Index("ix_movie_extras_source_id", "source_id"),
+        PrimaryKeyConstraint("id", name="pk_movie_extras"),
     )
 
     id: Mapped[int] = mapped_column(
-        ForeignKey("media_items.id", ondelete="CASCADE"),
+        ForeignKey(
+            "media_items.id",
+            ondelete="CASCADE",
+            name="fk_movie_extras_id_media_items",
+        ),
         primary_key=True,
     )
     movie_id: Mapped[int] = mapped_column(
-        ForeignKey("movies.id", ondelete="CASCADE"),
-        index=True,
+        ForeignKey(
+            "media_items_movies.id",
+            ondelete="CASCADE",
+            name="fk_movie_extras_movie_id_movies",
+        ),
         nullable=False,
     )
     source_id: Mapped[int] = mapped_column(
-        ForeignKey("movie_extra_sources.id", ondelete="RESTRICT"),
-        index=True,
+        ForeignKey(
+            "movie_extra_sources.id",
+            ondelete="RESTRICT",
+            name="fk_movie_extras_source_id_movie_extra_sources",
+        ),
         nullable=False,
     )
     movie_extra_type: Mapped[str] = mapped_column(

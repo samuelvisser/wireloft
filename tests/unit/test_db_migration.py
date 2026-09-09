@@ -11,10 +11,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 
 HEAD_REVISION = "c5a9e2f7b104"
-MEDIA_CONTENT_METADATA_REVISION = "b3e6d1f8c704"
-MOVIE_EXTRA_SOURCE_METADATA_REVISION = "e8d1c4b7a205"
-MOVIE_EXTRA_SOURCE_REVISION = "f7c2a5d9e104"
-MOVIE_DW_ID_REMOVAL_REVISION = "d7c4a1f9b203"
 MOVIE_EXTRA_IDENTITY_REVISION = "c9f2d8a1b604"
 MOVIE_PAGE_METADATA_REVISION = "a8e4c1d7f203"
 ARTIFACT_IDENTITY_REVISION = "c1f7b9e4d205"
@@ -77,9 +73,9 @@ def test_fresh_database_upgrades_to_head(migration_database):
     assert {
         "alembic_version",
         "shows",
-        "episodes",
-        "movies",
-        "movie_extras",
+        "media_items_episodes",
+        "media_items_movies",
+        "media_items_movie_extras",
         "movie_extra_sources",
         "media_downloads",
         "media_downloads_movie",
@@ -94,6 +90,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "task_operation_targets",
         "task_operation_runs",
     } <= tables
+    assert {"episodes", "movies", "movie_extras"}.isdisjoint(tables)
 
     task_run_columns = {column["name"] for column in inspector.get_columns("task_runs")}
     assert "result" in task_run_columns
@@ -141,7 +138,10 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "updated_at",
     }
 
-    episode_columns = {column["name"] for column in inspector.get_columns("episodes")}
+    episode_columns = {
+        column["name"]
+        for column in inspector.get_columns("media_items_episodes")
+    }
     assert "metadata_is_final" in episode_columns
     assert CONTENT_METADATA_FIELDS <= episode_columns
 
@@ -202,7 +202,10 @@ def test_fresh_database_upgrades_to_head(migration_database):
             },
         ]
 
-    movie_columns = {column["name"] for column in inspector.get_columns("movies")}
+    movie_columns = {
+        column["name"]
+        for column in inspector.get_columns("media_items_movies")
+    }
     assert movie_columns == {
         "id",
         "slug",
@@ -256,7 +259,10 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "uq_movie_extra_sources_slug"
     ]["column_names"] == ["slug"]
 
-    movie_extra_columns = {column["name"] for column in inspector.get_columns("movie_extras")}
+    movie_extra_columns = {
+        column["name"]
+        for column in inspector.get_columns("media_items_movie_extras")
+    }
     assert movie_extra_columns == {
         "id",
         "movie_id",
@@ -265,14 +271,14 @@ def test_fresh_database_upgrades_to_head(migration_database):
     }
     movie_extra_indexes = {
         index["name"]: index
-        for index in inspector.get_indexes("movie_extras")
+        for index in inspector.get_indexes("media_items_movie_extras")
     }
     assert "ix_movie_extras_dw_id" not in movie_extra_indexes
     assert "ix_movie_extras_slug" not in movie_extra_indexes
     assert not bool(movie_extra_indexes["ix_movie_extras_source_id"]["unique"])
     movie_extra_unique_constraints = {
         constraint["name"]: constraint
-        for constraint in inspector.get_unique_constraints("movie_extras")
+        for constraint in inspector.get_unique_constraints("media_items_movie_extras")
     }
     assert "uq_movie_extras_movie_id_dw_id" not in movie_extra_unique_constraints
     assert "uq_movie_extras_movie_id_slug" not in movie_extra_unique_constraints
@@ -281,13 +287,16 @@ def test_fresh_database_upgrades_to_head(migration_database):
     ]["column_names"] == ["movie_id", "source_id"]
     source_fk = next(
         foreign_key
-        for foreign_key in inspector.get_foreign_keys("movie_extras")
+        for foreign_key in inspector.get_foreign_keys("media_items_movie_extras")
         if foreign_key["constrained_columns"] == ["source_id"]
     )
     assert source_fk["referred_table"] == "movie_extra_sources"
     assert source_fk["referred_columns"] == ["id"]
 
-    movie_indexes = {index["name"]: index for index in inspector.get_indexes("movies")}
+    movie_indexes = {
+        index["name"]: index
+        for index in inspector.get_indexes("media_items_movies")
+    }
     assert "ix_movies_dw_id" not in movie_indexes
 
     media_download_columns = {
@@ -313,42 +322,6 @@ def test_fresh_database_upgrades_to_head(migration_database):
         column["name"] for column in inspector.get_columns("media_downloads_episode")
     }
     assert "is_redownload_attempt" not in episode_download_columns
-
-
-def test_movie_promotional_metadata_migration_drops_fields(migration_database):
-    _database_path, engine = migration_database
-
-    from backend.db.migrations import get_alembic_config
-
-    command.upgrade(get_alembic_config(), MEDIA_CONTENT_METADATA_REVISION)
-    with engine.begin() as connection:
-        movie_id = connection.execute(text(
-            "INSERT INTO media_items (uuid, type) VALUES "
-            "('promotional-metadata-movie', 'movie')"
-        )).lastrowid
-        connection.execute(text(
-            "INSERT INTO movies "
-            "(id, slug, more_like_this, shop_items, production_companies) VALUES "
-            "(:id, 'promotional-metadata-movie', '[{\"slug\":\"other\"}]', "
-            "'[{\"sku\":\"shirt\"}]', '[\"studio\"]')"
-        ), {"id": movie_id})
-
-    command.upgrade(get_alembic_config(), HEAD_REVISION)
-
-    columns = {column["name"] for column in inspect(engine).get_columns("movies")}
-    assert {"more_like_this", "shop_items"}.isdisjoint(columns)
-    assert "production_companies" in columns
-    with engine.connect() as connection:
-        assert connection.execute(
-            text("SELECT slug FROM movies WHERE id = :id"),
-            {"id": movie_id},
-        ).scalar_one() == "promotional-metadata-movie"
-
-    command.downgrade(get_alembic_config(), MEDIA_CONTENT_METADATA_REVISION)
-    downgraded_columns = {
-        column["name"] for column in inspect(engine).get_columns("movies")
-    }
-    assert {"more_like_this", "shop_items"} <= downgraded_columns
 
 
 def test_0001_is_the_main_branch_schema_baseline(migration_database):
@@ -642,7 +615,7 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
     check_database()
 
 
-def test_migration_history_is_linear_through_movie_promotional_metadata():
+def test_migration_history_is_linear_through_consolidated_media_items():
     from backend.db.migrations import get_alembic_config, get_head_revisions
 
     scripts = ScriptDirectory.from_config(get_alembic_config())
@@ -650,11 +623,7 @@ def test_migration_history_is_linear_through_movie_promotional_metadata():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, MEDIA_CONTENT_METADATA_REVISION),
-        (MEDIA_CONTENT_METADATA_REVISION, MOVIE_EXTRA_SOURCE_METADATA_REVISION),
-        (MOVIE_EXTRA_SOURCE_METADATA_REVISION, MOVIE_EXTRA_SOURCE_REVISION),
-        (MOVIE_EXTRA_SOURCE_REVISION, MOVIE_DW_ID_REMOVAL_REVISION),
-        (MOVIE_DW_ID_REMOVAL_REVISION, MOVIE_EXTRA_IDENTITY_REVISION),
+        (HEAD_REVISION, MOVIE_EXTRA_IDENTITY_REVISION),
         (MOVIE_EXTRA_IDENTITY_REVISION, MOVIE_PAGE_METADATA_REVISION),
         (MOVIE_PAGE_METADATA_REVISION, ARTIFACT_IDENTITY_REVISION),
         (ARTIFACT_IDENTITY_REVISION, SHOW_PROFILE_SCOPE_REVISION),
@@ -668,10 +637,6 @@ def test_migration_history_is_linear_through_movie_promotional_metadata():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Remove promotional movie metadata from persisted movies."
-    assert revisions[1].doc == "Move reusable media content metadata to concrete owners."
-    assert revisions[2].doc == "Move globally intrinsic movie-extra metadata onto shared sources."
-    assert revisions[3].doc == "Normalize shared movie-extra sources by immutable slug."
-    assert revisions[4].doc == "Stop persisting Daily Wire IDs for movies and movie extras."
-    assert revisions[5].doc == "Scope movie-extra identity to its parent movie."
-    assert revisions[6].doc == "Persist canonical Daily Wire movie-page metadata."
+    assert revisions[0].doc == "Consolidate media-item storage after movie-extra identity."
+    assert revisions[1].doc == "Scope movie-extra identity to its parent movie."
+    assert revisions[2].doc == "Persist canonical Daily Wire movie-page metadata."

@@ -63,15 +63,18 @@ def test_content_metadata_is_stored_by_concrete_owner_and_transparent_to_callers
             {column["name"] for column in inspector.get_columns("media_items")}
         )
         assert content_fields <= {
-            column["name"] for column in inspector.get_columns("episodes")
+            column["name"] for column in inspector.get_columns("media_items_episodes")
         }
         assert content_fields <= {
-            column["name"] for column in inspector.get_columns("movies")
+            column["name"] for column in inspector.get_columns("media_items_movies")
         }
         assert content_fields <= {
             column["name"] for column in inspector.get_columns("movie_extra_sources")
         }
-        assert {column["name"] for column in inspector.get_columns("movie_extras")} == {
+        assert {
+            column["name"]
+            for column in inspector.get_columns("media_items_movie_extras")
+        } == {
             "id",
             "movie_id",
             "source_id",
