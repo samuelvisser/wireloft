@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "f7c2a5d9e104"
+HEAD_REVISION = "e8d1c4b7a205"
+MOVIE_EXTRA_SOURCE_REVISION = "f7c2a5d9e104"
 MOVIE_DW_ID_REMOVAL_REVISION = "d7c4a1f9b203"
 MOVIE_EXTRA_IDENTITY_REVISION = "c9f2d8a1b604"
 MOVIE_PAGE_METADATA_REVISION = "a8e4c1d7f203"
@@ -217,7 +218,20 @@ def test_fresh_database_upgrades_to_head(migration_database):
     movie_extra_source_columns = {
         column["name"] for column in inspector.get_columns("movie_extra_sources")
     }
-    assert movie_extra_source_columns == {"id", "slug"}
+    assert movie_extra_source_columns == {
+        "id",
+        "slug",
+        "title",
+        "description",
+        "duration",
+        "background_image_path",
+        "thumbnail_landscape_path",
+        "thumbnail_portrait_path",
+        "thumbnail_square_path",
+        "sharing_url",
+        "published_date",
+        "available_for",
+    }
     movie_extra_source_unique_constraints = {
         constraint["name"]: constraint
         for constraint in inspector.get_unique_constraints("movie_extra_sources")
@@ -232,9 +246,6 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "movie_id",
         "source_id",
         "movie_extra_type",
-        "sharing_url",
-        "published_date",
-        "available_for",
     }
     movie_extra_indexes = {
         index["name"]: index
@@ -574,7 +585,7 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
     check_database()
 
 
-def test_migration_history_is_linear_through_movie_extra_source_normalization():
+def test_migration_history_is_linear_through_movie_extra_source_metadata():
     from backend.db.migrations import get_alembic_config, get_head_revisions
 
     scripts = ScriptDirectory.from_config(get_alembic_config())
@@ -582,7 +593,8 @@ def test_migration_history_is_linear_through_movie_extra_source_normalization():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, MOVIE_DW_ID_REMOVAL_REVISION),
+        (HEAD_REVISION, MOVIE_EXTRA_SOURCE_REVISION),
+        (MOVIE_EXTRA_SOURCE_REVISION, MOVIE_DW_ID_REMOVAL_REVISION),
         (MOVIE_DW_ID_REMOVAL_REVISION, MOVIE_EXTRA_IDENTITY_REVISION),
         (MOVIE_EXTRA_IDENTITY_REVISION, MOVIE_PAGE_METADATA_REVISION),
         (MOVIE_PAGE_METADATA_REVISION, ARTIFACT_IDENTITY_REVISION),
@@ -597,7 +609,8 @@ def test_migration_history_is_linear_through_movie_extra_source_normalization():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Normalize shared movie-extra sources by immutable slug."
-    assert revisions[1].doc == "Stop persisting Daily Wire IDs for movies and movie extras."
-    assert revisions[2].doc == "Scope movie-extra identity to its parent movie."
-    assert revisions[3].doc == "Persist canonical Daily Wire movie-page metadata."
+    assert revisions[0].doc == "Move globally intrinsic movie-extra metadata onto shared sources."
+    assert revisions[1].doc == "Normalize shared movie-extra sources by immutable slug."
+    assert revisions[2].doc == "Stop persisting Daily Wire IDs for movies and movie extras."
+    assert revisions[3].doc == "Scope movie-extra identity to its parent movie."
+    assert revisions[4].doc == "Persist canonical Daily Wire movie-page metadata."

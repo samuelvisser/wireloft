@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.api.models.movie_extra import MovieExtraAPICreate, MovieExtraAPIRead
 from backend.db.models import Movie, MovieExtra, MovieExtraSource
-from backend.types.media_types import MovieExtraType
+from backend.types.media_types import MediaType, MovieExtraType
 from backend.utils.helpers import generate_uuid
 from dailywire_api.records import DwMovieExtraRecord
 
@@ -38,19 +38,60 @@ def get_or_create_movie_extra_source(s: Session, slug: str) -> MovieExtraSource:
     return source
 
 
+def _apply_source_metadata(
+    source: MovieExtraSource,
+    record: MovieExtraAPICreate | DwMovieExtraRecord,
+) -> None:
+    """Merge the best known globally intrinsic metadata into one clip source.
+
+    A shared clip can be listed on multiple movie pages and one page may omit a
+    field that another includes. Non-empty values therefore refresh the source,
+    while an omitted value never erases richer metadata learned elsewhere.
+    """
+    if record.title:
+        source.title = record.title
+    if record.description:
+        source.description = record.description
+    if record.duration > 0 or (source.duration or 0) <= 0:
+        source.duration = record.duration
+
+    for field in (
+        "background_image_path",
+        "thumbnail_landscape_path",
+        "thumbnail_portrait_path",
+        "thumbnail_square_path",
+        "sharing_url",
+    ):
+        value = getattr(record, field)
+        if value:
+            setattr(source, field, value)
+
+    if record.published_date is not None:
+        source.published_date = record.published_date
+    if record.available_for:
+        source.available_for = list(record.available_for)
+
+
 def create_movie_extra(
     s: Session,
     movie_id: int,
     body: MovieExtraAPICreate,
 ) -> MovieExtraAPIRead:
-    """Create a movie-specific extra listing without committing the transaction."""
+    """Create a movie-specific placement while sharing canonical clip metadata."""
     movie = s.get(Movie, movie_id)
     if movie is None:
         raise HTTPException(status_code=404, detail="Movie not found")
 
-    data = body.model_dump(by_alias=True)
-    source = get_or_create_movie_extra_source(s, data.pop("slug"))
-    item = MovieExtra(movie=movie, source=source, **data)
+    source = get_or_create_movie_extra_source(s, body.slug)
+    _apply_source_metadata(source, body)
+    item = MovieExtra(
+        movie=movie,
+        source=source,
+        uuid=body.uuid,
+        type=MediaType.MOVIE_EXTRA.value,
+        downloaded_date=body.downloaded_date,
+        movie_extra_type=body.movie_extra_type,
+    )
     s.add(item)
     s.flush()
     return MovieExtraAPIRead.model_validate(item)
@@ -63,19 +104,17 @@ def sync_movie_extras(
     extras: Sequence[DwMovieExtraRecord],
     official_trailer: Optional[DwMovieExtraRecord],
 ) -> int:
-    """Upsert one movie's extra listings while sharing global clip identity.
+    """Upsert one movie's placements and one canonical source per clip slug.
 
     Daily Wire entity IDs are intentionally ignored because they can rotate over
-    time. ``MovieExtraSource`` owns the immutable clip slug globally, while each
-    ``MovieExtra`` remains a separate MediaItem placement under one parent movie.
-    That distinction lets the same source appear under multiple movies without
-    changing WireLoft's one-download-per-media-item-and-profile invariant.
+    time. ``MovieExtraSource`` owns the immutable slug and every globally
+    intrinsic metadata field. ``MovieExtra`` stores only placement-specific state
+    such as the parent movie and classification. It remains a MediaItem so the
+    existing one-download-per-media-item-and-profile invariant stays unchanged.
 
     The dedicated ``official_trailer`` relationship is more authoritative than
     the inferred extra type. Older WireLoft versions could persist a trailer as
-    ``scene`` or ``other`` (for example when Daily Wire described it generically
-    as a clip), so syncing repairs that classification instead of rejecting the
-    entire movie and blocking every extra download.
+    ``scene`` or ``other``, so syncing repairs that per-movie classification.
     """
     existing = list(movie.movie_extras)
     by_slug = {extra.slug: extra for extra in existing}
@@ -83,6 +122,9 @@ def sync_movie_extras(
     added = 0
 
     for record in extras:
+        source = get_or_create_movie_extra_source(s, record.slug)
+        _apply_source_metadata(source, record)
+
         item = by_slug.get(record.slug)
         movie_extra_type = (
             MovieExtraType.TRAILER.value
@@ -90,42 +132,25 @@ def sync_movie_extras(
             else record.movie_extra_type
         )
         if item is None:
-            source = get_or_create_movie_extra_source(s, record.slug)
             item = MovieExtra(
                 movie=movie,
                 source=source,
                 uuid=generate_uuid(),
-                type="movie_extra",
-                title=record.title,
-                description=record.description,
+                type=MediaType.MOVIE_EXTRA.value,
                 downloaded_date=None,
-                duration=record.duration,
-                background_image_path=record.background_image_path,
-                thumbnail_landscape_path=record.thumbnail_landscape_path,
-                thumbnail_portrait_path=record.thumbnail_portrait_path,
-                thumbnail_square_path=record.thumbnail_square_path,
                 movie_extra_type=movie_extra_type,
-                sharing_url=record.sharing_url,
-                published_date=record.published_date,
-                available_for=list(record.available_for),
             )
             s.add(item)
             existing.append(item)
             added += 1
         else:
-            item.title = record.title
-            item.description = record.description
-            item.duration = record.duration
-            item.background_image_path = record.background_image_path
-            item.thumbnail_landscape_path = record.thumbnail_landscape_path
-            item.thumbnail_portrait_path = record.thumbnail_portrait_path
-            item.thumbnail_square_path = record.thumbnail_square_path
+            # The slug lookup and source uniqueness guarantee this is normally
+            # already the same object. Reassigning makes legacy/inconsistent rows
+            # self-heal instead of carrying a second source identity forward.
+            item.source = source
             item.movie_extra_type = movie_extra_type
-            item.sharing_url = record.sharing_url
-            item.published_date = record.published_date
-            item.available_for = list(record.available_for)
 
-        by_slug[item.slug] = item
+        by_slug[record.slug] = item
 
     s.flush()
 
@@ -135,8 +160,6 @@ def sync_movie_extras(
         official = by_slug.get(official_trailer.slug)
         if official is None or official.movie_id != movie.id:
             raise ValueError("The official trailer is not present in this movie's extras")
-        # The API's dedicated trailer relationship is canonical. This also
-        # self-heals legacy rows that were persisted with an inferred type.
         official.movie_extra_type = MovieExtraType.TRAILER.value
         movie.official_trailer = official
 

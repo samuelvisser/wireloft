@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from datetime import datetime
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -12,11 +13,11 @@ if TYPE_CHECKING:
 
 
 class MovieExtraSource(Base):
-    """Global identity for one immutable Daily Wire movie-extra clip slug.
+    """Canonical metadata for one immutable Daily Wire movie-extra clip.
 
-    A source is not itself a downloadable WireLoft media item. Each movie-specific
-    listing remains a distinct ``MovieExtra`` media item so downloads continue to
-    be scoped to one parent movie and one Local Media Profile.
+    The source owns everything that is intrinsic to the clip itself. A
+    movie-specific ``MovieExtra`` keeps only placement-specific state such as its
+    parent movie, classification and download history.
     """
 
     __tablename__ = "movie_extra_sources"
@@ -26,8 +27,34 @@ class MovieExtraSource(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     slug: Mapped[str] = mapped_column(nullable=False)
+    title: Mapped[str] = mapped_column(
+        default="",
+        server_default="",
+        nullable=False,
+    )
+    description: Mapped[Optional[str]]
+    duration: Mapped[float] = mapped_column(
+        default=0.0,
+        server_default="0",
+        nullable=False,
+    )
+    background_image_path: Mapped[Optional[str]]
+    thumbnail_landscape_path: Mapped[Optional[str]]
+    thumbnail_portrait_path: Mapped[Optional[str]]
+    thumbnail_square_path: Mapped[Optional[str]]
+    sharing_url: Mapped[Optional[str]]
+    published_date: Mapped[Optional[datetime]]
+    available_for: Mapped[list[str]] = mapped_column(
+        JSON,
+        default=list,
+        server_default="[]",
+        nullable=False,
+    )
 
     movie_extras: Mapped[list["MovieExtra"]] = relationship(back_populates="source")
 
     def __repr__(self) -> str:
-        return f"<MovieExtraSource(id={self.id}, slug={self.slug!r})>"
+        return (
+            f"<MovieExtraSource(id={self.id}, slug={self.slug!r}, "
+            f"title={self.title!r})>"
+        )
