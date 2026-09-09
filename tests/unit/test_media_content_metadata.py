@@ -128,3 +128,45 @@ def test_content_metadata_is_stored_by_concrete_owner_and_transparent_to_callers
     finally:
         session.close()
         engine.dispose()
+
+
+def test_movie_extra_constructor_routes_source_table_columns():
+    import backend.db.models  # noqa: F401
+    from backend.db.models import MovieExtra, MovieExtraSource
+    from backend.types.media_types import MediaType
+
+    published_date = datetime(2026, 9, 9, tzinfo=timezone.utc)
+    extra = MovieExtra(
+        id=42,
+        uuid="extra-constructor-uuid",
+        type=MediaType.MOVIE_EXTRA.value,
+        movie_id=7,
+        movie_extra_type="trailer",
+        downloaded_date=None,
+        slug="constructor-extra",
+        title="Constructor Extra",
+        description="Source-owned description",
+        duration=75,
+        background_image_path="constructor-background.jpg",
+        thumbnail_landscape_path="constructor-landscape.jpg",
+        thumbnail_portrait_path="constructor-portrait.jpg",
+        thumbnail_square_path="constructor-square.jpg",
+        sharing_url="https://example.test/constructor-extra",
+        published_date=published_date,
+        available_for=["ALL_ACCESS"],
+    )
+
+    assert extra.id == 42
+    assert isinstance(extra.source, MovieExtraSource)
+    assert extra.source.id is None
+    assert extra.source.slug == "constructor-extra"
+    assert extra.source.title == "Constructor Extra"
+    assert extra.source.description == "Source-owned description"
+    assert extra.source.duration == 75
+    assert extra.source.background_image_path == "constructor-background.jpg"
+    assert extra.source.thumbnail_landscape_path == "constructor-landscape.jpg"
+    assert extra.source.thumbnail_portrait_path == "constructor-portrait.jpg"
+    assert extra.source.thumbnail_square_path == "constructor-square.jpg"
+    assert extra.source.sharing_url == "https://example.test/constructor-extra"
+    assert extra.source.published_date == published_date
+    assert extra.source.available_for == ["ALL_ACCESS"]

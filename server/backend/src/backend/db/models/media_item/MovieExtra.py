@@ -17,21 +17,6 @@ if TYPE_CHECKING:
     from .Movie import Movie
 
 
-_SOURCE_FIELDS = (
-    "slug",
-    "title",
-    "description",
-    "duration",
-    "background_image_path",
-    "thumbnail_landscape_path",
-    "thumbnail_portrait_path",
-    "thumbnail_square_path",
-    "sharing_url",
-    "published_date",
-    "available_for",
-)
-
-
 class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     """A movie-specific placement of one globally identified extra clip.
 
@@ -116,14 +101,17 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     def __init__(self, **kwargs) -> None:
         """Keep direct construction compatible with the pre-source model API."""
         source = kwargs.pop("source", None)
+        source_columns = MovieExtraSource.__table__.columns
         source_values = {
             field: kwargs.pop(field)
-            for field in _SOURCE_FIELDS
-            if field in kwargs
+            for field in tuple(kwargs)
+            if field != "id" and field in source_columns
         }
 
         if source is None and source_values:
-            source = MovieExtraSource(slug=source_values.pop("slug", ""))
+            source_values.setdefault("slug", "")
+            source = MovieExtraSource(**source_values)
+            source_values = {}
         if source is not None:
             kwargs["source"] = source
 
