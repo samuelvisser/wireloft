@@ -173,8 +173,12 @@
 
 .movie-extra-actions .movie-media-download-button.is-progress {
     width: max-content;
-    min-width: 140px;
     padding-right: 68px;
+}
+
+.movie-media-download-control.is-panel .movie-media-download-button.is-progress,
+.movie-extra-actions .movie-media-download-button.is-progress {
+    min-width: 150px;
 }
 
 .movie-extra-actions .movie-media-downloaded {
