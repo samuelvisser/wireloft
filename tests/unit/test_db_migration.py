@@ -10,8 +10,9 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "b3e6d1f8c704"
-MEDIA_CONTENT_METADATA_REVISION = "e8d1c4b7a205"
+HEAD_REVISION = "c5a9e2f7b104"
+MEDIA_CONTENT_METADATA_REVISION = "b3e6d1f8c704"
+MOVIE_EXTRA_SOURCE_METADATA_REVISION = "e8d1c4b7a205"
 MOVIE_EXTRA_SOURCE_REVISION = "f7c2a5d9e104"
 MOVIE_DW_ID_REMOVAL_REVISION = "d7c4a1f9b203"
 MOVIE_EXTRA_IDENTITY_REVISION = "c9f2d8a1b604"
@@ -225,9 +226,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "directed_by",
         "genres",
         "hosts",
-        "more_like_this",
         "production_companies",
-        "shop_items",
         "starring",
         "written_by",
         "release_date",
@@ -316,6 +315,42 @@ def test_fresh_database_upgrades_to_head(migration_database):
     assert "is_redownload_attempt" not in episode_download_columns
 
 
+def test_movie_promotional_metadata_migration_drops_fields(migration_database):
+    _database_path, engine = migration_database
+
+    from backend.db.migrations import get_alembic_config
+
+    command.upgrade(get_alembic_config(), MEDIA_CONTENT_METADATA_REVISION)
+    with engine.begin() as connection:
+        movie_id = connection.execute(text(
+            "INSERT INTO media_items (uuid, type) VALUES "
+            "('promotional-metadata-movie', 'movie')"
+        )).lastrowid
+        connection.execute(text(
+            "INSERT INTO movies "
+            "(id, slug, more_like_this, shop_items, production_companies) VALUES "
+            "(:id, 'promotional-metadata-movie', '[{\"slug\":\"other\"}]', "
+            "'[{\"sku\":\"shirt\"}]', '[\"studio\"]')"
+        ), {"id": movie_id})
+
+    command.upgrade(get_alembic_config(), HEAD_REVISION)
+
+    columns = {column["name"] for column in inspect(engine).get_columns("movies")}
+    assert {"more_like_this", "shop_items"}.isdisjoint(columns)
+    assert "production_companies" in columns
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT slug FROM movies WHERE id = :id"),
+            {"id": movie_id},
+        ).scalar_one() == "promotional-metadata-movie"
+
+    command.downgrade(get_alembic_config(), MEDIA_CONTENT_METADATA_REVISION)
+    downgraded_columns = {
+        column["name"] for column in inspect(engine).get_columns("movies")
+    }
+    assert {"more_like_this", "shop_items"} <= downgraded_columns
+
+
 def test_0001_is_the_main_branch_schema_baseline(migration_database):
     _database_path, engine = migration_database
 
@@ -385,7 +420,6 @@ def test_upgrade_from_main_baseline_preserves_movie_rows(migration_database):
         assert movie.cast_and_crew == []
         assert movie.directed_by == []
         assert movie.hosts == []
-        assert movie.more_like_this == []
         assert movie.starring == []
         assert movie.written_by == []
         assert movie.release_date is None
@@ -608,7 +642,7 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
     check_database()
 
 
-def test_migration_history_is_linear_through_media_content_metadata():
+def test_migration_history_is_linear_through_movie_promotional_metadata():
     from backend.db.migrations import get_alembic_config, get_head_revisions
 
     scripts = ScriptDirectory.from_config(get_alembic_config())
@@ -617,7 +651,8 @@ def test_migration_history_is_linear_through_media_content_metadata():
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
         (HEAD_REVISION, MEDIA_CONTENT_METADATA_REVISION),
-        (MEDIA_CONTENT_METADATA_REVISION, MOVIE_EXTRA_SOURCE_REVISION),
+        (MEDIA_CONTENT_METADATA_REVISION, MOVIE_EXTRA_SOURCE_METADATA_REVISION),
+        (MOVIE_EXTRA_SOURCE_METADATA_REVISION, MOVIE_EXTRA_SOURCE_REVISION),
         (MOVIE_EXTRA_SOURCE_REVISION, MOVIE_DW_ID_REMOVAL_REVISION),
         (MOVIE_DW_ID_REMOVAL_REVISION, MOVIE_EXTRA_IDENTITY_REVISION),
         (MOVIE_EXTRA_IDENTITY_REVISION, MOVIE_PAGE_METADATA_REVISION),
@@ -633,9 +668,10 @@ def test_migration_history_is_linear_through_media_content_metadata():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Move reusable media content metadata to concrete owners."
-    assert revisions[1].doc == "Move globally intrinsic movie-extra metadata onto shared sources."
-    assert revisions[2].doc == "Normalize shared movie-extra sources by immutable slug."
-    assert revisions[3].doc == "Stop persisting Daily Wire IDs for movies and movie extras."
-    assert revisions[4].doc == "Scope movie-extra identity to its parent movie."
-    assert revisions[5].doc == "Persist canonical Daily Wire movie-page metadata."
+    assert revisions[0].doc == "Remove promotional movie metadata from persisted movies."
+    assert revisions[1].doc == "Move reusable media content metadata to concrete owners."
+    assert revisions[2].doc == "Move globally intrinsic movie-extra metadata onto shared sources."
+    assert revisions[3].doc == "Normalize shared movie-extra sources by immutable slug."
+    assert revisions[4].doc == "Stop persisting Daily Wire IDs for movies and movie extras."
+    assert revisions[5].doc == "Scope movie-extra identity to its parent movie."
+    assert revisions[6].doc == "Persist canonical Daily Wire movie-page metadata."

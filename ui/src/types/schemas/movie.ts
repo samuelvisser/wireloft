@@ -73,9 +73,7 @@ const MovieBaseSchema = z.object({
     directedBy: z.array(z.string()).default([]),
     genres: z.array(z.unknown()).default([]),
     hosts: z.array(z.record(z.string(), z.unknown())).default([]),
-    moreLikeThis: z.array(z.record(z.string(), z.unknown())).default([]),
     productionCompanies: z.array(z.unknown()).default([]),
-    shopItems: z.array(z.unknown()).default([]),
     starring: z.array(z.string()).default([]),
     writtenBy: z.array(z.string()).default([]),
 })
@@ -124,9 +122,7 @@ export const MovieReadSchema = z.looseObject({
     directedBy: z.array(z.string()),
     genres: z.array(z.unknown()),
     hosts: z.array(z.record(z.string(), z.unknown())),
-    moreLikeThis: z.array(z.record(z.string(), z.unknown())),
     productionCompanies: z.array(z.unknown()),
-    shopItems: z.array(z.unknown()),
     starring: z.array(z.string()),
     writtenBy: z.array(z.string()),
     // Calendar dates stay calendar dates. Do not invent midnight or a timezone.

@@ -196,9 +196,7 @@ def sync_dailywire_movie_metadata(
     movie.directed_by = list(movie_data.directed_by)
     movie.genres = _json_list(movie_data.genres)
     movie.hosts = _json_list(movie_data.hosts)
-    movie.more_like_this = _json_list(movie_data.more_like_this)
     movie.production_companies = _json_list(movie_data.production_companies)
-    movie.shop_items = _json_list(movie_data.shop_items)
     movie.starring = list(movie_data.starring)
     movie.written_by = list(movie_data.written_by)
 
@@ -286,9 +284,7 @@ def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
         directed_by=list(movie_data.directed_by),
         genres=_json_list(movie_data.genres),
         hosts=_json_list(movie_data.hosts),
-        more_like_this=_json_list(movie_data.more_like_this),
         production_companies=_json_list(movie_data.production_companies),
-        shop_items=_json_list(movie_data.shop_items),
         starring=list(movie_data.starring),
         written_by=list(movie_data.written_by),
         movie_extras=movie_extras,

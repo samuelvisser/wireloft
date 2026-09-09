@@ -67,9 +67,7 @@ class Movie(MediaContentMetadataMixin, MediaItemBase, HasTaskResourcesMixin):
     directed_by: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
     genres: Mapped[list[Any]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
     hosts: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
-    more_like_this: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
     production_companies: Mapped[list[Any]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
-    shop_items: Mapped[list[Any]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
     starring: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
     written_by: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
 
