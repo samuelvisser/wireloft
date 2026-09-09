@@ -21,9 +21,15 @@ def create_database_fields(model_cls: Type[T], data: dict, *,
 # Makes sure to map only fields that exist in the database. Throws error if extra fields.
 def update_database_fields(db_model: T, data: APIModel, *,
                            exclude_fields: set[str] | None = None,
-                           ignore_extra_fields=False
+                           ignore_extra_fields=False,
+                           exclude_none: bool = False,
+                           exclude_defaults: bool = False,
                            ) -> T:
-    updates = data.model_dump(by_alias=True)
+    updates = data.model_dump(
+        by_alias=True,
+        exclude_none=exclude_none,
+        exclude_defaults=exclude_defaults,
+    )
     if exclude_fields:
         updates = {k: v for k, v in updates.items() if k not in exclude_fields}
     for field, value in updates.items():

@@ -7,7 +7,6 @@ from pydantic import ValidationError
 
 from backend.app import db_session
 from backend.db.models import Movie
-from backend.types.media_types import MovieExtraType
 from dailywire_api.dw_api.client import MiddlewareAPIError
 from dailywire_api.dw_api.movie import MovieMiddlewareClient
 from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
@@ -39,11 +38,7 @@ def _indexed_movie_fallback(movie_slug: str) -> DwMovieRecord | None:
                 dw_id=None,
                 slug=extra.slug,
                 title=extra.title,
-                movie_extra_type=(
-                    MovieExtraType.TRAILER.value
-                    if extra.id == movie.official_trailer_id
-                    else extra.movie_extra_type
-                ),
+                movie_extra_type=extra.movie_extra_type,
                 description=extra.description,
                 sharing_url=extra.sharing_url,
                 published_date=_aware_datetime(extra.published_date),

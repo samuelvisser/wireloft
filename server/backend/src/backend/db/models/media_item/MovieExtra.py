@@ -3,9 +3,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, Index, PrimaryKeyConstraint, UniqueConstraint
+from sqlalchemy import (
+    ForeignKey,
+    Index,
+    PrimaryKeyConstraint,
+    UniqueConstraint,
+    event,
+    inspect as sa_inspect,
+    select,
+)
 from sqlalchemy.ext.associationproxy import AssociationProxy, association_proxy
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.types.media_types import MediaType, MovieExtraType
@@ -40,20 +48,48 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     )
 
     # Table fields
-    id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE",
-            name="fk_movie_extras_id_media_items",), primary_key=True)
-    movie_id: Mapped[int] = mapped_column(ForeignKey("media_items_movie.id",
-            ondelete="CASCADE", name="fk_movie_extras_movie_id_movies",
-        ), nullable=False)
-    source_id: Mapped[int] = mapped_column(ForeignKey("movie_extra_sources.id", ondelete="RESTRICT", name="fk_movie_extras_source_id_movie_extra_sources",
-        ), nullable=False)
-    movie_extra_type: Mapped[str] = mapped_column(default=MovieExtraType.OTHER.value, server_default=MovieExtraType.OTHER.value, nullable=False)
+    id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "media_items.id",
+            ondelete="CASCADE",
+            name="fk_movie_extras_id_media_items",
+        ),
+        primary_key=True,
+    )
+    movie_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "media_items_movie.id",
+            ondelete="CASCADE",
+            name="fk_movie_extras_movie_id_movies",
+        ),
+        nullable=False,
+    )
+    source_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "movie_extra_sources.id",
+            ondelete="RESTRICT",
+            name="fk_movie_extras_source_id_movie_extra_sources",
+        ),
+        nullable=False,
+    )
+    movie_extra_type: Mapped[str] = mapped_column(
+        default=MovieExtraType.OTHER.value,
+        server_default=MovieExtraType.OTHER.value,
+        nullable=False,
+    )
 
     # Relationships
-    movie: Mapped["Movie"] = relationship(back_populates="movie_extras", foreign_keys=[movie_id])
-    source: Mapped[MovieExtraSource] = relationship(back_populates="movie_extras", lazy="joined", innerjoin=True)
+    movie: Mapped["Movie"] = relationship(
+        back_populates="movie_extras",
+        foreign_keys=[movie_id],
+    )
+    source: Mapped[MovieExtraSource] = relationship(
+        back_populates="movie_extras",
+        lazy="joined",
+        innerjoin=True,
+    )
 
-    # Related table fields
+    # Source-owned fields exposed transparently on the placement.
     slug: AssociationProxy[str] = association_proxy("source", "slug")
     title: AssociationProxy[str] = association_proxy("source", "title")
     description: AssociationProxy[Optional[str]] = association_proxy("source", "description")
@@ -67,7 +103,7 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     available_for: AssociationProxy[list[str]] = association_proxy("source", "available_for")
 
     def __init__(self, **kwargs) -> None:
-        """Keep direct construction compatible with the pre-source model API."""
+        """Allow callers to construct an extra without knowing about its source."""
         source = kwargs.pop("source", None)
         source_columns = MovieExtraSource.__table__.columns
         source_values = {
@@ -77,7 +113,6 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
         }
 
         if source is None and source_values:
-            source_values.setdefault("slug", "")
             source = MovieExtraSource(**source_values)
             source_values = {}
         if source is not None:
@@ -90,5 +125,60 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
 
     def __repr__(self) -> str:
         return (
-            f"<MovieExtra(id={self.id}, movie_id={self.movie_id}, source_id={self.source_id}, movie_extra_type={self.movie_extra_type}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"
+            f"<MovieExtra(id={self.id}, movie_id={self.movie_id}, "
+            f"source_id={self.source_id}, movie_extra_type={self.movie_extra_type}, "
+            f"slug={self.slug}, title={self.title}, created_at={self.created_at}, "
+            f"updated_at={self.updated_at})>"
         )
+
+
+@event.listens_for(Session, "before_flush")
+def _resolve_movie_extra_sources(
+    session: Session,
+    _flush_context,
+    _instances,
+) -> None:
+    """Reuse canonical source rows for newly attached MovieExtra placements.
+
+    Constructing ``MovieExtra(slug=..., title=...)`` creates a source-shaped
+    object locally so callers can ignore the storage normalization. Immediately
+    before flush, resolve those objects by slug against both persisted sources and
+    other new extras in the same unit of work, merge their useful metadata, and
+    point every placement at the one canonical source row.
+    """
+    extras = [item for item in list(session.new) if isinstance(item, MovieExtra)]
+    candidates = [
+        extra.source
+        for extra in extras
+        if extra.source is not None and extra.source.slug
+    ]
+    if not candidates:
+        return
+
+    slugs = {source.slug for source in candidates}
+    sources_by_slug = {
+        source.slug: source
+        for source in session.scalars(
+            select(MovieExtraSource).where(MovieExtraSource.slug.in_(slugs))
+        )
+    }
+
+    for extra in extras:
+        candidate = extra.source
+        if candidate is None or not candidate.slug:
+            continue
+
+        source = sources_by_slug.get(candidate.slug)
+        if source is None:
+            sources_by_slug[candidate.slug] = candidate
+            continue
+        if source is candidate:
+            continue
+
+        source.merge_metadata(candidate)
+        extra.source = source
+
+        # The constructor-created candidate was attached through relationship
+        # cascade. Once no placement references it, prevent a duplicate insert.
+        if sa_inspect(candidate).pending and not candidate.movie_extras:
+            session.expunge(candidate)

@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "d8f3a1c6b205"
+HEAD_REVISION = "e1c7a4b9d302"
+MEDIA_DB_REFACTOR_REVISION = "d8f3a1c6b205"
 CONSOLIDATED_MEDIA_ITEM_REVISION = "c5a9e2f7b104"
 MOVIE_EXTRA_IDENTITY_REVISION = "c9f2d8a1b604"
 MOVIE_PAGE_METADATA_REVISION = "a8e4c1d7f203"
@@ -646,7 +647,8 @@ def test_migration_history_is_linear_through_media_download_ownership():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, CONSOLIDATED_MEDIA_ITEM_REVISION),
+        (HEAD_REVISION, MEDIA_DB_REFACTOR_REVISION),
+        (MEDIA_DB_REFACTOR_REVISION, CONSOLIDATED_MEDIA_ITEM_REVISION),
         (CONSOLIDATED_MEDIA_ITEM_REVISION, MOVIE_EXTRA_IDENTITY_REVISION),
         (MOVIE_EXTRA_IDENTITY_REVISION, MOVIE_PAGE_METADATA_REVISION),
         (MOVIE_PAGE_METADATA_REVISION, ARTIFACT_IDENTITY_REVISION),
@@ -661,7 +663,8 @@ def test_migration_history_is_linear_through_media_download_ownership():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Finalize media-item naming, download ownership, and database metadata."
-    assert revisions[1].doc == "Consolidate media-item storage after movie-extra identity."
-    assert revisions[2].doc == "Scope movie-extra identity to its parent movie."
-    assert revisions[3].doc == "Persist canonical Daily Wire movie-page metadata."
+    assert revisions[0].doc == "Repair persisted movie-extra trailer classifications."
+    assert revisions[1].doc == "Finalize media-item naming, download ownership, and database metadata."
+    assert revisions[2].doc == "Consolidate media-item storage after movie-extra identity."
+    assert revisions[3].doc == "Scope movie-extra identity to its parent movie."
+    assert revisions[4].doc == "Persist canonical Daily Wire movie-page metadata."

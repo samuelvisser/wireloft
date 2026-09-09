@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-from datetime import timezone
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.api.endpoints.movie_extras.service import create_movie_extra, sync_movie_extras
-from backend.api.helpers import update_database_fields
+from backend.api.helpers import create_database_fields, update_database_fields
 from backend.api.models.movie import *
-from backend.api.models.movie_extra import MovieExtraAPICreate
 from backend.db.models.media_download import MediaDownloadBase
 from backend.db.models.media_item import Movie
 from backend.integrations.tmdb import MovieReleaseLookupResult, lookup_movie_release_metadata
+from backend.types.media_types import MediaType
 from dailywire_api.records import DwMovieRecord
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
@@ -123,11 +122,13 @@ def retry_movie_release_metadata(s: Session, movie_slug: str) -> MovieAPIRead:
 
 
 def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
-    data = body.model_dump(
-        by_alias=True,
-        exclude={"movie_extras", "official_trailer_slug"},
+    values = body.model_dump(by_alias=True)
+    values["type"] = MediaType.MOVIE.value
+    item = create_database_fields(
+        Movie,
+        values,
+        exclude_fields={"movie_extras", "official_trailer_slug"},
     )
-    item = Movie(**data)
     s.add(item)
     s.flush()
 
@@ -147,16 +148,6 @@ def create_movie(s: Session, body: MovieAPICreate) -> MovieAPIRead:
     return MovieAPIRead.model_validate(item)
 
 
-def _json_value(value: Any) -> Any:
-    if hasattr(value, "model_dump"):
-        return value.model_dump(mode="json", by_alias=False)
-    return value
-
-
-def _json_list(values: list[Any]) -> list[Any]:
-    return [_json_value(value) for value in values]
-
-
 def sync_dailywire_movie_metadata(
     s: Session,
     *,
@@ -164,41 +155,12 @@ def sync_dailywire_movie_metadata(
     movie_data: DwMovieRecord,
 ) -> None:
     """Refresh canonical getMoviePage metadata without persisting rotating DW IDs."""
-    scalar_fields = (
-        "title",
-        "extended_title",
-        "description",
-        "duration",
-        "background_image_path",
-        "thumbnail_landscape_path",
-        "thumbnail_portrait_path",
-        "thumbnail_square_path",
-        "sharing_url",
-        "author_name",
-        "author_slug",
-        "logo_image_path",
-        "mature_rating",
-        "has_video",
-        "is_downloadable",
-        "status",
-        "published_at",
-        "background",
-        "byline",
-        "language",
-        "origin_country",
+    update_database_fields(
+        movie,
+        MovieAPIUpdate.model_validate(
+            movie_data.model_dump(mode="python", by_alias=False)
+        ),
     )
-    for field in scalar_fields:
-        setattr(movie, field, getattr(movie_data, field))
-
-    movie.images = movie_data.images.model_dump(mode="json", by_alias=False)
-    movie.available_for = list(movie_data.available_for)
-    movie.cast_and_crew = _json_list(movie_data.cast_and_crew)
-    movie.directed_by = list(movie_data.directed_by)
-    movie.genres = _json_list(movie_data.genres)
-    movie.hosts = _json_list(movie_data.hosts)
-    movie.production_companies = _json_list(movie_data.production_companies)
-    movie.starring = list(movie_data.starring)
-    movie.written_by = list(movie_data.written_by)
 
     # getMoviePage's publishedAt is the authoritative movie publication instant.
     # Record the source, but do not persist Daily Wire's rotating entity ID.
@@ -237,59 +199,12 @@ def index_dailywire_movie(s: Session, movie_data: DwMovieRecord) -> tuple[Movie,
 
 
 def _movie_create_from_dailywire(movie_data: DwMovieRecord) -> MovieAPICreate:
-    movie_extras = [
-        MovieExtraAPICreate(
-            slug=extra.slug,
-            title=extra.title,
-            movie_extra_type=extra.movie_extra_type,
-            published_date=extra.published_date,
-            description=extra.description,
-            sharing_url=extra.sharing_url,
-            duration=extra.duration,
-            background_image_path=extra.background_image_path,
-            thumbnail_landscape_path=extra.thumbnail_landscape_path,
-            thumbnail_portrait_path=extra.thumbnail_portrait_path,
-            thumbnail_square_path=extra.thumbnail_square_path,
-            available_for=list(extra.available_for),
-        )
-        for extra in movie_data.movie_extras
-    ]
-
-    return MovieAPICreate(
-        slug=movie_data.slug,
-        title=movie_data.title,
-        extended_title=movie_data.extended_title,
-        description=movie_data.description,
-        duration=movie_data.duration,
-        background_image_path=movie_data.background_image_path,
-        thumbnail_landscape_path=movie_data.thumbnail_landscape_path,
-        thumbnail_portrait_path=movie_data.thumbnail_portrait_path,
-        thumbnail_square_path=movie_data.thumbnail_square_path,
-        sharing_url=movie_data.sharing_url,
-        author_name=movie_data.author_name,
-        author_slug=movie_data.author_slug,
-        logo_image_path=movie_data.logo_image_path,
-        mature_rating=movie_data.mature_rating,
-        has_video=movie_data.has_video,
-        is_downloadable=movie_data.is_downloadable,
-        status=movie_data.status,
-        published_at=movie_data.published_at,
-        background=movie_data.background,
-        byline=movie_data.byline,
-        language=movie_data.language,
-        origin_country=movie_data.origin_country,
-        images=movie_data.images.model_dump(mode="json", by_alias=False),
-        available_for=list(movie_data.available_for),
-        cast_and_crew=_json_list(movie_data.cast_and_crew),
-        directed_by=list(movie_data.directed_by),
-        genres=_json_list(movie_data.genres),
-        hosts=_json_list(movie_data.hosts),
-        production_companies=_json_list(movie_data.production_companies),
-        starring=list(movie_data.starring),
-        written_by=list(movie_data.written_by),
-        movie_extras=movie_extras,
-        official_trailer_slug=(movie_data.trailer.slug if movie_data.trailer else None),
+    """Validate the persistent subset of a canonical Daily Wire movie record."""
+    data = movie_data.model_dump(mode="python", by_alias=False)
+    data["official_trailer_slug"] = (
+        movie_data.trailer.slug if movie_data.trailer is not None else None
     )
+    return MovieAPICreate.model_validate(data)
 
 
 def update_movie(s: Session, movie_slug: str, body: MovieAPIUpdate) -> MovieAPIRead:

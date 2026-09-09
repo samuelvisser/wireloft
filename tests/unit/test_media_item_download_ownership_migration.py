@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 
 PREVIOUS_REVISION = "c5a9e2f7b104"
-REVISION = "d8f3a1c6b205"
+REVISION = "e1c7a4b9d302"
 
 
 def test_media_item_download_ownership_migration_upgrades_from_c5_and_downgrades(
