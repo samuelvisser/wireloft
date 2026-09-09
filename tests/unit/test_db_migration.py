@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "d7c4a1f9b203"
+HEAD_REVISION = "f7c2a5d9e104"
+MOVIE_DW_ID_REMOVAL_REVISION = "d7c4a1f9b203"
 MOVIE_EXTRA_IDENTITY_REVISION = "c9f2d8a1b604"
 MOVIE_PAGE_METADATA_REVISION = "a8e4c1d7f203"
 ARTIFACT_IDENTITY_REVISION = "c1f7b9e4d205"
@@ -66,6 +67,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "episodes",
         "movies",
         "movie_extras",
+        "movie_extra_sources",
         "media_downloads",
         "media_downloads_movie",
         "media_downloads_movie_extra",
@@ -212,12 +214,24 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "official_trailer_id",
     }
 
+    movie_extra_source_columns = {
+        column["name"] for column in inspector.get_columns("movie_extra_sources")
+    }
+    assert movie_extra_source_columns == {"id", "slug"}
+    movie_extra_source_unique_constraints = {
+        constraint["name"]: constraint
+        for constraint in inspector.get_unique_constraints("movie_extra_sources")
+    }
+    assert movie_extra_source_unique_constraints[
+        "uq_movie_extra_sources_slug"
+    ]["column_names"] == ["slug"]
+
     movie_extra_columns = {column["name"] for column in inspector.get_columns("movie_extras")}
     assert movie_extra_columns == {
         "id",
         "movie_id",
+        "source_id",
         "movie_extra_type",
-        "slug",
         "sharing_url",
         "published_date",
         "available_for",
@@ -227,15 +241,24 @@ def test_fresh_database_upgrades_to_head(migration_database):
         for index in inspector.get_indexes("movie_extras")
     }
     assert "ix_movie_extras_dw_id" not in movie_extra_indexes
-    assert not bool(movie_extra_indexes["ix_movie_extras_slug"]["unique"])
+    assert "ix_movie_extras_slug" not in movie_extra_indexes
+    assert not bool(movie_extra_indexes["ix_movie_extras_source_id"]["unique"])
     movie_extra_unique_constraints = {
         constraint["name"]: constraint
         for constraint in inspector.get_unique_constraints("movie_extras")
     }
     assert "uq_movie_extras_movie_id_dw_id" not in movie_extra_unique_constraints
+    assert "uq_movie_extras_movie_id_slug" not in movie_extra_unique_constraints
     assert movie_extra_unique_constraints[
-        "uq_movie_extras_movie_id_slug"
-    ]["column_names"] == ["movie_id", "slug"]
+        "uq_movie_extras_movie_id_source_id"
+    ]["column_names"] == ["movie_id", "source_id"]
+    source_fk = next(
+        foreign_key
+        for foreign_key in inspector.get_foreign_keys("movie_extras")
+        if foreign_key["constrained_columns"] == ["source_id"]
+    )
+    assert source_fk["referred_table"] == "movie_extra_sources"
+    assert source_fk["referred_columns"] == ["id"]
 
     movie_indexes = {index["name"]: index for index in inspector.get_indexes("movies")}
     assert "ix_movies_dw_id" not in movie_indexes
@@ -500,6 +523,7 @@ def test_local_media_profile_migration_downgrades_to_0001(migration_database):
     assert "local_media_profiles_show" not in tables
     assert "local_media_profiles_movie" not in tables
     assert "movie_extras" not in tables
+    assert "movie_extra_sources" not in tables
     assert "media_downloads_movie" not in tables
     assert "type" not in {column["name"] for column in inspector.get_columns("local_media_profiles")}
     assert {column["name"] for column in inspector.get_columns("movies")} == {"id", "slug"}
@@ -550,7 +574,7 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
     check_database()
 
 
-def test_migration_history_is_linear_through_movie_dailywire_id_removal():
+def test_migration_history_is_linear_through_movie_extra_source_normalization():
     from backend.db.migrations import get_alembic_config, get_head_revisions
 
     scripts = ScriptDirectory.from_config(get_alembic_config())
@@ -558,7 +582,8 @@ def test_migration_history_is_linear_through_movie_dailywire_id_removal():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, MOVIE_EXTRA_IDENTITY_REVISION),
+        (HEAD_REVISION, MOVIE_DW_ID_REMOVAL_REVISION),
+        (MOVIE_DW_ID_REMOVAL_REVISION, MOVIE_EXTRA_IDENTITY_REVISION),
         (MOVIE_EXTRA_IDENTITY_REVISION, MOVIE_PAGE_METADATA_REVISION),
         (MOVIE_PAGE_METADATA_REVISION, ARTIFACT_IDENTITY_REVISION),
         (ARTIFACT_IDENTITY_REVISION, SHOW_PROFILE_SCOPE_REVISION),
@@ -572,6 +597,7 @@ def test_migration_history_is_linear_through_movie_dailywire_id_removal():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Stop persisting Daily Wire IDs for movies and movie extras."
-    assert revisions[1].doc == "Scope movie-extra identity to its parent movie."
-    assert revisions[2].doc == "Persist canonical Daily Wire movie-page metadata."
+    assert revisions[0].doc == "Normalize shared movie-extra sources by immutable slug."
+    assert revisions[1].doc == "Stop persisting Daily Wire IDs for movies and movie extras."
+    assert revisions[2].doc == "Scope movie-extra identity to its parent movie."
+    assert revisions[3].doc == "Persist canonical Daily Wire movie-page metadata."
