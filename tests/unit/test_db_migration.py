@@ -350,11 +350,17 @@ def test_fresh_database_upgrades_to_head(migration_database):
 def test_0001_is_the_main_branch_schema_baseline(migration_database):
     _database_path, engine = migration_database
 
-    from backend.db.migrations import get_alembic_config, get_current_revisions
+    from backend.db.migrations import get_alembic_config
 
-    command.upgrade(get_alembic_config(), BASE_REVISION)
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        BASE_REVISION,
+    )
 
-    assert get_current_revisions() == (BASE_REVISION,)
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalar_one() == BASE_REVISION
     inspector = inspect(engine)
 
     assert {column["name"] for column in inspector.get_columns("movies")} == {"id", "slug"}
@@ -382,7 +388,10 @@ def test_upgrade_from_main_baseline_preserves_movie_rows(migration_database):
     from backend.db.migrations import downgrade_database, get_alembic_config, upgrade_database
     from backend.db.models import Movie
 
-    command.upgrade(get_alembic_config(), BASE_REVISION)
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        BASE_REVISION,
+    )
     with engine.begin() as connection:
         movie_id = connection.execute(text(
             "INSERT INTO media_items "
@@ -432,6 +441,9 @@ def test_upgrade_from_main_baseline_preserves_movie_rows(migration_database):
             text("SELECT slug FROM movies WHERE id = :id"),
             {"id": movie_id},
         ).scalar_one() == "a-movie"
+        assert connection.execute(
+            text("SELECT alembic_version_num FROM settings")
+        ).scalar_one() == BASE_REVISION
 
 
 def test_rss_and_episode_type_data_migrations_from_main_baseline(migration_database):
@@ -439,7 +451,10 @@ def test_rss_and_episode_type_data_migrations_from_main_baseline(migration_datab
 
     from backend.db.migrations import get_alembic_config, upgrade_database
 
-    command.upgrade(get_alembic_config(), BASE_REVISION)
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        BASE_REVISION,
+    )
     with engine.begin() as connection:
         show_id = connection.execute(text(
             "INSERT INTO shows "
@@ -522,7 +537,10 @@ def test_upgrade_from_0001_migrates_existing_profiles_to_show_type(migration_dat
     )
     from backend.db.models import LocalMediaProfileBase, ShowLocalMediaProfile
 
-    command.upgrade(get_alembic_config(), BASE_REVISION)
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        BASE_REVISION,
+    )
     with engine.begin() as connection:
         connection.execute(text(
             "INSERT INTO local_media_profiles "
@@ -551,13 +569,12 @@ def test_upgrade_from_0001_migrates_existing_profiles_to_show_type(migration_dat
 def test_upgrade_from_0001_rejects_duplicate_profile_settings(migration_database):
     _database_path, engine = migration_database
 
-    from backend.db.migrations import (
-        get_alembic_config,
-        get_current_revisions,
-        upgrade_database,
-    )
+    from backend.db.migrations import get_alembic_config, upgrade_database
 
-    command.upgrade(get_alembic_config(), BASE_REVISION)
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        BASE_REVISION,
+    )
     with engine.begin() as connection:
         connection.execute(text(
             "INSERT INTO local_media_profiles "
@@ -569,7 +586,10 @@ def test_upgrade_from_0001_rejects_duplicate_profile_settings(migration_database
     with pytest.raises(RuntimeError, match="must be unique"):
         upgrade_database()
 
-    assert get_current_revisions() == (BASE_REVISION,)
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalar_one() == BASE_REVISION
     assert "type" not in {column["name"] for column in inspect(engine).get_columns("local_media_profiles")}
     assert not {"local_media_profiles_show", "local_media_profiles_movie"} & set(inspect(engine).get_table_names())
 
@@ -591,7 +611,14 @@ def test_local_media_profile_migration_downgrades_to_0001(migration_database):
     assert "media_downloads_movie" not in tables
     assert "type" not in {column["name"] for column in inspector.get_columns("local_media_profiles")}
     assert {column["name"] for column in inspector.get_columns("movies")} == {"id", "slug"}
-    assert "alembic_version" in tables
+    assert "alembic_version" not in tables
+    assert "alembic_version_num" in {
+        column["name"] for column in inspector.get_columns("settings")
+    }
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT alembic_version_num FROM settings")
+        ).scalar_one() == BASE_REVISION
 
 
 def test_upgrade_is_idempotent(migration_database):

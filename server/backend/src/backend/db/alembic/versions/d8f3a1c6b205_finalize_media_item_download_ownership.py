@@ -5,7 +5,15 @@ Revises: c5a9e2f7b104
 """
 
 from alembic import op
+from alembic.runtime.migration import MigrationContext
+from alembic.util import CommandError
 import sqlalchemy as sa
+
+from backend.db.alembic_version import (
+    SETTINGS_VERSION_COLUMN,
+    SETTINGS_VERSION_TABLE,
+    apply_settings_version_table,
+)
 
 
 revision = "d8f3a1c6b205"
@@ -14,11 +22,139 @@ branch_labels = None
 depends_on = None
 
 
+_LEGACY_VERSION_TABLE = "alembic_version"
+_UNMANAGED_TABLES = {"apscheduler_jobs"}
+
+
 def _column_names(bind, table_name: str) -> set[str]:
     inspector = sa.inspect(bind)
     if not inspector.has_table(table_name):
         return set()
     return {column["name"] for column in inspector.get_columns(table_name)}
+
+
+def _legacy_version_table() -> sa.Table:
+    return sa.Table(
+        _LEGACY_VERSION_TABLE,
+        sa.MetaData(),
+        sa.Column("version_num", sa.String(32), primary_key=True, nullable=False),
+    )
+
+
+def _legacy_revisions(bind) -> tuple[str, ...]:
+    return tuple(
+        bind.execute(
+            sa.select(_legacy_version_table().c.version_num)
+        ).scalars()
+    )
+
+
+def _settings_version_rows(bind) -> list[dict]:
+    return list(bind.execute(sa.text(
+        f"SELECT id, {SETTINGS_VERSION_COLUMN} "
+        f"FROM {SETTINGS_VERSION_TABLE} ORDER BY id"
+    )).mappings())
+
+
+def configure_version_storage_for_upgrade(context: MigrationContext) -> None:
+    """Select version storage only while upgrading across this historical boundary.
+
+    Current WireLoft databases always use ``settings.alembic_version_num``. The
+    upgrade command can also receive a database created before this revision,
+    where Alembic still has its native ``alembic_version`` table. Keep that
+    compatibility here, beside the migration that performs the one-time handoff.
+    """
+    connection = context.connection
+    if connection is None:
+        return
+
+    inspector = sa.inspect(connection)
+    tables = set(inspector.get_table_names())
+    application_tables = tables - _UNMANAGED_TABLES
+
+    # A fresh database starts with Alembic's native table. This migration switches
+    # the same running MigrationContext to Settings once it reaches this revision.
+    if not application_tables:
+        return
+
+    settings_has_version = (
+        SETTINGS_VERSION_TABLE in tables
+        and SETTINGS_VERSION_COLUMN in _column_names(connection, SETTINGS_VERSION_TABLE)
+    )
+    legacy_exists = _LEGACY_VERSION_TABLE in tables
+
+    # Both can exist after an interrupted handoff. In that state Alembic must
+    # resume from the legacy value; upgrade() will complete the transfer below.
+    if legacy_exists:
+        return
+
+    if not settings_has_version:
+        raise CommandError(
+            "Database contains tables but is not Alembic-managed by a supported WireLoft schema. "
+            "Delete/recreate it, or manually stamp the correct Alembic revision before upgrading."
+        )
+
+    settings_rows = _settings_version_rows(connection)
+    if len(settings_rows) != 1 or settings_rows[0][SETTINGS_VERSION_COLUMN] is None:
+        raise CommandError(
+            "settings.alembic_version_num must contain exactly one current revision before upgrading."
+        )
+
+    apply_settings_version_table(context)
+
+
+def _handoff_version_storage(bind) -> None:
+    """Move Alembic's live MigrationContext from its old table into Settings."""
+    inspector = sa.inspect(bind)
+    if not inspector.has_table(_LEGACY_VERSION_TABLE):
+        # A downgrade followed by a re-upgrade, or an interrupted handoff after
+        # the old table was already dropped, is already using current storage.
+        apply_settings_version_table(op.get_context())
+        return
+
+    revisions = _legacy_revisions(bind)
+    if len(revisions) != 1:
+        raise RuntimeError(
+            "Cannot move Alembic version tracking into settings unless the database "
+            f"has exactly one current revision; found {revisions}."
+        )
+
+    current_revision = revisions[0]
+    if current_revision != down_revision:
+        raise RuntimeError(
+            "The Alembic version-storage handoff can only run while upgrading "
+            f"from {down_revision}; found {current_revision}."
+        )
+
+    settings_rows = _settings_version_rows(bind)
+    if len(settings_rows) != 1:
+        raise RuntimeError(
+            "The settings table must contain exactly one row before Alembic "
+            "version tracking can be moved into it."
+        )
+
+    stored_revision = settings_rows[0][SETTINGS_VERSION_COLUMN]
+    if stored_revision not in (None, current_revision):
+        raise RuntimeError(
+            "settings.alembic_version_num disagrees with the legacy Alembic version table."
+        )
+
+    bind.execute(
+        sa.text(
+            f"UPDATE {SETTINGS_VERSION_TABLE} "
+            f"SET {SETTINGS_VERSION_COLUMN} = :revision WHERE id = :settings_id"
+        ),
+        {
+            "revision": current_revision,
+            "settings_id": settings_rows[0]["id"],
+        },
+    )
+
+    # HeadMaintainer updates the revision *after* upgrade() returns. Switch the
+    # running context before that happens so c5 -> d8, and every later revision
+    # in the same command, is written directly to Settings.
+    _legacy_version_table().drop(bind)
+    apply_settings_version_table(op.get_context())
 
 
 def _rename_series_profile_fk_column(old_name: str, new_name: str) -> None:
@@ -96,8 +232,8 @@ def upgrade() -> None:
     # therefore restart-safe so `backend-api db upgrade` can resume the migration.
     _add_column_if_missing(
         bind,
-        "settings",
-        sa.Column("alembic_version_num", sa.String(length=32), nullable=True),
+        SETTINGS_VERSION_TABLE,
+        sa.Column(SETTINGS_VERSION_COLUMN, sa.String(length=32), nullable=True),
     )
 
     _rename_series_profile_fk_column(
@@ -124,18 +260,14 @@ def upgrade() -> None:
         "WHERE parent_table = 'media_items_episodes'"
     ))
 
+    # This is the one historical point where WireLoft changes Alembic's version
+    # store. Keep the compatibility and transfer logic in this migration rather
+    # than teaching current migration services about both storage schemes.
+    _handoff_version_storage(bind)
+
 
 def downgrade() -> None:
     bind = op.get_bind()
-
-    # The WireLoft database CLI materializes the legacy version table before
-    # crossing this boundary. Refuse a direct raw-Alembic downgrade that would
-    # otherwise delete the column used for persistent version tracking.
-    if "alembic_version" not in sa.inspect(bind).get_table_names():
-        raise RuntimeError(
-            "Downgrading past d8f3a1c6b205 must use 'backend-api db downgrade' "
-            "so Alembic version tracking can move out of settings first."
-        )
 
     bind.execute(sa.text(
         "UPDATE metadata SET parent_table = 'media_items_episodes' "
@@ -163,4 +295,9 @@ def downgrade() -> None:
         "download_profiles_series_id",
         "series_download_profile_id",
     )
-    _drop_column_if_present(bind, "settings", "alembic_version_num")
+
+    # Version tracking is migration-runner infrastructure rather than application
+    # schema state. Once this migration has moved it to Settings, keep it there
+    # even when the application schema is downgraded below d8. That lets the
+    # current WireLoft CLI continue to read and upgrade the downgraded database
+    # without reintroducing legacy version-table handling into runtime code.
