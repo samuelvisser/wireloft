@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "a8e4c1d7f203"
+HEAD_REVISION = "c9f2d8a1b604"
+MOVIE_PAGE_METADATA_REVISION = "a8e4c1d7f203"
 ARTIFACT_IDENTITY_REVISION = "c1f7b9e4d205"
 SHOW_PROFILE_SCOPE_REVISION = "e3a1b5c7d902"
 EPISODE_CANONICAL_REVISION = "a4d7c2e9f610"
@@ -222,6 +223,22 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "published_date",
         "available_for",
     }
+    movie_extra_indexes = {
+        index["name"]: index
+        for index in inspector.get_indexes("movie_extras")
+    }
+    assert not bool(movie_extra_indexes["ix_movie_extras_dw_id"]["unique"])
+    assert not bool(movie_extra_indexes["ix_movie_extras_slug"]["unique"])
+    movie_extra_unique_constraints = {
+        constraint["name"]: constraint
+        for constraint in inspector.get_unique_constraints("movie_extras")
+    }
+    assert movie_extra_unique_constraints[
+        "uq_movie_extras_movie_id_dw_id"
+    ]["column_names"] == ["movie_id", "dw_id"]
+    assert movie_extra_unique_constraints[
+        "uq_movie_extras_movie_id_slug"
+    ]["column_names"] == ["movie_id", "slug"]
 
     movie_indexes = {index["name"]: index for index in inspector.get_indexes("movies")}
     assert "ix_movies_dw_id" in movie_indexes
@@ -537,7 +554,7 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
     check_database()
 
 
-def test_migration_history_is_linear_through_movie_page_metadata():
+def test_migration_history_is_linear_through_movie_extra_identity():
     from backend.db.migrations import get_alembic_config, get_head_revisions
 
     scripts = ScriptDirectory.from_config(get_alembic_config())
@@ -545,7 +562,8 @@ def test_migration_history_is_linear_through_movie_page_metadata():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, ARTIFACT_IDENTITY_REVISION),
+        (HEAD_REVISION, MOVIE_PAGE_METADATA_REVISION),
+        (MOVIE_PAGE_METADATA_REVISION, ARTIFACT_IDENTITY_REVISION),
         (ARTIFACT_IDENTITY_REVISION, SHOW_PROFILE_SCOPE_REVISION),
         (SHOW_PROFILE_SCOPE_REVISION, EPISODE_CANONICAL_REVISION),
         (EPISODE_CANONICAL_REVISION, EPISODE_RELEASE_REVISION),
@@ -557,4 +575,5 @@ def test_migration_history_is_linear_through_movie_page_metadata():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Persist canonical Daily Wire movie-page metadata."
+    assert revisions[0].doc == "Scope movie-extra identity to its parent movie."
+    assert revisions[1].doc == "Persist canonical Daily Wire movie-page metadata."

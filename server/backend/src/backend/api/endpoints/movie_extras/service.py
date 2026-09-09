@@ -36,11 +36,14 @@ def sync_movie_extras(
     extras: Sequence[DwMovieExtraRecord],
     official_trailer: Optional[DwMovieExtraRecord],
 ) -> int:
-    """Upsert the extras exposed by Daily Wire and return the number added.
+    """Upsert the extras exposed on one Daily Wire movie page.
 
-    Slugs are the playback identifiers and are therefore the primary matching
-    key. A non-empty Daily Wire ID is also accepted so a later slug change
-    updates the existing logical extra instead of creating a duplicate.
+    Daily Wire can list the same underlying clip on multiple movie pages (for
+    example, a sequel teaser can also be promoted as an extra on the original
+    film). A MovieExtra therefore represents a clip *as listed for this parent
+    movie*: slug and Daily Wire ID identify it only within ``movie.movie_extras``.
+    Within that parent, slug remains the playback identifier and a non-empty
+    Daily Wire ID lets a later slug change update the existing logical listing.
     """
     existing = list(movie.movie_extras)
     by_slug = {extra.slug: extra for extra in existing}
