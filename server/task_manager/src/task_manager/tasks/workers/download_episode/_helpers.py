@@ -9,6 +9,7 @@ from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.local_media_profile_types import PreferredFormat
 from dailywire_api.dw_api.client import MiddlewareClient
 from dailywire_downloader import DownloadProgress, MediaUnavailableError, VideoRendition
+from task_manager.scheduler.progress import TASK_RUN_PROGRESS_META_KEY
 
 # Requested video height per preferred format; audio-only is handled separately
 FORMAT_HEIGHTS: dict[str, int] = {
@@ -48,16 +49,25 @@ def refresh_episode_media_urls(s: Session, *, episode: Episode, show: Show) -> N
 
 
 class TaskProgressWriter:
-    """Translate downloader byte progress into generic TaskRun progress.
+    """Translate downloader progress and live details into generic TaskRun reporting.
 
-    MediaDownload is intentionally not touched here. Live percentage, status and
-    cancellation belong exclusively to TaskRun/TaskOperation; the domain row is
-    updated only when a worker has produced a persistent artifact.
+    MediaDownload is intentionally not touched here. Live percentage, selected
+    format, status and cancellation belong to TaskRun/TaskOperation; the domain
+    row is updated only when a worker has produced a persistent artifact.
     """
 
     def __init__(self, task_progress=None):
         self._task_progress = task_progress
         self._last_pct = -1
+
+    def set_selected_format(self, selected_format: str) -> None:
+        """Publish the chosen source format without treating it as artifact metadata."""
+        if self._task_progress is None:
+            return
+        self._task_progress.set(
+            max(0, self._last_pct),
+            meta={TASK_RUN_PROGRESS_META_KEY: {"selected_format": selected_format}},
+        )
 
     def __call__(self, progress: DownloadProgress) -> None:
         fraction = progress.fraction

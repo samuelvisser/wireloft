@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from backend.api.endpoints.operations.service import list_operations
 from backend.api.models.puller import FrontendPullAPIRead, FrontendPullData
-from task_manager.scheduler.operations import list_operations
 from task_manager.scheduler.types import OperationStatus
 
 

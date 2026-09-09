@@ -20,6 +20,7 @@ export const TaskOperationReadSchema = z.looseObject({
   message: z.string().nullable().optional(),
   result: TaskOperationResultSchema.nullable().optional(),
   context: z.record(z.string(), z.unknown()).nullable().optional(),
+  progressMeta: z.record(z.string(), z.unknown()).nullable().optional(),
   error: z.string().nullable().optional(),
   notificationSeenAt: ApiDateTimeStringSchema.nullable().optional(),
   startedAt: ApiDateTimeStringSchema.nullable().optional(),

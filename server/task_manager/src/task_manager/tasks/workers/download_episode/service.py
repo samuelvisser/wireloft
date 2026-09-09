@@ -248,6 +248,8 @@ def _attempt_download(
             format_downloaded = "video"
             use_hls = False
 
+    task_progress.set_selected_format(format_downloaded)
+
     remux_video = not want_audio and use_hls and get_settings().download_settings.remux_video_to_mp4
     extension = "mp4" if remux_video else info.suggested_extension
     destination = resolve_episode_output_path(

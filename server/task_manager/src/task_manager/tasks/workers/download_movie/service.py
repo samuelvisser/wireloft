@@ -182,6 +182,8 @@ def _download_movie_media(
         format_downloaded = "video"
         use_hls = False
 
+    task_progress.set_selected_format(format_downloaded)
+
     remux = use_hls and get_settings().download_settings.remux_video_to_mp4
     extension = "mp4" if remux else info.suggested_extension
     destination = resolve_movie_output_path(
