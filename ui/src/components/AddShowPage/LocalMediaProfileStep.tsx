@@ -16,6 +16,7 @@ import {
 import LocalMediaProfileCard from '../LocalMediaProfile/LocalMediaProfileCard'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
+import {isShowLocalMediaProfileAvailableFor, type ShowLocalMediaProfileContext} from '../../types/local_media_profile'
 
 
 type Props = {
@@ -26,12 +27,14 @@ type Props = {
     onContinue: () => void
     onCancel: () => void
     showSlug?: string
+    showType: ShowLocalMediaProfileContext
 }
 
-export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, showSlug}: Props) {
+export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, showSlug, showType}: Props) {
     const profilesQuery = useLocalMediaProfiles()
     const profiles: ShowLocalMediaProfileRead[] | undefined = profilesQuery.data?.filter(
-        (profile): profile is ShowLocalMediaProfileRead => profile.type === 'show',
+        (profile): profile is ShowLocalMediaProfileRead =>
+            profile.type === 'show' && isShowLocalMediaProfileAvailableFor(profile, showType),
     )
     const profilesError = profilesQuery.isError ? ((profilesQuery.error)?.message ?? 'Failed to load media profiles') : null
     const createDefaults = getZodDefaults(LocalMediaProfileCreateUnionSchema)

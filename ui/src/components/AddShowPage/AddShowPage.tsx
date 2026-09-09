@@ -327,7 +327,13 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                 <ChooseShowStep
                     value={showInput}
                     onChange={setShowInput}
-                    onSubmit={setShowSubmit}
+                    onSubmit={(value) => {
+                        if (showSubmit?.type && showSubmit.type !== value.type) {
+                            setLocalMediaProfileInput(getZodDefaults(LocalMediaProfileCreateUnionSchema))
+                            setLocalMediaProfileSubmit(undefined)
+                        }
+                        setShowSubmit(value)
+                    }}
                     onSeasonsSubmit={setSeasonsSubmit}
                     onContinue={() => setStep(2)}
                     onCancel={handleCancel}
@@ -363,7 +369,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                 />
             )}
 
-            {step === 3 && (showAction === 'download' || showAction === 'download-stream') && (
+            {step === 3 && showSubmit && (showAction === 'download' || showAction === 'download-stream') && (
                 <LocalMediaProfileStep
                     value={localMediaProfileInput}
                     onChange={setLocalMediaProfileInput}
@@ -379,7 +385,8 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                     onBack={() => setStep(2)}
                     onContinue={() => setStep(4)}
                     onCancel={handleCancel}
-                    showSlug={showSubmit?.slug}
+                    showSlug={showSubmit.slug}
+                    showType={showSubmit.type}
                 />
             )}
 
