@@ -4,13 +4,18 @@ import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
+import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ProgressBar from '../../components/common/ProgressBar'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
+import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import {useDailywireMovie, useLocalMediaProfiles, useMovieDownloads, useMovies} from '../../lib/queries'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
+import {ACTIVE_DOWNLOAD_STATUSES} from '../../types/media_download'
 import {MovieExtraType} from '../../types/schemas/dailywire_catalog'
+import {MediaDownloadViewRead} from '../../types/schemas/media_download'
+import {formatBytes} from '../../utils/formatting'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
 import './MoviePage.css'
@@ -24,6 +29,136 @@ type MovieExtraSummary = {
     sharingUrl?: string | null
     thumbnailLandscapePath?: string | null
     backgroundImagePath?: string | null
+}
+
+type MovieDownloadControlProps = {
+    download?: MediaDownloadViewRead
+    label: string
+    progressLabel: string
+    queueing: boolean
+    disabled: boolean
+    primary?: boolean
+    panel?: boolean
+    controlBusy: boolean
+    onStart: () => void
+    onOpenLog: (downloadId: number) => void
+    onRestart: (download: MediaDownloadViewRead) => void
+    onCancel: (download: MediaDownloadViewRead) => void
+}
+
+const RESTARTABLE_DOWNLOAD_STATUSES = new Set([
+    'pending',
+    'downloading',
+    'local_processing',
+    'cancelled',
+    'error',
+    'missing',
+    'corrupted',
+])
+
+function MovieDownloadControl({
+    download,
+    label,
+    progressLabel,
+    queueing,
+    disabled,
+    primary = true,
+    panel = false,
+    controlBusy,
+    onStart,
+    onOpenLog,
+    onRestart,
+    onCancel,
+}: MovieDownloadControlProps) {
+    const status = download ? String(download.downloadStatus) : null
+    const active = queueing || (status !== null && ACTIVE_DOWNLOAD_STATUSES.has(status))
+    const downloaded = download?.artifactStatus === 'available'
+    const progress = queueing || status === 'pending'
+        ? 0
+        : Math.max(0, Math.min(100, download?.progress ?? 0))
+    const activeLabel = queueing
+        ? 'Queuing…'
+        : status === 'pending'
+            ? 'Queued…'
+            : status === 'local_processing'
+                ? 'Processing…'
+                : `${progress}%`
+    const downloadedDetails = download && downloaded
+        ? [
+            download.formatDownloaded || download.preferredFormat,
+            download.downloadedBytes != null ? formatBytes(download.downloadedBytes) : null,
+        ].filter(Boolean).join(', ')
+        : ''
+    const restartable = download && status !== null && RESTARTABLE_DOWNLOAD_STATUSES.has(status)
+    const cancellable = download && status !== null && ACTIVE_DOWNLOAD_STATUSES.has(status)
+
+    return (
+        <div className={`movie-media-download-control${panel ? ' is-panel' : ''}`}>
+            {downloaded ? (
+                <span className="movie-media-downloaded" role="status">
+                    <FontAwesomeIcon icon={['fas', 'circle-check']}/>
+                    <span>Downloaded{downloadedDetails ? ` (${downloadedDetails})` : ''}</span>
+                </span>
+            ) : active ? (
+                <button
+                    type="button"
+                    className={`btn${primary ? ' btn-primary' : ''} movie-media-download-button is-progress`}
+                    disabled
+                    aria-label={`${progressLabel}: ${activeLabel}`}
+                >
+                    <span
+                        className="movie-media-download-progress-fill"
+                        style={{width: `${progress}%`}}
+                        aria-hidden="true"
+                    />
+                    <span className="movie-media-download-progress-label">{activeLabel}</span>
+                </button>
+            ) : (
+                <button
+                    type="button"
+                    className={`btn${primary ? ' btn-primary' : ''} movie-media-download-button`}
+                    onClick={onStart}
+                    disabled={disabled}
+                >
+                    <FontAwesomeIcon icon={['fas', 'download']}/>
+                    {label}
+                </button>
+            )}
+
+            {download && (
+                <button
+                    type="button"
+                    className="icon-btn movie-download-log-button"
+                    onClick={() => onOpenLog(download.id)}
+                    title="View download log"
+                    aria-label={`View download log for ${progressLabel}`}
+                >
+                    <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+                </button>
+            )}
+
+            {(restartable || cancellable) && download && (
+                <ActionMenu
+                    className="movie-download-action-menu"
+                    items={[
+                        ...(restartable ? [{
+                            label: 'Restart download',
+                            icon: ['fas', 'rotate-right'] as [string, string],
+                            disabled: controlBusy,
+                            onSelect: () => onRestart(download),
+                        }] : []),
+                        ...(cancellable ? [{
+                            label: 'Cancel download',
+                            icon: ['fas', 'xmark'] as [string, string],
+                            tone: 'danger' as const,
+                            disabled: controlBusy,
+                            onSelect: () => onCancel(download),
+                        }] : []),
+                    ]}
+                />
+            )}
+        </div>
+    )
 }
 
 function formatDuration(seconds: number) {
@@ -79,7 +214,32 @@ export default function MoviePage() {
     const [deleting, setDeleting] = useState(false)
     const [retryingMetadata, setRetryingMetadata] = useState(false)
     const [refreshingExtrasStarting, setRefreshingExtrasStarting] = useState(false)
+    const [logDownloadId, setLogDownloadId] = useState<number | null>(null)
+    const [downloadControlBusy, setDownloadControlBusy] = useState<string | null>(null)
     const refreshingExtras = refreshingExtrasStarting || refreshExtrasOperation !== undefined
+
+    const selectedProfileDownloads = useMemo(() => {
+        const selectedProfileId = Number(profileId)
+        if (!selectedProfileId) return []
+        return (downloads ?? []).filter((download) => download.localMediaProfileId === selectedProfileId)
+    }, [downloads, profileId])
+    const movieDownload = useMemo(
+        () => selectedProfileDownloads.find((download) => download.type === 'movie'),
+        [selectedProfileDownloads],
+    )
+    const extraDownloadsBySlug = useMemo(() => {
+        const result = new Map<string, MediaDownloadViewRead>()
+        for (const download of selectedProfileDownloads) {
+            if (download.type === 'movie_extra' && download.mediaSlug) {
+                result.set(download.mediaSlug, download)
+            }
+        }
+        return result
+    }, [selectedProfileDownloads])
+    const logDownload = useMemo(
+        () => downloads?.find((download) => download.id === logDownloadId) ?? null,
+        [downloads, logDownloadId],
+    )
 
     useEffect(() => {
         if (!profileId && videoProfiles[0]) setProfileId(String(videoProfiles[0].id))
@@ -164,6 +324,34 @@ export default function MoviePage() {
             toast.error(`Could not start the ${label.toLocaleLowerCase()} download`)
         } finally {
             setSubmitting(null)
+        }
+    }
+
+    const controlDownload = async (download: MediaDownloadViewRead, action: 'restart' | 'cancel') => {
+        if (downloadControlBusy !== null) return
+        const busyKey = `${download.id}:${action}`
+        setDownloadControlBusy(busyKey)
+        try {
+            const base = (window as any).appConfig.API_URL
+            const endpoint = action === 'restart' ? 'retry' : 'cancel'
+            const response = await fetch(`${base}/media-downloads/${download.id}/${endpoint}`, {
+                method: 'POST',
+                credentials: 'include',
+            })
+            if (!response.ok) {
+                const {error: message} = await getErrorMessageFromResponse(response)
+                toast.error(message || `Could not ${action} the download`)
+                return
+            }
+            toast.success(action === 'restart' ? 'Download restarted' : 'Download cancelled')
+        } catch {
+            toast.error(`Could not ${action} the download`)
+        } finally {
+            await Promise.all([
+                queryClient.invalidateQueries({queryKey: ['movieDownloads', slug]}),
+                queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+            ])
+            setDownloadControlBusy((current) => current === busyKey ? null : current)
         }
     }
 
@@ -280,6 +468,10 @@ export default function MoviePage() {
     const expectedReleaseDate = formatReleaseDate(
         localMovie ? (isUpcoming ? localMovie.releaseDate : null) : dailywireMovie?.expectedReleaseDate,
     )
+    const featuredTrailerDownload = featuredTrailer
+        ? extraDownloadsBySlug.get(featuredTrailer.slug)
+        : undefined
+    const controlBusy = downloadControlBusy !== null
 
     return (
         <section className="view movie-detail-view" aria-labelledby="movie-title">
@@ -353,10 +545,19 @@ export default function MoviePage() {
                                 {videoProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
                             </select>
                             {movie.isDownloadable ? (
-                                <button className="btn btn-primary movie-download-button" type="button" onClick={() => void startMovieDownload()} disabled={submitting !== null || addingMovie}>
-                                    <FontAwesomeIcon icon={['fas', 'download']}/>
-                                    {submitting === 'movie' ? 'Queuing…' : 'Download movie'}
-                                </button>
+                                <MovieDownloadControl
+                                    download={movieDownload}
+                                    label="Download movie"
+                                    progressLabel={movie.title}
+                                    queueing={submitting === 'movie'}
+                                    disabled={submitting !== null || addingMovie || !profileId}
+                                    panel
+                                    controlBusy={controlBusy}
+                                    onStart={() => void startMovieDownload()}
+                                    onOpenLog={setLogDownloadId}
+                                    onRestart={(download) => void controlDownload(download, 'restart')}
+                                    onCancel={(download) => void controlDownload(download, 'cancel')}
+                                />
                             ) : (
                                 <div className="movie-download-unavailable" role="status">
                                     {isUpcoming
@@ -367,10 +568,20 @@ export default function MoviePage() {
                                 </div>
                             )}
                             {featuredTrailer && (
-                                <button className="btn movie-download-button" type="button" onClick={() => void startExtraDownload(featuredTrailer)} disabled={submitting !== null || addingMovie}>
-                                    <FontAwesomeIcon icon={['fas', 'download']}/>
-                                    {submitting === `extra:${featuredTrailer.slug}` ? 'Queuing…' : 'Download trailer'}
-                                </button>
+                                <MovieDownloadControl
+                                    download={featuredTrailerDownload}
+                                    label="Download trailer"
+                                    progressLabel={featuredTrailer.title}
+                                    queueing={submitting === `extra:${featuredTrailer.slug}`}
+                                    disabled={submitting !== null || addingMovie || !profileId}
+                                    primary={false}
+                                    panel
+                                    controlBusy={controlBusy}
+                                    onStart={() => void startExtraDownload(featuredTrailer)}
+                                    onOpenLog={setLogDownloadId}
+                                    onRestart={(download) => void controlDownload(download, 'restart')}
+                                    onCancel={(download) => void controlDownload(download, 'cancel')}
+                                />
                             )}
                         </>
                     ) : (
@@ -395,6 +606,7 @@ export default function MoviePage() {
                         {movieExtras.map((extra) => {
                             const thumbnail = toImageUrl(extra.thumbnailLandscapePath || extra.backgroundImagePath)
                             const isFeatured = featuredTrailer?.slug === extra.slug
+                            const download = extraDownloadsBySlug.get(extra.slug)
                             return (
                                 <article className="movie-extra-card" key={extra.id ?? extra.slug}>
                                     <div className="movie-extra-art">
@@ -417,15 +629,18 @@ export default function MoviePage() {
                                                     <FontAwesomeIcon icon={['fas', 'play']}/>
                                                 </a>
                                             )}
-                                            <button
-                                                className="btn btn-primary"
-                                                type="button"
-                                                onClick={() => void startExtraDownload(extra)}
+                                            <MovieDownloadControl
+                                                download={download}
+                                                label="Download"
+                                                progressLabel={extra.title}
+                                                queueing={submitting === `extra:${extra.slug}`}
                                                 disabled={submitting !== null || addingMovie || !profileId}
-                                            >
-                                                <FontAwesomeIcon icon={['fas', 'download']}/>
-                                                {submitting === `extra:${extra.slug}` ? 'Queuing…' : 'Download'}
-                                            </button>
+                                                controlBusy={controlBusy}
+                                                onStart={() => void startExtraDownload(extra)}
+                                                onOpenLog={setLogDownloadId}
+                                                onRestart={(download) => void controlDownload(download, 'restart')}
+                                                onCancel={(download) => void controlDownload(download, 'cancel')}
+                                            />
                                         </div>
                                     </div>
                                 </article>
@@ -451,6 +666,8 @@ export default function MoviePage() {
                     ))}
                 </section>
             )}
+
+            <DownloadLogDialog row={logDownload} onClose={() => setLogDownloadId(null)}/>
 
             <ConfirmDialog
                 open={confirmDelete && Boolean(localMovie)}
