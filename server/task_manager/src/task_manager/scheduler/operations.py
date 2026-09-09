@@ -16,6 +16,7 @@ from task_manager.scheduler.db import (
     TaskOperationTarget,
     TaskRun,
 )
+from task_manager.scheduler.operation_control import run_cancel_requested
 from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import OperationSource, OperationStatus, TaskStatus
 
@@ -575,6 +576,10 @@ def _matching_active_run(session: Session, target: TaskOperationTarget) -> TaskR
         .order_by(TaskRun.id.desc())
     )
     for run in session.scalars(statement):
+        # A running worker can remain active while cooperative cancellation is
+        # propagating. It cannot satisfy new work because it is guaranteed to exit.
+        if run_cancel_requested(run):
+            continue
         if _resource_type_value(run.resource_type) != target.resource_type:
             continue
         if _run_matches_target_inputs(run, target):
