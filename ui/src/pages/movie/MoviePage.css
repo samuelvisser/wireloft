@@ -99,6 +99,8 @@
     min-width: 0;
     max-width: 100%;
     min-height: 34px;
+    padding-inline: 6px;
+    box-sizing: border-box;
     color: #22a95e;
     font-size: 12px;
     font-weight: 650;
@@ -152,8 +154,8 @@
 }
 
 .movie-extra-actions .movie-media-download-control {
-    flex: 0 1 auto;
-    width: max-content;
+    flex: 0 0 auto;
+    width: fit-content;
     min-width: 0;
     max-width: 100%;
     margin: 0;
@@ -171,24 +173,23 @@
 
 .movie-extra-actions .movie-media-download-button.is-progress {
     width: max-content;
-    min-width: 0;
+    min-width: 116px;
     padding-right: 68px;
 }
 
 .movie-extra-actions .movie-media-downloaded {
-    flex: 0 1 auto;
-    width: max-content;
-    min-width: 0;
-    max-width: 100%;
+    flex: 0 0 auto;
+    width: fit-content;
+    min-width: max-content;
+    max-width: none;
     justify-content: flex-start;
     text-align: left;
-    white-space: normal;
+    white-space: nowrap;
 }
 
 .movie-extra-actions .movie-media-downloaded > span {
     min-width: 0;
-    white-space: normal;
-    overflow-wrap: break-word;
+    white-space: nowrap;
 }
 
 @media (prefers-color-scheme: dark) {
