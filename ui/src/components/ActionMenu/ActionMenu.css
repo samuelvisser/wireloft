@@ -3,6 +3,12 @@
     display: inline-flex;
 }
 
+.action-menu-inline-items {
+    display: none;
+    align-items: center;
+    gap: 2px;
+}
+
 .action-menu-trigger {
     min-height: 38px;
 }

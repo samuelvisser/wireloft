@@ -39,11 +39,13 @@
 }
 
 .movie-media-download-control {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 7px;
     min-width: 0;
+    max-width: 100%;
 }
 
 .movie-media-download-control.is-panel {
@@ -71,6 +73,7 @@
     border-color: rgba(59, 130, 246, 0.35);
     background: rgba(59, 130, 246, 0.12);
     color: var(--text);
+    padding-right: 68px;
 }
 
 .movie-media-download-progress-fill {
@@ -93,6 +96,8 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+    max-width: 100%;
     min-height: 34px;
     color: #22a95e;
     font-size: 12px;
@@ -112,23 +117,45 @@
     flex: 0 0 auto;
 }
 
-.movie-download-action-menu .action-menu-trigger {
-    min-height: 34px;
-    padding: 6px 9px;
+.movie-download-action-menu .action-menu-trigger,
+.movie-download-action-menu .action-menu-inline-items {
+    display: none;
+}
+
+.movie-media-download-control:has(.movie-media-download-button.is-progress) .movie-download-action-menu {
+    position: absolute;
+    right: 43px;
+    top: 50%;
+    z-index: 3;
+    transform: translateY(-50%);
+}
+
+.movie-media-download-control:has(.movie-media-download-button.is-progress) .movie-download-action-menu .action-menu-inline-items {
+    display: flex;
+}
+
+.movie-download-action-menu .action-menu-item-control {
+    width: 28px;
+    height: 28px;
     font-size: 12px;
 }
 
 .movie-extra-actions {
     align-items: center;
+    min-width: 0;
 }
 
 .movie-extra-actions .btn-icon {
     display: inline-flex;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: center;
 }
 
 .movie-extra-actions .movie-media-download-control {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
     margin: 0;
 }
 
@@ -138,8 +165,24 @@
     font-size: 12px;
 }
 
+.movie-extra-actions .movie-media-download-button.is-progress {
+    min-width: 116px;
+    padding-right: 68px;
+}
+
 .movie-extra-actions .movie-media-downloaded {
-    white-space: nowrap;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    justify-content: flex-end;
+    text-align: right;
+    white-space: normal;
+}
+
+.movie-extra-actions .movie-media-downloaded > span {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: break-word;
 }
 
 @media (prefers-color-scheme: dark) {
