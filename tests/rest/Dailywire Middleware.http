@@ -55,6 +55,9 @@ Authorization: Bearer {{access_token}}
 ### Extra's clip
 GET https://middleware-prod.dailywire.com/middleware/v4/getClip?slug=shut-in-official-trailer
 
+### GET show
+GET https://middleware-prod.dailywire.com/middleware/v4/getShowPage?slug=scamala-kamala-harris-unmasked&membershipPlan=ALL_ACCESS
+Authorization: Bearer {{access_token}}
 
 
 ### Get movie details: Am I racist
