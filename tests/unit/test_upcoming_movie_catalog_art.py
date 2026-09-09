@@ -130,3 +130,45 @@ def test_catalog_missing_portrait_also_uses_canonical_movie_page_art(monkeypatch
     page = service.get_catalog_movies(offset=0, limit=24, search=None)
 
     assert page.items[0].thumbnail_portrait_path == "canonical-poster.png"
+
+
+def test_indexed_movie_persists_canonical_movie_page_art(monkeypatch) -> None:
+    import backend.db.models  # noqa: F401
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from backend.api.endpoints.movies import service
+    from backend.db import Base
+    from backend.db.models import Movie
+    from dailywire_api.records import DwMovieRecord
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    try:
+        monkeypatch.setattr(service, "ensure_movie_release_metadata", lambda *_args: None)
+        movie_data = DwMovieRecord.model_validate({
+            "pid": "movie-1",
+            "slug": "upcoming-movie",
+            "title": "Upcoming Movie | Final Trailer",
+            "sharingURL": "https://www.dailywire.com/videos/upcoming-movie",
+            "status": "scheduled",
+            "images": {
+                "movie_poster_image": "canonical-poster.png",
+                "movie_thumbnail_image": "canonical-thumbnail.png",
+                "movie_web_background_image": "canonical-background.png",
+            },
+        })
+
+        movie, created = service.index_dailywire_movie(session, movie_data)
+        session.commit()
+        session.expire_all()
+
+        persisted = session.query(Movie).filter(Movie.id == movie.id).one()
+        assert created is True
+        assert persisted.thumbnail_portrait_path == "canonical-poster.png"
+        assert persisted.thumbnail_landscape_path == "canonical-thumbnail.png"
+        assert persisted.background_image_path == "canonical-background.png"
+    finally:
+        session.close()
+        engine.dispose()
