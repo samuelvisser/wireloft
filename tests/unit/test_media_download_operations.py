@@ -108,6 +108,7 @@ def test_media_download_operation_is_the_live_execution_owner():
         assert operation.resource_id == download.id
         assert operation.source == "UI"
         assert operation.progress == 0
+        assert operation.prioritized_at is not None
         assert operation.context["media_download_id"] == download.id
         assert operation.context["episode_slug"] == download.media.slug
         assert len(operation.targets) == 1
@@ -148,9 +149,74 @@ def test_system_download_operation_uses_durable_completion_acknowledgement():
         session.commit()
 
         assert operation.status == "QUEUED"
+        assert operation.prioritized_at is None
         # System/API work does not need a toast, but its terminal state must stay
         # discoverable until a frontend invalidates the ordinary domain queries.
         assert operation.notification_seen_at is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_ui_request_promotes_existing_system_queued_download():
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.types import OperationSource
+    from task_manager.tasks.media_download_operations import create_media_download_operation
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="promoted")
+        background = create_media_download_operation(
+            session,
+            download,
+            source=OperationSource.SYSTEM.value,
+        )
+        assert background.prioritized_at is None
+
+        manual = create_media_download_operation(
+            session,
+            download,
+            source=OperationSource.UI.value,
+        )
+
+        assert manual.id == background.id
+        assert manual.prioritized_at is not None
+        assert session.query(TaskOperation).count() == 1
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_manual_download_jumps_ahead_of_background_queue(monkeypatch):
+    from task_manager.scheduler.types import OperationSource
+    from task_manager.tasks import media_download_operations
+
+    session, engine = _session()
+    try:
+        background_download = _make_download(session, slug="background")
+        manual_download = _make_download(session, slug="manual")
+        background = media_download_operations.create_media_download_operation(
+            session,
+            background_download,
+            source=OperationSource.SYSTEM.value,
+        )
+        manual = media_download_operations.create_media_download_operation(
+            session,
+            manual_download,
+            source=OperationSource.UI.value,
+        )
+        session.commit()
+
+        dispatched: list[str] = []
+
+        def capture_dispatch(_session: Session, operation) -> bool:
+            dispatched.append(operation.id)
+            return True
+
+        monkeypatch.setattr(media_download_operations, "_reserve_target_dispatch", capture_dispatch)
+
+        assert media_download_operations.dispatch_queued_media_download_operations(session, budget=2) == 2
+        assert dispatched == [manual.id, background.id]
     finally:
         session.close()
         engine.dispose()

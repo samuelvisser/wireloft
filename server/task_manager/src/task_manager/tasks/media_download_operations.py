@@ -124,6 +124,25 @@ def get_active_media_download_operation(
     )
 
 
+def _prioritize_queued_operation(
+    session: Session,
+    operation: TaskOperation,
+) -> TaskOperation:
+    """Record queue priority for an operation that has not claimed a slot yet."""
+    if not operation.targets:
+        raise ValueError("This queued download has no executable target")
+    target = operation.targets[0]
+    if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
+        # It can still be presented as QUEUED while its SCHEDULED TaskRun is
+        # waiting for a worker thread. At that point the download already owns a
+        # slot, so there is no remaining queue position to change.
+        return operation
+
+    operation.prioritized_at = datetime.now(timezone.utc)
+    session.flush()
+    return operation
+
+
 def prioritize_media_download_operation(
     session: Session,
     media_download_id: int,
@@ -139,18 +158,7 @@ def prioritize_media_download_operation(
     if operation is None or operation.status != OperationStatus.QUEUED.value:
         raise ValueError("This download is not queued")
 
-    if not operation.targets:
-        raise ValueError("This queued download has no executable target")
-    target = operation.targets[0]
-    if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
-        # It can still be presented as QUEUED while its SCHEDULED TaskRun is
-        # waiting for a worker thread. At that point the download already owns a
-        # slot, so there is no remaining queue position to change.
-        return operation
-
-    operation.prioritized_at = datetime.now(timezone.utc)
-    session.flush()
-    return operation
+    return _prioritize_queued_operation(session, operation)
 
 
 def create_media_download_operation(
@@ -160,9 +168,20 @@ def create_media_download_operation(
     source: str = OperationSource.SYSTEM.value,
     is_redownload: bool = False,
 ) -> TaskOperation:
-    """Create the canonical execution operation for one MediaDownload attempt."""
+    """Create the canonical execution operation for one MediaDownload attempt.
+
+    UI-sourced operations represent an explicit download-button click and are
+    automatically prioritized over background/profile work. If automatic work
+    already queued the same MediaDownload, the user click promotes that existing
+    operation rather than creating a duplicate attempt.
+    """
     existing = get_active_media_download_operation(session, download.id)
     if existing is not None:
+        if (
+            source == OperationSource.UI.value
+            and existing.status == OperationStatus.QUEUED.value
+        ):
+            _prioritize_queued_operation(session, existing)
         return existing
 
     target = OperationTargetSpec(
@@ -187,6 +206,11 @@ def create_media_download_operation(
         targets=[target],
         context=_operation_context(download, is_redownload=is_redownload),
     )
+    if (
+        source == OperationSource.UI.value
+        and operation.status == OperationStatus.QUEUED.value
+    ):
+        _prioritize_queued_operation(session, operation)
     session.flush()
     return operation
 
