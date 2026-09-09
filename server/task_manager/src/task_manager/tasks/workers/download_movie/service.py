@@ -147,10 +147,6 @@ def _download_movie_media(
         source_playback_url = _movie_extra_playback_url(client, movie=movie, extra=media)
         _ensure_not_cancelled(cancellation)
     else:
-        # getMoviePage does not expose the full feature's signed playback URL in
-        # the current API response. Keep the existing playback lookup here until
-        # Daily Wire's replacement playback endpoint is identified; all movie
-        # metadata and trailer playback now come from getMoviePage.
         playback = client.get_movie_playback(movie.slug)
         _ensure_not_cancelled(cancellation)
         if not playback.has_video or not playback.video_url:

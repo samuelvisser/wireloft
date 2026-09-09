@@ -258,9 +258,6 @@ class DwCatalogMovieRecord(_CatalogTitleRecord):
 
 
 class DwMovieRecord(DwCatalogMovieRecord):
-    # getMoviePage uses pid for the entity ID and runtime for the feature length.
-    # Keep WireLoft's established names as normalized aliases while retaining the
-    # richer structured fields below.
     dw_id: str = Field(validation_alias=AliasChoices("pid", "id", "dwID", "dwId"))
     duration: float = Field(validation_alias=AliasChoices("runtime", "duration"), default=0)
     sharing_url: str

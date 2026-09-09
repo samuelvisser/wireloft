@@ -255,8 +255,6 @@ def start_controller() -> None:
 
         try:
             # Register workers only when the controller is actually starting.
-            # Importing task helpers during API router construction must remain
-            # side-effect free or worker -> API dependencies can form cycles.
             from task_manager.tasks import load_all_tasks
             load_all_tasks()
 
