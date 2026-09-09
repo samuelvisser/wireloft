@@ -225,3 +225,52 @@ def test_media_item_download_ownership_migration_upgrades_from_c5_and_downgrades
         ), {"download_id": download_id}).scalar_one() is not None
 
     engine.dispose()
+
+
+def test_media_item_download_ownership_migration_recovers_after_interrupted_column_add(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Resume d8 when SQLite kept its first DDL change but not the revision bump."""
+    from backend.db import core
+    from backend.db.migrations import (
+        get_alembic_config,
+        get_current_revisions,
+        upgrade_database,
+    )
+
+    database_path = tmp_path / "interrupted-media-item-upgrade.db"
+    engine = create_engine(
+        f"sqlite:///{database_path.as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+    session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    monkeypatch.setattr(core, "_engine", engine)
+    monkeypatch.setattr(core, "_SessionLocal", session_factory)
+    monkeypatch.setattr(core, "_db_path", database_path)
+
+    command.upgrade(get_alembic_config(), PREVIOUS_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text(
+            "ALTER TABLE settings ADD COLUMN alembic_version_num VARCHAR(32)"
+        ))
+
+    assert get_current_revisions() == (PREVIOUS_REVISION,)
+
+    upgrade_database()
+
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    assert "alembic_version" not in tables
+    assert {
+        "media_items_episode",
+        "media_items_movie",
+        "media_items_movie_extra",
+    } <= tables
+    assert get_current_revisions() == (REVISION,)
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT alembic_version_num FROM settings"
+        )).scalar_one() == REVISION
+
+    engine.dispose()
