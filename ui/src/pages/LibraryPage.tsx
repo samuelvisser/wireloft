@@ -1,11 +1,10 @@
-import {useMemo} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import ShowIndexingProgress from '../components/ShowIndexingProgress/ShowIndexingProgress'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
-import {useDailywireCatalog, useMediaDownloadsView, useMovies, useShowsView} from '../lib/queries'
+import {useMediaDownloadsView, useMovies, useShowsView} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 
 function latestMovieDownload(downloads: MediaDownloadViewRead[] | undefined, slug: string) {
@@ -17,12 +16,7 @@ export default function LibraryPage() {
     const [params, setParams] = useSearchParams()
     const {data: shows, isLoading: showsLoading, error: showsError} = useShowsView()
     const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
-    const {data: dailywireCatalog} = useDailywireCatalog()
     const {data: downloads} = useMediaDownloadsView()
-    const catalogMoviesBySlug = useMemo(
-        () => new Map(dailywireCatalog?.movies.map((movie) => [movie.slug, movie]) ?? []),
-        [dailywireCatalog],
-    )
     const hasShows = !!shows?.length
     const hasMovies = !!movies?.length
 
@@ -105,11 +99,11 @@ export default function LibraryPage() {
             ) : activeType === 'movies' && hasMovies ? (
                 <div className="movie-poster-grid" role="list" aria-label="Movies">
                     {movies!.map((movie) => {
-                        const catalogMovie = catalogMoviesBySlug.get(movie.slug)
                         const image = toImageUrl(
-                            catalogMovie?.thumbnailPortraitPath
-                            || catalogMovie?.thumbnailLandscapePath
-                            || catalogMovie?.backgroundImagePath,
+                            movie.thumbnailPortraitPath
+                            || movie.thumbnailLandscapePath
+                            || movie.backgroundImagePath
+                            || movie.logoImagePath,
                         )
                         const download = latestMovieDownload(downloads, movie.slug)
                         const status = String(download?.downloadStatus || '')
