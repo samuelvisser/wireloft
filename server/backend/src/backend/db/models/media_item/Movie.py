@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from .MovieExtra import MovieExtra
 
 
-class Movie(MediaContentMetadataMixin, MediaItemBase, HasTaskResourcesMixin):
+class Movie(MediaItemBase, MediaContentMetadataMixin, HasTaskResourcesMixin):
     __tablename__ = "movies"
     __mapper_args__ = {
         "polymorphic_identity": MediaType.MOVIE.value,
@@ -35,13 +35,10 @@ class Movie(MediaContentMetadataMixin, MediaItemBase, HasTaskResourcesMixin):
     logo_image_path: Mapped[Optional[str]]
     mature_rating: Mapped[Optional[str]]
 
-    # Canonical Daily Wire movie-page metadata. Structured collections are kept
-    # as JSON because they are descriptive snapshots owned by the parent movie,
-    # not independent WireLoft resources.
-    has_video: Mapped[bool] = mapped_column(default=False, server_default="0", nullable=False)
+    has_video: Mapped[bool] = mapped_column(default=False, server_default="0")
     is_downloadable: Mapped[Optional[bool]]
     status: Mapped[Optional[str]]
-    published_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    published_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
     background: Mapped[Optional[str]]
     byline: Mapped[Optional[str]]
     language: Mapped[Optional[str]]
@@ -99,6 +96,7 @@ class Movie(MediaContentMetadataMixin, MediaItemBase, HasTaskResourcesMixin):
         nullable=True,
     )
 
+    # Relationships
     movie_extras: Mapped[list["MovieExtra"]] = relationship(
         back_populates="movie",
         cascade="all, delete-orphan",

@@ -33,70 +33,31 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     }
     __task_resource_types__ = ("movie_extra",)
     __table_args__ = (
-        UniqueConstraint(
-            "movie_id",
-            "source_id",
-            name="uq_movie_extras_movie_id_source_id",
-        ),
+        UniqueConstraint("movie_id", "source_id", name="uq_movie_extras_movie_id_source_id"),
     )
 
-    id: Mapped[int] = mapped_column(
-        ForeignKey("media_items.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    movie_id: Mapped[int] = mapped_column(
-        ForeignKey("movies.id", ondelete="CASCADE"),
-        index=True,
-        nullable=False,
-    )
-    source_id: Mapped[int] = mapped_column(
-        ForeignKey("movie_extra_sources.id", ondelete="RESTRICT"),
-        index=True,
-        nullable=False,
-    )
-    movie_extra_type: Mapped[str] = mapped_column(
-        default=MovieExtraType.OTHER.value,
-        server_default=MovieExtraType.OTHER.value,
-        nullable=False,
-    )
+    # Table fields
+    id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
+    movie_id: Mapped[int] = mapped_column(ForeignKey("movies.id", ondelete="CASCADE"), index=True, nullable=False)
+    source_id: Mapped[int] = mapped_column(ForeignKey("movie_extra_sources.id", ondelete="RESTRICT"), index=True, nullable=False)
+    movie_extra_type: Mapped[str] = mapped_column(default=MovieExtraType.OTHER.value, server_default=MovieExtraType.OTHER.value, nullable=False)
 
-    movie: Mapped["Movie"] = relationship(
-        back_populates="movie_extras",
-        foreign_keys=[movie_id],
-    )
-    source: Mapped[MovieExtraSource] = relationship(
-        back_populates="movie_extras",
-        lazy="joined",
-        innerjoin=True,
-    )
+    # Relationships
+    movie: Mapped["Movie"] = relationship(back_populates="movie_extras", foreign_keys=[movie_id])
+    source: Mapped[MovieExtraSource] = relationship(back_populates="movie_extras", lazy="joined", innerjoin=True)
 
+    # Related table fields
     slug: AssociationProxy[str] = association_proxy("source", "slug")
     title: AssociationProxy[str] = association_proxy("source", "title")
-    description: AssociationProxy[Optional[str]] = association_proxy(
-        "source", "description"
-    )
+    description: AssociationProxy[Optional[str]] = association_proxy("source", "description")
     duration: AssociationProxy[float] = association_proxy("source", "duration")
-    background_image_path: AssociationProxy[Optional[str]] = association_proxy(
-        "source", "background_image_path"
-    )
-    thumbnail_landscape_path: AssociationProxy[Optional[str]] = association_proxy(
-        "source", "thumbnail_landscape_path"
-    )
-    thumbnail_portrait_path: AssociationProxy[Optional[str]] = association_proxy(
-        "source", "thumbnail_portrait_path"
-    )
-    thumbnail_square_path: AssociationProxy[Optional[str]] = association_proxy(
-        "source", "thumbnail_square_path"
-    )
-    sharing_url: AssociationProxy[Optional[str]] = association_proxy(
-        "source", "sharing_url"
-    )
-    published_date: AssociationProxy[Optional[datetime]] = association_proxy(
-        "source", "published_date"
-    )
-    available_for: AssociationProxy[list[str]] = association_proxy(
-        "source", "available_for"
-    )
+    background_image_path: AssociationProxy[Optional[str]] = association_proxy("source", "background_image_path")
+    thumbnail_landscape_path: AssociationProxy[Optional[str]] = association_proxy("source", "thumbnail_landscape_path")
+    thumbnail_portrait_path: AssociationProxy[Optional[str]] = association_proxy("source", "thumbnail_portrait_path")
+    thumbnail_square_path: AssociationProxy[Optional[str]] = association_proxy("source", "thumbnail_square_path")
+    sharing_url: AssociationProxy[Optional[str]] = association_proxy("source", "sharing_url")
+    published_date: AssociationProxy[Optional[datetime]] = association_proxy("source", "published_date")
+    available_for: AssociationProxy[list[str]] = association_proxy("source", "available_for")
 
     def __init__(self, **kwargs) -> None:
         """Keep direct construction compatible with the pre-source model API."""
@@ -122,8 +83,5 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
 
     def __repr__(self) -> str:
         return (
-            f"<MovieExtra(id={self.id}, movie_id={self.movie_id}, "
-            f"source_id={self.source_id}, movie_extra_type={self.movie_extra_type}, "
-            f"slug={self.slug}, title={self.title}, created_at={self.created_at}, "
-            f"updated_at={self.updated_at})>"
+            f"<MovieExtra(id={self.id}, movie_id={self.movie_id}, source_id={self.source_id}, movie_extra_type={self.movie_extra_type}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"
         )

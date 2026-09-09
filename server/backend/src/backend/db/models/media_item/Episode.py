@@ -17,8 +17,8 @@ if TYPE_CHECKING:
 
 
 class Episode(
-    MediaContentMetadataMixin,
     MediaItemBase,
+    MediaContentMetadataMixin,
     HasMetadataMixin,
     HasTaskResourcesMixin,
 ):

@@ -12,18 +12,10 @@ class MediaContentMetadataMixin:
     them directly; shared movie-extra sources own them for all of their placements.
     """
 
-    title: Mapped[str] = mapped_column(
-        default="",
-        server_default="",
-        nullable=False,
-    )
-    description: Mapped[Optional[str]] = mapped_column(nullable=True)
-    duration: Mapped[float] = mapped_column(
-        default=0.0,
-        server_default="0",
-        nullable=False,
-    )
-    background_image_path: Mapped[Optional[str]] = mapped_column(nullable=True)
-    thumbnail_landscape_path: Mapped[Optional[str]] = mapped_column(nullable=True)
-    thumbnail_portrait_path: Mapped[Optional[str]] = mapped_column(nullable=True)
-    thumbnail_square_path: Mapped[Optional[str]] = mapped_column(nullable=True)
+    title: Mapped[str] = mapped_column(default="", server_default="")
+    description: Mapped[Optional[str]]
+    duration: Mapped[float] = mapped_column(default=0.0, server_default="0")
+    background_image_path: Mapped[Optional[str]]
+    thumbnail_landscape_path: Mapped[Optional[str]]
+    thumbnail_portrait_path: Mapped[Optional[str]]
+    thumbnail_square_path: Mapped[Optional[str]]
