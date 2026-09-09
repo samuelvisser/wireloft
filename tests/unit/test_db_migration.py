@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "e8d1c4b7a205"
+HEAD_REVISION = "b3e6d1f8c704"
+MEDIA_CONTENT_METADATA_REVISION = "e8d1c4b7a205"
 MOVIE_EXTRA_SOURCE_REVISION = "f7c2a5d9e104"
 MOVIE_DW_ID_REMOVAL_REVISION = "d7c4a1f9b203"
 MOVIE_EXTRA_IDENTITY_REVISION = "c9f2d8a1b604"
@@ -25,6 +26,16 @@ DOWNLOAD_EXECUTION_REVISION = "f2c7a4e8b901"
 TASK_OPERATIONS_REVISION = "d4f0a9c2e713"
 WIRELOFT_1_0_REVISION = "c8d4e2f1a7b9"
 BASE_REVISION = "0001"
+
+CONTENT_METADATA_FIELDS = frozenset({
+    "title",
+    "description",
+    "duration",
+    "background_image_path",
+    "thumbnail_landscape_path",
+    "thumbnail_portrait_path",
+    "thumbnail_square_path",
+})
 
 
 @pytest.fixture
@@ -117,8 +128,21 @@ def test_fresh_database_upgrades_to_head(migration_database):
     settings_columns = {column["name"] for column in inspector.get_columns("settings")}
     assert "onboarding_completed" in settings_columns
 
+    media_item_columns = {
+        column["name"] for column in inspector.get_columns("media_items")
+    }
+    assert media_item_columns == {
+        "id",
+        "uuid",
+        "type",
+        "downloaded_date",
+        "created_at",
+        "updated_at",
+    }
+
     episode_columns = {column["name"] for column in inspector.get_columns("episodes")}
     assert "metadata_is_final" in episode_columns
+    assert CONTENT_METADATA_FIELDS <= episode_columns
 
     stream_profile_columns = {column["name"] for column in inspector.get_columns("stream_profiles")}
     assert "ep_id_type_list" in stream_profile_columns
@@ -213,7 +237,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "release_date_lookup_attempted_at",
         "release_date_lookup_error",
         "official_trailer_id",
-    }
+    } | CONTENT_METADATA_FIELDS
 
     movie_extra_source_columns = {
         column["name"] for column in inspector.get_columns("movie_extra_sources")
@@ -221,17 +245,10 @@ def test_fresh_database_upgrades_to_head(migration_database):
     assert movie_extra_source_columns == {
         "id",
         "slug",
-        "title",
-        "description",
-        "duration",
-        "background_image_path",
-        "thumbnail_landscape_path",
-        "thumbnail_portrait_path",
-        "thumbnail_square_path",
         "sharing_url",
         "published_date",
         "available_for",
-    }
+    } | CONTENT_METADATA_FIELDS
     movie_extra_source_unique_constraints = {
         constraint["name"]: constraint
         for constraint in inspector.get_unique_constraints("movie_extra_sources")
@@ -355,6 +372,12 @@ def test_upgrade_from_main_baseline_preserves_movie_rows(migration_database):
         movie = session.query(Movie).one()
         assert movie.id == movie_id
         assert movie.slug == "a-movie"
+        assert movie.title == "A Movie"
+        assert movie.description == "Description"
+        assert movie.duration == 5400
+        assert movie.thumbnail_landscape_path == "movie-land.jpg"
+        assert movie.thumbnail_portrait_path == "movie-port.jpg"
+        assert movie.thumbnail_square_path == "movie-square.jpg"
         assert movie.has_video is False
         assert movie.status is None
         assert movie.images == {}
@@ -585,7 +608,7 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
     check_database()
 
 
-def test_migration_history_is_linear_through_movie_extra_source_metadata():
+def test_migration_history_is_linear_through_media_content_metadata():
     from backend.db.migrations import get_alembic_config, get_head_revisions
 
     scripts = ScriptDirectory.from_config(get_alembic_config())
@@ -593,7 +616,8 @@ def test_migration_history_is_linear_through_movie_extra_source_metadata():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, MOVIE_EXTRA_SOURCE_REVISION),
+        (HEAD_REVISION, MEDIA_CONTENT_METADATA_REVISION),
+        (MEDIA_CONTENT_METADATA_REVISION, MOVIE_EXTRA_SOURCE_REVISION),
         (MOVIE_EXTRA_SOURCE_REVISION, MOVIE_DW_ID_REMOVAL_REVISION),
         (MOVIE_DW_ID_REMOVAL_REVISION, MOVIE_EXTRA_IDENTITY_REVISION),
         (MOVIE_EXTRA_IDENTITY_REVISION, MOVIE_PAGE_METADATA_REVISION),
@@ -609,8 +633,9 @@ def test_migration_history_is_linear_through_movie_extra_source_metadata():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Move globally intrinsic movie-extra metadata onto shared sources."
-    assert revisions[1].doc == "Normalize shared movie-extra sources by immutable slug."
-    assert revisions[2].doc == "Stop persisting Daily Wire IDs for movies and movie extras."
-    assert revisions[3].doc == "Scope movie-extra identity to its parent movie."
-    assert revisions[4].doc == "Persist canonical Daily Wire movie-page metadata."
+    assert revisions[0].doc == "Move reusable media content metadata to concrete owners."
+    assert revisions[1].doc == "Move globally intrinsic movie-extra metadata onto shared sources."
+    assert revisions[2].doc == "Normalize shared movie-extra sources by immutable slug."
+    assert revisions[3].doc == "Stop persisting Daily Wire IDs for movies and movie extras."
+    assert revisions[4].doc == "Scope movie-extra identity to its parent movie."
+    assert revisions[5].doc == "Persist canonical Daily Wire movie-page metadata."

@@ -14,16 +14,18 @@ from backend.utils.helpers import generate_uuid
 class _MovieAPIBaseIn(RequestBase):
     """Fields for requests: validate here if needed."""
 
-    # Fields in the media_items table
+    # Reusable content metadata is stored directly on the Movie table.
     title: str
-    extended_title: Optional[str] = None
     description: Optional[str] = None
-    downloaded_date: Optional[AwareDatetime] = None
     duration: float = 0
     background_image_path: Optional[str] = None
     thumbnail_landscape_path: Optional[str] = None
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
+
+    # Movie-specific metadata and MediaItem placement state.
+    extended_title: Optional[str] = None
+    downloaded_date: Optional[AwareDatetime] = None
     sharing_url: Optional[str] = None
     author_name: Optional[str] = None
     author_slug: Optional[str] = None

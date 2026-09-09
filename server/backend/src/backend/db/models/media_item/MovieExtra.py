@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import ForeignKey, UniqueConstraint, select
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.types.media_types import MediaType, MovieExtraType
@@ -35,20 +35,18 @@ _SOURCE_METADATA_FIELDS = (
 class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     """A movie-specific placement of one globally identified extra clip.
 
-    The immutable identity and all clip-level metadata live on
-    ``MovieExtraSource``. This row remains a ``MediaItemBase`` only because it is
-    the downloadable placement under one parent movie. Consequently the generic
-    ``(media_item_id, local_media_profile_id)`` download uniqueness rule remains
-    valid even when the same source is listed under several movies.
-
-    ``media_items`` predates source normalization and physically contains common
-    metadata columns for every media subtype. Movie-extra rows keep neutral
-    placeholders in those inherited columns; the public attributes below are
-    source-backed, so global metadata is stored only once.
+    MovieExtra intentionally does not inherit MediaContentMetadataMixin. Its
+    source owns all intrinsic clip metadata, while this MediaItem owns only the
+    parent-specific placement/download identity and contextual classification.
+    The proxy properties keep existing call sites independent of that storage
+    normalization.
     """
 
     __tablename__ = "movie_extras"
-    __mapper_args__ = {"polymorphic_identity": MediaType.MOVIE_EXTRA.value}
+    __mapper_args__ = {
+        "polymorphic_identity": MediaType.MOVIE_EXTRA.value,
+        "polymorphic_load": "selectin",
+    }
     __task_resource_types__ = ("movie_extra",)
     __table_args__ = (
         UniqueConstraint(
@@ -56,25 +54,6 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
             "source_id",
             name="uq_movie_extras_movie_id_source_id",
         ),
-    )
-
-    # Re-map the inherited clip-level media_items columns under private names so
-    # MovieExtra can expose the authoritative values from its source instead.
-    # They deliberately remain blank/NULL for movie-extra placements.
-    _media_item_title = column_property(MediaItemBase.__table__.c.title)
-    _media_item_description = column_property(MediaItemBase.__table__.c.description)
-    _media_item_duration = column_property(MediaItemBase.__table__.c.duration)
-    _media_item_background_image_path = column_property(
-        MediaItemBase.__table__.c.background_image_path
-    )
-    _media_item_thumbnail_landscape_path = column_property(
-        MediaItemBase.__table__.c.thumbnail_landscape_path
-    )
-    _media_item_thumbnail_portrait_path = column_property(
-        MediaItemBase.__table__.c.thumbnail_portrait_path
-    )
-    _media_item_thumbnail_square_path = column_property(
-        MediaItemBase.__table__.c.thumbnail_square_path
     )
 
     id: Mapped[int] = mapped_column(
@@ -108,7 +87,7 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     )
 
     def __init__(self, **kwargs) -> None:
-        """Keep direct constructors compatible while normalizing their metadata."""
+        """Keep direct construction compatible with the pre-source model API."""
         source = kwargs.pop("source", None)
         source_values = {
             field: kwargs.pop(field)
@@ -116,30 +95,22 @@ class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
             if field in kwargs
         }
 
-        # ``media_items.title`` and ``duration`` are NOT NULL for every media
-        # subtype. Movie-extra metadata no longer belongs there, so use neutral
-        # values rather than duplicating the source metadata.
-        kwargs.setdefault("_media_item_title", "")
-        kwargs.setdefault("_media_item_description", None)
-        kwargs.setdefault("_media_item_duration", 0.0)
-        kwargs.setdefault("_media_item_background_image_path", None)
-        kwargs.setdefault("_media_item_thumbnail_landscape_path", None)
-        kwargs.setdefault("_media_item_thumbnail_portrait_path", None)
-        kwargs.setdefault("_media_item_thumbnail_square_path", None)
+        if source is None and source_values:
+            source = MovieExtraSource(slug=source_values.get("slug", ""))
         if source is not None:
             kwargs["source"] = source
 
         super().__init__(**kwargs)
 
-        # Apply slug first so compatibility construction creates a usable source
-        # before assigning the rest of its metadata.
+        # Slug first establishes/validates immutable source identity before the
+        # remaining metadata is copied onto the shared source.
         for field in _SOURCE_METADATA_FIELDS:
             if field in source_values:
                 setattr(self, field, source_values[field])
 
     def _source_for_assignment(self) -> MovieExtraSource:
         if self.source is None:
-            self.source = MovieExtraSource(slug="", title="", duration=0.0)
+            self.source = MovieExtraSource(slug="")
         return self.source
 
     @hybrid_property

@@ -7,17 +7,17 @@ from sqlalchemy import JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
+from backend.db.mixins.MediaContentMetadataMixin import MediaContentMetadataMixin
 
 if TYPE_CHECKING:
     from .MovieExtra import MovieExtra
 
 
-class MovieExtraSource(Base):
+class MovieExtraSource(MediaContentMetadataMixin, Base):
     """Canonical metadata for one immutable Daily Wire movie-extra clip.
 
-    The source owns everything that is intrinsic to the clip itself. A
-    movie-specific ``MovieExtra`` keeps only placement-specific state such as its
-    parent movie, classification and download history.
+    The reusable content metadata mixin is stored here because the clip itself,
+    not any one parent-specific MovieExtra placement, owns those values.
     """
 
     __tablename__ = "movie_extra_sources"
@@ -27,21 +27,6 @@ class MovieExtraSource(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     slug: Mapped[str] = mapped_column(nullable=False)
-    title: Mapped[str] = mapped_column(
-        default="",
-        server_default="",
-        nullable=False,
-    )
-    description: Mapped[Optional[str]]
-    duration: Mapped[float] = mapped_column(
-        default=0.0,
-        server_default="0",
-        nullable=False,
-    )
-    background_image_path: Mapped[Optional[str]]
-    thumbnail_landscape_path: Mapped[Optional[str]]
-    thumbnail_portrait_path: Mapped[Optional[str]]
-    thumbnail_square_path: Mapped[Optional[str]]
     sharing_url: Mapped[Optional[str]]
     published_date: Mapped[Optional[datetime]]
     available_for: Mapped[list[str]] = mapped_column(

@@ -14,13 +14,13 @@ from backend.utils.helpers import generate_uuid
 # ---------- Strict input (create/update) ----------
 class _EpisodeAPIBaseIn(RequestBase):
     """Fields for requests: validate here if needed."""
-    # Fields in the episodes' table
+    # Episode lifecycle/context fields
     publish_status: EpisodePublishStatus
     went_live_date: Optional[AwareDatetime]
     published_date: Optional[AwareDatetime]
     redownloaded_date: Optional[AwareDatetime]
 
-    # Fields in the media_items table
+    # Reusable content metadata plus MediaItem placement state
     title: str
     description: str
     downloaded_date: Optional[AwareDatetime]
@@ -29,11 +29,8 @@ class _EpisodeAPIBaseIn(RequestBase):
 class EpisodeAPICreate(_EpisodeAPIBaseIn):
     """Request body for creating an episode."""
 
-    # Fields in the episodes' table
     show_id: int
     index: int
-
-    # Fields in the media_items table
     slug: str
 
     @computed_field(return_type=str)
@@ -50,7 +47,6 @@ class EpisodeAPIUpdate(_EpisodeAPIBaseIn):
 class _EpisodeAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, keep types for doc/serialization."""
 
-    # Fields in the episodes' table
     id: int
     show_id: int
     season_id: int
@@ -64,7 +60,6 @@ class _EpisodeAPIBaseOut(ResponseBase):
     sharing_url: str
     early_delete_available: bool = False
 
-    # Fields in the media_items table
     title: str
     description: str
     duration: float

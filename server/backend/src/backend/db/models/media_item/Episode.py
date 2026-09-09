@@ -9,15 +9,24 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
+from backend.db.mixins.MediaContentMetadataMixin import MediaContentMetadataMixin
 from backend.utils.episode_slug import is_no_show_today_slug
 
 if TYPE_CHECKING:
     from backend.db.models import Show, Season
 
 
-class Episode(MediaItemBase, HasMetadataMixin, HasTaskResourcesMixin):
+class Episode(
+    MediaContentMetadataMixin,
+    MediaItemBase,
+    HasMetadataMixin,
+    HasTaskResourcesMixin,
+):
     __tablename__ = "episodes"
-    __mapper_args__ = {"polymorphic_identity": MediaType.EPISODE.value}
+    __mapper_args__ = {
+        "polymorphic_identity": MediaType.EPISODE.value,
+        "polymorphic_load": "selectin",
+    }
     __task_resource_types__ = ("episode",)
     __table_args__ = (
         UniqueConstraint("show_id", "index", name="uq_episode_show_index"),
