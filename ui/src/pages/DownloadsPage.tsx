@@ -126,9 +126,8 @@ function StatusCell({row}: {row: MediaDownloadViewRead}) {
     return <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
 }
 
-// A retry also acts as a restart for queued or active attempts.
+// Queued attempts can be prioritized; retry is for attempts that already started or failed.
 const _RETRYABLE_STATUSES = new Set([
-    'pending',
     'downloading',
     'local_processing',
     'cancelled',
@@ -161,6 +160,27 @@ export default function DownloadsPage() {
         () => downloads?.filter((row) => statusFilter.has(String(row.downloadStatus))),
         [downloads, statusFilter],
     )
+
+    const prioritize = async (row: MediaDownloadViewRead) => {
+        try {
+            const base = (window as any).appConfig.API_URL
+            const r = await fetch(`${base}/media-downloads/${row.id}/prioritize`, {
+                method: 'POST',
+                credentials: 'include',
+            })
+            if (!r.ok) {
+                const {error: message} = await getErrorMessageFromResponse(r)
+                toast.error(message || 'Could not prioritize the download')
+            } else {
+                toast.success('Download prioritized')
+            }
+        } catch {
+            toast.error('Could not prioritize the download')
+        }
+        await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
+        if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
+        if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
+    }
 
     const retry = async (row: MediaDownloadViewRead) => {
         try {
@@ -326,6 +346,7 @@ export default function DownloadsPage() {
                         else if (row.showSlug && row.episodeSlug) navigate(`/show/${row.showSlug}/episode/${row.episodeSlug}`)
                     }}
                     actions={(row) => {
+                        const status = String(row.downloadStatus)
                         const actions: DataTableAction<MediaDownloadViewRead>[] = [
                             {
                                 onClick: (r) => setLogRow(r),
@@ -334,7 +355,14 @@ export default function DownloadsPage() {
                                 classes: 'btn',
                             },
                         ]
-                        if (_RETRYABLE_STATUSES.has(String(row.downloadStatus))) {
+                        if (status === 'pending') {
+                            actions.push({
+                                onClick: () => void prioritize(row),
+                                icon: ['fas', 'arrow-up'],
+                                text: 'Prioritize',
+                                classes: 'btn',
+                            })
+                        } else if (_RETRYABLE_STATUSES.has(status)) {
                             actions.push({
                                 onClick: () => void retry(row),
                                 icon: ['fas', 'rotate-right'],
@@ -342,7 +370,7 @@ export default function DownloadsPage() {
                                 classes: 'btn',
                             })
                         }
-                        if (ACTIVE_DOWNLOAD_STATUSES.has(String(row.downloadStatus))) {
+                        if (ACTIVE_DOWNLOAD_STATUSES.has(status)) {
                             actions.push({
                                 onClick: () => void cancel(row),
                                 icon: ['fas', 'ban'],
