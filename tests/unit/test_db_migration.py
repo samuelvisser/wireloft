@@ -11,10 +11,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 
 HEAD_REVISION = "e1c7a4b9d302"
-MEDIA_DB_REFACTOR_REVISION = "d8f3a1c6b205"
-CONSOLIDATED_MEDIA_ITEM_REVISION = "c5a9e2f7b104"
-MOVIE_EXTRA_IDENTITY_REVISION = "c9f2d8a1b604"
-MOVIE_PAGE_METADATA_REVISION = "a8e4c1d7f203"
 ARTIFACT_IDENTITY_REVISION = "c1f7b9e4d205"
 SHOW_PROFILE_SCOPE_REVISION = "e3a1b5c7d902"
 EPISODE_CANONICAL_REVISION = "a4d7c2e9f610"
@@ -506,8 +502,8 @@ def test_rss_and_episode_type_data_migrations_from_main_baseline(migration_datab
         profiles = connection.execute(text(
             "SELECT base.token, base.ep_id_type_list, rss.feed_url, "
             "rss.dw_video_method, rss.max_items "
-            "FROM stream_profiles AS base "
-            "JOIN stream_profiles_rss AS rss ON rss.id = base.id "
+            "FROM stream_profiles_rss AS rss "
+            "JOIN stream_profiles AS base ON base.id = rss.id "
             "ORDER BY base.token"
         )).mappings().all()
 
@@ -666,7 +662,7 @@ def test_initial_migration_matches_current_orm_metadata(migration_database):
     check_database()
 
 
-def test_migration_history_is_linear_through_media_download_ownership():
+def test_migration_history_consolidates_media_database_refactor():
     from backend.db.migrations import get_alembic_config, get_head_revisions
 
     scripts = ScriptDirectory.from_config(get_alembic_config())
@@ -674,11 +670,7 @@ def test_migration_history_is_linear_through_media_download_ownership():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, MEDIA_DB_REFACTOR_REVISION),
-        (MEDIA_DB_REFACTOR_REVISION, CONSOLIDATED_MEDIA_ITEM_REVISION),
-        (CONSOLIDATED_MEDIA_ITEM_REVISION, MOVIE_EXTRA_IDENTITY_REVISION),
-        (MOVIE_EXTRA_IDENTITY_REVISION, MOVIE_PAGE_METADATA_REVISION),
-        (MOVIE_PAGE_METADATA_REVISION, ARTIFACT_IDENTITY_REVISION),
+        (HEAD_REVISION, ARTIFACT_IDENTITY_REVISION),
         (ARTIFACT_IDENTITY_REVISION, SHOW_PROFILE_SCOPE_REVISION),
         (SHOW_PROFILE_SCOPE_REVISION, EPISODE_CANONICAL_REVISION),
         (EPISODE_CANONICAL_REVISION, EPISODE_RELEASE_REVISION),
@@ -690,8 +682,5 @@ def test_migration_history_is_linear_through_media_download_ownership():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Repair persisted movie-extra trailer classifications."
-    assert revisions[1].doc == "Finalize media-item naming, download ownership, and database metadata."
-    assert revisions[2].doc == "Consolidate media-item storage after movie-extra identity."
-    assert revisions[3].doc == "Scope movie-extra identity to its parent movie."
-    assert revisions[4].doc == "Persist canonical Daily Wire movie-page metadata."
+    assert revisions[0].doc == "Finalize the media database refactor."
+    assert revisions[1].doc == "Persist filesystem identity for downloaded artifacts."

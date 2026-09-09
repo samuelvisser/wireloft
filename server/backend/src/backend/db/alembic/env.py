@@ -31,7 +31,7 @@ def _configure_version_storage() -> None:
         # Only db upgrade needs to understand databases from before the one-time
         # version-storage migration. Keep that compatibility with the migration
         # that owns the schema transition instead of normal migration services.
-        from backend.db.alembic.versions.d8f3a1c6b205_finalize_media_item_download_ownership import (
+        from backend.db.alembic.versions.e1c7a4b9d302_finalize_media_database_refactor import (
             configure_version_storage_for_upgrade,
         )
 
