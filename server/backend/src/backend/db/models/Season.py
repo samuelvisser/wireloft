@@ -1,8 +1,8 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, func, UniqueConstraint
-from sqlalchemy.orm import mapped_column, Mapped, relationship
+from sqlalchemy import ForeignKey, UniqueConstraint, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
@@ -18,13 +18,14 @@ class Season(Base, HasTaskResourcesMixin):
     __task_resource_types__ = ("season",)
     __table_args__ = (
         UniqueConstraint("show_id", "index", name="uq_season_show_index"),
+        UniqueConstraint("show_id", "slug", name="uq_season_show_slug"),
     )
 
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"))
     index: Mapped[int]
-    slug: Mapped[str] = mapped_column(index=True, unique=True)
+    slug: Mapped[str] = mapped_column(index=True)
     name: Mapped[str]
 
     created_at: Mapped[datetime] = mapped_column(
