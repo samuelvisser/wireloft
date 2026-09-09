@@ -45,9 +45,7 @@ class _MovieAPIBaseIn(RequestBase):
     directed_by: list[str] = Field(default_factory=list)
     genres: list[Any] = Field(default_factory=list)
     hosts: list[dict[str, Any]] = Field(default_factory=list)
-    more_like_this: list[dict[str, Any]] = Field(default_factory=list)
     production_companies: list[Any] = Field(default_factory=list)
-    shop_items: list[Any] = Field(default_factory=list)
     starring: list[str] = Field(default_factory=list)
     written_by: list[str] = Field(default_factory=list)
 
@@ -107,9 +105,7 @@ class _MovieAPIBaseOut(ResponseBase):
     directed_by: list[str]
     genres: list[Any]
     hosts: list[dict[str, Any]]
-    more_like_this: list[dict[str, Any]]
     production_companies: list[Any]
-    shop_items: list[Any]
     starring: list[str]
     written_by: list[str]
     release_date: Optional[date]

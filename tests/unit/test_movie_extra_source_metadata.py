@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import Session
 
 
@@ -106,41 +106,26 @@ def test_shared_source_owns_all_intrinsic_movie_extra_metadata() -> None:
         assert all(placement.available_for == source.available_for for placement in placements)
 
         # The joined-inheritance child table now contains only placement data.
+        inspector = inspect(engine)
         assert {
-            column["name"] for column in inspect(engine).get_columns("movie_extras")
+            column["name"]
+            for column in inspector.get_columns("media_items_movie_extras")
         } == {"id", "movie_id", "source_id", "movie_extra_type"}
 
-        # media_items must still contain its historical NOT NULL common columns,
-        # but MovieExtra deliberately stores neutral placeholders there instead
-        # of duplicating globally intrinsic source metadata.
-        raw_media_rows = session.execute(text(
-            "SELECT title, description, duration, background_image_path, "
-            "thumbnail_landscape_path, thumbnail_portrait_path, thumbnail_square_path "
-            "FROM media_items WHERE id IN (:a, :b) ORDER BY id"
-        ), {
-            "a": placements[0].id,
-            "b": placements[1].id,
-        }).mappings().all()
-        assert [dict(row) for row in raw_media_rows] == [
-            {
-                "title": "",
-                "description": None,
-                "duration": 0.0,
-                "background_image_path": None,
-                "thumbnail_landscape_path": None,
-                "thumbnail_portrait_path": None,
-                "thumbnail_square_path": None,
-            },
-            {
-                "title": "",
-                "description": None,
-                "duration": 0.0,
-                "background_image_path": None,
-                "thumbnail_landscape_path": None,
-                "thumbnail_portrait_path": None,
-                "thumbnail_square_path": None,
-            },
-        ]
+        # MediaItemBase owns identity/download state only. Intrinsic clip metadata
+        # exists once, on MovieExtraSource, rather than being duplicated per placement.
+        content_fields = {
+            "title",
+            "description",
+            "duration",
+            "background_image_path",
+            "thumbnail_landscape_path",
+            "thumbnail_portrait_path",
+            "thumbnail_square_path",
+        }
+        assert content_fields.isdisjoint(
+            {column["name"] for column in inspector.get_columns("media_items")}
+        )
 
         api_extra = MovieExtraAPIRead.model_validate(placements[0])
         assert api_extra.slug == source.slug

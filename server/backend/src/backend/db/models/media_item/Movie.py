@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import Date, ForeignKey, JSON
+from sqlalchemy import Date, ForeignKey, Index, JSON, PrimaryKeyConstraint, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.datetime_types import UTCDateTime
@@ -18,16 +18,31 @@ if TYPE_CHECKING:
 
 
 class Movie(MediaItemBase, MediaContentMetadataMixin, HasTaskResourcesMixin):
-    __tablename__ = "movies"
+    __tablename__ = "media_items_movies"
     __mapper_args__ = {
         "polymorphic_identity": MediaType.MOVIE.value,
         "polymorphic_load": "selectin",
     }
     __task_resource_types__ = ("movie",)
+    __table_args__ = (
+        Index("ix_movies_slug", "slug", unique=True),
+        UniqueConstraint(
+            "official_trailer_id",
+            name="uq_movies_official_trailer_id",
+        ),
+        PrimaryKeyConstraint("id", name="pk_movies"),
+    )
 
     # Fields
-    id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
-    slug: Mapped[str] = mapped_column(index=True, unique=True)
+    id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "media_items.id",
+            ondelete="CASCADE",
+            name="fk_movies_id_media_items",
+        ),
+        primary_key=True,
+    )
+    slug: Mapped[str]
     extended_title: Mapped[Optional[str]]
     sharing_url: Mapped[Optional[str]]
     author_name: Mapped[Optional[str]]
@@ -64,9 +79,7 @@ class Movie(MediaItemBase, MediaContentMetadataMixin, HasTaskResourcesMixin):
     directed_by: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
     genres: Mapped[list[Any]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
     hosts: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
-    more_like_this: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
     production_companies: Mapped[list[Any]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
-    shop_items: Mapped[list[Any]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
     starring: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
     written_by: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
 
@@ -87,12 +100,11 @@ class Movie(MediaItemBase, MediaContentMetadataMixin, HasTaskResourcesMixin):
 
     official_trailer_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey(
-            "movie_extras.id",
+            "media_items_movie_extras.id",
             ondelete="SET NULL",
             use_alter=True,
             name="fk_movies_official_trailer_id_movie_extras",
         ),
-        unique=True,
         nullable=True,
     )
 
