@@ -14,7 +14,8 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.download_files import remove_download_artifacts
-from backend.utils.download_paths import replace_download_path_extension, resolve_unique_episode_download_path
+from backend.utils.download_paths import reserve_unique_download_path
+from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
 from dailywire_downloader import (
     DownloadCancelled,
@@ -250,39 +251,47 @@ def _attempt_download(
 
     remux_video = not want_audio and use_hls and get_settings().download_settings.remux_video_to_mp4
     extension = "mp4" if remux_video else info.suggested_extension
-    reserved_path = resolve_unique_episode_download_path(
-        s,
+    requested_destination = resolve_episode_output_path(
         profile.output_template,
         episode=episode,
-        current_download=download,
+        extension=extension,
     )
-    destination = replace_download_path_extension(reserved_path, extension)
+    reservation = reserve_unique_download_path(requested_destination)
+    destination = reservation.path
 
-    # The expected artifact location is domain data, not execution state.
-    download.file_path = str(destination)
-    s.commit()
+    try:
+        # Persist the exact path only after the concrete extension is known and
+        # the filesystem has atomically claimed it. Database rows never
+        # participate in filename uniqueness.
+        download.file_path = str(destination)
+        s.commit()
 
-    if remux_video:
-        result = _download_and_remux_to_mp4(
-            source_url,
-            str(destination),
-            task_progress=task_progress,
-            cancellation=cancellation,
-        )
-    elif use_hls:
-        result = download_hls(
-            source_url,
-            str(destination),
-            progress=task_progress,
-            should_cancel=cancellation,
-        )
-    else:
-        result = download_file(
-            source_url,
-            str(destination),
-            progress=task_progress,
-            should_cancel=cancellation,
-        )
+        if remux_video:
+            result = _download_and_remux_to_mp4(
+                source_url,
+                str(destination),
+                task_progress=task_progress,
+                cancellation=cancellation,
+            )
+        elif use_hls:
+            result = download_hls(
+                source_url,
+                str(destination),
+                progress=task_progress,
+                should_cancel=cancellation,
+            )
+        else:
+            result = download_file(
+                source_url,
+                str(destination),
+                progress=task_progress,
+                should_cancel=cancellation,
+            )
+    finally:
+        # Downloaders replace the empty reservation with the completed file. If
+        # the attempt failed before that replacement, remove only the exact
+        # placeholder inode we created so an unrelated file can never be deleted.
+        reservation.release_if_unclaimed()
 
     return _AttemptResult(
         file_path=result.path,

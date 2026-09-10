@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from backend.utils.download_paths import resolve_unique_episode_download_path
+from backend.utils.output_template import resolve_episode_output_path
 from task_manager.scheduler.db import TaskOperation
 from task_manager.scheduler.operation_control import cancel_operation
 from task_manager.scheduler.types import OperationSource, OperationStatus
@@ -97,11 +97,9 @@ def _prepare_redownloads(
     for download in downloads:
         episode = download.media
         local_media_profile = download.local_media_profile
-        target_path = str(resolve_unique_episode_download_path(
-            s,
+        target_path = str(resolve_episode_output_path(
             local_media_profile.output_template,
             episode=episode,
-            current_download=download,
         ))
 
         if download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
