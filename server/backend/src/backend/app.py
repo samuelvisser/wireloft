@@ -23,17 +23,48 @@ def db_session():
         s.close()
 
 
+def _is_committed_download_artifact(path, stat_dev: int, stat_ino: int) -> bool:
+    """Return whether the database owns this exact published filesystem artifact."""
+    from sqlalchemy import select
+
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session = get_session()
+    try:
+        statement = (
+            select(MediaDownloadBase.id)
+            .where(
+                MediaDownloadBase.file_path == str(path),
+                MediaDownloadBase.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value,
+                MediaDownloadBase.artifact_stat_dev == str(stat_dev),
+                MediaDownloadBase.artifact_stat_ino == str(stat_ino),
+            )
+            .limit(1)
+        )
+        return session.scalar(statement) is not None
+    finally:
+        session.close()
+
+
 @asynccontextmanager
 async def application_lifespan(app: FastAPI):
     """Own the background controller for exactly one ASGI app lifespan."""
     import controller
-    from backend.utils.download_paths import cleanup_abandoned_download_path_reservations
+    from backend.utils.download_paths import (
+        cleanup_abandoned_download_path_reservations,
+        cleanup_abandoned_temporary_downloads,
+    )
 
-    # A killed download worker can leave its filesystem-level destination claim
-    # behind. Clear those claims before controller recovery can dispatch the
-    # interrupted download again and incorrectly force it onto a numbered path.
-    cleanup_abandoned_download_path_reservations(
-        get_settings().download_settings.download_root
+    settings = get_settings().download_settings
+    # A killed download worker can leave either a direct-mode destination claim
+    # or a private temporary-mode workspace behind. Reconcile both before
+    # controller recovery can dispatch interrupted downloads again.
+    cleanup_abandoned_download_path_reservations(settings.download_root)
+    cleanup_abandoned_temporary_downloads(
+        settings.temporary_download_root,
+        settings.download_root,
+        is_published_artifact=_is_committed_download_artifact,
     )
 
     started = False

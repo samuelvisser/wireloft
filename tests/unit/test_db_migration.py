@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "f4d2a7b9c301"
+HEAD_REVISION = "f8a2d6c4b103"
+SEASON_SCOPE_REVISION = "f4d2a7b9c301"
 MEDIA_DATABASE_REFACTOR_REVISION = "e1c7a4b9d302"
 ARTIFACT_IDENTITY_REVISION = "c1f7b9e4d205"
 SHOW_PROFILE_SCOPE_REVISION = "e3a1b5c7d902"
@@ -128,6 +129,11 @@ def test_fresh_database_upgrades_to_head(migration_database):
         "preferred_format",
     ]
     assert bool(settings_index["unique"])
+
+    download_profile_columns = {
+        column["name"] for column in inspector.get_columns("download_profiles")
+    }
+    assert "download_mode" in download_profile_columns
 
     settings_columns = {column["name"] for column in inspector.get_columns("settings")}
     assert settings_columns == {
@@ -507,6 +513,9 @@ def test_rss_and_episode_type_data_migrations_from_main_baseline(migration_datab
             "JOIN stream_profiles AS base ON base.id = rss.id "
             "ORDER BY base.token"
         )).mappings().all()
+        assert connection.execute(text(
+            "SELECT download_mode FROM download_profiles"
+        )).scalar_one() == "system"
 
     profiles_by_token = {profile["token"]: profile for profile in profiles}
     assert profiles_by_token["dw-token"]["ep_id_type_list"] == ["ep", "aux"]
@@ -671,7 +680,8 @@ def test_migration_history_consolidates_media_database_refactor():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, MEDIA_DATABASE_REFACTOR_REVISION),
+        (HEAD_REVISION, SEASON_SCOPE_REVISION),
+        (SEASON_SCOPE_REVISION, MEDIA_DATABASE_REFACTOR_REVISION),
         (MEDIA_DATABASE_REFACTOR_REVISION, ARTIFACT_IDENTITY_REVISION),
         (ARTIFACT_IDENTITY_REVISION, SHOW_PROFILE_SCOPE_REVISION),
         (SHOW_PROFILE_SCOPE_REVISION, EPISODE_CANONICAL_REVISION),
@@ -684,6 +694,7 @@ def test_migration_history_consolidates_media_database_refactor():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Scope season slugs to their show."
-    assert revisions[1].doc == "Finalize the media database refactor."
-    assert revisions[2].doc == "Persist filesystem identity for downloaded artifacts."
+    assert revisions[0].doc == "Add per-download-profile storage mode."
+    assert revisions[1].doc == "Scope season slugs to their show."
+    assert revisions[2].doc == "Finalize the media database refactor."
+    assert revisions[3].doc == "Persist filesystem identity for downloaded artifacts."

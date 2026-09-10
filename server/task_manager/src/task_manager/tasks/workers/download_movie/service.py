@@ -13,8 +13,15 @@ from backend.types.local_media_profile_types import LocalMediaProfileType, Prefe
 from backend.types.media_types import MediaType
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.download_files import remove_download_artifacts
+from backend.utils.download_paths import (
+    TemporaryDownloadWorkspace,
+    create_temporary_download_workspace,
+    publish_temporary_download,
+    reserve_unique_download_path,
+)
 from backend.utils.output_template import resolve_movie_output_path
 from config import get_settings
+from config.settings.submodels import DownloadMode
 from dailywire_api.dw_api.movie import MovieMiddlewareClient
 from dailywire_authorisation import DeviceAuthClient
 from dailywire_downloader import (
@@ -73,6 +80,8 @@ async def run_download_movie(
     if progress is not None:
         progress.set(0, f"Starting download for {media.title}")
     task_progress = TaskProgressWriter(progress)
+    owned_paths: list[str] = []
+    temporary_workspaces: list[TemporaryDownloadWorkspace] = []
 
     try:
         _ensure_not_cancelled(progress)
@@ -83,6 +92,8 @@ async def run_download_movie(
             download=download,
             task_progress=task_progress,
             cancellation=progress,
+            owned_paths=owned_paths,
+            temporary_workspaces=temporary_workspaces,
         )
         _ensure_not_cancelled(progress)
 
@@ -123,12 +134,17 @@ async def run_download_movie(
         )
     except DownloadCancelled:
         session.rollback()
-        remove_download_artifacts(getattr(download, "file_path", None))
+        for path in owned_paths:
+            remove_download_artifacts(path)
         raise
     except Exception:
         session.rollback()
-        remove_download_artifacts(getattr(download, "file_path", None))
+        for path in owned_paths:
+            remove_download_artifacts(path)
         raise
+    finally:
+        for workspace in temporary_workspaces:
+            workspace.cleanup()
 
 
 def _download_movie_media(
@@ -139,6 +155,8 @@ def _download_movie_media(
     download: MediaDownloadBase,
     task_progress: TaskProgressWriter,
     cancellation,
+    owned_paths: list[str],
+    temporary_workspaces: list[TemporaryDownloadWorkspace],
 ) -> tuple[DownloadResult, str]:
     _ensure_not_cancelled(cancellation)
     tokens = DeviceAuthClient().get_token()
@@ -182,39 +200,103 @@ def _download_movie_media(
         format_downloaded = "video"
         use_hls = False
 
-    remux = use_hls and get_settings().download_settings.remux_video_to_mp4
+    settings = get_settings().download_settings
+    remux = use_hls and settings.remux_video_to_mp4
     extension = "mp4" if remux else info.suggested_extension
-    destination = resolve_movie_output_path(
+    requested_destination = resolve_movie_output_path(
         download.local_media_profile.output_template,
         movie=movie,
         media_item=media,
         extension=extension,
     )
-    download.file_path = str(destination)
-    session.commit()
 
+    if DownloadMode(settings.download_mode) is DownloadMode.TEMPORARY:
+        workspace = create_temporary_download_workspace(
+            settings.temporary_download_root,
+            requested_destination,
+        )
+        keep_workspace = False
+        published_destination: str | None = None
+        try:
+            result = _perform_download(
+                source_url,
+                str(workspace.path),
+                remux=remux,
+                use_hls=use_hls,
+                task_progress=task_progress,
+                cancellation=cancellation,
+            )
+            _ensure_not_cancelled(cancellation)
+            destination = publish_temporary_download(
+                workspace.path,
+                requested_destination,
+            )
+            published_destination = str(destination)
+            owned_paths.append(published_destination)
+            temporary_workspaces.append(workspace)
+            keep_workspace = True
+            result = DownloadResult(
+                path=published_destination,
+                bytes_downloaded=result.bytes_downloaded,
+                segments_downloaded=result.segments_downloaded,
+            )
+        except BaseException:
+            if published_destination is not None:
+                remove_download_artifacts(published_destination)
+            raise
+        finally:
+            if not keep_workspace:
+                workspace.cleanup()
+    else:
+        reservation = reserve_unique_download_path(requested_destination)
+        destination = reservation.path
+        owned_paths.append(str(destination))
+        try:
+            download.file_path = str(destination)
+            session.commit()
+            result = _perform_download(
+                source_url,
+                str(destination),
+                remux=remux,
+                use_hls=use_hls,
+                task_progress=task_progress,
+                cancellation=cancellation,
+            )
+        finally:
+            reservation.release_if_unclaimed()
+
+    return result, format_downloaded
+
+
+def _perform_download(
+        source_url: str,
+        destination: str,
+        *,
+        remux: bool,
+        use_hls: bool,
+        task_progress: TaskProgressWriter,
+        cancellation,
+) -> DownloadResult:
     if remux:
-        result = _download_and_remux(
+        return _download_and_remux(
             source_url,
-            str(destination),
+            destination,
             task_progress,
             cancellation,
         )
-    elif use_hls:
-        result = download_hls(
+    if use_hls:
+        return download_hls(
             source_url,
-            str(destination),
+            destination,
             progress=task_progress,
             should_cancel=cancellation,
         )
-    else:
-        result = download_file(
-            source_url,
-            str(destination),
-            progress=task_progress,
-            should_cancel=cancellation,
-        )
-    return result, format_downloaded
+    return download_file(
+        source_url,
+        destination,
+        progress=task_progress,
+        should_cancel=cancellation,
+    )
 
 
 def _movie_extra_playback_url(

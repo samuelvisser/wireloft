@@ -1,4 +1,4 @@
-import type {FilenameRestrictionMode} from '../../types/schemas/settings'
+import type {DownloadMode, FilenameRestrictionMode} from '../../types/schemas/settings'
 import ReadMore from '../../utils/ReadMore'
 import CronEditor from './CronEditor'
 import type {SettingsTabProps} from './SettingsTabTypes'
@@ -19,6 +19,12 @@ const FILENAME_RESTRICTION_LABELS = {
     restricted: 'Restricted filenames',
 } satisfies Record<FilenameRestrictionMode, string>
 
+const DOWNLOAD_MODES = ['direct', 'temporary'] as const
+const DOWNLOAD_MODE_LABELS = {
+    direct: 'Save directly to downloads',
+    temporary: 'Save to temporary folder first',
+} satisfies Record<DownloadMode, string>
+
 export default function DownloadsSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
     return (
         <>
@@ -36,6 +42,46 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                         next.downloadSettings.downloadRoot = value
                     })}
                     help="Local Media Profile output paths are resolved from this storage location where applicable."
+                    wide
+                />
+                <SelectField
+                    id="settings-download-mode"
+                    label="Default download behavior"
+                    value={draft.downloadSettings.downloadMode}
+                    options={DOWNLOAD_MODES}
+                    optionLabels={DOWNLOAD_MODE_LABELS}
+                    error={errorFor('downloadSettings.downloadMode')}
+                    environmentVariable={environmentVariableFor('downloadSettings.downloadMode')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.downloadMode = value as DownloadMode
+                    })}
+                    help={
+                        <ReadMore summary="Choose whether incomplete downloads are written in their destination or staged elsewhere first.">
+                            <p>
+                                <strong>Save directly to downloads</strong> writes temporary files next to the final media file and reserves the final filename while downloading.
+                            </p>
+                            <p>
+                                <strong>Save to temporary folder first</strong> keeps all partial download and remux files in the temporary download folder. Only after the media is fully complete does WireLoft choose an unused final filename and publish the completed file to the download root.
+                            </p>
+                            <p>
+                                Temporary mode is particularly useful when the destination folder is used by a media server and you do not want it to pick up partly downloaded or empty files.
+                            </p>
+                            <p>
+                                The temporary folder must be on the same filesystem or volume as the final download destination so WireLoft can publish the completed file atomically without exposing a partial copy.
+                            </p>
+                        </ReadMore>
+                    }
+                />
+                <TextField
+                    id="settings-temporary-download-root"
+                    label="Temporary download folder"
+                    value={draft.downloadSettings.temporaryDownloadRoot}
+                    error={errorFor('downloadSettings.temporaryDownloadRoot')}
+                    environmentVariable={environmentVariableFor('downloadSettings.temporaryDownloadRoot')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.temporaryDownloadRoot = value
+                    })}
+                    help="Used whenever the system default or a Download Profile is set to save to a temporary folder first. Keep it on the same filesystem or volume as the download root."
                     wide
                 />
                 <SelectField

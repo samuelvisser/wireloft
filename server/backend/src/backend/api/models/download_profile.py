@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 
 from backend.api.models.base import ResponseBase, RequestBase
-from backend.types.download_profile_types import EpIdType
+from backend.types.download_profile_types import DownloadProfileStorageMode, EpIdType
 
 
 # ---------- Strict input (create/update) ----------
 class DownloadProfileAPIBaseIn(RequestBase):
     enable_profile: bool
+    download_mode: DownloadProfileStorageMode = DownloadProfileStorageMode.SYSTEM
     ep_id_type_list: list[EpIdType]
 
 
@@ -34,6 +35,7 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     local_media_profile_id: int
     type: str
     enable_profile: bool
+    download_mode: DownloadProfileStorageMode = DownloadProfileStorageMode.SYSTEM
     ep_id_type_list: list[EpIdType]
 
 

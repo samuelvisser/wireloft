@@ -10,13 +10,22 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
 from backend.db.models.media_download import MediaDownloadBase
-from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.download_profile_types import (
+    DownloadProfileStorageMode,
+    MediaDownloadArtifactStatus,
+)
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.download_files import remove_download_artifacts
-from backend.utils.download_paths import reserve_unique_download_path
+from backend.utils.download_paths import (
+    TemporaryDownloadWorkspace,
+    create_temporary_download_workspace,
+    publish_temporary_download,
+    reserve_unique_download_path,
+)
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
+from config.settings.submodels import DownloadMode
 from dailywire_downloader import (
     DownloadCancelled,
     DownloadError,
@@ -47,6 +56,20 @@ def _ensure_not_cancelled(progress) -> None:
         raise DownloadCancelled("Download was canceled")
 
 
+def _effective_download_mode(download: MediaDownloadBase) -> DownloadMode:
+    """Resolve a Download Profile override against the current system default."""
+    system_mode = DownloadMode(get_settings().download_settings.download_mode)
+    profile = getattr(download, "download_profile", None)
+    profile_mode = getattr(
+        profile,
+        "download_mode",
+        DownloadProfileStorageMode.SYSTEM.value,
+    )
+    if profile_mode == DownloadProfileStorageMode.SYSTEM.value:
+        return system_mode
+    return DownloadMode(profile_mode)
+
+
 async def run_download_episode(
         s: Session,
         *,
@@ -73,6 +96,8 @@ async def run_download_episode(
 
     want_audio = profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
     task_progress = TaskProgressWriter(progress)
+    owned_paths: list[str] = []
+    temporary_workspaces: list[TemporaryDownloadWorkspace] = []
 
     try:
         _ensure_not_cancelled(progress)
@@ -84,6 +109,8 @@ async def run_download_episode(
             want_audio=want_audio,
             task_progress=task_progress,
             cancellation=progress,
+            owned_paths=owned_paths,
+            temporary_workspaces=temporary_workspaces,
         )
         _ensure_not_cancelled(progress)
 
@@ -137,12 +164,21 @@ async def run_download_episode(
         )
     except DownloadCancelled:
         s.rollback()
-        remove_download_artifacts(getattr(download, "file_path", None))
+        for path in owned_paths:
+            remove_download_artifacts(path)
         raise
     except Exception:
         s.rollback()
-        remove_download_artifacts(getattr(download, "file_path", None))
+        for path in owned_paths:
+            remove_download_artifacts(path)
         raise
+    finally:
+        # Successful temporary-mode publication intentionally keeps its staging
+        # hard link and recovery marker until the database transaction above has
+        # committed. Normal completion removes them here; an unclean shutdown
+        # leaves them for startup reconciliation.
+        for workspace in temporary_workspaces:
+            workspace.cleanup()
 
 
 def _download_with_url_refresh(
@@ -154,6 +190,8 @@ def _download_with_url_refresh(
         want_audio: bool,
         task_progress: TaskProgressWriter,
         cancellation,
+        owned_paths: list[str],
+        temporary_workspaces: list[TemporaryDownloadWorkspace],
 ) -> _AttemptResult:
     """Try the stored media URL; on a missing/unusable URL refresh from DW once."""
     _ensure_not_cancelled(cancellation)
@@ -177,6 +215,8 @@ def _download_with_url_refresh(
             want_audio=want_audio,
             task_progress=task_progress,
             cancellation=cancellation,
+            owned_paths=owned_paths,
+            temporary_workspaces=temporary_workspaces,
         )
     except MediaUnavailableError:
         if refreshed:
@@ -195,6 +235,8 @@ def _download_with_url_refresh(
             want_audio=want_audio,
             task_progress=task_progress,
             cancellation=cancellation,
+            owned_paths=owned_paths,
+            temporary_workspaces=temporary_workspaces,
         )
 
 
@@ -218,8 +260,10 @@ def _attempt_download(
         want_audio: bool,
         task_progress: TaskProgressWriter,
         cancellation,
+        owned_paths: list[str],
+        temporary_workspaces: list[TemporaryDownloadWorkspace],
 ) -> _AttemptResult:
-    """Probe the URL, pick what to fetch, and download it to its final path."""
+    """Probe the URL, pick what to fetch, and download it according to storage mode."""
     profile = download.local_media_profile
     _ensure_not_cancelled(cancellation)
     info = probe(url)
@@ -249,54 +293,113 @@ def _attempt_download(
             format_downloaded = "video"
             use_hls = False
 
-    remux_video = not want_audio and use_hls and get_settings().download_settings.remux_video_to_mp4
+    settings = get_settings().download_settings
+    remux_video = not want_audio and use_hls and settings.remux_video_to_mp4
     extension = "mp4" if remux_video else info.suggested_extension
     requested_destination = resolve_episode_output_path(
         profile.output_template,
         episode=episode,
         extension=extension,
     )
-    reservation = reserve_unique_download_path(requested_destination)
-    destination = reservation.path
 
-    try:
-        # Persist the exact path only after the concrete extension is known and
-        # the filesystem has atomically claimed it. Database rows never
-        # participate in filename uniqueness.
-        download.file_path = str(destination)
-        s.commit()
-
-        if remux_video:
-            result = _download_and_remux_to_mp4(
+    if _effective_download_mode(download) is DownloadMode.TEMPORARY:
+        workspace = create_temporary_download_workspace(
+            settings.temporary_download_root,
+            requested_destination,
+        )
+        keep_workspace = False
+        published_destination: str | None = None
+        try:
+            result = _perform_download(
                 source_url,
-                str(destination),
+                str(workspace.path),
+                remux_video=remux_video,
+                use_hls=use_hls,
                 task_progress=task_progress,
                 cancellation=cancellation,
             )
-        elif use_hls:
-            result = download_hls(
+            _ensure_not_cancelled(cancellation)
+            destination = publish_temporary_download(
+                workspace.path,
+                requested_destination,
+            )
+            published_destination = str(destination)
+            owned_paths.append(published_destination)
+            temporary_workspaces.append(workspace)
+            keep_workspace = True
+
+            # The MediaDownload keeps its pending template path until the outer
+            # artifact transaction verifies and commits this fully published file.
+            result = DownloadResult(
+                path=published_destination,
+                bytes_downloaded=result.bytes_downloaded,
+                segments_downloaded=result.segments_downloaded,
+            )
+        except BaseException:
+            if published_destination is not None:
+                remove_download_artifacts(published_destination)
+            raise
+        finally:
+            if not keep_workspace:
+                workspace.cleanup()
+    else:
+        reservation = reserve_unique_download_path(requested_destination)
+        destination = reservation.path
+        owned_paths.append(str(destination))
+
+        try:
+            # Direct mode preserves the existing placeholder-based reservation:
+            # persist the exact path after the filesystem has atomically claimed it.
+            download.file_path = str(destination)
+            s.commit()
+            result = _perform_download(
                 source_url,
                 str(destination),
-                progress=task_progress,
-                should_cancel=cancellation,
+                remux_video=remux_video,
+                use_hls=use_hls,
+                task_progress=task_progress,
+                cancellation=cancellation,
             )
-        else:
-            result = download_file(
-                source_url,
-                str(destination),
-                progress=task_progress,
-                should_cancel=cancellation,
-            )
-    finally:
-        # Downloaders replace the empty reservation with the completed file. If
-        # the attempt failed before that replacement, remove only the exact
-        # placeholder inode we created so an unrelated file can never be deleted.
-        reservation.release_if_unclaimed()
+        finally:
+            # Downloaders replace the empty reservation with the completed file.
+            # If the attempt failed first, remove only the placeholder we created.
+            reservation.release_if_unclaimed()
 
     return _AttemptResult(
         file_path=result.path,
         bytes_downloaded=result.bytes_downloaded,
         format_downloaded=format_downloaded,
+    )
+
+
+def _perform_download(
+        source_url: str,
+        destination: str,
+        *,
+        remux_video: bool,
+        use_hls: bool,
+        task_progress: TaskProgressWriter,
+        cancellation,
+) -> DownloadResult:
+    if remux_video:
+        return _download_and_remux_to_mp4(
+            source_url,
+            destination,
+            task_progress=task_progress,
+            cancellation=cancellation,
+        )
+    if use_hls:
+        return download_hls(
+            source_url,
+            destination,
+            progress=task_progress,
+            should_cancel=cancellation,
+        )
+    return download_file(
+        source_url,
+        destination,
+        progress=task_progress,
+        should_cancel=cancellation,
     )
 
 

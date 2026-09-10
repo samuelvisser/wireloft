@@ -296,6 +296,11 @@ class FilenameRestrictionMode(StrEnum):
     RESTRICTED = "restricted"
 
 
+class DownloadMode(StrEnum):
+    DIRECT = "direct"
+    TEMPORARY = "temporary"
+
+
 class DownloadSettings(SubmodelBase):
     verify_downloads_cron: str = Field(..., min_length=1, description="Cron schedule for verifying downloads")
     max_concurrent_downloads: int = Field(
@@ -314,6 +319,14 @@ class DownloadSettings(SubmodelBase):
         description="Timeout in seconds for each download",
     )
     download_root: Path = Field(..., description="Directory on disk that the '/downloads/' prefix of output templates maps to")
+    download_mode: DownloadMode = Field(
+        default=DownloadMode.DIRECT,
+        description="Whether downloads are written directly to their destination or staged in a temporary directory first",
+    )
+    temporary_download_root: Path = Field(
+        ...,
+        description="Directory used to stage complete downloads before publishing them to the download root",
+    )
     filename_restriction_mode: FilenameRestrictionMode = Field(
         default=FilenameRestrictionMode.WINDOWS,
         description="Filename compatibility mode: minimal restrictions, Windows-compatible, or restricted ASCII",
@@ -332,6 +345,9 @@ class DownloadSettings(SubmodelBase):
 
     _validate_download_root = field_validator(
         "download_root", mode="before"
+    )(_validate_non_empty_path)
+    _validate_temporary_download_root = field_validator(
+        "temporary_download_root", mode="before"
     )(_validate_non_empty_path)
 
 

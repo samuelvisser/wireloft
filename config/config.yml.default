@@ -23,5 +23,13 @@ downloadSettings:
   # Directory the '/downloads/' prefix of output templates maps to.
   downloadRoot: /downloads
 
+  # Default behavior for downloads: direct or temporary.
+  downloadMode: direct
+
+  # Staging location when temporary download mode is used. Keeping this on the
+  # same filesystem as downloadRoot lets WireLoft publish completed files
+  # atomically without exposing partial files in their final destination.
+  temporaryDownloadRoot: /downloads/.wireloft-temp
+
   # Filename compatibility: unrestricted, windows, or restricted.
   filenameRestrictionMode: windows

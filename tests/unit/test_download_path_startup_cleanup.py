@@ -51,7 +51,87 @@ def test_startup_cleanup_preserves_completed_file_if_marker_was_not_released(tmp
     assert not reservation.marker_path.exists()
 
 
-def test_application_lifespan_cleans_reservations_before_controller_recovery(monkeypatch):
+def test_startup_cleanup_removes_abandoned_temporary_workspace(tmp_path):
+    from backend.utils.download_paths import (
+        cleanup_abandoned_temporary_downloads,
+        create_temporary_download_workspace,
+    )
+
+    temporary_root = tmp_path / "temporary"
+    download_root = tmp_path / "downloads"
+    destination = download_root / "Same title.m4a"
+    workspace = create_temporary_download_workspace(temporary_root, destination)
+    partial = workspace.path.with_name(workspace.path.name + ".part")
+    partial.write_bytes(b"partial media")
+
+    assert cleanup_abandoned_temporary_downloads(
+        temporary_root,
+        download_root,
+        is_published_artifact=lambda *_args: False,
+    ) == 1
+    assert not workspace.workspace.exists()
+    assert not destination.exists()
+
+
+def test_startup_cleanup_removes_published_file_not_committed_to_database(tmp_path):
+    from backend.utils.download_paths import (
+        cleanup_abandoned_temporary_downloads,
+        create_temporary_download_workspace,
+        publish_temporary_download,
+    )
+
+    temporary_root = tmp_path / "temporary"
+    download_root = tmp_path / "downloads"
+    destination = download_root / "Same title.m4a"
+    workspace = create_temporary_download_workspace(temporary_root, destination)
+    workspace.path.write_bytes(b"complete media")
+    published = publish_temporary_download(workspace.path, destination)
+
+    assert published.read_bytes() == b"complete media"
+    assert workspace.path.exists()
+    assert cleanup_abandoned_temporary_downloads(
+        temporary_root,
+        download_root,
+        is_published_artifact=lambda *_args: False,
+    ) == 1
+
+    assert not published.exists()
+    assert not workspace.workspace.exists()
+
+
+def test_startup_cleanup_preserves_published_file_committed_to_database(tmp_path):
+    from backend.utils.download_paths import (
+        cleanup_abandoned_temporary_downloads,
+        create_temporary_download_workspace,
+        publish_temporary_download,
+    )
+
+    temporary_root = tmp_path / "temporary"
+    download_root = tmp_path / "downloads"
+    destination = download_root / "Same title.m4a"
+    workspace = create_temporary_download_workspace(temporary_root, destination)
+    workspace.path.write_bytes(b"complete media")
+    published = publish_temporary_download(workspace.path, destination)
+    identity = published.stat()
+
+    def is_published(path, stat_dev, stat_ino):
+        return (
+            path == published
+            and stat_dev == identity.st_dev
+            and stat_ino == identity.st_ino
+        )
+
+    assert cleanup_abandoned_temporary_downloads(
+        temporary_root,
+        download_root,
+        is_published_artifact=is_published,
+    ) == 1
+
+    assert published.read_bytes() == b"complete media"
+    assert not workspace.workspace.exists()
+
+
+def test_application_lifespan_cleans_download_state_before_controller_recovery(monkeypatch):
     import controller
     import backend.utils.download_paths as download_paths
     from backend.app import application_lifespan
@@ -60,7 +140,12 @@ def test_application_lifespan_cleans_reservations_before_controller_recovery(mon
     monkeypatch.setattr(
         download_paths,
         "cleanup_abandoned_download_path_reservations",
-        lambda _root: calls.append("cleanup") or 0,
+        lambda _root: calls.append("reservation-cleanup") or 0,
+    )
+    monkeypatch.setattr(
+        download_paths,
+        "cleanup_abandoned_temporary_downloads",
+        lambda *_args, **_kwargs: calls.append("temporary-cleanup") or 0,
     )
     monkeypatch.setattr(controller, "start_controller", lambda: calls.append("start"))
     monkeypatch.setattr(controller, "stop_controller", lambda: calls.append("stop"))
@@ -71,7 +156,13 @@ def test_application_lifespan_cleans_reservations_before_controller_recovery(mon
 
     asyncio.run(run_lifespan())
 
-    assert calls == ["cleanup", "start", "running", "stop"]
+    assert calls == [
+        "reservation-cleanup",
+        "temporary-cleanup",
+        "start",
+        "running",
+        "stop",
+    ]
 
 
 def test_startup_cleanup_removes_partial_marker_without_touching_external_empty_file(tmp_path):
