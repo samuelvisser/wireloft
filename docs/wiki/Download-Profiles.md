@@ -30,14 +30,15 @@ When countdown downloading is enabled, **Redownload final version** lets WireLof
 
 ### Limit downloads
 
-A Podcast Download Profile can be unlimited or use exactly one rolling limit:
+Use **Limit by** to choose how a Podcast Download Profile limits eligible episodes:
 
+- **No limits** — allow all eligible episodes.
 - **Date** — download eligible episodes from the most recent number of days.
 - **Number of episodes** — download only the newest X eligible episodes.
 
-The backend rejects a profile that has both limits active at once.
+The backend rejects a profile that has both rolling limits active at once.
 
-When limiting is first enabled in the UI, the date mode starts at **180 days**. Switching to episode-count mode starts at **5 episodes**. These are form conveniences; at the API/database level a value of `0` means that limit is disabled.
+The date mode starts at **180 days** when selected without an existing date limit. Episode-count mode starts at **5 episodes** when selected without an existing episode-count limit. These are form conveniences; at the API/database level a value of `0` means that limit is disabled, and both values being `0` represents **No limits**.
 
 ### Delete older episodes
 

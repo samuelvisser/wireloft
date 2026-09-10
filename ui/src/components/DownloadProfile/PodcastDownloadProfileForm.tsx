@@ -7,6 +7,8 @@ type Props = {
     mode?: 'create' | 'update'
 }
 
+type LimitMode = 'none' | 'date' | 'episodes'
+
 export default function PodcastDownloadProfileForm({form}: Props) {
     const {control, register, watch, setValue, formState: {errors}} = form
 
@@ -19,24 +21,19 @@ export default function PodcastDownloadProfileForm({form}: Props) {
     const watchedEpisodeCount = Number.isFinite(watchedEpisodeCountRaw) ? watchedEpisodeCountRaw : 0
     const daysInputInvalid = typeof watchedDaysRaw === 'number' && Number.isNaN(watchedDaysRaw)
     const episodeCountInputInvalid = typeof watchedEpisodeCountRaw === 'number' && Number.isNaN(watchedEpisodeCountRaw)
-    const limitEnabled = watchedDays > 0 || watchedEpisodeCount > 0 || daysInputInvalid || episodeCountInputInvalid
-    const limitMode: 'date' | 'episodes' = watchedEpisodeCount > 0 || episodeCountInputInvalid ? 'episodes' : 'date'
+    const limitMode: LimitMode = watchedEpisodeCount > 0 || episodeCountInputInvalid
+        ? 'episodes'
+        : watchedDays > 0 || daysInputInvalid
+            ? 'date'
+            : 'none'
 
-    const updateLimitEnabled = (enabled: boolean) => {
-        if (!enabled) {
+    const updateLimitMode = (mode: LimitMode) => {
+        if (mode === 'none') {
             setValue('downloadDaysInPast', 0, {shouldDirty: true, shouldValidate: true})
             setValue('downloadEpisodeCount', 0, {shouldDirty: true, shouldValidate: true})
             return
         }
 
-        if (!limitEnabled) {
-            // Preserve the existing default when a user first enables limiting.
-            setValue('downloadDaysInPast', 180, {shouldDirty: true, shouldValidate: true})
-            setValue('downloadEpisodeCount', 0, {shouldDirty: true, shouldValidate: true})
-        }
-    }
-
-    const updateLimitMode = (mode: 'date' | 'episodes') => {
         if (mode === 'date') {
             setValue('downloadEpisodeCount', 0, {shouldDirty: true, shouldValidate: true})
             setValue('downloadDaysInPast', watchedDays > 0 ? watchedDays : 180, {shouldDirty: true, shouldValidate: true})
@@ -126,41 +123,23 @@ export default function PodcastDownloadProfileForm({form}: Props) {
             )}
 
             <div className="form-row">
-                <label htmlFor="limit-downloads">Limit downloads</label>
-                <Switch
-                    id="limit-downloads"
-                    checked={limitEnabled}
-                    onChange={updateLimitEnabled}
-                    onColor="#0ea5e9"
-                    offColor="#d1d5db"
-                    uncheckedIcon={false}
-                    checkedIcon={false}
-                    aria-describedby="limit-downloads-help"
-                />
-                <div className="help" id="limit-downloads-help">
-                    Limit which podcast episodes this profile is allowed to download. Leave disabled to allow all eligible episodes.
+                <label htmlFor="download-limit-mode">Limit by</label>
+                <select
+                    id="download-limit-mode"
+                    className="input"
+                    value={limitMode}
+                    onChange={(event) => updateLimitMode(event.target.value as LimitMode)}
+                >
+                    <option value="none">No limits</option>
+                    <option value="date">Date</option>
+                    <option value="episodes">Number of episodes</option>
+                </select>
+                <div className="help">
+                    Choose no limits, a rolling date window, or only the latest number of episodes.
                 </div>
             </div>
 
-            {limitEnabled && (
-                <div className="form-row">
-                    <label htmlFor="download-limit-mode">Limit by</label>
-                    <select
-                        id="download-limit-mode"
-                        className="input"
-                        value={limitMode}
-                        onChange={(event) => updateLimitMode(event.target.value as 'date' | 'episodes')}
-                    >
-                        <option value="date">Date</option>
-                        <option value="episodes">Number of episodes</option>
-                    </select>
-                    <div className="help">
-                        Choose whether to keep a rolling date window or only the latest number of episodes.
-                    </div>
-                </div>
-            )}
-
-            {limitEnabled && limitMode === 'date' && (
+            {limitMode === 'date' && (
                 <div className="form-row">
                     <label htmlFor="days-in-past">Download days in past</label>
                     <input
@@ -190,7 +169,7 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                 </div>
             )}
 
-            {limitEnabled && limitMode === 'episodes' && (
+            {limitMode === 'episodes' && (
                 <div className="form-row">
                     <label htmlFor="episode-count">Latest episodes to download</label>
                     <input
@@ -215,7 +194,7 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                 </div>
             )}
 
-            {limitEnabled && (
+            {limitMode !== 'none' && (
                 <div className="form-row">
                     <label htmlFor="delete-older">Delete older episodes</label>
                     <Controller
