@@ -32,13 +32,19 @@ When countdown downloading is enabled, **Redownload final version** lets WireLof
 
 Use **Limit by** to choose how a Podcast Download Profile limits eligible episodes:
 
-- **No limits** — allow all eligible episodes.
+- **No limits** — do not use a rolling limit. You can optionally set a fixed **Download starting from** date.
 - **Date** — download eligible episodes from the most recent number of days.
 - **Number of episodes** — download only the newest X eligible episodes.
 
-The backend rejects a profile that has both rolling limits active at once.
+The backend rejects a profile that has both rolling limits active at once, or that combines **Download starting from** with either rolling limit.
 
-The date mode starts at **180 days** when selected without an existing date limit. Episode-count mode starts at **5 episodes** when selected without an existing episode-count limit. These are form conveniences; at the API/database level a value of `0` means that limit is disabled, and both values being `0` represents **No limits**.
+The date mode starts at **180 days** when selected without an existing date limit. Episode-count mode starts at **5 episodes** when selected without an existing episode-count limit. These are form conveniences; at the API/database level a value of `0` means that rolling limit is disabled, and both values being `0` represents **No limits**.
+
+### Download starting from
+
+When **Limit by** is set to **No limits**, **Download starting from** provides an optional fixed lower date bound. WireLoft downloads eligible episodes published on or after that date and continues downloading every eligible episode published later.
+
+Episodes published before the selected date are simply ignored by the Download Profile. Existing downloads are not removed, even if they are older than the selected date. Leave the field blank to download every eligible episode regardless of publication date.
 
 ### Delete older episodes
 

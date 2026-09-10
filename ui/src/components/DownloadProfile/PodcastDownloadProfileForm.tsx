@@ -34,6 +34,8 @@ export default function PodcastDownloadProfileForm({form}: Props) {
             return
         }
 
+        setValue('downloadStartingFrom', null, {shouldDirty: true, shouldValidate: true})
+
         if (mode === 'date') {
             setValue('downloadEpisodeCount', 0, {shouldDirty: true, shouldValidate: true})
             setValue('downloadDaysInPast', watchedDays > 0 ? watchedDays : 180, {shouldDirty: true, shouldValidate: true})
@@ -135,9 +137,42 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                     <option value="episodes">Number of episodes</option>
                 </select>
                 <div className="help">
-                    Choose no limits, a rolling date window, or only the latest number of episodes.
+                    Choose whether to use no rolling limit, a rolling date window, or only the latest number of episodes.
                 </div>
             </div>
+
+            {limitMode === 'none' && (
+                <div className="form-row">
+                    <label htmlFor="download-starting-from">Download starting from</label>
+                    <Controller
+                        control={control}
+                        name="downloadStartingFrom"
+                        render={({field}) => (
+                            <input
+                                id="download-starting-from"
+                                className="input"
+                                type="date"
+                                name={field.name}
+                                value={field.value ?? ''}
+                                onChange={(event) => field.onChange(event.target.value || null)}
+                                onBlur={field.onBlur}
+                                ref={field.ref}
+                                aria-invalid={!!errors.downloadStartingFrom}
+                                aria-describedby={errors.downloadStartingFrom ? 'download-starting-from-errors' : 'download-starting-from-help'}
+                            />
+                        )}
+                    />
+                    {errors.downloadStartingFrom && (
+                        <div id="download-starting-from-errors" className="error" role="alert" aria-live="polite">
+                            {errors.downloadStartingFrom.message as string}
+                        </div>
+                    )}
+                    <div className="help" id="download-starting-from-help">
+                        Optional. Download eligible episodes published on or after this date and keep downloading new episodes.
+                        Existing downloads are not removed. Leave blank to download everything.
+                    </div>
+                </div>
+            )}
 
             {limitMode === 'date' && (
                 <div className="form-row">

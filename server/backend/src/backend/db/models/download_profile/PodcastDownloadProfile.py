@@ -1,5 +1,9 @@
-from sqlalchemy import ForeignKey
+from datetime import date
+from typing import Optional
+
+from sqlalchemy import Date, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
+
 from .DownloadProfileBase import DownloadProfileBase
 from backend.types.download_profile_types import DownloadProfileType
 
@@ -14,7 +18,8 @@ class PodcastDownloadProfile(DownloadProfileBase):
     redownload_final: Mapped[bool] = mapped_column(default=False)
     download_days_in_past: Mapped[int] = mapped_column(default=0)
     download_episode_count: Mapped[int] = mapped_column(default=0)
+    download_starting_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     delete_older_episodes: Mapped[bool] = mapped_column(default=True)
 
     def __repr__(self) -> str:
-        return f"<PodcastDownloadProfile(id={self.id}, show_id={self.show_id}, enable_profile={self.enable_profile}, download_days_in_past={self.download_days_in_past}, download_episode_count={self.download_episode_count}, delete_older_episodes={self.delete_older_episodes}, created_at={self.created_at}, updated_at={self.updated_at})>"
+        return f"<PodcastDownloadProfile(id={self.id}, show_id={self.show_id}, enable_profile={self.enable_profile}, download_days_in_past={self.download_days_in_past}, download_episode_count={self.download_episode_count}, download_starting_from={self.download_starting_from}, delete_older_episodes={self.delete_older_episodes}, created_at={self.created_at}, updated_at={self.updated_at})>"

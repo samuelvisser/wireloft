@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "f4d2a7b9c301"
+HEAD_REVISION = "d8b4a1f6c203"
+SEASON_SLUG_SCOPE_REVISION = "f4d2a7b9c301"
 MEDIA_DATABASE_REFACTOR_REVISION = "e1c7a4b9d302"
 ARTIFACT_IDENTITY_REVISION = "c1f7b9e4d205"
 SHOW_PROFILE_SCOPE_REVISION = "e3a1b5c7d902"
@@ -173,7 +174,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         column["name"]
         for column in inspector.get_columns("download_profiles_podcast")
     }
-    assert "download_episode_count" in podcast_columns
+    assert {"download_episode_count", "download_starting_from"} <= podcast_columns
 
     with engine.connect() as connection:
         settings = connection.execute(text(
@@ -671,7 +672,8 @@ def test_migration_history_consolidates_media_database_refactor():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, MEDIA_DATABASE_REFACTOR_REVISION),
+        (HEAD_REVISION, SEASON_SLUG_SCOPE_REVISION),
+        (SEASON_SLUG_SCOPE_REVISION, MEDIA_DATABASE_REFACTOR_REVISION),
         (MEDIA_DATABASE_REFACTOR_REVISION, ARTIFACT_IDENTITY_REVISION),
         (ARTIFACT_IDENTITY_REVISION, SHOW_PROFILE_SCOPE_REVISION),
         (SHOW_PROFILE_SCOPE_REVISION, EPISODE_CANONICAL_REVISION),
@@ -684,6 +686,7 @@ def test_migration_history_consolidates_media_database_refactor():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Scope season slugs to their show."
-    assert revisions[1].doc == "Finalize the media database refactor."
-    assert revisions[2].doc == "Persist filesystem identity for downloaded artifacts."
+    assert revisions[0].doc == "Add fixed podcast download starting date."
+    assert revisions[1].doc == "Scope season slugs to their show."
+    assert revisions[2].doc == "Finalize the media database refactor."
+    assert revisions[3].doc == "Persist filesystem identity for downloaded artifacts."

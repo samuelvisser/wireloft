@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Sequence
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,6 +17,7 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.utils.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path
+from config import get_settings
 from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
@@ -104,6 +106,12 @@ def get_download_profile_episodes(
     if is_podcast and profile.download_days_in_past > 0:
         cutoff = _utc_now() - timedelta(days=profile.download_days_in_past)
 
+    starting_from = None
+    wireloft_timezone = None
+    if is_podcast and profile.download_starting_from is not None:
+        starting_from = profile.download_starting_from
+        wireloft_timezone = ZoneInfo(get_settings().timezone)
+
     allowed_season_ids: Optional[set[int]] = None
     max_chosen_season_index: Optional[int] = None
     include_upcoming = False
@@ -130,9 +138,14 @@ def get_download_profile_episodes(
         else:
             continue
 
-        if cutoff is not None:
-            published = episode.published_date or episode.went_live_date
-            if published is not None and published < cutoff:
+        published = episode.published_date or episode.went_live_date
+        if cutoff is not None and published is not None and published < cutoff:
+            continue
+
+        if starting_from is not None:
+            if published is None or wireloft_timezone is None:
+                continue
+            if published.astimezone(wireloft_timezone).date() < starting_from:
                 continue
 
         if allowed_season_ids is not None and episode.season_id not in allowed_season_ids:
