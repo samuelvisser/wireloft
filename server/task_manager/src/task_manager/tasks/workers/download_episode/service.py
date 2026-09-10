@@ -14,7 +14,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.download_files import remove_download_artifacts
-from backend.utils.output_template import resolve_episode_output_path
+from backend.utils.download_paths import replace_download_path_extension, resolve_unique_episode_download_path
 from config import get_settings
 from dailywire_downloader import (
     DownloadCancelled,
@@ -250,11 +250,13 @@ def _attempt_download(
 
     remux_video = not want_audio and use_hls and get_settings().download_settings.remux_video_to_mp4
     extension = "mp4" if remux_video else info.suggested_extension
-    destination = resolve_episode_output_path(
+    reserved_path = resolve_unique_episode_download_path(
+        s,
         profile.output_template,
         episode=episode,
-        extension=extension,
+        current_download=download,
     )
+    destination = replace_download_path_extension(reserved_path, extension)
 
     # The expected artifact location is domain data, not execution state.
     download.file_path = str(destination)

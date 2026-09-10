@@ -15,7 +15,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.utils.download_files import remove_download_artifacts
-from backend.utils.output_template import resolve_episode_output_path
+from backend.utils.download_paths import resolve_unique_episode_download_path
 from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
@@ -182,9 +182,11 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         .one_or_none()
     )
 
-    target_path = str(resolve_episode_output_path(
+    target_path = str(resolve_unique_episode_download_path(
+        s,
         profile.local_media_profile.output_template,
         episode=episode,
+        current_download=existing,
     ))
 
     if existing is None:

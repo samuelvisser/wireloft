@@ -20,7 +20,8 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from backend.utils.download_files import remove_download_artifacts
-from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
+from backend.utils.download_paths import resolve_unique_episode_download_path
+from backend.utils.output_template import resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
 from task_manager.scheduler.db import TaskDefinition, TaskRun
 from task_manager.scheduler.types import ResourceType
@@ -179,8 +180,14 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         _reconcile_existing_artifact(s, existing)
         if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
             raise HTTPException(status_code=409, detail=f"Episode already has a downloaded file for profile '{profile.name}'")
+        target_path = str(resolve_unique_episode_download_path(
+            s,
+            profile.output_template,
+            episode=episode,
+            current_download=existing,
+        ))
         prepare_media_download_artifact(s, existing)
-        existing.file_path = str(resolve_episode_output_path(profile.output_template, episode=episode))
+        existing.file_path = target_path
         s.flush()
         return existing
 
@@ -189,7 +196,11 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         media_item_id=episode.id,
         local_media_profile_id=profile.id,
         artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
-        file_path=str(resolve_episode_output_path(profile.output_template, episode=episode)),
+        file_path=str(resolve_unique_episode_download_path(
+            s,
+            profile.output_template,
+            episode=episode,
+        )),
     )
     s.add(download)
     s.flush()
