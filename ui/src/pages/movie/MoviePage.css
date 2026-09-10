@@ -38,6 +38,164 @@
     line-height: 1.45;
 }
 
+.movie-media-download-control {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.movie-media-download-control.is-panel {
+    width: 100%;
+    margin-top: 12px;
+}
+
+.movie-media-download-control.is-panel .movie-media-download-button,
+.movie-media-download-control.is-panel .movie-media-downloaded {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.movie-media-download-button {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    justify-content: center;
+}
+
+.movie-media-download-button.is-progress,
+.movie-media-download-button.is-progress:disabled {
+    opacity: 1;
+    cursor: default;
+    border-color: rgba(59, 130, 246, 0.35);
+    background: rgba(59, 130, 246, 0.12);
+    color: var(--text);
+    padding-right: 68px;
+}
+
+.movie-media-download-progress-fill {
+    position: absolute;
+    z-index: 0;
+    inset: 0 auto 0 0;
+    width: 0;
+    background: rgba(59, 130, 246, 0.36);
+    pointer-events: none;
+    transition: width 220ms ease;
+}
+
+.movie-media-download-progress-label {
+    position: relative;
+    z-index: 1;
+    font-weight: 700;
+}
+
+.movie-media-downloaded {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 34px;
+    padding-inline: 6px;
+    box-sizing: border-box;
+    color: #22a95e;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.25;
+}
+
+.movie-media-downloaded > span {
+    min-width: 0;
+}
+
+.movie-download-log-button {
+    flex: 0 0 auto;
+}
+
+.movie-download-action-menu {
+    flex: 0 0 auto;
+}
+
+.movie-download-action-menu .action-menu-trigger,
+.movie-download-action-menu .action-menu-inline-items {
+    display: none;
+}
+
+.movie-media-download-control:has(.movie-media-download-button.is-progress) .movie-download-action-menu {
+    position: absolute;
+    right: 43px;
+    top: 50%;
+    z-index: 3;
+    transform: translateY(-50%);
+}
+
+.movie-media-download-control:has(.movie-media-download-button.is-progress) .movie-download-action-menu .action-menu-inline-items {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding-right: 6px;
+}
+
+.movie-extra-actions {
+    align-items: center;
+    min-width: 0;
+}
+
+.movie-extra-actions .btn-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+}
+
+.movie-extra-actions .movie-media-download-control {
+    flex: 0 0 auto;
+    width: fit-content;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+}
+
+.movie-extra-actions .movie-media-download-button {
+    flex: 0 1 auto;
+    width: max-content;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+.movie-extra-actions .movie-media-download-button.is-progress {
+    width: max-content;
+    padding-right: 68px;
+}
+
+.movie-media-download-control.is-panel .movie-media-download-button.is-progress,
+.movie-extra-actions .movie-media-download-button.is-progress {
+    min-width: 150px;
+}
+
+.movie-extra-actions .movie-media-downloaded {
+    flex: 0 0 auto;
+    width: fit-content;
+    min-width: max-content;
+    max-width: none;
+    justify-content: flex-start;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.movie-extra-actions .movie-media-downloaded > span {
+    min-width: 0;
+    white-space: nowrap;
+}
+
 @media (prefers-color-scheme: dark) {
     .movie-upcoming-badge {
         border-color: rgba(255, 255, 255, 0.2);
@@ -48,5 +206,24 @@
     .movie-download-unavailable {
         border-color: rgba(255, 255, 255, 0.14);
         background: rgba(255, 255, 255, 0.05);
+    }
+
+    .movie-media-download-button.is-progress,
+    .movie-media-download-button.is-progress:disabled {
+        border-color: rgba(96, 165, 250, 0.38);
+        background: rgba(96, 165, 250, 0.12);
+    }
+
+    .movie-media-download-progress-fill {
+        background: rgba(96, 165, 250, 0.34);
+    }
+
+    .movie-download-action-menu .action-menu-item-control {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .movie-download-action-menu .action-menu-item-control:hover,
+    .movie-download-action-menu .action-menu-item-control:focus-visible {
+        background: rgba(255, 255, 255, 0.16);
     }
 }

@@ -75,6 +75,24 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
 
     return (
         <div ref={rootRef} className={`action-menu${open ? ' is-open' : ''}${className ? ` ${className}` : ''}`}>
+            <div className="action-menu-inline-items" role="group" aria-label={label}>
+                {items.map((item, index) => (
+                    <button
+                        key={`${item.label}-${index}`}
+                        type="button"
+                        className={`action-menu-item-control${item.tone === 'danger' ? ' is-danger' : ''}`}
+                        aria-label={item.label}
+                        title={item.label}
+                        disabled={item.disabled}
+                        onClick={() => selectItem(item)}
+                    >
+                        {item.icon
+                            ? <FontAwesomeIcon icon={item.icon} aria-hidden="true"/>
+                            : <span>{item.label}</span>}
+                    </button>
+                ))}
+            </div>
+
             <button
                 ref={triggerRef}
                 type="button"

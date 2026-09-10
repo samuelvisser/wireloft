@@ -310,7 +310,7 @@ export default function DownloadsPage() {
                                 <span className="mobile-summary-title">{rowTitle(row)}</span>
                                 <span className="mobile-summary-subtitle">{rowContext(row)}</span>
                                 <span className="mobile-summary-meta">
-                                    <span>{formatBytes(row.downloadedBytes)}</span>
+                                    <span>{status === 'pending' ? 'Queued' : status === 'downloading' ? `${row.progress}%` : status === 'cancelled' ? 'Cancelled' : formatBytes(row.downloadedBytes)}</span>
                                     <span aria-hidden="true">•</span>
                                     <span>{row.formatDownloaded ?? 'Unknown format'}</span>
                                     <span className={`mobile-summary-status ${statusClass}`}>
