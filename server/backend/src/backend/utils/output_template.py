@@ -6,7 +6,7 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
-from jinja2 import StrictUndefined, meta
+from jinja2 import StrictUndefined, meta, nodes
 from jinja2.exceptions import SecurityError, TemplateError, TemplateSyntaxError, UndefinedError
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 
@@ -79,16 +79,73 @@ def _reject_single_brace_template_variables(output_template: str) -> None:
         )
 
 
-def output_template_fields(output_template: str) -> frozenset[str]:
-    """Return all context variables referenced by a Jinja path template."""
+def _parse_output_template(output_template: str) -> nodes.Template:
+    """Parse an output template with WireLoft's sandbox and normalized errors."""
     _reject_single_brace_template_variables(output_template)
     environment = _jinja_environment()
     try:
-        parsed = environment.parse(output_template)
+        return environment.parse(output_template)
     except TemplateSyntaxError as exc:
         location = f" on line {exc.lineno}" if exc.lineno else ""
         raise ValueError(f"Invalid Jinja template{location}: {exc.message}") from exc
+
+
+def output_template_fields(output_template: str) -> frozenset[str]:
+    """Return all context variables referenced by a Jinja path template."""
+    parsed = _parse_output_template(output_template)
     return frozenset(meta.find_undeclared_variables(parsed))
+
+
+def _statement_may_emit_output(statement: nodes.Stmt) -> bool:
+    """Whether a Jinja statement can emit text into the rendered path."""
+    if isinstance(statement, (nodes.Assign, nodes.AssignBlock, nodes.Macro)):
+        # Assign blocks and macro bodies may contain Output nodes, but their text
+        # is captured/defined rather than emitted where the statement appears.
+        return False
+    if isinstance(statement, nodes.If):
+        branches = [*statement.body, *statement.elif_, *statement.else_]
+        return any(_statement_may_emit_output(child) for child in branches)
+    if isinstance(statement, nodes.For):
+        return any(
+            _statement_may_emit_output(child)
+            for child in [*statement.body, *statement.else_]
+        )
+    if isinstance(statement, nodes.With):
+        return any(_statement_may_emit_output(child) for child in statement.body)
+    return True
+
+
+def validate_output_template_path_requirements(
+    output_template: str,
+    *,
+    allowed_fields: frozenset[str],
+) -> str:
+    """Validate save-time path boundaries without interpreting Jinja in the frontend.
+
+    Non-outputting Jinja statements may precede the literal ``/downloads/``
+    prefix. Any statement that can render text before that prefix is rejected.
+    The raw template still has to end in ``.ext`` so the resulting filename keeps
+    WireLoft's extension marker.
+    """
+    if not output_template.endswith(".ext"):
+        raise ValueError("Output template must end with '.ext'")
+
+    validate_output_template_fields(output_template, allowed_fields=allowed_fields)
+    parsed = _parse_output_template(output_template)
+
+    for statement in parsed.body:
+        if isinstance(statement, nodes.Output):
+            first = statement.nodes[0] if statement.nodes else None
+            if (
+                isinstance(first, nodes.TemplateData)
+                and first.data.startswith(_DOWNLOADS_PREFIX)
+            ):
+                return output_template
+            raise ValueError("Output template must start with '/downloads/'")
+        if _statement_may_emit_output(statement):
+            raise ValueError("Output template must start with '/downloads/'")
+
+    raise ValueError("Output template must start with '/downloads/'")
 
 
 def _to_ascii(value: str) -> str:
