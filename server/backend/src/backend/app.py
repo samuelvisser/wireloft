@@ -27,6 +27,14 @@ def db_session():
 async def application_lifespan(app: FastAPI):
     """Own the background controller for exactly one ASGI app lifespan."""
     import controller
+    from backend.utils.download_paths import cleanup_abandoned_download_path_reservations
+
+    # A killed download worker can leave its filesystem-level destination claim
+    # behind. Clear those claims before controller recovery can dispatch the
+    # interrupted download again and incorrectly force it onto a numbered path.
+    cleanup_abandoned_download_path_reservations(
+        get_settings().download_settings.download_root
+    )
 
     started = False
     try:
