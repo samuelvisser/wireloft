@@ -2,9 +2,14 @@ import {z} from 'zod'
 import {ApiDateTimeSchema} from "./datetime";
 
 
+export const LocalMediaProfileStorageModeSchema = z.enum(['system', 'direct', 'temporary'])
+export type LocalMediaProfileStorageMode = z.infer<typeof LocalMediaProfileStorageModeSchema>
+
+
 // ---------- Strict request (create/update) ----------
 export const LocalMediaProfileSchemaRequest = z.object({
     name: z.string().min(1, 'Name is required'),
+    downloadMode: LocalMediaProfileStorageModeSchema.default('system'),
 })
 
 export const LocalMediaProfileCreateBaseSchema = LocalMediaProfileSchemaRequest
@@ -34,6 +39,7 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     name: z.string(),
     outputTemplate: z.string(),
     preferredFormat: z.string(),
+    downloadMode: LocalMediaProfileStorageModeSchema.default('system'),
     appendMediaTypeToFilename: z.boolean().optional().default(false),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,

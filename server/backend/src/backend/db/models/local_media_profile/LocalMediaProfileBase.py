@@ -3,12 +3,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Index, func
+from sqlalchemy import Boolean, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
-from backend.types.local_media_profile_types import LocalMediaProfileType
+from backend.types.local_media_profile_types import (
+    LocalMediaProfileStorageMode,
+    LocalMediaProfileType,
+)
 
 if TYPE_CHECKING:
     from backend.db.models.download_profile import DownloadProfileBase
@@ -19,10 +22,11 @@ class LocalMediaProfileBase(Base):
     __tablename__ = "local_media_profiles"
     __table_args__ = (
         Index(
-            "uq_local_media_profiles_type_output_template_preferred_format",
+            "uq_local_media_profiles_type_template_format_mode",
             "type",
             "output_template",
             "preferred_format",
+            "download_mode",
             unique=True,
         ),
     )
@@ -41,6 +45,12 @@ class LocalMediaProfileBase(Base):
     name: Mapped[str] = mapped_column(unique=True)
     output_template: Mapped[str]
     preferred_format: Mapped[str]
+    download_mode: Mapped[str] = mapped_column(
+        String(16),
+        default=LocalMediaProfileStorageMode.SYSTEM.value,
+        server_default=LocalMediaProfileStorageMode.SYSTEM.value,
+        nullable=False,
+    )
     append_media_type_to_filename: Mapped[bool] = mapped_column(
         Boolean,
         default=False,

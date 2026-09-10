@@ -6,7 +6,6 @@ import SeriesDownloadProfileForm, {SeasonItem} from './SeriesDownloadProfileForm
 import Select from "react-select";
 import {EpisodeTypeReg} from "../../types/episode";
 import {useEffect, useMemo} from "react";
-import {useSettings} from '../../lib/settings'
 
 export type DownloadProfileMode = 'podcast' | 'series' | 'base'
 
@@ -26,15 +25,9 @@ const NO_DISABLED_EPISODE_TYPES = new Set<string>()
 
 export default function DownloadProfileForm({form, mode, seasons, showRoot, disabledEpisodeTypes}: Props) {
     const {control, watch, setValue, formState: {errors}} = form
-    const {data: settings} = useSettings()
     showRoot ??= true
 
     const unavailableEpisodeTypes = disabledEpisodeTypes ?? NO_DISABLED_EPISODE_TYPES
-    const systemDownloadModeLabel = !settings
-        ? 'Loading system setting…'
-        : settings.values.downloadSettings.downloadMode === 'temporary'
-            ? 'Save to temporary folder first'
-            : 'Save directly to downloads'
 
     // Episode types multiselect wiring
     const selectedTypes: string[] = watch('epIdTypeList') || []
@@ -97,51 +90,6 @@ export default function DownloadProfileForm({form, mode, seasons, showRoot, disa
                     <ReadMore summary={<span>Whether to automatically download episodes</span>}>
                         If you disable the download profile, the show will still be indexed and you can still manually
                         download episodes in the show.
-                    </ReadMore>
-                </div>
-            </div>
-
-            {/* Download storage behavior */}
-            <div className="form-row">
-                <label htmlFor="download-mode">Download behavior</label>
-                <Controller
-                    control={control}
-                    name="downloadMode"
-                    render={({field}) => (
-                        <select
-                            id="download-mode"
-                            className="input"
-                            value={field.value ?? 'system'}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                            aria-invalid={!!errors.downloadMode}
-                            aria-describedby={errors.downloadMode ? 'download-mode-errors' : 'download-mode-help'}
-                        >
-                            <option value="system">System ({systemDownloadModeLabel})</option>
-                            <option value="direct">Save directly to downloads</option>
-                            <option value="temporary">Save to temporary folder first</option>
-                        </select>
-                    )}
-                />
-                {errors.downloadMode && (
-                    <div id="download-mode-errors" className="error" role="alert" aria-live="polite">
-                        {errors.downloadMode.message as string}
-                    </div>
-                )}
-                <div className="help" id="download-mode-help">
-                    <ReadMore summary="Choose whether this profile inherits the system behavior or overrides it.">
-                        <p>
-                            <strong>System</strong> follows the current system-wide default shown in parentheses.
-                        </p>
-                        <p>
-                            <strong>Save directly to downloads</strong> writes temporary files next to their final destination and reserves the final filename while the download is active.
-                        </p>
-                        <p>
-                            <strong>Save to temporary folder first</strong> keeps partial and processing files in the configured temporary download folder, then publishes only the completed media file to its final destination.
-                        </p>
-                        <p>
-                            Temporary mode is particularly useful when the destination folder is used by a media server and you do not want it to pick up partly downloaded or empty files.
-                        </p>
                     </ReadMore>
                 </div>
             </div>

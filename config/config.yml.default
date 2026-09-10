@@ -26,9 +26,9 @@ downloadSettings:
   # Default behavior for downloads: direct or temporary.
   downloadMode: direct
 
-  # Staging location when temporary download mode is used. Keeping this on the
-  # same filesystem as downloadRoot lets WireLoft publish completed files
-  # atomically without exposing partial files in their final destination.
+  # Staging location when temporary download mode is used. It may be on a
+  # different filesystem from downloadRoot, including local storage while the
+  # final media library is on network storage.
   temporaryDownloadRoot: /downloads/.wireloft-temp
 
   # Filename compatibility: unrestricted, windows, or restricted.

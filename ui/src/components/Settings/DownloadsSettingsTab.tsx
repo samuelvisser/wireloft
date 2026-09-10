@@ -61,13 +61,13 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                                 <strong>Save directly to downloads</strong> writes temporary files next to the final media file and reserves the final filename while downloading.
                             </p>
                             <p>
-                                <strong>Save to temporary folder first</strong> keeps all partial download and remux files in the temporary download folder. Only after the media is fully complete does WireLoft choose an unused final filename and publish the completed file to the download root.
+                                <strong>Save to temporary folder first</strong> keeps all download and remux work in the temporary folder. Only after the media is complete does WireLoft choose an unused final filename and publish it to the destination.
                             </p>
                             <p>
-                                Temporary mode is particularly useful when the destination folder is used by a media server and you do not want it to pick up partly downloaded or empty files.
+                                The temporary folder may be on a different filesystem from the media library, including local storage while the library itself is on SMB, NFS, or another network mount. If a cross-filesystem copy is required, WireLoft copies the already-complete media to a hidden <code>.part</code> publication file on the destination filesystem and only then renames it to the final media filename.
                             </p>
                             <p>
-                                The temporary folder must be on the same filesystem or volume as the final download destination so WireLoft can publish the completed file atomically without exposing a partial copy.
+                                Temporary mode is particularly useful when the destination folder is used by a media server and you do not want it to pick up partly downloaded or empty media files.
                             </p>
                         </ReadMore>
                     }
@@ -81,7 +81,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.temporaryDownloadRoot = value
                     })}
-                    help="Used whenever the system default or a Download Profile is set to save to a temporary folder first. Keep it on the same filesystem or volume as the download root."
+                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. It does not need to be on the same filesystem as the download root."
                     wide
                 />
                 <SelectField

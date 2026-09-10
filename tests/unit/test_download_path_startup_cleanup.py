@@ -14,7 +14,6 @@ def test_startup_cleanup_removes_abandoned_placeholder(tmp_path):
     path = reservation.path
     marker_path = reservation.marker_path
 
-    # Simulate an unclean shutdown by intentionally not releasing the claim.
     assert cleanup_abandoned_download_path_reservations(tmp_path) == 1
 
     assert not path.exists()
@@ -43,12 +42,22 @@ def test_startup_cleanup_preserves_completed_file_if_marker_was_not_released(tmp
     completed.write_bytes(b"downloaded media")
     os.replace(completed, reservation.path)
 
-    # Simulate a kill after the atomic final rename but before the worker's
-    # finally block could remove the reservation marker.
     assert cleanup_abandoned_download_path_reservations(tmp_path) == 1
 
     assert reservation.path.read_bytes() == b"downloaded media"
     assert not reservation.marker_path.exists()
+
+
+def test_startup_cleanup_removes_stale_temporary_publication_lock(tmp_path):
+    import backend.utils.download_paths as download_paths
+
+    tmp_path.mkdir(exist_ok=True)
+    lock = download_paths._claim_publication_lock(tmp_path / "Episode.m4a")
+    assert lock is not None
+    assert lock.path.exists()
+
+    assert download_paths.cleanup_abandoned_download_path_reservations(tmp_path) == 1
+    assert not lock.path.exists()
 
 
 def test_startup_cleanup_removes_abandoned_temporary_workspace(tmp_path):
@@ -88,7 +97,6 @@ def test_startup_cleanup_removes_published_file_not_committed_to_database(tmp_pa
     published = publish_temporary_download(workspace.path, destination)
 
     assert published.read_bytes() == b"complete media"
-    assert workspace.path.exists()
     assert cleanup_abandoned_temporary_downloads(
         temporary_root,
         download_root,
@@ -112,14 +120,12 @@ def test_startup_cleanup_preserves_published_file_committed_to_database(tmp_path
     workspace = create_temporary_download_workspace(temporary_root, destination)
     workspace.path.write_bytes(b"complete media")
     published = publish_temporary_download(workspace.path, destination)
-    identity = published.stat()
 
-    def is_published(path, stat_dev, stat_ino):
-        return (
-            path == published
-            and stat_dev == identity.st_dev
-            and stat_ino == identity.st_ino
-        )
+    seen = {}
+
+    def is_published(path, identity):
+        seen["fingerprint"] = identity.fingerprint
+        return path == published
 
     assert cleanup_abandoned_temporary_downloads(
         temporary_root,
@@ -127,6 +133,7 @@ def test_startup_cleanup_preserves_published_file_committed_to_database(tmp_path
         is_published_artifact=is_published,
     ) == 1
 
+    assert seen["fingerprint"]
     assert published.read_bytes() == b"complete media"
     assert not workspace.workspace.exists()
 

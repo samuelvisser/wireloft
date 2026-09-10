@@ -10,13 +10,11 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
 from backend.db.models.media_download import MediaDownloadBase
-from backend.types.download_profile_types import (
-    DownloadProfileStorageMode,
-    MediaDownloadArtifactStatus,
-)
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.download_files import remove_download_artifacts
+from backend.utils.download_modes import effective_download_mode
 from backend.utils.download_paths import (
     TemporaryDownloadWorkspace,
     create_temporary_download_workspace,
@@ -54,20 +52,6 @@ class _AttemptResult:
 def _ensure_not_cancelled(progress) -> None:
     if progress is not None and callable(progress) and progress():
         raise DownloadCancelled("Download was canceled")
-
-
-def _effective_download_mode(download: MediaDownloadBase) -> DownloadMode:
-    """Resolve a Download Profile override against the current system default."""
-    system_mode = DownloadMode(get_settings().download_settings.download_mode)
-    profile = getattr(download, "download_profile", None)
-    profile_mode = getattr(
-        profile,
-        "download_mode",
-        DownloadProfileStorageMode.SYSTEM.value,
-    )
-    if profile_mode == DownloadProfileStorageMode.SYSTEM.value:
-        return system_mode
-    return DownloadMode(profile_mode)
 
 
 async def run_download_episode(
@@ -173,10 +157,9 @@ async def run_download_episode(
             remove_download_artifacts(path)
         raise
     finally:
-        # Successful temporary-mode publication intentionally keeps its staging
-        # hard link and recovery marker until the database transaction above has
-        # committed. Normal completion removes them here; an unclean shutdown
-        # leaves them for startup reconciliation.
+        # Temporary-mode publication keeps its recovery record until the database
+        # transaction above commits. Normal completion removes the workspace here;
+        # an unclean shutdown leaves it for startup reconciliation.
         for workspace in temporary_workspaces:
             workspace.cleanup()
 
@@ -302,7 +285,7 @@ def _attempt_download(
         extension=extension,
     )
 
-    if _effective_download_mode(download) is DownloadMode.TEMPORARY:
+    if effective_download_mode(profile) is DownloadMode.TEMPORARY:
         workspace = create_temporary_download_workspace(
             settings.temporary_download_root,
             requested_destination,

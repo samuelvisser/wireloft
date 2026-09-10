@@ -13,6 +13,7 @@ from backend.types.local_media_profile_types import LocalMediaProfileType, Prefe
 from backend.types.media_types import MediaType
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.download_files import remove_download_artifacts
+from backend.utils.download_modes import effective_download_mode
 from backend.utils.download_paths import (
     TemporaryDownloadWorkspace,
     create_temporary_download_workspace,
@@ -210,7 +211,7 @@ def _download_movie_media(
         extension=extension,
     )
 
-    if DownloadMode(settings.download_mode) is DownloadMode.TEMPORARY:
+    if effective_download_mode(download.local_media_profile) is DownloadMode.TEMPORARY:
         workspace = create_temporary_download_workspace(
             settings.temporary_download_root,
             requested_destination,

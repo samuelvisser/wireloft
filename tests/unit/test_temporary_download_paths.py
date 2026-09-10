@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import errno
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from types import SimpleNamespace
-
-import pytest
 
 
 def test_temporary_download_is_not_visible_at_destination_until_publish(tmp_path):
@@ -27,14 +26,13 @@ def test_temporary_download_is_not_visible_at_destination_until_publish(tmp_path
 
         assert published == destination
         assert destination.read_bytes() == b"complete media"
-        # The private hard link remains until the database commits the artifact;
-        # normal worker cleanup removes the whole workspace immediately after.
-        assert workspace.path.exists()
-        assert workspace.path.stat().st_ino == destination.stat().st_ino
+        assert not list(destination.parent.glob(".wireloft-publish-*.part"))
+        # The primary workspace keeps only its crash-recovery publication record
+        # until the database transaction commits.
+        assert (workspace.workspace / ".wireloft-publication").exists()
     finally:
         workspace.cleanup()
 
-    assert not workspace.path.exists()
     assert destination.read_bytes() == b"complete media"
 
 
@@ -80,7 +78,7 @@ def test_temporary_publish_treats_extensions_as_distinct(tmp_path):
         workspace.cleanup()
 
 
-def test_temporary_publish_is_atomic_between_concurrent_workers(tmp_path):
+def test_temporary_publish_is_collision_safe_between_concurrent_workers(tmp_path):
     from backend.utils.download_paths import (
         create_temporary_download_workspace,
         publish_temporary_download,
@@ -122,7 +120,7 @@ def test_temporary_publish_is_atomic_between_concurrent_workers(tmp_path):
             workspace.cleanup()
 
 
-def test_temporary_publish_rejects_cross_filesystem_publish(tmp_path, monkeypatch):
+def test_temporary_publish_copies_complete_file_when_staging_is_cross_filesystem(tmp_path, monkeypatch):
     import backend.utils.download_paths as download_paths
 
     destination = tmp_path / "downloads" / "Episode.m4a"
@@ -132,45 +130,50 @@ def test_temporary_publish_rejects_cross_filesystem_publish(tmp_path, monkeypatc
     )
     workspace.path.write_bytes(b"complete media")
 
-    def cross_device_link(_source, _destination):
-        raise OSError(errno.EXDEV, "cross-device link")
+    real_replace = download_paths.os.replace
 
-    monkeypatch.setattr(download_paths.os, "link", cross_device_link)
-    try:
-        with pytest.raises(
-            download_paths.TemporaryDownloadFilesystemError,
-            match="same filesystem or volume",
+    def simulate_cross_device_move(source, target):
+        source_path = Path(source)
+        target_path = Path(target)
+        if (
+            source_path == workspace.path
+            and target_path.name.startswith(".wireloft-publish-")
+            and target_path.suffix == ".part"
         ):
-            download_paths.publish_temporary_download(workspace.path, destination)
-        assert not destination.exists()
+            raise OSError(errno.EXDEV, "cross-device link")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(download_paths.os, "replace", simulate_cross_device_move)
+    try:
+        published = download_paths.publish_temporary_download(workspace.path, destination)
+
+        assert published == destination
+        assert destination.read_bytes() == b"complete media"
+        # Cross-filesystem publication copies instead of moving the primary
+        # staged artifact, so it remains until the worker cleans its workspace.
         assert workspace.path.read_bytes() == b"complete media"
+        assert not list(destination.parent.glob(".wireloft-publish-*.part"))
     finally:
         workspace.cleanup()
 
 
-def test_episode_download_profile_mode_resolves_against_system_default(monkeypatch):
+def test_local_media_profile_mode_resolves_against_system_default(monkeypatch):
+    from backend.utils.download_modes import effective_download_mode
     from config import get_settings
     from config.settings.submodels import DownloadMode
-    from task_manager.tasks.workers.download_episode.service import _effective_download_mode
 
     settings = get_settings().download_settings
     monkeypatch.setattr(settings, "download_mode", DownloadMode.TEMPORARY)
 
-    inherited = SimpleNamespace(
-        download_profile=SimpleNamespace(download_mode="system")
-    )
-    forced_direct = SimpleNamespace(
-        download_profile=SimpleNamespace(download_mode="direct")
-    )
-    forced_temporary = SimpleNamespace(
-        download_profile=SimpleNamespace(download_mode="temporary")
-    )
-    manual_download = SimpleNamespace(download_profile=None)
+    inherited = SimpleNamespace(download_mode="system")
+    forced_direct = SimpleNamespace(download_mode="direct")
+    forced_temporary = SimpleNamespace(download_mode="temporary")
+    legacy_profile = SimpleNamespace()
 
-    assert _effective_download_mode(inherited) is DownloadMode.TEMPORARY
-    assert _effective_download_mode(forced_direct) is DownloadMode.DIRECT
-    assert _effective_download_mode(forced_temporary) is DownloadMode.TEMPORARY
-    assert _effective_download_mode(manual_download) is DownloadMode.TEMPORARY
+    assert effective_download_mode(inherited) is DownloadMode.TEMPORARY
+    assert effective_download_mode(forced_direct) is DownloadMode.DIRECT
+    assert effective_download_mode(forced_temporary) is DownloadMode.TEMPORARY
+    assert effective_download_mode(legacy_profile) is DownloadMode.TEMPORARY
 
 
 def test_episode_attempt_keeps_destination_absent_until_temporary_download_finishes(tmp_path, monkeypatch):
@@ -182,7 +185,7 @@ def test_episode_attempt_keeps_destination_absent_until_temporary_download_finis
     settings = get_settings().download_settings
     temporary_root = tmp_path / "temporary"
     destination = tmp_path / "downloads" / "Episode.m4a"
-    monkeypatch.setattr(settings, "download_mode", DownloadMode.TEMPORARY)
+    monkeypatch.setattr(settings, "download_mode", DownloadMode.DIRECT)
     monkeypatch.setattr(settings, "temporary_download_root", temporary_root)
     monkeypatch.setattr(settings, "remux_video_to_mp4", False)
     monkeypatch.setattr(
@@ -201,19 +204,18 @@ def test_episode_attempt_keeps_destination_absent_until_temporary_download_finis
     )
 
     pending_path = "/downloads/pending.ext"
+    profile = SimpleNamespace(
+        output_template="/downloads/{{ episode }}.ext",
+        preferred_format="format_audio_only",
+        download_mode="temporary",
+    )
     download = SimpleNamespace(
-        local_media_profile=SimpleNamespace(
-            output_template="/downloads/{{ episode }}.ext",
-            preferred_format="format_audio_only",
-        ),
-        download_profile=SimpleNamespace(download_mode="system"),
+        local_media_profile=profile,
         file_path=pending_path,
     )
     observed: dict[str, object] = {}
 
     def fake_download_file(_url, dest_path, *, progress=None, should_cancel=None):
-        from pathlib import Path
-
         staged = Path(dest_path)
         observed["staged"] = staged
         assert not destination.exists()
@@ -249,14 +251,11 @@ def test_episode_attempt_keeps_destination_absent_until_temporary_download_finis
     try:
         assert result.file_path == str(destination)
         assert destination.read_bytes() == b"complete media"
-        # The final path is deliberately not persisted by _attempt_download;
-        # run_download_episode does that together with artifact identity/status.
         assert download.file_path == pending_path
         assert owned_paths == [str(destination)]
         assert session.commits == 0
         assert observed["staged"] != destination
         assert len(temporary_workspaces) == 1
-        assert temporary_workspaces[0].path.exists()
     finally:
         for workspace in temporary_workspaces:
             workspace.cleanup()

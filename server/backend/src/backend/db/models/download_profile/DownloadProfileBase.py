@@ -2,13 +2,13 @@ from datetime import datetime
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, func, JSON, String
+from sqlalchemy import ForeignKey, func, JSON
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
-from backend.types.download_profile_types import DownloadProfileStorageMode, DownloadProfileType
+from backend.types.download_profile_types import DownloadProfileType
 
 if TYPE_CHECKING:
     from backend.db.models import EpisodeMediaDownload, LocalMediaProfileBase, Show
@@ -30,12 +30,6 @@ class DownloadProfileBase(Base, HasTaskResourcesMixin):
     local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
     type: Mapped[str]
     enable_profile: Mapped[bool] = mapped_column(default=True)
-    download_mode: Mapped[str] = mapped_column(
-        String(16),
-        default=DownloadProfileStorageMode.SYSTEM.value,
-        server_default=DownloadProfileStorageMode.SYSTEM.value,
-        nullable=False,
-    )
     ep_id_type_list: Mapped[list[str]] = mapped_column(
         MutableList.as_mutable(JSON),
         default=list,

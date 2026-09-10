@@ -9,12 +9,6 @@ class DownloadProfileType(Enum):
     BASE = "base"
 
 
-class DownloadProfileStorageMode(StrEnum):
-    SYSTEM = "system"
-    DIRECT = "direct"
-    TEMPORARY = "temporary"
-
-
 class MediaDownloadArtifactStatus(str, Enum):
     """Persistent state of the file represented by a MediaDownload.
 
