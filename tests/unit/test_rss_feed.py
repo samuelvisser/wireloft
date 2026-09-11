@@ -119,7 +119,7 @@ def _make_rss_profile(
         use_dw_stream=False,
         enable_profile=True,
         token="tok",
-        dw_video_method="podcasting_2_0",
+        dw_video_method="stream_hls_download_m4a",
 ):
     from backend.db.models.stream_profile import RssStreamProfile
 
