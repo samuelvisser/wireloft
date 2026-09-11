@@ -17,6 +17,19 @@ If you need to do any database migrations to implement the feature, please follo
 - Run `backend db history` to verify the new migration is the current head, and no multiple
 migration heads exist.
 
+### Legacy stored values
+WireLoft is still in an early stage and application code should not contain compatibility handling
+for legacy persisted values. If a change renames or otherwise changes the representation of a stored
+configuration value, key, enum/string value, profile option, or other persisted database value, add
+an Alembic data migration that rewrites existing stored data to the new canonical representation.
+
+After that migration, frontend and backend application code must only know about the current canonical
+values. Do not add aliases, legacy-value normalization, fallback branches, dual-read/dual-write logic,
+or other runtime handling whose only purpose is to support values used by an older WireLoft version.
+Legacy identifiers may appear in the Alembic migration itself and in migration-specific tests or
+fixtures needed to verify that migration, but not in normal application code. Treat legacy data
+compatibility as a one-time migration concern rather than a permanent application-code concern.
+
 ## Forms
 WireLoft forms are configured within React Hook Form and Zod to ensure field validation in the frontend.
 However, all backend API endpoints use Pydantic models to do their own validation. In most cases,
