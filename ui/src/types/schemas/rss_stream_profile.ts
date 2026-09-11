@@ -4,6 +4,14 @@ import {PreferredFormatReg} from "../local_media_profile";
 import {RssDwVideoMethodReg} from "../stream_profile";
 import {ApiDateTimeSchema} from "./datetime";
 
+// Accept the delivery-method names used before the September 2026 rename when
+// loading an existing profile, but always turn them into the current value.
+const RssDwVideoMethodSchema = z
+    .string()
+    .transform((value) => RssDwVideoMethodReg.normalize(value) ?? value)
+    .pipe(z.enum(RssDwVideoMethodReg.values))
+    .default('stream_hls_download_m4a')
+
 // ---------- Strict request (create/update) ----------
 const RssStreamProfileBaseSchema = z.object({
     enableProfile: z.boolean().default(true),
@@ -12,7 +20,7 @@ const RssStreamProfileBaseSchema = z.object({
     preferredFormat: z.enum(PreferredFormatReg.values),
     requireExactMatch: z.boolean().default(false),
     epIdTypeList: z.array(z.enum(EpisodeTypeReg.values)).default(['ep', 'aux']),
-    dwVideoMethod: z.enum(RssDwVideoMethodReg.values).default('stream_hls_download_m4a'),
+    dwVideoMethod: RssDwVideoMethodSchema,
     maxItems: z.int().nonnegative().default(0),
 })
 
