@@ -69,7 +69,21 @@ class _EpisodeAPIBaseOut(ResponseBase):
 
 
 class EpisodeAPIRead(_EpisodeAPIBaseOut):
-    """Represents an episode summary/detail item returned by the API."""
+    """Represents a complete episode returned by the detail/full-list API."""
 
     created_at: datetime
     updated_at: datetime
+
+
+class EpisodeAPIReadView(ResponseBase):
+    """Small episode representation used by show grids and browser-side warm caches."""
+
+    id: int
+    show_id: int
+    season_id: int
+    index: int
+    episode_identifier: str
+    publish_status: Union[EpisodePublishStatus, str]
+    title: str
+    slug: str
+    thumbnail_portrait_path: Optional[str]

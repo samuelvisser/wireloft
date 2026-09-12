@@ -49,3 +49,16 @@ export const EpisodeReadSchema = z.looseObject({
     updatedAt: ApiDateTimeSchema,
 })
 export type EpisodeRead = z.infer<typeof EpisodeReadSchema>
+
+export const EpisodeReadViewSchema = z.object({
+    id: z.int(),
+    showId: z.int(),
+    seasonId: z.int(),
+    index: z.number(),
+    episodeIdentifier: z.string(),
+    slug: z.string(),
+    title: z.string(),
+    publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),
+    thumbnailPortraitPath: z.string().nullable().optional(),
+})
+export type EpisodeReadView = z.infer<typeof EpisodeReadViewSchema>

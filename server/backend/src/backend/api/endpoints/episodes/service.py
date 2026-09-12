@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.episode import *
+from backend.db.models import Show
 from backend.db.models.media_item import Episode
 from backend.types.episode_types import EpisodePublishStatus
 from task_manager.events.transactional import queue_event
@@ -22,17 +23,55 @@ _METADATA_REFRESH_TASK_KEY = "refresh_episode_metadata"
 _EARLY_DELETE_TASK_KEY = "monitor_no_usable_media_episode"
 
 
-def get_episodes_by_show_list(s: Session, show_slug: str, limit: int | None = None) -> list[EpisodeAPIRead]:
-    stmt = (
+def _episodes_for_show_stmt(show_slug: str):
+    return (
         select(Episode)
-        .filter(Episode.show.has(slug=show_slug))
+        .join(Show, Episode.show_id == Show.id)
+        .where(Show.slug == show_slug)
         .order_by(Episode.published_date.desc())
     )
+
+
+def get_episodes_by_show_list(s: Session, show_slug: str, limit: int | None = None) -> list[EpisodeAPIRead]:
+    # Join directly through the indexed show slug rather than using Episode.show.has(), which
+    # produces a correlated EXISTS predicate. This keeps the full-list query simple while
+    # preserving the existing endpoint contract for callers that need complete episode records.
+    stmt = _episodes_for_show_stmt(show_slug)
     if limit is not None:
         stmt = stmt.limit(limit)
     episodes: Sequence[Episode] = s.scalars(stmt).all()
 
-    return [EpisodeAPIRead.model_validate(mp) for mp in episodes]
+    return [EpisodeAPIRead.model_validate(episode) for episode in episodes]
+
+
+def get_episode_views_by_show_list(
+        s: Session,
+        show_slug: str,
+        limit: int | None = None,
+) -> list[EpisodeAPIReadView]:
+    # The show grid needs only a small subset of Episode. Selecting those columns directly avoids
+    # constructing full ORM entities (and their select-in metadata relationship), then sending and
+    # validating descriptions/timestamps that the grid never renders.
+    stmt = (
+        select(
+            Episode.id.label("id"),
+            Episode.show_id.label("show_id"),
+            Episode.season_id.label("season_id"),
+            Episode.index.label("index"),
+            Episode.episode_identifier.label("episode_identifier"),
+            Episode.publish_status.label("publish_status"),
+            Episode.title.label("title"),
+            Episode.slug.label("slug"),
+            Episode.thumbnail_portrait_path.label("thumbnail_portrait_path"),
+        )
+        .join(Show, Episode.show_id == Show.id)
+        .where(Show.slug == show_slug)
+        .order_by(Episode.published_date.desc())
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+
+    return [EpisodeAPIReadView.model_validate(row) for row in s.execute(stmt).mappings().all()]
 
 
 def get_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:

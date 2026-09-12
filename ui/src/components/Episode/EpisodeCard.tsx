@@ -2,7 +2,7 @@ import React from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useNavigate} from 'react-router-dom'
 import {statusIcon, statusLabel} from '../../utils/showStatus'
-import {EpisodeRead} from '../../types/schemas/episode'
+import {EpisodeReadView} from '../../types/schemas/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 
 // Beyond this many downloads for one episode, collapse the rest into a "+N" pill
@@ -113,12 +113,12 @@ function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }
 }
 
 type Props = {
-    ep: EpisodeRead
+    ep: EpisodeReadView
     showSlug: string
     downloads?: MediaDownloadViewRead[]
 }
 
-/** The episode thumbnail card used on both the Home page and a show's episode list. */
+/** The episode thumbnail card used on a show's episode list. */
 export default function EpisodeCard({ep, showSlug, downloads}: Props) {
     const initials = ep.title
         .split(' ')

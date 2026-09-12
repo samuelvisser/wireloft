@@ -9,7 +9,7 @@ import {DownloadProfileRead, DownloadProfileReadSchema} from "../types/schemas/d
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {StreamProfileRead, StreamProfileReadSchema, StreamProfileReadView, StreamProfileReadViewSchema} from "../types/schemas/stream_profile_base";
 import {ShowRead, ShowReadSchema, ShowReadView, ShowReadViewSchema} from "../types/schemas/show";
-import {EpisodeRead, EpisodeReadSchema} from "../types/schemas/episode";
+import {EpisodeRead, EpisodeReadSchema, EpisodeReadView, EpisodeReadViewSchema} from "../types/schemas/episode";
 import {SeasonRead, SeasonReadSchema} from "../types/schemas/season";
 import {RssStreamProfileRead, RssStreamProfileReadSchema} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
@@ -273,15 +273,15 @@ export function useShow(id?: string) {
 }
 
 export function useEpisodes(showSlug?: string, opts?: { limit?: number }) {
-    return useQuery<EpisodeRead[], Error, EpisodeRead[], readonly ['episodes', string | undefined, number | undefined]>({
+    return useQuery<EpisodeReadView[], Error, EpisodeReadView[], readonly ['episodes', string | undefined, number | undefined]>({
         queryKey: ['episodes', showSlug, opts?.limit] as const,
         enabled: !!showSlug,
         queryFn: ({signal}) => {
             const base = (window as any).appConfig.API_URL
             const params = opts?.limit ? `?limit=${opts.limit}` : ''
             return fetchParsed(
-                `${base}/episodes/by-show-slug/${showSlug}${params}`,
-                EpisodeReadSchema.array(),
+                `${base}/episodes/as-view/by-show-slug/${encodeURIComponent(showSlug!)}${params}`,
+                EpisodeReadViewSchema.array(),
                 signal,
             )
         },
