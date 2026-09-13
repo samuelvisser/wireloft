@@ -405,7 +405,7 @@ def _append_item(
         _sub_text(item, "pubDate", format_datetime(pub_date))
 
     media_url = f"{media_base_url}/episodes/{episode.slug}"
-    audio_url = f"{media_url}/audio.mp3"
+    audio_url = f"{media_url}/audio.m4a"
     if download is not None:
         file_path = Path(download.file_path)
         length = (
@@ -414,16 +414,16 @@ def _append_item(
             else (download.downloaded_bytes or 0)
         )
         default_type = (
-            "audio/mpeg" if _is_audio_download(download) else "video/mp4"
+            "audio/mp4" if _is_audio_download(download) else "video/mp4"
         )
         mime_type = mimetypes.guess_type(file_path.name)[0] or default_type
         suffix = file_path.suffix.lower() or (
-            ".mp3" if _is_audio_download(download) else ".mp4"
+            ".m4a" if _is_audio_download(download) else ".mp4"
         )
         enclosure_url = f"{media_url}/download{suffix}"
     elif wants_audio:
         length = 0
-        mime_type = "audio/mpeg"
+        mime_type = "audio/mp4"
         enclosure_url = audio_url
     elif dw_video_method in _CACHED_MP4_METHODS:
         length = get_cached_mp4_size(episode.uuid) or 0
@@ -431,7 +431,7 @@ def _append_item(
         enclosure_url = f"{media_url}/video.mp4"
     else:
         length = 0
-        mime_type = "audio/mpeg"
+        mime_type = "audio/mp4"
         enclosure_url = audio_url
 
     SubElement(

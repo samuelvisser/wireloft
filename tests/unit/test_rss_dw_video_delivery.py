@@ -53,9 +53,9 @@ def test_podcasting_2_0_uses_direct_hls_with_audio_fallback():
     enclosure = item.find("enclosure")
     assert enclosure is not None
     assert enclosure.attrib == {
-        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1/audio.mp3",
+        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1/audio.m4a",
         "length": "0",
-        "type": "audio/mpeg",
+        "type": "audio/mp4",
     }
 
     alternates = _children(item, "podcast:alternateEnclosure")
@@ -294,7 +294,7 @@ def test_feed_and_media_head_responses_have_matching_headers():
     assert feed.headers["cache-control"] == "no-store, no-cache, must-revalidate"
 
     redirect = _temporary_stream_redirect(
-        "https://stream.example/audio.mp3?token=fresh",
+        "https://stream.example/audio.m4a?token=fresh",
         head_only=True,
     )
     assert redirect.status_code == 302
@@ -320,7 +320,7 @@ def test_feed_routes_support_get_and_head():
         "/feeds/rss/{token}/{show_slug}.xml",
         "/feeds/rss/{token}/episodes/{episode_slug}",
         "/feeds/rss/{token}/episodes/{episode_slug}/audio",
-        "/feeds/rss/{token}/episodes/{episode_slug}/audio.mp3",
+        "/feeds/rss/{token}/episodes/{episode_slug}/audio.m4a",
         "/feeds/rss/{token}/episodes/{episode_slug}/video.mp4",
     }
     routes = {route.path: route for route in router.routes if route.path in expected_paths}
