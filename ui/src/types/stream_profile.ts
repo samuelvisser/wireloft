@@ -20,7 +20,31 @@ export const RssDwVideoMethodReg = createSelectRegistry("RssDwVideoMethod", {
   },
   'experiment_hls_redirect_302': {
     label: "Experiment: stable video.m3u8 -> fresh DW (302)",
-    help: "RSS contains a stable WireLoft .m3u8 URL; WireLoft resolves a fresh Daily Wire URL only when playback starts and returns HTTP 302",
+    help: "RSS contains a stable WireLoft .m3u8 URL; WireLoft resolves a fresh Daily Wire URL when that URL is requested and returns HTTP 302",
+  },
+  'experiment_hls_https_redirect_302': {
+    label: "Experiment: force HTTPS WireLoft URL -> fresh DW (302)",
+    help: "Forces the HLS alternate enclosure to use https:// even when the generated RSS URL uses http://, isolating whether Pocket Casts rejects cleartext HLS before following the redirect",
+  },
+  'experiment_hls_cached_redirect_302': {
+    label: "Experiment: pre-warmed 302 (instant cache hit)",
+    help: "Resolves the signed Daily Wire URL while the RSS feed is generated, then the stable .m3u8 endpoint can return HTTP 302 without a Daily Wire lookup. Use a very small feed while testing this method.",
+  },
+  'experiment_hls_head_200_get_302': {
+    label: "Experiment: HEAD 200, GET fresh DW 302",
+    help: "HEAD on the stable .m3u8 returns an immediate HLS-looking 200 response without contacting Daily Wire; GET resolves a fresh Daily Wire URL and redirects with HTTP 302",
+  },
+  'experiment_hls_redirect_302_headers': {
+    label: "Experiment: 302 with explicit HLS headers",
+    help: "Same fresh Daily Wire redirect as the basic 302 experiment, but the redirect response explicitly advertises application/x-mpegURL and filename video.m3u8",
+  },
+  'experiment_hls_prewarmed_raw': {
+    label: "Experiment: pre-warmed raw DW manifest (instant 200)",
+    help: "Fetches the Daily Wire master playlist while generating the RSS feed and later serves the untouched playlist bytes immediately from the stable WireLoft .m3u8 URL. Use a very small feed while testing.",
+  },
+  'experiment_hls_prewarmed_absolute': {
+    label: "Experiment: pre-warmed manifest with absolute DW children",
+    help: "Pre-warms the Daily Wire master playlist, rewrites relative child URIs to signed absolute Daily Wire URLs, and serves it immediately as HTTP 200. Use a very small feed while testing.",
   },
   'experiment_hls_redirect_307': {
     label: "Experiment: stable video-307.m3u8 -> fresh DW (307)",
