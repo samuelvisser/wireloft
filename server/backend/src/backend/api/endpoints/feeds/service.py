@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import mimetypes
 import re
-from datetime import timezone
 from email.utils import format_datetime
 from pathlib import Path
 from typing import Literal, Optional
@@ -22,23 +21,32 @@ from .hls_probe_experiments import (
     prewarm_hls_manifests,
     remember_prefetched_hls_url,
 )
+from backend.db.datetime_types import utc_datetime
 from backend.db.models import Episode, LocalMediaProfile, RssStreamProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.dailywire_user_info import WlDwMembershipLevel
-from backend.types.download_profile_types import MediaDownloadStatus
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import (
     DEFAULT_RSS_DW_VIDEO_METHOD,
     RssDwVideoMethod,
 )
 from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
+from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
 logger = logging.getLogger(__name__)
 
-_AVAILABLE_STATUSES = {
-    MediaDownloadStatus.DOWNLOADED.value,
-    MediaDownloadStatus.REDOWNLOADED.value,
+_AVAILABLE_ARTIFACT_STATUS = MediaDownloadArtifactStatus.AVAILABLE.value
+_RECONCILABLE_ARTIFACT_STATUSES = (
+    MediaDownloadArtifactStatus.AVAILABLE.value,
+    MediaDownloadArtifactStatus.MISSING.value,
+    MediaDownloadArtifactStatus.CORRUPTED.value,
+)
+_UNAVAILABLE_PUBLISH_STATUSES = {
+    EpisodePublishStatus.NO_USABLE_MEDIA.value,
+    EpisodePublishStatus.DW_PROCESSING.value,
 }
 _VIDEO_HEIGHTS = {
     PreferredFormat.FORMAT_4K.value: 2160,
@@ -167,7 +175,7 @@ def _select_best_download(
         preferred_format: str,
         require_exact_match: bool,
 ) -> Optional[EpisodeMediaDownload]:
-    """Pick the local download that best matches a stream profile."""
+    """Pick the local artifact that best matches a stream profile."""
     wants_audio = preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
     candidates = [d for d in downloads if _is_audio_download(d) == wants_audio]
     if not candidates:
@@ -178,7 +186,7 @@ def _select_best_download(
         if d.local_media_profile.preferred_format == preferred_format
     ]
     if exact:
-        return max(exact, key=lambda d: d.finished_at or d.updated_at)
+        return max(exact, key=lambda d: d.downloaded_at or d.updated_at)
 
     if require_exact_match:
         return None
@@ -197,6 +205,34 @@ def _select_best_download(
             0,
         ),
     )
+
+
+def _select_best_resolvable_download(
+        s: Session,
+        downloads: list[EpisodeMediaDownload],
+        *,
+        preferred_format: str,
+        require_exact_match: bool,
+) -> Optional[EpisodeMediaDownload]:
+    """Pick the best local artifact that can actually be resolved on disk."""
+    remaining = list(downloads)
+    while remaining:
+        best = _select_best_download(
+            remaining,
+            preferred_format=preferred_format,
+            require_exact_match=require_exact_match,
+        )
+        if best is None:
+            return None
+        resolved = resolve_media_download_file(
+            s,
+            best,
+            release_read_transaction=True,
+        )
+        if resolved is not None and best.artifact_status == _AVAILABLE_ARTIFACT_STATUS:
+            return best
+        remaining.remove(best)
+    return None
 
 
 def _episode_type_prefix(episode: Episode) -> str:
@@ -218,7 +254,7 @@ def get_feed_items(
     episodes = (
         s.query(Episode)
         .filter(Episode.show_id == profile.show_id)
-        .filter(Episode.is_no_show_today.is_not(True))
+        .filter(Episode.publish_status.notin_(_UNAVAILABLE_PUBLISH_STATUSES))
         .all()
     )
 
@@ -230,7 +266,7 @@ def get_feed_items(
             .options(joinedload(EpisodeMediaDownload.local_media_profile))
             .filter(Episode.show_id == profile.show_id)
             .filter(
-                EpisodeMediaDownload.download_status.in_(_AVAILABLE_STATUSES)
+                EpisodeMediaDownload.artifact_status.in_(_RECONCILABLE_ARTIFACT_STATUSES)
             )
             .all()
         )
@@ -247,7 +283,8 @@ def get_feed_items(
 
         best = None
         if profile.use_downloads:
-            best = _select_best_download(
+            best = _select_best_resolvable_download(
+                s,
                 downloads_by_episode.get(episode.id, []),
                 preferred_format=profile.preferred_format,
                 require_exact_match=profile.require_exact_match,
@@ -262,9 +299,7 @@ def get_feed_items(
             or episode.went_live_date
             or episode.created_at
         )
-        if value.tzinfo is not None:
-            value = value.astimezone(timezone.utc).replace(tzinfo=None)
-        return value
+        return utc_datetime(value)
 
     items.sort(key=sort_key, reverse=True)
     return items[:profile.max_items] if profile.max_items > 0 else items
@@ -275,7 +310,7 @@ def get_media_for_episode(
         profile: RssStreamProfile,
         episode_slug: str,
 ) -> tuple[Episode, Optional[EpisodeMediaDownload]]:
-    """Resolve an enclosure to a local download or a Daily Wire fallback."""
+    """Resolve an enclosure to a local artifact or a Daily Wire fallback."""
     episode: Optional[Episode] = (
         s.query(Episode)
         .filter_by(slug=episode_slug, show_id=profile.show_id)
@@ -285,6 +320,10 @@ def get_media_for_episode(
         raise HTTPException(status_code=404, detail="Episode not found")
     if not _profile_allows_episode(profile, episode):
         raise HTTPException(status_code=404, detail="Episode not included in this feed")
+    if episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
+        raise HTTPException(status_code=404, detail="Episode has no usable media")
+    if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
+        raise HTTPException(status_code=404, detail="Episode media is still processing")
 
     best = None
     if profile.use_downloads:
@@ -293,11 +332,12 @@ def get_media_for_episode(
             .options(joinedload(EpisodeMediaDownload.local_media_profile))
             .filter(EpisodeMediaDownload.media_item_id == episode.id)
             .filter(
-                EpisodeMediaDownload.download_status.in_(_AVAILABLE_STATUSES)
+                EpisodeMediaDownload.artifact_status.in_(_RECONCILABLE_ARTIFACT_STATUSES)
             )
             .all()
         )
-        best = _select_best_download(
+        best = _select_best_resolvable_download(
+            s,
             downloads,
             preferred_format=profile.preferred_format,
             require_exact_match=profile.require_exact_match,
@@ -305,7 +345,7 @@ def get_media_for_episode(
 
     if best is not None:
         return episode, best
-    if profile.use_dw_stream and episode.is_no_show_today is not True:
+    if profile.use_dw_stream:
         return episode, None
 
     raise HTTPException(
@@ -319,7 +359,7 @@ def get_download_for_episode(
         profile: RssStreamProfile,
         episode_slug: str,
 ) -> EpisodeMediaDownload:
-    """Return the local download this profile would serve for one episode."""
+    """Return the local artifact this profile would serve for one episode."""
     _, download = get_media_for_episode(s, profile, episode_slug)
     if download is None:
         raise HTTPException(
@@ -443,18 +483,16 @@ def _append_item(
         or episode.created_at
     )
     if pub_date is not None:
-        if pub_date.tzinfo is None:
-            pub_date = pub_date.replace(tzinfo=timezone.utc)
-        _sub_text(item, "pubDate", format_datetime(pub_date))
+        _sub_text(item, "pubDate", format_datetime(utc_datetime(pub_date)))
 
     media_url = f"{media_base_url}/episodes/{episode.slug}"
     audio_url = f"{media_url}/audio.m4a"
     if download is not None:
         file_path = Path(download.file_path)
         length = (
-            file_path.stat().st_size
-            if file_path.is_file()
-            else (download.downloaded_bytes or 0)
+            getattr(download, "artifact_size_bytes", None)
+            or download.downloaded_bytes
+            or 0
         )
         default_type = (
             "audio/mp4" if _is_audio_download(download) else "video/mp4"

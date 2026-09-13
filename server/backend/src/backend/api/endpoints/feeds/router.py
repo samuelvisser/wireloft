@@ -31,6 +31,7 @@ from .service import (
 from backend.app import db_session
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import RssDwVideoMethod
+from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
 logger = logging.getLogger(__name__)
@@ -168,10 +169,19 @@ def rss_feed_episode_media(token: str, episode_slug: str, request: Request):
                 get_dailywire_stream_url(profile, episode),
                 head_only=request.method == "HEAD",
             )
-        file_path = Path(download.file_path)
 
-    if not file_path.is_file():
-        raise HTTPException(status_code=404, detail="Media file not available")
+        file_path = resolve_media_download_file(
+            s,
+            download,
+            release_read_transaction=True,
+        )
+        if file_path is None:
+            if profile.use_dw_stream:
+                return _temporary_stream_redirect(
+                    get_dailywire_stream_url(profile, episode),
+                    head_only=request.method == "HEAD",
+                )
+            raise HTTPException(status_code=404, detail="Media file not available")
 
     return FileResponse(
         file_path,
@@ -195,10 +205,14 @@ def rss_feed_episode_download(
         _, download = get_media_for_episode(s, profile, episode_slug)
         if download is None:
             raise HTTPException(status_code=404, detail="Episode uses remote media")
-        file_path = Path(download.file_path)
+        file_path = resolve_media_download_file(
+            s,
+            download,
+            release_read_transaction=True,
+        )
+        if file_path is None:
+            raise HTTPException(status_code=404, detail="Media file not available")
 
-    if not file_path.is_file():
-        raise HTTPException(status_code=404, detail="Media file not available")
     if file_path.suffix.lower() != f".{extension}".lower():
         raise HTTPException(status_code=404, detail="Media extension does not match")
 

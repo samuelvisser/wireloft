@@ -136,6 +136,7 @@ def test_local_download_keeps_download_only_feed_behavior(tmp_path, monkeypatch,
     file_path.write_bytes(b"video-data")
     download = SimpleNamespace(
         file_path=str(file_path),
+        artifact_size_bytes=file_path.stat().st_size,
         downloaded_bytes=0,
         local_media_profile=SimpleNamespace(preferred_format="format_1080p"),
     )
