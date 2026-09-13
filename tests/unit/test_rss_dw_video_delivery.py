@@ -53,7 +53,7 @@ def test_podcasting_2_0_uses_direct_hls_with_audio_fallback():
     enclosure = item.find("enclosure")
     assert enclosure is not None
     assert enclosure.attrib == {
-        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1/audio",
+        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1/audio.mp3",
         "length": "0",
         "type": "audio/mpeg",
     }
@@ -160,7 +160,7 @@ def test_local_download_keeps_download_only_feed_behavior(tmp_path, monkeypatch,
     enclosure = item.find("enclosure")
     assert enclosure is not None
     assert enclosure.attrib == {
-        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1",
+        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1/download.mp4",
         "length": str(file_path.stat().st_size),
         "type": "video/mp4",
     }
@@ -193,25 +193,25 @@ def test_remote_video_guid_changes_with_delivery_method():
 
 
 def test_feed_url_method_is_added_replaced_and_removed():
-    from backend.utils.feed_urls import set_rss_feed_video_method
+    from backend.utils.feed_urls import set_rss_feed_dw_video_method
 
     original = "https://wireloft.example/feed.xml?custom=value"
-    direct = set_rss_feed_video_method(
+    direct = set_rss_feed_dw_video_method(
         original,
         use_dw_stream=True,
         dw_video_method=PODCASTING_2_0,
     )
-    cached = set_rss_feed_video_method(
+    cached = set_rss_feed_dw_video_method(
         direct,
         use_dw_stream=True,
         dw_video_method=CACHED_MP4,
     )
-    hybrid = set_rss_feed_video_method(
+    hybrid = set_rss_feed_dw_video_method(
         cached,
         use_dw_stream=True,
         dw_video_method=HYBRID,
     )
-    disabled = set_rss_feed_video_method(
+    disabled = set_rss_feed_dw_video_method(
         hybrid,
         use_dw_stream=False,
         dw_video_method=HYBRID,
@@ -320,6 +320,7 @@ def test_feed_routes_support_get_and_head():
         "/feeds/rss/{token}/{show_slug}.xml",
         "/feeds/rss/{token}/episodes/{episode_slug}",
         "/feeds/rss/{token}/episodes/{episode_slug}/audio",
+        "/feeds/rss/{token}/episodes/{episode_slug}/audio.mp3",
         "/feeds/rss/{token}/episodes/{episode_slug}/video.mp4",
     }
     routes = {route.path: route for route in router.routes if route.path in expected_paths}

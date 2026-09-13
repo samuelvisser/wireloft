@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import mimetypes
 import re
+from datetime import timezone
 from email.utils import format_datetime
 from pathlib import Path
 from typing import Literal, Optional
@@ -12,32 +13,28 @@ from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
 
 from .cached_video import get_cached_mp4_size
-from backend.db.datetime_types import utc_datetime
+from .hls_experiments import (
+    HLS_APPLE_MPEGURL,
+    HLS_GENERIC_MPEGURL,
+    HLS_X_MPEGURL,
+)
 from backend.db.models import Episode, LocalMediaProfile, RssStreamProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.dailywire_user_info import WlDwMembershipLevel
-from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from backend.types.episode_types import EpisodePublishStatus
+from backend.types.download_profile_types import MediaDownloadStatus
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import (
     DEFAULT_RSS_DW_VIDEO_METHOD,
     RssDwVideoMethod,
 )
 from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
-from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
 logger = logging.getLogger(__name__)
 
-_AVAILABLE_ARTIFACT_STATUS = MediaDownloadArtifactStatus.AVAILABLE.value
-_RECONCILABLE_ARTIFACT_STATUSES = (
-    MediaDownloadArtifactStatus.AVAILABLE.value,
-    MediaDownloadArtifactStatus.MISSING.value,
-    MediaDownloadArtifactStatus.CORRUPTED.value,
-)
-_UNAVAILABLE_PUBLISH_STATUSES = {
-    EpisodePublishStatus.NO_USABLE_MEDIA.value,
-    EpisodePublishStatus.DW_PROCESSING.value,
+_AVAILABLE_STATUSES = {
+    MediaDownloadStatus.DOWNLOADED.value,
+    MediaDownloadStatus.REDOWNLOADED.value,
 }
 _VIDEO_HEIGHTS = {
     PreferredFormat.FORMAT_4K.value: 2160,
@@ -48,7 +45,6 @@ _VIDEO_HEIGHTS = {
 _ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd"
 _PODCAST_NS = "https://podcastindex.org/namespace/1.0"
 _ATOM_NS = "http://www.w3.org/2005/Atom"
-_HLS_MIME_TYPE = "application/x-mpegURL"
 _BARE_HTML_AMPERSAND_RE = re.compile(
     r"&(?!(?:#\d+|#x[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);)"
 )
@@ -58,12 +54,51 @@ _CACHED_MP4_METHODS = {
     "cached_mp4",
     "podcasting_2_0_cached_mp4",
 }
-_HLS_ALTERNATE_METHODS = {
+_EMBEDDED_HLS_METHODS = {
     RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value,
     RssDwVideoMethod.STREAM_HLS_DOWNLOAD_MP4.value,
     "podcasting_2_0",
     "podcasting_2_0_cached_mp4",
 }
+_STABLE_HLS_SOURCES: dict[str, tuple[str, str]] = {
+    RssDwVideoMethod.EXPERIMENT_HLS_REDIRECT_302.value: (
+        "video.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_REDIRECT_307.value: (
+        "video-307.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_REDIRECT_308.value: (
+        "video-308.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PROXY_VIDEO_X.value: (
+        "video-proxy.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PROXY_MASTER_X.value: (
+        "master.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PROXY_INDEX_X.value: (
+        "index.m3u8",
+        HLS_X_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PROXY_VIDEO_APPLE.value: (
+        "video-proxy-apple.m3u8",
+        HLS_APPLE_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PROXY_VIDEO_GENERIC.value: (
+        "video-proxy-generic.m3u8",
+        HLS_GENERIC_MPEGURL,
+    ),
+    RssDwVideoMethod.EXPERIMENT_HLS_PREPARED_TS.value: (
+        "prepared/video.m3u8",
+        HLS_X_MPEGURL,
+    ),
+}
+_HLS_ALTERNATE_METHODS = _EMBEDDED_HLS_METHODS | set(_STABLE_HLS_SOURCES)
 
 
 def get_rss_stream_profile_by_token(s: Session, token: str) -> RssStreamProfile:
@@ -89,7 +124,7 @@ def _select_best_download(
         preferred_format: str,
         require_exact_match: bool,
 ) -> Optional[EpisodeMediaDownload]:
-    """Pick the local artifact that best matches a stream profile."""
+    """Pick the local download that best matches a stream profile."""
     wants_audio = preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
     candidates = [d for d in downloads if _is_audio_download(d) == wants_audio]
     if not candidates:
@@ -100,7 +135,7 @@ def _select_best_download(
         if d.local_media_profile.preferred_format == preferred_format
     ]
     if exact:
-        return max(exact, key=lambda d: d.downloaded_at or d.updated_at)
+        return max(exact, key=lambda d: d.finished_at or d.updated_at)
 
     if require_exact_match:
         return None
@@ -119,34 +154,6 @@ def _select_best_download(
             0,
         ),
     )
-
-
-def _select_best_resolvable_download(
-        s: Session,
-        downloads: list[EpisodeMediaDownload],
-        *,
-        preferred_format: str,
-        require_exact_match: bool,
-) -> Optional[EpisodeMediaDownload]:
-    """Pick the best local artifact that can actually be resolved on disk."""
-    remaining = list(downloads)
-    while remaining:
-        best = _select_best_download(
-            remaining,
-            preferred_format=preferred_format,
-            require_exact_match=require_exact_match,
-        )
-        if best is None:
-            return None
-        resolved = resolve_media_download_file(
-            s,
-            best,
-            release_read_transaction=True,
-        )
-        if resolved is not None and best.artifact_status == _AVAILABLE_ARTIFACT_STATUS:
-            return best
-        remaining.remove(best)
-    return None
 
 
 def _episode_type_prefix(episode: Episode) -> str:
@@ -168,7 +175,7 @@ def get_feed_items(
     episodes = (
         s.query(Episode)
         .filter(Episode.show_id == profile.show_id)
-        .filter(Episode.publish_status.notin_(_UNAVAILABLE_PUBLISH_STATUSES))
+        .filter(Episode.is_no_show_today.is_not(True))
         .all()
     )
 
@@ -180,7 +187,7 @@ def get_feed_items(
             .options(joinedload(EpisodeMediaDownload.local_media_profile))
             .filter(Episode.show_id == profile.show_id)
             .filter(
-                EpisodeMediaDownload.artifact_status.in_(_RECONCILABLE_ARTIFACT_STATUSES)
+                EpisodeMediaDownload.download_status.in_(_AVAILABLE_STATUSES)
             )
             .all()
         )
@@ -197,8 +204,7 @@ def get_feed_items(
 
         best = None
         if profile.use_downloads:
-            best = _select_best_resolvable_download(
-                s,
+            best = _select_best_download(
                 downloads_by_episode.get(episode.id, []),
                 preferred_format=profile.preferred_format,
                 require_exact_match=profile.require_exact_match,
@@ -213,7 +219,9 @@ def get_feed_items(
             or episode.went_live_date
             or episode.created_at
         )
-        return utc_datetime(value)
+        if value.tzinfo is not None:
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
 
     items.sort(key=sort_key, reverse=True)
     return items[:profile.max_items] if profile.max_items > 0 else items
@@ -224,7 +232,7 @@ def get_media_for_episode(
         profile: RssStreamProfile,
         episode_slug: str,
 ) -> tuple[Episode, Optional[EpisodeMediaDownload]]:
-    """Resolve an enclosure to a local artifact or a Daily Wire fallback."""
+    """Resolve an enclosure to a local download or a Daily Wire fallback."""
     episode: Optional[Episode] = (
         s.query(Episode)
         .filter_by(slug=episode_slug, show_id=profile.show_id)
@@ -234,10 +242,6 @@ def get_media_for_episode(
         raise HTTPException(status_code=404, detail="Episode not found")
     if not _profile_allows_episode(profile, episode):
         raise HTTPException(status_code=404, detail="Episode not included in this feed")
-    if episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
-        raise HTTPException(status_code=404, detail="Episode has no usable media")
-    if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
-        raise HTTPException(status_code=404, detail="Episode media is still processing")
 
     best = None
     if profile.use_downloads:
@@ -246,12 +250,11 @@ def get_media_for_episode(
             .options(joinedload(EpisodeMediaDownload.local_media_profile))
             .filter(EpisodeMediaDownload.media_item_id == episode.id)
             .filter(
-                EpisodeMediaDownload.artifact_status.in_(_RECONCILABLE_ARTIFACT_STATUSES)
+                EpisodeMediaDownload.download_status.in_(_AVAILABLE_STATUSES)
             )
             .all()
         )
-        best = _select_best_resolvable_download(
-            s,
+        best = _select_best_download(
             downloads,
             preferred_format=profile.preferred_format,
             require_exact_match=profile.require_exact_match,
@@ -259,7 +262,7 @@ def get_media_for_episode(
 
     if best is not None:
         return episode, best
-    if profile.use_dw_stream:
+    if profile.use_dw_stream and episode.is_no_show_today is not True:
         return episode, None
 
     raise HTTPException(
@@ -273,7 +276,7 @@ def get_download_for_episode(
         profile: RssStreamProfile,
         episode_slug: str,
 ) -> EpisodeMediaDownload:
-    """Return the local artifact this profile would serve for one episode."""
+    """Return the local download this profile would serve for one episode."""
     _, download = get_media_for_episode(s, profile, episode_slug)
     if download is None:
         raise HTTPException(
@@ -342,9 +345,10 @@ def _append_hls_alternate(
         *,
         video_url: str,
         preferred_format: str,
+        hls_mime_type: str,
 ) -> None:
     attributes = {
-        "type": _HLS_MIME_TYPE,
+        "type": hls_mime_type,
         "length": "0",
         "bitrate": "2500000",
         "lang": "en",
@@ -368,6 +372,7 @@ def _append_item(
         preferred_format: str,
         dw_video_method: str = DEFAULT_RSS_DW_VIDEO_METHOD,
         dw_video_url: str | None = None,
+        experiment_guid_scope: str | None = None,
 ) -> None:
     item = SubElement(channel, "item")
     _sub_text(item, "title", episode.title)
@@ -376,6 +381,8 @@ def _append_item(
     guid_value = episode.uuid
     if download is None and not wants_audio:
         guid_value = f"{guid_value}:{dw_video_method}"
+        if dw_video_method.startswith("experiment_") and experiment_guid_scope:
+            guid_value = f"{guid_value}:{experiment_guid_scope}"
 
     guid = SubElement(item, "guid", {"isPermaLink": "false"})
     guid.text = guid_value
@@ -393,21 +400,31 @@ def _append_item(
         or episode.created_at
     )
     if pub_date is not None:
-        _sub_text(item, "pubDate", format_datetime(utc_datetime(pub_date)))
+        if pub_date.tzinfo is None:
+            pub_date = pub_date.replace(tzinfo=timezone.utc)
+        _sub_text(item, "pubDate", format_datetime(pub_date))
 
     media_url = f"{media_base_url}/episodes/{episode.slug}"
+    audio_url = f"{media_url}/audio.mp3"
     if download is not None:
         file_path = Path(download.file_path)
-        length = download.artifact_size_bytes or download.downloaded_bytes or 0
+        length = (
+            file_path.stat().st_size
+            if file_path.is_file()
+            else (download.downloaded_bytes or 0)
+        )
         default_type = (
             "audio/mpeg" if _is_audio_download(download) else "video/mp4"
         )
         mime_type = mimetypes.guess_type(file_path.name)[0] or default_type
-        enclosure_url = media_url
+        suffix = file_path.suffix.lower() or (
+            ".mp3" if _is_audio_download(download) else ".mp4"
+        )
+        enclosure_url = f"{media_url}/download{suffix}"
     elif wants_audio:
         length = 0
         mime_type = "audio/mpeg"
-        enclosure_url = media_url
+        enclosure_url = audio_url
     elif dw_video_method in _CACHED_MP4_METHODS:
         length = get_cached_mp4_size(episode.uuid) or 0
         mime_type = "video/mp4"
@@ -415,7 +432,7 @@ def _append_item(
     else:
         length = 0
         mime_type = "audio/mpeg"
-        enclosure_url = f"{media_url}/audio"
+        enclosure_url = audio_url
 
     SubElement(
         item,
@@ -428,17 +445,21 @@ def _append_item(
     )
     _sub_text(item, "link", media_url)
 
-    if (
-        download is None
-        and not wants_audio
-        and dw_video_method in _HLS_ALTERNATE_METHODS
-        and dw_video_url
-    ):
-        _append_hls_alternate(
-            item,
-            video_url=dw_video_url,
-            preferred_format=preferred_format,
-        )
+    if download is None and not wants_audio and dw_video_method in _HLS_ALTERNATE_METHODS:
+        video_url = dw_video_url
+        hls_mime_type = HLS_X_MPEGURL
+        stable_source = _STABLE_HLS_SOURCES.get(dw_video_method)
+        if stable_source is not None:
+            endpoint, hls_mime_type = stable_source
+            video_url = f"{media_url}/{endpoint}"
+
+        if video_url:
+            _append_hls_alternate(
+                item,
+                video_url=video_url,
+                preferred_format=preferred_format,
+                hls_mime_type=hls_mime_type,
+            )
 
     _sub_text(
         item,
@@ -519,6 +540,9 @@ def render_rss_feed(
         _sub_text(image, "title", show.title)
         _sub_text(image, "link", show.sharing_url)
 
+    # Only the known-working embedded-DW controls resolve signed HLS URLs
+    # while rendering the feed. Every 1.1 experiment below uses a stable
+    # WireLoft .m3u8 URL and resolves Daily Wire only when playback begins.
     client: MiddlewareClient | None = None
     for episode, download in items:
         dw_video_url = None
@@ -526,7 +550,7 @@ def render_rss_feed(
             download is None
             and profile.preferred_format
             != PreferredFormat.FORMAT_AUDIO_ONLY.value
-            and dw_video_method in _HLS_ALTERNATE_METHODS
+            and dw_video_method in _EMBEDDED_HLS_METHODS
         ):
             client = client or MiddlewareClient()
             try:
@@ -551,6 +575,7 @@ def render_rss_feed(
             preferred_format=profile.preferred_format,
             dw_video_method=dw_video_method,
             dw_video_url=dw_video_url,
+            experiment_guid_scope=profile.token,
         )
 
     return tostring(rss, encoding="UTF-8", xml_declaration=True)
