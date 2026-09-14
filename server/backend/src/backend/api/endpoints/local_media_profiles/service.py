@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Optional
 
-from sqlalchemy.orm import joinedload, selectinload, Session
 from fastapi import HTTPException
+from jinja2 import nodes
+from jinja2.visitor import NodeTransformer
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from backend.api.helpers import update_database_fields
 from backend.api.models.local_media_profile import *
@@ -18,6 +21,7 @@ from backend.types.local_media_profile_types import LocalMediaProfileType, Prefe
 from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
     SHOW_OUTPUT_TEMPLATE_FIELDS,
+    _parse_output_template,
     episode_output_template_values,
     movie_output_template_values,
     output_template_fields,
@@ -94,157 +98,97 @@ _EXAMPLE_MOVIE_VALUES = {
 }
 
 
-def _template_fields_for_type(profile_type: LocalMediaProfileType) -> frozenset[str]:
-    if profile_type == LocalMediaProfileType.SHOW:
-        return SHOW_OUTPUT_TEMPLATE_FIELDS
-    if profile_type == LocalMediaProfileType.MOVIE:
-        return MOVIE_OUTPUT_TEMPLATE_FIELDS
-    raise ValueError("Output templates are only available for Show and Movie profiles")
+class _NonComparableTemplate(Exception):
+    pass
 
 
-def _alternate_collision_probe_values(
-    profile_type: LocalMediaProfileType,
-) -> dict[str, str]:
-    if profile_type == LocalMediaProfileType.SHOW:
-        values = dict(_EXAMPLE_SHOW_VALUES)
-        values.update({
-            "show": "another-show",
-            "show_title": "Another Show",
-            "season": "season-2",
-            "season_name": "Season 2",
-            "season_index": "2",
-            "episode": "another-episode",
-            "episode_title": "Another Episode",
-            "title": "Another Episode",
-            "episode_type": "aux",
-            "episode_number": "42",
-            "episode_label": "42",
-            "episode_identifier": "aux.42",
-            "episode_published_date": "2025-01-02",
-            "episode_published_time": "03:04:05",
-            "episode_published_datetime": "2025-01-02 03:04:05",
-            "date": "2025-01-02",
-            "time": "03:04:05",
-            "datetime": "2025-01-02 03:04:05",
-            "year": "2025",
-            "month": "01",
-            "day": "02",
-            "hour": "03",
-            "minute": "04",
-            "second": "05",
-        })
-        return values
+def _normalize_expression(node: nodes.Expr, environment: dict[str, nodes.Expr]) -> nodes.Expr:
+    class NormalizeNames(NodeTransformer):
+        def visit_Name(self, name: nodes.Name, *args, **kwargs):
+            replacement = environment.get(name.name)
+            return deepcopy(replacement) if name.ctx == "load" and replacement is not None else name
 
-    if profile_type == LocalMediaProfileType.MOVIE:
-        values = dict(_EXAMPLE_MOVIE_VALUES)
-        values.update({
-            "movie_slug": "another-movie",
-            "movie_title": "Another Movie",
-            "movie_extended_title": "Another Movie Extended",
-            "movie_author": "Another Studio",
-            "movie_mature_rating": "R",
-            "movie_duration_seconds": "7200",
-            "movie_date": "2025-01-02",
-            "movie_time": "03:04:05",
-            "movie_datetime": "2025-01-02 03:04:05",
-            "movie_year": "2025",
-            "movie_month": "01",
-            "movie_day": "02",
-            "movie_hour": "03",
-            "movie_minute": "04",
-            "movie_second": "05",
-            "slug": "another-trailer",
-            "title": "Another Trailer",
-            "extended_title": "Another Trailer",
-            "author": "",
-            "mature_rating": "",
-            "rating": "",
-            "duration_seconds": "120",
-            "media_type": "trailer",
-            "date": "2025-01-03",
-            "time": "04:05:06",
-            "datetime": "2025-01-03 04:05:06",
-            "year": "2025",
-            "month": "01",
-            "day": "03",
-            "hour": "04",
-            "minute": "05",
-            "second": "06",
-        })
-        return values
-
-    raise ValueError("Output templates are only available for Show and Movie profiles")
+    return NormalizeNames().visit(deepcopy(node))
 
 
-def _preferred_format_extension(preferred_format: PreferredFormat | str) -> str:
-    return "m4a" if preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY else "mp4"
+def _canonical_expression(node: nodes.Expr, environment: dict[str, nodes.Expr]) -> str:
+    node = _normalize_expression(node, environment)
+    if isinstance(node, nodes.TemplateData):
+        return node.data
+    if isinstance(node, nodes.Name):
+        return f"{{{node.name}}}"
+    if isinstance(node, nodes.Const):
+        return str(node.value)
+    return repr(node)
 
 
-def _render_collision_path(
+def _canonical_body(
+    statements: list[nodes.Stmt],
+    states: list[tuple[str, dict[str, nodes.Expr]]],
+) -> list[tuple[str, dict[str, nodes.Expr]]]:
+    for statement in statements:
+        next_states = []
+        for text, environment in states:
+            if isinstance(statement, nodes.Output):
+                next_states.append((
+                    text + "".join(
+                        _canonical_expression(node, environment)
+                        for node in statement.nodes
+                    ),
+                    environment,
+                ))
+            elif isinstance(statement, nodes.Assign):
+                if not isinstance(statement.target, nodes.Name):
+                    raise _NonComparableTemplate
+                updated = dict(environment)
+                updated[statement.target.name] = _normalize_expression(
+                    statement.node,
+                    environment,
+                )
+                next_states.append((text, updated))
+            elif isinstance(statement, nodes.AssignBlock):
+                if not isinstance(statement.target, nodes.Name) or statement.filter is not None:
+                    raise _NonComparableTemplate
+                for captured, _captured_environment in _canonical_body(
+                    statement.body,
+                    [("", dict(environment))],
+                ):
+                    updated = dict(environment)
+                    updated[statement.target.name] = nodes.Const(captured)
+                    next_states.append((text, updated))
+            elif isinstance(statement, nodes.If):
+                for branch in [
+                    statement.body,
+                    *[elif_node.body for elif_node in statement.elif_],
+                    statement.else_,
+                ]:
+                    next_states.extend(
+                        _canonical_body(branch, [(text, dict(environment))])
+                    )
+            else:
+                raise _NonComparableTemplate
+        states = next_states
+    return states
+
+
+def _canonical_template_patterns(output_template: str) -> frozenset[str] | None:
+    """Return possible symbolic outputs after removing non-output-affecting Jinja."""
+    try:
+        states = _canonical_body(_parse_output_template(output_template).body, [("", {})])
+    except (ValueError, _NonComparableTemplate):
+        return None
+    return frozenset(output for output, _environment in states)
+
+
+def _profile_output_patterns(
     output_template: str,
-    *,
-    profile_type: LocalMediaProfileType,
     preferred_format: PreferredFormat | str,
-    values: dict[str, str],
-) -> str:
-    rendered = render_output_template(
-        output_template,
-        values,
-        allowed_fields=_template_fields_for_type(profile_type),
-    )
-    return replace_output_extension(
-        rendered,
-        _preferred_format_extension(preferred_format),
-    )
-
-
-def _collision_probe_values(
-    s: Session,
-    profile_type: LocalMediaProfileType,
-) -> list[tuple[str, dict[str, str]]]:
-    sources = get_output_template_sources(s, profile_type).sources
-    probes = [(source.label, source.values) for source in sources]
-
-    fallback_values = (
-        _EXAMPLE_SHOW_VALUES
-        if profile_type == LocalMediaProfileType.SHOW
-        else _EXAMPLE_MOVIE_VALUES
-    )
-    if not any(source.fallback for source in sources):
-        probes.append(("WireLoft example", dict(fallback_values)))
-
-    probes.append(("alternate WireLoft example", _alternate_collision_probe_values(profile_type)))
-    return probes
-
-
-def _find_rendered_output_collision(
-    body: LocalMediaProfileAPICreate | LocalMediaProfileAPIUpdate,
-    existing: LocalMediaProfileBase,
-    probes: list[tuple[str, dict[str, str]]],
-) -> tuple[str, str] | None:
-    profile_type = LocalMediaProfileType(body.type)
-    for label, values in probes:
-        try:
-            candidate_path = _render_collision_path(
-                body.output_template,
-                profile_type=profile_type,
-                preferred_format=body.preferred_format,
-                values=values,
-            )
-            existing_path = _render_collision_path(
-                existing.output_template,
-                profile_type=profile_type,
-                preferred_format=existing.preferred_format,
-                values=values,
-            )
-        except ValueError:
-            # Stored profiles may predate stricter template validation, and a
-            # representative probe can exercise a branch that is impossible for
-            # real media. Do not make an unrelated old template block all edits.
-            continue
-        if candidate_path == existing_path:
-            return label, candidate_path
-    return None
+) -> frozenset[str] | None:
+    patterns = _canonical_template_patterns(output_template)
+    if patterns is None:
+        return None
+    extension = "m4a" if preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY else "mp4"
+    return frozenset(replace_output_extension(pattern, extension) for pattern in patterns)
 
 
 def _ensure_unique_profile_settings(
@@ -253,57 +197,48 @@ def _ensure_unique_profile_settings(
     *,
     exclude_id: int | None = None,
 ) -> None:
-    exact_query = s.query(LocalMediaProfileBase).filter(
-        LocalMediaProfileBase.type == body.type,
-        LocalMediaProfileBase.output_template == body.output_template,
-        LocalMediaProfileBase.preferred_format == body.preferred_format,
-    )
+    query = s.query(LocalMediaProfileBase).filter(LocalMediaProfileBase.type == body.type)
     if exclude_id is not None:
-        exact_query = exact_query.filter(LocalMediaProfileBase.id != exclude_id)
-    if exact_query.first() is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=[{
-                "loc": ["body", "outputTemplate"],
-                "msg": "A Local Media Profile with this type, output path template, and preferred format already exists",
-                "type": "unique_violation",
-            }],
-        )
+        query = query.filter(LocalMediaProfileBase.id != exclude_id)
 
-    # Raw template strings can differ while rendering to the same file because of
-    # Jinja assignments/conditions or filename sanitization. Compare the actual
-    # rendered paths against every profile of the same media type. Preferred
-    # format is reflected by the concrete extension, so audio/video profiles may
-    # share a template safely while two video-quality profiles may not target the
-    # same .mp4 path.
-    profiles_query = s.query(LocalMediaProfileBase).filter(
-        LocalMediaProfileBase.type == body.type,
+    candidate_patterns = _profile_output_patterns(
+        body.output_template,
+        body.preferred_format,
     )
-    if exclude_id is not None:
-        profiles_query = profiles_query.filter(LocalMediaProfileBase.id != exclude_id)
+    for existing in query.all():
+        if (
+            existing.output_template == body.output_template
+            and existing.preferred_format == body.preferred_format
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=[{
+                    "loc": ["body", "outputTemplate"],
+                    "msg": "A Local Media Profile with this type, output path template, and preferred format already exists",
+                    "type": "unique_violation",
+                }],
+            )
 
-    existing_profiles = profiles_query.all()
-    if not existing_profiles:
-        return
-
-    probes = _collision_probe_values(s, LocalMediaProfileType(body.type))
-    for existing in existing_profiles:
-        collision = _find_rendered_output_collision(body, existing, probes)
-        if collision is None:
-            continue
-        label, output_path = collision
-        raise HTTPException(
-            status_code=409,
-            detail=[{
-                "loc": ["body", "outputTemplate"],
-                "msg": (
-                    "Output template resolves to the same file as Local Media Profile "
-                    f"'{existing.name}' for {label}: {output_path}. Choose a template "
-                    "that produces a different output path."
-                ),
-                "type": "output_path_collision",
-            }],
+        existing_patterns = _profile_output_patterns(
+            existing.output_template,
+            existing.preferred_format,
         )
+        if (
+            candidate_patterns is not None
+            and existing_patterns is not None
+            and candidate_patterns & existing_patterns
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=[{
+                    "loc": ["body", "outputTemplate"],
+                    "msg": (
+                        "Output template can produce the same file as Local Media Profile "
+                        f"'{existing.name}'. Choose a different output path."
+                    ),
+                    "type": "output_path_collision",
+                }],
+            )
 
 
 def get_local_media_profiles_list(s: Session) -> list[LocalMediaProfileAPIRead]:
