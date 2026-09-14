@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,7 +17,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
-from backend.utils.download_files import remove_download_artifacts
+from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
 from task_manager.scheduler.db import TaskDefinition, TaskRun

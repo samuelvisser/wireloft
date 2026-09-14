@@ -12,9 +12,9 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.types.media_types import MediaType
 from backend.utils.artifact_identity import inspect_artifact
-from backend.utils.download_files import remove_download_artifacts
-from backend.utils.download_modes import effective_download_mode
-from backend.utils.download_paths import (
+from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
+from task_manager.tasks.helpers.downloads.download_modes import effective_download_mode
+from task_manager.tasks.helpers.downloads.download_paths import (
     TemporaryDownloadWorkspace,
     create_temporary_download_workspace,
     publish_temporary_download,

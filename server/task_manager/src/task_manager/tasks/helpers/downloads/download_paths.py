@@ -11,7 +11,6 @@ import stat
 import sys
 import tempfile
 import uuid
-from collections.abc import Callable
 from dataclasses import dataclass
 from itertools import count
 from pathlib import Path

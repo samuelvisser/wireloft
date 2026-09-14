@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def test_remove_download_artifacts_ignores_unresolved_template_path(tmp_path):
-    from backend.utils.download_files import remove_download_artifacts
+    from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 
     unresolved = tmp_path / "Episode.ext"
     unresolved_part = tmp_path / "Episode.ext.part"

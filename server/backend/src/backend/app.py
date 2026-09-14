@@ -34,7 +34,7 @@ def db_session():
 async def application_lifespan(app: FastAPI):
     """Own the background controller for exactly one ASGI app lifespan."""
     import controller
-    from backend.utils.download_paths import (
+    from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_download_path_reservations,
         cleanup_abandoned_temporary_downloads,
     )

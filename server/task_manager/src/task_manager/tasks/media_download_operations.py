@@ -11,7 +11,7 @@ from backend.db.models import Episode, Movie, MovieExtra
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_types import MediaType
-from backend.utils.download_files import remove_download_artifacts
+from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 from config import get_settings
 from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskRun
 from task_manager.scheduler.operations import (

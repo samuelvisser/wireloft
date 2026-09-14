@@ -5,7 +5,7 @@ import os
 
 
 def test_startup_cleanup_removes_abandoned_placeholder(tmp_path):
-    from backend.utils.download_paths import (
+    from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_download_path_reservations,
         reserve_unique_download_path,
     )
@@ -21,7 +21,7 @@ def test_startup_cleanup_removes_abandoned_placeholder(tmp_path):
 
 
 def test_startup_cleanup_preserves_unmarked_zero_byte_files(tmp_path):
-    from backend.utils.download_paths import cleanup_abandoned_download_path_reservations
+    from task_manager.tasks.helpers.downloads.download_paths import cleanup_abandoned_download_path_reservations
 
     external = tmp_path / "External empty file.m4a"
     external.touch()
@@ -32,7 +32,7 @@ def test_startup_cleanup_preserves_unmarked_zero_byte_files(tmp_path):
 
 
 def test_startup_cleanup_preserves_completed_file_if_marker_was_not_released(tmp_path):
-    from backend.utils.download_paths import (
+    from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_download_path_reservations,
         reserve_unique_download_path,
     )
@@ -49,7 +49,7 @@ def test_startup_cleanup_preserves_completed_file_if_marker_was_not_released(tmp
 
 
 def test_startup_cleanup_removes_stale_temporary_publication_lock(tmp_path):
-    import backend.utils.download_paths as download_paths
+    import task_manager.tasks.helpers.downloads.download_paths as download_paths
 
     tmp_path.mkdir(exist_ok=True)
     lock = download_paths._claim_publication_lock(tmp_path / "Episode.m4a")
@@ -61,7 +61,7 @@ def test_startup_cleanup_removes_stale_temporary_publication_lock(tmp_path):
 
 
 def test_startup_cleanup_removes_abandoned_temporary_workspace(tmp_path):
-    from backend.utils.download_paths import (
+    from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_temporary_downloads,
         create_temporary_download_workspace,
     )
@@ -83,7 +83,7 @@ def test_startup_cleanup_removes_abandoned_temporary_workspace(tmp_path):
 
 
 def test_startup_cleanup_removes_published_file_not_committed_to_database(tmp_path):
-    from backend.utils.download_paths import (
+    from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_temporary_downloads,
         create_temporary_download_workspace,
         publish_temporary_download,
@@ -108,7 +108,7 @@ def test_startup_cleanup_removes_published_file_not_committed_to_database(tmp_pa
 
 
 def test_startup_cleanup_preserves_published_file_committed_to_database(tmp_path):
-    from backend.utils.download_paths import (
+    from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_temporary_downloads,
         create_temporary_download_workspace,
         publish_temporary_download,
@@ -140,7 +140,7 @@ def test_startup_cleanup_preserves_published_file_committed_to_database(tmp_path
 
 def test_application_lifespan_cleans_download_state_before_controller_recovery(monkeypatch):
     import controller
-    import backend.utils.download_paths as download_paths
+    import task_manager.tasks.helpers.downloads.download_paths as download_paths
     from backend.app import application_lifespan
 
     calls: list[str] = []
@@ -173,7 +173,7 @@ def test_application_lifespan_cleans_download_state_before_controller_recovery(m
 
 
 def test_startup_cleanup_removes_partial_marker_without_touching_external_empty_file(tmp_path):
-    from backend.utils.download_paths import (
+    from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_download_path_reservations,
         reserve_unique_download_path,
     )

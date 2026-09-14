@@ -14,7 +14,7 @@ from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
-from backend.utils.download_files import remove_download_artifacts
+from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path
 from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
