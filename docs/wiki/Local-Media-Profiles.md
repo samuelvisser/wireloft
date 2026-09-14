@@ -46,6 +46,7 @@ The `/downloads/` prefix is virtual. It maps to `downloadSettings.downloadRoot`,
 | `season` | Season slug, or empty when unavailable |
 | `season_name` | Season name, or empty when unavailable |
 | `season_index` | WireLoft season index, or empty when unavailable |
+| `normalized_season_index` | `0` for an extras season; otherwise the WireLoft season index with any earlier extras seasons removed |
 | `extra_seasons_count` | Number of seasons in the show whose lowercased name contains `extra` |
 | `is_extra_season` | `1` when the current episode belongs to a season whose lowercased name contains `extra`; otherwise `0` |
 | `episode` | Episode slug |
@@ -74,11 +75,17 @@ The `/downloads/` prefix is virtual. It maps to `downloadSettings.downloadRoot`,
 /downloads/Video/TV Shows/{{ show_title }}/Season {{ season_index }}/{{ show_title }} - {{ date }} - {{ title }}.ext
 ```
 
-For shows where Daily Wire puts one or more extras seasons before the numbered seasons, `extra_seasons_count` and `is_extra_season` can map every extras season to season `00` while shifting the numbered seasons down. Both values behave numerically inside Jinja, and `is_extra_season` can be used directly as a condition:
+`normalized_season_index` is useful when extras seasons should all map to season `00`, while normal seasons remain consecutively numbered. It is calculated from WireLoft's season indexes: extras seasons return `0`, while a normal season subtracts only extras seasons with a lower WireLoft season index. Extras added later therefore do not change earlier normal-season numbers.
+
+For example, indexes `1: 2022`, `2: Extras 1`, `3: 2023`, `4: Extras 2`, `5: 2024` normalize to `1`, `0`, `2`, `0`, `3`.
+
+The normalized value behaves numerically inside Jinja, so a Plex-style template can use it directly:
 
 ```jinja
-{% set plex_season = 0 if is_extra_season else (season_index|int) - extra_seasons_count %}/downloads/Video/TV Shows/{{ show_title }}/Season {{ "%02d"|format(plex_season) }}/{{ show_title }} - {{ date }} - {{ title }}.ext
+/downloads/Video/TV Shows/{{ show_title }}/Season {{ "%02d"|format(normalized_season_index) }}/{{ show_title }} - S{{ "%02d"|format(normalized_season_index) }}E{{ "%02d"|format(episode_number|int) }} - {{ title }}.ext
 ```
+
+`extra_seasons_count` remains available when a template needs the total number of extras seasons, while `is_extra_season` can be used directly as a Jinja condition.
 
 `episode_label` is the human-facing portion with the episode-type prefix removed. It is convenient in filenames but is not guaranteed to be unique. `episode_identifier` preserves the complete WireLoft identifier and is database-guaranteed to be unique within a show. For example, `ep.2497` has the label `2497`, `ep-extra.2497.1` has `2497.1`, and `ep.S01E07` has `S01E07`.
 

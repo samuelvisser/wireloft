@@ -27,6 +27,7 @@ _EXAMPLE_SHOW_VALUES = {
     "season": "season-1",
     "season_name": "Season 1",
     "season_index": "1",
+    "normalized_season_index": "1",
     "extra_seasons_count": "0",
     "is_extra_season": "0",
     "episode": "the-first-episode",

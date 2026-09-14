@@ -34,13 +34,14 @@ MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
 })
 
 SHOW_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "show", "show_title", "season", "season_name", "season_index", "extra_seasons_count", "is_extra_season",
-    "episode", "episode_title", "title", "episode_type", "episode_number", "episode_label", "episode_identifier",
-    "episode_published_date", "episode_published_time", "episode_published_datetime",
+    "show", "show_title", "season", "season_name", "season_index", "normalized_season_index",
+    "extra_seasons_count", "is_extra_season", "episode", "episode_title", "title", "episode_type",
+    "episode_number", "episode_label", "episode_identifier", "episode_published_date",
+    "episode_published_time", "episode_published_datetime",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 _SHOW_NUMERIC_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "extra_seasons_count", "is_extra_season",
+    "normalized_season_index", "extra_seasons_count", "is_extra_season",
 })
 
 MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
@@ -257,6 +258,21 @@ def _is_extra_season(season: "Season | None") -> bool:
     return bool(season is not None and "extra" in season.name.lower())
 
 
+def _normalized_season_index(episode: "Episode") -> str:
+    season = episode.season
+    if season is None:
+        return ""
+    if _is_extra_season(season):
+        return "0"
+
+    extras_before = sum(
+        1
+        for show_season in episode.show.seasons
+        if show_season.index < season.index and _is_extra_season(show_season)
+    )
+    return str(season.index - extras_before)
+
+
 def episode_output_template_values(episode: "Episode") -> dict[str, str]:
     """Build the complete Show-profile context for an episode."""
     episode_identifier = episode.episode_identifier or ""
@@ -276,6 +292,7 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "season": episode.season.slug if episode.season else "",
         "season_name": episode.season.name if episode.season else "",
         "season_index": str(episode.season.index) if episode.season else "",
+        "normalized_season_index": _normalized_season_index(episode),
         "extra_seasons_count": str(extra_seasons_count),
         "is_extra_season": "1" if is_extra_season else "0",
         "episode": episode.slug,
