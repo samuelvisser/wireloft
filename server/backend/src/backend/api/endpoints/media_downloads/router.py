@@ -2,8 +2,10 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from .history import get_media_download_history
 from .service import *
 from ...models.media_download import *
+from ...models.media_download_history import MediaDownloadHistoryPageRead
 from ...models.operations import MediaDownloadOperationAccepted
 from backend.app import db_session
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -186,6 +188,22 @@ def media_downloads_cancel(media_download_id: int):
             pass
 
     return payload
+
+
+@router.get("/{media_download_id}/history", response_model=MediaDownloadHistoryPageRead)
+def media_downloads_history(
+        media_download_id: int,
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=50, ge=1, le=200),
+):
+    """Return download TaskRun history enriched with the current artifact problem."""
+    with db_session() as s:
+        return get_media_download_history(
+            s,
+            media_download_id,
+            offset=offset,
+            limit=limit,
+        )
 
 
 @router.get("/{media_download_id}", response_model=MediaDownloadAPIRead)
