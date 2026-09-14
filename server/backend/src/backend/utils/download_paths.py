@@ -785,12 +785,51 @@ def _artifact_matches_record(identity: ArtifactIdentity, record: _PortablePublic
     )
 
 
+
+def _is_committed_download_artifact(path, identity) -> bool:
+    """Return whether the database owns this exact published media content."""
+    from sqlalchemy import select
+
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session = get_session()
+    try:
+        statement = (
+            select(
+                MediaDownloadBase.artifact_stat_dev,
+                MediaDownloadBase.artifact_stat_ino,
+                MediaDownloadBase.artifact_size_bytes,
+                MediaDownloadBase.artifact_fingerprint,
+            )
+            .where(
+                MediaDownloadBase.file_path == str(path),
+                MediaDownloadBase.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value,
+            )
+        )
+        for row in session.execute(statement):
+            # Content identity is the portable path for NAS/network filesystems,
+            # whose inode/device identifiers may change between mounts. Keep the
+            # filesystem identity fast path for older rows without a fingerprint.
+            if (
+                row.artifact_size_bytes == identity.size_bytes
+                and row.artifact_fingerprint
+                and row.artifact_fingerprint == identity.fingerprint
+            ):
+                return True
+            if (
+                row.artifact_stat_dev == identity.stat_dev
+                and row.artifact_stat_ino == identity.stat_ino
+            ):
+                return True
+        return False
+    finally:
+        session.close()
+
+
 def cleanup_abandoned_temporary_downloads(
     temporary_root: str | Path,
-    download_root: str | Path,
-    *,
-    is_published_artifact: Callable[[Path, ArtifactIdentity], bool],
-) -> int:
+    download_root: str | Path) -> int:
     """Reconcile temporary publication workspaces left by an unclean shutdown."""
     staging_root = Path(temporary_root) / _STAGING_DIRECTORY_NAME
     download_root_path = Path(download_root)
@@ -883,7 +922,7 @@ def cleanup_abandoned_temporary_downloads(
                         )
                         continue
                     try:
-                        committed = is_published_artifact(candidate, candidate_identity)
+                        committed = _is_committed_download_artifact(candidate, candidate_identity)
                     except Exception:
                         logger.warning(
                             "Could not verify whether staged download '%s' was committed; preserving workspace for safety",
@@ -948,7 +987,7 @@ def cleanup_abandoned_temporary_downloads(
                     continue
                 try:
                     artifact_identity = inspect_artifact(candidate)
-                    committed = is_published_artifact(candidate, artifact_identity)
+                    committed = _is_committed_download_artifact(candidate, artifact_identity)
                 except Exception:
                     logger.warning(
                         "Could not verify whether legacy staged download '%s' was committed; preserving workspace for safety",
