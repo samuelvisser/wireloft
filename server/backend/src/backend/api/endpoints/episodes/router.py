@@ -45,14 +45,16 @@ def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
 
 @router.get("/by-show-slug/{show_slug}", response_model=list[EpisodeAPIRead])
 def episodes_by_show_list(show_slug: str, limit: int | None = None):
-    """
-    List episodes for a specific show.
-
-    Optional query parameter:
-    - limit: maximum number of latest episodes to return (ordered by index desc).
-    """
+    """List complete episode records for callers that need episode detail fields."""
     with db_session() as s:
         return get_episodes_by_show_list(s, show_slug, limit)
+
+
+@router.get("/as-view/by-show-slug/{show_slug}", response_model=list[EpisodeAPIReadView])
+def episode_views_by_show_list(show_slug: str, limit: int | None = None):
+    """List the compact episode fields needed by show grids and frontend cache warming."""
+    with db_session() as s:
+        return get_episode_views_by_show_list(s, show_slug, limit)
 
 
 @router.post("", response_model=EpisodeAPIRead, status_code=status.HTTP_201_CREATED)
