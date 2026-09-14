@@ -1,8 +1,9 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useTaskLedger} from '../../lib/queries'
+import {useMediaDownloadHistory} from '../../lib/mediaDownloadHistory'
 import {ACTIVE_DOWNLOAD_STATUSES, MediaDownloadStatusReg} from '../../types/media_download'
 import {PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
+import {MediaDownloadHistoryEntryRead} from '../../types/schemas/media_download_history'
 import {TaskLedgerEntryRead} from '../../types/schemas/task'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
 
@@ -53,7 +54,7 @@ function isRedownload(run: TaskLedgerEntryRead): boolean {
     return resultData(run).is_redownload === true
 }
 
-function presentationStatus(run: TaskLedgerEntryRead): string {
+function taskPresentationStatus(run: TaskLedgerEntryRead): string {
     if (run.status === 'FAILED') return 'error'
     if (run.status === 'CANCELED') return 'cancelled'
     if (run.status === 'RUNNING') return 'downloading'
@@ -61,24 +62,46 @@ function presentationStatus(run: TaskLedgerEntryRead): string {
     return 'pending'
 }
 
-function runError(run: TaskLedgerEntryRead): string | null {
+function taskError(run: TaskLedgerEntryRead): string | null {
     if (run.lastError) return run.lastError
     return run.status === 'FAILED' ? run.message ?? null : null
 }
 
-/** Full detail view for one download row: current state plus canonical TaskRun history. */
+function entryStatus(entry: MediaDownloadHistoryEntryRead): string {
+    return entry.source === 'artifact'
+        ? entry.artifactStatus
+        : taskPresentationStatus(entry)
+}
+
+function entryError(entry: MediaDownloadHistoryEntryRead): string | null {
+    return entry.source === 'artifact'
+        ? entry.artifactError
+        : taskError(entry)
+}
+
+function entryType(entry: MediaDownloadHistoryEntryRead): string {
+    return entry.source === 'artifact'
+        ? 'File watcher'
+        : isRedownload(entry) ? 'Redownload' : 'Initial download'
+}
+
+function entryTime(entry: MediaDownloadHistoryEntryRead): string | null | undefined {
+    return entry.source === 'artifact'
+        ? entry.observedAt
+        : entry.finishedAt ?? entry.startedAt
+}
+
+function entryKey(entry: MediaDownloadHistoryEntryRead): string {
+    return entry.source === 'artifact' ? 'artifact-current' : `task-${entry.id}`
+}
+
+/** Full detail view for one download row: current state plus combined download history. */
 export default function DownloadLogDialog({row, onClose}: Props) {
-    const definitionKey = row?.type === 'episode' ? 'download_episode' : 'download_movie'
-    const ledger = useTaskLedger({
-        definitionKey,
-        resourceType: 'media_download',
-        resourceId: row?.id,
-        enabled: row !== null,
-    })
+    const history = useMediaDownloadHistory(row?.id)
 
     if (!row) return null
 
-    const attempts = ledger.data?.pages.flatMap((page) => page.items) ?? []
+    const entries = history.data?.pages.flatMap((page) => page.items) ?? []
     const currentAttempt = attemptLabel(row.isRedownloadAttempt)
     const downloadedVersion = row.downloadedPublishStatus
         ? PUBLISH_STATUS_LABELS[row.downloadedPublishStatus] ?? row.downloadedPublishStatus
@@ -120,29 +143,27 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                     <div><dt>File</dt><dd className="mono">{row.filePath}</dd></div>
                 </dl>
 
-                <p className="modal-text log-section-label">Attempt history</p>
-                {ledger.isLoading ? (
+                <p className="modal-text log-section-label">Download history</p>
+                {history.isLoading ? (
                     <p className="modal-text">Loading…</p>
-                ) : ledger.isError ? (
-                    <p className="modal-text">Could not load attempt history.</p>
-                ) : attempts.length === 0 ? (
-                    <p className="modal-text">No task runs recorded yet.</p>
+                ) : history.isError ? (
+                    <p className="modal-text">Could not load download history.</p>
+                ) : entries.length === 0 ? (
+                    <p className="modal-text">No history recorded yet.</p>
                 ) : (
                     <div className="log-attempts">
-                        {attempts.map((run) => {
-                            const status = presentationStatus(run)
-                            const error = runError(run)
+                        {entries.map((entry) => {
+                            const status = entryStatus(entry)
+                            const error = entryError(entry)
                             return (
-                                <div key={run.id} className="log-attempt">
+                                <div key={entryKey(entry)} className="log-attempt">
                                     <div className="log-attempt-header">
                                         <span className={`log-attempt-status log-attempt-status-${status}`}>
                                             {MediaDownloadStatusReg.getLabelLoose(status)}
                                         </span>
-                                        <span className="log-attempt-type">
-                                            {isRedownload(run) ? 'Redownload' : 'Initial download'}
-                                        </span>
+                                        <span className="log-attempt-type">{entryType(entry)}</span>
                                         <span className="log-attempt-time">
-                                            {formatDateTime(run.finishedAt ?? run.startedAt)}
+                                            {formatDateTime(entryTime(entry))}
                                         </span>
                                     </div>
                                     {error && <pre className="log-output">{error}</pre>}
@@ -152,15 +173,15 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                     </div>
                 )}
 
-                {ledger.hasNextPage && (
+                {history.hasNextPage && (
                     <div className="modal-actions">
                         <button
                             type="button"
                             className="btn"
-                            disabled={ledger.isFetchingNextPage}
-                            onClick={() => void ledger.fetchNextPage()}
+                            disabled={history.isFetchingNextPage}
+                            onClick={() => void history.fetchNextPage()}
                         >
-                            {ledger.isFetchingNextPage ? 'Loading…' : 'Load older attempts'}
+                            {history.isFetchingNextPage ? 'Loading…' : 'Load older history'}
                         </button>
                     </div>
                 )}

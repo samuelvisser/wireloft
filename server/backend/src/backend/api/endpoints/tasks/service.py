@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Literal, Optional
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from backend.db.core import get_session
 from task_manager.scheduler.db import TaskDefinition, TaskSchedule, TaskRun
@@ -144,6 +145,81 @@ def list_runs(
         s.close()
 
 
+def query_ledger(
+        s: Session,
+        *,
+        definition_key: str,
+        resource_type: str | None = None,
+        resource_ids: list[int] | None = None,
+        statuses: list[str] | None = None,
+        started_after: datetime | None = None,
+        order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
+        order: Literal["asc", "desc"] = "desc",
+        offset: int = 0,
+        limit: int = 50,
+) -> dict:
+    """Query paginated TaskRun history using a caller-owned database session."""
+    filters = [TaskDefinition.key == definition_key]
+    if resource_type is not None:
+        filters.append(TaskRun.resource_type == ResourceType(resource_type))
+    if resource_ids:
+        filters.append(TaskRun.resource_id.in_(resource_ids))
+    if statuses:
+        filters.append(TaskRun.status.in_([TaskStatus(status) for status in statuses]))
+    if started_after is not None:
+        filters.append(TaskRun.started_at >= started_after)
+
+    total = int(s.execute(
+        select(func.count(TaskRun.id))
+        .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
+        .where(*filters)
+    ).scalar_one())
+
+    order_column = {
+        "started_at": TaskRun.started_at,
+        "finished_at": TaskRun.finished_at,
+        "created_at": TaskRun.created_at,
+    }[order_by]
+    ordering = order_column.asc() if order == "asc" else order_column.desc()
+    tie_breaker = TaskRun.id.asc() if order == "asc" else TaskRun.id.desc()
+
+    rows = s.execute(
+        select(TaskRun, TaskDefinition.key)
+        .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
+        .where(*filters)
+        .order_by(ordering, tie_breaker)
+        .offset(offset)
+        .limit(limit)
+    ).all()
+
+    items = []
+    for run, def_key in rows:
+        meta = run.meta if isinstance(run.meta, dict) else {}
+        inputs = meta.get("inputs") if isinstance(meta.get("inputs"), dict) else {}
+        items.append({
+            "id": run.id,
+            "definition_key": def_key,
+            "resource_type": run.resource_type.value if hasattr(run.resource_type, "value") else run.resource_type,
+            "resource_id": run.resource_id,
+            "status": run.status.value if hasattr(run.status, "value") else run.status,
+            "message": run.message,
+            "last_error": run.last_error,
+            "inputs": inputs,
+            "result": run.result,
+            "started_at": run.started_at,
+            "finished_at": run.finished_at,
+            "runtime_ms": run.runtime_ms,
+        })
+
+    return {
+        "items": items,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "has_more": offset + len(items) < total,
+    }
+
+
 def list_ledger(
         *,
         definition_key: str,
@@ -159,65 +235,18 @@ def list_ledger(
     """Return paginated TaskRun history without worker-specific presentation data."""
     s = get_session()
     try:
-        filters = [TaskDefinition.key == definition_key]
-        if resource_type is not None:
-            filters.append(TaskRun.resource_type == ResourceType(resource_type))
-        if resource_ids:
-            filters.append(TaskRun.resource_id.in_(resource_ids))
-        if statuses:
-            filters.append(TaskRun.status.in_([TaskStatus(status) for status in statuses]))
-        if started_after is not None:
-            filters.append(TaskRun.started_at >= started_after)
-
-        total = int(s.execute(
-            select(func.count(TaskRun.id))
-            .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
-            .where(*filters)
-        ).scalar_one())
-
-        order_column = {
-            "started_at": TaskRun.started_at,
-            "finished_at": TaskRun.finished_at,
-            "created_at": TaskRun.created_at,
-        }[order_by]
-        ordering = order_column.asc() if order == "asc" else order_column.desc()
-        tie_breaker = TaskRun.id.asc() if order == "asc" else TaskRun.id.desc()
-
-        rows = s.execute(
-            select(TaskRun, TaskDefinition.key)
-            .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
-            .where(*filters)
-            .order_by(ordering, tie_breaker)
-            .offset(offset)
-            .limit(limit)
-        ).all()
-
-        items = []
-        for run, def_key in rows:
-            meta = run.meta if isinstance(run.meta, dict) else {}
-            inputs = meta.get("inputs") if isinstance(meta.get("inputs"), dict) else {}
-            items.append({
-                "id": run.id,
-                "definition_key": def_key,
-                "resource_type": run.resource_type.value if hasattr(run.resource_type, "value") else run.resource_type,
-                "resource_id": run.resource_id,
-                "status": run.status.value if hasattr(run.status, "value") else run.status,
-                "message": run.message,
-                "last_error": run.last_error,
-                "inputs": inputs,
-                "result": run.result,
-                "started_at": run.started_at,
-                "finished_at": run.finished_at,
-                "runtime_ms": run.runtime_ms,
-            })
-
-        return {
-            "items": items,
-            "total": total,
-            "offset": offset,
-            "limit": limit,
-            "has_more": offset + len(items) < total,
-        }
+        return query_ledger(
+            s,
+            definition_key=definition_key,
+            resource_type=resource_type,
+            resource_ids=resource_ids,
+            statuses=statuses,
+            started_after=started_after,
+            order_by=order_by,
+            order=order,
+            offset=offset,
+            limit=limit,
+        )
     finally:
         s.close()
 
