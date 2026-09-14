@@ -169,7 +169,7 @@ def test_single_brace_placeholders_are_rejected_instead_of_upgraded():
 
 
 def test_template_sources_use_only_ten_latest_episodes_and_fallback_for_empty_movies():
-    from backend.api.endpoints.local_media_profiles.service import get_output_template_sources
+    from backend.api.endpoints.local_media_profiles.output_template import get_output_template_sources
     from backend.db.models import Episode, Season, Show
     from backend.types.local_media_profile_types import LocalMediaProfileType
     from backend.types.show_types import EpisodeIdentifier, ShowType
@@ -226,7 +226,7 @@ def test_template_sources_use_only_ten_latest_episodes_and_fallback_for_empty_mo
 
 
 def test_movie_template_sources_include_local_extras_parent_first_and_limit_to_twenty():
-    from backend.api.endpoints.local_media_profiles.service import get_output_template_sources
+    from backend.api.endpoints.local_media_profiles.output_template import get_output_template_sources
     from backend.db.models import Movie, MovieExtra
     from backend.types.local_media_profile_types import LocalMediaProfileType
 
@@ -287,10 +287,10 @@ def test_movie_template_sources_include_local_extras_parent_first_and_limit_to_t
 
 
 def test_preview_uses_edited_values_and_returns_referenced_variables():
-    from backend.api.endpoints.local_media_profiles.service import preview_output_template
+    from backend.api.endpoints.local_media_profiles.output_template import local_media_profile_template_preview
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
 
-    result = preview_output_template(LocalMediaProfileTemplatePreview(
+    result = local_media_profile_template_preview(LocalMediaProfileTemplatePreview(
         type="movie",
         preferred_format="format_1080p",
         output_template=(
@@ -306,10 +306,10 @@ def test_preview_uses_edited_values_and_returns_referenced_variables():
 
 
 def test_preview_resolves_audio_extension_in_backend():
-    from backend.api.endpoints.local_media_profiles.service import preview_output_template
+    from backend.api.endpoints.local_media_profiles.output_template import local_media_profile_template_preview
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
 
-    result = preview_output_template(LocalMediaProfileTemplatePreview(
+    result = local_media_profile_template_preview(LocalMediaProfileTemplatePreview(
         type="show",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ show_title }}/{{ episode_title }}.ext",

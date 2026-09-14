@@ -1,12 +1,32 @@
 from fastapi import APIRouter, HTTPException, Query, status
 
-from .file_rename import request_local_media_profile_file_rename
-from .service import *
-from ...models.local_media_profile import *
-from ...models.operations import LocalMediaProfileFileRenameOperationAccepted
+from backend.api.models.local_media_profile import (
+    LocalMediaProfileAPICreate,
+    LocalMediaProfileAPIRead,
+    LocalMediaProfileAPIUpdate,
+    LocalMediaProfileTemplatePreview,
+    LocalMediaProfileTemplatePreviewResult,
+    LocalMediaProfileTemplateSources,
+)
+from backend.api.models.operations import LocalMediaProfileFileRenameOperationAccepted
 from backend.app import db_session
+from backend.types.local_media_profile_types import LocalMediaProfileType
+
+from .file_rename import request_local_media_profile_file_rename
+from .output_template import (
+    get_output_template_sources,
+    local_media_profile_template_preview,
+)
+from .service import (
+    create_local_media_profile,
+    delete_local_media_profile,
+    get_local_media_profile,
+    get_local_media_profiles_list,
+    update_local_media_profile,
+)
 
 router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles"])
+
 
 @router.get("", response_model=list[LocalMediaProfileAPIRead])
 def local_media_profiles_list():
@@ -28,7 +48,7 @@ def local_media_profiles_create(body: LocalMediaProfileAPICreate):
             raise
 
 
-@router.get("/template-sources", response_model=LocalMediaProfileTemplateSources)
+@router.get("/template/sources", response_model=LocalMediaProfileTemplateSources)
 def local_media_profile_template_sources(
     type: LocalMediaProfileType = Query(...),
 ):
@@ -40,11 +60,11 @@ def local_media_profile_template_sources(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.post("/template-preview", response_model=LocalMediaProfileTemplatePreviewResult)
-def local_media_profile_template_preview(body: LocalMediaProfileTemplatePreview):
+@router.post("/template/preview", response_model=LocalMediaProfileTemplatePreviewResult)
+def local_media_profile_template_preview_endpoint(body: LocalMediaProfileTemplatePreview):
     """Render an unsaved output path template against editable example values."""
     try:
-        return preview_output_template(body)
+        return local_media_profile_template_preview(body)
     except ValueError as exc:
         raise HTTPException(
             status_code=422,

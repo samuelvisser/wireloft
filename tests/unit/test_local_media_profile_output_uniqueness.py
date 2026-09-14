@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def test_canonical_output_resolves_assignments_and_ignores_unused_conditions() -> None:
-    from backend.api.endpoints.local_media_profiles.service import _canonical_template_patterns
+    from backend.api.endpoints.local_media_profiles.helpers import _canonical_template_patterns
 
     expected = frozenset({"/downloads/{title}.ext"})
 
@@ -24,7 +24,7 @@ def test_canonical_output_resolves_assignments_and_ignores_unused_conditions() -
 
 
 def test_canonical_output_keeps_only_conditionals_that_change_output() -> None:
-    from backend.api.endpoints.local_media_profiles.service import _canonical_template_patterns
+    from backend.api.endpoints.local_media_profiles.helpers import _canonical_template_patterns
 
     assert _canonical_template_patterns(
         "/downloads/{% if year %}special/{% endif %}{{ title }}.ext"
@@ -44,7 +44,7 @@ def test_canonical_output_keeps_only_conditionals_that_change_output() -> None:
 
 
 def test_canonical_output_normalizes_expressions_and_marks_unsupported_jinja() -> None:
-    from backend.api.endpoints.local_media_profiles.service import _canonical_template_patterns
+    from backend.api.endpoints.local_media_profiles.helpers import _canonical_template_patterns
 
     assert _canonical_template_patterns(
         "/downloads/{{ title | lower }}.ext"
