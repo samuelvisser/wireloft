@@ -1,0 +1,13 @@
+[
+  {
+    "prefix": "fas",
+    "proExport": "fas",
+    "freePackage": "@fortawesome/free-solid-svg-icons",
+    "freeExport": "fas"
+  },
+  {
+    "prefix": "far",
+    "proExport": "far",
+    "freeFallbackPrefix": "fas"
+  }
+]
