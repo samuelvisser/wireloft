@@ -11,6 +11,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
 
+from config.network import is_no_internet_error
 from .cached_video import get_cached_mp4_size
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import Episode, LocalMediaProfile, RssStreamProfile
@@ -297,6 +298,8 @@ def get_dailywire_stream_url(
             require_member_exclusive=require_member_exclusive,
         )
     except MiddlewareAPIError as exc:
+        if is_no_internet_error(exc):
+            raise
         raise HTTPException(
             status_code=502,
             detail="Daily Wire stream is currently unavailable",
