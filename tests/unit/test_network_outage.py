@@ -68,9 +68,10 @@ def test_no_internet_classifier_does_not_hide_remote_service_errors() -> None:
     assert not is_no_internet_error(RuntimeError("HTTP 503 from upstream"))
 
 
-def test_scheduler_suppresses_only_no_internet_traceback(monkeypatch) -> None:
+def test_scheduler_suppresses_expected_external_failures(monkeypatch, caplog) -> None:
     import task_manager.scheduler.executor as executor_module
     from config.network import NoInternetConnectionError
+    from dailywire_downloader import MediaUnavailableError
     from task_manager.scheduler.scheduler import _execute_task_job
 
     def offline(**_kwargs) -> None:
@@ -78,6 +79,14 @@ def test_scheduler_suppresses_only_no_internet_traceback(monkeypatch) -> None:
 
     monkeypatch.setattr(executor_module, "execute_task", offline)
     _execute_task_job(def_key="test", resource_type="show", resource_id=1)
+
+    def unavailable(**_kwargs) -> None:
+        raise MediaUnavailableError("Could not refresh signed media URL")
+
+    monkeypatch.setattr(executor_module, "execute_task", unavailable)
+    _execute_task_job(def_key="download_episode", resource_type="media_download", resource_id=1)
+    assert "could not access Daily Wire media" in caplog.text
+    assert "Could not refresh signed media URL" in caplog.text
 
     def broken(**_kwargs) -> None:
         raise RuntimeError("application bug")

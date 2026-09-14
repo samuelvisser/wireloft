@@ -36,15 +36,18 @@ assert 'refresh_movie_extras' in {definition.key for definition in all_definitio
 
 
 def test_app_factory_is_side_effect_free_and_lifespan_owns_controller(monkeypatch):
+    import backend.app as backend_app
     import controller
-    from backend.app import create_app
+    from config import get_settings
 
     start = Mock()
     stop = Mock()
     monkeypatch.setattr(controller, "start_controller", start)
     monkeypatch.setattr(controller, "stop_controller", stop)
+    monkeypatch.setattr(get_settings().scheduler, "enabled", False)
+    monkeypatch.setattr(backend_app, "_recover_download_filesystem", lambda *_args: None)
 
-    first_app = create_app()
+    first_app = backend_app.create_app()
     assert start.call_count == 0
     assert stop.call_count == 0
 
@@ -56,7 +59,7 @@ def test_app_factory_is_side_effect_free_and_lifespan_owns_controller(monkeypatc
     asyncio.run(run_lifespan(first_app, 1, 0))
     assert stop.call_count == 1
 
-    second_app = create_app()
+    second_app = backend_app.create_app()
     asyncio.run(run_lifespan(second_app, 2, 1))
     assert start.call_count == 2
     assert stop.call_count == 2

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 
 
 def test_startup_cleanup_removes_abandoned_placeholder(tmp_path):
@@ -138,21 +139,51 @@ def test_startup_cleanup_preserves_published_file_committed_to_database(tmp_path
     assert not workspace.workspace.exists()
 
 
-def test_application_lifespan_cleans_download_state_before_controller_recovery(monkeypatch):
+def test_application_lifespan_is_ready_while_download_recovery_runs(monkeypatch):
     import controller
+    import task_manager.scheduler.scheduler as scheduler_module
     import task_manager.tasks.helpers.downloads.download_paths as download_paths
     from backend.app import application_lifespan
+    from config import get_settings
 
     calls: list[str] = []
+    cleanup_started = threading.Event()
+    allow_cleanup_to_finish = threading.Event()
+    cleanup_finished = threading.Event()
+
+    class FakeScheduler:
+        running = True
+
+        def pause(self):
+            calls.append("pause")
+
+        def resume(self):
+            calls.append("resume")
+
+    scheduler = FakeScheduler()
+
+    def clean_reservations(_root):
+        calls.append("reservation-cleanup")
+        cleanup_started.set()
+        assert allow_cleanup_to_finish.wait(timeout=2)
+        return 2
+
+    def clean_temporary(*_args, **_kwargs):
+        calls.append("temporary-cleanup")
+        cleanup_finished.set()
+        return 3
+
+    monkeypatch.setattr(get_settings().scheduler, "enabled", True)
+    monkeypatch.setattr(scheduler_module, "start_scheduler", lambda: scheduler)
     monkeypatch.setattr(
         download_paths,
         "cleanup_abandoned_download_path_reservations",
-        lambda _root: calls.append("reservation-cleanup") or 0,
+        clean_reservations,
     )
     monkeypatch.setattr(
         download_paths,
         "cleanup_abandoned_temporary_downloads",
-        lambda *_args, **_kwargs: calls.append("temporary-cleanup") or 0,
+        clean_temporary,
     )
     monkeypatch.setattr(controller, "start_controller", lambda: calls.append("start"))
     monkeypatch.setattr(controller, "stop_controller", lambda: calls.append("stop"))
@@ -160,16 +191,26 @@ def test_application_lifespan_cleans_download_state_before_controller_recovery(m
     async def run_lifespan():
         async with application_lifespan(None):
             calls.append("running")
+            assert await asyncio.to_thread(cleanup_started.wait, 1)
+            assert "temporary-cleanup" not in calls
+            assert "resume" not in calls
+
+            allow_cleanup_to_finish.set()
+            assert await asyncio.to_thread(cleanup_finished.wait, 1)
+            for _ in range(100):
+                if "resume" in calls:
+                    break
+                await asyncio.sleep(0.001)
+            assert "resume" in calls
 
     asyncio.run(run_lifespan())
 
-    assert calls == [
-        "reservation-cleanup",
-        "temporary-cleanup",
-        "start",
-        "running",
-        "stop",
-    ]
+    assert calls.index("pause") < calls.index("start")
+    assert calls.index("start") < calls.index("running")
+    assert calls.index("running") < calls.index("temporary-cleanup")
+    assert calls.index("reservation-cleanup") < calls.index("temporary-cleanup")
+    assert calls.index("temporary-cleanup") < calls.index("resume")
+    assert calls.index("resume") < calls.index("stop")
 
 
 def test_startup_cleanup_removes_partial_marker_without_touching_external_empty_file(tmp_path):

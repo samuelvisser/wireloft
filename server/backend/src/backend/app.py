@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import asynccontextmanager, contextmanager
 
 from fastapi import FastAPI, Request
@@ -30,29 +31,80 @@ def db_session():
         s.close()
 
 
-@asynccontextmanager
-async def application_lifespan(app: FastAPI):
-    """Own the background controller for exactly one ASGI app lifespan."""
-    import controller
+def _recover_download_filesystem(download_settings, scheduler) -> None:
+    """Reconcile crash leftovers without delaying API readiness.
+
+    The scheduler is deliberately paused before the controller restores its jobs,
+    so startup/recovery work can be queued safely while these filesystem scans run
+    in the background. Only after the stale download claims and temporary
+    workspaces have been reconciled may scheduled work begin executing.
+    """
     from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_download_path_reservations,
         cleanup_abandoned_temporary_downloads,
     )
 
-    settings = get_settings().download_settings
-    # A killed download worker can leave either a direct-mode destination claim
-    # or a private temporary-mode publication record behind. Reconcile both
-    # before controller recovery can dispatch interrupted downloads again.
-    cleanup_abandoned_download_path_reservations(settings.download_root)
-    cleanup_abandoned_temporary_downloads(
-        settings.temporary_download_root,
-        settings.download_root,
-    )
+    try:
+        logger.info("Starting background download filesystem recovery")
+        reservation_count = cleanup_abandoned_download_path_reservations(
+            download_settings.download_root
+        )
+        temporary_count = cleanup_abandoned_temporary_downloads(
+            download_settings.temporary_download_root,
+            download_settings.download_root,
+        )
+        logger.info(
+            "Download filesystem recovery complete: cleaned %s stale path claim(s) and %s temporary workspace(s)",
+            reservation_count,
+            temporary_count,
+        )
+    except Exception:
+        # Filesystem recovery is best-effort crash cleanup. A transient mount or
+        # permissions problem must not leave every background task paused forever.
+        logger.exception(
+            "Download filesystem recovery failed; resuming scheduled work without complete cleanup"
+        )
+    finally:
+        if scheduler is not None and scheduler.running:
+            try:
+                scheduler.resume()
+            except Exception:
+                # The scheduler may have been shut down while the daemon recovery
+                # thread was still scanning a slow/network-backed download root.
+                if scheduler.running:
+                    logger.exception("Could not resume scheduler after download filesystem recovery")
+
+
+@asynccontextmanager
+async def application_lifespan(app: FastAPI):
+    """Own the background controller for exactly one ASGI app lifespan."""
+    import controller
+    from task_manager.scheduler.scheduler import start_scheduler
+
+    settings = get_settings()
+    scheduler = None
+
+    # The download crash-recovery scans can be very expensive on a large or
+    # network-backed library. Start APScheduler empty and paused first, then let
+    # controller startup restore its jobs while keeping all of them fenced. This
+    # makes the API/UI ready immediately without allowing recovered downloads to
+    # race stale path reservations or temporary publication state.
+    if settings.scheduler.enabled:
+        scheduler = start_scheduler()
+        scheduler.pause()
 
     started = False
     try:
         controller.start_controller()
         started = True
+
+        recovery_thread = threading.Thread(
+            target=_recover_download_filesystem,
+            args=(settings.download_settings, scheduler),
+            name="wireloft-startup-download-recovery",
+            daemon=True,
+        )
+        recovery_thread.start()
         yield
     finally:
         if started:

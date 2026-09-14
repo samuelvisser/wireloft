@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from datetime import datetime
 from typing import Iterable, Optional
@@ -15,22 +16,35 @@ from apscheduler.triggers.date import DateTrigger
 from backend.db.datetime_types import utc_datetime
 from config import get_settings
 from config.network import is_no_internet_error
+from dailywire_downloader import MediaUnavailableError
 
 _scheduler: Optional[AsyncIOScheduler] = None
 WATCHDOG_EXECUTOR_ALIAS = "watchdog"
+logger = logging.getLogger(__name__)
 
 
 def _execute_task_job(**kwargs) -> None:
-    """Run one task without turning an expected internet outage into an APScheduler traceback."""
+    """Run one task without noisy tracebacks for expected external conditions."""
     from .executor import execute_task  # local import to avoid cycles
 
     try:
         execute_task(**kwargs)
     except Exception as exc:
-        if not is_no_internet_error(exc):
-            raise
-        # execute_task already persisted and logged the normalized outage. Returning
-        # normally here prevents APScheduler from printing the exception traceback.
+        if is_no_internet_error(exc):
+            # execute_task already persisted and logged the normalized outage.
+            return
+        if isinstance(exc, MediaUnavailableError):
+            # A download worker already tried to refresh an unusable signed media
+            # URL before this reaches the scheduler. Keep the persisted task
+            # failure visible without asking APScheduler to dump the whole causal
+            # traceback for an expected authentication/media-availability state.
+            logger.warning(
+                "Task %s could not access Daily Wire media: %s",
+                kwargs.get("def_key", "unknown"),
+                exc,
+            )
+            return
+        raise
 
 
 def get_trigger(name: str, args: dict):
