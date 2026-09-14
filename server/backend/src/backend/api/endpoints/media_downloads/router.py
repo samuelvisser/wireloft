@@ -13,6 +13,7 @@ from task_manager.tasks.media_download_operations import (
     create_media_download_operation,
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
+    prioritize_media_download_operation,
 )
 
 router = APIRouter(prefix="/media-downloads", tags=["Media Downloads"])
@@ -92,6 +93,40 @@ def media_downloads_retry(media_download_id: int):
         except Exception:
             s.rollback()
             raise
+
+
+@router.post(
+    "/{media_download_id}/prioritize",
+    response_model=MediaDownloadOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def media_downloads_prioritize(media_download_id: int):
+    """Prioritize a queued download without replacing or restarting its attempt."""
+    with db_session() as s:
+        download = s.get(MediaDownloadBase, media_download_id)
+        if download is None:
+            raise HTTPException(status_code=404, detail="Media download not found")
+
+        try:
+            operation = prioritize_media_download_operation(s, media_download_id)
+            # If a slot is already free, fill it now using the newly updated
+            # ordering. Otherwise the terminal callback will honor this timestamp
+            # when the next running download releases a slot.
+            dispatch_queued_media_download_operations(s)
+            operation_id = operation.id
+            s.commit()
+        except ValueError as exc:
+            s.rollback()
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception:
+            s.rollback()
+            raise
+
+    return {
+        "queued": True,
+        "operation_id": operation_id,
+        "media_download_id": media_download_id,
+    }
 
 
 @router.post("/{media_download_id}/cancel", response_model=MediaDownloadAPIRead)

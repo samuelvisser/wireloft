@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
@@ -149,6 +151,66 @@ def test_system_download_operation_uses_durable_completion_acknowledgement():
         # System/API work does not need a toast, but its terminal state must stay
         # discoverable until a frontend invalidates the ordinary domain queries.
         assert operation.notification_seen_at is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_prioritize_queued_download_records_the_click_time():
+    from task_manager.tasks.media_download_operations import (
+        create_media_download_operation,
+        prioritize_media_download_operation,
+    )
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="priority-time")
+        operation = create_media_download_operation(session, download)
+        before = datetime.now(timezone.utc)
+
+        prioritized = prioritize_media_download_operation(session, download.id)
+        after = datetime.now(timezone.utc)
+
+        assert prioritized.id == operation.id
+        assert prioritized.prioritized_at is not None
+        assert before <= prioritized.prioritized_at <= after
+
+        first_click = prioritized.prioritized_at
+        prioritize_media_download_operation(session, download.id)
+        assert prioritized.prioritized_at is not None
+        assert prioritized.prioritized_at >= first_click
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_prioritized_downloads_dispatch_first_in_click_order(monkeypatch):
+    from task_manager.tasks import media_download_operations
+
+    session, engine = _session()
+    try:
+        normal_download = _make_download(session, slug="normal")
+        first_download = _make_download(session, slug="priority-first")
+        second_download = _make_download(session, slug="priority-second")
+        normal = media_download_operations.create_media_download_operation(session, normal_download)
+        first = media_download_operations.create_media_download_operation(session, first_download)
+        second = media_download_operations.create_media_download_operation(session, second_download)
+
+        first_click = datetime(2026, 9, 10, 0, 15, tzinfo=timezone.utc)
+        first.prioritized_at = first_click
+        second.prioritized_at = first_click + timedelta(seconds=1)
+        session.commit()
+
+        dispatched: list[str] = []
+
+        def capture_dispatch(_session: Session, operation) -> bool:
+            dispatched.append(operation.id)
+            return True
+
+        monkeypatch.setattr(media_download_operations, "_reserve_target_dispatch", capture_dispatch)
+
+        assert media_download_operations.dispatch_queued_media_download_operations(session, budget=3) == 3
+        assert dispatched == [first.id, second.id, normal.id]
     finally:
         session.close()
         engine.dispose()

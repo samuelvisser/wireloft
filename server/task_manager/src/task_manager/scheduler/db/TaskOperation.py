@@ -38,6 +38,7 @@ class TaskOperation(Base):
     error: Mapped[Optional[str]] = mapped_column(Text)
 
     notification_seen_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), index=True)
+    prioritized_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), index=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
     finished_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())

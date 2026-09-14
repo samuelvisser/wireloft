@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from backend.db.core import get_session
@@ -123,6 +124,35 @@ def get_active_media_download_operation(
     )
 
 
+def prioritize_media_download_operation(
+    session: Session,
+    media_download_id: int,
+) -> TaskOperation:
+    """Move one queued media download ahead of the ordinary FIFO queue.
+
+    Priority itself remains FIFO: each click records a fresh UTC timestamp, so
+    downloads prioritized earlier are selected before downloads prioritized
+    later. Re-prioritizing the same download deliberately moves it to the end of
+    the prioritized group.
+    """
+    operation = get_active_media_download_operation(session, media_download_id)
+    if operation is None or operation.status != OperationStatus.QUEUED.value:
+        raise ValueError("This download is not queued")
+
+    if not operation.targets:
+        raise ValueError("This queued download has no executable target")
+    target = operation.targets[0]
+    if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
+        # It can still be presented as QUEUED while its SCHEDULED TaskRun is
+        # waiting for a worker thread. At that point the download already owns a
+        # slot, so there is no remaining queue position to change.
+        return operation
+
+    operation.prioritized_at = datetime.now(timezone.utc)
+    session.flush()
+    return operation
+
+
 def create_media_download_operation(
     session: Session,
     download: MediaDownloadBase,
@@ -238,6 +268,9 @@ def _reserve_target_dispatch(
         run_id=run.id,
         **task_kwargs,
     )
+    # Priority is consumed once the operation has claimed a download slot. This
+    # prevents an old click from affecting a later recovery of the same operation.
+    operation.prioritized_at = None
     return True
 
 
@@ -263,7 +296,12 @@ def dispatch_queued_media_download_operations(
                 TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
                 TaskOperation.status == OperationStatus.QUEUED.value,
             )
-            .order_by(TaskOperation.created_at.asc(), TaskOperation.id.asc())
+            .order_by(
+                case((TaskOperation.prioritized_at.is_not(None), 0), else_=1),
+                TaskOperation.prioritized_at.asc(),
+                TaskOperation.created_at.asc(),
+                TaskOperation.id.asc(),
+            )
             .limit(max(25, budget * 4))
         )
     )
