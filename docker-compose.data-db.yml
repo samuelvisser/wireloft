@@ -1,0 +1,18 @@
+# Development override for testing the legacy/local database layout.
+#
+# The normal docker-compose.yml keeps all persistent application state in
+# ./config. Apply this override when you want the SQLite database isolated in
+# ./data instead, while still keeping config.yml and keyring state in ./config.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.data-db.yml up --build
+#
+# Switch back to the normal layout with:
+#   docker compose -f docker-compose.yml up --build
+
+services:
+  wireloft:
+    volumes:
+      - ./data:/data
+    environment:
+      - WL_DATABASE_PATH=/data/wireloft.db

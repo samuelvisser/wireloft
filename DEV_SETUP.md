@@ -14,6 +14,20 @@ docker compose up -d --build
 
 Then open http://localhost:8080.
 
+By default, Docker uses the same `config/wireloft.db` database as local
+development. To test the older isolated database layout instead, apply the
+included override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.data-db.yml up -d --build
+```
+
+That keeps `config.yml` and keyring state in `./config`, but mounts `./data` at
+`/data` and uses `/data/wireloft.db`. Because `config/wireloft.db` and
+`data/wireloft.db` are separate files, you can switch between the two layouts
+without moving or replacing either database. Return to the normal layout with
+`docker compose up -d --build`.
+
 Or with plain `docker`:
 
 ```bash
@@ -164,7 +178,8 @@ Options:
 
 This project includes a required SQLite database for the backend.
 - Default development DB path: config/wireloft.db
-- Docker mounts the same project `config` directory at `/config` and uses `/config/wireloft.db`, so local development and Docker operate on the same database by default.
+- Docker normally mounts the same project `config` directory at `/config` and uses `/config/wireloft.db`, so local development and Docker operate on the same database by default.
+- Docker can instead use the isolated `data/wireloft.db` database through `docker-compose.data-db.yml`.
 
 #### Create and seed the database
 
