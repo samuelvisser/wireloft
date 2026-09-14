@@ -12,6 +12,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from config import get_settings
+from config.network import NO_INTERNET_CONNECTION_MESSAGE, message_indicates_no_internet
 
 
 logger = logging.getLogger(__name__)
@@ -137,10 +138,17 @@ def prepare_cached_mp4(source_url: str, *, episode_uuid: str) -> Path:
                 prepared = False
 
             if completed.returncode != 0 or not prepared:
+                stderr = completed.stderr or ""
+                if message_indicates_no_internet(stderr):
+                    logger.warning(NO_INTERNET_CONNECTION_MESSAGE)
+                    raise HTTPException(
+                        status_code=503,
+                        detail=NO_INTERNET_CONNECTION_MESSAGE,
+                    )
                 logger.error(
                     "ffmpeg failed to prepare cached RSS video (exit %s): %s",
                     completed.returncode,
-                    (completed.stderr or "")[-4000:],
+                    stderr[-4000:],
                 )
                 raise HTTPException(
                     status_code=502,

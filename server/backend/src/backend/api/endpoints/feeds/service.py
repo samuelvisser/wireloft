@@ -23,6 +23,7 @@ from backend.types.stream_profile_types import (
     DEFAULT_RSS_DW_VIDEO_METHOD,
     RssDwVideoMethod,
 )
+from config.network import is_no_internet_error
 from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
@@ -301,6 +302,8 @@ def get_dailywire_stream_url(
             require_member_exclusive=require_member_exclusive,
         )
     except MiddlewareAPIError as exc:
+        if is_no_internet_error(exc):
+            raise
         raise HTTPException(
             status_code=502,
             detail="Daily Wire stream is currently unavailable",

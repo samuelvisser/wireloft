@@ -27,7 +27,12 @@ from ...helpers.episodes.same_episode import (
     PENDING_EPISODE_STATUSES,
     reconcile_single_pending_episode_slug,
 )
-from ...helpers.episodes.save import SavedEpisode, save_dw_episodes_per_season_asc
+from ...helpers.episodes.save import (
+    ResolvedEpisode,
+    SavedEpisode,
+    resolve_dw_episodes,
+    save_resolved_episodes_per_season_asc,
+)
 from ...helpers.progress import ProgressBounds, update_progress
 from ...helpers.seasons import create_season_by_dw_season
 from ...types.general import RecordOrder
@@ -91,11 +96,19 @@ async def run_fetch_new_episodes(
     progress=None,
 ) -> FetchNewEpisodesResult:
     shows: Sequence[Show] = get_shows(s, show_id=show_id, show_slug=show_slug)
+    show_ids = [show.id for show in shows]
+
+    # Token refresh can itself require the internet. Do not retain the SELECT
+    # transaction used to find the shows while waiting for OAuth/DNS/HTTP.
+    s.rollback()
     tokens = DeviceAuthClient().get_token()
     access_token = tokens.access_token if tokens else None
     client = MiddlewareClient(access_token=access_token)
     completed: list[ShowEpisodeScanResult] = []
-    for show in shows:
+    for current_show_id in show_ids:
+        show = s.get(Show, current_show_id)
+        if show is None:
+            continue
         try:
             found = await _fetch_show(
                 s,
@@ -126,10 +139,12 @@ async def _fetch_show(
     dry_run: bool,
     progress=None,
 ) -> int:
+    show_id = show.id
+    show_slug = show.slug
     membership_plan = show.membership_level
     if membership_plan != WlDwMembershipLevel.FREE.value and access_token is None:
         if membership_plan != WlDwMembershipLevel.WL_ANY.value:
-            logger.warning("No valid access token for show %s", show.slug)
+            logger.warning("No valid access token for show %s", show_slug)
             return 0
     if membership_plan == WlDwMembershipLevel.WL_ANY.value:
         membership_plan = WlDwMembershipLevel.FREE.value
@@ -138,40 +153,58 @@ async def _fetch_show(
     latest_final_episode = s.execute(
         select(Episode)
         .where(
-            Episode.show_id == show.id,
+            Episode.show_id == show_id,
             Episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value,
         )
         .order_by(Episode.index.desc())
         .limit(1)
     ).scalar_one_or_none()
+    latest_final_episode_id = latest_final_episode.id if latest_final_episode is not None else None
 
     monitor_requests: dict[int, dict] = {
         episode.id: _monitor_request_for_db_episode(show, episode)
         for episode in s.scalars(select(Episode).where(
-            Episode.show_id == show.id,
+            Episode.show_id == show_id,
             Episode.publish_status.in_(PENDING_EPISODE_STATUSES),
         ))
     }
 
-    dw_show = client.get_show_page(show.slug, membership_plan=membership_plan)
+    # The local snapshot is complete. Release its transaction before the first
+    # Daily Wire request so an outage cannot pin a DB connection per worker.
+    s.rollback()
+    dw_show = client.get_show_page(show_slug, membership_plan=membership_plan)
     all_dw_seasons: list[DwSeasonRecord] = dw_show.seasons
+
+    show = s.get(Show, show_id)
+    if show is None:
+        raise ValueError(f"Show {show_id} was removed while it was being indexed")
     for remote_season in all_dw_seasons:
         if not any(season.slug == remote_season.slug for season in show.seasons):
             create_season_by_dw_season(s, show=show, dw_season=remote_season)
             s.flush()
             s.refresh(show, attribute_names=["seasons"])
     if not dry_run:
+        # Newly discovered seasons are independent local facts and must exist before
+        # the network-only prefetch phase. Committing also releases the connection.
         s.commit()
 
     dw_id_by_slug = {season.slug: season.dw_id for season in all_dw_seasons}
+    season_requests = [
+        (season.id, season.slug, dw_id_by_slug.get(season.slug))
+        for season in show.seasons
+    ]
+    if not dry_run:
+        s.rollback()
+
+    # Fetch complete remote season snapshots without touching the ORM. This is the
+    # largest I/O phase of discovery and may span several requests per season.
     prefetched: dict[int, list[DwEpisodeRecord]] = {}
-    for season in show.seasons:
-        remote_id = dw_id_by_slug.get(season.slug)
+    for season_id, _season_slug, remote_id in season_requests:
         if remote_id is None:
             continue
-        records = fetch_all_episodes_paginated(
+        prefetched[season_id] = fetch_all_episodes_paginated(
             client,
-            show.slug,
+            show_slug,
             ByShowSeason(
                 season_dw_id=remote_id,
                 membership_plan=membership_plan,
@@ -179,7 +212,21 @@ async def _fetch_show(
                 order_by="CreatedAt_ASC",
             ),
         )
-        prefetched[season.id] = records
+
+    if not dry_run:
+        show = s.get(Show, show_id)
+        if show is None:
+            raise ValueError(f"Show {show_id} was removed while it was being indexed")
+        latest_final_episode = (
+            s.get(Episode, latest_final_episode_id)
+            if latest_final_episode_id is not None
+            else None
+        )
+
+    for season_id, records in prefetched.items():
+        season = get_season_from_list_by_id(show.seasons, season_id)
+        if season is None:
+            continue
         if reconcile_single_pending_episode_slug(
             s,
             show=show,
@@ -188,12 +235,12 @@ async def _fetch_show(
         ) is not None:
             # Refresh requests with the newly adopted slug while keeping immutable id identity.
             for episode in s.scalars(select(Episode).where(
-                Episode.show_id == show.id,
+                Episode.show_id == show_id,
                 Episode.publish_status.in_(PENDING_EPISODE_STATUSES),
             )):
                 monitor_requests[episode.id] = _monitor_request_for_db_episode(show, episode)
 
-    known_episode_slugs = set(s.scalars(select(Episode.slug).where(Episode.show_id == show.id)))
+    known_episode_slugs = set(s.scalars(select(Episode.slug).where(Episode.show_id == show_id)))
     prev_max_values: IdentifierMaxValues = {
         item.key: int(item.value)
         for item in show.meta_items
@@ -215,41 +262,57 @@ async def _fetch_show(
         progress_bounds=ProgressBounds(1, upper),
         order=RecordOrder.ASC,
         prefetched_by_season=prefetched,
-        vacated_identifiers=vacated_canonical_identifiers_for_show(s, show.id),
+        vacated_identifiers=vacated_canonical_identifiers_for_show(s, show_id),
     )
 
     if dry_run:
         _print_dry_run_report(show, ep_map_asc, identifier_max_values)
         s.rollback()
-        update_progress(progress, 100, f"Dry run complete for '{show.slug}' (nothing saved)")
+        update_progress(progress, 100, f"Dry run complete for '{show_slug}' (nothing saved)")
         return 0
-
-    for key, value in identifier_max_values.items():
-        show.set_meta(key=key, value=str(value))
 
     total = count_total_episodes(ep_map_asc)
     if total == 0:
+        for key, value in identifier_max_values.items():
+            show.set_meta(key=key, value=str(value))
         _queue_monitor_requests(s, monitor_requests.values())
         _queue_show_indexed(s, show=show, indexed_count=0)
         s.commit()
         update_progress(progress, 100, _completion_message(0, len(monitor_requests)))
         return 0
 
+    # Slug reconciliation is now complete. Persist it before resolving individual
+    # episode details, then perform all remaining remote/HLS work with no DB
+    # connection checked out.
+    s.commit()
+    always_resolve_details = latest_final_episode_id is not None
+    resolved_by_season: dict[int, list[ResolvedEpisode]] = {}
+    for season_id, ep_list in ep_map_asc.items():
+        resolved_by_season[season_id] = resolve_dw_episodes(
+            episodes=ep_list,
+            client=client,
+            require_member_exclusive=require_member_exclusive,
+            always_resolve_details=always_resolve_details,
+        )
+
+    show = s.get(Show, show_id)
+    if show is None:
+        raise ValueError(f"Show {show_id} was removed while it was being indexed")
+    for key, value in identifier_max_values.items():
+        show.set_meta(key=key, value=str(value))
+
     latest_episode_index = get_latest_ep_index(s, show=show) or 0
     current_index = latest_episode_index + 1
-    for season_id, ep_list in ep_map_asc.items():
+    for season_id, resolved_episodes in resolved_by_season.items():
         season = get_season_from_list_by_id(show.seasons, season_id)
         if season is None:
             continue
-        current_index, saved_episodes = save_dw_episodes_per_season_asc(
+        current_index, saved_episodes = save_resolved_episodes_per_season_asc(
             s,
             show=show,
             season=season,
-            episodes=ep_list,
+            episodes=resolved_episodes,
             start_index=current_index,
-            client=client,
-            require_member_exclusive=require_member_exclusive,
-            always_resolve_details=latest_final_episode is not None,
         )
         _announce_new_episodes(
             s,
