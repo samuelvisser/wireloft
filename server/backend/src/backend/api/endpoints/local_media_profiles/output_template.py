@@ -147,7 +147,7 @@ def get_output_template_sources(
     return LocalMediaProfileTemplateSources(sources=sources)
 
 
-def local_media_profile_template_preview(
+def get_output_template_preview(
     body: LocalMediaProfileTemplatePreview,
 ) -> LocalMediaProfileTemplatePreviewResult:
     if body.type == LocalMediaProfileType.SHOW:

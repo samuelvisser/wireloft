@@ -15,7 +15,7 @@ from backend.types.local_media_profile_types import LocalMediaProfileType
 from .file_rename import request_local_media_profile_file_rename
 from .output_template import (
     get_output_template_sources,
-    local_media_profile_template_preview,
+    get_output_template_preview,
 )
 from .service import (
     create_local_media_profile,
@@ -61,10 +61,10 @@ def local_media_profile_template_sources(
 
 
 @router.post("/template/preview", response_model=LocalMediaProfileTemplatePreviewResult)
-def local_media_profile_template_preview_endpoint(body: LocalMediaProfileTemplatePreview):
+def local_media_profile_template_preview(body: LocalMediaProfileTemplatePreview):
     """Render an unsaved output path template against editable example values."""
     try:
-        return local_media_profile_template_preview(body)
+        return get_output_template_preview(body)
     except ValueError as exc:
         raise HTTPException(
             status_code=422,
