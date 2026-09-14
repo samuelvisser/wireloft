@@ -15,6 +15,10 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from config import get_settings
+from config.network import (
+    NO_INTERNET_CONNECTION_MESSAGE,
+    is_no_internet_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -245,6 +249,10 @@ class TMDbClient:
                     continue
                 raise TMDbAPIError(f"TMDB request failed with HTTP {exc.code}") from exc
             except URLError as exc:
+                if is_no_internet_error(exc):
+                    # DNS/routing outages will not improve during a tight local retry
+                    # loop. Return immediately and let the owning task retry later.
+                    raise TMDbAPIError(NO_INTERNET_CONNECTION_MESSAGE) from exc
                 if attempt < self._max_retries:
                     time.sleep(min(2 ** attempt, 5))
                     continue
@@ -289,8 +297,12 @@ def lookup_movie_release_metadata(
             duration_seconds=duration_seconds,
         )
     except Exception as exc:
-        message = _truncate_error(str(exc))
-        logger.warning("TMDB movie metadata lookup failed for %r: %s", title, message)
+        if is_no_internet_error(exc):
+            message = NO_INTERNET_CONNECTION_MESSAGE
+            logger.warning(message)
+        else:
+            message = _truncate_error(str(exc))
+            logger.warning("TMDB movie metadata lookup failed for %r: %s", title, message)
         return MovieReleaseLookupResult(
             status="error",
             attempted_at=attempted_at,
