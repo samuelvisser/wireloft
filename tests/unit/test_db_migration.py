@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "a9c4e2f7b106"
+HEAD_REVISION = "a9c4e7b2d610"
+DOWNLOAD_MODE_REVISION = "a9c4e2f7b106"
 SEASON_SCOPE_REVISION = "f4d2a7b9c301"
 MEDIA_DATABASE_REFACTOR_REVISION = "e1c7a4b9d302"
 ARTIFACT_IDENTITY_REVISION = "c1f7b9e4d205"
@@ -686,7 +687,8 @@ def test_migration_history_consolidates_media_database_refactor():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, SEASON_SCOPE_REVISION),
+        (HEAD_REVISION, DOWNLOAD_MODE_REVISION),
+        (DOWNLOAD_MODE_REVISION, SEASON_SCOPE_REVISION),
         (SEASON_SCOPE_REVISION, MEDIA_DATABASE_REFACTOR_REVISION),
         (MEDIA_DATABASE_REFACTOR_REVISION, ARTIFACT_IDENTITY_REVISION),
         (ARTIFACT_IDENTITY_REVISION, SHOW_PROFILE_SCOPE_REVISION),
@@ -700,7 +702,8 @@ def test_migration_history_consolidates_media_database_refactor():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Add configurable temporary download storage."
-    assert revisions[1].doc == "Scope season slugs to their show."
-    assert revisions[2].doc == "Finalize the media database refactor."
-    assert revisions[3].doc == "Persist filesystem identity for downloaded artifacts."
+    assert revisions[0].doc == "Canonicalize RSS video method values."
+    assert revisions[1].doc == "Add configurable temporary download storage."
+    assert revisions[2].doc == "Scope season slugs to their show."
+    assert revisions[3].doc == "Finalize the media database refactor."
+    assert revisions[4].doc == "Persist filesystem identity for downloaded artifacts."
