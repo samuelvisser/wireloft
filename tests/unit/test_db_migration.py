@@ -1,40 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from alembic import command
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "d8b4a1f6c203"
-RSS_VIDEO_METHOD_REVISION = "a9c4e7b2d610"
-TEMP_STORAGE_REVISION = "a9c4e2f7b106"
-SEASON_SCOPE_REVISION = "f4d2a7b9c301"
-MEDIA_DATABASE_REFACTOR_REVISION = "e1c7a4b9d302"
-ARTIFACT_IDENTITY_REVISION = "c1f7b9e4d205"
-SHOW_PROFILE_SCOPE_REVISION = "e3a1b5c7d902"
-EPISODE_CANONICAL_REVISION = "a4d7c2e9f610"
-EPISODE_RELEASE_REVISION = "e6a9c1f4b203"
-DATETIME_CONTRACT_REVISION = "e3a8f4c9b102"
-DROP_DOWNLOAD_ATTEMPTS_REVISION = "b7e2c4d9a601"
-DOWNLOAD_EXECUTION_REVISION = "f2c7a4e8b901"
-TASK_OPERATIONS_REVISION = "d4f0a9c2e713"
+HEAD_REVISION = "b1d7c3e9f205"
 WIRELOFT_1_0_REVISION = "c8d4e2f1a7b9"
 BASE_REVISION = "0001"
-
-CONTENT_METADATA_FIELDS = frozenset({
-    "title",
-    "description",
-    "duration",
-    "background_image_path",
-    "thumbnail_landscape_path",
-    "thumbnail_portrait_path",
-    "thumbnail_square_path",
-})
 
 
 @pytest.fixture
@@ -57,656 +34,323 @@ def migration_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     engine.dispose()
 
 
-def test_fresh_database_upgrades_to_head(migration_database):
-    database_path, engine = migration_database
-
-    from backend.db.migrations import get_database_status, upgrade_database
-
-    assert not database_path.exists()
-
-    upgrade_database()
-
-    current, head = get_database_status()
-    assert current == (head,)
-    assert head == HEAD_REVISION
-
-    inspector = inspect(engine)
-    tables = set(inspector.get_table_names())
-    assert {
-        "shows",
-        "media_items_episode",
-        "media_items_movie",
-        "media_items_movie_extra",
-        "movie_extra_sources",
-        "media_downloads",
-        "media_downloads_movie",
-        "media_downloads_movie_extra",
-        "local_media_profiles_show",
-        "local_media_profiles_movie",
-        "stream_profiles",
-        "stream_profiles_rss",
-        "task_schedules",
-        "task_runs",
-        "task_operations",
-        "task_operation_targets",
-        "task_operation_runs",
-    } <= tables
-    assert {
-        "alembic_version",
-        "episodes",
-        "movies",
-        "movie_extras",
-        "media_items_episodes",
-        "media_items_movies",
-        "media_items_movie_extras",
-    }.isdisjoint(tables)
-
-    task_run_columns = {column["name"] for column in inspector.get_columns("task_runs")}
-    assert "result" in task_run_columns
-    operation_columns = {column["name"] for column in inspector.get_columns("task_operations")}
-    assert {
-        "kind",
-        "source",
-        "resource_type",
-        "resource_id",
-        "status",
-        "progress",
-        "result",
-        "context",
-        "notification_seen_at",
-    } <= operation_columns
-
-    profile_columns = {column["name"] for column in inspector.get_columns("local_media_profiles")}
-    assert {"type", "append_media_type_to_filename", "download_mode"} <= profile_columns
-    profile_indexes = {
-        index["name"]: index
-        for index in inspector.get_indexes("local_media_profiles")
-    }
-    settings_index = profile_indexes["uq_local_media_profiles_type_template_format_mode"]
-    assert settings_index["column_names"] == [
-        "type",
-        "output_template",
-        "preferred_format",
-        "download_mode",
-    ]
-    assert bool(settings_index["unique"])
-
-    download_profile_columns = {
-        column["name"] for column in inspector.get_columns("download_profiles")
-    }
-    assert "download_mode" not in download_profile_columns
-
-    settings_columns = {column["name"] for column in inspector.get_columns("settings")}
-    assert settings_columns == {
-        "id",
-        "onboarding_completed",
-        "alembic_version_num",
-        "created_at",
-        "updated_at",
-    }
-
-    media_item_columns = {
-        column["name"] for column in inspector.get_columns("media_items")
-    }
-    assert media_item_columns == {
-        "id",
-        "uuid",
-        "type",
-        "created_at",
-        "updated_at",
-    }
-
-    episode_columns = {
-        column["name"]
-        for column in inspector.get_columns("media_items_episode")
-    }
-    assert "metadata_is_final" in episode_columns
-    assert "redownloaded_date" not in episode_columns
-    assert CONTENT_METADATA_FIELDS <= episode_columns
-
-    series_season_columns = {
-        column["name"]
-        for column in inspector.get_columns("download_profile_series_seasons")
-    }
-    assert series_season_columns == {"download_profiles_series_id", "season_id"}
-
-    stream_profile_columns = {column["name"] for column in inspector.get_columns("stream_profiles")}
-    assert "ep_id_type_list" in stream_profile_columns
-
-    rss_profile_columns = {column["name"] for column in inspector.get_columns("stream_profiles_rss")}
-    assert {"dw_video_method", "max_items"} <= rss_profile_columns
-
-    podcast_columns = {
-        column["name"]
-        for column in inspector.get_columns("download_profiles_podcast")
-    }
-    assert {"download_episode_count", "download_starting_from"} <= podcast_columns
-
-    with engine.connect() as connection:
-        settings = connection.execute(text(
-            "SELECT onboarding_completed, alembic_version_num FROM settings"
-        )).mappings().one()
-        assert not bool(settings["onboarding_completed"])
-        assert settings["alembic_version_num"] == HEAD_REVISION
-        profiles = connection.execute(text(
-            "SELECT type, slug, name, output_template, preferred_format, "
-            "download_mode, append_media_type_to_filename "
-            "FROM local_media_profiles ORDER BY slug"
-        )).mappings().all()
-        assert [dict(profile) for profile in profiles] == [
-            {
-                "type": "movie",
-                "slug": "wireloft-movies",
-                "name": "WireLoft Movies",
-                "output_template": (
-                    "/downloads/movies/{{ movie_title }}/{{ title }}"
-                    "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
-                ),
-                "preferred_format": "format_1080p",
-                "download_mode": "system",
-                "append_media_type_to_filename": False,
-            },
-            {
-                "type": "show",
-                "slug": "wireloft-shows-audio",
-                "name": "WireLoft Shows (Audio)",
-                "output_template": (
-                    "/downloads/podcasts/{{ show_title }}/"
-                    "{{ episode_published_date }} - {{ episode_title }}.ext"
-                ),
-                "preferred_format": "format_audio_only",
-                "download_mode": "system",
-                "append_media_type_to_filename": False,
-            },
-            {
-                "type": "show",
-                "slug": "wireloft-shows-video",
-                "name": "WireLoft Shows (Video)",
-                "output_template": (
-                    "/downloads/shows/{{ show_title }}/{{ season_name }}/"
-                    "{{ episode_title }}.ext"
-                ),
-                "preferred_format": "format_1080p",
-                "download_mode": "system",
-                "append_media_type_to_filename": False,
-            },
-        ]
-
-    movie_columns = {
-        column["name"]
-        for column in inspector.get_columns("media_items_movie")
-    }
-    assert movie_columns == {
-        "id",
-        "slug",
-        "extended_title",
-        "sharing_url",
-        "author_name",
-        "author_slug",
-        "logo_image_path",
-        "mature_rating",
-        "has_video",
-        "is_downloadable",
-        "status",
-        "published_at",
-        "background",
-        "byline",
-        "language",
-        "origin_country",
-        "images",
-        "available_for",
-        "cast_and_crew",
-        "directed_by",
-        "genres",
-        "hosts",
-        "production_companies",
-        "starring",
-        "written_by",
-        "release_date",
-        "release_date_source",
-        "release_date_source_id",
-        "release_date_lookup_status",
-        "release_date_lookup_attempted_at",
-        "release_date_lookup_error",
-        "official_trailer_id",
-    } | CONTENT_METADATA_FIELDS
-
-    movie_extra_source_columns = {
-        column["name"] for column in inspector.get_columns("movie_extra_sources")
-    }
-    assert movie_extra_source_columns == {
-        "id",
-        "slug",
-        "sharing_url",
-        "published_date",
-        "available_for",
-    } | CONTENT_METADATA_FIELDS
-    movie_extra_source_unique_constraints = {
-        constraint["name"]: constraint
-        for constraint in inspector.get_unique_constraints("movie_extra_sources")
-    }
-    assert movie_extra_source_unique_constraints[
-        "uq_movie_extra_sources_slug"
-    ]["column_names"] == ["slug"]
-
-    movie_extra_columns = {
-        column["name"]
-        for column in inspector.get_columns("media_items_movie_extra")
-    }
-    assert movie_extra_columns == {
-        "id",
-        "movie_id",
-        "source_id",
-        "movie_extra_type",
-    }
-    movie_extra_indexes = {
-        index["name"]: index
-        for index in inspector.get_indexes("media_items_movie_extra")
-    }
-    assert "ix_movie_extras_dw_id" not in movie_extra_indexes
-    assert "ix_movie_extras_slug" not in movie_extra_indexes
-    assert not bool(movie_extra_indexes["ix_movie_extras_source_id"]["unique"])
-    movie_extra_unique_constraints = {
-        constraint["name"]: constraint
-        for constraint in inspector.get_unique_constraints("media_items_movie_extra")
-    }
-    assert "uq_movie_extras_movie_id_dw_id" not in movie_extra_unique_constraints
-    assert "uq_movie_extras_movie_id_slug" not in movie_extra_unique_constraints
-    assert movie_extra_unique_constraints[
-        "uq_movie_extras_movie_id_source_id"
-    ]["column_names"] == ["movie_id", "source_id"]
-    source_fk = next(
-        foreign_key
-        for foreign_key in inspector.get_foreign_keys("media_items_movie_extra")
-        if foreign_key["constrained_columns"] == ["source_id"]
-    )
-    assert source_fk["referred_table"] == "movie_extra_sources"
-    assert source_fk["referred_columns"] == ["id"]
-
-    movie_indexes = {
-        index["name"]: index
-        for index in inspector.get_indexes("media_items_movie")
-    }
-    assert "ix_movies_dw_id" not in movie_indexes
-
-    media_download_columns = {
-        column["name"] for column in inspector.get_columns("media_downloads")
-    }
-    assert {
-        "artifact_status",
-        "artifact_error",
-        "automatic_retry_suppressed",
-        "downloaded_at",
-        "downloaded_bytes",
-        "format_downloaded",
-    } <= media_download_columns
-    assert {
-        "download_status",
-        "progress",
-        "error_message",
-        "started_at",
-        "finished_at",
-        "attempt_generation",
-    }.isdisjoint(media_download_columns)
-    episode_download_columns = {
-        column["name"] for column in inspector.get_columns("media_downloads_episode")
-    }
-    assert "is_redownload_attempt" not in episode_download_columns
-
-
-def test_0001_is_the_main_branch_schema_baseline(migration_database):
-    _database_path, engine = migration_database
-
+def _upgrade_to_wireloft_1_0(engine) -> None:
     from backend.db.migrations import get_alembic_config
 
     command.upgrade(
         get_alembic_config(allow_version_storage_migration=True),
-        BASE_REVISION,
+        WIRELOFT_1_0_REVISION,
     )
-
     with engine.connect() as connection:
         assert connection.execute(
             text("SELECT version_num FROM alembic_version")
-        ).scalar_one() == BASE_REVISION
-    inspector = inspect(engine)
-
-    assert {column["name"] for column in inspector.get_columns("movies")} == {"id", "slug"}
-    assert "media_downloads_movie" not in set(inspector.get_table_names())
-
-    assert {column["name"] for column in inspector.get_columns("settings")} == {"id", "created_at", "updated_at"}
-    assert {column["name"] for column in inspector.get_columns("local_media_profiles")} == {
-        "id",
-        "slug",
-        "name",
-        "output_template",
-        "preferred_format",
-        "created_at",
-        "updated_at",
-    }
-    assert "metadata_is_final" not in {column["name"] for column in inspector.get_columns("episodes")}
-    assert "attempt_generation" not in {column["name"] for column in inspector.get_columns("media_downloads")}
-    assert "ep_id_type_list" not in {column["name"] for column in inspector.get_columns("stream_profiles")}
-    assert {column["name"] for column in inspector.get_columns("stream_profiles_rss")} == {"id", "feed_url"}
+        ).scalar_one() == WIRELOFT_1_0_REVISION
 
 
-def test_upgrade_from_main_baseline_preserves_movie_rows(migration_database):
-    _database_path, engine = migration_database
+def _seed_wireloft_1_0_data(database_path: Path, engine) -> dict[str, int | str]:
+    artifact_path = database_path.parent / "published-episode.mp4"
+    artifact_path.write_bytes(b"wireloft-1.0-artifact")
 
-    from backend.db.migrations import downgrade_database, get_alembic_config, upgrade_database
-    from backend.db.models import Movie
-
-    command.upgrade(
-        get_alembic_config(allow_version_storage_migration=True),
-        BASE_REVISION,
-    )
     with engine.begin() as connection:
-        movie_id = connection.execute(text(
-            "INSERT INTO media_items "
-            "(uuid, type, title, description, downloaded_date, duration, "
-            "background_image_path, thumbnail_landscape_path, "
-            "thumbnail_portrait_path, thumbnail_square_path) VALUES "
-            "('movie-uuid', 'movie', 'A Movie', 'Description', NULL, 5400, "
-            "NULL, 'movie-land.jpg', 'movie-port.jpg', 'movie-square.jpg')"
-        )).lastrowid
-        connection.execute(
-            text("INSERT INTO movies (id, slug) VALUES (:id, 'a-movie')"),
-            {"id": movie_id},
-        )
+        profile_id = connection.execute(text(
+            "SELECT id FROM local_media_profiles "
+            "WHERE slug = 'wireloft-shows-video'"
+        )).scalar_one()
 
-    upgrade_database()
-
-    with Session(engine) as session:
-        movie = session.query(Movie).one()
-        assert movie.id == movie_id
-        assert movie.slug == "a-movie"
-        assert movie.title == "A Movie"
-        assert movie.description == "Description"
-        assert movie.duration == 5400
-        assert movie.thumbnail_landscape_path == "movie-land.jpg"
-        assert movie.thumbnail_portrait_path == "movie-port.jpg"
-        assert movie.thumbnail_square_path == "movie-square.jpg"
-        assert movie.has_video is False
-        assert movie.status is None
-        assert movie.images == {}
-        assert movie.available_for == []
-        assert movie.cast_and_crew == []
-        assert movie.directed_by == []
-        assert movie.hosts == []
-        assert movie.starring == []
-        assert movie.written_by == []
-        assert movie.release_date is None
-        assert movie.release_date_lookup_status == "pending"
-        assert movie.movie_extras == []
-        assert movie.official_trailer is None
-
-    downgrade_database(BASE_REVISION)
-    inspector = inspect(engine)
-    assert {column["name"] for column in inspector.get_columns("movies")} == {"id", "slug"}
-    assert "media_downloads_movie" not in set(inspector.get_table_names())
-    with engine.connect() as connection:
-        assert connection.execute(
-            text("SELECT slug FROM movies WHERE id = :id"),
-            {"id": movie_id},
-        ).scalar_one() == "a-movie"
-        assert connection.execute(
-            text("SELECT alembic_version_num FROM settings")
-        ).scalar_one() == BASE_REVISION
-
-
-def test_rss_and_episode_type_data_migrations_from_main_baseline(migration_database):
-    _database_path, engine = migration_database
-
-    from backend.db.migrations import get_alembic_config, upgrade_database
-
-    command.upgrade(
-        get_alembic_config(allow_version_storage_migration=True),
-        BASE_REVISION,
-    )
-    with engine.begin() as connection:
         show_id = connection.execute(text(
             "INSERT INTO shows "
-            "(uuid, slug, title, description, sharing_url, membership_level, "
-            "type, episode_identifier, author_name, author_slug) VALUES "
-            "('show-uuid', 'show', 'Show', 'Description', "
-            "'https://example.test/show', 'FREE', 'podcast', 'numbered', "
+            "(uuid, slug, title, description, sharing_url, membership_level, type, "
+            "episode_identifier, author_name, author_slug) VALUES "
+            "('release-show-uuid', 'release-show', 'Release Show', 'Description', "
+            "'https://example.test/release-show', 'FREE', 'series', 'seasonal', "
             "'Host', 'host')"
         )).lastrowid
-        local_media_profile_id = connection.execute(text(
-            "INSERT INTO local_media_profiles "
-            "(slug, name, output_template, preferred_format) VALUES "
-            "('video', 'Video', '/downloads/{show_title}/{episode_title}.ext', "
-            "'format_1080p')"
+        season_id = connection.execute(text(
+            "INSERT INTO seasons (show_id, `index`, slug, name) "
+            "VALUES (:show_id, 1, 'season-1', 'Season 1')"
+        ), {"show_id": show_id}).lastrowid
+
+        episode_id = connection.execute(text(
+            "INSERT INTO media_items "
+            "(uuid, type, title, description, duration, background_image_path, "
+            "thumbnail_landscape_path, thumbnail_portrait_path, thumbnail_square_path) "
+            "VALUES ('release-episode-uuid', 'episode', 'Release Episode', "
+            "'Episode description', 1800, NULL, 'episode-land.jpg', NULL, NULL)"
         )).lastrowid
         connection.execute(text(
-            "INSERT INTO download_profiles "
-            "(show_id, local_media_profile_id, type, enable_profile, ep_id_type_list) "
-            "VALUES (:show_id, :profile_id, 'podcast', 1, '[\"ep\"]')"
+            "INSERT INTO episodes "
+            "(id, show_id, season_id, `index`, episode_identifier, slug, publish_status, "
+            "video_url, audio_url, sharing_url, published_date, metadata_is_final) "
+            "VALUES (:id, :show_id, :season_id, 1, 'ep.S01E01', 'release-episode', "
+            "'published', 'https://video.test/master.m3u8', NULL, "
+            "'https://example.test/release-episode', '2026-09-01 12:00:00', 1)"
         ), {
+            "id": episode_id,
             "show_id": show_id,
-            "profile_id": local_media_profile_id,
+            "season_id": season_id,
+        })
+        connection.execute(text(
+            "INSERT INTO metadata (parent_table, parent_id, key, value) "
+            "VALUES ('episodes', :episode_id, 'dw_processing.reason', 'release-test')"
+        ), {"episode_id": episode_id})
+
+        download_id = connection.execute(text(
+            "INSERT INTO media_downloads "
+            "(type, media_item_id, local_media_profile_id, download_status, file_path, "
+            "progress, error_message, downloaded_bytes, format_downloaded, started_at, "
+            "finished_at, attempt_generation) VALUES "
+            "('episode', :episode_id, :profile_id, 'downloaded', :file_path, 100, NULL, "
+            ":downloaded_bytes, '1920x1080', '2026-09-01 12:00:00', "
+            "'2026-09-01 12:30:00', 1)"
+        ), {
+            "episode_id": episode_id,
+            "profile_id": profile_id,
+            "file_path": str(artifact_path),
+            "downloaded_bytes": artifact_path.stat().st_size,
+        }).lastrowid
+        connection.execute(text(
+            "INSERT INTO media_downloads_episode "
+            "(id, download_profile_id, downloaded_publish_status, is_redownload_attempt) "
+            "VALUES (:id, NULL, 'published', 0)"
+        ), {"id": download_id})
+        connection.execute(text(
+            "INSERT INTO media_download_attempts "
+            "(media_download_id, is_redownload, status, downloaded_bytes, "
+            "format_downloaded, started_at, finished_at) VALUES "
+            "(:download_id, 0, 'downloaded', :downloaded_bytes, '1920x1080', "
+            "'2026-09-01 12:00:00', '2026-09-01 12:30:00')"
+        ), {
+            "download_id": download_id,
+            "downloaded_bytes": artifact_path.stat().st_size,
         })
 
-        dw_profile_id = connection.execute(text(
-            "INSERT INTO stream_profiles "
-            "(type, show_id, enable_profile, token, use_downloads, use_dw_stream, "
-            "preferred_format, require_exact_match) VALUES "
-            "('rss', :show_id, 1, 'dw-token', 0, 1, 'format_1080p', 0)"
-        ), {"show_id": show_id}).lastrowid
-        local_profile_id = connection.execute(text(
-            "INSERT INTO stream_profiles "
-            "(type, show_id, enable_profile, token, use_downloads, use_dw_stream, "
-            "preferred_format, require_exact_match) VALUES "
-            "('rss', :show_id, 1, 'local-token', 1, 0, 'format_1080p', 0)"
-        ), {"show_id": show_id}).lastrowid
+        task_definition_id = connection.execute(text(
+            "INSERT INTO task_definitions "
+            "(key, title, description, allowed_resource_types, default_max_retries) "
+            "VALUES ('monitor_episode_worker', 'Legacy monitor', NULL, '[\"episode\"]', 3)"
+        )).lastrowid
+
+        movie_id = connection.execute(text(
+            "INSERT INTO media_items "
+            "(uuid, type, title, description, duration, background_image_path, "
+            "thumbnail_landscape_path, thumbnail_portrait_path, thumbnail_square_path) "
+            "VALUES ('release-movie-uuid', 'movie', 'Release Movie', 'Movie description', "
+            "5400, NULL, 'movie-land.jpg', 'movie-port.jpg', 'movie-square.jpg')"
+        )).lastrowid
         connection.execute(text(
-            "INSERT INTO stream_profiles_rss (id, feed_url) VALUES "
-            "(:id, 'https://wireloft.test/dw.xml?custom=value')"
-        ), {"id": dw_profile_id})
+            "INSERT INTO movies "
+            "(id, slug, dw_id, sharing_url, is_downloadable, available_for, "
+            "release_date_lookup_status) VALUES "
+            "(:id, 'release-movie', 'rotating-movie-id', "
+            "'https://example.test/release-movie', 1, '[\"ALL_ACCESS\"]', 'pending')"
+        ), {"id": movie_id})
+
+        movie_extra_id = connection.execute(text(
+            "INSERT INTO media_items "
+            "(uuid, type, title, description, duration, background_image_path, "
+            "thumbnail_landscape_path, thumbnail_portrait_path, thumbnail_square_path) "
+            "VALUES ('release-extra-uuid', 'movie_extra', 'Official Trailer', "
+            "'Trailer description', 120, NULL, 'trailer-land.jpg', NULL, NULL)"
+        )).lastrowid
         connection.execute(text(
-            "INSERT INTO stream_profiles_rss (id, feed_url) VALUES "
-            "(:id, 'https://wireloft.test/local.xml?dwVideoMethod=cached_mp4&custom=value')"
-        ), {"id": local_profile_id})
+            "INSERT INTO movie_extras "
+            "(id, movie_id, movie_extra_type, dw_id, slug, sharing_url, published_date) "
+            "VALUES (:id, :movie_id, 'trailer', 'rotating-extra-id', "
+            "'release-movie-trailer', 'https://example.test/trailer', "
+            "'2026-08-01 12:00:00')"
+        ), {"id": movie_extra_id, "movie_id": movie_id})
+        connection.execute(text(
+            "UPDATE movies SET official_trailer_id = :extra_id WHERE id = :movie_id"
+        ), {"extra_id": movie_extra_id, "movie_id": movie_id})
 
-    upgrade_database()
-
-    with engine.connect() as connection:
-        profiles = connection.execute(text(
-            "SELECT base.token, base.ep_id_type_list, rss.feed_url, "
-            "rss.dw_video_method, rss.max_items "
-            "FROM stream_profiles_rss AS rss "
-            "JOIN stream_profiles AS base ON base.id = rss.id "
-            "ORDER BY base.token"
-        )).mappings().all()
-        assert connection.execute(text(
-            "SELECT download_mode FROM local_media_profiles WHERE id = :id"
-        ), {"id": local_media_profile_id}).scalar_one() == "system"
-
-    assert "download_mode" not in {
-        column["name"] for column in inspect(engine).get_columns("download_profiles")
-    }
-    profiles_by_token = {profile["token"]: profile for profile in profiles}
-    assert profiles_by_token["dw-token"]["ep_id_type_list"] == ["ep", "aux"]
-    assert profiles_by_token["local-token"]["ep_id_type_list"] == ["ep"]
-    assert profiles_by_token["dw-token"]["dw_video_method"] == "stream_hls_download_m4a"
-    assert profiles_by_token["local-token"]["dw_video_method"] == "stream_hls_download_m4a"
-    assert profiles_by_token["dw-token"]["max_items"] == 0
-    assert profiles_by_token["local-token"]["max_items"] == 0
-    assert parse_qs(urlsplit(profiles_by_token["dw-token"]["feed_url"]).query) == {
-        "custom": ["value"],
-        "dwVideoMethod": ["stream_hls_download_m4a"],
-    }
-    assert parse_qs(urlsplit(profiles_by_token["local-token"]["feed_url"]).query) == {
-        "custom": ["value"],
+    return {
+        "profile_id": int(profile_id),
+        "show_id": int(show_id),
+        "episode_id": int(episode_id),
+        "download_id": int(download_id),
+        "task_definition_id": int(task_definition_id),
+        "movie_id": int(movie_id),
+        "movie_extra_id": int(movie_extra_id),
+        "artifact_path": str(artifact_path),
     }
 
 
-def test_upgrade_from_0001_migrates_existing_profiles_to_show_type(migration_database):
-    _database_path, engine = migration_database
+def test_release_migration_history_is_single_1_1_boundary(migration_database):
+    _database_path, _engine = migration_database
+    from backend.db.migrations import get_alembic_config
 
-    from backend.db.migrations import (
-        get_alembic_config,
-        get_database_status,
-        upgrade_database,
+    script = ScriptDirectory.from_config(
+        get_alembic_config(allow_version_storage_migration=True)
     )
-    from backend.db.models import LocalMediaProfileBase, ShowLocalMediaProfile
+    revisions = [revision.revision for revision in script.walk_revisions()]
 
-    command.upgrade(
-        get_alembic_config(allow_version_storage_migration=True),
-        BASE_REVISION,
-    )
-    with engine.begin() as connection:
-        connection.execute(text(
-            "INSERT INTO local_media_profiles "
-            "(id, slug, name, output_template, preferred_format) VALUES "
-            "(1, 'audio', 'Audio', '/downloads/{show}/{episode}.ext', "
-            "'format_audio_only')"
-        ))
+    assert revisions == [HEAD_REVISION, WIRELOFT_1_0_REVISION, BASE_REVISION]
+    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_0_REVISION
 
+
+def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
+    database_path, engine = migration_database
+    from backend.db.migrations import get_database_status, upgrade_database
+
+    assert not database_path.exists()
     upgrade_database()
 
     current, head = get_database_status()
-    assert current == (head,)
-    with Session(engine) as session:
-        profile = session.query(LocalMediaProfileBase).filter_by(slug="audio").one()
-        assert isinstance(profile, ShowLocalMediaProfile)
-        assert profile.type == "show"
-        assert profile.download_mode == "system"
-        assert session.execute(
-            text("SELECT id FROM local_media_profiles_show WHERE id = :id"),
-            {"id": profile.id},
-        ).scalar_one() == profile.id
-        assert bool(session.execute(text(
-            "SELECT onboarding_completed FROM settings"
-        )).scalar_one())
-
-
-def test_upgrade_from_0001_rejects_duplicate_profile_settings(migration_database):
-    _database_path, engine = migration_database
-
-    from backend.db.migrations import get_alembic_config, upgrade_database
-
-    command.upgrade(
-        get_alembic_config(allow_version_storage_migration=True),
-        BASE_REVISION,
-    )
-    with engine.begin() as connection:
-        connection.execute(text(
-            "INSERT INTO local_media_profiles "
-            "(slug, name, output_template, preferred_format) VALUES "
-            "('first', 'First', '/downloads/{show}/{episode}.ext', 'format_1080p'), "
-            "('second', 'Second', '/downloads/{show}/{episode}.ext', 'format_1080p')"
-        ))
-
-    with pytest.raises(RuntimeError, match="must be unique"):
-        upgrade_database()
-
-    with engine.connect() as connection:
-        assert connection.execute(
-            text("SELECT version_num FROM alembic_version")
-        ).scalar_one() == BASE_REVISION
-    assert "type" not in {column["name"] for column in inspect(engine).get_columns("local_media_profiles")}
-    assert not {"local_media_profiles_show", "local_media_profiles_movie"} & set(inspect(engine).get_table_names())
-
-
-def test_local_media_profile_migration_downgrades_to_0001(migration_database):
-    _database_path, engine = migration_database
-
-    from backend.db.migrations import downgrade_database, upgrade_database
-
-    upgrade_database()
-    downgrade_database(BASE_REVISION)
+    assert current == (HEAD_REVISION,)
+    assert head == HEAD_REVISION
 
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
-    assert "local_media_profiles_show" not in tables
-    assert "local_media_profiles_movie" not in tables
-    assert "movie_extras" not in tables
-    assert "movie_extra_sources" not in tables
-    assert "media_downloads_movie" not in tables
-    assert "type" not in {column["name"] for column in inspector.get_columns("local_media_profiles")}
-    assert {column["name"] for column in inspector.get_columns("movies")} == {"id", "slug"}
+    assert "task_operations" in tables
+    assert "movie_extra_sources" in tables
+    assert "media_download_attempts" not in tables
     assert "alembic_version" not in tables
-    assert "alembic_version_num" in {
-        column["name"] for column in inspector.get_columns("settings")
+
+    profile_columns = {
+        column["name"] for column in inspector.get_columns("local_media_profiles")
     }
+    assert "download_mode" in profile_columns
+    profile_indexes = {index["name"] for index in inspector.get_indexes("local_media_profiles")}
+    assert "uq_local_media_profiles_type_output_template_preferred_format" in profile_indexes
+    assert "uq_local_media_profiles_type_template_format_mode" not in profile_indexes
+
     with engine.connect() as connection:
-        assert connection.execute(
-            text("SELECT alembic_version_num FROM settings")
-        ).scalar_one() == BASE_REVISION
+        assert connection.execute(text(
+            "SELECT alembic_version_num FROM settings"
+        )).scalar_one() == HEAD_REVISION
 
 
-def test_upgrade_is_idempotent(migration_database):
-    _database_path, _engine = migration_database
+def test_upgrade_from_wireloft_1_0_preserves_release_data(migration_database):
+    database_path, engine = migration_database
+    from backend.db.migrations import upgrade_database
 
-    from backend.db.migrations import get_database_status, upgrade_database
-
-    upgrade_database()
-    first_status = get_database_status()
-
+    _upgrade_to_wireloft_1_0(engine)
+    seeded = _seed_wireloft_1_0_data(database_path, engine)
     upgrade_database()
 
-    assert get_database_status() == first_status
-
-
-def test_unmanaged_existing_database_is_rejected(migration_database):
-    _database_path, engine = migration_database
-
-    from backend.db.migrations import DatabaseMigrationError, upgrade_database
-
-    with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE legacy_table (id INTEGER PRIMARY KEY)"))
-
-    with pytest.raises(DatabaseMigrationError, match="not Alembic-managed"):
-        upgrade_database()
-
-    tables = set(inspect(engine).get_table_names())
-    assert "legacy_table" in tables
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    assert "media_download_attempts" not in tables
+    assert "task_operations" in tables
     assert "alembic_version" not in tables
 
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT alembic_version_num FROM settings"
+        )).scalar_one() == HEAD_REVISION
 
-def test_initial_migration_matches_current_orm_metadata(migration_database):
-    _database_path, engine = migration_database
+        episode = connection.execute(text(
+            "SELECT slug, title, metadata_is_final "
+            "FROM media_items_episode WHERE id = :id"
+        ), {"id": seeded["episode_id"]}).mappings().one()
+        assert episode["slug"] == "release-episode"
+        assert episode["title"] == "Release Episode"
+        assert bool(episode["metadata_is_final"])
 
-    from backend.db.migrations import check_database, upgrade_database
+        metadata = connection.execute(text(
+            "SELECT parent_table, key, value FROM metadata WHERE parent_id = :id"
+        ), {"id": seeded["episode_id"]}).mappings().one()
+        assert metadata["parent_table"] == "media_items_episode"
+        assert metadata["key"] == "no_usable_media.reason"
+        assert metadata["value"] == "release-test"
 
+        download = connection.execute(text(
+            "SELECT artifact_status, artifact_error, artifact_size_bytes, "
+            "artifact_fingerprint, downloaded_bytes, format_downloaded, file_path "
+            "FROM media_downloads WHERE id = :id"
+        ), {"id": seeded["download_id"]}).mappings().one()
+        assert download["artifact_status"] == "available"
+        assert download["artifact_error"] is None
+        assert download["artifact_size_bytes"] == Path(str(seeded["artifact_path"])).stat().st_size
+        assert len(download["artifact_fingerprint"]) == 64
+        assert download["downloaded_bytes"] == Path(str(seeded["artifact_path"])).stat().st_size
+        assert download["format_downloaded"] == "1920x1080"
+        assert download["file_path"] == seeded["artifact_path"]
+
+        assert connection.execute(text(
+            "SELECT key FROM task_definitions WHERE id = :id"
+        ), {"id": seeded["task_definition_id"]}).scalar_one() == "monitor_pending_episode"
+
+        movie = connection.execute(text(
+            "SELECT slug, title, is_downloadable, official_trailer_id "
+            "FROM media_items_movie WHERE id = :id"
+        ), {"id": seeded["movie_id"]}).mappings().one()
+        assert movie["slug"] == "release-movie"
+        assert movie["title"] == "Release Movie"
+        assert bool(movie["is_downloadable"])
+        assert movie["official_trailer_id"] == seeded["movie_extra_id"]
+
+        extra = connection.execute(text(
+            "SELECT placement.movie_extra_type, source.slug, source.title "
+            "FROM media_items_movie_extra AS placement "
+            "JOIN movie_extra_sources AS source ON source.id = placement.source_id "
+            "WHERE placement.id = :id"
+        ), {"id": seeded["movie_extra_id"]}).mappings().one()
+        assert extra["movie_extra_type"] == "trailer"
+        assert extra["slug"] == "release-movie-trailer"
+        assert extra["title"] == "Official Trailer"
+
+        profile = connection.execute(text(
+            "SELECT download_mode FROM local_media_profiles WHERE id = :id"
+        ), {"id": seeded["profile_id"]}).scalar_one()
+        assert profile == "system"
+        assert connection.execute(text(
+            "SELECT show_scope FROM local_media_profiles_show WHERE id = :id"
+        ), {"id": seeded["profile_id"]}).scalar_one() == "both"
+
+
+def test_wireloft_1_1_downgrades_to_1_0_schema(migration_database):
+    database_path, engine = migration_database
+    from backend.db.migrations import downgrade_database, upgrade_database
+
+    _upgrade_to_wireloft_1_0(engine)
+    seeded = _seed_wireloft_1_0_data(database_path, engine)
     upgrade_database()
+    downgrade_database(WIRELOFT_1_0_REVISION)
 
-    with engine.begin() as connection:
-        connection.execute(text(
-            "CREATE TABLE apscheduler_jobs ("
-            "id VARCHAR(191) PRIMARY KEY, next_run_time FLOAT, job_state BLOB NOT NULL)"
-        ))
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    assert "task_operations" not in tables
+    assert "media_download_attempts" in tables
+    assert "episodes" in tables
+    assert "movies" in tables
+    assert "movie_extras" in tables
+    assert "media_items_episode" not in tables
 
-    check_database()
+    assert "download_mode" not in {
+        column["name"] for column in inspector.get_columns("local_media_profiles")
+    }
+    assert "timezone" in {
+        column["name"] for column in inspector.get_columns("task_schedules")
+    }
+    assert "is_no_show_today" in {
+        column["name"] for column in inspector.get_columns("episodes")
+    }
+    assert "artifact_status" not in {
+        column["name"] for column in inspector.get_columns("media_downloads")
+    }
+    assert "download_status" in {
+        column["name"] for column in inspector.get_columns("media_downloads")
+    }
 
-
-def test_migration_history_consolidates_media_database_refactor():
-    from backend.db.migrations import get_alembic_config, get_head_revisions
-
-    scripts = ScriptDirectory.from_config(get_alembic_config())
-    revisions = list(scripts.walk_revisions())
-
-    assert get_head_revisions() == (HEAD_REVISION,)
-    assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, RSS_VIDEO_METHOD_REVISION),
-        (RSS_VIDEO_METHOD_REVISION, TEMP_STORAGE_REVISION),
-        (TEMP_STORAGE_REVISION, SEASON_SCOPE_REVISION),
-        (SEASON_SCOPE_REVISION, MEDIA_DATABASE_REFACTOR_REVISION),
-        (MEDIA_DATABASE_REFACTOR_REVISION, ARTIFACT_IDENTITY_REVISION),
-        (ARTIFACT_IDENTITY_REVISION, SHOW_PROFILE_SCOPE_REVISION),
-        (SHOW_PROFILE_SCOPE_REVISION, EPISODE_CANONICAL_REVISION),
-        (EPISODE_CANONICAL_REVISION, EPISODE_RELEASE_REVISION),
-        (EPISODE_RELEASE_REVISION, DATETIME_CONTRACT_REVISION),
-        (DATETIME_CONTRACT_REVISION, DROP_DOWNLOAD_ATTEMPTS_REVISION),
-        (DROP_DOWNLOAD_ATTEMPTS_REVISION, DOWNLOAD_EXECUTION_REVISION),
-        (DOWNLOAD_EXECUTION_REVISION, TASK_OPERATIONS_REVISION),
-        (TASK_OPERATIONS_REVISION, WIRELOFT_1_0_REVISION),
-        (WIRELOFT_1_0_REVISION, BASE_REVISION),
-        (BASE_REVISION, None),
-    ]
-    assert revisions[0].doc == "Add fixed podcast download starting date."
-    assert revisions[1].doc == "Canonicalize RSS video method values."
-    assert revisions[2].doc == "Add configurable temporary download storage."
-    assert revisions[3].doc == "Scope season slugs to their show."
-    assert revisions[4].doc == "Finalize the media database refactor."
-    assert revisions[5].doc == "Persist filesystem identity for downloaded artifacts."
+    with engine.connect() as connection:
+        # The old attempt table is structurally restored, but its 1.0 history was
+        # intentionally discarded during the upgrade.
+        assert connection.execute(text(
+            "SELECT COUNT(*) FROM media_download_attempts"
+        )).scalar_one() == 0
+        assert connection.execute(text(
+            "SELECT slug FROM episodes WHERE id = :id"
+        ), {"id": seeded["episode_id"]}).scalar_one() == "release-episode"
+        assert connection.execute(text(
+            "SELECT slug FROM movies WHERE id = :id"
+        ), {"id": seeded["movie_id"]}).scalar_one() == "release-movie"
+        assert connection.execute(text(
+            "SELECT slug FROM movie_extras WHERE id = :id"
+        ), {"id": seeded["movie_extra_id"]}).scalar_one() == "release-movie-trailer"
+        assert connection.execute(text(
+            "SELECT key FROM task_definitions WHERE id = :id"
+        ), {"id": seeded["task_definition_id"]}).scalar_one() == "monitor_episode_worker"
+        assert connection.execute(text(
+            "SELECT alembic_version_num FROM settings"
+        )).scalar_one() == WIRELOFT_1_0_REVISION

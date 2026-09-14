@@ -21,9 +21,7 @@ from dailywire_api.records import (
     DwEpisodeDetailRecord,
     DwEpisodeRecord,
     DwMoviePlaybackRecord,
-    DwMovieRecord,
     DwShowRecord,
-    DwMovieExtraRecord,
     DwUserInfo,
 )
 from dailywire_authorisation import DeviceAuthClient
@@ -184,6 +182,7 @@ class ByShowSeason(_BySeason):
 class ByPodcastSeason(_BySeason):
     season_id_key: ClassVar[str] = "podcastSeasonId"
 
+
 class EpisodesPaginatedResult(NamedTuple):
     items: list[DwEpisodeRecord]
     next_page_url: Optional[str]
@@ -266,64 +265,14 @@ class MiddlewareClient:
             movies=sorted(movies.values(), key=lambda value: value.title.casefold()),
         )
 
-    def get_movie_page(self, slug: str, *, membership_plan: Optional[str] = None) -> DwMovieRecord:
-        params: Dict[str, Any] = {'slug': slug}
-        if membership_plan:
-            params['membershipPlan'] = membership_plan
-        payload = self._get('v4/getVideoPage', params)
-        raw = payload.get('video')
-        if not isinstance(raw, dict) or not raw.get('slug'):
-            raise MiddlewareAPIError(f"Daily Wire movie '{slug}' was not found")
-
-        extras_by_key: dict[str, DwMovieExtraRecord] = {}
-        for tab in payload.get('tabs') or []:
-            for component in tab.get('components') or []:
-                for item in component.get('items') or []:
-                    extra = item.get('showEpisode')
-                    if not isinstance(extra, dict) or not extra.get('slug'):
-                        continue
-                    title = str(extra.get('title') or '')
-                    images = extra.get('images') or {}
-                    thumbnails = images.get('thumbnail') or {}
-                    record = DwMovieExtraRecord(
-                        dw_id=str(extra['id']) if extra.get('id') else None,
-                        slug=str(extra.get('slug') or ''),
-                        title=title,
-                        movie_extra_type=self._movie_extra_type(extra),
-                        description=extra.get('description') or None,
-                        sharing_url=extra.get('sharingURL') or None,
-                        published_date=extra.get('publishedAt') or None,
-                        duration=float(extra.get('duration') or 0),
-                        background_image_path=extra.get('backgroundImage') or None,
-                        thumbnail_landscape_path=thumbnails.get('land') or None,
-                        thumbnail_portrait_path=thumbnails.get('port') or None,
-                        thumbnail_square_path=thumbnails.get('square') or None,
-                    )
-                    key = record.dw_id or record.slug
-                    extras_by_key.setdefault(key, record)
-
-        movie_extras = list(extras_by_key.values())
-        trailer_candidates = [
-            extra for extra in movie_extras if extra.movie_extra_type == 'trailer'
-        ]
-        trailer = next(
-            (
-                extra
-                for extra in trailer_candidates
-                if 'official trailer' in extra.title.casefold()
-            ),
-            trailer_candidates[0] if trailer_candidates else None,
-        )
-
-        return DwMovieRecord.model_validate({
-            **raw,
-            'sharingURL': str(raw.get('sharingURL') or f"https://www.dailywire.com/videos/{slug}"),
-            'movie_extras': movie_extras,
-            'trailer': trailer,
-        })
-
     def get_movie_playback(self, slug: str) -> DwMoviePlaybackRecord:
-        """Fetch a fresh, signed playback URL for a movie download."""
+        """Fetch Daily Wire's current signed movie playback URL.
+
+        Movie metadata is resolved through ``v4/getMoviePage`` by
+        ``MovieMiddlewareClient``. Daily Wire's own current web player still uses
+        ``v2/getVideo`` to obtain the signed movie stream, so playback intentionally
+        remains on this endpoint.
+        """
         payload = self._get('v2/getVideo', {'slug': slug})
         raw = payload.get('video')
         if not isinstance(raw, dict):
@@ -472,7 +421,6 @@ class MiddlewareClient:
                             continue
                         params[k] = v[0] if len(v) == 1 else v
 
-
             case _BySeason(season_dw_id=sid) as sel:
                 params = {
                     "slug": show_slug,
@@ -481,7 +429,7 @@ class MiddlewareClient:
                     "pageSize": sel.page_size,
                     "showOffset": sel.show_offset,
                     "podcastOffset": sel.podcast_offset,
-                    type(sel).season_id_key: sid,    # use the subclass’ key
+                    type(sel).season_id_key: sid,
                 }
                 if sel.membership_plan:
                     params["membershipPlan"] = sel.membership_plan
@@ -579,52 +527,6 @@ class MiddlewareClient:
             thumbnail_portrait_path=thumbnails.get('port') or None,
             thumbnail_square_path=thumbnails.get('square') or None,
         )
-
-    @staticmethod
-    def _movie_extra_type(raw: dict[str, Any]) -> str:
-        """Map Daily Wire metadata (or, as a fallback, its title) to one stable type."""
-        aliases = {
-            'behindthescenes': 'behindthescenes',
-            'makingof': 'behindthescenes',
-            'deleted': 'deleted',
-            'deletedscene': 'deleted',
-            'deletedscenes': 'deleted',
-            'featurette': 'featurette',
-            'interview': 'interview',
-            'scene': 'scene',
-            'clip': 'scene',
-            'short': 'short',
-            'shortfilm': 'short',
-            'trailer': 'trailer',
-            'teaser': 'trailer',
-            'other': 'other',
-        }
-        for field in ('movieExtraType', 'extraType', 'contentType'):
-            value = ''.join(character for character in str(raw.get(field) or '').casefold() if character.isalnum())
-            if value in aliases:
-                return aliases[value]
-
-        title = str(raw.get('title') or '').casefold()
-        compact_title = ''.join(character if character.isalnum() else ' ' for character in title)
-        words = f" {compact_title} "
-        if 'behind the scenes' in title or 'behind-the-scenes' in title or 'making of' in title:
-            return 'behindthescenes'
-        if 'deleted scene' in title:
-            return 'deleted'
-        if 'featurette' in title:
-            return 'featurette'
-        if 'interview' in title:
-            return 'interview'
-        if 'trailer' in title or 'teaser' in title:
-            return 'trailer'
-        if 'short film' in title or ' short ' in words:
-            return 'short'
-        if ' scene ' in words or ' clip ' in words:
-            return 'scene'
-        return 'other'
-
-
-
 
     # --------------- internals ---------------
     _TRANSIENT_HTTP_CODES = (429, 502, 503, 504)

@@ -28,14 +28,6 @@ class LocalMediaProfileBase(Base):
             "preferred_format",
             unique=True,
         ),
-        Index(
-            "uq_local_media_profiles_type_template_format_mode",
-            "type",
-            "output_template",
-            "preferred_format",
-            "download_mode",
-            unique=True,
-        ),
     )
     __mapper_args__ = {
         "polymorphic_on": "type",

@@ -31,7 +31,7 @@ def _configure_version_storage() -> None:
         # Only db upgrade needs to understand databases from before the one-time
         # version-storage migration. Keep that compatibility with the migration
         # that owns the schema transition instead of normal migration services.
-        from backend.db.alembic.versions.e1c7a4b9d302_finalize_media_database_refactor import (
+        from backend.db.alembic.versions.b1d7c3e9f205_wireloft_1_1 import (
             configure_version_storage_for_upgrade,
         )
 

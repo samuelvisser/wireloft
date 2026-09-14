@@ -9,26 +9,17 @@ import {
   saveSeasonsToStorage,
   saveShowsToStorage,
 } from './cache'
-import {EpisodeReadView, EpisodeReadViewSchema} from '../types/schemas/episode'
-import {SeasonRead, SeasonReadSchema} from '../types/schemas/season'
-import {ShowRead, ShowReadSchema} from '../types/schemas/show'
+import {
+  episodesQueryOptions,
+  seasonsQueryOptions,
+  showsQueryOptions,
+} from './showQueryOptions'
+import {EpisodeReadView} from '../types/schemas/episode'
+import {SeasonRead} from '../types/schemas/season'
+import {ShowRead} from '../types/schemas/show'
 
 const SHOW_DATA_MAX_AGE_MS = 24 * 60 * 60 * 1000
 const SHOW_WARM_CONCURRENCY = 2
-
-async function fetchParsed<T>(
-  url: string,
-  schema: {parse(value: unknown): T},
-  signal?: AbortSignal,
-): Promise<T> {
-  const response = await fetch(url, {signal, credentials: 'include'})
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return schema.parse(await response.json())
-}
-
-function apiBase() {
-  return ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
-}
 
 function isFresh(fetchedAt: number | undefined) {
   if (fetchedAt === undefined) return false
@@ -59,19 +50,21 @@ export function hydrateCurrentShowRouteCache(queryClient: QueryClient): void {
   const showSlug = showSlugFromCurrentRoute()
   if (!showSlug) return
 
+  const episodeOptions = episodesQueryOptions(showSlug)
   const episodes = loadEpisodesFromStorage(showSlug)
   if (episodes !== undefined) {
     queryClient.setQueryData(
-      ['episodes', showSlug, undefined],
+      episodeOptions.queryKey,
       episodes,
       {updatedAt: getEpisodesCacheFetchedAt(showSlug) ?? 0},
     )
   }
 
+  const seasonOptions = seasonsQueryOptions(showSlug)
   const seasons = loadSeasonsFromStorage(showSlug)
   if (seasons !== undefined) {
     queryClient.setQueryData(
-      ['seasons', showSlug],
+      seasonOptions.queryKey,
       seasons,
       {updatedAt: getSeasonsCacheFetchedAt(showSlug) ?? 0},
     )
@@ -85,47 +78,32 @@ export function hydrateCachedSeasonQueries(queryClient: QueryClient, shows: Show
     const seasons = loadSeasonsFromStorage(show.slug)
     if (seasons === undefined) continue
     const cachedAt = getSeasonsCacheFetchedAt(show.slug) ?? 0
-    const queryUpdatedAt = queryClient.getQueryState(['seasons', show.slug])?.dataUpdatedAt ?? 0
-    if (queryUpdatedAt >= cachedAt && queryClient.getQueryData(['seasons', show.slug]) !== undefined) continue
-    queryClient.setQueryData(['seasons', show.slug], seasons, {updatedAt: cachedAt})
+    const queryKey = seasonsQueryOptions(show.slug).queryKey
+    const queryUpdatedAt = queryClient.getQueryState(queryKey)?.dataUpdatedAt ?? 0
+    if (queryUpdatedAt >= cachedAt && queryClient.getQueryData(queryKey) !== undefined) continue
+    queryClient.setQueryData(queryKey, seasons, {updatedAt: cachedAt})
   }
 }
 
 async function warmEpisodes(queryClient: QueryClient, show: ShowRead) {
-  const queryKey = ['episodes', show.slug, undefined] as const
-  const queryUpdatedAt = queryClient.getQueryState(queryKey)?.dataUpdatedAt
+  const options = episodesQueryOptions(show.slug)
+  const queryUpdatedAt = queryClient.getQueryState(options.queryKey)?.dataUpdatedAt
   const cachedAt = getEpisodesCacheFetchedAt(show.slug)
   if (isFresh(newestTimestamp(queryUpdatedAt, cachedAt))) return
 
-  await queryClient.prefetchQuery({
-    queryKey,
-    staleTime: 0,
-    queryFn: ({signal}) => fetchParsed(
-      `${apiBase()}/episodes/as-view/by-show-slug/${encodeURIComponent(show.slug)}`,
-      EpisodeReadViewSchema.array(),
-      signal,
-    ),
-  })
+  await queryClient.prefetchQuery({...options, staleTime: 0})
 }
 
 async function warmSeasons(queryClient: QueryClient, show: ShowRead) {
   if (show.episodeIdentifier !== 'seasonal') return
 
-  const queryKey = ['seasons', show.slug] as const
+  const options = seasonsQueryOptions(show.slug)
   const cachedAt = getSeasonsCacheFetchedAt(show.slug)
-  const queryUpdatedAt = queryClient.getQueryState(queryKey)?.dataUpdatedAt
+  const queryUpdatedAt = queryClient.getQueryState(options.queryKey)?.dataUpdatedAt
   const newest = newestTimestamp(queryUpdatedAt, cachedAt)
   if (isFresh(newest)) return
 
-  await queryClient.prefetchQuery({
-    queryKey,
-    staleTime: 0,
-    queryFn: ({signal}) => fetchParsed(
-      `${apiBase()}/shows/${encodeURIComponent(show.slug)}/seasons`,
-      SeasonReadSchema.array(),
-      signal,
-    ),
-  })
+  await queryClient.prefetchQuery({...options, staleTime: 0})
 }
 
 async function yieldToBrowser() {
@@ -157,20 +135,13 @@ async function warmShowsWithLimitedConcurrency(
 }
 
 async function warmShowDataCache(queryClient: QueryClient) {
-  let shows = queryClient.getQueryData<ShowRead[]>(['shows']) ?? []
+  const showOptions = showsQueryOptions()
+  let shows = queryClient.getQueryData<ShowRead[]>(showOptions.queryKey) ?? []
   hydrateCachedSeasonQueries(queryClient, shows)
 
   try {
     // Always resolve the current show list in the background so newly-added shows are included.
-    shows = await queryClient.fetchQuery({
-      queryKey: ['shows'] as const,
-      staleTime: 0,
-      queryFn: ({signal}) => fetchParsed(
-        `${apiBase()}/shows`,
-        ShowReadSchema.array(),
-        signal,
-      ),
-    })
+    shows = await queryClient.fetchQuery({...showOptions, staleTime: 0})
     saveShowsToStorage(shows)
     hydrateCachedSeasonQueries(queryClient, shows)
   } catch {

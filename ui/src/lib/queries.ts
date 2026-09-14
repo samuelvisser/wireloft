@@ -2,15 +2,20 @@ import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClien
 import {useEffect, useMemo} from 'react'
 import {saveProfilesToStorage, saveShowsToStorage} from './cache'
 import {useFrontendPuller} from './puller'
+import {
+    episodesQueryOptions,
+    seasonsQueryOptions,
+    showQueryOptions,
+    showsQueryOptions,
+} from './showQueryOptions'
 import {LocalMediaProfileRead, LocalMediaProfileReadSchema} from "../types/schemas/local_media_profile";
 import {PodcastDownloadProfileRead, PodcastDownloadProfileReadSchema} from "../types/schemas/podcast_download_profile";
 import {SeriesDownloadProfileRead, SeriesDownloadProfileReadSchema} from "../types/schemas/series_download_profile";
 import {DownloadProfileRead, DownloadProfileReadSchema} from "../types/schemas/download_profile_base";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {StreamProfileRead, StreamProfileReadSchema, StreamProfileReadView, StreamProfileReadViewSchema} from "../types/schemas/stream_profile_base";
-import {ShowRead, ShowReadSchema, ShowReadView, ShowReadViewSchema} from "../types/schemas/show";
-import {EpisodeRead, EpisodeReadSchema, EpisodeReadView, EpisodeReadViewSchema} from "../types/schemas/episode";
-import {SeasonRead, SeasonReadSchema} from "../types/schemas/season";
+import {ShowRead, ShowReadView, ShowReadViewSchema} from "../types/schemas/show";
+import {EpisodeRead, EpisodeReadSchema} from "../types/schemas/episode";
 import {RssStreamProfileRead, RssStreamProfileReadSchema} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
@@ -128,16 +133,7 @@ export function useStreamProfilesView() {
 }
 
 export function useShows() {
-    const result = useQuery<ShowRead[], Error, ShowRead[], readonly ['shows']>({
-        queryKey: ['shows'] as const,
-        queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/shows`,
-            ShowReadSchema.array(),
-            signal,
-        ),
-        placeholderData: keepPreviousData,
-        refetchOnMount: 'always',
-    })
+    const result = useQuery(showsQueryOptions())
     useEffect(() => {
         if (result.data) saveShowsToStorage(result.data)
     }, [result.data])
@@ -254,39 +250,16 @@ export function useDailywireMovie(slug?: string) {
 
 export function useShow(id?: string) {
     const qc = useQueryClient()
-    return useQuery<ShowRead, Error, ShowRead, readonly ['show', string | undefined]>({
-        queryKey: ['show', id] as const,
+    return useQuery({
+        ...showQueryOptions(id, qc),
         enabled: !!id,
-        queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/shows/${id}`,
-            ShowReadSchema,
-            signal,
-        ),
-        placeholderData: keepPreviousData,
-        initialData: () => {
-            if (!id) return undefined
-            const shows = qc.getQueryData<ShowRead[]>(['shows'])
-            return shows?.find((s) => s.slug === id)
-        },
-        initialDataUpdatedAt: () => qc.getQueryState(['shows'])?.dataUpdatedAt,
     })
 }
 
 export function useEpisodes(showSlug?: string, opts?: { limit?: number }) {
-    return useQuery<EpisodeReadView[], Error, EpisodeReadView[], readonly ['episodes', string | undefined, number | undefined]>({
-        queryKey: ['episodes', showSlug, opts?.limit] as const,
+    return useQuery({
+        ...episodesQueryOptions(showSlug, opts?.limit),
         enabled: !!showSlug,
-        queryFn: ({signal}) => {
-            const base = (window as any).appConfig.API_URL
-            const params = opts?.limit ? `?limit=${opts.limit}` : ''
-            return fetchParsed(
-                `${base}/episodes/as-view/by-show-slug/${encodeURIComponent(showSlug!)}${params}`,
-                EpisodeReadViewSchema.array(),
-                signal,
-            )
-        },
-        placeholderData: keepPreviousData,
-        refetchOnMount: 'always',
     })
 }
 
@@ -357,16 +330,9 @@ export function useDailywireUserInfo() {
 }
 
 export function useShowSeasons(showSlug?: string) {
-    return useQuery<SeasonRead[], Error, SeasonRead[], readonly ['seasons', string | undefined]>({
-        queryKey: ['seasons', showSlug] as const,
+    return useQuery({
+        ...seasonsQueryOptions(showSlug),
         enabled: !!showSlug,
-        queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/shows/${showSlug}/seasons`,
-            SeasonReadSchema.array(),
-            signal,
-        ),
-        placeholderData: keepPreviousData,
-        refetchOnMount: 'always',
     })
 }
 
@@ -648,16 +614,9 @@ export function useTaskLedger({
 // Prefetch core data to warm the cache on app start
 export function prefetchCoreData(qc: QueryClient) {
     void qc
-        .prefetchQuery({
-            queryKey: ['shows'],
-            queryFn: ({signal}) => fetchParsed(
-                `${(window as any).appConfig.API_URL}/shows`,
-                ShowReadSchema.array(),
-                signal,
-            ),
-        })
+        .prefetchQuery(showsQueryOptions())
         .then(() => {
-            const shows = qc.getQueryData<ShowRead[]>(['shows'])
+            const shows = qc.getQueryData<ShowRead[]>(showsQueryOptions().queryKey)
             if (shows) saveShowsToStorage(shows)
         })
     void qc.prefetchQuery({

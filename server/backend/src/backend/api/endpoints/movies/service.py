@@ -14,14 +14,12 @@ from backend.db.models.media_item import Movie
 from backend.integrations.tmdb import MovieReleaseLookupResult, lookup_movie_release_metadata
 from backend.types.media_types import MediaType
 from dailywire_api.records import DwMovieRecord
-from task_manager.scheduler.operations import (
-    OperationTargetSpec,
-    create_operation,
-    queue_operation_target_dispatch,
-)
+from task_manager.scheduler.operation_factory import create_operation
+from task_manager.scheduler.operations import queue_operation_target_dispatch
+
+from .operations import MovieExtrasRefreshOperation
 
 
-_REFRESH_MOVIE_EXTRAS_TASK_KEY = "refresh_movie_extras"
 _DAILYWIRE_RELEASE_SOURCE = "dailywire"
 
 
@@ -43,21 +41,8 @@ def request_movie_extras_refresh(s: Session, movie_slug: str) -> dict[str, bool 
     if movie is None:
         raise HTTPException(status_code=404, detail="Movie not found")
 
-    target = OperationTargetSpec(
-        task_key=_REFRESH_MOVIE_EXTRAS_TASK_KEY,
-        resource_type="movie",
-        resource_id=movie.id,
-    )
-    operation = create_operation(
-        s,
-        kind="movie.refresh_extras",
-        resource_type="movie",
-        resource_id=movie.id,
-        title=movie.title,
-        targets=[target],
-        context={"movie_slug": movie.slug, "movie_title": movie.title},
-    )
-    queue_operation_target_dispatch(s, operation.id, target.resolved_slot_key())
+    operation = create_operation(s, MovieExtrasRefreshOperation(movie))
+    queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
     return {"queued": True, "operation_id": operation.id}
 
 

@@ -8,12 +8,11 @@ from .client import MiddlewareAPIError, MiddlewareClient
 
 
 class MovieMiddlewareClient(MiddlewareClient):
-    """Daily Wire client for the current v4 movie-page contract.
+    """Daily Wire client for the current movie metadata contract.
 
-    Daily Wire's ``getMoviePage`` response is already the canonical, flattened
-    movie representation used by its current website. Keep the compatibility
-    adapter here so the rest of WireLoft consumes one typed ``DwMovieRecord``
-    instead of reconstructing movie metadata from the older video-page tabs.
+    ``v4/getMoviePage`` is the canonical metadata source used by WireLoft. Movie
+    playback intentionally remains separate: Daily Wire's own current web player
+    still obtains the signed movie stream through ``v2/getVideo``.
     """
 
     def get_movie_page(
@@ -71,3 +70,52 @@ class MovieMiddlewareClient(MiddlewareClient):
             "movie_extras": extras,
             "trailer": trailer,
         })
+
+    @staticmethod
+    def _movie_extra_type(raw: dict[str, Any]) -> str:
+        """Map Daily Wire metadata (or, as a fallback, its title) to one stable type."""
+        aliases = {
+            "behindthescenes": "behindthescenes",
+            "makingof": "behindthescenes",
+            "deleted": "deleted",
+            "deletedscene": "deleted",
+            "deletedscenes": "deleted",
+            "featurette": "featurette",
+            "interview": "interview",
+            "scene": "scene",
+            "clip": "scene",
+            "short": "short",
+            "shortfilm": "short",
+            "trailer": "trailer",
+            "teaser": "trailer",
+            "other": "other",
+        }
+        for field in ("movieExtraType", "extraType", "contentType"):
+            value = "".join(
+                character
+                for character in str(raw.get(field) or "").casefold()
+                if character.isalnum()
+            )
+            if value in aliases:
+                return aliases[value]
+
+        title = str(raw.get("title") or "").casefold()
+        compact_title = "".join(
+            character if character.isalnum() else " " for character in title
+        )
+        words = f" {compact_title} "
+        if "behind the scenes" in title or "behind-the-scenes" in title or "making of" in title:
+            return "behindthescenes"
+        if "deleted scene" in title:
+            return "deleted"
+        if "featurette" in title:
+            return "featurette"
+        if "interview" in title:
+            return "interview"
+        if "trailer" in title or "teaser" in title:
+            return "trailer"
+        if "short film" in title or " short " in words:
+            return "short"
+        if " scene " in words or " clip " in words:
+            return "scene"
+        return "other"
