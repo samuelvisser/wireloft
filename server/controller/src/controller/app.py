@@ -108,9 +108,9 @@ def setup_triggers_from_registry() -> None:
     """Install code-defined cron jobs and event-to-task subscriptions."""
     from apscheduler.triggers.cron import CronTrigger
     from task_manager.events.registry import WireloftEventLinker
-    from task_manager.scheduler.executor import execute_task, trigger_now as scheduler_trigger_now
+    from task_manager.scheduler.executor import trigger_now as scheduler_trigger_now
     from task_manager.scheduler.registry import all_triggers
-    from task_manager.scheduler.scheduler import start_scheduler
+    from task_manager.scheduler.scheduler import execute_task_job, start_scheduler
 
     if not get_settings().scheduler.enabled:
         return
@@ -129,7 +129,7 @@ def setup_triggers_from_registry() -> None:
                 )
                 job_id = f"auto-{task_key}-{trigger.resource_type}-{trigger.resource_id}-{index}"
                 scheduler.add_job(
-                    execute_task,
+                    execute_task_job,
                     trigger=cron_trigger,
                     kwargs={
                         "def_key": task_key,

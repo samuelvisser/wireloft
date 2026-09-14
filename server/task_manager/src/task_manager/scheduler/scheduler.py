@@ -13,6 +13,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
 
+from backend.db import is_database_corruption_error
 from backend.db.datetime_types import utc_datetime
 from config import get_settings
 from config.network import is_no_internet_error
@@ -23,13 +24,32 @@ WATCHDOG_EXECUTOR_ALIAS = "watchdog"
 logger = logging.getLogger(__name__)
 
 
-def _execute_task_job(**kwargs) -> None:
-    """Run one task without noisy tracebacks for expected external conditions."""
+def _pause_after_database_corruption(exc: BaseException) -> None:
+    """Fail closed after SQLite reports corruption instead of scheduling more writes."""
+    scheduler = _scheduler
+    if scheduler is not None and scheduler.running:
+        try:
+            scheduler.pause()
+        except Exception:
+            logger.exception("Could not pause scheduler after database corruption")
+
+    logger.critical(
+        "SQLite database corruption detected; scheduled background work has been paused. "
+        "Stop WireLoft and run 'backend-api db integrity' or 'backend-api db recover --replace'. Error: %s",
+        exc,
+    )
+
+
+def execute_task_job(**kwargs) -> None:
+    """Run one task with centralized handling for expected and unsafe failures."""
     from .executor import execute_task  # local import to avoid cycles
 
     try:
         execute_task(**kwargs)
     except Exception as exc:
+        if is_database_corruption_error(exc):
+            _pause_after_database_corruption(exc)
+            return
         if is_no_internet_error(exc):
             # execute_task already persisted and logged the normalized outage.
             return
@@ -45,6 +65,12 @@ def _execute_task_job(**kwargs) -> None:
             )
             return
         raise
+
+
+# Private alias kept for existing imports/tests while all new scheduling uses the
+# public wrapper name, including code-defined cron jobs.
+def _execute_task_job(**kwargs) -> None:
+    execute_task_job(**kwargs)
 
 
 def get_trigger(name: str, args: dict):
@@ -143,7 +169,7 @@ def shutdown_scheduler(wait: bool = True) -> None:
 def schedule_job(*, schedule_id: int, def_key: str, resource_type: str, resource_id: int, trigger: str, trigger_args: dict) -> str:
     sch = start_scheduler()
     job = sch.add_job(
-        _execute_task_job,
+        execute_task_job,
         trigger=get_trigger(trigger, trigger_args),
         kwargs=dict(def_key=def_key, resource_type=resource_type, resource_id=resource_id, schedule_id=schedule_id),
         replace_existing=True,
@@ -258,7 +284,7 @@ def schedule_retry(*, def_key: str, resource_type: str, resource_id: int, run_id
     sch = start_scheduler()
     run_at = utc_datetime(run_at)
     job = sch.add_job(
-        _execute_task_job,
+        execute_task_job,
         trigger=DateTrigger(run_date=run_at),
         kwargs=dict(def_key=def_key, resource_type=resource_type, resource_id=resource_id, schedule_id=None, run_id=run_id),
         replace_existing=False,
@@ -304,7 +330,7 @@ def trigger_now(
         execution_kwargs["operation_slot"] = operation_slot
 
     job = sch.add_job(
-        _execute_task_job,
+        execute_task_job,
         trigger=DateTrigger(run_date=datetime.now(tz=sch.timezone)),
         kwargs=execution_kwargs,
         replace_existing=False,

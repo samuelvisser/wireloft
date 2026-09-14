@@ -10,9 +10,17 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from sqlalchemy import text
 
-from backend.db import configure_db, get_db_path, get_engine, seed_db
+from backend.db import (
+    DatabaseCorruptionError,
+    DatabaseInUseError,
+    DatabaseInstanceLock,
+    configure_db,
+    dispose_db,
+    get_db_path,
+    get_engine,
+    seed_db,
+)
 from backend.db.migrations import (
     DatabaseMigrationError,
     check_database,
@@ -27,8 +35,16 @@ from backend.db.migrations import (
     upgrade_database,
     validate_database_migration_state,
 )
+from backend.db.recovery import (
+    DatabaseRecoveryError,
+    recover_sqlite_database,
+    sqlite_integrity_check,
+)
 from config.registry import get_settings
 from .config import PROJECT_ROOT
+
+
+_EXCLUSIVE_DB_COMMANDS = {"init", "upgrade", "downgrade", "seed", "recover"}
 
 
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -58,6 +74,27 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         command_parser = db_subparsers.add_parser(command_name, help=help_text)
         command_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
 
+    integrity_parser = db_subparsers.add_parser(
+        "integrity",
+        help="Run SQLite's full integrity_check without modifying the database",
+    )
+    integrity_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
+
+    recover_parser = db_subparsers.add_parser(
+        "recover",
+        help="Salvage a corrupt SQLite database using sqlite3 .recover",
+    )
+    recover_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
+    recover_parser.add_argument(
+        "--output",
+        help="Recovered database path (default: timestamped file beside the source)",
+    )
+    recover_parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="After successful integrity_check, back up the corrupt DB and install the recovered DB in its place",
+    )
+
     downgrade_parser = db_subparsers.add_parser(
         "downgrade",
         help="Downgrade the database to an Alembic revision",
@@ -85,6 +122,12 @@ def _get_db_path(args: argparse.Namespace) -> Path:
     return get_settings().database_path
 
 
+def _set_database_path_for_args(args: argparse.Namespace) -> Path:
+    path = _get_db_path(args).resolve()
+    os.environ["WL_DATABASE_PATH"] = str(path)
+    return path
+
+
 def _validate_db_health() -> None:
     if not get_db_path().exists():
         print(
@@ -94,14 +137,9 @@ def _validate_db_health() -> None:
         )
         sys.exit(1)
 
+    # configure_db() already ran PRAGMA quick_check before enabling WAL. This
+    # second stage only verifies that this is an initialized WireLoft database.
     engine = get_engine()
-    try:
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
-    except Exception as exc:
-        print(f"Failed to connect to database: {exc}", file=sys.stderr)
-        sys.exit(1)
-
     try:
         from sqlalchemy import inspect as sa_inspect
 
@@ -112,8 +150,8 @@ def _validate_db_health() -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
-    except Exception:
-        pass
+    except DatabaseCorruptionError:
+        raise
 
 
 def _reload_startup_marker(supervisor_pid: str) -> Path:
@@ -134,11 +172,9 @@ def _matches_backend_api(cmdline: Optional[list[str]]) -> bool:
     )
 
 
-def _stop_backend() -> None:
-    """Stop all other running backend-api processes."""
+def _running_backend_processes() -> dict[int, psutil.Process]:
     own_pid = os.getpid()
     targets: dict[int, psutil.Process] = {}
-
     for proc in psutil.process_iter(["pid", "cmdline"]):
         if proc.pid == own_pid:
             continue
@@ -147,6 +183,12 @@ def _stop_backend() -> None:
                 targets[proc.pid] = proc
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
+    return targets
+
+
+def _stop_backend() -> None:
+    """Stop all other running backend-api processes."""
+    targets = _running_backend_processes()
 
     if not targets:
         print("No running backend-api processes found")
@@ -183,11 +225,42 @@ def _stop_backend() -> None:
 
 
 def _configure_database_for_args(args: argparse.Namespace) -> None:
-    os.environ["WL_DATABASE_PATH"] = str(_get_db_path(args))
+    _set_database_path_for_args(args)
     configure_db()
 
 
-def _handle_db_command(args: argparse.Namespace) -> None:
+def _handle_integrity_command(args: argparse.Namespace) -> None:
+    path = _set_database_path_for_args(args)
+    if not path.is_file():
+        raise DatabaseRecoveryError(f"Database file does not exist: '{path}'")
+    results = sqlite_integrity_check(path)
+    if results == ("ok",):
+        print(f"SQLite integrity_check: ok ({path})")
+        return
+    details = "\n".join(results)
+    raise DatabaseRecoveryError(
+        f"SQLite integrity_check failed for '{path}':\n{details}"
+    )
+
+
+def _handle_recover_command(args: argparse.Namespace) -> None:
+    path = _set_database_path_for_args(args)
+    result = recover_sqlite_database(
+        path,
+        output=args.output,
+        replace=bool(args.replace),
+    )
+    print(f"Recovered SQLite database: {result.recovered}")
+    if result.replaced_source and result.backup_directory is not None:
+        print(f"Original corrupt database preserved at: {result.backup_directory}")
+        print("Run 'backend-api db current' before starting WireLoft.")
+    else:
+        print(
+            "The original database was not changed. Inspect the recovered file, then rerun with --replace if desired."
+        )
+
+
+def _dispatch_db_command(args: argparse.Namespace) -> None:
     _configure_database_for_args(args)
 
     if args.db_command == "init":
@@ -249,6 +322,68 @@ def _handle_db_command(args: argparse.Namespace) -> None:
     raise RuntimeError(f"Unsupported database command: {args.db_command}")
 
 
+def _handle_db_command(args: argparse.Namespace) -> None:
+    # integrity uses SQLite's read-only URI mode and deliberately does not claim
+    # ownership, so it can diagnose a running instance without changing state.
+    if args.db_command == "integrity":
+        _handle_integrity_command(args)
+        return
+
+    if args.db_command == "recover":
+        path = _set_database_path_for_args(args)
+        with DatabaseInstanceLock.acquire(path, command="backend-api db recover"):
+            _handle_recover_command(args)
+        return
+
+    if args.db_command in _EXCLUSIVE_DB_COMMANDS:
+        path = _set_database_path_for_args(args)
+        with DatabaseInstanceLock.acquire(
+            path,
+            command=f"backend-api db {args.db_command}",
+        ):
+            _dispatch_db_command(args)
+        return
+
+    # Read-only inspection/generation commands may run while WireLoft is active.
+    _dispatch_db_command(args)
+
+
+def _run_backend(args: argparse.Namespace) -> None:
+    path = _set_database_path_for_args(args)
+    with DatabaseInstanceLock.acquire(path, command="backend-api run"):
+        configure_db()
+
+        print("Starting Wireloft backend...")
+        _validate_db_health()
+        require_database_current()
+        debug = args.debug
+
+        if debug:
+            supervisor_pid = str(os.getpid())
+            os.environ["WIRELOFT_RELOAD_SUPERVISOR_PID"] = supervisor_pid
+            _reload_startup_marker(supervisor_pid).unlink(missing_ok=True)
+
+            # The reload supervisor owns the cross-process database lock but does
+            # not need to keep an SQLite connection pool open. Every spawned app
+            # worker configures its own fresh pool while the supervisor continues
+            # holding the single-instance lock for the whole reload session.
+            dispose_db()
+
+        try:
+            uvicorn.run(
+                "backend.app:create_app",
+                factory=True,
+                host=args.host,
+                port=args.port,
+                reload=debug,
+                reload_dirs=str(PROJECT_ROOT / "server") if debug else None,
+                log_level="debug" if debug else "info",
+            )
+        finally:
+            if debug:
+                _reload_startup_marker(os.getpid()).unlink(missing_ok=True)
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     args = _parse_args(argv)
 
@@ -262,32 +397,22 @@ def main(argv: Optional[list[str]] = None) -> None:
             return
 
         if args.command == "run":
-            _configure_database_for_args(args)
-
-            print("Starting Wireloft backend...")
-            _validate_db_health()
-            require_database_current()
-            debug = args.debug
-
-            if debug:
-                supervisor_pid = str(os.getpid())
-                os.environ["WIRELOFT_RELOAD_SUPERVISOR_PID"] = supervisor_pid
-                _reload_startup_marker(supervisor_pid).unlink(missing_ok=True)
-
-            try:
-                uvicorn.run(
-                    "backend.app:create_app",
-                    factory=True,
-                    host=args.host,
-                    port=args.port,
-                    reload=debug,
-                    reload_dirs=str(PROJECT_ROOT / "server") if debug else None,
-                    log_level="debug" if debug else "info",
-                )
-            finally:
-                if debug:
-                    _reload_startup_marker(os.getpid()).unlink(missing_ok=True)
+            _run_backend(args)
             return
+    except DatabaseInUseError as exc:
+        print(f"Database in use: {exc}", file=sys.stderr)
+        sys.exit(2)
+    except DatabaseCorruptionError as exc:
+        print(
+            f"Database corruption detected: {exc}\n"
+            "WireLoft will not start or continue writing to this database. "
+            "Run 'backend-api db integrity' for a full check or 'backend-api db recover --replace' to attempt salvage.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    except DatabaseRecoveryError as exc:
+        print(f"Database recovery error: {exc}", file=sys.stderr)
+        sys.exit(2)
     except DatabaseMigrationError as exc:
         print(f"Database migration error: {exc}", file=sys.stderr)
         sys.exit(1)
