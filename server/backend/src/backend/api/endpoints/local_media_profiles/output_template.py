@@ -8,7 +8,7 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplateSource,
     LocalMediaProfileTemplateSources,
 )
-from backend.db.models import Episode, Movie
+from backend.db.models import Episode, Movie, Show
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
@@ -27,6 +27,8 @@ _EXAMPLE_SHOW_VALUES = {
     "season": "season-1",
     "season_name": "Season 1",
     "season_index": "1",
+    "extra_seasons_count": "0",
+    "is_extra_season": "0",
     "episode": "the-first-episode",
     "episode_title": "The First Episode",
     "title": "The First Episode",
@@ -92,7 +94,10 @@ def get_output_template_sources(
     if profile_type == LocalMediaProfileType.SHOW:
         episodes = (
             s.query(Episode)
-            .options(joinedload(Episode.show), joinedload(Episode.season))
+            .options(
+                joinedload(Episode.show).selectinload(Show.seasons),
+                joinedload(Episode.season),
+            )
             .order_by(Episode.published_date.desc().nullslast(), Episode.created_at.desc(), Episode.id.desc())
             .limit(10)
             .all()

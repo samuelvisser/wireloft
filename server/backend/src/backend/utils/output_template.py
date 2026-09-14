@@ -15,7 +15,7 @@ from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
 
 if TYPE_CHECKING:
-    from backend.db.models import Episode, Movie, MovieExtra
+    from backend.db.models import Episode, Movie, MovieExtra, Season
 
 _DOWNLOADS_PREFIX = "/downloads/"
 _MAX_RENDERED_PATH_LENGTH = 4096
@@ -34,10 +34,14 @@ MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
 })
 
 SHOW_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "show", "show_title", "season", "season_name", "season_index", "episode", "episode_title", "title",
-    "episode_type", "episode_number", "episode_label", "episode_identifier", "episode_published_date",
-    "episode_published_time", "episode_published_datetime",
+    "show", "show_title", "season", "season_name", "season_index", "extra_seasons_count", "is_extra_season",
+    "episode", "episode_title", "title", "episode_type", "episode_number", "episode_label", "episode_identifier",
+    "episode_published_date", "episode_published_time", "episode_published_datetime",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
+
+_SHOW_NUMERIC_OUTPUT_TEMPLATE_FIELDS = frozenset({
+    "extra_seasons_count", "is_extra_season",
+})
 
 MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "movie_slug", "movie_title", "movie_extended_title", "movie_author",
@@ -204,6 +208,21 @@ def _sanitize_template_value(value: object, *, mode: FilenameRestrictionMode) ->
     return sanitize_path_component(text, mode=mode)
 
 
+def _render_context_value(
+    field: str,
+    value: object,
+    *,
+    mode: FilenameRestrictionMode,
+) -> object:
+    sanitized = _sanitize_template_value(value, mode=mode)
+    if field in _SHOW_NUMERIC_OUTPUT_TEMPLATE_FIELDS and sanitized:
+        try:
+            return int(sanitized)
+        except ValueError:
+            pass
+    return sanitized
+
+
 def _sanitize_rendered_path(rendered: str, *, mode: FilenameRestrictionMode) -> str:
     """Apply the filename mode to template literals as well as substitutions."""
     relative = rendered[len(_DOWNLOADS_PREFIX):]
@@ -234,6 +253,10 @@ def movie_template_uses_release_date(output_template: str) -> bool:
     )
 
 
+def _is_extra_season(season: "Season | None") -> bool:
+    return bool(season is not None and "extra" in season.name.lower())
+
+
 def episode_output_template_values(episode: "Episode") -> dict[str, str]:
     """Build the complete Show-profile context for an episode."""
     episode_identifier = episode.episode_identifier or ""
@@ -243,12 +266,18 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
 
     ep_info = episode_type_info(episode_identifier)
     published_at = episode.published_date
+    extra_seasons_count = sum(
+        1 for season in episode.show.seasons if _is_extra_season(season)
+    )
+    is_extra_season = _is_extra_season(episode.season)
     return {
         "show": episode.show.slug,
         "show_title": episode.show.title,
         "season": episode.season.slug if episode.season else "",
         "season_name": episode.season.name if episode.season else "",
         "season_index": str(episode.season.index) if episode.season else "",
+        "extra_seasons_count": str(extra_seasons_count),
+        "is_extra_season": "1" if is_extra_season else "0",
         "episode": episode.slug,
         "episode_title": episode.title,
         "title": episode.title,
@@ -327,7 +356,7 @@ def render_output_template(
     normalized = validate_output_template_fields(output_template, allowed_fields=allowed_fields)
     mode = get_settings().download_settings.filename_restriction_mode
     context = {
-        field: _sanitize_template_value(values.get(field, ""), mode=mode)
+        field: _render_context_value(field, values.get(field, ""), mode=mode)
         for field in allowed_fields
     }
     environment = _jinja_environment()

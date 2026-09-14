@@ -23,6 +23,8 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'season', description: 'Season URL slug'},
     {name: 'season_name', description: 'Season name'},
     {name: 'season_index', description: 'Season index'},
+    {name: 'extra_seasons_count', description: 'Number of show seasons whose name contains "extra" (case-insensitive)'},
+    {name: 'is_extra_season', description: '1 when the current season name contains "extra"; otherwise 0'},
     {name: 'episode', description: 'Episode URL slug'},
     {name: 'episode_title', description: 'Episode title'},
     {name: 'title', description: 'Episode title'},

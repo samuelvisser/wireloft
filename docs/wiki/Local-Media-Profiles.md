@@ -46,6 +46,8 @@ The `/downloads/` prefix is virtual. It maps to `downloadSettings.downloadRoot`,
 | `season` | Season slug, or empty when unavailable |
 | `season_name` | Season name, or empty when unavailable |
 | `season_index` | WireLoft season index, or empty when unavailable |
+| `extra_seasons_count` | Number of seasons in the show whose lowercased name contains `extra` |
+| `is_extra_season` | `1` when the current episode belongs to a season whose lowercased name contains `extra`; otherwise `0` |
 | `episode` | Episode slug |
 | `episode_title` | Episode title |
 | `title` | Alias for the episode title |
@@ -70,6 +72,12 @@ The `/downloads/` prefix is virtual. It maps to `downloadSettings.downloadRoot`,
 
 ```jinja
 /downloads/Video/TV Shows/{{ show_title }}/Season {{ season_index }}/{{ show_title }} - {{ date }} - {{ title }}.ext
+```
+
+For shows where Daily Wire puts one or more extras seasons before the numbered seasons, `extra_seasons_count` and `is_extra_season` can map every extras season to season `00` while shifting the numbered seasons down. Both values behave numerically inside Jinja, and `is_extra_season` can be used directly as a condition:
+
+```jinja
+{% set plex_season = 0 if is_extra_season else (season_index|int) - extra_seasons_count %}/downloads/Video/TV Shows/{{ show_title }}/Season {{ "%02d"|format(plex_season) }}/{{ show_title }} - {{ date }} - {{ title }}.ext
 ```
 
 `episode_label` is the human-facing portion with the episode-type prefix removed. It is convenient in filenames but is not guaranteed to be unique. `episode_identifier` preserves the complete WireLoft identifier and is database-guaranteed to be unique within a show. For example, `ep.2497` has the label `2497`, `ep-extra.2497.1` has `2497.1`, and `ep.S01E07` has `S01E07`.
