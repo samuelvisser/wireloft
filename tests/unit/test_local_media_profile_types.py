@@ -45,8 +45,14 @@ def test_local_media_profile_models_are_polymorphic_and_unique_by_type() -> None
     assert isinstance(profiles[1], MovieLocalMediaProfile)
     assert [profile.type for profile in profiles] == ["show", "movie"]
 
+    # Download behavior is not part of the profile identity. The same type,
+    # output template and preferred format must remain unique even when the
+    # storage-mode override differs.
     session.add(ShowLocalMediaProfile(
-        slug="duplicate-show-video", name="Duplicate show video", **shared_settings,
+        slug="duplicate-show-video",
+        name="Duplicate show video",
+        download_mode="temporary",
+        **shared_settings,
     ))
     with pytest.raises(IntegrityError):
         session.commit()
@@ -109,9 +115,15 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
         )
 
 
-def test_local_media_profile_service_allows_same_settings_across_types_only() -> None:
-    from backend.api.endpoints.local_media_profiles.service import create_local_media_profile
-    from backend.api.models.local_media_profile import LocalMediaProfileAPICreate
+def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -> None:
+    from backend.api.endpoints.local_media_profiles.service import (
+        create_local_media_profile,
+        update_local_media_profile,
+    )
+    from backend.api.models.local_media_profile import (
+        LocalMediaProfileAPICreate,
+        LocalMediaProfileAPIUpdate,
+    )
 
     session, engine = _new_session()
     common = {
@@ -129,13 +141,90 @@ def test_local_media_profile_service_allows_same_settings_across_types_only() ->
     assert show.type == "show"
     assert movie.type == "movie"
 
-    with pytest.raises(HTTPException) as exc_info:
+    # Exact uniqueness remains type + output template + preferred format. A
+    # different Local Media Profile storage override does not make it unique.
+    with pytest.raises(HTTPException) as exact_error:
         create_local_media_profile(
             session,
-            LocalMediaProfileAPICreate(type="show", name="Duplicate", **common),
+            LocalMediaProfileAPICreate(
+                type="show",
+                name="Duplicate",
+                download_mode="temporary",
+                **common,
+            ),
         )
-    assert exc_info.value.status_code == 409
-    assert "type, output path template, and preferred format" in exc_info.value.detail[0]["msg"]
+    assert exact_error.value.status_code == 409
+    assert "type, output path template, and preferred format" in exact_error.value.detail[0]["msg"]
+
+    # A different Jinja string that renders to the same path is also a conflict.
+    equivalent_template = (
+        "{% set media_title = title %}"
+        "/downloads/library/{{ media_title }}.ext"
+    )
+    with pytest.raises(HTTPException) as semantic_error:
+        create_local_media_profile(
+            session,
+            LocalMediaProfileAPICreate(
+                type="show",
+                name="Equivalent",
+                output_template=equivalent_template,
+                preferred_format="format_1080p",
+            ),
+        )
+    assert semantic_error.value.status_code == 409
+    assert semantic_error.value.detail[0]["type"] == "output_path_collision"
+    assert "same file as Local Media Profile 'Show'" in semantic_error.value.detail[0]["msg"]
+
+    # Video qualities still resolve to the same concrete .mp4 path, so they may
+    # not share an effective output even though preferred_format differs.
+    with pytest.raises(HTTPException) as video_quality_error:
+        create_local_media_profile(
+            session,
+            LocalMediaProfileAPICreate(
+                type="show",
+                name="Show 720p",
+                output_template=common["output_template"],
+                preferred_format="format_720p",
+            ),
+        )
+    assert video_quality_error.value.status_code == 409
+    assert video_quality_error.value.detail[0]["type"] == "output_path_collision"
+
+    # Audio and video may safely use the same template because their concrete
+    # output extensions differ.
+    audio = create_local_media_profile(
+        session,
+        LocalMediaProfileAPICreate(
+            type="show",
+            name="Show audio",
+            output_template=common["output_template"],
+            preferred_format="format_audio_only",
+        ),
+    )
+    assert audio.preferred_format == "format_audio_only"
+
+    distinct = create_local_media_profile(
+        session,
+        LocalMediaProfileAPICreate(
+            type="show",
+            name="Distinct",
+            output_template="/downloads/distinct/{{ title }}.ext",
+            preferred_format="format_1080p",
+        ),
+    )
+    with pytest.raises(HTTPException) as update_error:
+        update_local_media_profile(
+            session,
+            distinct.slug,
+            LocalMediaProfileAPIUpdate(
+                type="show",
+                name="Distinct",
+                output_template=equivalent_template,
+                preferred_format="format_1080p",
+            ),
+        )
+    assert update_error.value.status_code == 409
+    assert update_error.value.detail[0]["type"] == "output_path_collision"
 
     session.close()
     engine.dispose()

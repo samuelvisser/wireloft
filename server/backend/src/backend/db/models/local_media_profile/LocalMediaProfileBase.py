@@ -22,6 +22,13 @@ class LocalMediaProfileBase(Base):
     __tablename__ = "local_media_profiles"
     __table_args__ = (
         Index(
+            "uq_local_media_profiles_type_output_template_preferred_format",
+            "type",
+            "output_template",
+            "preferred_format",
+            unique=True,
+        ),
+        Index(
             "uq_local_media_profiles_type_template_format_mode",
             "type",
             "output_template",

@@ -94,27 +94,214 @@ _EXAMPLE_MOVIE_VALUES = {
 }
 
 
+def _template_fields_for_type(profile_type: LocalMediaProfileType) -> frozenset[str]:
+    if profile_type == LocalMediaProfileType.SHOW:
+        return SHOW_OUTPUT_TEMPLATE_FIELDS
+    if profile_type == LocalMediaProfileType.MOVIE:
+        return MOVIE_OUTPUT_TEMPLATE_FIELDS
+    raise ValueError("Output templates are only available for Show and Movie profiles")
+
+
+def _alternate_collision_probe_values(
+    profile_type: LocalMediaProfileType,
+) -> dict[str, str]:
+    if profile_type == LocalMediaProfileType.SHOW:
+        values = dict(_EXAMPLE_SHOW_VALUES)
+        values.update({
+            "show": "another-show",
+            "show_title": "Another Show",
+            "season": "season-2",
+            "season_name": "Season 2",
+            "season_index": "2",
+            "episode": "another-episode",
+            "episode_title": "Another Episode",
+            "title": "Another Episode",
+            "episode_type": "aux",
+            "episode_number": "42",
+            "episode_label": "42",
+            "episode_identifier": "aux.42",
+            "episode_published_date": "2025-01-02",
+            "episode_published_time": "03:04:05",
+            "episode_published_datetime": "2025-01-02 03:04:05",
+            "date": "2025-01-02",
+            "time": "03:04:05",
+            "datetime": "2025-01-02 03:04:05",
+            "year": "2025",
+            "month": "01",
+            "day": "02",
+            "hour": "03",
+            "minute": "04",
+            "second": "05",
+        })
+        return values
+
+    if profile_type == LocalMediaProfileType.MOVIE:
+        values = dict(_EXAMPLE_MOVIE_VALUES)
+        values.update({
+            "movie_slug": "another-movie",
+            "movie_title": "Another Movie",
+            "movie_extended_title": "Another Movie Extended",
+            "movie_author": "Another Studio",
+            "movie_mature_rating": "R",
+            "movie_duration_seconds": "7200",
+            "movie_date": "2025-01-02",
+            "movie_time": "03:04:05",
+            "movie_datetime": "2025-01-02 03:04:05",
+            "movie_year": "2025",
+            "movie_month": "01",
+            "movie_day": "02",
+            "movie_hour": "03",
+            "movie_minute": "04",
+            "movie_second": "05",
+            "slug": "another-trailer",
+            "title": "Another Trailer",
+            "extended_title": "Another Trailer",
+            "author": "",
+            "mature_rating": "",
+            "rating": "",
+            "duration_seconds": "120",
+            "media_type": "trailer",
+            "date": "2025-01-03",
+            "time": "04:05:06",
+            "datetime": "2025-01-03 04:05:06",
+            "year": "2025",
+            "month": "01",
+            "day": "03",
+            "hour": "04",
+            "minute": "05",
+            "second": "06",
+        })
+        return values
+
+    raise ValueError("Output templates are only available for Show and Movie profiles")
+
+
+def _preferred_format_extension(preferred_format: PreferredFormat | str) -> str:
+    return "m4a" if preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY else "mp4"
+
+
+def _render_collision_path(
+    output_template: str,
+    *,
+    profile_type: LocalMediaProfileType,
+    preferred_format: PreferredFormat | str,
+    values: dict[str, str],
+) -> str:
+    rendered = render_output_template(
+        output_template,
+        values,
+        allowed_fields=_template_fields_for_type(profile_type),
+    )
+    return replace_output_extension(
+        rendered,
+        _preferred_format_extension(preferred_format),
+    )
+
+
+def _collision_probe_values(
+    s: Session,
+    profile_type: LocalMediaProfileType,
+) -> list[tuple[str, dict[str, str]]]:
+    sources = get_output_template_sources(s, profile_type).sources
+    probes = [(source.label, source.values) for source in sources]
+
+    fallback_values = (
+        _EXAMPLE_SHOW_VALUES
+        if profile_type == LocalMediaProfileType.SHOW
+        else _EXAMPLE_MOVIE_VALUES
+    )
+    if not any(source.fallback for source in sources):
+        probes.append(("WireLoft example", dict(fallback_values)))
+
+    probes.append(("alternate WireLoft example", _alternate_collision_probe_values(profile_type)))
+    return probes
+
+
+def _find_rendered_output_collision(
+    body: LocalMediaProfileAPICreate | LocalMediaProfileAPIUpdate,
+    existing: LocalMediaProfileBase,
+    probes: list[tuple[str, dict[str, str]]],
+) -> tuple[str, str] | None:
+    profile_type = LocalMediaProfileType(body.type)
+    for label, values in probes:
+        try:
+            candidate_path = _render_collision_path(
+                body.output_template,
+                profile_type=profile_type,
+                preferred_format=body.preferred_format,
+                values=values,
+            )
+            existing_path = _render_collision_path(
+                existing.output_template,
+                profile_type=profile_type,
+                preferred_format=existing.preferred_format,
+                values=values,
+            )
+        except ValueError:
+            # Stored profiles may predate stricter template validation, and a
+            # representative probe can exercise a branch that is impossible for
+            # real media. Do not make an unrelated old template block all edits.
+            continue
+        if candidate_path == existing_path:
+            return label, candidate_path
+    return None
+
+
 def _ensure_unique_profile_settings(
     s: Session,
     body: LocalMediaProfileAPICreate | LocalMediaProfileAPIUpdate,
     *,
     exclude_id: int | None = None,
 ) -> None:
-    query = s.query(LocalMediaProfileBase).filter(
+    exact_query = s.query(LocalMediaProfileBase).filter(
         LocalMediaProfileBase.type == body.type,
         LocalMediaProfileBase.output_template == body.output_template,
         LocalMediaProfileBase.preferred_format == body.preferred_format,
-        LocalMediaProfileBase.download_mode == body.download_mode,
     )
     if exclude_id is not None:
-        query = query.filter(LocalMediaProfileBase.id != exclude_id)
-    if query.first() is not None:
+        exact_query = exact_query.filter(LocalMediaProfileBase.id != exclude_id)
+    if exact_query.first() is not None:
         raise HTTPException(
             status_code=409,
             detail=[{
                 "loc": ["body", "outputTemplate"],
-                "msg": "A Local Media Profile with this type, output path template, preferred format, and download behavior already exists",
+                "msg": "A Local Media Profile with this type, output path template, and preferred format already exists",
                 "type": "unique_violation",
+            }],
+        )
+
+    # Raw template strings can differ while rendering to the same file because of
+    # Jinja assignments/conditions or filename sanitization. Compare the actual
+    # rendered paths against every profile of the same media type. Preferred
+    # format is reflected by the concrete extension, so audio/video profiles may
+    # share a template safely while two video-quality profiles may not target the
+    # same .mp4 path.
+    profiles_query = s.query(LocalMediaProfileBase).filter(
+        LocalMediaProfileBase.type == body.type,
+    )
+    if exclude_id is not None:
+        profiles_query = profiles_query.filter(LocalMediaProfileBase.id != exclude_id)
+
+    existing_profiles = profiles_query.all()
+    if not existing_profiles:
+        return
+
+    probes = _collision_probe_values(s, LocalMediaProfileType(body.type))
+    for existing in existing_profiles:
+        collision = _find_rendered_output_collision(body, existing, probes)
+        if collision is None:
+            continue
+        label, output_path = collision
+        raise HTTPException(
+            status_code=409,
+            detail=[{
+                "loc": ["body", "outputTemplate"],
+                "msg": (
+                    "Output template resolves to the same file as Local Media Profile "
+                    f"'{existing.name}' for {label}: {output_path}. Choose a template "
+                    "that produces a different output path."
+                ),
+                "type": "output_path_collision",
             }],
         )
 
