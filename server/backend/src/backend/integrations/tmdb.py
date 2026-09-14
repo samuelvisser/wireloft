@@ -250,8 +250,6 @@ class TMDbClient:
                 raise TMDbAPIError(f"TMDB request failed with HTTP {exc.code}") from exc
             except URLError as exc:
                 if is_no_internet_error(exc):
-                    # DNS/routing outages will not improve during a tight local retry
-                    # loop. Return immediately and let the owning task retry later.
                     raise TMDbAPIError(NO_INTERNET_CONNECTION_MESSAGE) from exc
                 if attempt < self._max_retries:
                     time.sleep(min(2 ** attempt, 5))

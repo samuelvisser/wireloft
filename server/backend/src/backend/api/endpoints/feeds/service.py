@@ -302,9 +302,6 @@ def get_dailywire_stream_url(
             require_member_exclusive=require_member_exclusive,
         )
     except MiddlewareAPIError as exc:
-        # Outages are infrastructure failures, not per-episode stream failures.
-        # Let the application-level outage handler stop feed fallback fan-out and
-        # emit one clean 503/log entry instead of warning once per feed item.
         if is_no_internet_error(exc):
             raise
         raise HTTPException(
