@@ -5,7 +5,7 @@ import tomllib
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, computed_field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import YamlConfigSettingsSource
 
 from config.config import PROJECT_ROOT
@@ -68,11 +68,11 @@ class AppSettings(SettingsBase):
     app_version: str = Field(default_factory=get_app_version, frozen=True)
 
     database_path: Path = PROJECT_ROOT / "config" / "wireloft.db"
+    database_url: str | None = Field(default=None, exclude=True, repr=False)
 
-    @computed_field
     @property
-    def database_url(self) -> str:
-        return f"sqlite:///{self.database_path.as_posix()}"
+    def resolved_database_url(self) -> str:
+        return self.database_url or f"sqlite:///{self.database_path.as_posix()}"
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     timezone: str = Field(default="UTC", min_length=1, description="Application timezone")
@@ -133,6 +133,14 @@ class AppSettings(SettingsBase):
         scan_cron="*/10 * * * *",
         verify_file_size=True,
     ))
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_database_url(cls, value: Any):
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
 
     @field_validator("log_level", mode="before")
     @classmethod

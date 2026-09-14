@@ -13,6 +13,12 @@
 # saving Settings does not populate config.yml with every application default.
 # WL_* environment variables and .env values take precedence over this file.
 
+# WireLoft uses SQLite at /config/wireloft.db by default in Docker. To use a
+# different SQLAlchemy backend, set databaseUrl (or WL_DATABASE_URL) to a full
+# SQLAlchemy URL and make sure the corresponding DBAPI driver is installed.
+# PostgreSQL example: postgresql+psycopg://wireloft:password@postgres/wireloft
+# databaseUrl: postgresql+psycopg://wireloft:password@postgres/wireloft
+
 crypto:
   # Fallback location for the auto-generated session-signing key, used when
   # neither secretKey nor secretKeyFile is set. Keep this on a persistent

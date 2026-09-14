@@ -9,7 +9,7 @@ import os
 import pkgutil
 
 from sqlalchemy import MetaData, create_engine, event
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, URL, make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -38,7 +38,8 @@ class Base(DeclarativeBase):
 
 
 _engine: Optional[Engine] = None
-_SessionLocal: Optional[Session] = None
+_SessionLocal: Optional[sessionmaker] = None
+_database_url: Optional[str] = None
 _db_path: Optional[Path] = None
 
 
@@ -59,9 +60,6 @@ def _enable_sqlite_wal(engine: Engine) -> None:
                 "PRAGMA journal_mode=WAL"
             ).scalar_one()
         except OperationalError:
-            # A previous development/reload process can briefly retain a lock.
-            # The busy timeout still protects this process; do not make startup
-            # fail solely because WAL could not be switched during that window.
             logger.warning(
                 "Could not enable SQLite WAL mode; continuing with the current journal mode",
                 exc_info=True,
@@ -75,48 +73,94 @@ def _enable_sqlite_wal(engine: Engine) -> None:
         )
 
 
+def _resolved_url() -> URL:
+    return make_url(get_settings().resolved_database_url)
+
+
+def _sqlite_path(url: URL) -> Path | None:
+    """Return a filesystem path for file-backed SQLite URLs."""
+    if url.get_backend_name() != "sqlite":
+        return None
+    database = url.database
+    if not database or database == ":memory:" or database.startswith("file:"):
+        return None
+    return Path(database)
+
+
+def get_database_url() -> URL:
+    if _engine is None:
+        configure_db()
+    assert _engine is not None
+    return _engine.url
+
+
+def get_database_label() -> str:
+    """Return a log/CLI-safe database identifier with passwords hidden."""
+    return get_database_url().render_as_string(hide_password=True)
+
+
+def get_sqlite_database_path() -> Path | None:
+    if _engine is None:
+        configure_db()
+    return _db_path
+
+
 def configure_db() -> None:
     """Configure the global SQLAlchemy engine and session factory."""
-    global _engine, _SessionLocal, _db_path
+    global _engine, _SessionLocal, _database_url, _db_path
 
-    path = get_settings().database_path
-    if _db_path is not None and path.resolve() == _db_path.resolve():
+    url = _resolved_url()
+    url_key = url.render_as_string(hide_password=False)
+    if _engine is not None and _database_url == url_key:
         return
 
-    os.makedirs(path.parent, exist_ok=True)
-    engine = create_engine(
-        get_settings().database_url,
-        connect_args={
-            "check_same_thread": False,
-            # sqlite3 defaults to five seconds. Background workers and API writes
-            # legitimately overlap, so give short writer bursts time to serialize.
-            "timeout": _SQLITE_BUSY_TIMEOUT_SECONDS,
-        },
-    )
-    event.listen(engine, "connect", _configure_sqlite_connection)
-    _enable_sqlite_wal(engine)
+    sqlite_path = _sqlite_path(url)
+    if sqlite_path is not None:
+        os.makedirs(sqlite_path.parent, exist_ok=True)
 
+    engine_kwargs: dict[str, object] = {}
+    if url.get_backend_name() == "sqlite":
+        engine_kwargs["connect_args"] = {
+            "check_same_thread": False,
+            "timeout": _SQLITE_BUSY_TIMEOUT_SECONDS,
+        }
+    else:
+        engine_kwargs["pool_pre_ping"] = True
+
+    engine = create_engine(url, **engine_kwargs)
+    if url.get_backend_name() == "sqlite":
+        event.listen(engine, "connect", _configure_sqlite_connection)
+        _enable_sqlite_wal(engine)
+
+    old_engine = _engine
     _engine = engine
-    _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
-    _db_path = path
+    _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    _database_url = url_key
+    _db_path = sqlite_path
+    if old_engine is not None:
+        old_engine.dispose()
 
 
 def get_engine() -> Engine:
     if _engine is None:
         configure_db()
+    assert _engine is not None
     return _engine
 
 
 def get_session() -> Session:
     if _SessionLocal is None:
         configure_db()
+    assert _SessionLocal is not None
     return _SessionLocal()
 
 
 def get_db_path() -> Path:
-    if _db_path is None:
-        configure_db()
-    return _db_path
+    """Return the SQLite file path for legacy callers."""
+    path = get_sqlite_database_path()
+    if path is None:
+        raise RuntimeError("The configured database is not a file-backed SQLite database")
+    return path
 
 
 def load_database_models() -> None:
@@ -128,8 +172,6 @@ def load_database_models() -> None:
         for _, name, _ in pkgutil.walk_packages(package.__path__, package_name + "."):
             importlib.import_module(name)
 
-    # The scheduler owns models outside backend.db.models, but they inherit
-    # backend.db.Base and therefore belong to the same Alembic schema.
     importlib.import_module("task_manager.scheduler.db")
 
     from sqlalchemy.orm import configure_mappers
