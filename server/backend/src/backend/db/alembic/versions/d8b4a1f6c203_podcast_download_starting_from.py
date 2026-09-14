@@ -1,7 +1,7 @@
 """Add fixed podcast download starting date.
 
 Revision ID: d8b4a1f6c203
-Revises: a7c5d9e2f401
+Revises: a9c4e7b2d610
 """
 
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 revision = "d8b4a1f6c203"
-down_revision = "a7c5d9e2f401"
+down_revision = "a9c4e7b2d610"
 branch_labels = None
 depends_on = None
 
