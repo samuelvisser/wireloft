@@ -1,7 +1,7 @@
 """Canonicalize RSS video method values.
 
 Revision ID: a9c4e7b2d610
-Revises: a9c4e2f7b106
+Revises: a7c5d9e2f401
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 
 revision = "a9c4e7b2d610"
-down_revision = "a9c4e2f7b106"
+down_revision = "a7c5d9e2f401"
 branch_labels = None
 depends_on = None
 
