@@ -15,7 +15,7 @@ from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
     SHOW_OUTPUT_TEMPLATE_FIELDS,
     movie_template_has_media_item_field,
-    validate_output_template_path_requirements,
+        validate_output_template_path_requirements,
 )
 from backend.utils.helpers import slugify
 
