@@ -1,57 +1,73 @@
 # First-Run Setup
 
-On first launch, WireLoft walks through four stages: welcome, Daily Wire connection, security, and adding the first media item.
+On first launch, WireLoft guides you through connecting Daily Wire, reviewing security, and adding your first media. You can skip optional steps and finish them later from the normal interface.
 
-## 1. Connect your Daily Wire account
+## 1. Connect Daily Wire
 
-WireLoft uses Daily Wire's **device authorization flow**. You follow the sign-in instructions provided by Daily Wire and authorize WireLoft there; WireLoft does not ask for or store your Daily Wire password.
+WireLoft uses Daily Wire's device authorization flow. Follow the instructions shown by WireLoft and authorize the connection on Daily Wire's own site.
 
-Connecting an account allows WireLoft to access content included with that membership. This is required for premium downloads and for RSS profiles that stream premium media directly from Daily Wire.
+WireLoft does **not** ask for your Daily Wire password.
 
-You can skip this step if you want, WireLoft will also work without a Daily Wire account attached for any content that is publicly accessible. If you can view it on The Daily Wire website without
-a login, WireLoft can use it without Daily Wire authentication.
+Connecting an account is required for member-exclusive content. You can skip this step if you only want to use content that Daily Wire makes publicly available without signing in.
 
-## 2. Protect the WireLoft UI
+You can reconnect or change the Daily Wire session later from **Settings → DailyWire**.
 
-WireLoft's administrator login is separate from your Daily Wire account. Configure it on the container with:
+## 2. Decide how WireLoft should be protected
+
+WireLoft's administrator login is separate from your Daily Wire account.
+
+If your installation is only reachable on a trusted private network, the administrator login is optional. If WireLoft is reachable through a reverse proxy or from an untrusted network, configure a long unique password with:
 
 ```yaml
 environment:
-  WL_ADMIN_AUTH__PASSWORD: "choose-a-long-unique-password"
+  - WL_ADMIN_AUTH__PASSWORD=choose-a-long-unique-password
 ```
 
-Restart WireLoft after changing the variable.
+Restart the container after changing it.
 
-If no administrator password is configured, anyone who can reach the WireLoft web interface can control the application. Authentication is especially important when WireLoft is available through a reverse proxy.
+Private RSS feeds do not use this administrator login. Each feed has its own secret URL. See [[Security-and-Remote-Access]].
 
-See [[Security-and-Remote-Access]] for the distinction between UI authentication and private RSS-feed tokens.
+## 3. Confirm your download storage
 
-## 3. Add your first show or movie
+If you are using the supplied Docker Compose layout, open **Settings → Downloads** and confirm **Download root** is `/downloads`. That points WireLoft at the persistent `./downloads:/downloads` media mount from the Compose file.
 
-The final setup stage opens the normal WireLoft media workflow.
+If you choose **Save to temporary folder first**, also review the **Temporary download folder** and make sure that location has enough free space for the media you download.
 
-For a **show**, select it from Browse and use the Add Show wizard. The wizard can:
+## 4. Add your first show or movie
 
-- add/index the show without downloading it;
-- create a Local Media Profile describing the desired format and output path;
-- create a Podcast or Series Download Profile;
-- create an RSS Stream Profile.
+Open **Browse** to see Daily Wire content that can be added to your Library.
 
-For a **movie**, select it from Browse, create or select a Movie Local Media Profile, and add/download the movie from its page.
+### Shows
 
-You may also skip adding media during onboarding and configure it later from the normal interface.
+When you add a show, the wizard can set up any combination of:
 
-## Recommended first setup
+- the show itself, with no automatic downloads;
+- a **Local Media Profile** describing the file format, download behavior, and output path;
+- a **Download Profile** for automatic podcast or series downloads;
+- an **RSS Stream Profile** for a private podcast/video feed.
+
+You do not have to configure everything at once. A good first step is to add the show, confirm its seasons and episodes look correct, and then add the download/RSS behavior you want.
+
+### Movies
+
+Movies use Movie Local Media Profiles and are downloaded manually from their movie page. When Daily Wire provides extras such as trailers or featurettes, those can be downloaded from the same page using the movie profile.
+
+Upcoming movies can remain in your Library before the actual media is available.
+
+## A simple first configuration
 
 For most installations:
 
-1. Persist both `/config` and `/downloads`.
-2. Set `TZ` to your local [IANA](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List) timezone.
-3. Connect your Daily Wire account.
-4. Set `WL_ADMIN_AUTH__PASSWORD` if WireLoft is accessible outside a completely trusted LAN.
-5. Add one show without aggressive download rules first, then verify its metadata and available episode types.
-6. Create the Local Media Profile(s) you actually want.
-7. Add Download Profiles for automatic retention.
-8. Add an RSS Stream Profile only after deciding whether the feed should use local downloads, Daily Wire streaming, or both.
+1. Make sure `/config` and `/downloads` are persistent.
+2. For the supplied Docker layout, set **Download root** to `/downloads`.
+3. Set `TZ` to your local timezone.
+4. Connect your Daily Wire account if you use member content.
+5. Protect the WireLoft UI if it is not confined to a trusted network.
+6. Add one show from Browse.
+7. Create a Local Media Profile with the format and folder structure you want.
+8. Add a Download Profile if you want automatic downloads.
+9. Add an RSS Stream Profile only if you want to use WireLoft as a private podcast/video feed.
 
-This separation makes it easier to change storage or RSS behavior later without removing the show itself.
+From there, **Home** shows the current health of the instance, **Library** contains your managed media, and **Downloads** shows actual file activity.
+
+For the profile concepts in more detail, see [[Local-Media-Profiles]], [[Download-Profiles]], and [[Podcast-RSS-Feeds]].

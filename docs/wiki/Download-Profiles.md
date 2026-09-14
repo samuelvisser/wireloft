@@ -1,91 +1,97 @@
 # Download Profiles
 
-Download Profiles decide **which media WireLoft should download automatically**. They do not decide where the file is stored or which format is written; that comes from the attached [[Local-Media-Profiles]].
+Download Profiles decide **which show episodes WireLoft should download automatically**. The attached Local Media Profile decides the file format, download behavior, and output path. See [[Local-Media-Profiles]].
 
-A show can have multiple Download Profiles. For example, you can keep audio for every regular and auxiliary episode while retaining video only for full episodes.
+A show can have more than one Download Profile. For example, you can keep audio for every episode while retaining video only for the newest five.
 
-## Common fields
+Movies do not use Download Profiles; movie downloads are started manually from the movie page.
 
-Every Download Profile has:
+## Common options
 
-- **Enable profile** — keep the configuration while temporarily disabling its automatic behavior.
-- **Episode types** — which Daily Wire episode types are eligible.
-- **Local Media Profile** — the format and output-template destination used for those downloads.
+Every Download Profile lets you choose:
 
-Because a Local Media Profile includes the preferred format, multiple Download Profiles can target different versions of the same episode.
+- whether the profile is enabled;
+- which episode types it applies to;
+- which Local Media Profile should be used for the resulting files.
+
+Disabling a profile keeps its configuration but stops it from automatically selecting new downloads.
 
 ## Podcast Download Profiles
 
-Podcast profiles are designed for rolling episode libraries.
+Podcast profiles are designed for shows where you usually care about a rolling set of episodes rather than individual seasons.
 
-### Download with countdown
+### Limit by
 
-Some Daily Wire episodes appear before the final media is ready and initially contain the countdown used in live shows.
+Choose how many episodes the profile should consider:
 
-Enable **Download with countdown** if you want WireLoft to download that early version. If it is disabled, WireLoft waits until the episode is considered past the countdown stage.
-
-### Redownload final version
-
-When countdown downloading is enabled, **Redownload final version** lets WireLoft replace that early file with the finalized media after the countdown is expected to have disappeared.
-
-### Limit downloads
-
-Use **Limit by** to choose how a Podcast Download Profile limits eligible episodes:
-
-- **No limits** — do not use a rolling limit. You can optionally set a fixed **Download starting from** date.
-- **Date** — download eligible episodes from the most recent number of days.
-- **Number of episodes** — download only the newest X eligible episodes.
-
-The backend rejects a profile that has both rolling limits active at once, or that combines **Download starting from** with either rolling limit.
-
-The date mode starts at **180 days** when selected without an existing date limit. Episode-count mode starts at **5 episodes** when selected without an existing episode-count limit. These are form conveniences; at the API/database level a value of `0` means that rolling limit is disabled, and both values being `0` represents **No limits**.
+- **No limits** — every eligible episode can be downloaded.
+- **Date** — only episodes inside a recent number-of-days window are eligible.
+- **Number of episodes** — only the newest selected number of eligible episodes are kept in the active window.
 
 ### Download starting from
 
-When **Limit by** is set to **No limits**, **Download starting from** provides an optional fixed lower date bound. WireLoft downloads eligible episodes published on or after that date and continues downloading every eligible episode published later.
+When **No limits** is selected, you can optionally set **Download starting from** to establish a fixed cutoff date.
 
-Episodes published before the selected date are simply ignored by the Download Profile. Existing downloads are not removed, even if they are older than the selected date. Leave the field blank to download every eligible episode regardless of publication date.
+WireLoft will ignore eligible episodes older than that date and continue downloading new episodes published after it. Existing files are not deleted simply because they predate the cutoff.
+
+This is useful when you want to begin archiving a show from a particular date without downloading its complete history.
 
 ### Delete older episodes
 
-When a rolling limit is enabled, **Delete older episodes** can remove previously downloaded files that fall outside that limit.
+When a rolling Date or Number of episodes limit is active, **Delete older episodes** can also remove downloaded files that fall outside that window.
 
-- With a date limit, files older than the rolling date window become eligible for removal.
-- With an episode-count limit, files outside the newest selected number of eligible episodes become eligible for removal.
+Leave it disabled if you only want the limit to control which new episodes are selected while keeping older files already on disk.
 
-Leave this disabled if you want the limit to affect future download selection without pruning older files already on disk.
+### Countdown and final versions
+
+Some Daily Wire episodes appear with temporary countdown media before the final episode is ready.
+
+- **Download with countdown** allows WireLoft to download that early version.
+- **Redownload final version** replaces the early version after the final media becomes available.
+
+If you only want the finished episode, leave countdown downloading disabled.
 
 ## Series Download Profiles
 
-Series profiles work by season rather than by a rolling podcast window.
+Series profiles work by season instead of a rolling podcast window.
 
 ### Seasons to download
 
-Select one or more known seasons. Only eligible episode types within the selected seasons are handled by the profile.
+Select the known seasons that should be covered by the profile. Only selected episode types inside those seasons are eligible.
 
 ### Include upcoming seasons
 
-Enable **Include upcoming seasons** if the same profile should automatically apply to seasons that do not exist yet. This is useful for ongoing series.
+Enable **Include upcoming seasons** when the same rules should automatically apply to seasons Daily Wire adds later.
 
-**Select all** in the UI selects all currently known seasons and enables upcoming seasons as well.
+This is useful for an ongoing series where you do not want to edit the profile every time a new season appears.
 
-## Multiple profiles for one show
+Selecting all seasons in the UI also enables future seasons so the profile keeps following the complete series.
 
-Multiple profiles are useful when retention or formats differ. Examples:
+## Using multiple profiles
 
-- audio-only for `Episode` + `Auxiliary`, unlimited;
-- 1080p video for `Episode`, latest 5 only;
-- a second video profile for a specific season;
-- high-resolution archive profile alongside a smaller RSS-friendly profile.
+Multiple Download Profiles are useful whenever format or retention differs. Examples include:
 
-WireLoft tracks each downloaded media variant through its Local Media Profile, so several representations of the same episode can coexist.
+- audio for all regular and auxiliary episodes with no limit;
+- 1080p video for regular episodes, latest five only;
+- a separate video profile for one particular season;
+- a high-quality archive profile alongside a smaller podcast-friendly copy.
 
-## Download profiles and RSS
+Because each profile points to a Local Media Profile, several versions of the same episode can coexist without being treated as the same local file.
 
-An RSS Stream Profile can use files created by Download Profiles, but it does not directly depend on one specific Download Profile. It searches completed downloads for a media file that matches the RSS profile's desired format and episode type.
+## Download Profiles and RSS feeds
 
-If **Use Downloads** and **Use DailyWire stream** are both enabled, an acceptable completed local download is preferred and Daily Wire is the fallback. See [[Podcast-RSS-Feeds]].
+An RSS Stream Profile can use files created by any suitable Download Profile. It does not need to be linked to one specific Download Profile.
+
+A common setup is:
+
+1. keep recent episodes downloaded locally;
+2. enable **Use Downloads** in the RSS profile;
+3. also enable **Use DailyWire stream** as a fallback for older episodes that are no longer stored locally.
+
+See [[Podcast-RSS-Feeds]].
 
 ## Global download controls
 
-Concurrency, retry attempts, per-download timeout, verification frequency, MP4 remuxing, FFmpeg path, filename compatibility, and the physical download root are global settings rather than per-profile options. See [[Settings#downloads]].
+Settings such as maximum simultaneous downloads, retry attempts, timeout, direct-versus-temporary download behavior, file verification, FFmpeg remuxing, and filename compatibility are configured globally under **Settings → Downloads**.
+
+A Local Media Profile can override the system-wide direct/temporary download behavior when needed. See [[Local-Media-Profiles]] and [[Settings#downloads]].

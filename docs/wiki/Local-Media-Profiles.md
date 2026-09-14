@@ -1,43 +1,100 @@
 # Local Media Profiles
 
-A Local Media Profile defines **what kind of file WireLoft writes and where that file goes**. Download Profiles then reference these profiles to decide which content should be downloaded.
+A Local Media Profile describes **the local file WireLoft should create**. It controls the preferred format, where the file is stored, and whether incomplete download work is written directly in the library or staged elsewhere first.
 
-This separation lets one show have several local representations, such as audio-only and 1080p video, without duplicating all the download-selection settings.
+Download Profiles use Local Media Profiles for automatic show downloads. Movies also use Local Media Profiles, but movie downloads are started manually.
 
-## Profile types
+## Show and Movie profiles
 
-### Show
+### Show profiles
 
 Show profiles can use:
 
-- 4K video
-- 1080p video
-- 720p video
-- audio only
+- 4K video;
+- 1080p video;
+- 720p video;
+- audio only.
 
-### Movie
+A Show profile also has an **Available for** setting. This only controls where WireLoft offers the profile in the interface; it does not change the file itself.
 
-Movie profiles can use 4K, 1080p, or 720p video.
+### Movie profiles
+
+Movie profiles can use 4K, 1080p, or 720p video. The same profile can be used for the main movie and its extras, so its output template must keep those items distinct.
+
+## Download behavior
+
+Each Local Media Profile can choose how downloads using it are written:
+
+- **System** — follow the current system-wide default from **Settings → Downloads**.
+- **Save directly to downloads** — perform the download in the destination area. This is the simplest and usually fastest option.
+- **Save to temporary folder first** — keep incomplete download and processing work in the configured temporary folder, then place the completed file in the media library.
+
+Temporary mode is useful when Plex, Jellyfin, or another application actively watches the destination folder and you do not want it to see partly downloaded media.
+
+The temporary folder may be on different storage from the final library. Configure the system default and temporary location under [[Settings#downloads]].
+
+## Preferred format
+
+The preferred format is the quality or media type WireLoft should request when this profile is used.
+
+A profile represents one local variant. If you want both audio and 1080p copies of the same episode, create separate Local Media Profiles and use them from separate Download Profiles.
 
 ## Output templates
 
-Every profile has a Jinja output template. The template:
+The output template controls the folder structure and filename. WireLoft uses Jinja variables so one template can produce a unique path for every episode, movie, or extra.
 
-- must start with `/downloads/`;
-- must end with `.ext`;
-- may only reference variables valid for that media type.
+A simple show example is:
 
-`.ext` is a WireLoft placeholder: the actual extension is selected from the media format produced by the download.
+```jinja
+/downloads/{{ show_title }}/{{ episode_title }}.ext
+```
+
+A media-server-friendly series example is:
+
+```jinja
+/downloads/TV Shows/{{ show_title }}/Season {{ season_index }}/{{ show_title }} - {{ episode_label }} - {{ title }}.ext
+```
+
+`.ext` is a WireLoft placeholder. It is replaced with the extension that matches the file WireLoft actually produces.
+
+### Path requirements
+
+After Jinja is evaluated, the output path must:
+
+- begin with `/downloads/`;
+- end with `.ext`.
+
+Most templates should simply begin with `/downloads/`. Advanced templates may place Jinja setup statements before it as long as those statements do not output any text.
+
+For example:
+
+```jinja
+{% set folder = show_title %}/downloads/{{ folder }}/{{ episode_title }}.ext
+```
+
+The `/downloads/` prefix maps to WireLoft's configured **Download root**. In a normal Docker installation that is the mounted media directory.
+
+### Use the editor preview
+
+The Local Media Profile editor includes a variable picker and path preview. Use those rather than memorizing the full reference below. The preview is especially helpful when optional values or Jinja conditionals are involved.
+
+## Optional values and conditionals
+
+Some metadata, such as a season or date, may not exist for every item. Missing values are empty, so Jinja conditionals can omit the punctuation or folder that belongs with them.
 
 Example:
 
 ```jinja
-/downloads/{{ show_title }}/{{ season_name }}/{{ episode_number }} - {{ episode_title }}.ext
+/downloads/{{ show_title }}/{% if season_name %}{{ season_name }}/{% endif %}{{ episode_title }}.ext
 ```
 
-The `/downloads/` prefix is virtual. It maps to `downloadSettings.downloadRoot`, which is `/downloads` in the supplied Docker configuration.
+Or append a year only when one is known:
 
-## Show template variables
+```jinja
+/downloads/{{ show_title }}/{{ episode_title }}{% if year %} ({{ year }}){% endif %}.ext
+```
+
+## Show template variable reference
 
 | Variable | Meaning |
 | --- | --- |
@@ -48,11 +105,11 @@ The `/downloads/` prefix is virtual. It maps to `downloadSettings.downloadRoot`,
 | `season_index` | WireLoft season index, or empty when unavailable |
 | `episode` | Episode slug |
 | `episode_title` | Episode title |
-| `title` | Alias for the episode title |
+| `title` | Episode title |
 | `episode_type` | Parsed episode type |
 | `episode_number` | Parsed episode number |
-| `episode_label` | Human-facing episode label without the episode-type prefix, for example `2497`, `2497.1`, or `S01E07`; not guaranteed unique |
-| `episode_identifier` | Full WireLoft episode identifier including the type prefix, for example `ep.2497`, `ep-extra.2497.1`, or `ep.S01E07`; guaranteed unique within a show |
+| `episode_label` | Human-facing episode label without the type prefix; convenient but not guaranteed unique |
+| `episode_identifier` | Full WireLoft episode identifier; unique within the show |
 | `episode_published_date` | Publication date as `YYYY-MM-DD` |
 | `episode_published_time` | Publication time as `HH:MM:SS` |
 | `episode_published_datetime` | Publication date and time |
@@ -66,21 +123,28 @@ The `/downloads/` prefix is virtual. It maps to `downloadSettings.downloadRoot`,
 | `minute` | Minute value |
 | `second` | Second value |
 
-`season_index` is useful for media servers that require numbered season folders even when Daily Wire gives the season a custom name. For example:
+`season_index` is useful when a media server expects numbered season folders even if Daily Wire uses custom season names.
+
+Use `episode_label` when you want a clean human-facing filename. Use `episode_identifier` when the filename itself needs a guaranteed unique episode value.
+
+## Movies and extras
+
+Movie templates have two groups of values:
+
+- variables beginning with `movie_` always describe the parent movie;
+- variables without that prefix describe the actual item being downloaded, which can be either the main movie or a specific extra.
+
+This makes it possible to keep all extras inside the movie's folder while giving each item its own filename.
+
+Example:
 
 ```jinja
-/downloads/Video/TV Shows/{{ show_title }}/Season {{ season_index }}/{{ show_title }} - {{ date }} - {{ title }}.ext
+/downloads/Movies/{{ movie_title }}{% if movie_year %} ({{ movie_year }}){% endif %}/{{ media_type }} - {{ title }}.ext
 ```
 
-`episode_label` is the human-facing portion with the episode-type prefix removed. It is convenient in filenames but is not guaranteed to be unique. `episode_identifier` preserves the complete WireLoft identifier and is database-guaranteed to be unique within a show. For example, `ep.2497` has the label `2497`, `ep-extra.2497.1` has `2497.1`, and `ep.S01E07` has `S01E07`.
+A movie template must use an item-specific value such as `{{ title }}`, `{{ slug }}`, or `{{ media_type }}` so the main movie and an extra cannot resolve to the same output path.
 
-Date-related values can be empty when Daily Wire does not provide the corresponding date. Jinja conditionals are therefore useful when punctuation or folders should only appear when a value exists.
-
-## Movie template variables
-
-Movie templates distinguish the **parent movie** from the **actual downloaded media item**. This matters because a movie can have extras.
-
-### Parent-movie values
+### Parent movie variables
 
 | Variable | Meaning |
 | --- | --- |
@@ -94,9 +158,9 @@ Movie templates distinguish the **parent movie** from the **actual downloaded me
 | `movie_year`, `movie_month`, `movie_day` | Parent release-date components |
 | `movie_hour`, `movie_minute`, `movie_second` | Parent release-time components |
 
-### Downloaded-item values
+### Current item variables
 
-These describe the main movie **or** the specific extra currently being downloaded:
+These describe the main movie or the specific extra currently being downloaded:
 
 | Variable | Meaning |
 | --- | --- |
@@ -106,58 +170,36 @@ These describe the main movie **or** the specific extra currently being download
 | `author` | Item author when available |
 | `mature_rating` / `rating` | Item rating when available |
 | `duration_seconds` | Item duration |
-| `media_type` | `movie` for the main feature or the extra type for an extra |
+| `media_type` | `movie` for the main feature, or the extra type |
 | `date`, `time`, `datetime` | Item date/time values |
 | `year`, `month`, `day`, `hour`, `minute`, `second` | Item date/time components |
 
-### Movie collision protection
-
-A Movie Local Media Profile must use at least one item-specific variable. Otherwise, the main movie and an extra could resolve to the same output path and overwrite each other.
-
-Good examples include `{{ title }}`, `{{ slug }}`, `{{ media_type }}`, or an item-specific date field.
-
-Example:
-
-```jinja
-/downloads/Movies/{{ movie_title }} ({{ movie_year }})/{{ media_type }} - {{ title }}.ext
-```
-
-## Jinja conditionals
-
-Because values such as seasons or dates can be absent, templates can conditionally include text:
-
-```jinja
-/downloads/{{ show_title }}/{% if season_name %}{{ season_name }}/{% endif %}{{ episode_title }}.ext
-```
-
-The editor previews the rendered path so you can verify the result before saving.
+Daily Wire does not always provide every field for movie extras. Use conditionals around values that may be empty.
 
 ## Filename restrictions
 
-`downloadSettings.filenameRestrictionMode` controls how both literal template components and substituted values are sanitized.
+The global **Filename restrictions** setting controls how template text and substituted values are made safe for filesystems.
 
-### `unrestricted`
+### Minimal restrictions (`unrestricted`)
 
-Preserves ordinary Unicode and punctuation as much as possible. WireLoft still removes or replaces path-breaking values such as `/`, `\`, NUL, and control characters so a substituted title cannot create an unexpected directory level.
+Preserves most Unicode and punctuation while still preventing characters that would accidentally create a new path or invalid filename.
 
-### `windows` — default
+### Windows-compatible filenames (`windows`) — default
 
-Produces filenames compatible with Windows while retaining Unicode. WireLoft replaces characters Windows does not allow (`< > : " / \ | ? *` and control characters), removes trailing spaces/dots, and protects reserved names such as `CON`, `PRN`, `AUX`, `NUL`, `COM1`, and `LPT1`.
+Keeps Unicode while replacing characters Windows does not allow and protecting reserved Windows names. This is a good cross-platform default.
 
-This is the supplied default and is a good cross-platform choice.
+### Restricted filenames (`restricted`)
 
-### `restricted`
+Produces conservative ASCII-style filenames using letters, numbers, `.`, `_`, and `-`.
 
-Transliterates decomposable Unicode to ASCII, drops remaining non-ASCII characters, and permits only letters, numbers, `.`, `_`, and `-`. Other runs of characters become underscores.
+Use this only when another application or filesystem needs very simple filenames.
 
-Use this only when you specifically need conservative ASCII-style filenames.
-
-## Choosing profiles for media servers
+## Suggested layouts
 
 A common arrangement is:
 
-- a Show video profile using a Plex/Jellyfin-friendly series hierarchy;
-- a separate Show audio profile for Audiobookshelf or podcast-style storage;
-- a Movie profile with a conventional movie directory and item-specific extra naming.
+- one Show video profile for Plex/Jellyfin;
+- one Show audio profile for podcast-style storage or Audiobookshelf;
+- one Movie profile with a conventional movie folder and item-specific extra names.
 
-The profile only controls WireLoft's output. Your media server can independently scan whichever subdirectories are relevant.
+Local Media Profiles only control files WireLoft creates. Your media server can independently scan whichever subfolders you want.

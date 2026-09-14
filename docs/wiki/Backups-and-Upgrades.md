@@ -1,28 +1,32 @@
 # Backups and Upgrades
 
-WireLoft is straightforward to back up when the two persistent Docker mounts are kept separate from the container itself.
+WireLoft is easy to back up when its persistent data is kept outside the container.
 
 ## What to back up
 
 ### `/config` — essential
 
-Back up the entire `/config` directory. It contains the application configuration and persistent state needed to reconstruct your WireLoft instance, including the SQLite database, `config.yml`, secret-key material, and Daily Wire authentication state.
+Back up the entire `/config` directory. It contains the state needed to restore your WireLoft installation, including:
 
-Backing up the whole directory is safer than trying to maintain a hand-picked file list as WireLoft evolves.
+- the SQLite database;
+- `config.yml`;
+- the application secret key;
+- Daily Wire authentication state;
+- other persistent application data stored alongside the configuration.
 
-### `/downloads` — according to your recovery needs
+Backing up the complete directory is safer than maintaining a hand-picked file list as WireLoft evolves.
 
-`/downloads` contains the media WireLoft downloaded. Whether you back it up depends on your storage strategy:
+### `/downloads` — optional, depending on your storage policy
 
-- back it up if downloaded media is expensive or inconvenient to recreate;
-- omit it from backups if you deliberately treat downloads as reproducible cache/archive data and are comfortable fetching them again;
-- remember that old premium media may not remain remotely available forever, so reproducibility is not guaranteed by WireLoft.
+`/downloads` contains the media WireLoft downloaded.
 
-## Consistent database backups
+Back it up when those files are important or expensive to recreate. You may choose not to back it up when downloads are treated as replaceable media and you are comfortable fetching them again.
 
-WireLoft uses SQLite. For the cleanest snapshot, stop or quiesce the container while copying the database/config directory, or use a backup mechanism that understands SQLite snapshots.
+Remember that WireLoft cannot guarantee Daily Wire will continue to make every old file available forever, especially member-exclusive media.
 
-A simple maintenance approach is:
+## Make a consistent database backup
+
+WireLoft uses SQLite. The simplest reliable backup is to stop WireLoft while copying `/config`:
 
 ```bash
 docker compose stop wireloft
@@ -30,45 +34,57 @@ docker compose stop wireloft
 docker compose start wireloft
 ```
 
-If your backup product already provides application-consistent filesystem snapshots, follow its SQLite guidance instead.
+If your storage/backup system supports application-consistent SQLite snapshots, you can use that instead.
 
-## Do not lose the secret key
+Do not run two WireLoft backends against the same SQLite database at the same time. For example, avoid starting a local development backend and a Docker instance that both point to the same `wireloft.db`.
 
-The supplied Docker configuration keeps the generated application secret under `/config/wl_secret.key`. Preserve it with the rest of `/config`.
+## Do not lose the application key
 
-Restoring only the database but not the accompanying secret/authentication state can produce an incomplete restore.
+The normal Docker setup keeps WireLoft's generated application key under `/config`. Preserve it together with the database.
 
-## Upgrade the container
+Restoring only `wireloft.db` while losing the accompanying key and authentication state can result in an incomplete restore.
 
-For a normal Compose deployment:
+## Upgrade WireLoft
+
+Before an important upgrade, make a fresh `/config` backup.
+
+Then update a normal Compose installation with:
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-Because `/config` and `/downloads` are bind-mounted outside the container, recreating the container does not remove those directories.
+WireLoft applies required database migrations when the new container starts. Because `/config` and `/downloads` live outside the container, recreating the container does not remove those mounted directories.
 
-Before a major upgrade, take a fresh `/config` backup.
+## Configuration after an upgrade
 
-## Configuration upgrades
+WireLoft does not replace your existing `config.yml` with a newly shipped default file.
 
-The default `config.yml` shipped with WireLoft is copied only when a configuration file does not already exist. 
+Settings you explicitly changed remain yours. Settings that are not present in your file use the defaults supplied by the new WireLoft version.
 
-That behavior is intentional: settings omitted from your YAML continue to receive their current application defaults, while values you explicitly customized remain yours.
+The Settings page also writes only values you actually change instead of filling `config.yml` with every possible default.
 
-The Settings UI likewise writes only changed fields instead of materializing every default into the file.
+After a larger update, it is worth opening **Settings** and checking for new options that may be useful to your installation.
 
 ## Restore procedure
 
 A typical restore is:
 
 1. Stop WireLoft.
-2. Restore the saved `/config` directory to the path mounted into the container.
-3. Restore `/downloads` if it was part of the backup.
-4. Confirm file ownership/permissions allow the container to read and write both mounts.
+2. Restore the complete saved `/config` directory to the path mounted into the container.
+3. Restore `/downloads` if it was included in the backup.
+4. Confirm the container has permission to read and write the restored directories.
 5. Start WireLoft.
-6. Verify the Library, Settings, Daily Wire connection, and a known local download.
-7. Test any private RSS feed from a podcast client.
+6. Check Home and Library.
+7. Verify the Daily Wire connection under Settings.
+8. Open a known completed download and confirm the file is available.
+9. Test any private RSS feeds you rely on.
 
-If you intentionally restore to a different public hostname, edit RSS Stream Profile URLs so they point at the new reachable hostname. The secret token can remain the same unless you also want to rotate it.
+If the restored installation uses a different hostname, edit the RSS Stream Profile URLs so podcast clients can reach the new address. You only need to regenerate the secret token if you intentionally want to revoke the old feed URL.
+
+## Before experimenting with database or migration commands
+
+Take a `/config` backup first. Database maintenance commands can be useful during development or recovery, but they are not a substitute for a known-good backup.
+
+For ordinary upgrades, let the container apply its normal migrations automatically.

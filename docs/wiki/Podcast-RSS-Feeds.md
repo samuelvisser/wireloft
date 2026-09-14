@@ -1,218 +1,196 @@
 # Podcast RSS Feeds
 
-WireLoft can expose a managed show as a private RSS 2.0 podcast/video feed. The feed can serve downloaded media, stream directly from Daily Wire, or combine both approaches.
+WireLoft can expose a managed show as a private podcast or video RSS feed. The feed can use downloaded files, stream from Daily Wire, or combine both approaches.
 
 > [!CAUTION]
-> **Treat the complete WireLoft RSS feed URL like a password or API key.** The URL contains a secret token that authorizes access to the feed and the media exposed through it. RSS endpoints intentionally remain reachable without the WireLoft administrator login so podcast clients can use them. Anyone who obtains the URL can use that access too, including for premium media available through your WireLoft/Daily Wire session.
+> **Treat the complete RSS feed URL like a password or API key.** It contains a secret token that gives access to the feed without requiring the WireLoft administrator login. Anyone who obtains the URL can use the feed access you configured.
 
-Do not post the URL publicly, include it in screenshots, paste it into public issue reports, or share it with people who should not have access. If it leaks, regenerate the URL immediately from the Stream Profile; the old token is invalidated.
+If a URL leaks, regenerate it from the Stream Profile. The old token stops working immediately for new requests.
 
-## Requirements
+## Before creating a feed
 
-Before creating a feed:
+You need:
 
-1. Add the show to WireLoft.
-2. If you want the feed to use local media, create suitable Download Profiles and let WireLoft download some episodes.
-3. If you want direct Daily Wire streaming—especially premium content—connect a Daily Wire account that has access to the show.
-4. Make sure the hostname you will put in the feed URL is reachable by the podcast client.
+1. the show in your WireLoft Library;
+2. a Daily Wire account connected if the feed needs member-exclusive Daily Wire media;
+3. suitable local downloads if you want the feed to use downloaded files;
+4. a WireLoft hostname that the podcast client can reach.
 
-A feed used only inside your LAN can use a local hostname/IP. A phone that needs the feed away from home requires a network path back to WireLoft, such as your own HTTPS reverse proxy or VPN.
+A LAN-only feed can use a local hostname or IP. For a phone away from home, use your own HTTPS reverse proxy, VPN, or another secure route back to WireLoft.
 
-## Create an RSS Stream Profile
+## Choose where media comes from
 
-Open the show and create a Stream Profile, or use **Stream Profiles → Add Stream Profile**.
+An RSS Stream Profile has two independent media sources.
 
-### 1. Choose streaming sources
+### Use Downloads
 
-WireLoft offers two independent sources.
+WireLoft serves suitable completed files already stored in your local download library.
 
-#### Use Downloads
+This is the best option when you want predictable local playback and do not want the podcast client to fetch that episode from Daily Wire again.
 
-WireLoft can serve completed files already stored locally. This gives the podcast client a stable local enclosure and avoids fetching that media from Daily Wire again.
+### Use DailyWire stream
 
-#### Use DailyWire stream
+WireLoft obtains the episode media from Daily Wire when the podcast client requests it.
 
-WireLoft can request a fresh media URL from Daily Wire when the podcast client asks for an episode.
+This makes it possible to expose episodes you have not kept locally, including a much larger back catalog.
 
-When **both** options are enabled, WireLoft prefers a suitable completed local download. If none is available, it falls back to Daily Wire. This hybrid mode is useful when you keep only recent episodes locally but still want older episodes available through the feed.
+### Use both
 
-### 2. Enable streaming
+When both options are enabled, WireLoft prefers a suitable local download and uses Daily Wire when no acceptable local file exists.
 
-**Enable streaming** controls whether the profile is active. A disabled profile keeps its configuration but its tokenized feed returns as unavailable.
+This is a useful default for many users: keep recent episodes downloaded for fast access while still allowing older episodes to remain available through the feed.
 
-### 3. Choose audio or video
+## Enable or disable a feed
 
-Choose the preferred media format for the feed.
+**Enable streaming** controls whether the Stream Profile is active. Disabling it keeps the profile settings but makes that feed unavailable until you enable it again.
 
-For downloaded media, WireLoft searches completed downloads that belong to the same audio/video class and attempts to match the requested format.
+## Preferred format
 
-### 4. Exact format matching
+Choose the audio or video format you want the feed to prefer.
 
-When local downloads are enabled, **Require exact match** determines how strict WireLoft should be.
+When **Use Downloads** is enabled, WireLoft looks for completed local files that match the requested media type.
 
-- With exact matching enabled, a local download is used only if its Local Media Profile has exactly the preferred format.
-- With exact matching disabled, WireLoft can choose another suitable video resolution when an exact one does not exist.
+### Require exact match
 
-For video, WireLoft first prefers the smallest available resolution that is at least the requested resolution; if none reaches it, it chooses from the available video candidates. Audio and video are never mixed as format fallbacks.
+- Enabled: only a local file with the exact preferred format is accepted.
+- Disabled: WireLoft can use another suitable resolution of the same media type when the exact video quality is unavailable.
 
-If no acceptable local file exists and Daily Wire streaming is enabled, Daily Wire becomes the fallback.
+WireLoft never treats audio as a substitute for a local video file or vice versa.
 
-### 5. Choose episode types
+If no acceptable local file exists and Daily Wire streaming is enabled, the feed can fall back to Daily Wire.
 
-Select which episode types the feed should expose. The normal default is **Episode** plus **Auxiliary**.
+## Episode types
 
-WireLoft filters each episode by the type prefix in its episode identifier. An episode outside the selected types is not exposed by the feed or its tokenized media URL.
+Choose which Daily Wire episode types should appear in the feed. A normal podcast setup commonly includes **Episode** and **Auxiliary**.
 
-### 6. Limit feed history
+Items outside the selected types are left out of the feed.
 
-**Maximum episodes in RSS feed** controls how many of the newest eligible items appear.
+## Limit the feed size
 
-- `0` — complete eligible history.
-- Any positive number — only that many newest eligible episodes.
+**Maximum episodes in RSS feed** controls how many of the newest eligible episodes are listed.
 
-Items are sorted newest-first using publication date, then live date, then creation date as fallbacks. WireLoft excludes `No Show Today` placeholders.
+- `0` — expose the complete eligible history.
+- Any positive value — expose only that many newest eligible episodes.
 
-A smaller limit can make very large feeds easier for podcast applications to process. It does not delete any WireLoft data.
+This only limits the RSS listing. It does not delete episodes or downloaded files from WireLoft.
 
-## Daily Wire video delivery methods
+A smaller value can help podcast apps that struggle with very large feeds.
 
-When the profile streams Daily Wire video, WireLoft offers three delivery modes.
+## Daily Wire video delivery
 
-### Podcasting 2.0 direct stream with audio fallback — recommended
+If a video feed uses Daily Wire streaming, WireLoft offers three delivery choices.
 
-Internal value: `stream_hls_download_m4a`
+### Podcasting 2.0 direct stream with audio fallback
 
-WireLoft exposes the Daily Wire HLS video as a Podcasting 2.0 alternate enclosure. Compatible podcast clients can start streaming video immediately. The conventional RSS enclosure is audio so clients that do not understand the HLS alternate can still consume the episode.
+This is the fastest true-streaming option. Podcast apps with good Podcasting 2.0 HLS support can begin playing the Daily Wire video quickly.
 
-This is the fastest true-streaming option, but Podcasting 2.0 HLS support differs between podcast applications. A client may decide to download/use the conventional audio enclosure instead of the video alternate.
+Because support differs between apps, an incompatible client may use the audio fallback instead of video.
 
-### Serve as locally cached MP4 — full compatibility
+Choose this when immediate streaming is more important than compatibility with every video podcast client.
 
-Internal value: `stream_download_mp4`
+### Serve as locally cached MP4
 
-WireLoft prepares a complete MP4 locally and serves it as a conventional `video/mp4` enclosure. This is easier for normal video podcast clients to understand and never intentionally substitutes audio for a Daily Wire video request.
+WireLoft prepares a conventional MP4 and serves that to the podcast client.
 
-The trade-off is startup delay: when no cached MP4 exists, WireLoft must prepare the entire file before it can serve it. Long episodes can therefore take noticeably longer to start or download.
+This has the broadest compatibility with normal video podcast apps and does not intentionally replace the requested video with audio. The trade-off is that the first request can take noticeably longer because the complete MP4 must be prepared before it can be served.
 
 ### Direct stream with cached MP4 fallback
 
-Internal value: `stream_hls_download_mp4`
+This combines both approaches. Compatible clients can use the direct HLS stream, while clients that need a conventional enclosure can use the MP4 fallback.
 
-This combines both approaches. Podcasting 2.0-compatible clients can use the HLS alternate immediately, while the normal enclosure is a cached MP4 for clients/download workflows that need conventional video.
+Preparing the MP4 may still take time the first time it is needed.
 
-If that MP4 is not already cached, preparing it can still take time.
+### Local downloads take priority
 
-### Downloaded video is unaffected by this choice
+These video-delivery choices only matter when WireLoft needs the Daily Wire fallback. If a suitable downloaded file is available, WireLoft serves that local file directly.
 
-If WireLoft finds a suitable completed local download first, it serves that file directly. The Daily Wire video-method setting only matters for episodes that need the Daily Wire fallback.
+A useful video setup is to keep a small number of recent episodes downloaded while allowing older episodes to use Daily Wire.
 
-### Recommended MP4 setup
+## Copy and edit the feed URL
 
-If you use either cached-MP4 method frequently, consider a small video Download Profile that keeps only the latest **5** episodes. Recent episodes can then be served immediately from the normal download library, while older episodes remain available through on-demand Daily Wire preparation.
+After a Stream Profile is created, WireLoft shows its private RSS URL with **Copy** and **Regenerate** actions.
 
-## Save and copy the feed URL
-
-When a new RSS Stream Profile is created, WireLoft generates a secret token and builds a URL from the current request host:
+The URL looks similar to:
 
 ```text
 https://wireloft.example.com/feeds/rss/<secret-token>/<show-slug>.xml
 ```
 
-For Daily Wire video profiles, the URL can also carry a `dwVideoMethod` query parameter. **Copy the complete URL exactly as shown**, including any query string.
+The hostname is editable. This is useful when WireLoft sees an internal hostname but your podcast app needs a different LAN or public hostname.
 
-After creation, the Stream Profile shows an editable **RSS feed URL** field and a Copy button.
-
-### Why the URL is editable
-
-The host seen by WireLoft is not always the host a podcast client should use. For example, WireLoft might generate an internal Docker/LAN hostname while your phone needs a public reverse-proxy hostname.
-
-You can edit the URL to use the correct scheme/hostname. Keep the secret token and feed path intact. WireLoft automatically keeps the video-method query parameter consistent with the profile settings.
+Keep the token and feed path intact unless you deliberately regenerate the token.
 
 ## Add the feed to a podcast app
 
-The exact wording differs by client, but the workflow is normally:
+Most podcast apps have an option such as **Add by URL**, **Private feed**, or **Subscribe by RSS URL**.
 
-1. Open the podcast application's option to **add a podcast by URL**, **follow private feed**, or **subscribe by RSS URL**.
-2. Paste the complete WireLoft RSS URL.
-3. Save/follow the feed.
-4. Refresh the podcast app if it does not fetch immediately.
-5. Open an episode and verify that the expected media type plays.
+1. Copy the complete WireLoft RSS URL.
+2. Paste it into the podcast app.
+3. Save or follow the feed.
+4. Refresh the app if it does not fetch immediately.
+5. Test an episode and confirm the expected audio/video behavior.
 
-The podcast app does **not** need the WireLoft administrator password. The token in the RSS URL is the feed credential.
-
-If a client offers separate username/password fields, leave them unused unless your own reverse proxy imposes an additional authentication layer that the client supports.
+The podcast app does not need the WireLoft administrator password. The secret URL is the feed credential.
 
 ## Reverse proxies and remote access
 
-For a remote client, both the XML feed and every media URL it contains must be reachable. Allow the tokenized path tree, not only the `.xml` file:
+A remote podcast client must be able to reach both the feed and the media URLs it contains.
 
-```text
-/feeds/rss/<token>/<show>.xml
-/feeds/rss/<token>/episodes/<episode>
-/feeds/rss/<token>/episodes/<episode>/audio
-/feeds/rss/<token>/episodes/<episode>/video.mp4
-```
+When using a reverse proxy:
 
-Use HTTPS whenever the feed leaves a trusted private network. HTTPS protects the secret URL from passive observation in transit.
+- forward the entire `/feeds/rss/` path tree, not only the `.xml` feed;
+- use HTTPS whenever the feed travels over an untrusted network;
+- do not require the normal WireLoft web-login flow for RSS paths unless your podcast client explicitly supports the extra authentication method.
 
-## How WireLoft chooses an enclosure
+See [[Security-and-Remote-Access]].
 
-For each eligible episode, the logic is approximately:
+## Premium content
 
-1. Reject episodes outside the profile's selected episode types.
-2. Ignore `No Show Today` placeholders.
-3. If **Use Downloads** is enabled, inspect completed/redownloaded local files.
-4. Prefer an exact local format match.
-5. If exact matching is not required, choose the best suitable local fallback of the same audio/video class.
-6. If a local file was selected, serve it directly.
-7. Otherwise, if **Use DailyWire stream** is enabled, expose a Daily Wire-backed enclosure using the chosen audio/video method.
-8. Otherwise, omit the episode because no media source is available.
+WireLoft requests Daily Wire media using the account connected to your WireLoft instance. That account must already have access to member-exclusive content.
 
-This means a hybrid feed can transparently transition from local recent episodes to Daily Wire-backed older episodes.
+The RSS token does not create a Daily Wire entitlement. It delegates access to the feed capability your WireLoft instance already has, which is why the URL must be kept private.
 
-## Premium feeds and membership
+## Regenerate a leaked URL
 
-WireLoft requests Daily Wire media using the account connected to WireLoft. For a member-exclusive show, the account must have the necessary access. The private WireLoft RSS token does not create a Daily Wire entitlement; it only authorizes the caller to use the feed capability already configured on your WireLoft instance.
+If a feed URL is exposed:
 
-This is also why the URL must be kept private: it effectively delegates your WireLoft instance's configured feed access to whoever has the token.
-
-## Regenerate a leaked feed URL
-
-If the URL is exposed:
-
-1. Open the RSS Stream Profile.
+1. Open the Stream Profile.
 2. Click **Regenerate** beside the feed URL.
-3. Save/use the new URL in your own podcast clients.
-4. Remove the old URL from places where it may have been stored or shared.
+3. Replace the old URL in your podcast clients.
+4. Remove the old URL from anywhere it was shared or stored publicly.
 
-Regeneration creates a new secret token and immediately makes the previous token invalid.
+Previously downloaded media on another device cannot be recalled, but new requests using the old token are rejected.
 
-## Troubleshooting RSS
+## Troubleshooting
 
-### The podcast app cannot add the URL
+### The podcast app cannot add the feed
 
-Open the complete RSS URL from a device on the same network path as the podcast client. If it cannot reach WireLoft, fix DNS, reverse proxy, firewall, VPN, or hostname selection first.
+Try opening the same RSS URL from a device using the same network path. If it cannot reach WireLoft, check the hostname, DNS, firewall, VPN, reverse proxy, and HTTPS certificate.
 
-### The feed opens locally but not on a phone away from home
+### It works at home but not away from home
 
-The generated URL probably points to a LAN-only address, or `/feeds/rss/...` is not exposed through your remote-access path. Edit the Stream Profile URL to the reachable HTTPS hostname and confirm the proxy forwards the feed and media paths.
+The feed probably uses a LAN-only hostname or your remote-access path is not forwarding `/feeds/rss/`. Edit the Stream Profile URL to use the reachable hostname.
 
-### Audio works but direct Daily Wire video does not
+### Video plays as audio
 
-Your podcast app may not implement the Podcasting 2.0 HLS alternate-enclosure method in the way WireLoft expects. Try **Serve as locally cached MP4** for maximum conventional-video compatibility, or **Direct stream with cached MP4 fallback**.
+If you selected **Podcasting 2.0 direct stream with audio fallback**, the app may not support the HLS video method properly. Try **Serve as locally cached MP4** for broader compatibility or **Direct stream with cached MP4 fallback**.
 
-### Cached MP4 takes a long time to begin
+### MP4 video takes a long time to begin
 
-That is expected on the first request when WireLoft must prepare the complete MP4. Keep a small number of recent video episodes downloaded locally if you want immediate playback for new episodes.
+That is expected the first time WireLoft must prepare an MP4. Keep recent video episodes downloaded locally if you want immediate playback for new episodes.
 
-### Some downloaded episodes are missing
+### Some episodes are missing
 
-Check the RSS profile's episode types, preferred format, **Require exact match**, and source selection. If Daily Wire fallback is disabled, an episode with no acceptable local file is omitted.
+Check:
 
-### Old episodes disappeared from the feed
+- selected episode types;
+- preferred format;
+- **Require exact match**;
+- **Use Downloads** / **Use DailyWire stream**;
+- **Maximum episodes in RSS feed**.
 
-Check **Maximum episodes in RSS feed**. A positive value limits the feed listing but does not delete the episodes from WireLoft.
+A downloads-only feed cannot serve an episode without a suitable completed local file.
 
-### A leaked URL still works in one app after regeneration
+### An old URL still appears to work after regeneration
 
-The client may be showing cached feed data or a previously downloaded media file. New requests using the old token are invalidated at WireLoft.
+The podcast client may be showing cached feed data or media it previously downloaded. New requests to WireLoft using the old token are invalid.

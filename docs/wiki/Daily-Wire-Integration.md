@@ -1,118 +1,89 @@
 # Daily Wire Integration
 
-WireLoft uses Daily Wire services for catalog discovery, show/episode metadata, account authorization, and media URLs. The integration is designed so WireLoft can manage both free and member-exclusive content without collecting your Daily Wire password.
+WireLoft uses Daily Wire for catalog information, show and episode metadata, account authorization, and media access. Most of this happens automatically; the main thing you need to decide is whether to connect a Daily Wire account.
 
-## Account connection
+## Connecting your account
 
-WireLoft uses Daily Wire's device authorization/OAuth flow.
+WireLoft uses Daily Wire's device authorization flow. When you connect an account, WireLoft gives you instructions for authorizing the device through Daily Wire itself.
 
-During onboarding or from the Daily Wire authentication area:
+Your Daily Wire password is never entered into WireLoft.
 
-1. WireLoft starts a device authorization request.
-2. You follow the Daily Wire-provided instructions to authorize the device/session.
-3. Daily Wire confirms authorization to WireLoft.
-4. WireLoft stores the resulting authentication state under its persistent `/config` data.
+The connection is stored with WireLoft's persistent application data under `/config`, so it normally survives container recreation and upgrades.
 
-Your Daily Wire password is entered only into Daily Wire's own authorization experience, never into WireLoft.
+## Public and member-exclusive content
 
-## Membership access
+WireLoft does not bypass Daily Wire membership restrictions.
 
-WireLoft does not grant access to content your account cannot use. When a managed show is member-exclusive, direct stream/media lookups require the connected Daily Wire account to have the appropriate access.
+- Public content can be browsed and used without connecting an account when Daily Wire exposes it publicly.
+- Member-exclusive downloads require a connected account with access to that content.
+- RSS profiles that fall back to Daily Wire also require the connected account to have access to any member-exclusive media they serve.
 
-This applies to:
+The secret token in a WireLoft RSS URL only authorizes access to that WireLoft feed. It does not create or upgrade a Daily Wire membership.
 
-- premium episode downloads;
-- premium movie downloads;
-- RSS feeds using **Use DailyWire stream** as a source.
+## Browse and Library
 
-A private WireLoft RSS token is not a substitute for Daily Wire membership. It authorizes use of the configured WireLoft feed after WireLoft itself has the necessary upstream access.
+**Browse** shows content WireLoft can discover from Daily Wire. Adding something creates a managed copy of its metadata in **Library**.
 
-## Catalog and library
+Once a show is in your Library, WireLoft can keep its seasons and episodes synchronized even if you never download a file. Downloads and RSS feeds are optional behavior layered on top of the Library.
 
-The **Browse** view represents content discoverable from Daily Wire. Adding an item creates WireLoft's own managed representation in the **Library**.
+## New episodes and changing metadata
 
-WireLoft can then keep a show's episodes/seasons synchronized independently of whether any files are downloaded.
+WireLoft checks managed shows for new episodes every 30 minutes by default. Episodes that are scheduled, live, processing, or otherwise still settling are checked more frequently until their media becomes usable and final.
 
-## Episode discovery
+Daily Wire can also change titles, thumbnails, episode numbers, or other metadata after publication. WireLoft performs several follow-up refreshes for recently published episodes so those changes can settle without repeatedly refreshing your entire historical library.
 
-The normal discovery schedule is every 30 minutes. It looks for newly known episodes on managed shows.
+You can use **Sync now** on a show whenever you want to check that show immediately rather than wait for the next scheduled discovery pass.
 
-Known episodes that are still live/not final are monitored separately every minute by default. This separation is important: WireLoft does not need to requery every historical episode at one-minute intervals merely because one current episode is live.
+See [[Automation-and-Background-Tasks]] for the default schedules.
 
-See [[Automation-and-Background-Tasks]].
+## Live and newly published episodes
 
-## Post-publication metadata changes
-
-Daily Wire can change titles, thumbnails, or other metadata after an episode first appears. WireLoft schedules targeted refreshes for recently published episodes instead of continuously rechecking the full library.
-
-Default refresh offsets are:
-
-```text
-5m,15m,30m,1h,3h,6h,24h
-```
-
-See `newEpisodeSchedule.metadataRefreshIntervals` in [[Settings]].
-
-## Live/countdown media
-
-Podcast episodes can move through a live/countdown version before their final media settles. WireLoft uses configurable publication thresholds to distinguish these stages.
+A Daily Wire episode may appear before its final media is ready. Depending on the show, WireLoft may see a scheduled or live item, a temporary countdown version, processing media, and eventually the final episode.
 
 Podcast Download Profiles can choose whether to:
 
 - wait for the final version;
-- download the countdown version early;
-- download early and later replace it with the final version.
+- download an early countdown version;
+- download early and replace it when the final version becomes available.
 
 See [[Download-Profiles]].
 
-## Direct RSS streaming
+## Daily Wire streaming in RSS feeds
 
-An RSS Stream Profile with **Use DailyWire stream** does not permanently embed one upstream Daily Wire media URL in the feed. When a media request needs the Daily Wire fallback, WireLoft obtains current episode details/media from Daily Wire and returns the appropriate stream/redirect or prepares an MP4 according to the selected video method.
+An RSS Stream Profile can use Daily Wire as a media source instead of requiring every episode to be stored locally.
 
-This matters because upstream media URLs can be temporary. Podcast clients use WireLoft's stable tokenized enclosure URLs while WireLoft resolves the current Daily Wire media behind them.
+This is useful when you want a large feed without keeping the complete back catalog on disk. A common setup is to keep recent episodes downloaded locally and let older episodes fall back to Daily Wire.
+
+WireLoft resolves current media when the podcast client requests it, so temporary upstream media URLs are handled by WireLoft rather than stored permanently in the podcast application.
 
 See [[Podcast-RSS-Feeds]].
 
-## Request pacing
+## Internet outages
 
-WireLoft includes Daily Wire request-throttling settings:
+Your Library and already downloaded files are local to WireLoft. Features that need fresh information or media from Daily Wire naturally require an internet connection.
 
-- `dwTimeout.minFastRequestMs = 100`
-- `dwTimeout.maxFastRequests = 350`
-- `dwTimeout.minSlowRequestMs = 120`
+During an outage, actions such as discovering new episodes, refreshing remote metadata, starting a new Daily Wire-backed download, or using a Daily Wire RSS fallback may temporarily fail. Normal operation resumes when connectivity returns.
 
-These are advanced integration settings. Keep them at their defaults unless you are deliberately diagnosing a known issue; making requests more aggressive can increase upstream throttling risk.
+## Advanced integration settings
 
-## Production endpoints
+The **Settings → DailyWire** page contains advanced options for API endpoints, OAuth client details, and request pacing. Ordinary installations should leave these at their defaults.
 
-The default integration endpoints are:
+Changing these values can prevent authorization or media access from working. If you changed them while troubleshooting, restore the defaults before assuming the Daily Wire account itself is broken.
 
-```yaml
-dwApi:
-  middlewareApi: https://middleware-prod.dailywire.com/middleware
-  streamApi: https://stream.media.dailywire.com
-
-dwOauth:
-  issuer: https://authorize.dailywire.com
-  audience: https://api.dailywire.com/
-  clientId: FCgw3nA6cxkcXLVseAQvCSVBrymwvfpE
-  scope: openid profile offline_access
-```
-
-They are configurable for development/advanced purposes, but ordinary installations should leave them unchanged.
+See [[Settings#daily-wire-integration]].
 
 ## TMDB is separate
 
-TMDB enrichment is not part of Daily Wire authentication. It is an optional third-party metadata source used for movie information such as release dates. Configure it under `movieMetadata` in [[Settings]].
+WireLoft can optionally use TMDB for movie metadata such as release-date information used for matching and file naming. TMDB is separate from your Daily Wire account and has its own optional API token under **Settings → Advanced**.
 
 ## Authentication troubleshooting
 
-If premium content suddenly fails:
+If member-exclusive content stops working:
 
-1. Check the Daily Wire authentication status in WireLoft.
-2. Confirm the Daily Wire membership itself still has access to the content.
-3. Reauthorize the Daily Wire connection if required.
-4. Restore default API/OAuth endpoints if you customized them.
-5. Check WireLoft logs for upstream authentication or middleware errors.
+1. Open **Settings → DailyWire** and check whether WireLoft is still connected.
+2. Confirm your Daily Wire membership can access the same content on Daily Wire itself.
+3. Reauthorize the WireLoft connection if necessary.
+4. If you changed advanced Daily Wire endpoints or OAuth settings, restore their defaults.
+5. Check the WireLoft log or the affected download's log for the specific error.
 
-For RSS-specific failures, also verify that the WireLoft feed token/profile remains valid; Daily Wire authentication and WireLoft RSS token authentication are two separate layers.
+For RSS-only problems, also check the Stream Profile and its feed token. Daily Wire authentication and WireLoft RSS access are separate.

@@ -1,129 +1,132 @@
 # Downloads and File Integrity
 
-WireLoft's Downloads area tracks the concrete media files produced by Download Profiles and manual movie/episode downloads. This is separate from the profile definitions themselves: profiles describe desired behavior, while download records describe actual work and files.
+The **Downloads** page is the central place to see actual media-file activity in WireLoft. Profiles describe what WireLoft should do; this page shows what has actually been queued, downloaded, processed, or failed.
 
-## Download lifecycle
+Each row represents one media item and Local Media Profile combination, so the same episode can appear more than once when you keep multiple formats.
 
-A download is associated with:
+## Download statuses
 
-- a media item such as an episode, movie, or movie extra;
-- a Local Media Profile, which determines format and output path;
-- status/progress information;
-- the final path and recorded artifact identity when the download completes.
+WireLoft can show downloads as:
 
-WireLoft can keep multiple local variants of the same episode because different Local Media Profiles represent different formats/output destinations.
+- **Queued** — waiting for a download slot;
+- **Downloading** — media is currently being transferred;
+- **Processing** — the download finished but local work such as MP4 remuxing is still happening;
+- **Downloaded** — the local file completed successfully;
+- **Cancelled** — the download was stopped;
+- **Error** — the attempt failed;
+- **Missing** — WireLoft expected a completed file but cannot find it;
+- **Corrupted** — the file exists but failed WireLoft's integrity checks.
 
-## Concurrency and retries
+Completed downloads are hidden by the default Downloads-page filter so active/problems are easier to see. Enable the **Downloaded** filter when you want full history.
 
-Global defaults are:
+## Download actions
 
-```text
-Maximum concurrent downloads: 5
-Maximum download attempts:    3
-Download timeout:             600 seconds
-```
+Available actions depend on the current state.
 
-These apply across Download Profiles. Reducing concurrency can help on slower storage/network connections; increasing it beyond available bandwidth or disk throughput may make overall performance worse.
+### Prioritize a queued download
 
-## Video remuxing
+A queued item can be **Prioritized**. Prioritized items are chosen before ordinary queued work when the next download slot becomes available. If several queued items are prioritized, the order in which they were prioritized is respected.
 
-By default, WireLoft remuxes downloaded HLS video into MP4:
+### Cancel
 
-```yaml
-downloadSettings:
-  remuxVideoToMp4: true
-  ffmpegPath: ffmpeg
-```
+Active or queued work can be cancelled. Cancellation stops the WireLoft download operation; it does not delete a previously completed media file.
 
-This is a **lossless container change**, not a video re-encode. It is intended to produce a conventional MP4 file quickly without changing the encoded video/audio streams.
+### Retry
 
-FFmpeg must be available at the configured path.
+Failed, cancelled, missing, or corrupted downloads can be retried where appropriate. Queued items do not show Retry because they have not failed—they can be prioritized instead.
 
-## Output paths
+### Download log
 
-The Local Media Profile renders a virtual path beginning with `/downloads/`. WireLoft maps that prefix to `downloadSettings.downloadRoot`.
+Open the download log when you need to understand why a particular item failed or was retried. This is usually more useful than starting with the complete application log because it focuses on that media item.
 
-In the supplied Docker configuration:
+## Download limits and retries
 
-```yaml
-downloadSettings:
-  downloadRoot: /downloads
-```
+The system-wide defaults are:
 
-The host bind mount then determines where that directory lives physically.
+| Setting | Default |
+| --- | ---: |
+| Concurrent downloads | 5 |
+| Maximum attempts | 3 |
+| Timeout per attempt | 600 seconds |
 
-See [[Local-Media-Profiles]] for template syntax and filename sanitization.
+These are configured under **Settings → Downloads**.
 
-## Download logs
+Higher concurrency is not always faster. Your internet connection, Daily Wire, CPU, FFmpeg work, and storage can all become bottlenecks.
 
-WireLoft exposes download status/log information in the UI so failed media does not have to be diagnosed only from container logs. When investigating a failed item, check the specific download record first, then global application logs if the failure is upstream or infrastructure-related.
+## Direct and temporary download modes
 
-## Scheduled verification
+WireLoft supports two ways of handling incomplete downloads.
 
-WireLoft runs a download-verification job every two hours by default:
+### Save directly to downloads
 
-```text
-0 */2 * * *
-```
+Download work happens in the destination area. This is the simpler option and is the system default.
 
-Configure this with `downloadSettings.verifyDownloadsCron`.
+### Save to temporary folder first
 
-## File watcher
+Incomplete download and processing work stays in the configured temporary folder. The completed media is placed in its final library location only when it is ready.
 
-The file watcher is enabled by default and scans every ten minutes:
+This is useful when a media server watches your final library and should never see partial files.
 
-```text
-*/10 * * * *
-```
+The system default is configured in **Settings → Downloads**, and individual Local Media Profiles can inherit or override it. See [[Local-Media-Profiles#download-behavior]].
 
-Its job is to reconcile WireLoft's recorded downloaded files with the filesystem.
+## Video MP4 output
 
-### Missing and renamed files
+By default, WireLoft remuxes downloaded HLS video into MP4.
 
-If the path stored on a download record no longer exists, WireLoft first checks that file's original directory for a rename. It uses filesystem device/inode identity where useful and confirms/falls back to a lightweight sampled content fingerprint, so the same behavior also works on SMB/NFS-style mounts where filesystem identifiers can be unstable.
+This changes the container format without re-encoding the video, so it is much faster than converting the video itself and does not intentionally reduce quality.
 
-If exactly one matching file is found, WireLoft updates the recorded path. It deliberately does not search other directories. Files should be moved to a different directory by changing the Local Media Profile output template so WireLoft performs the move itself.
+FFmpeg must be available at the configured path. The Docker image already includes it.
 
-If no unique same-directory match exists, the artifact is marked missing.
+## Where files are stored
 
-The same reconciliation path is also used on demand whenever WireLoft needs an existing downloaded file. RSS delivery, file renaming, replacement/re-download flows, and retention/deletion therefore attempt same-directory rename recovery before treating the recorded path as unavailable. A successfully recovered path is persisted before the caller continues using the file.
+A Local Media Profile produces a path beginning with `/downloads/`. WireLoft resolves that against the configured **Download root**.
+
+The supplied Docker setup mounts the host's `./downloads` directory at `/downloads` inside the container.
+
+See [[Local-Media-Profiles]] for output templates and filename rules.
+
+## Automatic file checks
+
+WireLoft periodically checks recorded downloads so problems caused by external file changes do not remain invisible.
+
+By default:
+
+- download verification runs every **2 hours**;
+- the file watcher checks tracked files every **10 minutes**.
+
+These schedules can be changed in **Settings → Downloads**.
+
+### Missing files and renames
+
+When a completed file is no longer at its recorded path, WireLoft can recognize some same-folder renames and update the stored path automatically.
+
+It does not treat your entire media library as a general filesystem index. If you manually move a file to another directory, WireLoft may mark the original download as missing.
+
+For reorganizing WireLoft-managed media, change the Local Media Profile output template and use WireLoft's own workflow rather than moving files around externally whenever possible.
 
 ### File-size verification
 
-With the default:
+With **Verify file size** enabled, WireLoft marks a completed file as corrupted if it is empty or smaller than the size recorded when the download completed.
 
-```yaml
-fileWatcher:
-  verifyFileSize: true
-```
+This is a lightweight integrity safeguard. WireLoft does not continuously calculate a full checksum of every healthy media file.
 
-WireLoft also treats a file as corrupted when it is empty or smaller than the size recorded when the download completed.
+If a file is marked corrupted, check the actual storage first if you suspect a disk, NAS, or filesystem problem, then use Retry when you want WireLoft to download it again.
 
-This remains a lightweight integrity check, not continuous full-file checksum verification. The sampled fingerprint used for rename identity is not used to re-hash every healthy file on every watcher run.
+## Retention and automatic deletion
 
-## Filename compatibility
+Automatic retention for show episodes comes from Podcast Download Profiles.
 
-The global filename-restriction mode is applied when output templates are rendered. The default `windows` mode is designed to remain usable on Windows while preserving Unicode where possible.
-
-Use `restricted` for conservative ASCII-style filenames or `unrestricted` when you specifically want more original punctuation/Unicode and do not require Windows compatibility.
-
-See [[Local-Media-Profiles#filename-restrictions]].
-
-## Retention/deletion
-
-Automatic deletion is primarily controlled by Podcast Download Profiles. A rolling date/episode-count limit can optionally delete downloads that fall outside the active window.
-
-A limit without **Delete older episodes** affects what new content should be downloaded but does not automatically prune older media already retained.
+A rolling date or episode-count limit can optionally delete downloads that fall outside the active window. If **Delete older episodes** is disabled, the limit affects new download selection but leaves older files already on disk alone.
 
 See [[Download-Profiles]].
 
-## RSS interaction
+## RSS feeds and local files
 
-RSS profiles that enable **Use Downloads** search local artifact records for the best match. Before a candidate is rejected as unavailable, WireLoft reconciles its recorded path through the same file-watcher logic, so a same-directory manual rename can be recovered and served immediately.
+An RSS Stream Profile with **Use Downloads** can serve suitable completed files from the download library.
 
-If no suitable local file can be resolved:
+If no acceptable local file is available:
 
-- with Daily Wire fallback enabled, the feed can still stream remotely;
-- with downloads-only mode, the episode may no longer have an available enclosure.
+- a hybrid feed can fall back to Daily Wire when **Use DailyWire stream** is also enabled;
+- a downloads-only feed cannot serve that episode until a suitable local file exists.
 
 See [[Podcast-RSS-Feeds]].

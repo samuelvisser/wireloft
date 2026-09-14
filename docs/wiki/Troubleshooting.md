@@ -1,147 +1,185 @@
 # Troubleshooting
 
-This page starts with the subsystem most likely to explain each symptom. For exact defaults and environment-variable mappings, see [[Settings]].
+Start with the symptom you can see in the WireLoft interface. The **Home** page highlights downloads and movie metadata that need attention, while individual downloads have their own logs.
+
+For exact setting names and defaults, see [[Settings]].
 
 ## A new episode is not visible yet
 
-1. Open the show and check its recent sync log.
-2. If the last scheduled discovery has not run yet, use **Sync now** for that show.
-3. If a sync ran and found `0`, Daily Wire may not yet be exposing the episode through the endpoint WireLoft uses.
-4. If the episode exists but is live/not final, WireLoft's faster episode monitor handles it separately from normal discovery.
+1. Open the show and check its recent sync history.
+2. Use **Sync now** if you do not want to wait for the next automatic check.
+3. If a sync completed but found nothing, Daily Wire may not be exposing the episode to WireLoft yet.
+4. If the episode is already listed but is live or still publishing, WireLoft will continue monitoring it automatically.
 
-Default discovery is every 30 minutes; known not-yet-final episodes are monitored every minute.
+New-episode discovery runs every **30 minutes** by default. Known episodes that are still publishing are checked every **2 minutes**.
 
-## An episode has an old title or placeholder thumbnail
+## An episode has an old title, image, or number
 
-New/live Daily Wire metadata can change after publication. WireLoft performs targeted metadata refreshes by default at:
+Daily Wire can change metadata after publication. WireLoft refreshes recently published episode metadata by default after:
 
 ```text
-5m,15m,30m,1h,3h,6h,24h
+15m,30m,1h,3h,6h,24h,3d
 ```
 
-That avoids continuously rescanning the complete library just to catch changes to newly published episodes.
+Use **Sync now** when you want to check the show immediately. If the problem persists much longer, check the Daily Wire version itself to confirm whether the upstream metadata has actually changed.
 
-If you changed `newEpisodeSchedule.metadataRefreshIntervals`, verify the sequence is valid and strictly increasing.
+## A live episode has no download yet
 
-## A live episode does not have a download
+Seeing an episode in the Library does not necessarily mean final downloadable media is ready.
 
-An indexed episode does not necessarily mean final downloadable media is ready. Podcast Download Profiles can either wait past the countdown stage or deliberately download the early countdown version.
+For Podcast Download Profiles, check:
+
+- **Download with countdown** — whether WireLoft may download the early countdown version;
+- **Redownload final version** — whether an early copy should later be replaced;
+- whether the profile's episode types include this item.
+
+If countdown downloading is disabled, waiting for the final version is expected behavior.
+
+## WireLoft stopped discovering episodes automatically
 
 Check:
 
-- **Download with countdown**;
-- **Redownload final version**;
-- `episodeStatusTiming.publishedCountdownAfterMinutes`;
-- `episodeStatusTiming.publishedFinalAfterMinutes`.
+- **Settings → Automation → Enable background scheduler** is enabled;
+- the **Find new episodes** schedule is valid;
+- `TZ` is correct;
+- Home/download logs for recent errors;
+- the Daily Wire connection when the show requires member access.
 
-## WireLoft stopped discovering new episodes automatically
+Try **Sync now** on one show. If manual sync works, the problem is more likely related to scheduling than Daily Wire access.
+
+## Downloads stay queued
+
+WireLoft allows **5 simultaneous downloads** by default. When all slots are occupied, additional items wait as Queued.
+
+You can use **Prioritize** on a queued item when you want it selected before ordinary queued work as soon as a slot becomes available.
+
+If nothing is actually downloading, check Home and the Downloads page for failed or stalled work.
+
+## Downloads are slow
 
 Check:
 
-- `scheduler.enabled` is `true`;
-- `newEpisodeSchedule.findEpisodesCron` is a valid five-field cron expression;
-- the container timezone (`TZ`) is what you expect;
-- logs for task failures/retries;
-- Daily Wire authentication if the show requires member access.
+- **Concurrent downloads**;
+- internet bandwidth;
+- disk or NAS performance;
+- whether several downloads are also being processed by FFmpeg;
+- Daily Wire connectivity.
 
-A manual **Sync now** can help distinguish a scheduler problem from a Daily Wire/API problem.
+Increasing concurrency can make performance worse when the real bottleneck is storage, CPU, or bandwidth.
 
-## Downloads are queued or slow
+## A download failed
 
-Check the global limits:
+Open its **Download log** first. Common causes include:
 
-- `downloadSettings.maxConcurrentDownloads` — default `5`;
-- `downloadSettings.maxDownloadAttempts` — default `3`;
-- `downloadSettings.downloadTimeoutSeconds` — default `600`;
-- scheduler worker availability.
+- a temporary internet problem;
+- Daily Wire media not being available yet;
+- expired or unavailable upstream media;
+- authentication/membership problems;
+- storage permission or capacity problems;
+- FFmpeg errors during local processing.
 
-Increasing concurrency is not always beneficial: source bandwidth, disk throughput, FFmpeg work, and Daily Wire request pacing can become the bottleneck.
+Use **Retry** once the underlying problem is resolved.
 
-## Video downloaded as TS instead of MP4
+## Video was not produced as MP4
 
-`downloadSettings.remuxVideoToMp4` is enabled by default. If remuxing is expected, verify:
+Check **Settings → Downloads**:
 
-- the setting is `true`;
-- `downloadSettings.ffmpegPath` points to a working FFmpeg executable;
-- FFmpeg is available inside the environment/container where WireLoft runs.
+- **Remux downloaded video to MP4** is enabled;
+- **FFmpeg executable** points to a working FFmpeg installation.
 
-The remux is a container-format change, not a video re-encode.
+The normal Docker image already includes FFmpeg.
 
-## A downloaded file is marked missing
+Remuxing changes the container format without re-encoding the video.
 
-WireLoft stores the path associated with a completed download. The file watcher checks that recorded path on disk.
+## Temporary download mode is not writing to the final library yet
 
-If a managed file is manually renamed or moved outside WireLoft, the old path can be reported missing. The file watcher is not a general rename-tracking filesystem index.
+That is expected while the download or local processing is incomplete.
 
-Also verify `downloadSettings.downloadRoot` and the host volume mapping did not change.
+With **Save to temporary folder first**, WireLoft keeps incomplete work in the configured temporary folder and only publishes the completed media into its final destination afterwards.
 
-## A file is marked corrupted
+Check the Download page for the current progress/status before looking for the final file.
 
-With `fileWatcher.verifyFileSize=true`, WireLoft flags a download when the file is empty or smaller than the size recorded when the download originally completed.
+## A downloaded file is marked Missing
 
-Check the actual file size and storage health before forcing a re-download.
+WireLoft could no longer find the completed file at the path it recorded.
+
+Check:
+
+- whether the file was manually moved or renamed;
+- whether the download/root mount changed;
+- whether a NAS or network share is currently mounted and reachable;
+- permissions on the media directory.
+
+WireLoft can recover some same-folder renames, but it is not a general filesystem index and may not follow a file moved into another directory.
+
+## A file is marked Corrupted
+
+With **Verify file size** enabled, WireLoft considers a completed file corrupted when it is empty or smaller than the size recorded when the download completed.
+
+Check the actual file and storage health. If the storage is healthy and you want a fresh copy, use **Retry**.
 
 ## Output paths contain unexpected characters
 
-Check `downloadSettings.filenameRestrictionMode`:
+Check **Settings → Downloads → Filename restrictions**:
 
-- `unrestricted` preserves most Unicode/punctuation;
-- `windows` removes Windows-incompatible characters and reserved names;
-- `restricted` reduces names to conservative ASCII-style characters.
+- **Minimal restrictions** preserves most punctuation and Unicode;
+- **Windows-compatible filenames** removes characters Windows cannot safely use;
+- **Restricted filenames** creates conservative ASCII-style names.
 
 See [[Local-Media-Profiles#filename-restrictions]].
 
 ## A Local Media Profile template will not save
 
-Templates must:
+Check that:
 
-- start with `/downloads/`;
-- end with `.ext`;
-- use only variables valid for the profile type;
-- contain valid Jinja syntax;
-- for movies, contain at least one item-specific value so a movie and its extras cannot collide.
+- the rendered path begins with `/downloads/`;
+- the template ends with `.ext`;
+- variables are available for that profile type;
+- the Jinja syntax is valid;
+- a Movie profile includes an item-specific value such as `{{ title }}` or `{{ media_type }}` so movies and extras cannot use the same path.
 
-Use the template preview to identify the problematic segment. See [[Local-Media-Profiles]].
+Jinja setup statements may appear before `/downloads/` as long as they do not output text.
 
-## A setting keeps changing back or ignores `config.yml`
+Use the template editor's preview and variable picker to locate the problem. See [[Local-Media-Profiles]].
 
-An environment variable probably has higher priority.
+## A setting ignores the value saved in the UI
 
-WireLoft precedence is:
+An environment variable may be overriding it.
+
+The Settings page identifies fields controlled by environment variables. Change the deployment value instead of repeatedly changing the UI field.
+
+For normal use, precedence is:
 
 ```text
-internal kwargs > environment > .env > config.yml > file secrets > defaults
+environment > config.yml > defaults
 ```
 
-For example, `WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS` overrides `downloadSettings.maxConcurrentDownloads` in YAML.
+The timezone uses `TZ`.
 
-Timezone is the exception: use `TZ`, not `WL_TIMEZONE`.
+## The Settings UI did not write every default to `config.yml`
 
-## The Settings UI did not write every default into `config.yml`
+That is normal. WireLoft stores only values you changed. Missing keys continue to use their current defaults.
 
-That is expected. WireLoft keeps the configuration sparse and only writes changed fields. Missing YAML keys use the current built-in defaults.
-
-The Docker seed also runs only once, when `config.yml` is absent.
-
-## RSS feed returns 404
+## RSS feed returns 404 or is unavailable
 
 Check:
 
 - the Stream Profile is enabled;
-- the URL contains the current token;
-- you did not regenerate the token and leave the old URL in the client;
-- the reverse proxy forwards `/feeds/rss/...` to WireLoft.
+- the URL uses the current token;
+- the token was not regenerated while the podcast app still has the old URL;
+- your reverse proxy forwards `/feeds/rss/` to WireLoft.
 
-An unknown, rotated, or disabled tokenized feed is intentionally unavailable.
+## RSS feed is empty or some episodes are missing
 
-## RSS feed is empty
+Check:
 
-Check that at least one source is enabled:
+- at least one of **Use Downloads** or **Use DailyWire stream** is enabled;
+- selected episode types;
+- preferred format;
+- **Require exact match**;
+- **Maximum episodes in RSS feed**.
 
-- **Use Downloads**; and/or
-- **Use DailyWire stream**.
-
-Then verify the selected episode types. For downloads-only feeds, the episodes also need suitable completed local files.
+A downloads-only feed cannot expose media for an episode when no acceptable completed local download exists.
 
 ## RSS works in a browser but not in the podcast app
 
@@ -149,67 +187,53 @@ The browser and podcast app may not be using the same network path.
 
 Check:
 
-- whether the feed hostname is LAN-only;
+- whether the hostname is LAN-only;
 - DNS from the client;
 - HTTPS certificate validity;
-- reverse-proxy forwarding for both feed XML and enclosure URLs;
-- whether the podcast service fetches feeds from a cloud server rather than directly from your device.
+- firewall/VPN access;
+- reverse-proxy forwarding for `/feeds/rss/` media as well as the XML feed;
+- whether the podcast provider fetches feeds from cloud servers instead of directly from your device.
 
-The RSS feed URL is editable, so replace an internal hostname with the correct reachable hostname while preserving the token/path.
+The Stream Profile URL can be edited to use the correct reachable hostname while retaining its token/path.
 
 ## RSS video plays as audio
 
-If the profile uses **Podcasting 2.0 direct stream with audio fallback**, the podcast client may be ignoring the HLS alternate enclosure and using the conventional audio enclosure instead.
+When using **Podcasting 2.0 direct stream with audio fallback**, the podcast app may not support the video stream method correctly and may choose the audio fallback.
 
-Try:
-
-- **Serve as locally cached MP4** for conventional video compatibility; or
-- **Direct stream with cached MP4 fallback**.
-
-See [[Podcast-RSS-Feeds#daily-wire-video-delivery-methods]].
+Try **Serve as locally cached MP4** for broader video compatibility or **Direct stream with cached MP4 fallback**.
 
 ## RSS MP4 takes a long time to start
 
-When an episode is not already downloaded/cached, WireLoft may need to prepare the complete MP4 before a normal video enclosure can be served.
+If the episode is not already downloaded or cached, WireLoft must prepare the complete MP4 before conventional playback can begin.
 
-For faster recent playback, create a video Download Profile that keeps only the latest 5 episodes and enable **Use Downloads** on the RSS profile.
-
-## Some RSS episodes are unexpectedly absent
-
-Review:
-
-- episode-type selection;
-- preferred format;
-- **Require exact match**;
-- whether **Use Downloads** and/or **Use DailyWire stream** is enabled;
-- **Maximum episodes in RSS feed**.
-
-A downloads-only feed omits an episode when no acceptable completed local file exists.
+For faster access to recent episodes, keep a small recent video window downloaded locally and enable **Use Downloads** on the RSS profile.
 
 ## Premium Daily Wire media fails
 
-Confirm the Daily Wire account connected to WireLoft still authenticates and has access to the requested member-exclusive content.
+Open **Settings → DailyWire** and confirm WireLoft is still connected. Also confirm that the same account still has access to the content on Daily Wire itself.
 
-The WireLoft RSS token is not a Daily Wire entitlement; it only grants access to the feed capability configured on your instance.
+If you changed advanced endpoints, OAuth settings, or request pacing, restore their defaults before continuing diagnosis.
 
-## Daily Wire requests fail after changing advanced endpoint settings
+## WireLoft says an episode has no usable media
 
-Restore the production defaults unless you intentionally know you need a different endpoint:
+Daily Wire can temporarily list an episode before usable media is available, or an old placeholder can remain in the catalog.
 
-```yaml
-dwApi:
-  middlewareApi: https://middleware-prod.dailywire.com/middleware
-  streamApi: https://stream.media.dailywire.com
+WireLoft rechecks these episodes every **20 minutes** by default. It normally waits **4 hours** before an episode that remains unavailable can be cleaned up.
 
-dwOauth:
-  issuer: https://authorize.dailywire.com
-  audience: https://api.dailywire.com/
-```
+If you are certain the entry should be removed immediately, use **Early Delete** from the episode actions. WireLoft checks its current Daily Wire state again before removal.
 
-The OAuth client ID/scope and request-throttling settings should also generally remain at their defaults.
+## Database errors or `database disk image is malformed`
 
-## After restoring a backup, sessions or authentication behave strangely
+Stop WireLoft before doing anything else and make a copy of the complete `/config` directory.
 
-Make sure you restored the **entire `/config` directory**, not only `wireloft.db`. The application secret and Daily Wire authentication state live alongside the database/configuration.
+Do not run multiple WireLoft backends against the same SQLite database. A common development mistake is running a local backend and a Docker instance that both use the same `wireloft.db` at the same time.
+
+If the database reports structural corruption, restore a known-good `/config` backup when available. Avoid repeatedly restarting or running migration commands against a database that is already reporting corruption.
 
 See [[Backups-and-Upgrades]].
+
+## Problems after restoring a backup
+
+Make sure you restored the **entire `/config` directory**, not only `wireloft.db`. The application key and Daily Wire authentication state live alongside the database/configuration.
+
+If the hostname changed, update RSS Stream Profile URLs as well.

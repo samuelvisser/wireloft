@@ -1,41 +1,77 @@
-# WireLoft Wiki
+# WireLoft 1.1 Wiki
 
-WireLoft is a self-hosted media manager for Daily Wire shows, podcasts, series, and movies. It can index your library, download media to local storage, or expose shows as private RSS feeds that stream downloaded files and/or media directly from The Daily Wire.
+WireLoft is a self-hosted media manager for Daily Wire shows, podcasts, series, and movies. It can keep a local library of Daily Wire content, download media to your own storage, and expose shows through private RSS feeds.
 
-This Wiki documents the WireLoft 1.0-era implementation.
+This wiki documents **WireLoft 1.1** from a user's point of view. It focuses on what features do, how to configure them, and how to solve common problems. Developer implementation details are intentionally left out unless they affect how you operate WireLoft.
+
+## What you can do with WireLoft
+
+- Browse Daily Wire shows and movies and add them to your own Library.
+- Keep show seasons and episodes synchronized automatically.
+- Download episodes in audio, 720p, 1080p, or 4K where available.
+- Download movies and movie extras using separate movie storage rules.
+- Keep only the latest episodes, a date window, selected seasons, or everything.
+- Organize files with customizable Local Media Profiles and Jinja output templates.
+- Subscribe to private RSS feeds that use downloaded files, Daily Wire streaming, or both.
+- Track active, queued, failed, missing, and corrupted downloads from one place.
+
+## Main areas of the interface
+
+### Home
+
+The Home page is WireLoft's status dashboard. It shows active and queued downloads, recent completions, and items that need attention such as failed downloads or movie metadata problems.
+
+### Browse
+
+Browse is the Daily Wire catalog. Use it to find shows and movies that are not yet in your Library.
+
+### Library
+
+The Library contains the shows and movies WireLoft manages for you. Adding something to the Library does **not** automatically mean it must be downloaded.
+
+For shows, WireLoft can manage seasons, episodes, automatic downloads, and RSS feeds. Movies are downloaded manually and can include extras such as trailers or featurettes when Daily Wire provides them.
+
+### Downloads
+
+The Downloads page is the central history and queue for actual media files. It shows progress, format, size, status, and available actions such as cancel, retry, prioritize, and viewing the download log.
+
+### Profiles
+
+WireLoft separates three decisions so they can be changed independently:
+
+1. A **Local Media Profile** defines the format, download behavior, and output path for a local file.
+2. A **Download Profile** decides which show episodes should be downloaded automatically with a Local Media Profile.
+3. An **RSS Stream Profile** decides which episodes appear in a private feed and whether media should come from local downloads, Daily Wire, or both.
+
+This makes it possible, for example, to keep every episode as audio, retain only the latest five episodes as 1080p video, and expose both through one RSS feed.
+
+### Settings
+
+The Settings page covers normal application, download, automation, Daily Wire, and advanced settings. Most users can configure WireLoft entirely from this page; environment variables are mainly useful when a deployment needs to enforce a value.
 
 ## Start here
 
-- [[Installation]] — run WireLoft with Docker and persist the correct data.
-- [[First-Run-Setup]] — connect Daily Wire, protect the UI, and add your first media.
-- [[Daily-Wire-Integration]] — account authorization, membership access, catalog/API behavior, and live/publishing metadata.
-- [[Shows-and-Library]] — browse, add, sync, and manage shows, seasons, episodes, and movies.
-- [[Download-Profiles]] — control what WireLoft downloads and how long it keeps it.
-- [[Local-Media-Profiles]] — choose formats and build output paths using Jinja templates.
-- [[Downloads-and-File-Integrity]] — actual download files, FFmpeg remuxing, verification, and filesystem reconciliation.
-- [[Podcast-RSS-Feeds]] — create private podcast feeds and choose local/downloaded versus Daily Wire streaming behavior.
-- [[Settings]] — complete settings reference, including every `config.yml` key, environment-variable equivalent, default, and purpose.
-- [[Automation-and-Background-Tasks]] — episode discovery, publication monitoring, retries, verification, and scheduling.
-- [[Security-and-Remote-Access]] — administrator authentication, reverse proxies, and RSS feed security.
-- [[Backups-and-Upgrades]] — what to persist and back up.
-- [[Troubleshooting]] — common causes of missing media, failed downloads, RSS problems, and configuration surprises.
+- [[Installation]] — install WireLoft with Docker and persist the correct directories.
+- [[First-Run-Setup]] — connect Daily Wire, secure WireLoft, and add your first media.
+- [[Shows-and-Library]] — understand Home, Browse, Library, shows, movies, seasons, and episodes.
+- [[Local-Media-Profiles]] — choose formats, download behavior, and output paths.
+- [[Download-Profiles]] — configure automatic show downloads and retention.
+- [[Downloads-and-File-Integrity]] — use the download queue and understand missing/corrupted file handling.
+- [[Podcast-RSS-Feeds]] — create private podcast/video feeds.
+- [[Automation-and-Background-Tasks]] — understand what WireLoft keeps updated automatically.
+- [[Settings]] — complete user-facing settings reference.
+- [[Security-and-Remote-Access]] — protect the UI and private feeds.
+- [[Backups-and-Upgrades]] — back up and update your installation safely.
+- [[Troubleshooting]] — symptom-based help for common problems.
 
-## How WireLoft fits together
+## Daily Wire access
 
-WireLoft separates **what media you want**, **how it should be stored**, and **how it should be exposed**:
+WireLoft does not bypass Daily Wire membership checks. Public content can be used without connecting an account. Member-exclusive content requires a Daily Wire account that already has access to it.
 
-1. A **Show** or **Movie** represents Daily Wire content in your WireLoft library.
-2. A **Local Media Profile** defines a local format and output path, such as 1080p video under a Plex-friendly directory or audio-only files under a podcast directory.
-3. A **Download Profile** determines which episodes/seasons/types should automatically be downloaded using a Local Media Profile.
-4. An **RSS Stream Profile** creates a private RSS feed and decides whether the feed serves local downloads, falls back to Daily Wire, or both.
-5. Background workers discover new episodes, monitor live/publishing state, download eligible media, refresh metadata, and verify files on disk.
+WireLoft uses Daily Wire's device authorization flow, so you authorize WireLoft through Daily Wire rather than giving WireLoft your Daily Wire password. See [[Daily-Wire-Integration]].
 
-This separation is intentional: one show can have multiple download profiles and multiple local formats while an RSS feed independently decides which of those files to use.
+## Keep RSS URLs private
 
-## Premium content
+A WireLoft RSS feed URL contains a secret token. Treat the complete URL like a password or API key. Anyone who has it can use that feed without signing in to the WireLoft web interface.
 
-WireLoft does not bypass Daily Wire membership checks. Premium content requires a Daily Wire account with access to that content. WireLoft uses Daily Wire's device authorization flow and does not ask for your Daily Wire password.
-
-## Important RSS security note
-
-A WireLoft RSS feed URL contains a secret token. **Treat the complete feed URL like a password or API key.** Anyone who has it can request that feed and the media exposed through it without logging into the WireLoft UI. See [[Podcast-RSS-Feeds]] and [[Security-and-Remote-Access]] before exposing feeds outside your LAN.
+If a feed URL is exposed, regenerate it from the Stream Profile. See [[Podcast-RSS-Feeds]] and [[Security-and-Remote-Access]].

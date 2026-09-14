@@ -1,16 +1,20 @@
 # Installation
 
-Docker is the recommended way to run WireLoft. The published container includes the application and exposes the web UI and API through one HTTP port.
+Docker is the recommended way to run WireLoft. The published container includes the backend, web interface, FFmpeg, and the web server used to expose them through one HTTP port.
 
 ## Quick start
 
 ```bash
 mkdir wireloft && cd wireloft
-curl -O https://raw.githubusercontent.com/samuelvisser/wireloft/develop/.docker/docker-compose.yml
+curl -O https://raw.githubusercontent.com/samuelvisser/wireloft/main/.docker/docker-compose.yml
 docker compose up -d
 ```
 
-Open `http://localhost:5273`.
+Open:
+
+```text
+http://localhost:5273
+```
 
 The supplied Compose file is equivalent to:
 
@@ -30,70 +34,83 @@ services:
       # - WL_ADMIN_AUTH__PASSWORD=change-me
 ```
 
-## Persistent volumes
+After WireLoft opens, continue with [[First-Run-Setup]]. For the supplied Docker layout, also confirm **Settings → Downloads → Download root** is set to `/downloads` so downloaded media uses the persistent media mount.
 
-### `/config`
+## Persistent storage
 
-Persist this directory. It contains WireLoft's application state, including `config.yml`, the SQLite database, the generated secret key, and Daily Wire authentication state.
+WireLoft keeps the application itself inside the container and stores persistent data in mounted directories. Recreating or upgrading the container is therefore safe as long as these mounts are preserved.
 
-A container that loses `/config` should be treated like a new installation. Back up the entire directory rather than selecting individual files unless you have a specific reason not to.
+### `/config` — required
 
-### `/downloads`
+Persist the entire `/config` directory. It contains WireLoft's database, configuration, secret-key material, and Daily Wire authentication state.
 
-This is the default root for downloaded shows, podcasts, movies, and extras. Local Media Profile output templates begin with `/downloads/`; WireLoft maps that virtual prefix to the configured download root.
+If `/config` is lost, WireLoft should be treated as a new installation.
 
-Mount the directory wherever you want the media to live on the host. Media servers such as Plex, Jellyfin, or Audiobookshelf can then be pointed at suitable subdirectories.
+### `/downloads` — your media library
 
-## Timezone
+The supplied Compose file maps `./downloads` on the host to `/downloads` in the container. Set **Download root** to `/downloads` when using this layout.
 
-Set the standard `TZ` environment variable to an [IANA](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List) timezone:
+Local Media Profiles use paths beginning with `/downloads/`. WireLoft resolves that virtual prefix from the configured Download root. See [[Local-Media-Profiles]] and [[Settings#downloads]].
+
+You can point Plex, Jellyfin, Audiobookshelf, or another media application at the appropriate folders inside the host's download directory.
+
+If you enable temporary download mode, also review **Temporary download folder**. It can remain on container-local storage when you only need a staging area, or you can point it at another suitable disk/mount.
+
+## Set your timezone
+
+Change `TZ` to your local IANA timezone, for example:
 
 ```yaml
 environment:
   - TZ=Europe/Amsterdam
 ```
 
-WireLoft deliberately uses `TZ` rather than `WL_TIMEZONE` for the application timezone. Scheduled jobs and date-sensitive behavior therefore use the same conventional container timezone setting.
+The timezone affects scheduled jobs and how WireLoft displays and interprets time-based behavior.
 
-## Administrator authentication
+## Protect the web interface
 
-For a trusted LAN-only installation you can leave administrator authentication disabled, but anyone who can reach WireLoft can then control the application and access its stored Daily Wire session.
-
-If WireLoft is reachable through a reverse proxy or from an untrusted network, set a long unique administrator password:
+On a trusted LAN you can run WireLoft without its own administrator password. If other people can reach the service, or if you expose it through a reverse proxy, configure one:
 
 ```yaml
 environment:
   - WL_ADMIN_AUTH__PASSWORD=choose-a-long-unique-password
 ```
 
-Restart the container after changing it. See [[Security-and-Remote-Access]].
+Restart the container after changing deployment environment variables:
 
-## Configuration files and environment variables
+```bash
+docker compose up -d
+```
 
-WireLoft supports both `config.yml` and environment overrides. The default configuration file is seeded only once, when no `config.yml` exists yet. After that it is safe to edit in place, and changes made in the Settings UI are written to the same file.
+This password protects the WireLoft web interface. Private RSS feeds use their own secret URLs instead. See [[Security-and-Remote-Access]].
 
-Environment variables take precedence over `config.yml`. See [[Settings]] for the complete precedence rules and every supported key.
+## Configuration
 
-Two loader variables can move the configuration sources themselves:
+For normal use, configure WireLoft from **Settings** in the web interface. Changes are saved to the persistent `config.yml` under `/config`.
 
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `WL_CONFIG_FILE` | Path to the YAML configuration file | `<project>/config/config.yml` |
-| `WL_ENV_FILE` | Path to the dotenv file | `<project>/.env` |
+Environment variables can override settings when you need deployment-level control. If a setting is controlled by an environment variable, the Settings page shows that override and does not pretend a saved UI value can replace it.
 
-These are loader options rather than fields inside `config.yml`.
+See [[Settings]] for the full reference.
 
-## UI API URL
+## Reverse proxy and remote access
 
-The web UI normally talks to the relative `/api` path, which works through the bundled container regardless of the host port. `API_URL` can override that UI runtime value for unusual deployments. It is not part of WireLoft's `AppSettings` configuration model.
+If WireLoft will be available outside your trusted local network:
 
-## Reverse proxy installations
+- use HTTPS;
+- enable the WireLoft administrator password;
+- make sure the hostname stored in RSS Stream Profiles is reachable by your podcast clients;
+- forward both the normal WireLoft application and `/feeds/rss/` paths;
+- keep RSS feed URLs private, because the token in the URL is the feed credential.
 
-When placing WireLoft behind a reverse proxy:
+A VPN or private overlay network is also a good option when you do not want to expose WireLoft publicly. See [[Security-and-Remote-Access]].
 
-- use HTTPS if the service or RSS feeds are reachable over the internet;
-- configure `WL_ADMIN_AUTH__PASSWORD` for the UI;
-- ensure the hostname embedded in RSS feed URLs is reachable by the podcast client;
-- do not accidentally require the WireLoft UI login on the tokenized `/feeds/rss/...` endpoints, because podcast clients access those using the secret feed token instead.
+## Updating WireLoft
 
-If the generated RSS hostname is wrong for your deployment, the feed URL can be edited from its Stream Profile. See [[Podcast-RSS-Feeds]].
+For a normal Compose installation:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+WireLoft applies database migrations when the container starts. Back up `/config` before important upgrades. See [[Backups-and-Upgrades]].

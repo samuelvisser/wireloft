@@ -1,70 +1,74 @@
 # Shows and Library
 
-WireLoft's Library is the local index of Daily Wire content you have chosen to manage. Adding an item to the Library is separate from downloading it: a show can be fully indexed while all media remains on Daily Wire.
+WireLoft separates discovering media, managing it, and downloading it. Adding a show or movie to your Library does not automatically download anything.
 
-## Browse versus Library
+## Home
 
-**Browse** is used to discover Daily Wire shows and movies that WireLoft can add. **Library** contains the shows and movies already managed by your WireLoft instance.
+The Home page is the quickest way to see the state of WireLoft. It summarizes active and queued downloads, failed or problematic downloads, recent completions, Library size, and items that need attention.
 
-This distinction lets you use WireLoft as an index first and decide later whether each item should be downloaded, exposed through RSS, or both.
+Use Home when you want to know whether WireLoft is operating normally or something needs your attention.
 
-## Shows
+## Browse
 
-A show contains its seasons and episodes plus the profiles that determine local downloads and RSS behavior.
+Browse shows Daily Wire content that can be added to WireLoft. Shows and movies are kept separate so it is easier to find the kind of media you want.
 
-When adding a show, WireLoft's wizard can configure three independent concerns:
+Adding an item from Browse creates a managed entry in your Library. For shows, WireLoft indexes seasons and episodes. For movies, WireLoft stores the information needed for the local movie page and downloads.
 
-- **Local Media Profile** — format and output path for files written to disk.
-- **Download Profile** — which content should be downloaded automatically.
-- **Stream Profile** — how the show's private RSS feed should expose media.
+## Library
 
-You can add a show without enabling either downloads or RSS.
+Library contains the shows and movies you have chosen to manage.
 
-### Show types
+It has separate Shows and Movies views. Show filters are remembered in that browser, so returning to the Library restores the last show-type selection you used.
 
-Download behavior differs between Podcast and Series profiles:
+### Shows
 
-- **Podcast** profiles use rolling limits such as a number of days or latest episode count, plus countdown/final-version behavior.
-- **Series** profiles select explicit seasons and can automatically include future seasons.
+A show page brings together its seasons and episodes, current publication state, local downloads, Download Profiles, RSS Stream Profiles, manual synchronization, and recent sync history.
+
+A show can stay in the Library without any download or RSS profiles. This is useful when you only want WireLoft to index it for now.
+
+### Podcast and Series shows
+
+WireLoft distinguishes Podcast and Series shows because their automatic download rules are different.
+
+- Podcast Download Profiles are usually based on a rolling date window, a number of recent episodes, or no limit.
+- Series Download Profiles are based on selected seasons and can automatically include future seasons.
 
 See [[Download-Profiles]].
 
-## Episodes and episode types
+## Seasons and episodes
 
-WireLoft identifies Daily Wire items by episode type. Profiles can choose which types they apply to. The common defaults for a podcast/RSS workflow are regular **Episode** (`ep`) and **Auxiliary** (`aux`) items.
+Series can contain multiple seasons. The show page lets you switch between them rather than treating the entire show as one long list.
 
-An episode's page shows the media known to WireLoft and any local downloads. Media that is still live or otherwise not ready for normal download can remain indexed without an immediately downloadable file.
+Episodes can also have different Daily Wire types, such as regular episodes and auxiliary items. Profiles can choose which types they apply to.
 
-## Publication and live episodes
-
-Daily Wire episodes can change after first appearing. A live/published item may initially contain a countdown version, and metadata can also be updated after publication.
-
-WireLoft therefore separates discovery from publication monitoring:
-
-- a normal discovery job looks for new episodes;
-- a faster monitor checks episodes that exist but are not yet considered fully published;
-- finalized episode metadata is refreshed at a configurable sequence of offsets after publication.
-
-The defaults are documented in [[Automation-and-Background-Tasks]] and [[Settings]].
+An episode can appear in WireLoft before final downloadable media exists. You may therefore see an episode that is scheduled, live, processing, still using a countdown version, final, or temporarily unavailable. WireLoft continues monitoring recent non-final episodes automatically.
 
 ## Sync now and sync history
 
-A show can be synchronized manually when you do not want to wait for the next scheduled discovery pass. WireLoft also records recent show-sync activity so you can distinguish "the worker has not run yet" from "the worker ran and found nothing new."
+WireLoft checks managed shows automatically, but a show's **Sync now** action checks that show immediately.
 
-A manual synchronization runs discovery for that show rather than forcing a full-library re-index.
+Use it when you know Daily Wire has published something and you do not want to wait for the next scheduled check.
 
-## Seasons
+The show also keeps recent synchronization results. This helps distinguish between WireLoft not having checked yet and a successful check that found nothing new.
 
-Series Download Profiles can select any combination of known seasons. **Include upcoming seasons** tells WireLoft to continue applying that profile when new seasons appear, avoiding the need to edit the profile every time a season is added.
+## Local copies of episodes
+
+An episode can have more than one local copy when different Local Media Profiles are used, for example an audio version and a 1080p video version.
+
+The episode page shows its downloads, formats, file sizes, and download history. Queue-wide activity is available from the main **Downloads** page. See [[Downloads-and-File-Integrity]].
 
 ## Movies and extras
 
-Movies are managed separately from shows. Movie Local Media Profiles require a video format and their output template must distinguish the main movie from its extras. This prevents two different media items from resolving to the same file path.
+Movies are managed separately from shows and are downloaded manually rather than through show Download Profiles.
 
-Movie metadata may optionally be enriched with TMDB data, primarily for release-date lookups used by output templates. Configure TMDB under [[Settings]].
+A movie page can include the main movie, descriptive and release metadata, available download formats, movie extras supplied by Daily Wire, and download progress/history.
 
-## Removing content
+Upcoming movies can be added to the Library before their final media is available. WireLoft keeps the local movie entry available and can refresh its Daily Wire metadata as the release approaches.
 
-Deleting a profile and deleting media are different operations. A Local Media Profile describes storage; a Download Profile describes automation; the downloaded media itself has its own lifecycle and status.
+Movie output templates should distinguish the main movie from extras so different items cannot use the same filename. See [[Local-Media-Profiles#movies-and-extras]].
 
-Before deleting a profile that is in use, review the profiles attached to the show and any download retention rules. This is especially important when automatic deletion of old podcast episodes is enabled.
+## Profiles and files are separate
+
+A Local Media Profile describes the local file WireLoft should create. A Download Profile describes which show episodes should be downloaded automatically. An RSS Stream Profile describes a private feed. A download record represents actual file activity.
+
+Changing or deleting a profile is therefore not the same as deleting a downloaded file. Before changing retention or removing profiles, review the affected show and its existing downloads so the result matches what you intend to keep.
