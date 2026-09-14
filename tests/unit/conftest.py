@@ -24,9 +24,10 @@ def clean_event_bus():
 
 @pytest.fixture
 def task_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Configure scheduler tests with a file-backed, disposable SQLite DB."""
+    """Configure scheduler/download tests with a file-backed disposable SQLite DB."""
     from backend.db import core
     from backend.db.core import Base
+    from backend.db.models.DownloadPathClaim import DownloadPathClaim
     from task_manager.scheduler.db import (
         TaskDefinition,
         TaskOperation,
@@ -50,6 +51,7 @@ def task_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     Base.metadata.create_all(
         engine,
         tables=[
+            DownloadPathClaim.__table__,
             TaskDefinition.__table__,
             TaskSchedule.__table__,
             TaskRun.__table__,

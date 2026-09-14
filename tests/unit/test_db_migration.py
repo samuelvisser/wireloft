@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "b1d7c3e9f205"
+HEAD_REVISION = "e7c91a4d2b60"
+PREVIOUS_1_1_REVISION = "d8b4a1f6c203"
 WIRELOFT_1_0_REVISION = "c8d4e2f1a7b9"
 BASE_REVISION = "0001"
 
@@ -175,7 +176,7 @@ def _seed_wireloft_1_0_data(database_path: Path, engine) -> dict[str, int | str]
     }
 
 
-def test_release_migration_history_is_single_1_1_boundary(migration_database):
+def test_development_migration_history_keeps_d8_upgradeable(migration_database):
     _database_path, _engine = migration_database
     from backend.db.migrations import get_alembic_config
 
@@ -184,8 +185,36 @@ def test_release_migration_history_is_single_1_1_boundary(migration_database):
     )
     revisions = [revision.revision for revision in script.walk_revisions()]
 
-    assert revisions == [HEAD_REVISION, WIRELOFT_1_0_REVISION, BASE_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_0_REVISION
+    assert revisions == [
+        HEAD_REVISION,
+        PREVIOUS_1_1_REVISION,
+        WIRELOFT_1_0_REVISION,
+        BASE_REVISION,
+    ]
+    assert script.get_revision(HEAD_REVISION).down_revision == PREVIOUS_1_1_REVISION
+    assert script.get_revision(PREVIOUS_1_1_REVISION).down_revision == WIRELOFT_1_0_REVISION
+
+
+def test_existing_d8_database_upgrades_to_download_path_claims(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config, get_database_status, upgrade_database
+
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        PREVIOUS_1_1_REVISION,
+    )
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT alembic_version_num FROM settings"
+        )).scalar_one() == PREVIOUS_1_1_REVISION
+    assert "download_path_claims" not in set(inspect(engine).get_table_names())
+
+    upgrade_database()
+
+    current, head = get_database_status()
+    assert current == (HEAD_REVISION,)
+    assert head == HEAD_REVISION
+    assert "download_path_claims" in set(inspect(engine).get_table_names())
 
 
 def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
@@ -203,6 +232,7 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
     tables = set(inspector.get_table_names())
     assert "task_operations" in tables
     assert "movie_extra_sources" in tables
+    assert "download_path_claims" in tables
     assert "media_download_attempts" not in tables
     assert "alembic_version" not in tables
 
@@ -232,6 +262,7 @@ def test_upgrade_from_wireloft_1_0_preserves_release_data(migration_database):
     tables = set(inspector.get_table_names())
     assert "media_download_attempts" not in tables
     assert "task_operations" in tables
+    assert "download_path_claims" in tables
     assert "alembic_version" not in tables
 
     with engine.connect() as connection:
@@ -311,6 +342,7 @@ def test_wireloft_1_1_downgrades_to_1_0_schema(migration_database):
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
     assert "task_operations" not in tables
+    assert "download_path_claims" not in tables
     assert "media_download_attempts" in tables
     assert "episodes" in tables
     assert "movies" in tables

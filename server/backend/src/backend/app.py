@@ -35,9 +35,9 @@ def _recover_download_filesystem(download_settings, scheduler) -> None:
     """Reconcile crash leftovers without delaying API readiness.
 
     The scheduler is deliberately paused before the controller restores its jobs,
-    so startup/recovery work can be queued safely while these filesystem scans run
-    in the background. Only after the stale download claims and temporary
-    workspaces have been reconciled may scheduled work begin executing.
+    so startup/recovery work can be queued safely while persisted download claims
+    and temporary workspaces are reconciled. Only after that recovery may
+    scheduled work begin executing.
     """
     from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_download_path_reservations,
@@ -70,7 +70,7 @@ def _recover_download_filesystem(download_settings, scheduler) -> None:
                 scheduler.resume()
             except Exception:
                 # The scheduler may have been shut down while the daemon recovery
-                # thread was still scanning a slow/network-backed download root.
+                # thread was still reconciling a slow/network-backed filesystem.
                 if scheduler.running:
                     logger.exception("Could not resume scheduler after download filesystem recovery")
 
@@ -84,11 +84,11 @@ async def application_lifespan(app: FastAPI):
     settings = get_settings()
     scheduler = None
 
-    # The download crash-recovery scans can be very expensive on a large or
-    # network-backed library. Start APScheduler empty and paused first, then let
-    # controller startup restore its jobs while keeping all of them fenced. This
-    # makes the API/UI ready immediately without allowing recovered downloads to
-    # race stale path reservations or temporary publication state.
+    # Crash recovery can still touch a slow or network-backed destination, but it
+    # now follows only database-journaled WireLoft paths instead of walking the
+    # entire download library. Keep APScheduler paused while those exact claims
+    # and private temporary workspaces are reconciled, while making the API/UI
+    # ready immediately.
     if settings.scheduler.enabled:
         scheduler = start_scheduler()
         scheduler.pause()

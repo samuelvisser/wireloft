@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 
-def test_temporary_download_is_not_visible_at_destination_until_publish(tmp_path):
+def test_temporary_download_is_not_visible_at_destination_until_publish(tmp_path, task_database):
     from task_manager.tasks.helpers.downloads.download_paths import (
         create_temporary_download_workspace,
         publish_temporary_download,
@@ -36,7 +36,7 @@ def test_temporary_download_is_not_visible_at_destination_until_publish(tmp_path
     assert destination.read_bytes() == b"complete media"
 
 
-def test_temporary_publish_numbers_existing_exact_filename(tmp_path):
+def test_temporary_publish_numbers_existing_exact_filename(tmp_path, task_database):
     from task_manager.tasks.helpers.downloads.download_paths import (
         create_temporary_download_workspace,
         publish_temporary_download,
@@ -59,7 +59,7 @@ def test_temporary_publish_numbers_existing_exact_filename(tmp_path):
         workspace.cleanup()
 
 
-def test_temporary_publish_treats_extensions_as_distinct(tmp_path):
+def test_temporary_publish_treats_extensions_as_distinct(tmp_path, task_database):
     from task_manager.tasks.helpers.downloads.download_paths import (
         create_temporary_download_workspace,
         publish_temporary_download,
@@ -78,7 +78,7 @@ def test_temporary_publish_treats_extensions_as_distinct(tmp_path):
         workspace.cleanup()
 
 
-def test_temporary_publish_is_collision_safe_between_concurrent_workers(tmp_path):
+def test_temporary_publish_is_collision_safe_between_concurrent_workers(tmp_path, task_database):
     from task_manager.tasks.helpers.downloads.download_paths import (
         create_temporary_download_workspace,
         publish_temporary_download,
@@ -120,7 +120,11 @@ def test_temporary_publish_is_collision_safe_between_concurrent_workers(tmp_path
             workspace.cleanup()
 
 
-def test_temporary_publish_copies_complete_file_when_staging_is_cross_filesystem(tmp_path, monkeypatch):
+def test_temporary_publish_copies_complete_file_when_staging_is_cross_filesystem(
+    tmp_path,
+    monkeypatch,
+    task_database,
+):
     import task_manager.tasks.helpers.downloads.download_paths as download_paths
 
     destination = tmp_path / "downloads" / "Episode.m4a"
@@ -176,7 +180,11 @@ def test_local_media_profile_mode_resolves_against_system_default(monkeypatch):
     assert effective_download_mode(legacy_profile) is DownloadMode.TEMPORARY
 
 
-def test_episode_attempt_keeps_destination_absent_until_temporary_download_finishes(tmp_path, monkeypatch):
+def test_episode_attempt_keeps_destination_absent_until_temporary_download_finishes(
+    tmp_path,
+    monkeypatch,
+    task_database,
+):
     from config import get_settings
     from config.settings.submodels import DownloadMode
     from dailywire_downloader import DownloadResult, MediaInfo, MediaKind

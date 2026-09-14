@@ -4,7 +4,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 
-def test_reserve_unique_download_path_numbers_existing_exact_filename(tmp_path):
+def test_reserve_unique_download_path_numbers_existing_exact_filename(tmp_path, task_database):
     from task_manager.tasks.helpers.downloads.download_paths import reserve_unique_download_path
 
     requested = tmp_path / "Same title.m4a"
@@ -20,7 +20,7 @@ def test_reserve_unique_download_path_numbers_existing_exact_filename(tmp_path):
         reservation.release_if_unclaimed()
 
 
-def test_reserve_unique_download_path_treats_extensions_as_distinct(tmp_path):
+def test_reserve_unique_download_path_treats_extensions_as_distinct(tmp_path, task_database):
     from task_manager.tasks.helpers.downloads.download_paths import reserve_unique_download_path
 
     (tmp_path / "Same title.mp4").write_bytes(b"video")
@@ -32,7 +32,7 @@ def test_reserve_unique_download_path_treats_extensions_as_distinct(tmp_path):
         reservation.release_if_unclaimed()
 
 
-def test_reserve_unique_download_path_is_atomic_between_concurrent_workers(tmp_path):
+def test_reserve_unique_download_path_is_atomic_between_concurrent_workers(tmp_path, task_database):
     from task_manager.tasks.helpers.downloads.download_paths import reserve_unique_download_path
 
     requested = tmp_path / "Same title.m4a"
@@ -59,7 +59,7 @@ def test_reserve_unique_download_path_is_atomic_between_concurrent_workers(tmp_p
             reservation.release_if_unclaimed()
 
 
-def test_release_if_unclaimed_removes_only_its_empty_placeholder(tmp_path):
+def test_release_if_unclaimed_removes_only_its_empty_placeholder(tmp_path, task_database):
     from task_manager.tasks.helpers.downloads.download_paths import reserve_unique_download_path
 
     reservation = reserve_unique_download_path(tmp_path / "Same title.m4a")
@@ -71,7 +71,7 @@ def test_release_if_unclaimed_removes_only_its_empty_placeholder(tmp_path):
     assert not path.exists()
 
 
-def test_release_if_unclaimed_keeps_file_that_replaced_reservation(tmp_path):
+def test_release_if_unclaimed_keeps_file_that_replaced_reservation(tmp_path, task_database):
     from task_manager.tasks.helpers.downloads.download_paths import reserve_unique_download_path
 
     reservation = reserve_unique_download_path(tmp_path / "Same title.m4a")
