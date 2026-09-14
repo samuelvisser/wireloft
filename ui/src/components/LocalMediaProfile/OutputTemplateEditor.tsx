@@ -144,7 +144,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         queryKey: ['localMediaProfileTemplateSources', mode],
         queryFn: async ({signal}) => {
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}/local-media-profiles/template-sources?type=${mode}`,
+                `${(window as any).appConfig.API_URL}/local-media-profiles/template/sources?type=${mode}`,
                 {signal, credentials: 'include'},
             )
             if (!response.ok) throw new Error(`Failed to load template examples (${response.status})`)
@@ -197,7 +197,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             setPreviewLoading(true)
             try {
                 const response = await fetch(
-                    `${(window as any).appConfig.API_URL}/local-media-profiles/template-preview`,
+                    `${(window as any).appConfig.API_URL}/local-media-profiles/template/preview`,
                     {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
@@ -370,7 +370,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                                     <div className="template-test-values-grid">
                                         {usedVariables.map((variable) => (
                                             <label key={variable.name}>
-                                                <span><code>{variable.name}</code> <small>{variable.description}</small></span>
+                                                <span><code>{`{{ ${variable.name} }}`}</code> <small>{variable.description}</small></span>
                                                 <input
                                                     className="input"
                                                     type="text"
