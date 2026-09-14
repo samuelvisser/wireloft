@@ -11,6 +11,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
 
+from config.network import is_no_internet_error
 from .cached_video import get_cached_mp4_size
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import Episode, LocalMediaProfile, RssStreamProfile
@@ -23,7 +24,6 @@ from backend.types.stream_profile_types import (
     DEFAULT_RSS_DW_VIDEO_METHOD,
     RssDwVideoMethod,
 )
-from config.network import is_no_internet_error
 from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
@@ -56,14 +56,10 @@ _BARE_HTML_AMPERSAND_RE = re.compile(
 _CACHED_MP4_METHODS = {
     RssDwVideoMethod.STREAM_DOWNLOAD_MP4.value,
     RssDwVideoMethod.STREAM_HLS_DOWNLOAD_MP4.value,
-    "cached_mp4",
-    "podcasting_2_0_cached_mp4",
 }
 _HLS_ALTERNATE_METHODS = {
     RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value,
     RssDwVideoMethod.STREAM_HLS_DOWNLOAD_MP4.value,
-    "podcasting_2_0",
-    "podcasting_2_0_cached_mp4",
 }
 
 
