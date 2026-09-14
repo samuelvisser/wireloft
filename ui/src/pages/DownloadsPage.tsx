@@ -10,7 +10,6 @@ import DownloadLogDialog from '../components/MediaDownload/DownloadLogDialog'
 import PageSubtitle from '../components/common/PageSubtitle'
 import ProgressBar from '../components/common/ProgressBar'
 import {useMediaDownloadsView} from '../lib/queries'
-import {useFrontendPuller} from '../lib/puller'
 import {ACTIVE_DOWNLOAD_STATUSES, MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {getErrorMessageFromResponse} from '../utils/helpers'
@@ -141,32 +140,9 @@ export default function DownloadsPage() {
     const navigate = useNavigate()
     const qc = useQueryClient()
     const {data: downloads, isLoading, error} = useMediaDownloadsView()
-    const {data: pullData} = useFrontendPuller()
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
     const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(DEFAULT_STATUS_FILTER))
-
-    const liveFormatByDownloadId = useMemo(() => {
-        const formats = new Map<number, string>()
-        for (const operation of pullData?.operations ?? []) {
-            if (
-                operation.kind !== 'media.download'
-                || operation.resourceType !== 'media_download'
-                || operation.resourceId == null
-            ) {
-                continue
-            }
-            const selectedFormat = operation.progressMeta?.selected_format
-            if (typeof selectedFormat === 'string' && selectedFormat) {
-                formats.set(operation.resourceId, selectedFormat)
-            }
-        }
-        return formats
-    }, [pullData?.operations])
-
-    const rowFormat = (row: MediaDownloadViewRead): string | null => (
-        row.formatDownloaded ?? liveFormatByDownloadId.get(row.id) ?? null
-    )
 
     const toggleStatusFilter = (option: StatusFilterOption) => {
         setStatusFilter((prev) => {
@@ -261,10 +237,10 @@ export default function DownloadsPage() {
         },
         {
             header: 'Format',
-            accessor: (row) => rowFormat(row) ?? '—',
+            accessor: (row) => row.formatDownloaded ?? '—',
             align: 'center',
             dataLabel: 'Format',
-            sortAccessor: (row) => rowFormat(row),
+            sortAccessor: (row) => row.formatDownloaded,
             width: '9%',
         },
         {
@@ -356,7 +332,7 @@ export default function DownloadsPage() {
                                 <span className="mobile-summary-meta">
                                     <span>{status === 'pending' ? 'Queued' : status === 'downloading' ? `${row.progress}%` : status === 'cancelled' ? 'Cancelled' : formatBytes(row.downloadedBytes)}</span>
                                     <span aria-hidden="true">•</span>
-                                    <span>{rowFormat(row) ?? 'Unknown format'}</span>
+                                    <span>{row.formatDownloaded ?? 'Unknown format'}</span>
                                     <span className={`mobile-summary-status ${statusClass}`}>
                                         {MediaDownloadStatusReg.getLabelLoose(status)}
                                     </span>
@@ -422,7 +398,7 @@ export default function DownloadsPage() {
                         credentials: 'include',
                     })
                 }
-                invalidateQueries={[["mediaDownloadsView"], ["episodeDownloads"], ["movieDownloads"], ["movies"]]}
+                invalidateQueries={[['mediaDownloadsView'], ['episodeDownloads'], ['movieDownloads'], ['movies']]}
             />
             <DownloadLogDialog row={logRow} onClose={() => setLogRow(null)}/>
         </section>

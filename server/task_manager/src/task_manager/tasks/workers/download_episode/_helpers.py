@@ -9,7 +9,6 @@ from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.local_media_profile_types import PreferredFormat
 from dailywire_api.dw_api.client import MiddlewareClient
 from dailywire_downloader import DownloadCancelled, DownloadProgress, MediaUnavailableError, VideoRendition
-from task_manager.scheduler.progress import TASK_RUN_PROGRESS_META_KEY
 
 # Requested video height per preferred format; audio-only is handled separately
 FORMAT_HEIGHTS: dict[str, int] = {
@@ -75,7 +74,7 @@ class TaskProgressWriter:
             return
         self._task_progress.set(
             max(0, self._last_pct),
-            meta={TASK_RUN_PROGRESS_META_KEY: {"selected_format": selected_format}},
+            meta={"selected_format": selected_format},
         )
 
     def __call__(self, progress: DownloadProgress) -> None:

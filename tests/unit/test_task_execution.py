@@ -22,16 +22,26 @@ def _install_task(monkeypatch, *, key: str, function, default_max_retries: int =
 
 
 def test_successful_task_persists_progress_and_terminal_state(task_database, monkeypatch):
+    from backend.db.core import get_session
     from task_manager.scheduler.db import TaskRun
     from task_manager.scheduler.executor import execute_task
-    from task_manager.scheduler.progress import TASK_RUN_PROGRESS_META_KEY
+    from task_manager.scheduler.operations import TASK_RUN_PROGRESS_META_KEY
+
+    reported_meta = None
 
     async def worker(*, resource_id=None, progress=None, slug=None):
+        nonlocal reported_meta
         progress.set(
             50,
             "Halfway",
-            meta={TASK_RUN_PROGRESS_META_KEY: {"selected_format": "1920x1080"}},
+            meta={"selected_format": "1920x1080"},
         )
+        session = get_session()
+        try:
+            run = session.get(TaskRun, progress.run_id)
+            reported_meta = dict(run.meta or {}) if run is not None else None
+        finally:
+            session.close()
 
     _install_task(monkeypatch, key="test_success", function=worker)
     execute_task(
@@ -40,6 +50,11 @@ def test_successful_task_persists_progress_and_terminal_state(task_database, mon
         resource_id=7,
         slug="stable-slug",
     )
+
+    assert reported_meta == {
+        "inputs": {"slug": "stable-slug"},
+        TASK_RUN_PROGRESS_META_KEY: {"selected_format": "1920x1080"},
+    }
 
     with task_database() as session:
         run = session.execute(select(TaskRun)).scalar_one()

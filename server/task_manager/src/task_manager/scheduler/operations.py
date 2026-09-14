@@ -22,6 +22,7 @@ from task_manager.scheduler.types import OperationSource, OperationStatus, TaskS
 
 
 TASK_RUN_WAIT_STATE_META_KEY = "_operation_wait_state"
+TASK_RUN_PROGRESS_META_KEY = "_progress_meta"
 
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
@@ -499,6 +500,20 @@ def mark_operation_seen(operation_id: str) -> dict[str, Any] | None:
         session.close()
 
 
+def _operation_progress_meta(
+        operation: TaskOperation,
+        effective_runs: Sequence[TaskRun | None],
+) -> dict[str, Any] | None:
+    """Expose structured worker progress only when it has one unambiguous source."""
+    if operation.status not in _ACTIVE_OPERATION_STATUSES or len(effective_runs) != 1:
+        return None
+    run = effective_runs[0]
+    if run is None or not isinstance(run.meta, dict):
+        return None
+    progress_meta = run.meta.get(TASK_RUN_PROGRESS_META_KEY)
+    return dict(progress_meta) if isinstance(progress_meta, dict) else None
+
+
 def _operation_to_dict(operation: TaskOperation) -> dict[str, Any]:
     targets = list(operation.targets)
     effective_runs = [_effective_run_for_target(target) for target in targets]
@@ -520,6 +535,7 @@ def _operation_to_dict(operation: TaskOperation) -> dict[str, Any]:
         "message": operation.message,
         "result": operation.result,
         "context": operation.context,
+        "progress_meta": _operation_progress_meta(operation, effective_runs),
         "error": operation.error,
         "notification_seen_at": operation.notification_seen_at.isoformat() if operation.notification_seen_at else None,
         "started_at": operation.started_at.isoformat() if operation.started_at else None,

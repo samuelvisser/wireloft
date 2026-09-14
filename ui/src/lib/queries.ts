@@ -415,6 +415,11 @@ function contextBoolean(operation: TaskOperationRead, key: string): boolean | nu
     return typeof value === 'boolean' ? value : null
 }
 
+function progressMetaString(operation: TaskOperationRead | undefined, key: string): string | null {
+    const value = operation?.progressMeta?.[key]
+    return typeof value === 'string' ? value : null
+}
+
 function operationDate(value: string | null | undefined): Date | null {
     if (!value) return null
     const parsed = new Date(value)
@@ -466,6 +471,7 @@ function presentDownload(
         : null
     return {
         ...download,
+        formatDownloaded: progressMetaString(operation, 'selected_format') ?? download.formatDownloaded,
         downloadStatus: status,
         progress: operation && ACTIVE_OPERATION_STATUSES.has(operation.status)
             ? Math.max(0, Math.min(100, operation.progress ?? 0))

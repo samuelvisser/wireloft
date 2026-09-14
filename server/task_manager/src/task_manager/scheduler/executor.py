@@ -24,11 +24,11 @@ from .operation_control import (
     run_cancel_requested,
 )
 from .operations import (
+    TASK_RUN_PROGRESS_META_KEY,
     TASK_RUN_WAIT_STATE_META_KEY,
     link_run_to_operations,
     refresh_operations_for_run,
 )
-from .progress import TASK_RUN_PROGRESS_META_KEY
 from .results import TaskResult
 from config import get_settings
 from config.network import (
@@ -60,10 +60,11 @@ class _PreparedExecution:
 class ProgressUpdater:
     """Generic progress and cooperative-cancellation channel for a TaskRun.
 
-    Workers report percentage/message through ``set``. Long-running libraries
-    may also use the updater itself as a ``should_cancel`` callback; cancellation
-    is then driven by the same durable TaskRun state used for every other worker
-    rather than by worker-specific generation flags.
+    Workers report percentage, message and structured live metadata through
+    ``set``. Long-running libraries may also use the updater itself as a
+    ``should_cancel`` callback; cancellation is then driven by the same durable
+    TaskRun state used for every other worker rather than by worker-specific
+    generation flags.
     """
 
     _CANCEL_CHECK_INTERVAL_SECONDS = 0.25
@@ -129,7 +130,12 @@ class ProgressUpdater:
         if canceled:
             raise TaskCancellationRequested(reason)
 
-    def set(self, percent: int, message: Optional[str] = None, meta: Optional[dict] = None):
+    def set(
+            self,
+            percent: int,
+            message: Optional[str] = None,
+            meta: Optional[dict[str, Any]] = None,
+    ) -> None:
         p = max(0, min(100, int(percent)))
 
         # Progress writes deliberately use their own short-lived Session. The
@@ -174,10 +180,14 @@ class ProgressUpdater:
 
                     if meta is not None:
                         merged_meta = dict(current_meta or {})
-                        if isinstance(meta, dict):
-                            merged_meta.update(meta)
-                        else:
-                            merged_meta["progress_meta"] = meta
+                        current_progress_meta = merged_meta.get(TASK_RUN_PROGRESS_META_KEY)
+                        merged_progress_meta = (
+                            dict(current_progress_meta)
+                            if isinstance(current_progress_meta, dict)
+                            else {}
+                        )
+                        merged_progress_meta.update(meta)
+                        merged_meta[TASK_RUN_PROGRESS_META_KEY] = merged_progress_meta
                         values["meta"] = merged_meta
 
                     result = s.execute(
