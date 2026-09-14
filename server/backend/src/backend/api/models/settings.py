@@ -15,6 +15,7 @@ from backend.api.models.base import RequestBase, ResponseBase
 from config.settings.cron_validation import WorkerCronIntervalError, validate_worker_cron_settings
 from config.settings.settings import AppSettings
 from config.settings.submodels import (
+    DownloadMode,
     FilenameRestrictionMode,
     normalize_metadata_refresh_intervals,
 )
@@ -57,6 +58,8 @@ SettingFieldPath = Literal[
     "downloadSettings.maxDownloadAttempts",
     "downloadSettings.downloadTimeoutSeconds",
     "downloadSettings.downloadRoot",
+    "downloadSettings.downloadMode",
+    "downloadSettings.temporaryDownloadRoot",
     "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
@@ -102,6 +105,8 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.maxDownloadAttempts",
     "downloadSettings.downloadTimeoutSeconds",
     "downloadSettings.downloadRoot",
+    "downloadSettings.downloadMode",
+    "downloadSettings.temporaryDownloadRoot",
     "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
@@ -238,6 +243,8 @@ class DownloadSettingsValue(_SettingsValueModel):
     max_download_attempts: int = Field(ge=1)
     download_timeout_seconds: int = Field(ge=1)
     download_root: Path
+    download_mode: DownloadMode
+    temporary_download_root: Path
     filename_restriction_mode: FilenameRestrictionMode
     remux_video_to_mp4: bool
     ffmpeg_path: str = Field(min_length=1)
@@ -245,6 +252,9 @@ class DownloadSettingsValue(_SettingsValueModel):
     _validate_verify_downloads_cron = field_validator("verify_downloads_cron")(_validate_cron_expression)
     _validate_download_root = field_validator(
         "download_root", mode="before"
+    )(_validate_non_empty_path)
+    _validate_temporary_download_root = field_validator(
+        "temporary_download_root", mode="before"
     )(_validate_non_empty_path)
 
 

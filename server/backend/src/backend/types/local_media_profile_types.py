@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, StrEnum
 
 
 class LocalMediaProfileType(str, Enum):
@@ -7,6 +7,12 @@ class LocalMediaProfileType(str, Enum):
 
     # Only used by the polymorphic parent mapper.
     BASE = "base"
+
+
+class LocalMediaProfileStorageMode(StrEnum):
+    SYSTEM = "system"
+    DIRECT = "direct"
+    TEMPORARY = "temporary"
 
 
 class ShowLocalMediaProfileScope(str, Enum):

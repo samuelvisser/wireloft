@@ -62,6 +62,8 @@ const EpisodeStatusTimingSchema = z.object({
 
 export const FilenameRestrictionModeSchema = z.enum(['unrestricted', 'windows', 'restricted'])
 export type FilenameRestrictionMode = z.infer<typeof FilenameRestrictionModeSchema>
+export const DownloadModeSchema = z.enum(['direct', 'temporary'])
+export type DownloadMode = z.infer<typeof DownloadModeSchema>
 
 const DownloadSettingsSchema = z.object({
     verifyDownloadsCron: z.string(),
@@ -69,6 +71,8 @@ const DownloadSettingsSchema = z.object({
     maxDownloadAttempts: z.number(),
     downloadTimeoutSeconds: z.number(),
     downloadRoot: z.string(),
+    downloadMode: DownloadModeSchema,
+    temporaryDownloadRoot: z.string(),
     filenameRestrictionMode: FilenameRestrictionModeSchema,
     remuxVideoToMp4: z.boolean(),
     ffmpegPath: z.string(),
@@ -158,6 +162,8 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         maxConcurrentDownloads: requiredNumber().int().min(1, 'Must be at least 1.'),
         maxDownloadAttempts: requiredNumber().int().min(1, 'Must be at least 1.'),
         downloadTimeoutSeconds: requiredNumber().int().min(1, 'Must be at least 1 second.'),
+        downloadRoot: z.string().trim().min(1, 'A download root is required.'),
+        temporaryDownloadRoot: z.string().trim().min(1, 'A temporary download folder is required.'),
     }),
     fileWatcher: FileWatcherSettingsSchema.extend({
         scanCron: cronExpression,
@@ -211,6 +217,8 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadSettings.maxDownloadAttempts',
     'downloadSettings.downloadTimeoutSeconds',
     'downloadSettings.downloadRoot',
+    'downloadSettings.downloadMode',
+    'downloadSettings.temporaryDownloadRoot',
     'downloadSettings.filenameRestrictionMode',
     'downloadSettings.remuxVideoToMp4',
     'downloadSettings.ffmpegPath',

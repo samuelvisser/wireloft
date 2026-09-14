@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
-HEAD_REVISION = "f4d2a7b9c301"
+HEAD_REVISION = "a9c4e2f7b106"
+SEASON_SCOPE_REVISION = "f4d2a7b9c301"
 MEDIA_DATABASE_REFACTOR_REVISION = "e1c7a4b9d302"
 ARTIFACT_IDENTITY_REVISION = "c1f7b9e4d205"
 SHOW_PROFILE_SCOPE_REVISION = "e3a1b5c7d902"
@@ -114,20 +115,24 @@ def test_fresh_database_upgrades_to_head(migration_database):
     } <= operation_columns
 
     profile_columns = {column["name"] for column in inspector.get_columns("local_media_profiles")}
-    assert {"type", "append_media_type_to_filename"} <= profile_columns
+    assert {"type", "append_media_type_to_filename", "download_mode"} <= profile_columns
     profile_indexes = {
         index["name"]: index
         for index in inspector.get_indexes("local_media_profiles")
     }
-    settings_index = profile_indexes[
-        "uq_local_media_profiles_type_output_template_preferred_format"
-    ]
+    settings_index = profile_indexes["uq_local_media_profiles_type_template_format_mode"]
     assert settings_index["column_names"] == [
         "type",
         "output_template",
         "preferred_format",
+        "download_mode",
     ]
     assert bool(settings_index["unique"])
+
+    download_profile_columns = {
+        column["name"] for column in inspector.get_columns("download_profiles")
+    }
+    assert "download_mode" not in download_profile_columns
 
     settings_columns = {column["name"] for column in inspector.get_columns("settings")}
     assert settings_columns == {
@@ -183,7 +188,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
         assert settings["alembic_version_num"] == HEAD_REVISION
         profiles = connection.execute(text(
             "SELECT type, slug, name, output_template, preferred_format, "
-            "append_media_type_to_filename "
+            "download_mode, append_media_type_to_filename "
             "FROM local_media_profiles ORDER BY slug"
         )).mappings().all()
         assert [dict(profile) for profile in profiles] == [
@@ -196,6 +201,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
                     "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
                 ),
                 "preferred_format": "format_1080p",
+                "download_mode": "system",
                 "append_media_type_to_filename": False,
             },
             {
@@ -207,6 +213,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
                     "{{ episode_published_date }} - {{ episode_title }}.ext"
                 ),
                 "preferred_format": "format_audio_only",
+                "download_mode": "system",
                 "append_media_type_to_filename": False,
             },
             {
@@ -218,6 +225,7 @@ def test_fresh_database_upgrades_to_head(migration_database):
                     "{{ episode_title }}.ext"
                 ),
                 "preferred_format": "format_1080p",
+                "download_mode": "system",
                 "append_media_type_to_filename": False,
             },
         ]
@@ -507,7 +515,13 @@ def test_rss_and_episode_type_data_migrations_from_main_baseline(migration_datab
             "JOIN stream_profiles AS base ON base.id = rss.id "
             "ORDER BY base.token"
         )).mappings().all()
+        assert connection.execute(text(
+            "SELECT download_mode FROM local_media_profiles WHERE id = :id"
+        ), {"id": local_media_profile_id}).scalar_one() == "system"
 
+    assert "download_mode" not in {
+        column["name"] for column in inspect(engine).get_columns("download_profiles")
+    }
     profiles_by_token = {profile["token"]: profile for profile in profiles}
     assert profiles_by_token["dw-token"]["ep_id_type_list"] == ["ep", "aux"]
     assert profiles_by_token["local-token"]["ep_id_type_list"] == ["ep"]
@@ -554,6 +568,7 @@ def test_upgrade_from_0001_migrates_existing_profiles_to_show_type(migration_dat
         profile = session.query(LocalMediaProfileBase).filter_by(slug="audio").one()
         assert isinstance(profile, ShowLocalMediaProfile)
         assert profile.type == "show"
+        assert profile.download_mode == "system"
         assert session.execute(
             text("SELECT id FROM local_media_profiles_show WHERE id = :id"),
             {"id": profile.id},
@@ -671,7 +686,8 @@ def test_migration_history_consolidates_media_database_refactor():
 
     assert get_head_revisions() == (HEAD_REVISION,)
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
-        (HEAD_REVISION, MEDIA_DATABASE_REFACTOR_REVISION),
+        (HEAD_REVISION, SEASON_SCOPE_REVISION),
+        (SEASON_SCOPE_REVISION, MEDIA_DATABASE_REFACTOR_REVISION),
         (MEDIA_DATABASE_REFACTOR_REVISION, ARTIFACT_IDENTITY_REVISION),
         (ARTIFACT_IDENTITY_REVISION, SHOW_PROFILE_SCOPE_REVISION),
         (SHOW_PROFILE_SCOPE_REVISION, EPISODE_CANONICAL_REVISION),
@@ -684,6 +700,7 @@ def test_migration_history_consolidates_media_database_refactor():
         (WIRELOFT_1_0_REVISION, BASE_REVISION),
         (BASE_REVISION, None),
     ]
-    assert revisions[0].doc == "Scope season slugs to their show."
-    assert revisions[1].doc == "Finalize the media database refactor."
-    assert revisions[2].doc == "Persist filesystem identity for downloaded artifacts."
+    assert revisions[0].doc == "Add configurable temporary download storage."
+    assert revisions[1].doc == "Scope season slugs to their show."
+    assert revisions[2].doc == "Finalize the media database refactor."
+    assert revisions[3].doc == "Persist filesystem identity for downloaded artifacts."

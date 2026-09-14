@@ -30,10 +30,66 @@ def db_session():
         s.close()
 
 
+def _is_committed_download_artifact(path, identity) -> bool:
+    """Return whether the database owns this exact published media content."""
+    from sqlalchemy import select
+
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session = get_session()
+    try:
+        statement = (
+            select(
+                MediaDownloadBase.artifact_stat_dev,
+                MediaDownloadBase.artifact_stat_ino,
+                MediaDownloadBase.artifact_size_bytes,
+                MediaDownloadBase.artifact_fingerprint,
+            )
+            .where(
+                MediaDownloadBase.file_path == str(path),
+                MediaDownloadBase.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value,
+            )
+        )
+        for row in session.execute(statement):
+            # Content identity is the portable path for NAS/network filesystems,
+            # whose inode/device identifiers may change between mounts. Keep the
+            # filesystem identity fast path for older rows without a fingerprint.
+            if (
+                row.artifact_size_bytes == identity.size_bytes
+                and row.artifact_fingerprint
+                and row.artifact_fingerprint == identity.fingerprint
+            ):
+                return True
+            if (
+                row.artifact_stat_dev == identity.stat_dev
+                and row.artifact_stat_ino == identity.stat_ino
+            ):
+                return True
+        return False
+    finally:
+        session.close()
+
+
 @asynccontextmanager
 async def application_lifespan(app: FastAPI):
     """Own the background controller for exactly one ASGI app lifespan."""
     import controller
+    from backend.utils.download_paths import (
+        cleanup_abandoned_download_path_reservations,
+        cleanup_abandoned_temporary_downloads,
+    )
+
+    settings = get_settings().download_settings
+    # A killed download worker can leave either a direct-mode destination claim
+    # or a private temporary-mode publication record behind. Reconcile both
+    # before controller recovery can dispatch interrupted downloads again.
+    cleanup_abandoned_download_path_reservations(settings.download_root)
+    cleanup_abandoned_temporary_downloads(
+        settings.temporary_download_root,
+        settings.download_root,
+        is_published_artifact=_is_committed_download_artifact,
+    )
 
     started = False
     try:
