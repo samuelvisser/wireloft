@@ -50,6 +50,7 @@ class TaskOperationRead(ResponseBase):
     message: Optional[str]
     result: Optional[dict[str, Any]]
     context: Optional[dict[str, Any]]
+    progress_meta: Optional[dict[str, Any]] = None
     error: Optional[str]
     notification_seen_at: Optional[datetime]
     started_at: Optional[datetime]

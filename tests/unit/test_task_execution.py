@@ -24,9 +24,14 @@ def _install_task(monkeypatch, *, key: str, function, default_max_retries: int =
 def test_successful_task_persists_progress_and_terminal_state(task_database, monkeypatch):
     from task_manager.scheduler.db import TaskRun
     from task_manager.scheduler.executor import execute_task
+    from task_manager.scheduler.progress import TASK_RUN_PROGRESS_META_KEY
 
     async def worker(*, resource_id=None, progress=None, slug=None):
-        progress.set(50, "Halfway")
+        progress.set(
+            50,
+            "Halfway",
+            meta={TASK_RUN_PROGRESS_META_KEY: {"selected_format": "1920x1080"}},
+        )
 
     _install_task(monkeypatch, key="test_success", function=worker)
     execute_task(

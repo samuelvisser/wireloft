@@ -28,6 +28,7 @@ from .operations import (
     link_run_to_operations,
     refresh_operations_for_run,
 )
+from .progress import TASK_RUN_PROGRESS_META_KEY
 from .results import TaskResult
 from config import get_settings
 from config.network import (
@@ -340,6 +341,7 @@ def _prepare_execution(
 
         run_meta = dict(run.meta or {})
         run_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+        run_meta.pop(TASK_RUN_PROGRESS_META_KEY, None)
         run.meta = run_meta or None
 
         linked_operation_ids = link_run_to_operations(
@@ -400,6 +402,7 @@ def _finalize_execution(
 
         run_meta = dict(run.meta or {})
         run_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+        run_meta.pop(TASK_RUN_PROGRESS_META_KEY, None)
         run.meta = run_meta or None
 
         if run_cancel_requested(run):
