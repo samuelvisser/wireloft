@@ -1,8 +1,14 @@
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 
+export type OutputTemplateVariableReadMore = {
+    summary?: string
+    paragraphs: readonly string[]
+}
+
 export type OutputTemplateVariable = {
     name: string
     description: string
+    readMore?: OutputTemplateVariableReadMore
 }
 
 const DATE_VARIABLES: readonly OutputTemplateVariable[] = [
@@ -23,8 +29,26 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'season', description: 'Season URL slug'},
     {name: 'season_name', description: 'Season name'},
     {name: 'season_index', description: 'WireLoft season index'},
-    {name: 'normalized_season_index', description: 'Season index with earlier extras seasons removed; extras themselves are 0'},
-    {name: 'extra_seasons_count', description: 'Number of show seasons whose name contains "extra" (case-insensitive)'},
+    {
+        name: 'normalized_season_index',
+        description: 'Season index with earlier extras seasons removed; extras themselves are 0',
+        readMore: {
+            paragraphs: [
+                'Extras seasons always normalize to 0. For a normal season, WireLoft subtracts only extras seasons with a lower WireLoft season index.',
+                'For example, indexes 1: 2022, 2: Extras, 3: 2023 normalize to 1, 0, 2. An extras season added later does not renumber earlier normal seasons.',
+            ],
+        },
+    },
+    {
+        name: 'extra_seasons_count',
+        description: 'Number of show seasons whose name contains "extra" (case-insensitive)',
+        readMore: {
+            paragraphs: [
+                'This counts every season in the show whose lowercased name contains "extra", regardless of where that season appears in the WireLoft season order.',
+                'Use normalized_season_index when you need a consecutive Plex/Jellyfin-style season number, because it only removes extras seasons before the current season.',
+            ],
+        },
+    },
     {name: 'is_extra_season', description: '1 when the current season name contains "extra"; otherwise 0'},
     {name: 'episode', description: 'Episode URL slug'},
     {name: 'episode_title', description: 'Episode title'},
