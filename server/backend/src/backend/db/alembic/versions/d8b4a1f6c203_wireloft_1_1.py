@@ -1,6 +1,6 @@
 """Upgrade the shipped WireLoft 1.0 schema to WireLoft 1.1.
 
-Revision ID: b1d7c3e9f205
+Revision ID: d8b4a1f6c203
 Revises: c8d4e2f1a7b9
 Create Date: 2026-09-14
 
@@ -32,7 +32,7 @@ from backend.db.alembic_version import (
 )
 
 
-revision = "b1d7c3e9f205"
+revision = "d8b4a1f6c203"
 down_revision = "c8d4e2f1a7b9"
 branch_labels = None
 depends_on = None
