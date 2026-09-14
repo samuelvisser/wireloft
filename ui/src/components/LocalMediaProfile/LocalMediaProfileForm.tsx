@@ -103,10 +103,12 @@ export default function LocalMediaProfileForm({form, mode}: Props) {
                             <strong>Save directly to downloads</strong> writes download temporary files beside the final media destination and reserves the final filename while downloading.
                         </p>
                         <p>
-                            <strong>Save to temporary folder first</strong> keeps download and processing files in the configured temporary folder and only publishes the completed media file at the end. This applies to automatic downloads, manual episode downloads, movies, and movie extras that use this profile.
+                            <strong>Save to temporary folder first</strong> keeps download and processing files in the configured temporary folder and only publishes the completed media file at the end.
                         </p>
                         <p>
                             Temporary mode is particularly useful when the destination is watched by a media server and you do not want it to pick up partly downloaded or empty media files.
+                            Save directly to downloads, due to its simple nature, is a little faster and less prone to errors. Though if errors do happen in either mode, WireLoft will
+                            automatically restore from them.
                         </p>
                     </ReadMore>
                 </div>
