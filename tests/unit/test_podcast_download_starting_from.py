@@ -214,3 +214,21 @@ def test_api_rejects_starting_from_with_rolling_limit():
             download_starting_from=date(2026, 1, 1),
             delete_older_episodes=True,
         )
+
+
+def test_api_rejects_date_and_episode_count_limits_together():
+    from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPICreate
+
+    with pytest.raises(ValidationError, match="Choose either a date limit or an episode-count limit, not both"):
+        PodcastDownloadProfileAPICreate(
+            show_id=1,
+            local_media_profile_id=1,
+            enable_profile=True,
+            ep_id_type_list=["ep"],
+            download_with_countdown=False,
+            redownload_final=False,
+            download_days_in_past=30,
+            download_episode_count=5,
+            download_starting_from=None,
+            delete_older_episodes=True,
+        )
