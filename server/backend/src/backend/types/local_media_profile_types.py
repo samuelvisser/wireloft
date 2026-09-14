@@ -1,7 +1,7 @@
-from enum import Enum, StrEnum
+from enum import StrEnum
 
 
-class LocalMediaProfileType(str, Enum):
+class LocalMediaProfileType(StrEnum):
     SHOW = "show"
     MOVIE = "movie"
 
@@ -15,13 +15,13 @@ class LocalMediaProfileStorageMode(StrEnum):
     TEMPORARY = "temporary"
 
 
-class ShowLocalMediaProfileScope(str, Enum):
+class ShowLocalMediaProfileScope(StrEnum):
     BOTH = "both"
     PODCAST = "podcast"
     SERIES = "series"
 
 
-class PreferredFormat(str, Enum):
+class PreferredFormat(StrEnum):
     FORMAT_4K = 'format_4k'
     FORMAT_1080P = 'format_1080p'
     FORMAT_720P = 'format_720p'
