@@ -26,10 +26,6 @@ function isFresh(fetchedAt: number | undefined) {
   return Date.now() - fetchedAt < SHOW_DATA_MAX_AGE_MS
 }
 
-function newestTimestamp(...timestamps: Array<number | undefined>) {
-  return Math.max(0, ...timestamps.map((value) => value ?? 0)) || undefined
-}
-
 function showSlugFromCurrentRoute(): string | undefined {
   if (typeof window === 'undefined') return undefined
   const match = window.location.pathname.match(/^\/show\/([^/]+)\/?$/)
@@ -42,9 +38,9 @@ function showSlugFromCurrentRoute(): string | undefined {
 }
 
 /**
- * Hydrate only the show that is being opened directly. Parsing every persisted episode list at
- * startup would defeat the purpose of the background warmer, while parsing one requested show is
- * cheap and lets a cold browser reload render its episode cards immediately.
+ * Hydrate only the show that is being opened directly. Parsing every persisted episode list before
+ * the initial render would delay startup, while parsing one requested show is cheap and lets a cold
+ * browser reload render its episode cards immediately.
  */
 export function hydrateCurrentShowRouteCache(queryClient: QueryClient): void {
   const showSlug = showSlugFromCurrentRoute()
@@ -87,11 +83,33 @@ export function hydrateCachedSeasonQueries(queryClient: QueryClient, shows: Show
 
 async function warmEpisodes(queryClient: QueryClient, show: ShowRead) {
   const options = episodesQueryOptions(show.slug)
+  const queryData = queryClient.getQueryData(options.queryKey)
   const queryUpdatedAt = queryClient.getQueryState(options.queryKey)?.dataUpdatedAt
   const cachedAt = getEpisodesCacheFetchedAt(show.slug)
-  if (isFresh(newestTimestamp(queryUpdatedAt, cachedAt))) return
 
-  await queryClient.prefetchQuery({...options, staleTime: 0})
+  // A recent localStorage timestamp used to make the warmer return here without putting the
+  // episodes into React Query. That left navigation dependent on parsing storage (or refetching)
+  // at the moment the show was opened. Hydrate recent persisted data during the background pass
+  // so every show is actually warm in memory after startup.
+  if (
+    cachedAt !== undefined
+    && isFresh(cachedAt)
+    && (queryData === undefined || (queryUpdatedAt ?? 0) < cachedAt)
+  ) {
+    const cachedEpisodes = loadEpisodesFromStorage(show.slug)
+    if (cachedEpisodes !== undefined) {
+      queryClient.setQueryData(options.queryKey, cachedEpisodes, {updatedAt: cachedAt})
+      return
+    }
+  }
+
+  if (queryData !== undefined && isFresh(queryUpdatedAt)) return
+
+  // Persist data fetched by the warmer directly. The query-cache subscription below still handles
+  // normal foreground refreshes, but warming should not depend on that side effect being installed.
+  const episodes = await queryClient.fetchQuery({...options, staleTime: 0})
+  const fetchedAt = queryClient.getQueryState(options.queryKey)?.dataUpdatedAt ?? Date.now()
+  saveEpisodesToStorage(show.slug, episodes, fetchedAt)
 }
 
 async function warmSeasons(queryClient: QueryClient, show: ShowRead) {
@@ -99,11 +117,13 @@ async function warmSeasons(queryClient: QueryClient, show: ShowRead) {
 
   const options = seasonsQueryOptions(show.slug)
   const cachedAt = getSeasonsCacheFetchedAt(show.slug)
+  const queryData = queryClient.getQueryData(options.queryKey)
   const queryUpdatedAt = queryClient.getQueryState(options.queryKey)?.dataUpdatedAt
-  const newest = newestTimestamp(queryUpdatedAt, cachedAt)
-  if (isFresh(newest)) return
+  if (queryData !== undefined && isFresh(queryUpdatedAt ?? cachedAt)) return
 
-  await queryClient.prefetchQuery({...options, staleTime: 0})
+  const seasons = await queryClient.fetchQuery({...options, staleTime: 0})
+  const fetchedAt = queryClient.getQueryState(options.queryKey)?.dataUpdatedAt ?? Date.now()
+  saveSeasonsToStorage(show.slug, seasons, fetchedAt)
 }
 
 async function yieldToBrowser() {
@@ -152,12 +172,12 @@ async function warmShowDataCache(queryClient: QueryClient) {
   await warmShowsWithLimitedConcurrency(queryClient, shows)
 }
 
-let persistenceInstalled = false
+const persistenceInstalledFor = new WeakSet<QueryClient>()
 
 /** Persist successful show-list episode/season query results, including normal foreground refreshes. */
 export function installShowDataQueryPersistence(queryClient: QueryClient): void {
-  if (persistenceInstalled) return
-  persistenceInstalled = true
+  if (persistenceInstalledFor.has(queryClient)) return
+  persistenceInstalledFor.add(queryClient)
 
   const lastPersistedAt = new Map<string, number>()
   queryClient.getQueryCache().subscribe((event) => {
