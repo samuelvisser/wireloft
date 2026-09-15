@@ -61,7 +61,7 @@ Select the known seasons that should be covered by the profile. Only selected ep
 
 ### Include upcoming seasons
 
-Enable **Include upcoming seasons** when the same rules should automatically apply to seasons Daily Wire adds later.
+Enable **Include upcoming seasons** when the same rules should automatically apply to seasons The Daily Wire adds later.
 
 This is useful for an ongoing series where you do not want to edit the profile every time a new season appears.
 

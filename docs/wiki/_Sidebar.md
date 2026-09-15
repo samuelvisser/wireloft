@@ -1,4 +1,4 @@
-**WireLoft 1.1 Wiki**
+**WireLoft Wiki**
 
 - [[Home]]
 

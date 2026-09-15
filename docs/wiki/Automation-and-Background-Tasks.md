@@ -26,7 +26,7 @@ This is the normal automatic discovery process. It does not mean every episode i
 
 ### Sync now
 
-Use a show's **Sync now** action when you know something new has appeared on Daily Wire and you do not want to wait for the next scheduled check.
+Use a show's **Sync now** action when you know something new has appeared on The Daily Wire and you do not want to wait for the next scheduled check.
 
 The show keeps recent synchronization results so you can see whether WireLoft checked successfully and whether anything new was found.
 
@@ -40,7 +40,7 @@ Podcast Download Profiles can decide whether they should wait for the final medi
 
 ## Recent metadata updates
 
-Daily Wire sometimes changes titles, thumbnails, episode numbers, or other information shortly after publication.
+The Daily Wire sometimes changes titles, thumbnails, episode numbers, or other information shortly after publication.
 
 WireLoft revisits newly published episodes at several gradually increasing intervals:
 
@@ -52,19 +52,20 @@ This keeps recent metadata accurate without repeatedly refreshing the entire his
 
 ## Episodes without usable media
 
-Sometimes Daily Wire lists an episode but does not yet provide usable media for it. This can be temporary, so WireLoft does not immediately remove the episode.
+Sometimes The Daily Wire lists an episode but does not (yet) provide usable media for it. This can be temporary, so WireLoft does not immediately remove the episode.
 
 By default, WireLoft rechecks these episodes every 20 minutes. If usable media returns, the episode becomes available to downloads and RSS profiles again automatically.
 
-If an episode remains unavailable and Daily Wire continues to confirm that it is no longer available, WireLoft can eventually remove the stale entry. The default waiting period is **4 hours**.
+If an episode remains unavailable and The Daily Wire continues to confirm that it is no longer available, WireLoft can eventually remove the stale entry. The default waiting period is **4 hours**.
+WireLoft only removes episodes after those 4 hours if The Daily Wire does not have them listed on their site either (in other words, if it 404's).
 
-On an affected episode, **Early Delete** lets you request that cleanup immediately instead of waiting for the normal delay. WireLoft still checks the current Daily Wire state before removing it.
+On an affected episode page, **Early Delete** lets you request that cleanup immediately instead of waiting for the normal delay. WireLoft still checks the current Daily Wire state before removing it.
 
 ## Download queue
 
 Download Profiles and manual actions add work to the central download queue. By default, WireLoft allows up to **5 downloads at once**.
 
-If all download slots are busy, additional downloads remain queued. You can use **Prioritize** on a queued item to make it one of the next downloads selected when a slot opens.
+If all download slots are busy, additional downloads remain queued. You can use **Prioritize** on a queued item to make it one of the next downloads selected when a slot opens. Download actions started manually are automatically prioritized.
 
 See [[Downloads-and-File-Integrity]].
 
@@ -76,8 +77,6 @@ The default background-task retry count is **3**, with increasing pauses between
 
 WireLoft also watches work that is supposed to be making progress. If its progress does not change for **20 minutes** by default, the work is treated as stalled and cancelled rather than being allowed to sit indefinitely.
 
-Queued work and intentionally scheduled retries are not considered stalled just because they are waiting.
-
 ## Download verification and file watching
 
 Two background checks help keep the download list aligned with your actual files:
@@ -87,7 +86,7 @@ Two background checks help keep the download list aligned with your actual files
 
 These checks can detect missing files and, when enabled, obviously truncated files. WireLoft can also recover some same-folder renames.
 
-See [[Downloads-and-File-Integrity]] for the user-facing behavior.
+See [[Downloads-and-File-Integrity]] for more details.
 
 ## Scheduler settings
 
@@ -99,7 +98,7 @@ Unless you are diagnosing a specific performance problem, leave the scheduler se
 
 ## Cron schedules
 
-Settings that use cron follow the familiar five-field format:
+Settings that use cron follow the UNIX five-field format:
 
 ```text
 minute hour day-of-month month day-of-week

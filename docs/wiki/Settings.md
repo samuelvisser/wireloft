@@ -27,7 +27,7 @@ can be overridden with:
 WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS=3
 ```
 
-The Settings page identifies environment-controlled values so it is clear why changing them in the UI would not take effect.
+The Settings page identifies environment-controlled values and tells you why you cannot change them in the UI.
 
 ### Practical precedence
 

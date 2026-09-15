@@ -22,7 +22,7 @@ Backing up the complete directory is safer than maintaining a hand-picked file l
 
 Back it up when those files are important or expensive to recreate. You may choose not to back it up when downloads are treated as replaceable media and you are comfortable fetching them again.
 
-Remember that WireLoft cannot guarantee Daily Wire will continue to make every old file available forever, especially member-exclusive media.
+Remember that WireLoft cannot guarantee The Daily Wire will continue to make every old file available forever, especially member-exclusive media.
 
 ## Make a consistent database backup
 
