@@ -1,6 +1,6 @@
 [project]
 name = "task-manager"
-version = "0.1.0"
+version = "1.0.0"
 description = "Task scheduling and event management system for WireLoft."
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
