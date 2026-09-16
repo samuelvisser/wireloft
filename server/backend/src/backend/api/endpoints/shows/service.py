@@ -9,8 +9,8 @@ from backend.api.models.show import *
 from fastapi import HTTPException
 
 from backend.db.models import Episode, Show
-from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.utils.episode_download_scope import EpisodeDownloadScope
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import (
@@ -36,35 +36,23 @@ _PHYSICAL_ARTIFACT_STATUSES = (
 _ShowDownloadMaintenanceOperation = ShowDeleteDownloadsOperation | ShowRedownloadOperation
 
 
-def _show_local_media_profile_ids(s: Session, show_id: int) -> list[int]:
-    rows = (
-        s.query(EpisodeMediaDownload.local_media_profile_id)
-        .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
-        .filter(Episode.show_id == show_id)
-        .distinct()
-        .order_by(EpisodeMediaDownload.local_media_profile_id.asc())
-        .all()
-    )
-    return [profile_id for (profile_id,) in rows]
-
-
-def _selected_show_local_media_profiles(
-        s: Session,
+def _select_show_episode_download_scope(
+        scope: EpisodeDownloadScope,
         *,
-        show: Show,
         local_media_profile_id: int | None,
-) -> list[int]:
-    profile_ids = _show_local_media_profile_ids(s, show.id)
-    if not profile_ids:
+) -> EpisodeDownloadScope:
+    """Validate and apply a show action's optional Local Media Profile scope."""
+    if not scope.downloads:
         raise HTTPException(status_code=422, detail="This show has no episode downloads")
-    if local_media_profile_id is None:
-        return profile_ids
-    if local_media_profile_id not in profile_ids:
+    if (
+        local_media_profile_id is not None
+        and local_media_profile_id not in scope.local_media_profile_ids
+    ):
         raise HTTPException(
             status_code=422,
             detail="Local Media Profile has no downloads for this show",
         )
-    return [local_media_profile_id]
+    return scope.select(local_media_profile_id=local_media_profile_id)
 
 
 def get_shows_list(s: Session) -> list[ShowAPIRead]:
@@ -210,7 +198,7 @@ def _request_show_download_maintenance(
         local_media_profile_id: int | None,
         operation_type: type[_ShowDownloadMaintenanceOperation],
 ) -> dict[str, bool | int | str]:
-    """Queue a destructive show download action through the shared profile scope."""
+    """Queue a destructive show download action through the shared download scope."""
     show = (
         s.query(Show)
         .filter_by(slug=show_slug)
@@ -219,9 +207,8 @@ def _request_show_download_maintenance(
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
-    selected_profile_ids = _selected_show_local_media_profiles(
-        s,
-        show=show,
+    scope = _select_show_episode_download_scope(
+        EpisodeDownloadScope.resolve(s, show_id=show.id),
         local_media_profile_id=local_media_profile_id,
     )
     operation = create_operation(
@@ -229,13 +216,13 @@ def _request_show_download_maintenance(
         operation_type(
             show,
             local_media_profile_id=local_media_profile_id,
-            selected_profile_count=len(selected_profile_ids),
+            selected_profile_count=scope.local_media_profile_count,
         ),
     )
     queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
     return {
         "queued": True,
-        "local_media_profiles_queued": len(selected_profile_ids),
+        "local_media_profiles_queued": scope.local_media_profile_count,
         "operation_id": operation.id,
     }
 
@@ -282,22 +269,19 @@ def request_show_file_rename(
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
-    selected_profile_ids = _selected_show_local_media_profiles(
-        s,
-        show=show,
+    selected_scope = _select_show_episode_download_scope(
+        EpisodeDownloadScope.resolve(s, show_id=show.id),
         local_media_profile_id=local_media_profile_id,
     )
+    rename_scope = selected_scope.select(artifact_statuses=_PHYSICAL_ARTIFACT_STATUSES)
+    episode_ids = rename_scope.episode_ids
     episodes = (
         s.query(Episode)
-        .join(EpisodeMediaDownload, EpisodeMediaDownload.media_item_id == Episode.id)
-        .filter(
-            Episode.show_id == show.id,
-            EpisodeMediaDownload.local_media_profile_id.in_(selected_profile_ids),
-            EpisodeMediaDownload.artifact_status.in_(_PHYSICAL_ARTIFACT_STATUSES),
-        )
-        .distinct()
+        .filter(Episode.id.in_(episode_ids))
         .order_by(Episode.id.asc())
         .all()
+        if episode_ids
+        else []
     )
 
     operation = create_operation(
@@ -306,7 +290,7 @@ def request_show_file_rename(
             show,
             episodes,
             local_media_profile_id=local_media_profile_id,
-            selected_profile_count=len(selected_profile_ids),
+            selected_profile_count=selected_scope.local_media_profile_count,
         ),
     )
     if not episodes:
@@ -329,6 +313,6 @@ def request_show_file_rename(
     return {
         "queued": bool(episodes),
         "episodes_queued": len(episodes),
-        "local_media_profiles_queued": len(selected_profile_ids),
+        "local_media_profiles_queued": selected_scope.local_media_profile_count,
         "operation_id": operation.id,
     }

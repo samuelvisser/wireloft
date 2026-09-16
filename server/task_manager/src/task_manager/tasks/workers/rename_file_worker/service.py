@@ -3,12 +3,12 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
-from backend.db.models import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.artifact_identity import inspect_artifact
+from backend.utils.episode_download_scope import EpisodeDownloadScope
 from backend.utils.output_template import output_template_fields, resolve_episode_output_path
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.progress import update_progress
@@ -44,8 +44,12 @@ async def run_rename_file_worker(
     discovered source path. The destination is then rendered from the episode's
     current data and its current Local Media Profile template.
     """
-    episode = s.get(Episode, episode_id)
-    if episode is None:
+    try:
+        scope = EpisodeDownloadScope.resolve(s, episode_id=episode_id).select(
+            local_media_profile_id=local_media_profile_id,
+            artifact_statuses=_PHYSICAL_ARTIFACT_STATUSES,
+        )
+    except ValueError:
         update_progress(progress, 100, f"Episode {episode_id} no longer exists")
         return TaskResult(
             summary="Episode no longer exists",
@@ -57,21 +61,9 @@ async def run_rename_file_worker(
             },
         )
 
-    query = (
-        s.query(EpisodeMediaDownload)
-        .options(joinedload(EpisodeMediaDownload.local_media_profile))
-        .filter(
-            EpisodeMediaDownload.media_item_id == episode.id,
-            EpisodeMediaDownload.artifact_status.in_(_PHYSICAL_ARTIFACT_STATUSES),
-        )
-        .order_by(EpisodeMediaDownload.id.asc())
-    )
-    if local_media_profile_id is not None:
-        query = query.filter(
-            EpisodeMediaDownload.local_media_profile_id == local_media_profile_id,
-        )
-
-    downloads = query.all()
+    episode = scope.episode
+    assert episode is not None
+    downloads = list(scope.downloads)
     if identifier_fields_only:
         downloads = [
             download

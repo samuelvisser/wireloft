@@ -5,10 +5,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from backend.utils.episode_download_scope import EpisodeDownloadScope
 from dailywire_downloader import DownloadCancelled
-from task_manager.tasks.helpers.downloads.show_episode_downloads import (
-    resolve_episode_download_scope,
-)
 from task_manager.tasks.helpers.progress import update_progress
 from ._helpers import (
     _POLL_INTERVAL_SECONDS,
@@ -27,12 +25,11 @@ async def run_redownload_show_episodes_worker(
         progress=None,
 ) -> dict[str, Any]:
     """Coordinate replacement downloads for existing episode media rows."""
-    scope = resolve_episode_download_scope(
+    scope = EpisodeDownloadScope.resolve(
         s,
         show_id=show_id,
         episode_id=episode_id,
-        local_media_profile_id=local_media_profile_id,
-    )
+    ).select(local_media_profile_id=local_media_profile_id)
     base_result = scope.result_data()
     downloads = list(scope.downloads)
 

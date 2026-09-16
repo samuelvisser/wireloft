@@ -6,13 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import DownloadProfileBase
+from backend.utils.episode_download_scope import EpisodeDownloadScope
 from dailywire_downloader import DownloadCancelled
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.helpers.downloads.show_episode_downloads import (
     cancel_active_download_attempts,
     delete_episode_download_artifact,
-    resolve_episode_download_scope,
 )
 from task_manager.tasks.helpers.progress import update_progress
 
@@ -50,9 +50,7 @@ def run_delete_show_downloads_worker(
         progress=None,
 ) -> dict[str, Any]:
     """Delete existing show artifacts after disabling the show's Download Profiles."""
-    scope = resolve_episode_download_scope(
-        s,
-        show_id=show_id,
+    scope = EpisodeDownloadScope.resolve(s, show_id=show_id).select(
         local_media_profile_id=local_media_profile_id,
     )
     base_result = scope.result_data()
