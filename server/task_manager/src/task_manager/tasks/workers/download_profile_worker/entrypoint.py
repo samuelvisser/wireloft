@@ -5,6 +5,7 @@ from typing import Optional
 from config import get_settings
 from controller.db_utils import db_session
 from task_manager.scheduler.registry import on_cron, on_event, task
+from task_manager.tasks.media_download_operations import on_media_download_task_terminal
 from ..fetch_new_episodes.service import SHOW_INDEXED_EVENT
 from .service import run_download_profile_worker
 
@@ -46,6 +47,7 @@ from .service import run_download_profile_worker
     allowed_resource_types=("download_profile", "show", "episode"),
     default_max_retries=5,
     tracks_progress=True,
+    terminal_callback=on_media_download_task_terminal,
 )
 async def download_profile_worker(
         *,
@@ -61,6 +63,11 @@ async def download_profile_worker(
     download_profile id, or 0/None for a global sweep across every enabled profile
     (cron, app.startup, or a manual "show"/"download_profile" trigger).
     ``resource_type`` defines which one it is.
+
+    Profile enablement only controls admission of new automatic downloads. Once
+    a ``media.download`` operation is queued, the terminal callback gives the
+    shared download dispatcher a chance to start it regardless of the profile's
+    current enabled state.
     """
     with db_session() as s:
         await run_download_profile_worker(
