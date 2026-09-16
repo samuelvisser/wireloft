@@ -9,7 +9,7 @@ def test_download_clip_metadata_refresh_updates_canonical_source() -> None:
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieExtraSource
     from backend.types.media_types import MediaType
-    from dailywire_api.records import DwMovieExtraPlaybackRecord
+    from dailywire_api.records import DwMovieExtraDetailRecord
     from task_manager.tasks.workers.download_movie.service import _persist_movie_extra_metadata
 
     engine = create_engine("sqlite:///:memory:")
@@ -46,7 +46,7 @@ def test_download_clip_metadata_refresh_updates_canonical_source() -> None:
             "https://daily-wire-production.imgix.net/clips/ckk2pibct76em0722atmhheia/"
             "John%20Matthews%20Thumbnail.png?auto=compress&cs=origin"
         )
-        playback = DwMovieExtraPlaybackRecord.from_clip_payload(
+        playback = DwMovieExtraDetailRecord.from_clip_payload(
             {
                 "id": "2ce931ff-1fba-48fa-8352-7bc0d9e5efe6",
                 "slug": extra.slug,

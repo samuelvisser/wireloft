@@ -362,7 +362,7 @@ class DwMovieRecord(DwCatalogMovieRecord):
         return self.published_at.date()
 
 
-class DwMoviePlaybackRecord(BaseRecord):
+class DwMovieDetailRecord(BaseRecord):
     video_url: Optional[str] = None
     trailer_url: Optional[str] = None
     duration: float = 0

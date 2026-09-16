@@ -3,10 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from .DwCatalogRecord import DwMovieExtraRecord, DwMoviePlaybackRecord
+from .DwCatalogRecord import DwMovieExtraRecord, DwMovieDetailRecord
 
 
-class DwMovieExtraPlaybackRecord(DwMoviePlaybackRecord):
+class DwMovieExtraDetailRecord(DwMovieDetailRecord):
     """Movie-extra playback plus metadata returned by the same ``getClip`` call."""
 
     metadata: DwMovieExtraRecord
@@ -17,7 +17,7 @@ class DwMovieExtraPlaybackRecord(DwMoviePlaybackRecord):
         raw: Mapping[str, Any],
         *,
         video_url: str | None,
-    ) -> "DwMovieExtraPlaybackRecord":
+    ) -> "DwMovieExtraDetailRecord":
         metadata_payload = dict(raw)
         images = raw.get("images")
         if isinstance(images, Mapping):
