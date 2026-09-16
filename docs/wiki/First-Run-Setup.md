@@ -1,10 +1,10 @@
 # First-Run Setup
 
-On first launch, WireLoft guides you through connecting Daily Wire, reviewing security, and adding your first media. You can skip optional steps and finish them later from the normal interface.
+On first launch, WireLoft guides you through connecting The Daily Wire, reviewing security, and adding your first media. You can skip optional steps and finish them later from the normal interface.
 
-## 1. Connect Daily Wire
+## 1. Connect The Daily Wire
 
-WireLoft uses Daily Wire's device authorization flow. Follow the instructions shown by WireLoft and authorize the connection on Daily Wire's own site.
+WireLoft uses The Daily Wire's device authorization flow. Follow the instructions shown by WireLoft and authorize the connection on Daily Wire's own site.
 
 WireLoft does **not** ask for your Daily Wire password.
 

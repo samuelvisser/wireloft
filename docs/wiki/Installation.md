@@ -34,7 +34,7 @@ services:
       # - WL_ADMIN_AUTH__PASSWORD=change-me
 ```
 
-After WireLoft opens, continue with [[First-Run-Setup]]. For the supplied Docker layout, also confirm **Settings → Downloads → Download root** is set to `/downloads` so downloaded media uses the persistent media mount.
+After WireLoft opens, continue with [[First-Run-Setup]]. 
 
 ## Persistent storage
 
@@ -58,7 +58,8 @@ If you enable temporary download mode, also review **Temporary download folder**
 
 ## Set your timezone
 
-Change `TZ` to your local IANA timezone, for example:
+Change `TZ` to your local [IANA](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List)
+timezone, for example:
 
 ```yaml
 environment:
@@ -88,7 +89,7 @@ This password protects the WireLoft web interface. Private RSS feeds use their o
 
 For normal use, configure WireLoft from **Settings** in the web interface. Changes are saved to the persistent `config.yml` under `/config`.
 
-Environment variables can override settings when you need deployment-level control. If a setting is controlled by an environment variable, the Settings page shows that override and does not pretend a saved UI value can replace it.
+Environment variables can override settings when you need deployment-level control. If a setting is controlled by an environment variable, the Settings page shows that override and explains the UI cannot overwrite it.
 
 See [[Settings]] for the full reference.
 
