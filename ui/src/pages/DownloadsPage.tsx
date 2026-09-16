@@ -147,6 +147,14 @@ const _RETRYABLE_STATUSES = new Set([
     'corrupted',
 ])
 
+function isRetryableDownload(row: MediaDownloadViewRead): boolean {
+    return _RETRYABLE_STATUSES.has(String(row.downloadStatus))
+}
+
+function hasRetryableError(row: MediaDownloadViewRead): boolean {
+    return Boolean(row.errorMessage?.trim()) && isRetryableDownload(row)
+}
+
 export default function DownloadsPage() {
     const navigate = useNavigate()
     const qc = useQueryClient()
@@ -176,8 +184,8 @@ export default function DownloadsPage() {
         () => downloads?.filter((row) => statusFilter.has(String(row.downloadStatus))),
         [downloads, statusFilter],
     )
-    const erroredDownloads = useMemo(
-        () => downloads?.filter((row) => String(row.downloadStatus) === 'error') ?? [],
+    const retryableErrorDownloads = useMemo(
+        () => downloads?.filter(hasRetryableError) ?? [],
         [downloads],
     )
     const retryAllPercent = retryAllProgress && retryAllProgress.total > 0
@@ -239,9 +247,9 @@ export default function DownloadsPage() {
     }
 
     const retryAll = async () => {
-        if (retryAllProgress !== null || erroredDownloads.length === 0) return
+        if (retryAllProgress !== null || retryableErrorDownloads.length === 0) return
 
-        const downloadsToRetry = [...erroredDownloads]
+        const downloadsToRetry = [...retryableErrorDownloads]
         const controller = new AbortController()
         retryAllAbortRef.current = controller
         retryAllCancelRequestedRef.current = false
@@ -369,17 +377,17 @@ export default function DownloadsPage() {
                         Deleting a row only removes the record, never the downloaded file unless the download had never fully finished.
                     </p>
                 </PageSubtitle>
-                {(retryAllProgress !== null || erroredDownloads.length > 0) && (
+                {(retryAllProgress !== null || retryableErrorDownloads.length > 0) && (
                     <ProgressButton
                         definition={frontendOperationDefinitions['media.download']}
                         label="Retry all"
                         icon={['fas', 'rotate-right']}
                         onClick={() => void retryAll()}
-                        disabled={erroredDownloads.length === 0}
+                        disabled={retryableErrorDownloads.length === 0}
                         active={retryAllProgress !== null}
                         progress={retryAllPercent}
                         activeLabel={`${retryAllPercent}%`}
-                        ariaLabel="Retry all errored downloads"
+                        ariaLabel="Retry all retryable downloads with errors"
                         onCancel={retryAllProgress !== null ? cancelRetryAll : undefined}
                         cancelLabel="Cancel retry all"
                     />
@@ -469,7 +477,7 @@ export default function DownloadsPage() {
                                 text: 'Prioritize',
                                 classes: 'btn',
                             })
-                        } else if (_RETRYABLE_STATUSES.has(status)) {
+                        } else if (isRetryableDownload(row)) {
                             actions.push({
                                 onClick: () => void retry(row),
                                 icon: ['fas', 'rotate-right'],
