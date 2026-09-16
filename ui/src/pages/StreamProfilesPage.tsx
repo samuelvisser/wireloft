@@ -1,19 +1,53 @@
 import {useCallback, useRef} from 'react'
 import {useNavigate} from 'react-router-dom'
+import {useQueryClient} from '@tanstack/react-query'
+import {toast} from 'react-hot-toast'
 import {useStreamProfilesView} from '../lib/queries'
 import {StreamProfileReadView} from '../types/schemas/stream_profile_base'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import {PreferredFormatReg} from "../types/local_media_profile";
 import PageSubtitle from "../components/common/PageSubtitle";
+import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
+import {RssStreamProfileUpdateSchema} from '../types/schemas/rss_stream_profile'
 
 export default function StreamProfilesPage() {
     const navigate = useNavigate()
+    const queryClient = useQueryClient()
     const onAdd = useCallback(() => navigate('/add-stream-profile'), [navigate])
 
     const {data: profiles, isLoading, error} = useStreamProfilesView()
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
+
+    const setProfileEnabled = useCallback(async (profile: StreamProfileReadView, enableProfile: boolean) => {
+        try {
+            const body = RssStreamProfileUpdateSchema.parse({...profile.streamProfileImpl, enableProfile})
+            const response = await fetch(`${(window as any).appConfig.API_URL}/rss-stream-profiles/${profile.id}`, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'include',
+                body: JSON.stringify(body),
+            })
+            if (!response.ok) throw new Error(`Failed to update stream profile (${response.status})`)
+
+            queryClient.setQueryData<StreamProfileReadView[]>(['streamProfilesView'], (current) => (
+                current?.map((item) => (
+                    item.id === profile.id && item.type === profile.type
+                        ? {...item, enableProfile}
+                        : item
+                ))
+            ))
+
+            await Promise.allSettled([
+                queryClient.invalidateQueries({queryKey: ['streamProfilesView']}),
+                queryClient.invalidateQueries({queryKey: ['rssStreamProfiles']}),
+            ])
+        } catch (updateError) {
+            toast.error(`Failed to ${enableProfile ? 'enable' : 'disable'} stream profile`)
+            throw updateError
+        }
+    }, [queryClient])
 
     const columns: Column<StreamProfileReadView>[] = [
         {
@@ -41,7 +75,13 @@ export default function StreamProfilesPage() {
         },
         {
             header: 'Enabled',
-            accessor: (p) => (p.enableProfile ? '✓' : '✕'),
+            cell: (p) => (
+                <ProfileEnabledSwitch
+                    checked={p.enableProfile}
+                    ariaLabel={`Stream profile for ${p.showTitle}`}
+                    onChange={(checked) => setProfileEnabled(p, checked)}
+                />
+            ),
             align: 'center',
         },
     ]
