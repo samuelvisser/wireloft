@@ -24,6 +24,7 @@ from task_manager.scheduler.db import TaskDefinition, TaskRun
 from task_manager.scheduler.types import ResourceType
 from task_manager.tasks.media_download_operations import (
     get_active_media_download_operation,
+    get_media_download_queue_positions,
     prepare_media_download_artifact,
 )
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
@@ -93,6 +94,7 @@ def get_media_downloads_view(
 
     rows = list(s.execute(stmt))
     latest_runs = _latest_download_runs(s, [download.id for download, _ in rows])
+    queue_positions = get_media_download_queue_positions(s)
 
     views: list[MediaDownloadAPIReadView] = []
     for download, profile in rows:
@@ -123,6 +125,7 @@ def get_media_downloads_view(
             local_media_profile_name=profile.name,
             preferred_format=profile.preferred_format,
             downloaded_publish_status=getattr(download, "downloaded_publish_status", None),
+            queue_position=queue_positions.get(download.id),
             latest_task_status=(
                 latest_run.status.value if latest_run is not None and hasattr(latest_run.status, "value")
                 else latest_run.status if latest_run is not None else None

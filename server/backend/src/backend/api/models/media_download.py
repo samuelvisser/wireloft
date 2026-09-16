@@ -64,6 +64,10 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
     preferred_format: Optional[str]
     downloaded_publish_status: Optional[str]
 
+    # Position among queued downloads that have not claimed a concurrency slot.
+    # None means this download is not waiting in the dispatcher queue.
+    queue_position: Optional[int]
+
     # Generic facts from the latest canonical download TaskRun. Full history is
     # served by /tasks/ledger rather than a MediaDownload-specific audit table.
     latest_task_status: Optional[str]

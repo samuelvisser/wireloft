@@ -59,6 +59,7 @@ export const MediaDownloadViewReadSchema = MediaDownloadReadSchema.extend({
     localMediaProfileName: z.string().nullable(),
     preferredFormat: z.string().nullable(),
     downloadedPublishStatus: z.string().nullable(),
+    queuePosition: z.int().positive().nullable().optional(),
     latestTaskStatus: z.string().nullable(),
     latestTaskError: z.string().nullable(),
     latestTaskIsRedownload: z.boolean().nullable(),

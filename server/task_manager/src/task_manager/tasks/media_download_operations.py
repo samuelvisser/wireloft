@@ -301,6 +301,50 @@ def _reserve_target_dispatch(
     return True
 
 
+def _ordered_queued_media_download_operations(
+    session: Session,
+    *,
+    limit: int | None = None,
+) -> list[TaskOperation]:
+    """Return queued downloads in the exact order used by the dispatcher."""
+    stmt = (
+        select(TaskOperation)
+        .where(
+            TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
+            TaskOperation.status == OperationStatus.QUEUED.value,
+        )
+        .order_by(
+            case((TaskOperation.prioritized_at.is_not(None), 0), else_=1),
+            TaskOperation.prioritized_at.asc(),
+            TaskOperation.created_at.asc(),
+            TaskOperation.id.asc(),
+        )
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    return list(session.scalars(stmt))
+
+
+def get_media_download_queue_positions(session: Session) -> dict[int, int]:
+    """Return 1-based positions for downloads still waiting to claim a slot.
+
+    Operations that already own a SCHEDULED/active TaskRun are omitted because
+    they are no longer candidates for the next dispatcher slot, even if their
+    aggregate operation is briefly still presented as QUEUED.
+    """
+    positions: dict[int, int] = {}
+    for operation in _ordered_queued_media_download_operations(session):
+        if not operation.targets:
+            continue
+        target = operation.targets[0]
+        if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
+            continue
+        if operation.resource_id is None:
+            continue
+        positions[int(operation.resource_id)] = len(positions) + 1
+    return positions
+
+
 def dispatch_queued_media_download_operations(
     session: Session,
     *,
@@ -316,21 +360,9 @@ def dispatch_queued_media_download_operations(
     # a committed SCHEDULED reservation. Those operations still count as active
     # in the UI but should not prevent a later truly-unreserved operation from
     # consuming another free slot.
-    operations = list(
-        session.scalars(
-            select(TaskOperation)
-            .where(
-                TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
-                TaskOperation.status == OperationStatus.QUEUED.value,
-            )
-            .order_by(
-                case((TaskOperation.prioritized_at.is_not(None), 0), else_=1),
-                TaskOperation.prioritized_at.asc(),
-                TaskOperation.created_at.asc(),
-                TaskOperation.id.asc(),
-            )
-            .limit(max(25, budget * 4))
-        )
+    operations = _ordered_queued_media_download_operations(
+        session,
+        limit=max(25, budget * 4),
     )
 
     dispatched = 0

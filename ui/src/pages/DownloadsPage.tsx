@@ -149,12 +149,40 @@ const _RETRYABLE_STATUSES = new Set([
     'corrupted',
 ])
 
+const _ACTIVE_SORT_STATUSES = new Set(['downloading', 'local_processing'])
+
 function isRetryableDownload(row: MediaDownloadViewRead): boolean {
     return _RETRYABLE_STATUSES.has(String(row.downloadStatus))
 }
 
 function hasRetryableError(row: MediaDownloadViewRead): boolean {
     return Boolean(row.errorMessage?.trim()) && isRetryableDownload(row)
+}
+
+function defaultDownloadOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
+    const leftStatus = String(left.downloadStatus)
+    const rightStatus = String(right.downloadStatus)
+    const leftActive = _ACTIVE_SORT_STATUSES.has(leftStatus)
+    const rightActive = _ACTIVE_SORT_STATUSES.has(rightStatus)
+    if (leftActive !== rightActive) return leftActive ? -1 : 1
+
+    const leftQueued = leftStatus === 'pending'
+    const rightQueued = rightStatus === 'pending'
+    if (leftQueued !== rightQueued) return leftQueued ? -1 : 1
+
+    if (leftQueued && rightQueued) {
+        const leftPosition = left.queuePosition
+        const rightPosition = right.queuePosition
+
+        // A QUEUED operation with no queue position has already claimed a download
+        // slot and is waiting for its worker, so it is ahead of the dispatcher queue.
+        if (leftPosition == null && rightPosition != null) return -1
+        if (leftPosition != null && rightPosition == null) return 1
+        if (leftPosition != null && rightPosition != null) return leftPosition - rightPosition
+    }
+
+    // Preserve the existing newest-first order within all other groups.
+    return 0
 }
 
 export default function DownloadsPage() {
@@ -183,7 +211,9 @@ export default function DownloadsPage() {
     }
 
     const filteredDownloads = useMemo(
-        () => downloads?.filter((row) => statusFilter.has(String(row.downloadStatus))),
+        () => downloads
+            ?.filter((row) => statusFilter.has(String(row.downloadStatus)))
+            .sort(defaultDownloadOrder),
         [downloads, statusFilter],
     )
     const retryableErrorDownloads = useMemo(
