@@ -2,8 +2,21 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
-    margin: 10px 0 4px;
+    gap: 9px;
+    margin: 10px 0 12px;
+    padding: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.26);
+    border-radius: 12px;
+    background: rgba(148, 163, 184, 0.06);
+}
+
+.downloads-action-row::before {
+    content: "Actions";
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
 .downloads-action-row .progress-button-root.downloads-action-danger:not(.is-progress) .progress-button {
@@ -17,7 +30,18 @@
     border-color: #dc2626;
 }
 
+@media (prefers-color-scheme: dark) {
+    .downloads-action-row {
+        background: rgba(255, 255, 255, 0.035);
+        border-color: rgba(148, 163, 184, 0.18);
+    }
+}
+
 @media (max-width: 640px) {
+    .downloads-action-row::before {
+        flex-basis: 100%;
+    }
+
     .downloads-action-row .progress-button-root {
         flex: 1 1 auto;
     }
