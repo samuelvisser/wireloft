@@ -84,6 +84,15 @@ function invalidateShowFiles(
   invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
 }
 
+function invalidateShowDownloadDeletion(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateShowFiles(queryClient, operation, invalidations)
+  invalidations.push(queryClient.invalidateQueries({queryKey: ['downloadProfilesView']}))
+}
+
 function invalidateEpisode(
   queryClient: QueryClient,
   operation: TaskOperationRead,
@@ -235,15 +244,19 @@ export const frontendOperationDefinitions = {
   },
   'show.delete_downloads': {
     label: 'Delete downloads',
-    invalidate: invalidateShowFiles,
+    invalidate: invalidateShowDownloadDeletion,
     success: (operation) => {
       const showTitle = contextString(operation, 'show_title') || operation.title
       const files = resultNumber(operation, 'episode_files') ?? 0
       const profiles = resultNumber(operation, 'local_media_profiles')
+      const disabledProfiles = resultNumber(operation, 'download_profiles_disabled') ?? 0
       const profileDetail = profiles === undefined
         ? ''
         : ` using ${profiles} ${plural(profiles, 'Local Media Profile')}`
-      return `Deleted downloads for ${showTitle}: ${files} episode ${plural(files, 'file')} deleted${profileDetail}`
+      const disabledDetail = disabledProfiles > 0
+        ? `; ${disabledProfiles} ${plural(disabledProfiles, 'Download Profile')} disabled`
+        : ''
+      return `Deleted downloads for ${showTitle}: ${files} episode ${plural(files, 'file')} deleted${profileDetail}${disabledDetail}`
     },
   },
   'show.redownload_episodes': {

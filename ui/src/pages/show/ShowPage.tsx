@@ -127,7 +127,7 @@ export default function ShowPage() {
     const profiles = new Map<number, {id: number; name: string; preferredFormat: string | null}>()
     for (const download of downloads ?? []) {
       if (download.type !== 'episode' || download.showSlug !== id) continue
-      if (download.artifactStatus === 'absent' && download.automaticRetrySuppressed) continue
+      if (download.artifactStatus === 'absent') continue
       if (profiles.has(download.localMediaProfileId)) continue
       profiles.set(download.localMediaProfileId, {
         id: download.localMediaProfileId,
@@ -793,8 +793,7 @@ export default function ShowPage() {
       >
         {maintenanceIsDelete ? (
           <p>
-            Delete downloaded episode files in "{show.title}". The episodes and Local Media Profiles remain in WireLoft,
-            and the deleted files will not be downloaded again automatically.
+            Delete downloaded episode files in "{show.title}". Before deletion, WireLoft will disable every Download Profile attached to this show, even if deletion is scoped to one Local Media Profile. Re-enable a Download Profile whenever you want WireLoft to download its eligible episodes again. The profiles themselves are not deleted.
           </p>
         ) : (
           <p>

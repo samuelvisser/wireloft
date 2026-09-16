@@ -55,11 +55,7 @@ def _prepare_redownloads(
             episode=episode,
         ))
 
-        delete_episode_download_artifact(
-            s,
-            download,
-            suppress_automatic_retry=False,
-        )
+        delete_episode_download_artifact(s, download)
         download.file_path = target_path
         s.flush()
 

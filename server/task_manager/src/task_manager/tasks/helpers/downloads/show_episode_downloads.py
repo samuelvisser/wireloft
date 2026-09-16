@@ -129,8 +129,6 @@ def cancel_active_download_attempts(
 def delete_episode_download_artifact(
         s: Session,
         download: EpisodeMediaDownload,
-        *,
-        suppress_automatic_retry: bool,
 ) -> None:
     """Remove one episode artifact through the canonical MediaDownload lifecycle."""
     if download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
@@ -140,5 +138,4 @@ def delete_episode_download_artifact(
             release_read_transaction=True,
         )
     prepare_media_download_artifact(s, download)
-    download.automatic_retry_suppressed = suppress_automatic_retry
     s.flush()

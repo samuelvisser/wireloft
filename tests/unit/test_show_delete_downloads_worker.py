@@ -21,9 +21,15 @@ def _session() -> tuple[Session, object]:
 
 
 def _library(session: Session, tmp_path: Path):
-    from backend.db.models import Episode, LocalMediaProfile, Season, Show
+    from backend.db.models import (
+        Episode,
+        LocalMediaProfile,
+        PodcastDownloadProfile,
+        Season,
+        Show,
+    )
     from backend.db.models.media_download import EpisodeMediaDownload
-    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
@@ -76,6 +82,26 @@ def _library(session: Session, tmp_path: Path):
     session.add_all([show, season, episode, audio_profile, video_profile, unused_profile])
     session.flush()
 
+    def add_download_profile(local_media_profile):
+        profile = PodcastDownloadProfile(
+            show_id=show.id,
+            local_media_profile_id=local_media_profile.id,
+            enable_profile=True,
+            ep_id_type_list=[EpIdType.EP.value],
+            download_with_countdown=False,
+            redownload_final=False,
+            download_days_in_past=0,
+            download_episode_count=0,
+            delete_older_episodes=False,
+        )
+        session.add(profile)
+        session.flush()
+        return profile
+
+    audio_download_profile = add_download_profile(audio_profile)
+    video_download_profile = add_download_profile(video_profile)
+    unused_download_profile = add_download_profile(unused_profile)
+
     audio_path = tmp_path / "old" / "episode-1.m4a"
     video_path = tmp_path / "old" / "episode-1.mp4"
     audio_path.parent.mkdir(parents=True)
@@ -86,6 +112,7 @@ def _library(session: Session, tmp_path: Path):
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=audio_profile.id,
+        download_profile_id=audio_download_profile.id,
         artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
         file_path=str(audio_path),
         downloaded_bytes=5,
@@ -97,6 +124,7 @@ def _library(session: Session, tmp_path: Path):
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=video_profile.id,
+        download_profile_id=video_download_profile.id,
         artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
         file_path=str(video_path),
         downloaded_bytes=5,
@@ -110,6 +138,7 @@ def _library(session: Session, tmp_path: Path):
         show,
         audio_profile,
         unused_profile,
+        (audio_download_profile, video_download_profile, unused_download_profile),
         audio_download,
         video_download,
         audio_path,
@@ -127,6 +156,7 @@ def test_show_delete_downloads_request_uses_existing_local_media_profiles(tmp_pa
             show,
             audio_profile,
             unused_profile,
+            _download_profiles,
             _audio_download,
             _video_download,
             _audio_path,
@@ -169,7 +199,8 @@ def test_show_delete_downloads_request_uses_existing_local_media_profiles(tmp_pa
         engine.dispose()
 
 
-def test_delete_show_downloads_worker_deletes_selected_artifacts_and_suppresses_retry(tmp_path):
+def test_delete_show_downloads_worker_disables_all_profiles_and_leaves_deleted_rows_retryable(tmp_path):
+    from backend.db.models import DownloadProfileBase
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from task_manager.tasks.workers.delete_show_downloads_worker.service import (
@@ -182,11 +213,17 @@ def test_delete_show_downloads_worker_deletes_selected_artifacts_and_suppresses_
             show,
             audio_profile,
             _unused_profile,
+            download_profiles,
             audio_download,
             video_download,
             audio_path,
             video_path,
         ) = _library(session, tmp_path)
+
+        # A previous per-download cancellation must not survive this show-level
+        # deletion. Re-enabling its Download Profile should be enough to arm it.
+        audio_download.automatic_retry_suppressed = True
+        session.commit()
 
         result = run_delete_show_downloads_worker(
             session,
@@ -196,6 +233,7 @@ def test_delete_show_downloads_worker_deletes_selected_artifacts_and_suppresses_
 
         assert result["episode_files"] == 1
         assert result["local_media_profiles"] == 1
+        assert result["download_profiles_disabled"] == 3
         assert not audio_path.exists()
         assert video_path.exists()
 
@@ -204,14 +242,19 @@ def test_delete_show_downloads_worker_deletes_selected_artifacts_and_suppresses_
         untouched = session.get(EpisodeMediaDownload, video_download.id)
         assert deleted is not None
         assert deleted.artifact_status == MediaDownloadArtifactStatus.ABSENT.value
-        assert deleted.automatic_retry_suppressed is True
+        assert deleted.automatic_retry_suppressed is False
         assert deleted.downloaded_bytes is None
         assert deleted.format_downloaded is None
         assert deleted.downloaded_at is None
         assert deleted.downloaded_publish_status is None
         assert untouched is not None
         assert untouched.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
-        assert untouched.automatic_retry_suppressed is False
+
+        disabled_profiles = [
+            session.get(DownloadProfileBase, profile.id)
+            for profile in download_profiles
+        ]
+        assert all(profile is not None and profile.enable_profile is False for profile in disabled_profiles)
     finally:
         session.close()
         engine.dispose()
