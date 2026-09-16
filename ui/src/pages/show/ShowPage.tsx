@@ -25,8 +25,6 @@ function preferredFormatLabel(value?: string | null) {
   return label === 'Audio Only' ? 'Audio' : label
 }
 
-type DownloadMaintenanceAction = 'delete' | 'redownload'
-
 const EPISODE_SKELETON_COUNT = 12
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
 const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
@@ -76,9 +74,12 @@ export default function ShowPage() {
   const [fileRenameConfirm, setFileRenameConfirm] = useState(false)
   const [fileRenameStarting, setFileRenameStarting] = useState(false)
   const [fileRenameLocalMediaProfileId, setFileRenameLocalMediaProfileId] = useState('')
-  const [downloadMaintenanceConfirm, setDownloadMaintenanceConfirm] = useState<DownloadMaintenanceAction | null>(null)
-  const [downloadMaintenanceStarting, setDownloadMaintenanceStarting] = useState<DownloadMaintenanceAction | null>(null)
-  const [downloadMaintenanceLocalMediaProfileId, setDownloadMaintenanceLocalMediaProfileId] = useState('')
+  const [deleteDownloadsConfirm, setDeleteDownloadsConfirm] = useState(false)
+  const [deleteDownloadsStarting, setDeleteDownloadsStarting] = useState(false)
+  const [deleteDownloadsLocalMediaProfileId, setDeleteDownloadsLocalMediaProfileId] = useState('')
+  const [redownloadConfirm, setRedownloadConfirm] = useState(false)
+  const [redownloadStarting, setRedownloadStarting] = useState(false)
+  const [redownloadLocalMediaProfileId, setRedownloadLocalMediaProfileId] = useState('')
   const [syncLogOpen, setSyncLogOpen] = useState(false)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
@@ -94,8 +95,8 @@ export default function ShowPage() {
   const syncBusy = syncStarting || manualSyncing
   const metadataRefreshBusy = metadataRefreshStarting || metadataRefreshOperation !== undefined
   const fileRenameBusy = fileRenameStarting || fileRenameOperation !== undefined
-  const deleteDownloadsBusy = downloadMaintenanceStarting === 'delete' || deleteDownloadsOperation !== undefined
-  const redownloadBusy = downloadMaintenanceStarting === 'redownload' || redownloadOperation !== undefined
+  const deleteDownloadsBusy = deleteDownloadsStarting || deleteDownloadsOperation !== undefined
+  const redownloadBusy = redownloadStarting || redownloadOperation !== undefined
   const downloadMaintenanceBusy = deleteDownloadsBusy || redownloadBusy
 
   useEffect(() => {
@@ -237,7 +238,7 @@ export default function ShowPage() {
         ? fileRenameOperation.message || OPERATION_WAITING_MESSAGE
         : `A File Rename operation is running for ${show.title}.`
       : downloadStateDisabledReason
-  const deleteDownloadsDisabledReason = downloadMaintenanceStarting !== null
+  const deleteDownloadsDisabledReason = deleteDownloadsStarting || redownloadStarting
     ? OPERATION_STARTING_MESSAGE
     : deleteDownloadsOperation
       ? deleteDownloadsOperation.status === 'WAITING'
@@ -246,7 +247,7 @@ export default function ShowPage() {
       : redownloadOperation
         ? `A delete and re-download operation is running for ${show.title}.`
         : downloadStateDisabledReason
-  const redownloadDisabledReason = downloadMaintenanceStarting !== null
+  const redownloadDisabledReason = deleteDownloadsStarting || redownloadStarting
     ? OPERATION_STARTING_MESSAGE
     : redownloadOperation
       ? redownloadOperation.status === 'WAITING'
@@ -386,62 +387,91 @@ export default function ShowPage() {
     }
   }
 
-  const openDownloadMaintenanceConfirm = (action: DownloadMaintenanceAction) => {
+  const getInitialDownloadMaintenanceLocalMediaProfileId = () => {
     if (downloadStateUnknown) {
       toast('WireLoft is still checking for downloaded episodes in this show')
-      return
+      return null
     }
     if (downloadStateFailed) {
       toast.error('Could not determine whether this show has downloaded episodes')
-      return
+      return null
     }
     if (!downloadLocalMediaProfiles.length) {
       toast(`There are no downloaded episodes in ${show.title}`)
-      return
+      return null
     }
-    setDownloadMaintenanceLocalMediaProfileId(
-      downloadLocalMediaProfiles.length > 1 ? 'all' : String(downloadLocalMediaProfiles[0].id),
-    )
-    setDownloadMaintenanceConfirm(action)
+    return downloadLocalMediaProfiles.length > 1
+      ? 'all'
+      : String(downloadLocalMediaProfiles[0].id)
   }
 
-  const runDownloadMaintenance = async () => {
-    const action = downloadMaintenanceConfirm
-    if (!action || downloadMaintenanceBusy || !downloadMaintenanceLocalMediaProfileId) return
-    setDownloadMaintenanceStarting(action)
+  const openDeleteDownloadsConfirm = () => {
+    const localMediaProfileId = getInitialDownloadMaintenanceLocalMediaProfileId()
+    if (!localMediaProfileId) return
+    setDeleteDownloadsLocalMediaProfileId(localMediaProfileId)
+    setDeleteDownloadsConfirm(true)
+  }
+
+  const openRedownloadConfirm = () => {
+    const localMediaProfileId = getInitialDownloadMaintenanceLocalMediaProfileId()
+    if (!localMediaProfileId) return
+    setRedownloadLocalMediaProfileId(localMediaProfileId)
+    setRedownloadConfirm(true)
+  }
+
+  const deleteDownloads = async () => {
+    if (downloadMaintenanceBusy || !deleteDownloadsLocalMediaProfileId) return
+    setDeleteDownloadsStarting(true)
     try {
       const base = (window as any).appConfig?.API_URL || '/api'
-      const endpoint = action === 'delete' ? 'delete-downloads' : 'redownload-episodes'
-      const result = await startOperation(`${base}/shows/${encodeURIComponent(id)}/${endpoint}`, {
+      const result = await startOperation(`${base}/shows/${encodeURIComponent(id)}/delete-downloads`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-          localMediaProfileId: downloadMaintenanceLocalMediaProfileId === 'all'
+          localMediaProfileId: deleteDownloadsLocalMediaProfileId === 'all'
             ? null
-            : Number(downloadMaintenanceLocalMediaProfileId),
+            : Number(deleteDownloadsLocalMediaProfileId),
         }),
       })
       const profileCount = typeof result?.localMediaProfilesQueued === 'number'
         ? result.localMediaProfilesQueued
-        : (downloadMaintenanceLocalMediaProfileId === 'all' ? downloadLocalMediaProfiles.length : 1)
-      setDownloadMaintenanceConfirm(null)
-      if (action === 'delete') {
-        toast.success(
-          `Download deletion started for ${show.title} using ${profileCount} ${profileCount === 1 ? 'Local Media Profile' : 'Local Media Profiles'}`,
-        )
-      } else {
-        toast.success(
-          `Re-download started for ${show.title} using ${profileCount} ${profileCount === 1 ? 'Local Media Profile' : 'Local Media Profiles'}`,
-        )
-      }
-    } catch {
-      toast.error(
-        action === 'delete'
-          ? `Could not start download deletion for ${show.title}`
-          : `Could not start re-download for ${show.title}`,
+        : (deleteDownloadsLocalMediaProfileId === 'all' ? downloadLocalMediaProfiles.length : 1)
+      setDeleteDownloadsConfirm(false)
+      toast.success(
+        `Download deletion started for ${show.title} using ${profileCount} ${profileCount === 1 ? 'Local Media Profile' : 'Local Media Profiles'}`,
       )
+    } catch {
+      toast.error(`Could not start download deletion for ${show.title}`)
     } finally {
-      setDownloadMaintenanceStarting(null)
+      setDeleteDownloadsStarting(false)
+    }
+  }
+
+  const redownloadEpisodes = async () => {
+    if (downloadMaintenanceBusy || !redownloadLocalMediaProfileId) return
+    setRedownloadStarting(true)
+    try {
+      const base = (window as any).appConfig?.API_URL || '/api'
+      const result = await startOperation(`${base}/shows/${encodeURIComponent(id)}/redownload-episodes`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          localMediaProfileId: redownloadLocalMediaProfileId === 'all'
+            ? null
+            : Number(redownloadLocalMediaProfileId),
+        }),
+      })
+      const profileCount = typeof result?.localMediaProfilesQueued === 'number'
+        ? result.localMediaProfilesQueued
+        : (redownloadLocalMediaProfileId === 'all' ? downloadLocalMediaProfiles.length : 1)
+      setRedownloadConfirm(false)
+      toast.success(
+        `Re-download started for ${show.title} using ${profileCount} ${profileCount === 1 ? 'Local Media Profile' : 'Local Media Profiles'}`,
+      )
+    } catch {
+      toast.error(`Could not start re-download for ${show.title}`)
+    } finally {
+      setRedownloadStarting(false)
     }
   }
 
@@ -487,9 +517,6 @@ export default function ShowPage() {
     ])
     navigate('/library?type=shows')
   }
-
-  const maintenanceIsDelete = downloadMaintenanceConfirm === 'delete'
-  const maintenanceDialogBusy = downloadMaintenanceStarting !== null
 
   return (
     <section className="view show-view" aria-labelledby="show-title">
@@ -553,7 +580,7 @@ export default function ShowPage() {
                   disabledReason: deleteDownloadsDisabledReason,
                   progress: deleteDownloadsOperation ? (deleteDownloadsOperation.progress ?? 0) : undefined,
                   controls: operationControls(deleteDownloadsOperation?.id, 'download deletion'),
-                  onSelect: () => openDownloadMaintenanceConfirm('delete'),
+                  onSelect: openDeleteDownloadsConfirm,
                 },
                 {
                   label: 'Delete and re-download all episodes',
@@ -563,7 +590,7 @@ export default function ShowPage() {
                   disabledReason: redownloadDisabledReason,
                   progress: redownloadOperation ? (redownloadOperation.progress ?? 0) : undefined,
                   controls: operationControls(redownloadOperation?.id, 're-download'),
-                  onSelect: () => openDownloadMaintenanceConfirm('redownload'),
+                  onSelect: openRedownloadConfirm,
                 },
                 {
                   label: 'Create download profile',
@@ -771,44 +798,73 @@ export default function ShowPage() {
       </ConfirmDialog>
 
       <ConfirmDialog
-        open={downloadMaintenanceConfirm !== null}
-        title={maintenanceIsDelete ? 'Delete all downloads' : 'Delete and re-download all episodes'}
+        open={deleteDownloadsConfirm}
+        title="Delete all downloads"
         onDismiss={() => {
-          if (!maintenanceDialogBusy) setDownloadMaintenanceConfirm(null)
+          if (!deleteDownloadsStarting) setDeleteDownloadsConfirm(false)
         }}
-        icon={maintenanceIsDelete ? ['fas', 'trash'] : ['fas', 'arrows-rotate']}
+        icon={['fas', 'trash']}
         iconTone="danger"
-        dismissOnOverlayClick={!maintenanceDialogBusy}
-        cancelButton={{disabled: maintenanceDialogBusy}}
+        dismissOnOverlayClick={!deleteDownloadsStarting}
+        cancelButton={{disabled: deleteDownloadsStarting}}
         confirmButton={{
-          label: maintenanceDialogBusy
-            ? 'Starting…'
-            : maintenanceIsDelete
-              ? 'Delete downloads'
-              : 'Delete and re-download',
-          onClick: runDownloadMaintenance,
+          label: deleteDownloadsStarting ? 'Starting…' : 'Delete downloads',
+          onClick: deleteDownloads,
           className: 'btn btn-danger',
-          disabled: maintenanceDialogBusy || !downloadMaintenanceLocalMediaProfileId,
+          disabled: downloadMaintenanceBusy || !deleteDownloadsLocalMediaProfileId,
         }}
       >
-        {maintenanceIsDelete ? (
-          <p>
-            Delete downloaded episode files in "{show.title}". Before deletion, WireLoft will disable every Download Profile attached to this show, even if deletion is scoped to one Local Media Profile. Re-enable a Download Profile whenever you want WireLoft to download its eligible episodes again. The profiles themselves are not deleted.
-          </p>
-        ) : (
-          <p>
-            Delete existing episode files in "{show.title}" and re-download them.
-            This can take a long time, use significant bandwidth, and is usually not needed.
-          </p>
-        )}
+        <p>
+          Delete downloaded episode files in "{show.title}". Before deletion, WireLoft will disable every Download Profile attached to this show, even if deletion is scoped to one Local Media Profile. Re-enable a Download Profile whenever you want WireLoft to download its eligible episodes again. The profiles themselves are not deleted.
+        </p>
         <div className="form-row">
-          <label htmlFor="download-maintenance-profile">Local Media Profile</label>
+          <label htmlFor="delete-downloads-profile">Local Media Profile</label>
           <select
-            id="download-maintenance-profile"
+            id="delete-downloads-profile"
             className="input"
-            value={downloadMaintenanceLocalMediaProfileId}
-            disabled={maintenanceDialogBusy}
-            onChange={(event) => setDownloadMaintenanceLocalMediaProfileId(event.target.value)}
+            value={deleteDownloadsLocalMediaProfileId}
+            disabled={deleteDownloadsStarting}
+            onChange={(event) => setDeleteDownloadsLocalMediaProfileId(event.target.value)}
+          >
+            {downloadLocalMediaProfiles.length > 1 && <option value="all">All Local Media Profiles</option>}
+            {downloadLocalMediaProfiles.map((profile) => (
+              <option key={profile.id} value={String(profile.id)}>
+                {`${profile.name} · ${preferredFormatLabel(profile.preferredFormat)}`}
+              </option>
+            ))}
+          </select>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={redownloadConfirm}
+        title="Delete and re-download all episodes"
+        onDismiss={() => {
+          if (!redownloadStarting) setRedownloadConfirm(false)
+        }}
+        icon={['fas', 'arrows-rotate']}
+        iconTone="danger"
+        dismissOnOverlayClick={!redownloadStarting}
+        cancelButton={{disabled: redownloadStarting}}
+        confirmButton={{
+          label: redownloadStarting ? 'Starting…' : 'Delete and re-download',
+          onClick: redownloadEpisodes,
+          className: 'btn btn-danger',
+          disabled: downloadMaintenanceBusy || !redownloadLocalMediaProfileId,
+        }}
+      >
+        <p>
+          Delete existing episode files in "{show.title}" and re-download them.
+          This can take a long time, use significant bandwidth, and is usually not needed.
+        </p>
+        <div className="form-row">
+          <label htmlFor="redownload-profile">Local Media Profile</label>
+          <select
+            id="redownload-profile"
+            className="input"
+            value={redownloadLocalMediaProfileId}
+            disabled={redownloadStarting}
+            onChange={(event) => setRedownloadLocalMediaProfileId(event.target.value)}
           >
             {downloadLocalMediaProfiles.length > 1 && <option value="all">All Local Media Profiles</option>}
             {downloadLocalMediaProfiles.map((profile) => (
