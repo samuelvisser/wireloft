@@ -23,6 +23,8 @@ export function statusIcon(status: string) {
         case 'downloaded':
         case 'redownloaded':
             return ['fas', 'circle-check'] as const
+        case 'not_downloaded':
+            return ['fas', 'floppy-disk-circle-xmark'] as const
         case 'pending':
             return ['fas', 'clock'] as const
         case 'downloading':
@@ -50,6 +52,8 @@ export function statusLabel(status: string) {
         case 'downloaded':
         case 'redownloaded':
             return 'Downloaded'
+        case 'not_downloaded':
+            return 'Not downloaded'
         case 'pending':
             return 'Queued'
         case 'downloading':
