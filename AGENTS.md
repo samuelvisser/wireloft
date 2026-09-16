@@ -47,6 +47,15 @@ default changes dynamically based on certain conditions.
 
 Make sure to use this structure for any form adjustments and especially any new forms.
 
+## Wiki
+When making big changes, you are allowed to update the WireLoft Wiki, too. 
+However, keep in mind that the Wiki’s goal is user-facing: it should tell users things 
+they might want to know for using WireLoft as a product. 
+The wiki is not for documenting exact development implementations. 
+It should also be easy to understand for a moderately tech-literate audience.
+
+The wiki should document the big picture for WireLoft: code comments are for explaining 
+programming implementation details.
 
 ## Test your work
 Before you push your branch, please run all appropriate tests to verify your work.  

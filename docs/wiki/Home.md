@@ -2,11 +2,11 @@
 
 WireLoft is a self-hosted media manager for Daily Wire shows, podcasts, series, and movies. It can keep a local library of Daily Wire content, download media to your own storage, and expose shows through private RSS feeds.
 
-This wiki documents **WireLoft 1.1** from a user's point of view. It focuses on what features do, how to configure them, and how to solve common problems. Developer implementation details are intentionally left out unless they affect how you operate WireLoft.
+This wiki documents **WireLoft 1.1**. It focuses on what features do, how to configure them, and how to solve common problems.
 
 ## What you can do with WireLoft
 
-- Browse Daily Wire shows and movies and add them to your own Library.
+- Browse The Daily Wire shows and movies and add them to your own Library.
 - Keep show seasons and episodes synchronized automatically.
 - Download episodes in audio, 720p, 1080p, or 4K where available.
 - Download movies and movie extras using separate movie storage rules.
@@ -29,7 +29,7 @@ Browse is the Daily Wire catalog. Use it to find shows and movies that are not y
 
 The Library contains the shows and movies WireLoft manages for you. Adding something to the Library does **not** automatically mean it must be downloaded.
 
-For shows, WireLoft can manage seasons, episodes, automatic downloads, and RSS feeds. Movies are downloaded manually and can include extras such as trailers or featurettes when Daily Wire provides them.
+For shows, WireLoft can manage seasons, episodes, automatic downloads, and RSS feeds. Movies are downloaded manually and can include extras such as trailers or featurettes when The Daily Wire provides them.
 
 ### Downloads
 
@@ -64,11 +64,11 @@ The Settings page covers normal application, download, automation, Daily Wire, a
 - [[Backups-and-Upgrades]] — back up and update your installation safely.
 - [[Troubleshooting]] — symptom-based help for common problems.
 
-## Daily Wire access
+## The Daily Wire access
 
-WireLoft does not bypass Daily Wire membership checks. Public content can be used without connecting an account. Member-exclusive content requires a Daily Wire account that already has access to it.
+WireLoft does not bypass The Daily Wire membership checks. Public content can be used without connecting an account. Member-exclusive content requires a Daily Wire account that already has access to it.
 
-WireLoft uses Daily Wire's device authorization flow, so you authorize WireLoft through Daily Wire rather than giving WireLoft your Daily Wire password. See [[Daily-Wire-Integration]].
+WireLoft uses Daily Wire's device authorization flow, so you authorize WireLoft through The Daily Wire rather than giving WireLoft your Daily Wire password. See [[Daily-Wire-Integration]].
 
 ## Keep RSS URLs private
 

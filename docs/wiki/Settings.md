@@ -60,7 +60,7 @@ They are deployment options, not keys inside `config.yml`.
 | --- | --- | --- | --- |
 | `databasePath` | `WL_DATABASE_PATH` | `<project>/config/wireloft.db` | Location of the SQLite database. The Docker image sets this to `/config/wireloft.db`. |
 | `logLevel` | `WL_LOG_LEVEL` | `INFO` | Logging detail: `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`. |
-| `timezone` | `TZ` | `UTC` | Timezone used for schedules and displayed time-sensitive behavior. Use an IANA value such as `Europe/Amsterdam`. |
+| `timezone` | `TZ` | `UTC` | Timezone used for schedules and displayed time-sensitive behavior. Use an [IANA](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List) value such as `Europe/Amsterdam`. |
 | `loginSession.ttlSeconds` | `WL_LOGIN_SESSION__TTL_SECONDS` | `2592000` (30 days) | How long a signed-in browser remains authenticated. |
 
 ### Administrator password
