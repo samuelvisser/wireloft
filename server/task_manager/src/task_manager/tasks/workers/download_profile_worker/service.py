@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode, PodcastDownloadProfile
 from backend.db.models.media_download import MediaDownloadBase
 from task_manager.scheduler.types import OperationSource
+from task_manager.tasks.helpers.download_profiles import lock_enabled_download_profile
 from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.media_download_operations import (
     create_media_download_operation,
@@ -26,29 +27,49 @@ async def run_download_profile_worker(
 ) -> None:
     """Reconcile Download Profile domain state and create SYSTEM download operations.
 
-    The profile worker no longer maintains or starts a second download queue. It
-    creates/reuses persistent MediaDownload artifact rows and represents every
-    required attempt as a normal ``media.download`` TaskOperation. The shared
-    operation dispatcher enforces the configured download concurrency limit.
+    Each profile reconciliation owns a lock on that Download Profile until its
+    operation rows are committed. A concurrent profile disable therefore cannot
+    interleave with a stale in-memory profile and recreate downloads after the
+    disable has taken effect.
     """
     print("Starting download_profile_worker" + (f" ({resource_type}={resource_id})" if resource_type else ""))
 
     profiles = resolve_target_profiles(s, resource_type=resource_type, resource_id=resource_id)
-    if not profiles:
+    profile_ids = tuple(profile.id for profile in profiles)
+
+    # Profile discovery is advisory only. End that read transaction before taking
+    # the per-profile reconciliation lock so the enabled state is re-read fresh.
+    s.rollback()
+
+    if not profile_ids:
         update_progress(progress, 100, "No enabled download profile in scope")
         print("download_profile_worker completed: nothing to do")
         return
 
-    only_episode: Optional[Episode] = None
-    if resource_type == "episode" and resource_id is not None:
-        only_episode = s.get(Episode, resource_id)
-        if only_episode is None:
-            update_progress(progress, 100, f"Episode {resource_id} no longer exists")
-            return
-
+    only_episode_id = resource_id if resource_type == "episode" and resource_id is not None else None
     created = 0
-    total = len(profiles)
-    for index, profile in enumerate(profiles):
+    total = len(profile_ids)
+
+    for index, profile_id in enumerate(profile_ids):
+        profile = lock_enabled_download_profile(s, profile_id)
+        if profile is None:
+            # Release the lock acquired while confirming the profile is disabled.
+            s.rollback()
+            update_progress(
+                progress,
+                int((index + 1) / total * 90),
+                f"Prepared {created} download operation(s) ({index + 1}/{total} profile(s) checked)",
+            )
+            continue
+
+        only_episode: Optional[Episode] = None
+        if only_episode_id is not None:
+            only_episode = s.get(Episode, only_episode_id)
+            if only_episode is None:
+                s.rollback()
+                update_progress(progress, 100, f"Episode {only_episode_id} no longer exists")
+                return
+
         for episode in get_download_profile_episodes(s, profile, only_episode=only_episode):
             action = ensure_episode_download(s, profile, episode)
             if not action.needs_operation:
@@ -70,8 +91,9 @@ async def run_download_profile_worker(
             if should_cleanup:
                 cleanup_older_episodes(s, profile)
 
-        # Keep each profile reconciliation transaction short. The operations are
-        # durable but remain QUEUED until the shared dispatcher below has room.
+        # The profile lock is held through this commit. A concurrent disable can
+        # only proceed after every operation created from this enabled snapshot is
+        # durable; once disabled, later worker runs will skip the profile entirely.
         s.commit()
         update_progress(
             progress,

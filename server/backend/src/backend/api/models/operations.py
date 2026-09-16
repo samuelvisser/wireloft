@@ -33,7 +33,7 @@ class _ShowDownloadMaintenanceOperationAccepted(TaskOperationAccepted):
 
 
 class ShowDeleteDownloadsOperationAccepted(_ShowDownloadMaintenanceOperationAccepted):
-    pass
+    download_profiles_disabled: int
 
 
 class ShowRedownloadOperationAccepted(_ShowDownloadMaintenanceOperationAccepted):

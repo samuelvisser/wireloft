@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import DownloadProfileBase
 from backend.utils.episode_download_scope import EpisodeDownloadScope
 from dailywire_downloader import DownloadCancelled
-from task_manager.events.transactional import queue_event
-from task_manager.scheduler.types import OperationSource
+from task_manager.tasks.helpers.download_profiles import (
+    disable_download_profiles_for_episode_scope,
+)
 from task_manager.tasks.helpers.downloads.show_episode_downloads import (
     cancel_active_download_attempts,
     delete_episode_download_artifact,
@@ -17,71 +16,55 @@ from task_manager.tasks.helpers.downloads.show_episode_downloads import (
 from task_manager.tasks.helpers.progress import update_progress
 
 
-def _disable_show_download_profiles(s: Session, *, scope: EpisodeDownloadScope) -> int:
-    """Disable Download Profiles that target Local Media Profiles in the deletion scope."""
-    local_media_profile_ids = scope.local_media_profile_ids
-    if not local_media_profile_ids:
-        return 0
-
-    profiles = list(s.scalars(
-        select(DownloadProfileBase).where(
-            DownloadProfileBase.show_id == scope.show.id,
-            DownloadProfileBase.local_media_profile_id.in_(local_media_profile_ids),
-        )
-    ))
-    disabled = 0
-    for profile in profiles:
-        if not profile.enable_profile:
-            continue
-        profile.enable_profile = False
-        disabled += 1
-        queue_event(s, "download_profile.updated", {
-            "resource_id": profile.id,
-            "id": profile.id,
-            "show_id": profile.show_id,
-            "profile_type": profile.type,
-        })
-
-    # This must be durable before any artifact is removed. It prevents an
-    # affected Download Profile sweep from rebuilding files while the delete
-    # operation is still working through the selected scope.
-    s.commit()
-    return disabled
-
-
 def run_delete_show_downloads_worker(
         s: Session,
         *,
         show_id: int,
         local_media_profile_id: int | None = None,
+        download_profiles_disabled: int = 0,
         progress=None,
 ) -> dict[str, Any]:
-    """Delete existing show artifacts after disabling affected Download Profiles."""
+    """Delete existing show artifacts after affected Download Profiles are disabled."""
     scope = EpisodeDownloadScope.resolve(s, show_id=show_id).select(
         local_media_profile_id=local_media_profile_id,
     )
     base_result = scope.result_data()
     downloads = list(scope.downloads)
-    download_profile_count = _disable_show_download_profiles(s, scope=scope)
+
+    # The API disables profiles before this worker can be dispatched. Keep this
+    # idempotent guard for recovered/manual task execution and commit it before
+    # cancellation helpers deliberately roll back their read transaction.
+    disabled_during_worker = disable_download_profiles_for_episode_scope(s, scope)
+    s.commit()
+    disabled_profile_count = max(download_profiles_disabled, disabled_during_worker)
 
     if not downloads:
         update_progress(progress, 100, "No downloaded episodes match this request")
         return {
             **base_result,
             "episode_files": 0,
-            "download_profiles_disabled": download_profile_count,
+            "download_profiles_disabled": disabled_profile_count,
         }
 
     total = len(downloads)
     update_progress(progress, 1, f"Preparing to delete {total} episode download(s)")
 
+    # Any automatic work that won the profile lock before the disable is now
+    # fully committed and no later profile reconciliation can create more work.
+    # Cancel those existing attempts for the whole scope before removing files.
+    cancel_active_download_attempts(
+        s,
+        downloads,
+        reason="Deleted by show download cleanup",
+    )
+
     for index, download in enumerate(downloads, start=1):
         if progress is not None and callable(progress) and progress():
             raise DownloadCancelled("Show download deletion was canceled")
 
-        # Cancel immediately before destructive work. An already-running profile
-        # worker may have loaded its now-disabled profile before this operation
-        # committed that state, so retain the per-item cancellation race guard.
+        # Also protect against an explicit per-episode retry started by the user
+        # after the operation began. Automatic retries cannot appear here because
+        # the affected Download Profiles are durably disabled and serialized.
         cancel_active_download_attempts(
             s,
             [download],
@@ -92,16 +75,6 @@ def run_delete_show_downloads_worker(
         # long-running show cleanup without rolling already removed files back
         # into database state that claims they still exist.
         s.commit()
-
-        # Close the cancellation/requeue race for an in-flight Download Profile
-        # worker. Once the profile-disable commit is visible, no new automatic
-        # replacement can be created. Never cancel an explicit user retry.
-        cancel_active_download_attempts(
-            s,
-            [download],
-            reason="Deleted by show download cleanup",
-            source=OperationSource.SYSTEM.value,
-        )
 
         percentage = min(99, max(1, int(index * 100 / total)))
         update_progress(
@@ -114,5 +87,5 @@ def run_delete_show_downloads_worker(
     return {
         **base_result,
         "episode_files": total,
-        "download_profiles_disabled": download_profile_count,
+        "download_profiles_disabled": disabled_profile_count,
     }
