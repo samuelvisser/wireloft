@@ -24,6 +24,12 @@ class MediaDownloadAPIUpdate(RequestBase):
     file_path: str
 
 
+class MediaDownloadBulkActionAPIRequest(RequestBase):
+    """Exact download rows selected by a Downloads-page bulk action."""
+
+    media_download_ids: list[int]
+
+
 # ---------- Persistent artifact output ----------
 class _MediaDownloadAPIBaseOut(ResponseBase):
     id: int

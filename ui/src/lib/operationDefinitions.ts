@@ -45,6 +45,10 @@ function resultNumber(operation: TaskOperationRead, key: string): number | undef
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
+function completedCount(operation: TaskOperationRead): number {
+  return resultNumber(operation, 'completed') ?? operation.progressCurrent
+}
+
 function httpErrorMessage(error: string | null | undefined): string | undefined {
   if (!error) return undefined
 
@@ -182,6 +186,19 @@ function invalidateMediaDownload(
   }
 }
 
+function invalidateMediaDownloadCollection(
+  queryClient: QueryClient,
+  _operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+    queryClient.invalidateQueries({queryKey: ['episodeDownloads']}),
+    queryClient.invalidateQueries({queryKey: ['movieDownloads']}),
+    queryClient.invalidateQueries({queryKey: ['movies']}),
+  )
+}
+
 export const frontendOperationDefinitions = {
   'show.index': {
     kind: 'show.index',
@@ -315,6 +332,54 @@ export const frontendOperationDefinitions = {
     resourceType: 'movie',
     label: 'Movie extra refresh',
     invalidate: invalidateMovie,
+  },
+  'media_download.bulk_retry': {
+    kind: 'media_download.bulk_retry',
+    resourceType: 'media_download',
+    label: 'Retry downloads',
+    invalidate: invalidateMediaDownloadCollection,
+    success: (operation) => {
+      const count = operation.progressTotal
+      return `${count} ${plural(count, 'download')} queued for retry`
+    },
+    partial: (operation) => (
+      `${completedCount(operation)} of ${operation.progressTotal} downloads queued for retry`
+    ),
+    canceled: (operation) => (
+      `Retry all canceled after ${completedCount(operation)} of ${operation.progressTotal} downloads`
+    ),
+  },
+  'media_download.bulk_cancel': {
+    kind: 'media_download.bulk_cancel',
+    resourceType: 'media_download',
+    label: 'Cancel downloads',
+    invalidate: invalidateMediaDownloadCollection,
+    success: (operation) => {
+      const count = operation.progressTotal
+      return `Canceled ${count} ${plural(count, 'download')}`
+    },
+    partial: (operation) => (
+      `Canceled ${completedCount(operation)} of ${operation.progressTotal} downloads`
+    ),
+    canceled: (operation) => (
+      `Cancel all stopped after ${completedCount(operation)} of ${operation.progressTotal} downloads`
+    ),
+  },
+  'media_download.bulk_delete': {
+    kind: 'media_download.bulk_delete',
+    resourceType: 'media_download',
+    label: 'Delete downloads',
+    invalidate: invalidateMediaDownloadCollection,
+    success: (operation) => {
+      const count = operation.progressTotal
+      return `Deleted ${count} download ${plural(count, 'record')}`
+    },
+    partial: (operation) => (
+      `Deleted ${completedCount(operation)} of ${operation.progressTotal} download records`
+    ),
+    canceled: (operation) => (
+      `Delete all stopped after ${completedCount(operation)} of ${operation.progressTotal} download records`
+    ),
   },
   'media.download': {
     kind: 'media.download',

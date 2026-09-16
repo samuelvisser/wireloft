@@ -15,6 +15,10 @@ class MediaDownloadOperationAccepted(TaskOperationAccepted):
     media_download_id: int
 
 
+class MediaDownloadBulkOperationAccepted(TaskOperationAccepted):
+    downloads_queued: int
+
+
 class ShowMetadataOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
 

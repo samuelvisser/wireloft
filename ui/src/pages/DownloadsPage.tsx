@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState} from 'react'
+import {useMemo, useRef, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -6,16 +6,21 @@ import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {Column, DataTable, DataTableAction} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
+import ConfirmDialog from '../components/ConfirmDialog/ConfirmDialog'
 import DownloadLogDialog from '../components/MediaDownload/DownloadLogDialog'
+import {useActiveOperation} from '../components/OperationNotifier/OperationNotifier'
 import PageSubtitle from '../components/common/PageSubtitle'
 import ProgressBar from '../components/common/ProgressBar'
 import ProgressButton from '../components/common/ProgressButton'
 import {frontendOperationDefinitions} from '../lib/operationDefinitions'
+import {useControlOperation, useStartOperation} from '../lib/operations'
 import {useMediaDownloadsView} from '../lib/queries'
 import {ACTIVE_DOWNLOAD_STATUSES, MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
+import {TaskOperationRead} from '../types/schemas/operation'
 import {getErrorMessageFromResponse} from '../utils/helpers'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
+import './DownloadsPage.css'
 
 type StatusFilterOption = {
     value: string
@@ -23,10 +28,7 @@ type StatusFilterOption = {
     statuses: readonly string[]
 }
 
-type RetryAllProgress = {
-    completed: number
-    total: number
-}
+type BulkAction = 'retry' | 'cancel' | 'delete'
 
 const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
     {value: 'not_downloaded', label: 'Not downloaded', statuses: ['not_downloaded']},
@@ -83,8 +85,12 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
     return true
 }
 
-function isAbortError(error: unknown): boolean {
-    return error instanceof Error && error.name === 'AbortError'
+function bulkOperationLabel(operation: TaskOperationRead | undefined, starting: boolean): string | undefined {
+    if (starting && operation === undefined) return 'Starting…'
+    if (!operation) return undefined
+    if (operation.status === 'QUEUED') return 'Queued…'
+    if (operation.status === 'WAITING') return operation.message || 'Waiting…'
+    return `${operation.progress ?? 0}%`
 }
 
 // Ensure icons from the kit are registered (idempotent)
@@ -188,15 +194,19 @@ function defaultDownloadOrder(left: MediaDownloadViewRead, right: MediaDownloadV
 export default function DownloadsPage() {
     const navigate = useNavigate()
     const qc = useQueryClient()
+    const startOperation = useStartOperation()
+    const controlOperation = useControlOperation()
     const {data: downloads, isLoading, error} = useMediaDownloadsView()
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
-    const retryAllAbortRef = useRef<AbortController | null>(null)
-    const retryAllCancelRequestedRef = useRef(false)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
     const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(DEFAULT_STATUS_FILTER))
-    const [retryAllProgress, setRetryAllProgress] = useState<RetryAllProgress | null>(null)
+    const [bulkActionStarting, setBulkActionStarting] = useState<BulkAction | null>(null)
+    const [bulkControlBusy, setBulkControlBusy] = useState<string | null>(null)
+    const [bulkDeleteRows, setBulkDeleteRows] = useState<MediaDownloadViewRead[] | null>(null)
 
-    useEffect(() => () => retryAllAbortRef.current?.abort(), [])
+    const retryAllOperation = useActiveOperation('media_download.bulk_retry', 'media_download')
+    const cancelAllOperation = useActiveOperation('media_download.bulk_cancel', 'media_download')
+    const deleteAllOperation = useActiveOperation('media_download.bulk_delete', 'media_download')
 
     const toggleStatusFilter = (option: StatusFilterOption) => {
         setStatusFilter((prev) => {
@@ -211,18 +221,34 @@ export default function DownloadsPage() {
     }
 
     const filteredDownloads = useMemo(
-        () => downloads
-            ?.filter((row) => statusFilter.has(String(row.downloadStatus)))
+        () => (downloads ?? [])
+            .filter((row) => statusFilter.has(String(row.downloadStatus)))
             .sort(defaultDownloadOrder),
         [downloads, statusFilter],
     )
     const retryableErrorDownloads = useMemo(
-        () => downloads?.filter(hasRetryableError) ?? [],
-        [downloads],
+        () => filteredDownloads.filter(hasRetryableError),
+        [filteredDownloads],
     )
-    const retryAllPercent = retryAllProgress && retryAllProgress.total > 0
-        ? Math.round((retryAllProgress.completed / retryAllProgress.total) * 100)
-        : 0
+    const cancellableDownloads = useMemo(
+        () => filteredDownloads.filter((row) => ACTIVE_DOWNLOAD_STATUSES.has(String(row.downloadStatus))),
+        [filteredDownloads],
+    )
+
+    const bulkOperationActive = Boolean(
+        retryAllOperation
+        || cancelAllOperation
+        || deleteAllOperation
+        || bulkActionStarting,
+    )
+    const showActionRow = Boolean(
+        retryableErrorDownloads.length
+        || cancellableDownloads.length
+        || filteredDownloads.length
+        || retryAllOperation
+        || cancelAllOperation
+        || deleteAllOperation,
+    )
 
     const prioritize = async (row: MediaDownloadViewRead) => {
         try {
@@ -245,21 +271,19 @@ export default function DownloadsPage() {
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
     }
 
-    const retryRequest = async (row: MediaDownloadViewRead, signal?: AbortSignal): Promise<string | null> => {
+    const retryRequest = async (row: MediaDownloadViewRead): Promise<string | null> => {
         try {
             const base = (window as any).appConfig.API_URL
             const r = await fetch(`${base}/media-downloads/${row.id}/retry`, {
                 method: 'POST',
                 credentials: 'include',
-                signal,
             })
             if (!r.ok) {
                 const {error: message} = await getErrorMessageFromResponse(r)
                 return message || 'Could not retry the download'
             }
             return null
-        } catch (requestError) {
-            if (isAbortError(requestError)) throw requestError
+        } catch {
             return 'Could not retry the download'
         }
     }
@@ -270,64 +294,6 @@ export default function DownloadsPage() {
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
-    }
-
-    const cancelRetryAll = () => {
-        if (retryAllProgress === null) return
-        retryAllCancelRequestedRef.current = true
-        retryAllAbortRef.current?.abort()
-    }
-
-    const retryAll = async () => {
-        if (retryAllProgress !== null || retryableErrorDownloads.length === 0) return
-
-        const downloadsToRetry = [...retryableErrorDownloads]
-        const controller = new AbortController()
-        retryAllAbortRef.current = controller
-        retryAllCancelRequestedRef.current = false
-        setRetryAllProgress({completed: 0, total: downloadsToRetry.length})
-
-        let completed = 0
-        let failed = 0
-        let canceled = false
-
-        try {
-            for (const row of downloadsToRetry) {
-                if (retryAllCancelRequestedRef.current) {
-                    canceled = true
-                    break
-                }
-
-                try {
-                    if (await retryRequest(row, controller.signal)) failed += 1
-                } catch (requestError) {
-                    if (isAbortError(requestError)) {
-                        canceled = true
-                        break
-                    }
-                    failed += 1
-                }
-
-                completed += 1
-                setRetryAllProgress({completed, total: downloadsToRetry.length})
-            }
-
-            canceled = canceled || retryAllCancelRequestedRef.current
-            await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
-
-            if (canceled) {
-                toast('Retry all canceled; no further retries will be submitted')
-            } else if (failed === 0) {
-                const label = downloadsToRetry.length === 1 ? 'download' : 'downloads'
-                toast.success(`${downloadsToRetry.length} ${label} queued for retry`)
-            } else {
-                toast.error(`Could not retry ${failed} of ${downloadsToRetry.length} downloads`)
-            }
-        } finally {
-            if (retryAllAbortRef.current === controller) retryAllAbortRef.current = null
-            retryAllCancelRequestedRef.current = false
-            setRetryAllProgress(null)
-        }
     }
 
     const cancel = async (row: MediaDownloadViewRead) => {
@@ -344,6 +310,44 @@ export default function DownloadsPage() {
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
+    }
+
+    const startBulkAction = async (action: BulkAction, rows: MediaDownloadViewRead[]) => {
+        if (!rows.length || bulkOperationActive) return
+        setBulkActionStarting(action)
+        try {
+            const base = (window as any).appConfig?.API_URL || '/api'
+            await startOperation(`${base}/media-downloads/bulk/${action}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mediaDownloadIds: rows.map((row) => row.id)}),
+            })
+        } catch (actionError) {
+            const fallback = action === 'retry'
+                ? 'Could not retry the selected downloads'
+                : action === 'cancel'
+                    ? 'Could not cancel the selected downloads'
+                    : 'Could not delete the selected downloads'
+            toast.error(actionError instanceof Error && actionError.message ? actionError.message : fallback)
+        } finally {
+            setBulkActionStarting(null)
+        }
+    }
+
+    const cancelBulkOperation = async (operation: TaskOperationRead) => {
+        if (bulkControlBusy) return
+        setBulkControlBusy(operation.id)
+        try {
+            await controlOperation(operation.id, 'cancel')
+        } catch (controlError) {
+            toast.error(
+                controlError instanceof Error && controlError.message
+                    ? controlError.message
+                    : 'Could not stop the bulk action',
+            )
+        } finally {
+            setBulkControlBusy(null)
+        }
     }
 
     const columns: Column<MediaDownloadViewRead>[] = [
@@ -410,21 +414,6 @@ export default function DownloadsPage() {
                         Deleting a row only removes the record, never the downloaded file unless the download had never fully finished.
                     </p>
                 </PageSubtitle>
-                {(retryAllProgress !== null || retryableErrorDownloads.length > 0) && (
-                    <ProgressButton
-                        definition={frontendOperationDefinitions['media.download']}
-                        label="Retry all"
-                        icon={['fas', 'rotate-right']}
-                        onClick={() => void retryAll()}
-                        disabled={retryableErrorDownloads.length === 0}
-                        active={retryAllProgress !== null}
-                        progress={retryAllPercent}
-                        activeLabel={`${retryAllPercent}%`}
-                        ariaLabel="Retry all retryable downloads with errors"
-                        onCancel={retryAllProgress !== null ? cancelRetryAll : undefined}
-                        cancelLabel="Cancel retry all"
-                    />
-                )}
             </div>
             <div className="filter-chip-group" role="group" aria-label="Filter downloads by status">
                 {STATUS_FILTER_OPTIONS.map((option) => (
@@ -448,6 +437,65 @@ export default function DownloadsPage() {
                     </button>
                 )}
             </div>
+            {showActionRow && (
+                <div className="downloads-action-row" role="group" aria-label="Actions for visible downloads">
+                    {(retryableErrorDownloads.length > 0 || retryAllOperation || bulkActionStarting === 'retry') && (
+                        <ProgressButton
+                            definition={frontendOperationDefinitions['media_download.bulk_retry']}
+                            label="Retry all"
+                            icon={['fas', 'rotate-right']}
+                            onClick={() => void startBulkAction('retry', retryableErrorDownloads)}
+                            disabled={bulkOperationActive && !retryAllOperation && bulkActionStarting !== 'retry'}
+                            primary={false}
+                            starting={bulkActionStarting === 'retry'}
+                            active={retryAllOperation !== undefined}
+                            progress={retryAllOperation?.progress ?? 0}
+                            activeLabel={bulkOperationLabel(retryAllOperation, bulkActionStarting === 'retry')}
+                            ariaLabel={`Retry ${retryableErrorDownloads.length} visible retryable downloads with errors`}
+                            onCancel={retryAllOperation ? () => void cancelBulkOperation(retryAllOperation) : undefined}
+                            cancelDisabled={bulkControlBusy === retryAllOperation?.id}
+                            cancelLabel="Cancel retry all"
+                        />
+                    )}
+                    {(cancellableDownloads.length > 0 || cancelAllOperation || bulkActionStarting === 'cancel') && (
+                        <ProgressButton
+                            definition={frontendOperationDefinitions['media_download.bulk_cancel']}
+                            label="Cancel all"
+                            icon={['fas', 'ban']}
+                            onClick={() => void startBulkAction('cancel', cancellableDownloads)}
+                            disabled={bulkOperationActive && !cancelAllOperation && bulkActionStarting !== 'cancel'}
+                            primary={false}
+                            starting={bulkActionStarting === 'cancel'}
+                            active={cancelAllOperation !== undefined}
+                            progress={cancelAllOperation?.progress ?? 0}
+                            activeLabel={bulkOperationLabel(cancelAllOperation, bulkActionStarting === 'cancel')}
+                            ariaLabel={`Cancel ${cancellableDownloads.length} visible active downloads`}
+                            onCancel={cancelAllOperation ? () => void cancelBulkOperation(cancelAllOperation) : undefined}
+                            cancelDisabled={bulkControlBusy === cancelAllOperation?.id}
+                            cancelLabel="Stop cancel all"
+                        />
+                    )}
+                    {(filteredDownloads.length > 0 || deleteAllOperation || bulkActionStarting === 'delete') && (
+                        <ProgressButton
+                            definition={frontendOperationDefinitions['media_download.bulk_delete']}
+                            label="Delete all"
+                            icon={['fas', 'trash']}
+                            onClick={() => setBulkDeleteRows([...filteredDownloads])}
+                            disabled={bulkOperationActive && !deleteAllOperation && bulkActionStarting !== 'delete'}
+                            primary={false}
+                            className="downloads-action-danger"
+                            starting={bulkActionStarting === 'delete'}
+                            active={deleteAllOperation !== undefined}
+                            progress={deleteAllOperation?.progress ?? 0}
+                            activeLabel={bulkOperationLabel(deleteAllOperation, bulkActionStarting === 'delete')}
+                            ariaLabel={`Delete ${filteredDownloads.length} visible download records`}
+                            onCancel={deleteAllOperation ? () => void cancelBulkOperation(deleteAllOperation) : undefined}
+                            cancelDisabled={bulkControlBusy === deleteAllOperation?.id}
+                            cancelLabel="Stop delete all"
+                        />
+                    )}
+                </div>
+            )}
             <div className="form-row">
                 <DataTable<MediaDownloadViewRead>
                     ariaLabel="Media downloads"
@@ -548,6 +596,27 @@ export default function DownloadsPage() {
                 }
                 invalidateQueries={[['mediaDownloadsView'], ['episodeDownloads'], ['movieDownloads'], ['movies']]}
             />
+            <ConfirmDialog
+                open={bulkDeleteRows !== null}
+                title="Delete visible download records"
+                onDismiss={() => setBulkDeleteRows(null)}
+                icon={['fas', 'trash']}
+                iconTone="danger"
+                confirmButton={{
+                    label: 'Delete all',
+                    className: 'btn btn-danger',
+                    onClick: async () => {
+                        const rows = bulkDeleteRows ?? []
+                        setBulkDeleteRows(null)
+                        await startBulkAction('delete', rows)
+                    },
+                }}
+            >
+                <p>
+                    Delete {bulkDeleteRows?.length ?? 0} download {(bulkDeleteRows?.length ?? 0) === 1 ? 'record' : 'records'} currently visible with the selected filters?
+                    This cannot be undone. Successfully downloaded files are left on disk, matching the existing per-download Delete action; incomplete artifacts may be cleaned up with their records.
+                </p>
+            </ConfirmDialog>
             <DownloadLogDialog row={logRow} onClose={() => setLogRow(null)}/>
         </section>
     )
