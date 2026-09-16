@@ -42,6 +42,8 @@ const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
     {value: 'corrupted', label: 'Corrupted', statuses: ['corrupted']},
 ]
 
+const FILTER_DOUBLE_PRESS_WINDOW_MS = 500
+
 // Show everything by default except completed downloads.
 const DEFAULT_STATUS_FILTER = new Set(
     STATUS_FILTER_OPTIONS
@@ -198,6 +200,7 @@ export default function DownloadsPage() {
     const controlOperation = useControlOperation()
     const {data: downloads, isLoading, error} = useMediaDownloadsView()
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
+    const lastFilterPressRef = useRef<{value: string; timestamp: number} | null>(null)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
     const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(DEFAULT_STATUS_FILTER))
     const [bulkActionStarting, setBulkActionStarting] = useState<BulkAction | null>(null)
@@ -218,6 +221,24 @@ export default function DownloadsPage() {
             }
             return next
         })
+    }
+
+    const pressStatusFilter = (option: StatusFilterOption) => {
+        const now = Date.now()
+        const previousPress = lastFilterPressRef.current
+
+        // Detect consecutive clicks ourselves so the shortcut also works for touch-generated clicks.
+        if (
+            previousPress?.value === option.value
+            && now - previousPress.timestamp <= FILTER_DOUBLE_PRESS_WINDOW_MS
+        ) {
+            lastFilterPressRef.current = null
+            setStatusFilter(new Set(option.statuses))
+            return
+        }
+
+        lastFilterPressRef.current = {value: option.value, timestamp: now}
+        toggleStatusFilter(option)
     }
 
     const filteredDownloads = useMemo(
@@ -422,7 +443,7 @@ export default function DownloadsPage() {
                         type="button"
                         className="filter-chip"
                         aria-pressed={option.statuses.every((status) => statusFilter.has(status))}
-                        onClick={() => toggleStatusFilter(option)}
+                        onClick={() => pressStatusFilter(option)}
                     >
                         {option.label}
                     </button>
@@ -431,7 +452,10 @@ export default function DownloadsPage() {
                     <button
                         type="button"
                         className="filter-chip-reset"
-                        onClick={() => setStatusFilter(new Set(DEFAULT_STATUS_FILTER))}
+                        onClick={() => {
+                            lastFilterPressRef.current = null
+                            setStatusFilter(new Set(DEFAULT_STATUS_FILTER))
+                        }}
                     >
                         Reset filters
                     </button>
