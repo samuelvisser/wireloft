@@ -143,6 +143,7 @@ export default function DownloadsPage() {
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
     const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(DEFAULT_STATUS_FILTER))
+    const [retryingAll, setRetryingAll] = useState(false)
 
     const toggleStatusFilter = (option: StatusFilterOption) => {
         setStatusFilter((prev) => {
@@ -159,6 +160,10 @@ export default function DownloadsPage() {
     const filteredDownloads = useMemo(
         () => downloads?.filter((row) => statusFilter.has(String(row.downloadStatus))),
         [downloads, statusFilter],
+    )
+    const erroredDownloads = useMemo(
+        () => downloads?.filter((row) => String(row.downloadStatus) === 'error') ?? [],
+        [downloads],
     )
 
     const prioritize = async (row: MediaDownloadViewRead) => {
@@ -182,20 +187,52 @@ export default function DownloadsPage() {
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
     }
 
-    const retry = async (row: MediaDownloadViewRead) => {
+    const retryRequest = async (row: MediaDownloadViewRead): Promise<string | null> => {
         try {
             const base = (window as any).appConfig.API_URL
             const r = await fetch(`${base}/media-downloads/${row.id}/retry`, {method: 'POST', credentials: 'include'})
             if (!r.ok) {
                 const {error: message} = await getErrorMessageFromResponse(r)
-                toast.error(message || 'Could not retry the download')
+                return message || 'Could not retry the download'
             }
+            return null
         } catch {
-            toast.error('Could not retry the download')
+            return 'Could not retry the download'
         }
+    }
+
+    const retry = async (row: MediaDownloadViewRead) => {
+        const message = await retryRequest(row)
+        if (message) toast.error(message)
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
+    }
+
+    const retryAll = async () => {
+        if (retryingAll || erroredDownloads.length === 0) return
+
+        const downloadsToRetry = [...erroredDownloads]
+        setRetryingAll(true)
+        let failed = 0
+
+        try {
+            // Retry sequentially so each request can safely reuse the existing retry endpoint and
+            // its operation scheduling without creating a burst of competing database writes.
+            for (const row of downloadsToRetry) {
+                if (await retryRequest(row)) failed += 1
+            }
+
+            await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
+            if (failed === 0) {
+                const label = downloadsToRetry.length === 1 ? 'download' : 'downloads'
+                toast.success(`${downloadsToRetry.length} ${label} queued for retry`)
+            } else {
+                toast.error(`Could not retry ${failed} of ${downloadsToRetry.length} downloads`)
+            }
+        } finally {
+            setRetryingAll(false)
+        }
     }
 
     const cancel = async (row: MediaDownloadViewRead) => {
@@ -277,6 +314,16 @@ export default function DownloadsPage() {
                         Deleting a row only removes the record, never the downloaded file unless the download had never fully finished.
                     </p>
                 </PageSubtitle>
+                {erroredDownloads.length > 0 && (
+                    <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => void retryAll()}
+                        disabled={retryingAll}
+                    >
+                        {retryingAll ? 'Retrying…' : 'Retry all'}
+                    </button>
+                )}
             </div>
             <div className="filter-chip-group" role="group" aria-label="Filter downloads by status">
                 {STATUS_FILTER_OPTIONS.map((option) => (
