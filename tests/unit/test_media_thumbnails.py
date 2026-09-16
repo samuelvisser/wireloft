@@ -88,6 +88,7 @@ def test_embed_thumbnail_uses_attached_picture_stream_for_audio(tmp_path, monkey
     assert "1:v:0" in command
     assert "-disposition:v:0" in command
     assert "attached_pic" in command
+    assert not any(argument.startswith("-frames:v:") for argument in command)
     assert command[command.index("-f") + 1] == "mp4"
 
 
