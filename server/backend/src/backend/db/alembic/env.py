@@ -41,6 +41,26 @@ def _configure_version_storage() -> None:
     apply_settings_version_table(migration_context)
 
 
+def _set_sqlite_foreign_keys(connection, *, enabled: bool) -> None:
+    """Temporarily control SQLite FK enforcement around Alembic batch DDL.
+
+    Runtime connections enforce foreign keys. SQLite batch migrations may need
+    to rebuild/drop tables that are referenced by other tables, which cannot be
+    done while FK enforcement is active. Use the raw DB-API connection here so
+    changing the pragma does not create a SQLAlchemy transaction before Alembic
+    starts its own migration transaction.
+    """
+    if connection.dialect.name != "sqlite":
+        return
+
+    dbapi_connection = connection.connection.dbapi_connection
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute(f"PRAGMA foreign_keys={'ON' if enabled else 'OFF'}")
+    finally:
+        cursor.close()
+
+
 def run_migrations_offline() -> None:
     context.configure(
         url=get_settings().database_url,
@@ -59,17 +79,23 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     with get_engine().connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            render_as_batch=True,
-            compare_type=True,
-            include_name=_include_name,
-        )
-        _configure_version_storage()
+        _set_sqlite_foreign_keys(connection, enabled=False)
+        try:
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,
+                render_as_batch=True,
+                compare_type=True,
+                include_name=_include_name,
+            )
+            _configure_version_storage()
 
-        with context.begin_transaction():
-            context.run_migrations()
+            with context.begin_transaction():
+                context.run_migrations()
+        finally:
+            # Return pooled runtime connections with the same integrity contract
+            # established by backend.db.core's connect listener.
+            _set_sqlite_foreign_keys(connection, enabled=True)
 
 
 if context.is_offline_mode():
