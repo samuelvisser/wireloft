@@ -638,7 +638,10 @@ export default function DownloadsPage() {
             >
                 <p>
                     Delete {bulkDeleteRows?.length ?? 0} download {(bulkDeleteRows?.length ?? 0) === 1 ? 'record' : 'records'} currently visible with the selected filters?
-                    This cannot be undone. Successfully downloaded files are left on disk, matching the existing per-download Delete action; incomplete artifacts may be cleaned up with their records.
+                    This cannot be undone.
+                </p>
+                <p>
+                    Successfully downloaded files are left on disk; incomplete artifacts may be cleaned up with their records.
                 </p>
             </ConfirmDialog>
             <DownloadLogDialog row={logRow} onClose={() => setLogRow(null)}/>
