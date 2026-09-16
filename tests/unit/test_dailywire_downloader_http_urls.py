@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 
 def test_http_get_encodes_raw_spaces_without_touching_existing_percent_encoding(monkeypatch) -> None:
     import dailywire_downloader.http as http_module
