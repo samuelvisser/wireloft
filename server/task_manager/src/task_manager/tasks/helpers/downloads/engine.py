@@ -31,7 +31,7 @@ from .download_paths import (
     publish_temporary_download,
     reserve_unique_download_path,
 )
-
+from .thumbnails import prepare_thumbnail, wants_thumbnail_embed, wants_thumbnail_sidecar
 
 FORMAT_HEIGHTS: dict[str, int] = {
     PreferredFormat.FORMAT_4K.value: 2160,
@@ -239,12 +239,12 @@ def _execute_temporary_plan(
             task_progress=task_progress,
             cancellation=cancellation,
         )
-        thumbnail_source = _prepare_thumbnail(
+        thumbnail_source = prepare_thumbnail(
             plan,
             workspace.workspace,
             cancellation=cancellation,
         )
-        if thumbnail_source is not None and _wants_embed(plan.thumbnail_mode):
+        if thumbnail_source is not None and wants_thumbnail_embed(plan.thumbnail_mode):
             embed_thumbnail(
                 result.path,
                 str(thumbnail_source),
@@ -259,7 +259,7 @@ def _execute_temporary_plan(
             plan.requested_destination,
         )
         published_destination = str(destination)
-        if thumbnail_source is not None and _wants_sidecar(plan.thumbnail_mode):
+        if thumbnail_source is not None and wants_thumbnail_sidecar(plan.thumbnail_mode):
             thumbnail_path = _publish_sidecar(thumbnail_source, destination)
 
         keep_workspace = True
@@ -303,12 +303,12 @@ def _execute_direct_plan(
             cancellation=cancellation,
         )
         with tempfile.TemporaryDirectory() as thumbnail_workspace:
-            thumbnail_source = _prepare_thumbnail(
+            thumbnail_source = prepare_thumbnail(
                 plan,
                 Path(thumbnail_workspace),
                 cancellation=cancellation,
             )
-            if thumbnail_source is not None and _wants_embed(plan.thumbnail_mode):
+            if thumbnail_source is not None and wants_thumbnail_embed(plan.thumbnail_mode):
                 embed_thumbnail(
                     result.path,
                     str(thumbnail_source),
@@ -316,7 +316,7 @@ def _execute_direct_plan(
                     ffmpeg_path=plan.ffmpeg_path,
                     should_cancel=cancellation,
                 )
-            if thumbnail_source is not None and _wants_sidecar(plan.thumbnail_mode):
+            if thumbnail_source is not None and wants_thumbnail_sidecar(plan.thumbnail_mode):
                 thumbnail_path = _publish_sidecar(
                     thumbnail_source,
                     Path(destination),
@@ -331,39 +331,6 @@ def _execute_direct_plan(
         raise
     finally:
         reservation.release_if_unclaimed()
-
-
-def _prepare_thumbnail(
-    plan: DownloadPlan,
-    workspace: Path,
-    *,
-    cancellation,
-) -> Path | None:
-    if plan.thumbnail_mode is ThumbnailMode.NO_THUMBNAIL or not plan.thumbnail_url:
-        return None
-
-    ensure_not_cancelled(cancellation)
-    info = probe(plan.thumbnail_url)
-    extension = info.suggested_extension
-    if extension not in {"jpg", "jpeg", "png", "webp"}:
-        extension = "jpg"
-
-    workspace.mkdir(parents=True, exist_ok=True)
-    destination = workspace / f"thumbnail.{extension}"
-    download_file(
-        plan.thumbnail_url,
-        str(destination),
-        should_cancel=cancellation,
-    )
-    return destination
-
-
-def _wants_embed(mode: ThumbnailMode) -> bool:
-    return mode in {ThumbnailMode.EMBED, ThumbnailMode.EMBED_AND_SIDECAR}
-
-
-def _wants_sidecar(mode: ThumbnailMode) -> bool:
-    return mode in {ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR}
 
 
 def _publish_sidecar(source: Path, media_destination: Path) -> str:

@@ -155,7 +155,7 @@ export default function LocalMediaProfileForm({form, mode}: Props) {
                 <div className="help" id="local-media-thumbnail-mode-help">
                     <ReadMore summary="Choose whether downloaded media stores its Daily Wire thumbnail and whether this profile inherits the system default.">
                         <p><strong>System</strong> follows the current system-wide default shown in parentheses.</p>
-                        <p><strong>No thumbnail</strong> keeps the current media-only behavior.</p>
+                        <p><strong>No thumbnail</strong> keeps downloads media-only.</p>
                         <p><strong>Embed in media</strong> stores the thumbnail as cover artwork inside the downloaded media file.</p>
                         <p><strong>Download besides media</strong> saves the thumbnail as an image alongside the media file.</p>
                         <p><strong>Both embed and download</strong> does both.</p>

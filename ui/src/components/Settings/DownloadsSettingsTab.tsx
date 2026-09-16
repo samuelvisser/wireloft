@@ -94,7 +94,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     help={
                         <ReadMore summary="Choose how WireLoft stores the Daily Wire thumbnail for downloaded media.">
                             <p><strong>No thumbnail</strong> keeps downloads media-only.</p>
-                            <p><strong>Embed in media</strong> stores cover artwork in the media container when the downloaded format supports embedded artwork.</p>
+                            <p><strong>Embed in media</strong> stores the thumbnail as cover artwork inside the downloaded media file.</p>
                             <p><strong>Download besides media</strong> writes the image alongside the final media file, using the same basename.</p>
                             <p><strong>Both embed and download</strong> does both.</p>
                             <p>Local Media Profiles default to System and can override this setting individually.</p>

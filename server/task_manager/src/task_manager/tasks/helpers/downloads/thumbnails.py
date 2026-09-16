@@ -1,5 +1,47 @@
 from __future__ import annotations
 
+from fastapi import Path
+
+from config.settings.submodels import ThumbnailMode
+from task_manager.tasks.helpers.downloads import engine
+
+
+def wants_thumbnail_embed(mode: ThumbnailMode) -> bool:
+    return mode in {ThumbnailMode.EMBED, ThumbnailMode.EMBED_AND_SIDECAR}
+
+
+def wants_thumbnail_sidecar(mode: ThumbnailMode) -> bool:
+    return mode in {ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR}
+
+
+def prepare_thumbnail(
+    plan: engine.DownloadPlan,
+    workspace: Path,
+    *,
+    cancellation,
+) -> Path | None:
+    from task_manager.tasks.helpers.downloads.engine import ensure_not_cancelled
+    from dailywire_downloader import probe
+    from dailywire_downloader import download_file
+
+    if plan.thumbnail_mode is ThumbnailMode.NO_THUMBNAIL or not plan.thumbnail_url:
+        return None
+
+    ensure_not_cancelled(cancellation)
+    info = probe(plan.thumbnail_url)
+    extension = info.suggested_extension
+    if extension not in {"jpg", "jpeg", "png", "webp"}:
+        extension = "jpg"
+
+    workspace.mkdir(parents=True, exist_ok=True)
+    destination = workspace / f"thumbnail.{extension}"
+    download_file(
+        plan.thumbnail_url,
+        str(destination),
+        should_cancel=cancellation,
+    )
+    return destination
+
 
 def select_thumbnail_url(media) -> str | None:
     """Choose the best artwork source for embedding or a per-media sidecar."""
