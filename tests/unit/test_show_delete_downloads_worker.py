@@ -199,7 +199,7 @@ def test_show_delete_downloads_request_uses_existing_local_media_profiles(tmp_pa
         engine.dispose()
 
 
-def test_delete_show_downloads_worker_disables_all_profiles_and_leaves_deleted_rows_retryable(tmp_path):
+def test_delete_show_downloads_worker_disables_only_profiles_in_selected_scope_and_leaves_deleted_rows_retryable(tmp_path):
     from backend.db.models import DownloadProfileBase
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -233,7 +233,7 @@ def test_delete_show_downloads_worker_disables_all_profiles_and_leaves_deleted_r
 
         assert result["episode_files"] == 1
         assert result["local_media_profiles"] == 1
-        assert result["download_profiles_disabled"] == 3
+        assert result["download_profiles_disabled"] == 1
         assert not audio_path.exists()
         assert video_path.exists()
 
@@ -250,11 +250,53 @@ def test_delete_show_downloads_worker_disables_all_profiles_and_leaves_deleted_r
         assert untouched is not None
         assert untouched.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
 
-        disabled_profiles = [
-            session.get(DownloadProfileBase, profile.id)
-            for profile in download_profiles
-        ]
-        assert all(profile is not None and profile.enable_profile is False for profile in disabled_profiles)
+        audio_download_profile, video_download_profile, unused_download_profile = download_profiles
+        audio_profile_state = session.get(DownloadProfileBase, audio_download_profile.id)
+        video_profile_state = session.get(DownloadProfileBase, video_download_profile.id)
+        unused_profile_state = session.get(DownloadProfileBase, unused_download_profile.id)
+        assert audio_profile_state is not None and audio_profile_state.enable_profile is False
+        assert video_profile_state is not None and video_profile_state.enable_profile is True
+        assert unused_profile_state is not None and unused_profile_state.enable_profile is True
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_delete_show_downloads_worker_all_scope_disables_only_profiles_with_deleted_downloads(tmp_path):
+    from backend.db.models import DownloadProfileBase
+    from task_manager.tasks.workers.delete_show_downloads_worker.service import (
+        run_delete_show_downloads_worker,
+    )
+
+    session, engine = _session()
+    try:
+        (
+            show,
+            _audio_profile,
+            _unused_profile,
+            download_profiles,
+            _audio_download,
+            _video_download,
+            audio_path,
+            video_path,
+        ) = _library(session, tmp_path)
+
+        result = run_delete_show_downloads_worker(session, show_id=show.id)
+
+        assert result["episode_files"] == 2
+        assert result["local_media_profiles"] == 2
+        assert result["download_profiles_disabled"] == 2
+        assert not audio_path.exists()
+        assert not video_path.exists()
+
+        session.expire_all()
+        audio_download_profile, video_download_profile, unused_download_profile = download_profiles
+        audio_profile_state = session.get(DownloadProfileBase, audio_download_profile.id)
+        video_profile_state = session.get(DownloadProfileBase, video_download_profile.id)
+        unused_profile_state = session.get(DownloadProfileBase, unused_download_profile.id)
+        assert audio_profile_state is not None and audio_profile_state.enable_profile is False
+        assert video_profile_state is not None and video_profile_state.enable_profile is False
+        assert unused_profile_state is not None and unused_profile_state.enable_profile is True
     finally:
         session.close()
         engine.dispose()

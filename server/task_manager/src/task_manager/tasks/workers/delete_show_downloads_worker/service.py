@@ -17,10 +17,17 @@ from task_manager.tasks.helpers.downloads.show_episode_downloads import (
 from task_manager.tasks.helpers.progress import update_progress
 
 
-def _disable_show_download_profiles(s: Session, *, show_id: int) -> int:
-    """Disable every Download Profile attached to the show before deleting files."""
+def _disable_show_download_profiles(s: Session, *, scope: EpisodeDownloadScope) -> int:
+    """Disable Download Profiles that target Local Media Profiles in the deletion scope."""
+    local_media_profile_ids = scope.local_media_profile_ids
+    if not local_media_profile_ids:
+        return 0
+
     profiles = list(s.scalars(
-        select(DownloadProfileBase).where(DownloadProfileBase.show_id == show_id)
+        select(DownloadProfileBase).where(
+            DownloadProfileBase.show_id == scope.show.id,
+            DownloadProfileBase.local_media_profile_id.in_(local_media_profile_ids),
+        )
     ))
     disabled = 0
     for profile in profiles:
@@ -35,9 +42,9 @@ def _disable_show_download_profiles(s: Session, *, show_id: int) -> int:
             "profile_type": profile.type,
         })
 
-    # This must be durable before any artifact is removed. It prevents a normal
-    # Download Profile sweep from rebuilding files while the delete operation is
-    # still working through the show.
+    # This must be durable before any artifact is removed. It prevents an
+    # affected Download Profile sweep from rebuilding files while the delete
+    # operation is still working through the selected scope.
     s.commit()
     return disabled
 
@@ -49,13 +56,13 @@ def run_delete_show_downloads_worker(
         local_media_profile_id: int | None = None,
         progress=None,
 ) -> dict[str, Any]:
-    """Delete existing show artifacts after disabling the show's Download Profiles."""
+    """Delete existing show artifacts after disabling affected Download Profiles."""
     scope = EpisodeDownloadScope.resolve(s, show_id=show_id).select(
         local_media_profile_id=local_media_profile_id,
     )
     base_result = scope.result_data()
     downloads = list(scope.downloads)
-    download_profile_count = _disable_show_download_profiles(s, show_id=scope.show.id)
+    download_profile_count = _disable_show_download_profiles(s, scope=scope)
 
     if not downloads:
         update_progress(progress, 100, "No downloaded episodes match this request")

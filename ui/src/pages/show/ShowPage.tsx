@@ -818,7 +818,7 @@ export default function ShowPage() {
           Delete downloaded episode files in "{show.title}".
         </p>
         <p>
-          Before deletion, WireLoft will disable every Download Profile attached to this show, even if deletion is scoped to one Local Media Profile. Re-enable a Download Profile whenever you want WireLoft to download its eligible episodes again. The profiles themselves are not deleted.
+          Before deletion, WireLoft will disable the Download Profiles attached to the selected Local Media Profile or Profiles. Other Download Profiles on this show are left unchanged. Re-enable a disabled Download Profile whenever you want WireLoft to download its eligible episodes again. The profiles themselves are not deleted.
         </p>
         <div className="form-row">
           <label htmlFor="delete-downloads-profile">Local Media Profile</label>
