@@ -1,4 +1,5 @@
 from .MediaDownloadBase import MediaDownloadBase
+from .MediaDownloadEvent import MediaDownloadEvent
 from .EpisodeMediaDownload import EpisodeMediaDownload
 from .MovieMediaDownload import MovieMediaDownload
 from .MovieExtraMediaDownload import MovieExtraMediaDownload

@@ -14,9 +14,18 @@ export const MediaDownloadArtifactHistoryEntryReadSchema = z.looseObject({
   observedAt: ApiDateTimeStringSchema,
 })
 
+export const MediaDownloadEventHistoryEntryReadSchema = z.looseObject({
+  source: z.literal('event'),
+  id: z.int(),
+  eventType: z.enum(['deleted']),
+  filePath: z.string(),
+  occurredAt: ApiDateTimeStringSchema,
+})
+
 export const MediaDownloadHistoryEntryReadSchema = z.discriminatedUnion('source', [
   MediaDownloadTaskHistoryEntryReadSchema,
   MediaDownloadArtifactHistoryEntryReadSchema,
+  MediaDownloadEventHistoryEntryReadSchema,
 ])
 
 export const MediaDownloadHistoryPageReadSchema = z.looseObject({

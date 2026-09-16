@@ -23,6 +23,12 @@ class MediaDownloadArtifactStatus(str, Enum):
     CORRUPTED = "corrupted"
 
 
+class MediaDownloadEventType(str, Enum):
+    """Durable non-task events in a MediaDownload artifact's lifecycle."""
+
+    DELETED = "deleted"
+
+
 class MediaDownloadStatus(Enum):
     """Legacy wire values kept for migration/test compatibility only.
 

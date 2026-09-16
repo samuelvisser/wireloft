@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 
-def _task_item(task_id: int) -> dict:
-    finished_at = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
+def _task_item(task_id: int, *, finished_at: datetime | None = None) -> dict:
+    finished_at = finished_at or datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
     return {
         "id": task_id,
         "definition_key": "download_movie",
@@ -23,11 +23,18 @@ def _task_item(task_id: int) -> dict:
 
 
 class _FakeSession:
-    def __init__(self, download):
+    def __init__(self, download, events=()):
         self.download = download
+        self.events = list(events)
 
     def get(self, _model, media_download_id: int):
         return self.download if media_download_id == self.download.id else None
+
+    def scalar(self, _statement):
+        return len(self.events)
+
+    def scalars(self, _statement):
+        return iter(self.events)
 
 
 def test_download_history_projects_corrupted_artifact_after_task_run(monkeypatch):
@@ -81,7 +88,50 @@ def test_download_history_projects_corrupted_artifact_after_task_run(monkeypatch
     }]
 
 
-def test_download_history_paginates_past_artifact_entry(monkeypatch):
+def test_download_history_merges_deletion_event_chronologically(monkeypatch):
+    from backend.api.endpoints.media_downloads import history
+    from backend.api.models.media_download_history import MediaDownloadHistoryPageRead
+
+    download = SimpleNamespace(
+        id=42,
+        type="episode",
+        artifact_status="available",
+        artifact_error=None,
+        file_path="/downloads/episode.mp4",
+        updated_at=datetime(2026, 9, 16, 12, 10, tzinfo=timezone.utc),
+    )
+    event = SimpleNamespace(
+        id=9,
+        media_download_id=42,
+        event_type="deleted",
+        file_path="/downloads/episode.mp4",
+        occurred_at=datetime(2026, 9, 16, 12, 5, tzinfo=timezone.utc),
+    )
+
+    def fake_query_ledger(_session, **kwargs):
+        return {
+            "items": [
+                _task_item(11, finished_at=datetime(2026, 9, 16, 12, 9, tzinfo=timezone.utc)),
+                _task_item(7, finished_at=datetime(2026, 9, 9, 12, 0, tzinfo=timezone.utc)),
+            ],
+            "total": 2,
+            "offset": kwargs["offset"],
+            "limit": kwargs["limit"],
+            "has_more": False,
+        }
+
+    monkeypatch.setattr(history, "query_ledger", fake_query_ledger)
+
+    result = history.get_media_download_history(_FakeSession(download, [event]), 42)
+    parsed = MediaDownloadHistoryPageRead.model_validate(result)
+
+    assert parsed.total == 3
+    assert [item.source for item in parsed.items] == ["task", "event", "task"]
+    assert parsed.items[1].event_type == "deleted"
+    assert parsed.items[1].occurred_at == event.occurred_at
+
+
+def test_download_history_paginates_combined_history(monkeypatch):
     from backend.api.endpoints.media_downloads import history
 
     download = SimpleNamespace(
@@ -93,24 +143,24 @@ def test_download_history_paginates_past_artifact_entry(monkeypatch):
         updated_at=datetime(2026, 9, 14, 12, 5, tzinfo=timezone.utc),
     )
 
-    requested_offsets = []
+    requested = []
 
     def fake_query_ledger(_session, **kwargs):
-        requested_offsets.append(kwargs["offset"])
+        requested.append((kwargs["offset"], kwargs["limit"]))
         return {
-            "items": [_task_item(2), _task_item(1)],
+            "items": [_task_item(3), _task_item(2), _task_item(1)],
             "total": 3,
             "offset": kwargs["offset"],
             "limit": kwargs["limit"],
-            "has_more": True,
+            "has_more": False,
         }
 
     monkeypatch.setattr(history, "query_ledger", fake_query_ledger)
 
     result = history.get_media_download_history(_FakeSession(download), 42, offset=2, limit=2)
 
-    assert requested_offsets == [1]
-    assert [item["source"] for item in result["items"]] == ["task", "task"]
+    assert requested == [(0, 4)]
+    assert len(result["items"]) == 2
     assert result["total"] == 4
     assert result["has_more"] is False
 

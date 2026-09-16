@@ -7,7 +7,7 @@ from pydantic import Field
 
 from backend.api.models.base import ResponseBase
 from backend.api.models.tasks import TaskLedgerEntryRead
-from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.download_profile_types import MediaDownloadArtifactStatus, MediaDownloadEventType
 
 
 class MediaDownloadTaskHistoryEntryRead(TaskLedgerEntryRead):
@@ -26,8 +26,22 @@ class MediaDownloadArtifactHistoryEntryRead(ResponseBase):
     observed_at: datetime
 
 
+class MediaDownloadEventHistoryEntryRead(ResponseBase):
+    """A durable non-task MediaDownload lifecycle event."""
+
+    source: Literal["event"] = "event"
+    id: int
+    event_type: MediaDownloadEventType | str
+    file_path: str
+    occurred_at: datetime
+
+
 MediaDownloadHistoryEntryRead = Annotated[
-    Union[MediaDownloadTaskHistoryEntryRead, MediaDownloadArtifactHistoryEntryRead],
+    Union[
+        MediaDownloadTaskHistoryEntryRead,
+        MediaDownloadArtifactHistoryEntryRead,
+        MediaDownloadEventHistoryEntryRead,
+    ],
     Field(discriminator="source"),
 ]
 

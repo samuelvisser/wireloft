@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from backend.db.core import get_session
 from backend.db.models import Episode, Movie, MovieExtra
-from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
-from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase, MediaDownloadEvent
+from backend.types.download_profile_types import MediaDownloadArtifactStatus, MediaDownloadEventType
 from backend.types.media_types import MediaType
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 from config import get_settings
@@ -51,8 +51,23 @@ def prepare_media_download_artifact(
     """Prepare domain state for an attempt without encoding any execution state."""
     if remove_existing_artifacts:
         resolved_path = None
-        if download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
+        previous_status = download.artifact_status
+        if previous_status != MediaDownloadArtifactStatus.ABSENT.value:
             resolved_path = resolve_media_download_file(session, download)
+
+        # Only record a deletion when WireLoft found a concrete owned artifact
+        # and is about to remove it. A MISSING row, or an AVAILABLE row that
+        # disappeared in a race, must not be presented as deleted by WireLoft.
+        if resolved_path is not None and previous_status in {
+            MediaDownloadArtifactStatus.AVAILABLE.value,
+            MediaDownloadArtifactStatus.CORRUPTED.value,
+        }:
+            session.add(MediaDownloadEvent(
+                media_download_id=download.id,
+                event_type=MediaDownloadEventType.DELETED.value,
+                file_path=str(resolved_path),
+            ))
+
         remove_download_artifacts(
             str(resolved_path) if resolved_path is not None else download.file_path,
             download.thumbnail_path,

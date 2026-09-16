@@ -68,31 +68,33 @@ function taskError(run: TaskLedgerEntryRead): string | null {
 }
 
 function entryStatus(entry: MediaDownloadHistoryEntryRead): string {
-    return entry.source === 'artifact'
-        ? entry.artifactStatus
-        : taskPresentationStatus(entry)
+    if (entry.source === 'artifact') return entry.artifactStatus
+    if (entry.source === 'event') return entry.eventType
+    return taskPresentationStatus(entry)
 }
 
 function entryError(entry: MediaDownloadHistoryEntryRead): string | null {
-    return entry.source === 'artifact'
-        ? entry.artifactError
-        : taskError(entry)
+    if (entry.source === 'artifact') return entry.artifactError
+    if (entry.source === 'event') return null
+    return taskError(entry)
 }
 
 function entryType(entry: MediaDownloadHistoryEntryRead): string {
-    return entry.source === 'artifact'
-        ? 'File watcher'
-        : isRedownload(entry) ? 'Redownload' : 'Initial download'
+    if (entry.source === 'artifact') return 'File watcher'
+    if (entry.source === 'event') return 'WireLoft'
+    return isRedownload(entry) ? 'Redownload' : 'Initial download'
 }
 
 function entryTime(entry: MediaDownloadHistoryEntryRead): string | null | undefined {
-    return entry.source === 'artifact'
-        ? entry.observedAt
-        : entry.finishedAt ?? entry.startedAt
+    if (entry.source === 'artifact') return entry.observedAt
+    if (entry.source === 'event') return entry.occurredAt
+    return entry.finishedAt ?? entry.startedAt
 }
 
 function entryKey(entry: MediaDownloadHistoryEntryRead): string {
-    return entry.source === 'artifact' ? 'artifact-current' : `task-${entry.id}`
+    if (entry.source === 'artifact') return 'artifact-current'
+    if (entry.source === 'event') return `event-${entry.id}`
+    return `task-${entry.id}`
 }
 
 /** Full detail view for one download row: current state plus combined download history. */
