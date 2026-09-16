@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 # How many of the last (non-boilerplate) output lines to surface in the
 # raised error / stored error_message.
 _ERROR_TAIL_LINES = 15
-_MIN_EMBED_SIZE_RATIO = 0.5
 
 # ffmpeg always prints these before touching the actual input/output, and
 # they carry no diagnostic value for a remux failure: the "configuration:"
@@ -179,26 +178,10 @@ def embed_thumbnail(
             raise DownloadError(
                 f"ffmpeg thumbnail embedding failed (exit {result.returncode}): {_tail_lines(result.stdout)}"
             )
-        _validate_embedded_output_size(media_path, part_path)
         os.replace(part_path, media_path)
     except BaseException:
         _remove_quietly(part_path)
         raise
-
-
-def _validate_embedded_output_size(media_path: str, output_path: str) -> None:
-    """Refuse to replace media when stream-copy embedding unexpectedly truncates it."""
-    try:
-        input_size = os.path.getsize(media_path)
-        output_size = os.path.getsize(output_path)
-    except OSError as exc:
-        raise DownloadError(f"Could not validate thumbnail-embedded media: {exc}") from exc
-
-    if input_size and output_size < input_size * _MIN_EMBED_SIZE_RATIO:
-        raise DownloadError(
-            "ffmpeg thumbnail embedding produced an unexpectedly small file "
-            f"({output_size} bytes from {input_size} bytes); refusing to replace the original media"
-        )
 
 
 def _run_cancellable(command: list[str], should_cancel: CancelCheck):
