@@ -48,6 +48,11 @@ class HttpResponse:
         self.close()
 
 
+def _encode_raw_spaces(url: str) -> str:
+    """Make a URL request-safe without changing existing percent encoding."""
+    return url.replace(" ", "%20")
+
+
 def http_get(
         url: str,
         *,
@@ -63,10 +68,11 @@ def http_get(
     request_headers = {"User-Agent": USER_AGENT}
     if headers:
         request_headers.update(headers)
+    request_url = _encode_raw_spaces(url)
 
     last_error: Optional[Exception] = None
     for attempt in range(retries + 1):
-        req = Request(url, headers=request_headers, method="GET")
+        req = Request(request_url, headers=request_headers, method="GET")
         try:
             return HttpResponse(urlopen(req, timeout=timeout))
         except HTTPError as e:

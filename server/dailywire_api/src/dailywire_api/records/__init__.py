@@ -17,8 +17,9 @@ from .DwCatalogRecord import (
     DwMovieHostImagesRecord,
     DwMovieHostRecord,
     DwMovieImagesRecord,
-    DwMoviePlaybackRecord,
+    DwMovieDetailRecord,
     DwMovieRecord,
     DwRelatedContentImagesRecord,
     DwRelatedContentRecord,
 )
+from .DwMovieExtraDetailRecord import DwMovieExtraDetailRecord

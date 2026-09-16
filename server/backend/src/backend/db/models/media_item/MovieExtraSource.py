@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -37,6 +38,23 @@ class MovieExtraSource(MediaContentMetadataMixin, Base):
     )
 
     movie_extras: Mapped[list["MovieExtra"]] = relationship(back_populates="source")
+
+    def update_metadata(self, values: Mapping[str, Any]) -> None:
+        """Apply authoritative source metadata that an upstream response supplied.
+
+        Missing keys are left unchanged. Values that are present are retained as
+        returned, including explicit empty values. Fields that do not belong to
+        ``MovieExtraSource`` (for example playback tokens) are ignored.
+        """
+        incoming_slug = values.get("slug")
+        if incoming_slug is not None and incoming_slug != self.slug:
+            raise ValueError("MovieExtraSource metadata can only be updated for the same slug")
+
+        for column in self.__table__.columns:
+            field = column.key
+            if field in {"id", "slug"} or field not in values:
+                continue
+            setattr(self, field, values[field])
 
     def merge_metadata(self, other: "MovieExtraSource") -> None:
         """Merge useful metadata from another representation of this source.

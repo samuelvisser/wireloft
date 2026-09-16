@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -14,6 +15,7 @@ from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.output_template import resolve_movie_output_path
 from config import get_settings
 from dailywire_api.dw_api.movie import MovieMiddlewareClient
+from dailywire_api.records import DwMovieExtraRecord
 from dailywire_authorisation import DeviceAuthClient
 from dailywire_downloader import DownloadCancelled, DownloadError, MediaUnavailableError
 from task_manager.scheduler.results import TaskResult
@@ -31,6 +33,12 @@ from task_manager.tasks.helpers.downloads.engine import (
     resolve_download_source,
 )
 from task_manager.tasks.helpers.downloads.thumbnails import select_thumbnail_url
+
+
+@dataclass(frozen=True)
+class _MovieExtraPlaybackResolution:
+    source_url: str
+    metadata: DwMovieExtraRecord | None
 
 
 async def run_download_movie(
@@ -172,7 +180,7 @@ def _download_movie_media(
     tokens = DeviceAuthClient().get_token()
     client = MovieMiddlewareClient(access_token=tokens.access_token if tokens else None)
     if is_extra:
-        source_playback_url = _movie_extra_playback_url(
+        resolution = _resolve_movie_extra_playback(
             client,
             movie_slug=movie_slug,
             official_trailer_id=official_trailer_id,
@@ -181,6 +189,15 @@ def _download_movie_media(
             extra_title=extra_title,
         )
         ensure_not_cancelled(cancellation)
+        source_playback_url = resolution.source_url
+        if resolution.metadata is not None:
+            thumbnail_refreshed, fresh_thumbnail_url = _persist_movie_extra_metadata(
+                session,
+                extra_id=media_id,
+                metadata=resolution.metadata,
+            )
+            if thumbnail_refreshed:
+                thumbnail_url = fresh_thumbnail_url
     else:
         playback = client.get_movie_playback(movie_slug)
         ensure_not_cancelled(cancellation)
@@ -247,7 +264,37 @@ def _download_movie_media(
     )
 
 
-def _movie_extra_playback_url(
+def _persist_movie_extra_metadata(
+    session: Session,
+    *,
+    extra_id: int,
+    metadata: DwMovieExtraRecord,
+) -> tuple[bool, str | None]:
+    """Persist metadata already returned by ``getClip`` and release the transaction."""
+    extra = session.get(MovieExtra, extra_id)
+    if extra is None:
+        raise DownloadCancelled("Movie extra was deleted while resolving playback")
+
+    metadata_values = metadata.model_dump(
+        mode="python",
+        by_alias=False,
+        exclude_unset=True,
+    )
+    extra.source.update_metadata(metadata_values)
+
+    thumbnail_fields = {
+        "thumbnail_landscape_path",
+        "thumbnail_portrait_path",
+        "thumbnail_square_path",
+        "background_image_path",
+    }
+    thumbnail_refreshed = bool(metadata.model_fields_set & thumbnail_fields)
+    thumbnail_url = select_thumbnail_url(metadata) if thumbnail_refreshed else None
+    session.commit()
+    return thumbnail_refreshed, thumbnail_url
+
+
+def _resolve_movie_extra_playback(
     client: MovieMiddlewareClient,
     *,
     movie_slug: str,
@@ -255,13 +302,17 @@ def _movie_extra_playback_url(
     extra_id: int,
     extra_slug: str | None,
     extra_title: str | None,
-) -> str:
+) -> _MovieExtraPlaybackResolution:
     if not extra_slug:
         raise MediaUnavailableError(f"Movie extra {extra_id} has no Daily Wire slug")
 
+    metadata: DwMovieExtraRecord | None = None
     try:
         playback = client.get_movie_extra_playback(extra_slug)
         source_url = playback.video_url
+        playback_metadata = getattr(playback, "metadata", None)
+        if isinstance(playback_metadata, DwMovieExtraRecord):
+            metadata = playback_metadata
     except Exception:
         if official_trailer_id != extra_id:
             raise
@@ -274,4 +325,23 @@ def _movie_extra_playback_url(
         raise MediaUnavailableError(
             f"Daily Wire provides no playable video for movie extra '{extra_title or extra_slug}'"
         )
-    return source_url
+    return _MovieExtraPlaybackResolution(source_url=source_url, metadata=metadata)
+
+
+def _movie_extra_playback_url(
+    client: MovieMiddlewareClient,
+    *,
+    movie_slug: str,
+    official_trailer_id: int | None,
+    extra_id: int,
+    extra_slug: str | None,
+    extra_title: str | None,
+) -> str:
+    return _resolve_movie_extra_playback(
+        client,
+        movie_slug=movie_slug,
+        official_trailer_id=official_trailer_id,
+        extra_id=extra_id,
+        extra_slug=extra_slug,
+        extra_title=extra_title,
+    ).source_url
