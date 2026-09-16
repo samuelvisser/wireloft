@@ -154,7 +154,6 @@ def embed_thumbnail(
             "-map", "1:v:0",
             "-c", "copy",
             f"-c:v:{artwork_stream_index}", "mjpeg",
-            f"-frames:v:{artwork_stream_index}", "1",
             f"-disposition:v:{artwork_stream_index}", "attached_pic",
         ]
         if muxer == "mp4":
