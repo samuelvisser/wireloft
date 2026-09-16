@@ -364,7 +364,7 @@ export function useStreamProfilesByShowSlug(showSlug?: string) {
     })
 }
 
-const ACTIVE_OPERATION_STATUSES = new Set(['QUEUED', 'RUNNING'])
+const ACTIVE_OPERATION_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
 
 function contextString(operation: TaskOperationRead, key: string): string | null {
     const value = operation.context?.[key]
@@ -408,7 +408,7 @@ function presentationStatus(
     operation?: TaskOperationRead,
 ): string {
     if (operation?.status === 'QUEUED') return 'pending'
-    if (operation?.status === 'RUNNING') return 'downloading'
+    if (operation?.status === 'RUNNING' || operation?.status === 'WAITING') return 'downloading'
     if (operation?.status === 'FAILED' || operation?.status === 'PARTIAL') return 'error'
     if (operation?.status === 'CANCELED') return 'cancelled'
     if (operation?.status === 'SUCCEEDED') {
@@ -424,7 +424,7 @@ function presentationStatus(
     if (download.latestTaskStatus === 'CANCELED') return 'cancelled'
     if (download.latestTaskStatus === 'FAILED') return 'error'
     if (download.latestTaskStatus === 'RUNNING') return 'downloading'
-    return 'pending'
+    return 'not_downloaded'
 }
 
 function presentDownload(
