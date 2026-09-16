@@ -15,6 +15,7 @@ import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {ACTIVE_DOWNLOAD_STATUSES} from '../../types/media_download'
 import {MovieExtraType} from '../../types/schemas/dailywire_catalog'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
+import {MovieRead, MovieReadSchema} from '../../types/schemas/movie'
 import {formatBytes} from '../../utils/formatting'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
@@ -201,6 +202,9 @@ export default function MoviePage() {
     } = useDailywireMovie(localMovies && !localMovie ? slug : undefined)
     const movie = localMovie ?? dailywireMovie
     const refreshAttemptedSlugs = useRef(new Set<string>())
+    const shouldRefreshMovie = Boolean(
+        localMovie && (localMovie.status !== 'published' || !localMovie.isDownloadable),
+    )
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads} = useMovieDownloads(slug)
     const refreshExtrasOperation = useActiveOperation(
@@ -253,8 +257,7 @@ export default function MoviePage() {
     useEffect(() => {
         if (
             !slug
-            || !localMovie
-            || (localMovie.status === 'published' && localMovie.isDownloadable)
+            || !shouldRefreshMovie
             || refreshAttemptedSlugs.current.has(slug)
         ) return
 
@@ -271,7 +274,10 @@ export default function MoviePage() {
                     },
                 )
                 if (response.ok) {
-                    await queryClient.invalidateQueries({queryKey: ['movies']})
+                    const refreshedMovie = MovieReadSchema.parse(await response.json())
+                    queryClient.setQueryData<MovieRead[]>(['movies'], (movies) =>
+                        movies?.map((item) => item.slug === refreshedMovie.slug ? refreshedMovie : item),
+                    )
                 }
             } catch {
                 // The persisted movie remains fully usable when Daily Wire is unavailable.
@@ -279,7 +285,7 @@ export default function MoviePage() {
         }
         void refresh()
         return () => controller.abort()
-    }, [localMovie, queryClient, slug])
+    }, [queryClient, shouldRefreshMovie, slug])
 
     const startMovieDownload = async () => {
         if (!slug || !profileId || !movie) return
