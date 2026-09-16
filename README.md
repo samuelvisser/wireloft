@@ -82,3 +82,7 @@ See the [Settings documentation](https://github.com/samuelvisser/wireloft/wiki/S
 
 While WireLoft is built entirely from the ground up with original code, the open-source [DailyWirePodcastProxy](https://github.com/fpnewton/DailyWirePodcastProxy) project has helped tremendously in figuring out how The Daily Wire API works. 
 DailyWirePodcastProxy allows you to access premium versions of Daily Wire shows directly from your podcast app. Definitely check it out if you're interested!
+
+## Disclaimer
+This project is not affiliated with or endorsed by The Daily Wire. Only connect a Daily Wire account you are authorized to access,
+and comply with all applicable terms and laws.
