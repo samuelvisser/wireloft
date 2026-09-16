@@ -15,7 +15,7 @@ Show profiles can use:
 - 720p video;
 - audio only.
 
-A Show profile also has an **Available for** setting. This only controls where WireLoft offers the profile in the interface; it does not change the file itself.
+A Show profile also has an **Available for** setting. This controls where WireLoft offers the profile in the interface.
 
 ### Movie profiles
 
@@ -80,15 +80,9 @@ The Local Media Profile editor includes a variable picker and path preview. Use 
 
 ## Optional values and conditionals
 
-Some metadata, such as a season or date, may not exist for every item. Missing values are empty, so Jinja conditionals can omit the punctuation or folder that belongs with them.
+Some metadata, such as a release date, may not exist for every item. Missing values are empty, so Jinja conditionals can omit the punctuation or folder that belongs with them.
 
 Example:
-
-```jinja
-/downloads/{{ show_title }}/{% if season_name %}{{ season_name }}/{% endif %}{{ episode_title }}.ext
-```
-
-Or append a year only when one is known:
 
 ```jinja
 /downloads/{{ show_title }}/{{ episode_title }}{% if year %} ({{ year }}){% endif %}.ext
@@ -123,16 +117,14 @@ Or append a year only when one is known:
 | `minute` | Minute value |
 | `second` | Second value |
 
-`season_index` is useful when a media server expects numbered season folders even if Daily Wire uses custom season names.
-
-Use `episode_label` when you want a clean human-facing filename. Use `episode_identifier` when the filename itself needs a guaranteed unique episode value.
+`season_index` is useful when a media server expects numbered season folders even if The Daily Wire uses custom season names.
 
 ## Movies and extras
 
 Movie templates have two groups of values:
 
 - variables beginning with `movie_` always describe the parent movie;
-- variables without that prefix describe the actual item being downloaded, which can be either the main movie or a specific extra.
+- variables without that prefix describe the actual item being downloaded, which can be either the main movie or a specific movie extra.
 
 This makes it possible to keep all extras inside the movie's folder while giving each item its own filename.
 
@@ -142,7 +134,9 @@ Example:
 /downloads/Movies/{{ movie_title }}{% if movie_year %} ({{ movie_year }}){% endif %}/{{ media_type }} - {{ title }}.ext
 ```
 
-A movie template must use an item-specific value such as `{{ title }}`, `{{ slug }}`, or `{{ media_type }}` so the main movie and an extra cannot resolve to the same output path.
+A movie template must use an item-specific value such as `{{ title }}`, `{{ slug }}`, or `{{ media_type }}` so the main movie and an extra cannot resolve to the same output path.  
+WireLoft never overwrites existing files if the same output path is generated for multiple items, but it is
+still a case that should be avoided to make it obvious what content is in a file.
 
 ### Parent movie variables
 
@@ -174,7 +168,7 @@ These describe the main movie or the specific extra currently being downloaded:
 | `date`, `time`, `datetime` | Item date/time values |
 | `year`, `month`, `day`, `hour`, `minute`, `second` | Item date/time components |
 
-Daily Wire does not always provide every field for movie extras. Use conditionals around values that may be empty.
+The Daily Wire does not always provide every field for movie extras. Use conditionals around values that may be empty.
 
 ## Filename restrictions
 
