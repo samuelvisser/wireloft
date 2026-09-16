@@ -22,6 +22,7 @@ type StatusFilterOption = {
 }
 
 const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
+    {value: 'not_downloaded', label: 'Not downloaded', statuses: ['not_downloaded']},
     {value: 'pending', label: 'Queued', statuses: ['pending']},
     {value: 'downloading', label: 'Downloading', statuses: ['downloading']},
     {value: 'downloaded', label: 'Downloaded', statuses: ['downloaded', 'redownloaded']},
@@ -48,7 +49,7 @@ function formatDateTime(value: Date | null | undefined): string {
     }
 }
 
-/** The timestamp to show for a download row: when it finished, or else when it was queued. */
+/** The timestamp to show for a download row: when it finished, otherwise when its record was created. */
 function rowTimestamp(row: MediaDownloadViewRead): Date | null {
     return row.finishedAt ?? row.createdAt ?? null
 }
@@ -126,8 +127,9 @@ function StatusCell({row}: {row: MediaDownloadViewRead}) {
     return <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
 }
 
-// Queued attempts can be prioritized; retry is for attempts that already started or failed.
+// Queued operations can be prioritized. Records with no active queue item can be retried instead.
 const _RETRYABLE_STATUSES = new Set([
+    'not_downloaded',
     'downloading',
     'local_processing',
     'cancelled',
@@ -270,10 +272,11 @@ export default function DownloadsPage() {
         <section className="view" aria-labelledby="downloads-title">
             <div className="view-header">
                 <h1 id="downloads-title">Downloads</h1>
-                <PageSubtitle summary={<>All media downloads: running, finished and failed.</>}>
+                <PageSubtitle summary={<>All media downloads: queued, running, finished, failed and not downloaded.</>}>
                     <p>
                         Every episode and movie download shows up here, one row per Local Media Profile.
                         Running downloads report live progress; failed ones show the error and can be retried.
+                        Records without a file or active queue item are marked Not downloaded and can also be retried.
                         Deleting a row only removes the record, never the downloaded file unless the download had never fully finished.
                     </p>
                 </PageSubtitle>
@@ -330,7 +333,7 @@ export default function DownloadsPage() {
                                 <span className="mobile-summary-title">{rowTitle(row)}</span>
                                 <span className="mobile-summary-subtitle">{rowContext(row)}</span>
                                 <span className="mobile-summary-meta">
-                                    <span>{status === 'pending' ? 'Queued' : status === 'downloading' ? `${row.progress}%` : status === 'cancelled' ? 'Cancelled' : formatBytes(row.downloadedBytes)}</span>
+                                    <span>{status === 'not_downloaded' ? 'Not downloaded' : status === 'pending' ? 'Queued' : status === 'downloading' ? `${row.progress}%` : status === 'cancelled' ? 'Cancelled' : formatBytes(row.downloadedBytes)}</span>
                                     <span aria-hidden="true">•</span>
                                     <span>{row.formatDownloaded ?? 'Unknown format'}</span>
                                     <span className={`mobile-summary-status ${statusClass}`}>
