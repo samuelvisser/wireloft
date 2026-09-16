@@ -28,6 +28,13 @@ export function buildLocalMediaProfileOnSubmit<TIn extends FieldValues, TOut ext
     })
 }
 
+const THUMBNAIL_MODE_LABELS = {
+    no_thumbnail: 'No thumbnail',
+    embed: 'Embed in media',
+    sidecar: 'Download besides media',
+    embed_and_sidecar: 'Both embed and download',
+} as const
+
 export default function LocalMediaProfileForm({form, mode}: Props) {
     const {control, register, formState: {errors}} = form
     const {data: settings} = useSettings()
@@ -36,6 +43,9 @@ export default function LocalMediaProfileForm({form, mode}: Props) {
         : settings.values.downloadSettings.downloadMode === 'temporary'
             ? 'Save to temporary folder first'
             : 'Save directly to downloads'
+    const systemThumbnailModeLabel = !settings
+        ? 'Loading system setting…'
+        : THUMBNAIL_MODE_LABELS[settings.values.downloadSettings.thumbnailMode]
 
     return (
         <>
@@ -110,6 +120,45 @@ export default function LocalMediaProfileForm({form, mode}: Props) {
                             Save directly to downloads, due to its simple nature, is a little faster and less prone to errors. Though if errors do happen in either mode, WireLoft will
                             automatically restore from them.
                         </p>
+                    </ReadMore>
+                </div>
+            </div>
+
+            <div className="form-row">
+                <label htmlFor="local-media-thumbnail-mode">Thumbnail behavior</label>
+                <Controller
+                    control={control}
+                    name="thumbnailMode"
+                    render={({field}) => (
+                        <select
+                            id="local-media-thumbnail-mode"
+                            className="input"
+                            value={field.value ?? 'system'}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            aria-invalid={!!errors.thumbnailMode}
+                            aria-describedby={errors.thumbnailMode ? 'local-media-thumbnail-mode-errors' : 'local-media-thumbnail-mode-help'}
+                        >
+                            <option value="system">System ({systemThumbnailModeLabel})</option>
+                            <option value="no_thumbnail">No thumbnail</option>
+                            <option value="embed">Embed in media</option>
+                            <option value="sidecar">Download besides media</option>
+                            <option value="embed_and_sidecar">Both embed and download</option>
+                        </select>
+                    )}
+                />
+                {errors.thumbnailMode && (
+                    <div id="local-media-thumbnail-mode-errors" className="error" role="alert" aria-live="polite">
+                        {errors.thumbnailMode.message as string}
+                    </div>
+                )}
+                <div className="help" id="local-media-thumbnail-mode-help">
+                    <ReadMore summary="Choose whether downloaded media stores its Daily Wire thumbnail and whether this profile inherits the system default.">
+                        <p><strong>System</strong> follows the current system-wide default shown in parentheses.</p>
+                        <p><strong>No thumbnail</strong> keeps the current media-only behavior.</p>
+                        <p><strong>Embed in media</strong> stores the thumbnail as cover artwork inside the downloaded media file.</p>
+                        <p><strong>Download besides media</strong> saves the thumbnail as an image alongside the media file.</p>
+                        <p><strong>Both embed and download</strong> does both.</p>
                     </ReadMore>
                 </div>
             </div>

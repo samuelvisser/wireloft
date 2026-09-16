@@ -18,7 +18,10 @@ from dailywire_authorisation import DeviceAuthClient
 from dailywire_downloader import DownloadCancelled, DownloadError, MediaUnavailableError
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
-from task_manager.tasks.helpers.downloads.download_modes import effective_download_mode
+from task_manager.tasks.helpers.downloads.download_modes import (
+    effective_download_mode,
+    effective_thumbnail_mode,
+)
 from task_manager.tasks.helpers.downloads.engine import (
     DownloadExecution,
     DownloadPlan,
@@ -27,6 +30,7 @@ from task_manager.tasks.helpers.downloads.engine import (
     execute_download_plan,
     resolve_download_source,
 )
+from task_manager.tasks.helpers.downloads.thumbnails import select_thumbnail_url
 
 
 async def run_download_movie(
@@ -83,12 +87,13 @@ async def run_download_movie(
         session.expire_all()
         download = session.get(MediaDownloadBase, media_download_id)
         if download is None:
-            remove_download_artifacts(execution.result.path)
+            remove_download_artifacts(execution.result.path, execution.thumbnail_path)
             raise DownloadCancelled("Media download was deleted while the worker was running")
         ensure_not_cancelled(progress)
 
         artifact_identity = inspect_artifact(execution.result.path)
         download.file_path = execution.result.path
+        download.thumbnail_path = execution.thumbnail_path
         download.artifact_stat_dev = artifact_identity.stat_dev
         download.artifact_stat_ino = artifact_identity.stat_ino
         download.artifact_size_bytes = artifact_identity.size_bytes
@@ -113,18 +118,19 @@ async def run_download_movie(
                 "downloaded_bytes": execution.result.bytes_downloaded,
                 "format_downloaded": execution.format_downloaded,
                 "file_path": execution.result.path,
+                "thumbnail_path": execution.thumbnail_path,
                 "is_redownload": is_redownload,
             },
         )
     except DownloadCancelled:
         session.rollback()
         if execution is not None:
-            remove_download_artifacts(execution.result.path)
+            remove_download_artifacts(execution.result.path, execution.thumbnail_path)
         raise
     except Exception:
         session.rollback()
         if execution is not None:
-            remove_download_artifacts(execution.result.path)
+            remove_download_artifacts(execution.result.path, execution.thumbnail_path)
         raise
     finally:
         if execution is not None:
@@ -156,6 +162,8 @@ def _download_movie_media(
     preferred_format = profile.preferred_format
     output_template = profile.output_template
     download_mode = effective_download_mode(profile)
+    thumbnail_mode = effective_thumbnail_mode(profile)
+    thumbnail_url = select_thumbnail_url(media)
     settings = get_settings().download_settings
 
     # Authentication, playback lookup and probing may all block on the internet.
@@ -223,6 +231,8 @@ def _download_movie_media(
         download_mode=download_mode,
         temporary_root=settings.temporary_download_root,
         ffmpeg_path=settings.ffmpeg_path,
+        thumbnail_url=thumbnail_url,
+        thumbnail_mode=thumbnail_mode,
     )
 
     def persist_direct_destination(destination: str) -> None:

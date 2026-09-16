@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from backend.types.local_media_profile_types import PreferredFormat
-from config.settings.submodels import DownloadMode
+from config.settings.submodels import DownloadMode, ThumbnailMode
 from dailywire_downloader import (
     DownloadCancelled,
     DownloadError,
@@ -16,6 +19,7 @@ from dailywire_downloader import (
     VideoRendition,
     download_file,
     download_hls,
+    embed_thumbnail,
     probe,
     remux_to_mp4,
 )
@@ -45,6 +49,7 @@ class ResolvedDownloadSource:
     use_hls: bool
     remux_to_mp4: bool
     extension: str
+    audio_only: bool
 
 
 @dataclass(frozen=True)
@@ -56,6 +61,8 @@ class DownloadPlan:
     download_mode: DownloadMode
     temporary_root: str
     ffmpeg_path: str
+    thumbnail_url: str | None = None
+    thumbnail_mode: ThumbnailMode = ThumbnailMode.NO_THUMBNAIL
 
 
 @dataclass
@@ -64,6 +71,7 @@ class DownloadExecution:
 
     result: DownloadResult
     source: ResolvedDownloadSource
+    thumbnail_path: str | None = None
     workspace: TemporaryDownloadWorkspace | None = None
 
     @property
@@ -181,6 +189,7 @@ def resolve_download_source(
         use_hls=use_hls,
         remux_to_mp4=remux,
         extension="mp4" if remux else info.suggested_extension,
+        audio_only=audio_only,
     )
 
 
@@ -191,12 +200,7 @@ def execute_download_plan(
     cancellation=None,
     on_direct_destination_reserved: Callable[[str], None] | None = None,
 ) -> DownloadExecution:
-    """Execute one resolved download using the selected storage mode.
-
-    Temporary-mode workspaces are returned on success so the caller can keep the
-    crash-recovery marker until its artifact database transaction commits. Failed
-    transfers clean up their own unpublished or partially published filesystem state.
-    """
+    """Execute one resolved download using the selected storage and thumbnail modes."""
     task_progress.set_selected_format(plan.source.format_downloaded)
     ensure_not_cancelled(cancellation)
 
@@ -225,6 +229,7 @@ def _execute_temporary_plan(
         plan.requested_destination,
     )
     published_destination: str | None = None
+    thumbnail_path: str | None = None
     keep_workspace = False
     try:
         result = _perform_download(
@@ -234,12 +239,29 @@ def _execute_temporary_plan(
             task_progress=task_progress,
             cancellation=cancellation,
         )
+        thumbnail_source = _prepare_thumbnail(
+            plan,
+            workspace.workspace,
+            cancellation=cancellation,
+        )
+        if thumbnail_source is not None and _wants_embed(plan.thumbnail_mode):
+            embed_thumbnail(
+                result.path,
+                str(thumbnail_source),
+                audio_only=plan.source.audio_only,
+                ffmpeg_path=plan.ffmpeg_path,
+                should_cancel=cancellation,
+            )
+
         ensure_not_cancelled(cancellation)
         destination = publish_temporary_download(
             workspace.path,
             plan.requested_destination,
         )
         published_destination = str(destination)
+        if thumbnail_source is not None and _wants_sidecar(plan.thumbnail_mode):
+            thumbnail_path = _publish_sidecar(thumbnail_source, destination)
+
         keep_workspace = True
         return DownloadExecution(
             result=DownloadResult(
@@ -248,11 +270,12 @@ def _execute_temporary_plan(
                 segments_downloaded=result.segments_downloaded,
             ),
             source=plan.source,
+            thumbnail_path=thumbnail_path,
             workspace=workspace,
         )
     except BaseException:
         if published_destination is not None:
-            remove_download_artifacts(published_destination)
+            remove_download_artifacts(published_destination, thumbnail_path)
         raise
     finally:
         if not keep_workspace:
@@ -268,6 +291,7 @@ def _execute_direct_plan(
 ) -> DownloadExecution:
     reservation = reserve_unique_download_path(plan.requested_destination)
     destination = str(reservation.path)
+    thumbnail_path: str | None = None
     try:
         if on_destination_reserved is not None:
             on_destination_reserved(destination)
@@ -278,12 +302,103 @@ def _execute_direct_plan(
             task_progress=task_progress,
             cancellation=cancellation,
         )
-        return DownloadExecution(result=result, source=plan.source)
+        with tempfile.TemporaryDirectory() as thumbnail_workspace:
+            thumbnail_source = _prepare_thumbnail(
+                plan,
+                Path(thumbnail_workspace),
+                cancellation=cancellation,
+            )
+            if thumbnail_source is not None and _wants_embed(plan.thumbnail_mode):
+                embed_thumbnail(
+                    result.path,
+                    str(thumbnail_source),
+                    audio_only=plan.source.audio_only,
+                    ffmpeg_path=plan.ffmpeg_path,
+                    should_cancel=cancellation,
+                )
+            if thumbnail_source is not None and _wants_sidecar(plan.thumbnail_mode):
+                thumbnail_path = _publish_sidecar(
+                    thumbnail_source,
+                    Path(destination),
+                )
+        return DownloadExecution(
+            result=result,
+            source=plan.source,
+            thumbnail_path=thumbnail_path,
+        )
     except BaseException:
-        remove_download_artifacts(destination)
+        remove_download_artifacts(destination, thumbnail_path)
         raise
     finally:
         reservation.release_if_unclaimed()
+
+
+def _prepare_thumbnail(
+    plan: DownloadPlan,
+    workspace: Path,
+    *,
+    cancellation,
+) -> Path | None:
+    if plan.thumbnail_mode is ThumbnailMode.NO_THUMBNAIL or not plan.thumbnail_url:
+        return None
+
+    ensure_not_cancelled(cancellation)
+    info = probe(plan.thumbnail_url)
+    extension = info.suggested_extension
+    if extension not in {"jpg", "jpeg", "png", "webp"}:
+        extension = "jpg"
+
+    workspace.mkdir(parents=True, exist_ok=True)
+    destination = workspace / f"thumbnail.{extension}"
+    download_file(
+        plan.thumbnail_url,
+        str(destination),
+        should_cancel=cancellation,
+    )
+    return destination
+
+
+def _wants_embed(mode: ThumbnailMode) -> bool:
+    return mode in {ThumbnailMode.EMBED, ThumbnailMode.EMBED_AND_SIDECAR}
+
+
+def _wants_sidecar(mode: ThumbnailMode) -> bool:
+    return mode in {ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR}
+
+
+def _publish_sidecar(source: Path, media_destination: Path) -> str:
+    """Publish a sidecar with the exact collision-resolved media basename."""
+    destination = media_destination.with_suffix(source.suffix.lower())
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    part_path = Path(str(destination) + ".part")
+
+    placeholder_fd: int | None = None
+    placeholder_created = False
+    try:
+        placeholder_fd = os.open(
+            destination,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o666,
+        )
+        placeholder_created = True
+        os.close(placeholder_fd)
+        placeholder_fd = None
+        shutil.copyfile(source, part_path)
+        os.replace(part_path, destination)
+        return str(destination)
+    except BaseException:
+        if placeholder_fd is not None:
+            os.close(placeholder_fd)
+        try:
+            part_path.unlink()
+        except FileNotFoundError:
+            pass
+        if placeholder_created:
+            try:
+                destination.unlink()
+            except FileNotFoundError:
+                pass
+        raise
 
 
 def _perform_download(

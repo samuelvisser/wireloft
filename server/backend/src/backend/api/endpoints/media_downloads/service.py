@@ -319,7 +319,7 @@ def suppress_media_download_automatic_retry(s: Session, media_download_id: int) 
         raise HTTPException(status_code=404, detail="Media download not found")
     download.automatic_retry_suppressed = True
     if download.artifact_status == MediaDownloadArtifactStatus.ABSENT.value:
-        remove_download_artifacts(download.file_path)
+        remove_download_artifacts(download.file_path, download.thumbnail_path)
     s.flush()
     return download
 
@@ -345,7 +345,8 @@ def delete_media_download(s: Session, media_download_id: int) -> MediaDownloadAP
     payload = MediaDownloadAPIRead.model_validate(item)
     if item.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value:
         remove_download_artifacts(
-            str(resolved_path) if resolved_path is not None else item.file_path
+            str(resolved_path) if resolved_path is not None else item.file_path,
+            item.thumbnail_path,
         )
     s.delete(item)
     s.flush()

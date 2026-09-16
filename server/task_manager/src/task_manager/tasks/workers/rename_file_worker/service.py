@@ -132,17 +132,30 @@ async def run_rename_file_worker(
                         f"Cannot rename '{source}' to '{destination}': destination already exists"
                     )
                 destination.parent.mkdir(parents=True, exist_ok=True)
+                thumbnail_destination = _planned_thumbnail_destination(download, destination)
+                if thumbnail_destination is not None and thumbnail_destination.exists():
+                    raise FileExistsError(
+                        f"Cannot rename thumbnail to '{thumbnail_destination}': destination already exists"
+                    )
+
                 shutil.move(str(source), str(destination))
+                try:
+                    _move_thumbnail_if_present(download, thumbnail_destination)
+                except BaseException:
+                    # Keep the media and its accessory together if the second move fails.
+                    if destination.exists() and not source.exists():
+                        shutil.move(str(destination), str(source))
+                    raise
+
                 _record_artifact_location(download, destination)
-                # The filesystem cannot participate in the SQL transaction. Persist
-                # every completed move immediately so later failures cannot roll the
-                # database path back behind already-moved files.
                 s.commit()
                 renamed += 1
             elif destination.exists():
-                # A previous WireLoft attempt can be interrupted after shutil.move()
-                # but before its database commit. This can be a cross-directory move,
-                # so it remains a separate recovery path from FileWatcher reconciliation.
+                # A previous attempt can be interrupted after the filesystem move
+                # but before its database commit. Reconcile the sidecar in the same
+                # recovery pass so it remains beside the recovered media artifact.
+                thumbnail_destination = _planned_thumbnail_destination(download, destination)
+                _move_thumbnail_if_present(download, thumbnail_destination)
                 _record_artifact_location(download, destination)
                 s.commit()
                 recovered += 1
@@ -175,6 +188,36 @@ async def run_rename_file_worker(
             "files_considered": total,
         },
     )
+
+
+def _planned_thumbnail_destination(
+    download: EpisodeMediaDownload,
+    media_destination: Path,
+) -> Path | None:
+    if not download.thumbnail_path:
+        return None
+    suffix = Path(download.thumbnail_path).suffix
+    return media_destination.with_suffix(suffix) if suffix else None
+
+
+def _move_thumbnail_if_present(
+    download: EpisodeMediaDownload,
+    destination: Path | None,
+) -> None:
+    if not download.thumbnail_path or destination is None:
+        return
+
+    source = Path(download.thumbnail_path)
+    if source == destination:
+        return
+    if source.exists():
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(destination))
+        download.thumbnail_path = str(destination)
+    elif destination.exists():
+        download.thumbnail_path = str(destination)
+    else:
+        download.thumbnail_path = None
 
 
 def _record_artifact_location(download: EpisodeMediaDownload, path: Path) -> None:

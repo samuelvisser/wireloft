@@ -125,6 +125,7 @@ class AppSettings(SettingsBase):
         download_timeout_seconds=600,
         download_root=PROJECT_ROOT / "downloads",
         download_mode=DownloadMode.DIRECT,
+        thumbnail_mode=ThumbnailMode.EMBED,
         temporary_download_root=PROJECT_ROOT / "downloads" / ".wireloft-temp",
         filename_restriction_mode=FilenameRestrictionMode.WINDOWS,
         remux_video_to_mp4=True,

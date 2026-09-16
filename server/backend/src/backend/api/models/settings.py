@@ -17,6 +17,7 @@ from config.settings.settings import AppSettings
 from config.settings.submodels import (
     DownloadMode,
     FilenameRestrictionMode,
+    ThumbnailMode,
     normalize_metadata_refresh_intervals,
 )
 
@@ -59,6 +60,7 @@ SettingFieldPath = Literal[
     "downloadSettings.downloadTimeoutSeconds",
     "downloadSettings.downloadRoot",
     "downloadSettings.downloadMode",
+    "downloadSettings.thumbnailMode",
     "downloadSettings.temporaryDownloadRoot",
     "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
@@ -106,6 +108,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.downloadTimeoutSeconds",
     "downloadSettings.downloadRoot",
     "downloadSettings.downloadMode",
+    "downloadSettings.thumbnailMode",
     "downloadSettings.temporaryDownloadRoot",
     "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
@@ -244,6 +247,7 @@ class DownloadSettingsValue(_SettingsValueModel):
     download_timeout_seconds: int = Field(ge=1)
     download_root: Path
     download_mode: DownloadMode
+    thumbnail_mode: ThumbnailMode
     temporary_download_root: Path
     filename_restriction_mode: FilenameRestrictionMode
     remux_video_to_mp4: bool

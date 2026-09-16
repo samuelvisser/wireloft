@@ -15,6 +15,14 @@ class LocalMediaProfileStorageMode(StrEnum):
     TEMPORARY = "temporary"
 
 
+class LocalMediaProfileThumbnailMode(StrEnum):
+    SYSTEM = "system"
+    NO_THUMBNAIL = "no_thumbnail"
+    EMBED = "embed"
+    SIDECAR = "sidecar"
+    EMBED_AND_SIDECAR = "embed_and_sidecar"
+
+
 class ShowLocalMediaProfileScope(StrEnum):
     BOTH = "both"
     PODCAST = "podcast"

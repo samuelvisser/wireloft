@@ -42,6 +42,7 @@ class MediaDownloadBase(HasTaskResourcesMixin, Base):
     local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
 
     file_path: Mapped[str]
+    thumbnail_path: Mapped[Optional[str]]
     artifact_status: Mapped[str] = mapped_column(
         String(24),
         default=MediaDownloadArtifactStatus.ABSENT.value,

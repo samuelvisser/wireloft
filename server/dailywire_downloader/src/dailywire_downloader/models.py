@@ -92,6 +92,10 @@ _CONTENT_TYPE_EXTENSIONS = {
     "audio/aac": "aac",
     "video/mp4": "mp4",
     "video/mp2t": "ts",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
 }
 
 
