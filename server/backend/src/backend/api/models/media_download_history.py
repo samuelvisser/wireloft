@@ -1,49 +1,19 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal, Optional, Union
-
-from pydantic import Field
+from typing import Optional
 
 from backend.api.models.base import ResponseBase
-from backend.api.models.tasks import TaskLedgerEntryRead
-from backend.types.download_profile_types import MediaDownloadArtifactStatus, MediaDownloadEventType
 
 
-class MediaDownloadTaskHistoryEntryRead(TaskLedgerEntryRead):
-    """A canonical download TaskRun projected into download history."""
+class MediaDownloadHistoryEntryRead(ResponseBase):
+    """One normalized entry in a media download's user-facing history."""
 
-    source: Literal["task"] = "task"
-
-
-class MediaDownloadArtifactHistoryEntryRead(ResponseBase):
-    """Current problem state discovered by artifact reconciliation."""
-
-    source: Literal["artifact"] = "artifact"
-    artifact_status: MediaDownloadArtifactStatus | str
-    artifact_error: Optional[str]
-    file_path: str
-    observed_at: datetime
-
-
-class MediaDownloadEventHistoryEntryRead(ResponseBase):
-    """A durable non-task MediaDownload lifecycle event."""
-
-    source: Literal["event"] = "event"
-    id: int
-    event_type: MediaDownloadEventType | str
-    file_path: str
-    occurred_at: datetime
-
-
-MediaDownloadHistoryEntryRead = Annotated[
-    Union[
-        MediaDownloadTaskHistoryEntryRead,
-        MediaDownloadArtifactHistoryEntryRead,
-        MediaDownloadEventHistoryEntryRead,
-    ],
-    Field(discriminator="source"),
-]
+    key: str
+    status: str
+    activity: str
+    occurred_at: Optional[datetime]
+    error: Optional[str]
 
 
 class MediaDownloadHistoryPageRead(ResponseBase):

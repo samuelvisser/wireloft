@@ -4,18 +4,26 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 
-def _task_item(task_id: int, *, finished_at: datetime | None = None) -> dict:
+def _task_item(
+    task_id: int,
+    *,
+    finished_at: datetime | None = None,
+    is_redownload: bool = False,
+    status: str = "SUCCEEDED",
+    message: str = "Download complete",
+    last_error: str | None = None,
+) -> dict:
     finished_at = finished_at or datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
     return {
         "id": task_id,
         "definition_key": "download_movie",
         "resource_type": "media_download",
         "resource_id": 42,
-        "status": "SUCCEEDED",
-        "message": "Download complete",
-        "last_error": None,
-        "inputs": {"is_redownload": False},
-        "result": {"data": {"is_redownload": False}},
+        "status": status,
+        "message": message,
+        "last_error": last_error,
+        "inputs": {"is_redownload": is_redownload},
+        "result": {"data": {"is_redownload": is_redownload}},
         "started_at": finished_at,
         "finished_at": finished_at,
         "runtime_ms": 1000,
@@ -70,13 +78,14 @@ def test_download_history_projects_corrupted_artifact_after_task_run(monkeypatch
     parsed = MediaDownloadHistoryPageRead.model_validate(result)
 
     assert parsed.total == 2
-    assert parsed.items[0].source == "artifact"
-    assert parsed.items[0].artifact_status == "corrupted"
-    assert parsed.items[0].artifact_error == artifact_error
-    assert parsed.items[0].file_path == "/downloads/movie.mp4"
-    assert parsed.items[0].observed_at == observed_at
-    assert parsed.items[1].source == "task"
-    assert parsed.items[1].id == 7
+    assert parsed.items[0].key == "artifact-current"
+    assert parsed.items[0].status == "corrupted"
+    assert parsed.items[0].activity == "File watcher"
+    assert parsed.items[0].error == artifact_error
+    assert parsed.items[0].occurred_at == observed_at
+    assert parsed.items[1].key == "task-7"
+    assert parsed.items[1].status == "downloaded"
+    assert parsed.items[1].activity == "Initial download"
     assert calls == [{
         "definition_key": "download_movie",
         "resource_type": "media_download",
@@ -111,7 +120,11 @@ def test_download_history_merges_deletion_event_chronologically(monkeypatch):
     def fake_query_ledger(_session, **kwargs):
         return {
             "items": [
-                _task_item(11, finished_at=datetime(2026, 9, 16, 12, 9, tzinfo=timezone.utc)),
+                _task_item(
+                    11,
+                    finished_at=datetime(2026, 9, 16, 12, 9, tzinfo=timezone.utc),
+                    is_redownload=True,
+                ),
                 _task_item(7, finished_at=datetime(2026, 9, 9, 12, 0, tzinfo=timezone.utc)),
             ],
             "total": 2,
@@ -126,9 +139,49 @@ def test_download_history_merges_deletion_event_chronologically(monkeypatch):
     parsed = MediaDownloadHistoryPageRead.model_validate(result)
 
     assert parsed.total == 3
-    assert [item.source for item in parsed.items] == ["task", "event", "task"]
-    assert parsed.items[1].event_type == "deleted"
+    assert [item.status for item in parsed.items] == ["redownloaded", "deleted", "downloaded"]
+    assert [item.activity for item in parsed.items] == ["Redownload", "WireLoft", "Initial download"]
+    assert parsed.items[1].key == "event-9"
     assert parsed.items[1].occurred_at == event.occurred_at
+
+
+def test_download_history_normalizes_task_failures(monkeypatch):
+    from backend.api.endpoints.media_downloads import history
+
+    download = SimpleNamespace(
+        id=42,
+        type="episode",
+        artifact_status="absent",
+        artifact_error=None,
+        file_path="/downloads/episode.mp4",
+        updated_at=datetime(2026, 9, 14, 12, 5, tzinfo=timezone.utc),
+    )
+
+    def fake_query_ledger(_session, **kwargs):
+        return {
+            "items": [_task_item(
+                8,
+                status="FAILED",
+                message="Download failed",
+                last_error="HTTP 500",
+            )],
+            "total": 1,
+            "offset": kwargs["offset"],
+            "limit": kwargs["limit"],
+            "has_more": False,
+        }
+
+    monkeypatch.setattr(history, "query_ledger", fake_query_ledger)
+
+    result = history.get_media_download_history(_FakeSession(download), 42)
+
+    assert result["items"] == [{
+        "key": "task-8",
+        "status": "error",
+        "activity": "Initial download",
+        "occurred_at": datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc),
+        "error": "HTTP 500",
+    }]
 
 
 def test_download_history_paginates_combined_history(monkeypatch):
@@ -197,5 +250,10 @@ def test_download_history_does_not_add_healthy_artifact(monkeypatch):
 
     assert definition_keys == ["download_episode"]
     assert result["total"] == 1
-    assert result["items"][0]["source"] == "task"
-    assert result["items"][0]["definition_key"] == "download_episode"
+    assert result["items"][0] == {
+        "key": "task-3",
+        "status": "downloaded",
+        "activity": "Initial download",
+        "occurred_at": datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc),
+        "error": None,
+    }

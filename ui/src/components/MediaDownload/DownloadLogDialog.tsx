@@ -3,8 +3,6 @@ import {useMediaDownloadHistory} from '../../lib/mediaDownloadHistory'
 import {ACTIVE_DOWNLOAD_STATUSES, MediaDownloadStatusReg} from '../../types/media_download'
 import {PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
-import {MediaDownloadHistoryEntryRead} from '../../types/schemas/media_download_history'
-import {TaskLedgerEntryRead} from '../../types/schemas/task'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
 
 type Props = {
@@ -37,64 +35,6 @@ function mediaTypeLabel(type: string, movieExtraType?: string | null): string {
 
 function mediaTitle(row: MediaDownloadViewRead): string {
     return row.mediaTitle ?? row.movieTitle ?? row.episodeTitle ?? 'Download log'
-}
-
-function resultData(run: TaskLedgerEntryRead): Record<string, unknown> {
-    const result = run.result
-    if (!result || typeof result !== 'object') return {}
-    const data = result.data
-    return data && typeof data === 'object' && !Array.isArray(data)
-        ? data as Record<string, unknown>
-        : {}
-}
-
-function isRedownload(run: TaskLedgerEntryRead): boolean {
-    const inputValue = run.inputs.is_redownload
-    if (typeof inputValue === 'boolean') return inputValue
-    return resultData(run).is_redownload === true
-}
-
-function taskPresentationStatus(run: TaskLedgerEntryRead): string {
-    if (run.status === 'FAILED') return 'error'
-    if (run.status === 'CANCELED') return 'cancelled'
-    if (run.status === 'RUNNING') return 'downloading'
-    if (run.status === 'SUCCEEDED') return isRedownload(run) ? 'redownloaded' : 'downloaded'
-    return 'pending'
-}
-
-function taskError(run: TaskLedgerEntryRead): string | null {
-    if (run.lastError) return run.lastError
-    return run.status === 'FAILED' ? run.message ?? null : null
-}
-
-function entryStatus(entry: MediaDownloadHistoryEntryRead): string {
-    if (entry.source === 'artifact') return entry.artifactStatus
-    if (entry.source === 'event') return entry.eventType
-    return taskPresentationStatus(entry)
-}
-
-function entryError(entry: MediaDownloadHistoryEntryRead): string | null {
-    if (entry.source === 'artifact') return entry.artifactError
-    if (entry.source === 'event') return null
-    return taskError(entry)
-}
-
-function entryType(entry: MediaDownloadHistoryEntryRead): string {
-    if (entry.source === 'artifact') return 'File watcher'
-    if (entry.source === 'event') return 'WireLoft'
-    return isRedownload(entry) ? 'Redownload' : 'Initial download'
-}
-
-function entryTime(entry: MediaDownloadHistoryEntryRead): string | null | undefined {
-    if (entry.source === 'artifact') return entry.observedAt
-    if (entry.source === 'event') return entry.occurredAt
-    return entry.finishedAt ?? entry.startedAt
-}
-
-function entryKey(entry: MediaDownloadHistoryEntryRead): string {
-    if (entry.source === 'artifact') return 'artifact-current'
-    if (entry.source === 'event') return `event-${entry.id}`
-    return `task-${entry.id}`
 }
 
 /** Full detail view for one download row: current state plus combined download history. */
@@ -154,24 +94,20 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                     <p className="modal-text">No history recorded yet.</p>
                 ) : (
                     <div className="log-attempts">
-                        {entries.map((entry) => {
-                            const status = entryStatus(entry)
-                            const error = entryError(entry)
-                            return (
-                                <div key={entryKey(entry)} className="log-attempt">
-                                    <div className="log-attempt-header">
-                                        <span className={`log-attempt-status log-attempt-status-${status}`}>
-                                            {MediaDownloadStatusReg.getLabelLoose(status)}
-                                        </span>
-                                        <span className="log-attempt-type">{entryType(entry)}</span>
-                                        <span className="log-attempt-time">
-                                            {formatDateTime(entryTime(entry))}
-                                        </span>
-                                    </div>
-                                    {error && <pre className="log-output">{error}</pre>}
+                        {entries.map((entry) => (
+                            <div key={entry.key} className="log-attempt">
+                                <div className="log-attempt-header">
+                                    <span className={`log-attempt-status log-attempt-status-${entry.status}`}>
+                                        {MediaDownloadStatusReg.getLabelLoose(entry.status)}
+                                    </span>
+                                    <span className="log-attempt-type">{entry.activity}</span>
+                                    <span className="log-attempt-time">
+                                        {formatDateTime(entry.occurredAt)}
+                                    </span>
                                 </div>
-                            )
-                        })}
+                                {entry.error && <pre className="log-output">{entry.error}</pre>}
+                            </div>
+                        ))}
                     </div>
                 )}
 

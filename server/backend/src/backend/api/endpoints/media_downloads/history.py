@@ -28,12 +28,54 @@ def _download_definition_key(download: MediaDownloadBase) -> str:
     raise HTTPException(status_code=422, detail=f"Unsupported media download type '{download.type}'")
 
 
+def _task_result_data(item: dict) -> dict:
+    result = item.get("result")
+    if not isinstance(result, dict):
+        return {}
+    data = result.get("data")
+    return data if isinstance(data, dict) else {}
+
+
+def _task_is_redownload(item: dict) -> bool:
+    inputs = item.get("inputs")
+    if isinstance(inputs, dict) and isinstance(inputs.get("is_redownload"), bool):
+        return inputs["is_redownload"]
+    return _task_result_data(item).get("is_redownload") is True
+
+
+def _task_status(item: dict) -> str:
+    status = item.get("status")
+    if status == "FAILED":
+        return "error"
+    if status == "CANCELED":
+        return "cancelled"
+    if status == "RUNNING":
+        return "downloading"
+    if status == "SUCCEEDED":
+        return "redownloaded" if _task_is_redownload(item) else "downloaded"
+    return "pending"
+
+
+def _task_error(item: dict) -> str | None:
+    if item.get("last_error"):
+        return str(item["last_error"])
+    if item.get("status") == "FAILED" and item.get("message"):
+        return str(item["message"])
+    return None
+
+
+def _task_history_entry(item: dict) -> dict:
+    return {
+        "key": f"task-{item['id']}",
+        "status": _task_status(item),
+        "activity": "Redownload" if _task_is_redownload(item) else "Initial download",
+        "occurred_at": item.get("finished_at") or item.get("started_at"),
+        "error": _task_error(item),
+    }
+
+
 def _history_time(item: dict) -> datetime:
-    if item["source"] == "task":
-        return item.get("finished_at") or item.get("started_at") or _MIN_HISTORY_TIME
-    if item["source"] == "event":
-        return item["occurred_at"]
-    return item["observed_at"]
+    return item.get("occurred_at") or _MIN_HISTORY_TIME
 
 
 def get_media_download_history(
@@ -43,7 +85,7 @@ def get_media_download_history(
     offset: int = 0,
     limit: int = 50,
 ) -> dict:
-    """Combine download TaskRuns, artifact events and the current problem state."""
+    """Return normalized download history independent of its storage source."""
     download = s.get(MediaDownloadBase, media_download_id)
     if download is None:
         raise HTTPException(status_code=404, detail="Media download not found")
@@ -61,7 +103,7 @@ def get_media_download_history(
         offset=0,
         limit=fetch_limit,
     )
-    task_items = [{"source": "task", **item} for item in task_page["items"]]
+    task_items = [_task_history_entry(item) for item in task_page["items"]]
 
     event_total = int(s.scalar(
         select(func.count(MediaDownloadEvent.id)).where(
@@ -76,11 +118,11 @@ def get_media_download_history(
     ))
     event_items = [
         {
-            "source": "event",
-            "id": event.id,
-            "event_type": event.event_type,
-            "file_path": event.file_path,
+            "key": f"event-{event.id}",
+            "status": event.event_type,
+            "activity": "WireLoft",
             "occurred_at": event.occurred_at,
+            "error": None,
         }
         for event in events
     ]
@@ -88,11 +130,11 @@ def get_media_download_history(
     items: list[dict] = [*task_items, *event_items]
     if include_artifact_problem:
         items.append({
-            "source": "artifact",
-            "artifact_status": download.artifact_status,
-            "artifact_error": download.artifact_error,
-            "file_path": download.file_path,
-            "observed_at": download.updated_at,
+            "key": "artifact-current",
+            "status": download.artifact_status,
+            "activity": "File watcher",
+            "occurred_at": download.updated_at,
+            "error": download.artifact_error,
         })
 
     items.sort(key=_history_time, reverse=True)
