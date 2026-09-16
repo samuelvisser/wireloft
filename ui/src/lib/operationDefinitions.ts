@@ -45,6 +45,24 @@ function resultNumber(operation: TaskOperationRead, key: string): number | undef
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
+function httpErrorMessage(error: string | null | undefined): string | undefined {
+  if (!error) return undefined
+
+  const match = error.match(/^HTTP error \d+:\s*([\s\S]+)$/)
+  if (!match) return undefined
+
+  try {
+    const parsed = JSON.parse(match[1])
+    if (parsed && typeof parsed === 'object' && typeof parsed.error === 'string' && parsed.error.trim()) {
+      return parsed.error
+    }
+  } catch {
+    // Fall back to the ordinary operation failure message for non-JSON HTTP errors.
+  }
+
+  return undefined
+}
+
 function plural(value: number, singular: string, pluralForm = `${singular}s`) {
   return value === 1 ? singular : pluralForm
 }
@@ -304,6 +322,8 @@ export const frontendOperationDefinitions = {
     label: 'Download',
     invalidate: invalidateMediaDownload,
     success: (operation) => operation.result?.summary || `Downloaded ${operation.title}`,
+    failed: (operation) => httpErrorMessage(operation.error)
+      ?? `Download failed for ${operation.title}${operation.error ? `: ${operation.error}` : ''}`,
   },
 } satisfies Readonly<Record<string, FrontendOperationDefinition>>
 
