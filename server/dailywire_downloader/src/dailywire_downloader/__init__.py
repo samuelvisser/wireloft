@@ -15,7 +15,7 @@ from .errors import (
     FfmpegNotFoundError,
     MediaUnavailableError,
 )
-from .ffmpeg import ffmpeg_available, remux_to_mp4
+from .ffmpeg import embed_thumbnail, ffmpeg_available, remux_to_mp4
 from .models import (
     DownloadProgress,
     DownloadResult,
@@ -31,6 +31,7 @@ __all__ = [
     "download_hls",
     "download_file",
     "remux_to_mp4",
+    "embed_thumbnail",
     "ffmpeg_available",
     "MediaInfo",
     "MediaKind",

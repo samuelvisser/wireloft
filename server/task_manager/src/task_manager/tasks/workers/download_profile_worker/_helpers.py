@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -25,8 +24,6 @@ from task_manager.tasks.media_download_operations import (
     remaining_media_download_budget,
 )
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
-
-logger = logging.getLogger(__name__)
 
 
 def resolve_target_profiles(
@@ -126,9 +123,6 @@ def get_download_profile_episodes(
         if _episode_type_prefix(episode) not in allowed_types:
             continue
 
-        # Publication status is the single eligibility authority. NO_USABLE_MEDIA
-        # and DW_PROCESSING are both naturally excluded because neither is a
-        # downloadable publication state, with no placeholder-specific exception.
         publish_status = episode.publish_status
         if publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
             pass
@@ -298,9 +292,6 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
     else:
         return 0
 
-    # This worker may already own flushed changes in its transaction. Reconcile
-    # through the shared FileWatcher path without taking ownership of that wider
-    # transaction, then delete the resolved physical artifact before its row.
     resolved_paths: dict[int, Path | None] = {}
     for row in rows:
         if row.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
@@ -308,20 +299,11 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
 
     for row in rows:
         resolved_path = resolved_paths.get(row.id)
-        if resolved_path is not None:
-            _delete_download_file(str(resolved_path))
-        else:
-            remove_download_artifacts(row.file_path)
+        remove_download_artifacts(
+            str(resolved_path) if resolved_path is not None else row.file_path,
+            row.thumbnail_path,
+        )
         s.delete(row)
     if rows:
         s.flush()
     return len(rows)
-
-
-def _delete_download_file(file_path: str) -> None:
-    try:
-        path = Path(file_path)
-        if path.exists():
-            path.unlink()
-    except OSError:
-        logger.warning("Could not delete download file '%s'", file_path, exc_info=True)

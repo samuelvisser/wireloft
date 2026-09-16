@@ -10,6 +10,7 @@ from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.types.local_media_profile_types import (
     LocalMediaProfileStorageMode,
+    LocalMediaProfileThumbnailMode,
     LocalMediaProfileType,
 )
 
@@ -48,6 +49,12 @@ class LocalMediaProfileBase(Base):
         String(16),
         default=LocalMediaProfileStorageMode.SYSTEM.value,
         server_default=LocalMediaProfileStorageMode.SYSTEM.value,
+        nullable=False,
+    )
+    thumbnail_mode: Mapped[str] = mapped_column(
+        String(24),
+        default=LocalMediaProfileThumbnailMode.SYSTEM.value,
+        server_default=LocalMediaProfileThumbnailMode.SYSTEM.value,
         nullable=False,
     )
     append_media_type_to_filename: Mapped[bool] = mapped_column(

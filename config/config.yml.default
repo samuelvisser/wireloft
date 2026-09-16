@@ -23,5 +23,8 @@ downloadSettings:
   # Default behavior for downloads: direct or temporary.
   downloadMode: direct
 
+  # Thumbnail handling: no_thumbnail, embed, sidecar, or embed_and_sidecar.
+  thumbnailMode: embed
+
   # Filename compatibility: unrestricted, windows, or restricted.
   filenameRestrictionMode: windows

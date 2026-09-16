@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import re
 from enum import StrEnum
@@ -301,6 +303,13 @@ class DownloadMode(StrEnum):
     TEMPORARY = "temporary"
 
 
+class ThumbnailMode(StrEnum):
+    NO_THUMBNAIL = "no_thumbnail"
+    EMBED = "embed"
+    SIDECAR = "sidecar"
+    EMBED_AND_SIDECAR = "embed_and_sidecar"
+
+
 class DownloadSettings(SubmodelBase):
     verify_downloads_cron: str = Field(..., min_length=1, description="Cron schedule for verifying downloads")
     max_concurrent_downloads: int = Field(
@@ -322,6 +331,10 @@ class DownloadSettings(SubmodelBase):
     download_mode: DownloadMode = Field(
         default=DownloadMode.DIRECT,
         description="Whether downloads are written directly to their destination or staged in a temporary directory first",
+    )
+    thumbnail_mode: ThumbnailMode = Field(
+        default=ThumbnailMode.EMBED,
+        description="Whether downloaded media embeds its thumbnail, writes a sidecar image, does both, or stores no thumbnail",
     )
     temporary_download_root: Path = Field(
         ...,

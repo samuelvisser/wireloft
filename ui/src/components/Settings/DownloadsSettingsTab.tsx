@@ -1,4 +1,4 @@
-import type {DownloadMode, FilenameRestrictionMode} from '../../types/schemas/settings'
+import type {DownloadMode, FilenameRestrictionMode, ThumbnailMode} from '../../types/schemas/settings'
 import ReadMore from '../../utils/ReadMore'
 import CronEditor from './CronEditor'
 import type {SettingsTabProps} from './SettingsTabTypes'
@@ -24,6 +24,14 @@ const DOWNLOAD_MODE_LABELS = {
     direct: 'Save directly to downloads',
     temporary: 'Save to temporary folder first',
 } satisfies Record<DownloadMode, string>
+
+const THUMBNAIL_MODES = ['no_thumbnail', 'embed', 'sidecar', 'embed_and_sidecar'] as const
+const THUMBNAIL_MODE_LABELS = {
+    no_thumbnail: 'No thumbnail',
+    embed: 'Embed in media',
+    sidecar: 'Download besides media',
+    embed_and_sidecar: 'Both embed and download',
+} satisfies Record<ThumbnailMode, string>
 
 export default function DownloadsSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
     return (
@@ -69,6 +77,27 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                             <p>
                                 Temporary mode is particularly useful when the destination folder is used by a media server and you do not want it to pick up partly downloaded or empty media files.
                             </p>
+                        </ReadMore>
+                    }
+                />
+                <SelectField
+                    id="settings-thumbnail-mode"
+                    label="Default thumbnail behavior"
+                    value={draft.downloadSettings.thumbnailMode}
+                    options={THUMBNAIL_MODES}
+                    optionLabels={THUMBNAIL_MODE_LABELS}
+                    error={errorFor('downloadSettings.thumbnailMode')}
+                    environmentVariable={environmentVariableFor('downloadSettings.thumbnailMode')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.thumbnailMode = value as ThumbnailMode
+                    })}
+                    help={
+                        <ReadMore summary="Choose how WireLoft stores the Daily Wire thumbnail for downloaded media.">
+                            <p><strong>No thumbnail</strong> keeps downloads media-only.</p>
+                            <p><strong>Embed in media</strong> stores the thumbnail as cover artwork inside the downloaded media file.</p>
+                            <p><strong>Download besides media</strong> writes the image alongside the final media file, using the same basename.</p>
+                            <p><strong>Both embed and download</strong> does both.</p>
+                            <p>Local Media Profiles default to System and can override this setting individually.</p>
                         </ReadMore>
                     }
                 />

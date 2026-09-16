@@ -8,6 +8,7 @@ from pydantic import Field, ValidationInfo, computed_field, field_validator
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.types.local_media_profile_types import (
     LocalMediaProfileStorageMode,
+    LocalMediaProfileThumbnailMode,
     LocalMediaProfileType,
     PreferredFormat,
     ShowLocalMediaProfileScope,
@@ -37,6 +38,7 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
     show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH
     preferred_format: PreferredFormat
     download_mode: LocalMediaProfileStorageMode = LocalMediaProfileStorageMode.SYSTEM
+    thumbnail_mode: LocalMediaProfileThumbnailMode = LocalMediaProfileThumbnailMode.SYSTEM
     output_template: str = Field(min_length=16, max_length=4096)
 
     @computed_field(return_type=str)
@@ -130,6 +132,7 @@ class _LocalMediaProfileAPIBaseOut(ResponseBase):
     output_template: str
     preferred_format: Union[PreferredFormat, str]
     download_mode: Union[LocalMediaProfileStorageMode, str] = LocalMediaProfileStorageMode.SYSTEM
+    thumbnail_mode: Union[LocalMediaProfileThumbnailMode, str] = LocalMediaProfileThumbnailMode.SYSTEM
     append_media_type_to_filename: bool
     show_scope: Union[ShowLocalMediaProfileScope, str, None] = None
 

@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Optional
 
 from .errors import DownloadCancelled, DownloadError, FfmpegNotFoundError
@@ -108,6 +109,77 @@ def remux_to_mp4(
                 f"ffmpeg remux to mp4 failed (exit {result.returncode}): {_tail_lines(result.stdout)}"
             )
         os.replace(part_path, dest_path)
+    except BaseException:
+        _remove_quietly(part_path)
+        raise
+
+
+def embed_thumbnail(
+        media_path: str,
+        thumbnail_path: str,
+        *,
+        audio_only: bool,
+        ffmpeg_path: str = "ffmpeg",
+        should_cancel: Optional[CancelCheck] = None,
+) -> None:
+    """Attach an image as cover artwork without re-encoding existing media streams."""
+    if not ffmpeg_available(ffmpeg_path):
+        raise FfmpegNotFoundError(
+            f"ffmpeg binary '{ffmpeg_path}' not found on PATH; install ffmpeg or choose a thumbnail mode that does not embed artwork"
+        )
+
+    suffix = Path(media_path).suffix.lower()
+    muxer = {
+        ".mp4": "mp4",
+        ".m4a": "mp4",
+        ".m4v": "mp4",
+        ".mp3": "mp3",
+        ".mkv": "matroska",
+    }.get(suffix)
+    if muxer is None:
+        raise DownloadError(
+            f"Cannot embed a thumbnail into '{suffix or 'extensionless'}' media; "
+            "use sidecar thumbnails or an MP4, M4A, MP3, or MKV output"
+        )
+
+    # Existing video occupies v:0, while audio-only files have no video stream.
+    artwork_stream_index = 0 if audio_only else 1
+    part_path = media_path + ".thumbnail.part"
+    try:
+        command = [
+            ffmpeg_path, "-y",
+            "-i", media_path,
+            "-i", thumbnail_path,
+            "-map", "0",
+            "-map", "1:v:0",
+            "-c", "copy",
+            f"-c:v:{artwork_stream_index}", "mjpeg",
+            f"-frames:v:{artwork_stream_index}", "1",
+            f"-disposition:v:{artwork_stream_index}", "attached_pic",
+        ]
+        if muxer == "mp4":
+            command += ["-movflags", "+faststart"]
+        command += ["-f", muxer, part_path]
+
+        result = (
+            _run_cancellable(command, should_cancel)
+            if should_cancel is not None
+            else subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+        )
+        if result.returncode != 0:
+            logger.error(
+                "ffmpeg thumbnail embedding failed (exit %s) for '%s' with '%s':\n%s",
+                result.returncode, media_path, thumbnail_path, result.stdout,
+            )
+            raise DownloadError(
+                f"ffmpeg thumbnail embedding failed (exit {result.returncode}): {_tail_lines(result.stdout)}"
+            )
+        os.replace(part_path, media_path)
     except BaseException:
         _remove_quietly(part_path)
         raise

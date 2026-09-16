@@ -64,6 +64,8 @@ export const FilenameRestrictionModeSchema = z.enum(['unrestricted', 'windows', 
 export type FilenameRestrictionMode = z.infer<typeof FilenameRestrictionModeSchema>
 export const DownloadModeSchema = z.enum(['direct', 'temporary'])
 export type DownloadMode = z.infer<typeof DownloadModeSchema>
+export const ThumbnailModeSchema = z.enum(['no_thumbnail', 'embed', 'sidecar', 'embed_and_sidecar'])
+export type ThumbnailMode = z.infer<typeof ThumbnailModeSchema>
 
 const DownloadSettingsSchema = z.object({
     verifyDownloadsCron: z.string(),
@@ -72,6 +74,7 @@ const DownloadSettingsSchema = z.object({
     downloadTimeoutSeconds: z.number(),
     downloadRoot: z.string(),
     downloadMode: DownloadModeSchema,
+    thumbnailMode: ThumbnailModeSchema,
     temporaryDownloadRoot: z.string(),
     filenameRestrictionMode: FilenameRestrictionModeSchema,
     remuxVideoToMp4: z.boolean(),
@@ -218,6 +221,7 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadSettings.downloadTimeoutSeconds',
     'downloadSettings.downloadRoot',
     'downloadSettings.downloadMode',
+    'downloadSettings.thumbnailMode',
     'downloadSettings.temporaryDownloadRoot',
     'downloadSettings.filenameRestrictionMode',
     'downloadSettings.remuxVideoToMp4',

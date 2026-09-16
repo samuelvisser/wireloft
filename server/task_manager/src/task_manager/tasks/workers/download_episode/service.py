@@ -17,7 +17,10 @@ from config.network import is_no_internet_error
 from dailywire_downloader import DownloadCancelled, DownloadError, MediaUnavailableError
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
-from task_manager.tasks.helpers.downloads.download_modes import effective_download_mode
+from task_manager.tasks.helpers.downloads.download_modes import (
+    effective_download_mode,
+    effective_thumbnail_mode,
+)
 from task_manager.tasks.helpers.downloads.engine import (
     DownloadExecution,
     DownloadPlan,
@@ -26,6 +29,7 @@ from task_manager.tasks.helpers.downloads.engine import (
     execute_download_plan,
     resolve_download_source,
 )
+from task_manager.tasks.helpers.downloads.thumbnails import select_thumbnail_url
 
 from ._helpers import refresh_episode_media_urls
 
@@ -79,12 +83,13 @@ async def run_download_episode(
         s.expire_all()
         download = s.get(MediaDownloadBase, media_download_id)
         if download is None:
-            remove_download_artifacts(execution.result.path)
+            remove_download_artifacts(execution.result.path, execution.thumbnail_path)
             raise DownloadCancelled("Media download was deleted while the worker was running")
         ensure_not_cancelled(progress)
 
         artifact_identity = inspect_artifact(execution.result.path)
         download.file_path = execution.result.path
+        download.thumbnail_path = execution.thumbnail_path
         download.artifact_stat_dev = artifact_identity.stat_dev
         download.artifact_stat_ino = artifact_identity.stat_ino
         download.artifact_size_bytes = artifact_identity.size_bytes
@@ -117,18 +122,19 @@ async def run_download_episode(
                 "downloaded_bytes": execution.result.bytes_downloaded,
                 "format_downloaded": execution.format_downloaded,
                 "file_path": execution.result.path,
+                "thumbnail_path": execution.thumbnail_path,
                 "is_redownload": is_redownload,
             },
         )
     except DownloadCancelled:
         s.rollback()
         if execution is not None:
-            remove_download_artifacts(execution.result.path)
+            remove_download_artifacts(execution.result.path, execution.thumbnail_path)
         raise
     except Exception:
         s.rollback()
         if execution is not None:
-            remove_download_artifacts(execution.result.path)
+            remove_download_artifacts(execution.result.path, execution.thumbnail_path)
         raise
     finally:
         # Temporary-mode publication keeps its recovery record until the database
@@ -226,6 +232,8 @@ def _attempt_download(
     preferred_format = profile.preferred_format
     output_template = profile.output_template
     download_mode = effective_download_mode(profile)
+    thumbnail_mode = effective_thumbnail_mode(profile)
+    thumbnail_url = select_thumbnail_url(episode)
     settings = get_settings().download_settings
 
     # Probe may block on DNS/HTTP. Everything it needs is now a plain value, so
@@ -256,6 +264,8 @@ def _attempt_download(
         download_mode=download_mode,
         temporary_root=settings.temporary_download_root,
         ffmpeg_path=settings.ffmpeg_path,
+        thumbnail_url=thumbnail_url,
+        thumbnail_mode=thumbnail_mode,
     )
 
     def persist_direct_destination(destination: str) -> None:
