@@ -56,7 +56,7 @@ GET https://middleware-prod.dailywire.com/middleware/v4/getMoviePage?slug=run-hi
 Authorization: Bearer {{access_token}}
 
 ### Extra's clip
-GET https://middleware-prod.dailywire.com/middleware/v4/getClip?slug=shut-in-official-trailer
+GET https://middleware-prod.dailywire.com/middleware/v4/getClip?slug=mass-shooting-safety-expert-breaks-down-scenes-from-run-hide-fight
 
 ### GET show
 GET https://middleware-prod.dailywire.com/middleware/v4/getShowPage?slug=scamala-kamala-harris-unmasked&membershipPlan=ALL_ACCESS

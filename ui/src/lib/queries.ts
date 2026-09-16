@@ -424,7 +424,6 @@ function presentationStatus(
     if (download.latestTaskStatus === 'CANCELED') return 'cancelled'
     if (download.latestTaskStatus === 'FAILED') return 'error'
     if (download.latestTaskStatus === 'RUNNING') return 'downloading'
-    // An absent artifact without an active media.download operation is not queued.
     return 'not_downloaded'
 }
 
