@@ -88,7 +88,43 @@ def test_embed_thumbnail_uses_attached_picture_stream_for_audio(tmp_path, monkey
     assert "1:v:0" in command
     assert "-disposition:v:0" in command
     assert "attached_pic" in command
+    assert not any(argument.startswith("-frames:v:") for argument in command)
     assert command[command.index("-f") + 1] == "mp4"
+
+
+def test_embed_thumbnail_refuses_to_replace_media_with_truncated_output(tmp_path, monkeypatch):
+    import pytest
+
+    from dailywire_downloader import ffmpeg as ffmpeg_module
+
+    media = tmp_path / "episode.mp4"
+    thumbnail = tmp_path / "thumbnail.jpg"
+    original = b"media" * 100
+    media.write_bytes(original)
+    thumbnail.write_bytes(b"image")
+
+    monkeypatch.setattr(ffmpeg_module.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+    class Completed:
+        returncode = 0
+        stdout = ""
+
+    def fake_run(command, **_kwargs):
+        with open(command[-1], "wb") as handle:
+            handle.write(b"truncated")
+        return Completed()
+
+    monkeypatch.setattr(ffmpeg_module.subprocess, "run", fake_run)
+
+    with pytest.raises(ffmpeg_module.DownloadError, match="unexpectedly small"):
+        ffmpeg_module.embed_thumbnail(
+            str(media),
+            str(thumbnail),
+            audio_only=False,
+        )
+
+    assert media.read_bytes() == original
+    assert not (tmp_path / "episode.mp4.thumbnail.part").exists()
 
 
 def test_sidecar_uses_media_basename_and_does_not_overwrite(tmp_path):
