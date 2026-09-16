@@ -20,6 +20,7 @@ from dailywire_api.records import (
     DwCatalogShowRecord,
     DwEpisodeDetailRecord,
     DwEpisodeRecord,
+    DwMovieExtraPlaybackRecord,
     DwMoviePlaybackRecord,
     DwShowRecord,
     DwUserInfo,
@@ -293,8 +294,8 @@ class MiddlewareClient:
             has_video=bool(raw.get('hasVideo')),
         )
 
-    def get_movie_extra_playback(self, slug: str) -> DwMoviePlaybackRecord:
-        """Fetch a fresh playback URL for a clip listed as a movie extra.
+    def get_movie_extra_playback(self, slug: str) -> DwMovieExtraPlaybackRecord:
+        """Fetch playback and authoritative clip metadata for a movie extra.
 
         Daily Wire represents movie extras as ``showEpisode`` rows on the movie
         page, but their playback endpoint is ``getClip``. The movie-only
@@ -321,12 +322,9 @@ class MiddlewareClient:
                 if mux_playback_token:
                     video_url = f"{video_url}?{urlencode({'token': mux_playback_token})}"
 
-        return DwMoviePlaybackRecord(
+        return DwMovieExtraPlaybackRecord.from_clip_payload(
+            raw,
             video_url=video_url,
-            trailer_url=None,
-            duration=float(raw.get('duration') or 0),
-            trailer_duration=0,
-            has_video=bool(video_url),
         )
 
     def _resolve_secure_video_url(self, secure_url: str) -> str:

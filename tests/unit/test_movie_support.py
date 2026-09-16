@@ -81,11 +81,15 @@ def test_movie_playback_intentionally_uses_v2_get_video(monkeypatch):
     assert playback.duration == 5400
 
 
-def test_movie_extra_playback_uses_clip_endpoint(monkeypatch):
+def test_movie_extra_playback_uses_clip_endpoint_and_retains_metadata(monkeypatch):
     from dailywire_api.dw_api.movie import MovieMiddlewareClient
 
     client = MovieMiddlewareClient(base_url="https://middleware.example/middleware")
     calls: list[tuple[str, dict]] = []
+    thumbnail_url = (
+        "https://daily-wire-production.imgix.net/clips/example/"
+        "John%20Matthews%20Thumbnail.png?auto=compress&cs=origin"
+    )
 
     def fake_get(endpoint, params):
         calls.append((endpoint, params))
@@ -93,7 +97,18 @@ def test_movie_extra_playback_uses_clip_endpoint(monkeypatch):
             "id": "extra-1",
             "slug": "making-of-a-movie",
             "title": "The Making of A Movie",
+            "description": "Fresh clip metadata",
             "duration": 600,
+            "publishedAt": "2026-09-16T19:27:02.570Z",
+            "sharingURL": "https://www.dailywire.com/clips/making-of-a-movie",
+            "availableFor": ["FREE", "ALL_ACCESS"],
+            "images": {
+                "thumbnail": {
+                    "land": thumbnail_url,
+                    "port": thumbnail_url,
+                    "square": "",
+                }
+            },
             "videoURL": "https://stream.example/extra/master.m3u8",
         }
 
@@ -104,3 +119,9 @@ def test_movie_extra_playback_uses_clip_endpoint(monkeypatch):
     assert calls == [("v4/getClip", {"slug": "making-of-a-movie"})]
     assert playback.has_video is True
     assert playback.video_url == "https://stream.example/extra/master.m3u8"
+    assert playback.metadata.slug == "making-of-a-movie"
+    assert playback.metadata.thumbnail_landscape_path == thumbnail_url
+    assert playback.metadata.thumbnail_portrait_path == thumbnail_url
+    assert playback.metadata.thumbnail_square_path == ""
+    assert playback.metadata.sharing_url == "https://www.dailywire.com/clips/making-of-a-movie"
+    assert playback.metadata.available_for == ["FREE", "ALL_ACCESS"]

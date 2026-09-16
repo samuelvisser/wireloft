@@ -22,3 +22,4 @@ from .DwCatalogRecord import (
     DwRelatedContentImagesRecord,
     DwRelatedContentRecord,
 )
+from .DwMovieExtraPlaybackRecord import DwMovieExtraPlaybackRecord
