@@ -25,6 +25,8 @@ type OperationInvalidation = (
 ) => void
 
 export type FrontendOperationDefinition = OperationNotificationDefinition & {
+  kind: string
+  resourceType: string
   invalidate?: OperationInvalidation
 }
 
@@ -164,6 +166,8 @@ function invalidateMediaDownload(
 
 export const frontendOperationDefinitions = {
   'show.index': {
+    kind: 'show.index',
+    resourceType: 'show',
     label: 'Show indexing',
     invalidate: invalidateShow,
     success: (operation) => {
@@ -175,6 +179,8 @@ export const frontendOperationDefinitions = {
     },
   },
   'show.sync': {
+    kind: 'show.sync',
+    resourceType: 'show',
     label: 'Sync',
     invalidate: invalidateShow,
     success: (operation) => {
@@ -184,6 +190,8 @@ export const frontendOperationDefinitions = {
     },
   },
   'show.refresh_metadata': {
+    kind: 'show.refresh_metadata',
+    resourceType: 'show',
     label: 'Metadata refresh',
     invalidate: invalidateShow,
     success: (operation) => {
@@ -195,6 +203,8 @@ export const frontendOperationDefinitions = {
     },
   },
   'episode.refresh_metadata': {
+    kind: 'episode.refresh_metadata',
+    resourceType: 'episode',
     label: 'Metadata refresh',
     invalidate: invalidateEpisode,
     success: (operation) => {
@@ -203,6 +213,8 @@ export const frontendOperationDefinitions = {
     },
   },
   'episode.early_delete': {
+    kind: 'episode.early_delete',
+    resourceType: 'episode',
     label: 'Early delete',
     invalidate: invalidateEpisode,
     success: (operation) => {
@@ -227,6 +239,8 @@ export const frontendOperationDefinitions = {
     },
   },
   'show.rename_files': {
+    kind: 'show.rename_files',
+    resourceType: 'show',
     label: 'File Rename',
     invalidate: invalidateShowFiles,
     success: (operation) => {
@@ -235,6 +249,8 @@ export const frontendOperationDefinitions = {
     },
   },
   'local_media_profile.rename_files': {
+    kind: 'local_media_profile.rename_files',
+    resourceType: 'local_media_profile',
     label: 'File Rename',
     invalidate: invalidateLocalMediaProfileFiles,
     success: (operation) => {
@@ -243,6 +259,8 @@ export const frontendOperationDefinitions = {
     },
   },
   'show.delete_downloads': {
+    kind: 'show.delete_downloads',
+    resourceType: 'show',
     label: 'Delete downloads',
     invalidate: invalidateShowDownloadDeletion,
     success: (operation) => {
@@ -260,6 +278,8 @@ export const frontendOperationDefinitions = {
     },
   },
   'show.redownload_episodes': {
+    kind: 'show.redownload_episodes',
+    resourceType: 'show',
     label: 'Re-download',
     invalidate: invalidateShowFiles,
     success: (operation) => {
@@ -273,10 +293,14 @@ export const frontendOperationDefinitions = {
     },
   },
   'movie.refresh_extras': {
+    kind: 'movie.refresh_extras',
+    resourceType: 'movie',
     label: 'Movie extra refresh',
     invalidate: invalidateMovie,
   },
   'media.download': {
+    kind: 'media.download',
+    resourceType: 'media_download',
     label: 'Download',
     invalidate: invalidateMediaDownload,
     success: (operation) => operation.result?.summary || `Downloaded ${operation.title}`,

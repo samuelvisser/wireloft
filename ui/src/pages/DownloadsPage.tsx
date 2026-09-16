@@ -1,4 +1,4 @@
-import {useMemo, useRef, useState} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -9,6 +9,8 @@ import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/Confirm
 import DownloadLogDialog from '../components/MediaDownload/DownloadLogDialog'
 import PageSubtitle from '../components/common/PageSubtitle'
 import ProgressBar from '../components/common/ProgressBar'
+import ProgressButton from '../components/common/ProgressButton'
+import {frontendOperationDefinitions} from '../lib/operationDefinitions'
 import {useMediaDownloadsView} from '../lib/queries'
 import {ACTIVE_DOWNLOAD_STATUSES, MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
@@ -19,6 +21,11 @@ type StatusFilterOption = {
     value: string
     label: string
     statuses: readonly string[]
+}
+
+type RetryAllProgress = {
+    completed: number
+    total: number
 }
 
 const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
@@ -73,6 +80,10 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
     if (a.size !== b.size) return false
     for (const v of a) if (!b.has(v)) return false
     return true
+}
+
+function isAbortError(error: unknown): boolean {
+    return error instanceof Error && error.name === 'AbortError'
 }
 
 // Ensure icons from the kit are registered (idempotent)
@@ -141,9 +152,13 @@ export default function DownloadsPage() {
     const qc = useQueryClient()
     const {data: downloads, isLoading, error} = useMediaDownloadsView()
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
+    const retryAllAbortRef = useRef<AbortController | null>(null)
+    const retryAllCancelRequestedRef = useRef(false)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
     const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(DEFAULT_STATUS_FILTER))
-    const [retryingAll, setRetryingAll] = useState(false)
+    const [retryAllProgress, setRetryAllProgress] = useState<RetryAllProgress | null>(null)
+
+    useEffect(() => () => retryAllAbortRef.current?.abort(), [])
 
     const toggleStatusFilter = (option: StatusFilterOption) => {
         setStatusFilter((prev) => {
@@ -165,6 +180,9 @@ export default function DownloadsPage() {
         () => downloads?.filter((row) => String(row.downloadStatus) === 'error') ?? [],
         [downloads],
     )
+    const retryAllPercent = retryAllProgress && retryAllProgress.total > 0
+        ? Math.round((retryAllProgress.completed / retryAllProgress.total) * 100)
+        : 0
 
     const prioritize = async (row: MediaDownloadViewRead) => {
         try {
@@ -187,16 +205,21 @@ export default function DownloadsPage() {
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
     }
 
-    const retryRequest = async (row: MediaDownloadViewRead): Promise<string | null> => {
+    const retryRequest = async (row: MediaDownloadViewRead, signal?: AbortSignal): Promise<string | null> => {
         try {
             const base = (window as any).appConfig.API_URL
-            const r = await fetch(`${base}/media-downloads/${row.id}/retry`, {method: 'POST', credentials: 'include'})
+            const r = await fetch(`${base}/media-downloads/${row.id}/retry`, {
+                method: 'POST',
+                credentials: 'include',
+                signal,
+            })
             if (!r.ok) {
                 const {error: message} = await getErrorMessageFromResponse(r)
                 return message || 'Could not retry the download'
             }
             return null
-        } catch {
+        } catch (requestError) {
+            if (isAbortError(requestError)) throw requestError
             return 'Could not retry the download'
         }
     }
@@ -209,29 +232,61 @@ export default function DownloadsPage() {
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
     }
 
+    const cancelRetryAll = () => {
+        if (retryAllProgress === null) return
+        retryAllCancelRequestedRef.current = true
+        retryAllAbortRef.current?.abort()
+    }
+
     const retryAll = async () => {
-        if (retryingAll || erroredDownloads.length === 0) return
+        if (retryAllProgress !== null || erroredDownloads.length === 0) return
 
         const downloadsToRetry = [...erroredDownloads]
-        setRetryingAll(true)
+        const controller = new AbortController()
+        retryAllAbortRef.current = controller
+        retryAllCancelRequestedRef.current = false
+        setRetryAllProgress({completed: 0, total: downloadsToRetry.length})
+
+        let completed = 0
         let failed = 0
+        let canceled = false
 
         try {
-            // Retry sequentially so each request can safely reuse the existing retry endpoint and
-            // its operation scheduling without creating a burst of competing database writes.
             for (const row of downloadsToRetry) {
-                if (await retryRequest(row)) failed += 1
+                if (retryAllCancelRequestedRef.current) {
+                    canceled = true
+                    break
+                }
+
+                try {
+                    if (await retryRequest(row, controller.signal)) failed += 1
+                } catch (requestError) {
+                    if (isAbortError(requestError)) {
+                        canceled = true
+                        break
+                    }
+                    failed += 1
+                }
+
+                completed += 1
+                setRetryAllProgress({completed, total: downloadsToRetry.length})
             }
 
+            canceled = canceled || retryAllCancelRequestedRef.current
             await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
-            if (failed === 0) {
+
+            if (canceled) {
+                toast('Retry all canceled; no further retries will be submitted')
+            } else if (failed === 0) {
                 const label = downloadsToRetry.length === 1 ? 'download' : 'downloads'
                 toast.success(`${downloadsToRetry.length} ${label} queued for retry`)
             } else {
                 toast.error(`Could not retry ${failed} of ${downloadsToRetry.length} downloads`)
             }
         } finally {
-            setRetryingAll(false)
+            if (retryAllAbortRef.current === controller) retryAllAbortRef.current = null
+            retryAllCancelRequestedRef.current = false
+            setRetryAllProgress(null)
         }
     }
 
@@ -314,15 +369,20 @@ export default function DownloadsPage() {
                         Deleting a row only removes the record, never the downloaded file unless the download had never fully finished.
                     </p>
                 </PageSubtitle>
-                {erroredDownloads.length > 0 && (
-                    <button
-                        type="button"
-                        className="btn btn-primary"
+                {(retryAllProgress !== null || erroredDownloads.length > 0) && (
+                    <ProgressButton
+                        definition={frontendOperationDefinitions['media.download']}
+                        label="Retry all"
+                        icon={['fas', 'rotate-right']}
                         onClick={() => void retryAll()}
-                        disabled={retryingAll}
-                    >
-                        {retryingAll ? 'Retrying…' : 'Retry all'}
-                    </button>
+                        disabled={erroredDownloads.length === 0}
+                        active={retryAllProgress !== null}
+                        progress={retryAllPercent}
+                        activeLabel={`${retryAllPercent}%`}
+                        ariaLabel="Retry all errored downloads"
+                        onCancel={retryAllProgress !== null ? cancelRetryAll : undefined}
+                        cancelLabel="Cancel retry all"
+                    />
                 )}
             </div>
             <div className="filter-chip-group" role="group" aria-label="Filter downloads by status">

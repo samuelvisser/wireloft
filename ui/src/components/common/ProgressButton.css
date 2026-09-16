@@ -1,0 +1,123 @@
+.progress-button-root {
+    position: relative;
+    display: inline-flex;
+    align-items: stretch;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.progress-button-root.is-progress {
+    min-width: 120px;
+}
+
+.progress-button {
+    position: relative;
+    z-index: 0;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    isolation: isolate;
+    justify-content: center;
+}
+
+.progress-button-root.is-progress .progress-button {
+    opacity: 1;
+    cursor: default;
+    border-color: rgba(59, 130, 246, 0.35);
+    background: rgba(59, 130, 246, 0.12);
+    color: var(--text);
+}
+
+.progress-button-root.has-controls .progress-button {
+    padding-right: 44px;
+}
+
+.progress-button-root.has-multiple-controls .progress-button {
+    padding-right: 76px;
+}
+
+.progress-button-fill {
+    position: absolute;
+    z-index: 0;
+    inset: 0 auto 0 0;
+    width: 0;
+    background: rgba(59, 130, 246, 0.36);
+    pointer-events: none;
+    transition: width 220ms ease;
+}
+
+.progress-button-label {
+    position: relative;
+    z-index: 1;
+    font-weight: 700;
+}
+
+.progress-button-controls {
+    position: absolute;
+    z-index: 2;
+    top: 50%;
+    right: 4px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    transform: translateY(-50%);
+}
+
+.progress-button-control {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.12);
+    color: inherit;
+    cursor: pointer;
+}
+
+.progress-button-root.is-primary:not(.is-progress) .progress-button-control {
+    background: rgba(15, 23, 42, 0.16);
+    color: #fff;
+}
+
+.progress-button-root.is-progress .progress-button-control {
+    color: var(--text);
+}
+
+.progress-button-control:hover,
+.progress-button-control:focus-visible {
+    background: rgba(15, 23, 42, 0.2);
+}
+
+.progress-button-control:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.progress-button-control.is-cancel:hover,
+.progress-button-control.is-cancel:focus-visible {
+    color: var(--danger, #dc2626);
+}
+
+@media (prefers-color-scheme: dark) {
+    .progress-button-root.is-progress .progress-button {
+        border-color: rgba(96, 165, 250, 0.38);
+        background: rgba(96, 165, 250, 0.12);
+    }
+
+    .progress-button-fill {
+        background: rgba(96, 165, 250, 0.34);
+    }
+
+    .progress-button-control,
+    .progress-button-root.is-primary:not(.is-progress) .progress-button-control {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .progress-button-control:hover,
+    .progress-button-control:focus-visible {
+        background: rgba(255, 255, 255, 0.16);
+    }
+}

@@ -4,12 +4,13 @@ import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
-import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ProgressBar from '../../components/common/ProgressBar'
+import ProgressButton from '../../components/common/ProgressButton'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
+import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {useDailywireMovie, useLocalMediaProfiles, useMovieDownloads, useMovies} from '../../lib/queries'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {ACTIVE_DOWNLOAD_STATUSES} from '../../types/media_download'
@@ -43,11 +44,11 @@ type MovieDownloadControlProps = {
     controlBusy: boolean
     onStart: () => void
     onOpenLog: (downloadId: number) => void
-    onRestart: (download: MediaDownloadViewRead) => void
+    onRetry: (download: MediaDownloadViewRead) => void
     onCancel: (download: MediaDownloadViewRead) => void
 }
 
-const RESTARTABLE_DOWNLOAD_STATUSES = new Set([
+const RETRYABLE_DOWNLOAD_STATUSES = new Set([
     'pending',
     'downloading',
     'local_processing',
@@ -68,7 +69,7 @@ function MovieDownloadControl({
     controlBusy,
     onStart,
     onOpenLog,
-    onRestart,
+    onRetry,
     onCancel,
 }: MovieDownloadControlProps) {
     const status = download ? String(download.downloadStatus) : null
@@ -95,7 +96,7 @@ function MovieDownloadControl({
             download.downloadedBytes != null ? formatBytes(download.downloadedBytes) : null,
         ].filter(Boolean).join(', ')
         : ''
-    const restartable = download && status !== null && RESTARTABLE_DOWNLOAD_STATUSES.has(status)
+    const retryable = download && status !== null && RETRYABLE_DOWNLOAD_STATUSES.has(status)
     const cancellable = download && status !== null && ACTIVE_DOWNLOAD_STATUSES.has(status)
 
     return (
@@ -105,30 +106,28 @@ function MovieDownloadControl({
                     <FontAwesomeIcon icon={['fas', 'circle-check']}/>
                     <span>Downloaded{downloadedDetails ? ` (${downloadedDetails})` : ''}</span>
                 </span>
-            ) : active ? (
-                <button
-                    type="button"
-                    className={`btn${primary ? ' btn-primary' : ''} movie-media-download-button is-progress`}
-                    disabled
-                    aria-label={`${progressLabel}: ${activeLabel}`}
-                >
-                    <span
-                        className="movie-media-download-progress-fill"
-                        style={{width: `${progress}%`}}
-                        aria-hidden="true"
-                    />
-                    <span className="movie-media-download-progress-label">{activeLabel}</span>
-                </button>
             ) : (
-                <button
-                    type="button"
-                    className={`btn${primary ? ' btn-primary' : ''} movie-media-download-button`}
+                <ProgressButton
+                    definition={frontendOperationDefinitions['media.download']}
+                    resourceId={download?.id ?? null}
+                    label={label}
+                    icon={['fas', 'download']}
                     onClick={onStart}
                     disabled={disabled}
-                >
-                    <FontAwesomeIcon icon={['fas', 'download']}/>
-                    {label}
-                </button>
+                    primary={primary}
+                    starting={queueing}
+                    active={active}
+                    progress={progress}
+                    activeLabel={activeLabel}
+                    ariaLabel={progressLabel}
+                    onCancel={cancellable && download ? () => onCancel(download) : undefined}
+                    cancelDisabled={controlBusy}
+                    retry={retryable && download ? {
+                        onClick: () => onRetry(download),
+                        disabled: controlBusy,
+                        label: 'Retry download',
+                    } : undefined}
+                />
             )}
 
             {download && (
@@ -141,27 +140,6 @@ function MovieDownloadControl({
                 >
                     <FontAwesomeIcon icon={['fas', 'file-lines']}/>
                 </button>
-            )}
-
-            {(restartable || cancellable) && download && (
-                <ActionMenu
-                    className="movie-download-action-menu"
-                    items={[
-                        ...(restartable ? [{
-                            label: 'Restart download',
-                            icon: ['fas', 'rotate-right'] as [string, string],
-                            disabled: controlBusy,
-                            onSelect: () => onRestart(download),
-                        }] : []),
-                        ...(cancellable ? [{
-                            label: 'Cancel download',
-                            icon: ['fas', 'xmark'] as [string, string],
-                            tone: 'danger' as const,
-                            disabled: controlBusy,
-                            onSelect: () => onCancel(download),
-                        }] : []),
-                    ]}
-                />
             )}
         </div>
     )
@@ -338,14 +316,13 @@ export default function MoviePage() {
         }
     }
 
-    const controlDownload = async (download: MediaDownloadViewRead, action: 'restart' | 'cancel') => {
+    const controlDownload = async (download: MediaDownloadViewRead, action: 'retry' | 'cancel') => {
         if (downloadControlBusy !== null) return
         const busyKey = `${download.id}:${action}`
         setDownloadControlBusy(busyKey)
         try {
             const base = (window as any).appConfig.API_URL
-            const endpoint = action === 'restart' ? 'retry' : 'cancel'
-            const response = await fetch(`${base}/media-downloads/${download.id}/${endpoint}`, {
+            const response = await fetch(`${base}/media-downloads/${download.id}/${action}`, {
                 method: 'POST',
                 credentials: 'include',
             })
@@ -354,7 +331,7 @@ export default function MoviePage() {
                 toast.error(message || `Could not ${action} the download`)
                 return
             }
-            toast.success(action === 'restart' ? 'Download restarted' : 'Download cancelled')
+            toast.success(action === 'retry' ? 'Download queued for retry' : 'Download cancelled')
         } catch {
             toast.error(`Could not ${action} the download`)
         } finally {
@@ -566,7 +543,7 @@ export default function MoviePage() {
                                     controlBusy={controlBusy}
                                     onStart={() => void startMovieDownload()}
                                     onOpenLog={setLogDownloadId}
-                                    onRestart={(download) => void controlDownload(download, 'restart')}
+                                    onRetry={(download) => void controlDownload(download, 'retry')}
                                     onCancel={(download) => void controlDownload(download, 'cancel')}
                                 />
                             ) : (
@@ -590,7 +567,7 @@ export default function MoviePage() {
                                     controlBusy={controlBusy}
                                     onStart={() => void startExtraDownload(featuredTrailer)}
                                     onOpenLog={setLogDownloadId}
-                                    onRestart={(download) => void controlDownload(download, 'restart')}
+                                    onRetry={(download) => void controlDownload(download, 'retry')}
                                     onCancel={(download) => void controlDownload(download, 'cancel')}
                                 />
                             )}
@@ -649,7 +626,7 @@ export default function MoviePage() {
                                                 controlBusy={controlBusy}
                                                 onStart={() => void startExtraDownload(extra)}
                                                 onOpenLog={setLogDownloadId}
-                                                onRestart={(download) => void controlDownload(download, 'restart')}
+                                                onRetry={(download) => void controlDownload(download, 'retry')}
                                                 onCancel={(download) => void controlDownload(download, 'cancel')}
                                             />
                                         </div>

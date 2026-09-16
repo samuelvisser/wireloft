@@ -53,43 +53,14 @@
     margin-top: 12px;
 }
 
-.movie-media-download-control.is-panel .movie-media-download-button,
+.movie-media-download-control.is-panel .progress-button-root,
 .movie-media-download-control.is-panel .movie-media-downloaded {
     flex: 1 1 auto;
     min-width: 0;
 }
 
-.movie-media-download-button {
-    position: relative;
-    overflow: hidden;
-    isolation: isolate;
-    justify-content: center;
-}
-
-.movie-media-download-button.is-progress,
-.movie-media-download-button.is-progress:disabled {
-    opacity: 1;
-    cursor: default;
-    border-color: rgba(59, 130, 246, 0.35);
-    background: rgba(59, 130, 246, 0.12);
-    color: var(--text);
-    padding-right: 68px;
-}
-
-.movie-media-download-progress-fill {
-    position: absolute;
-    z-index: 0;
-    inset: 0 auto 0 0;
-    width: 0;
-    background: rgba(59, 130, 246, 0.36);
-    pointer-events: none;
-    transition: width 220ms ease;
-}
-
-.movie-media-download-progress-label {
-    position: relative;
-    z-index: 1;
-    font-weight: 700;
+.movie-media-download-control.is-panel .progress-button-root {
+    width: 100%;
 }
 
 .movie-media-downloaded {
@@ -115,32 +86,6 @@
     flex: 0 0 auto;
 }
 
-.movie-download-action-menu {
-    flex: 0 0 auto;
-}
-
-.movie-download-action-menu .action-menu-trigger,
-.movie-download-action-menu .action-menu-inline-items {
-    display: none;
-}
-
-.movie-media-download-control:has(.movie-media-download-button.is-progress) .movie-download-action-menu {
-    position: absolute;
-    right: 43px;
-    top: 50%;
-    z-index: 3;
-    transform: translateY(-50%);
-}
-
-.movie-media-download-control:has(.movie-media-download-button.is-progress) .movie-download-action-menu .action-menu-inline-items {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    padding-right: 6px;
-}
-
 .movie-extra-actions {
     align-items: center;
     min-width: 0;
@@ -161,23 +106,21 @@
     margin: 0;
 }
 
-.movie-extra-actions .movie-media-download-button {
+.movie-extra-actions .progress-button-root {
     flex: 0 1 auto;
     width: max-content;
     min-width: 0;
     max-width: 100%;
+}
+
+.movie-extra-actions .progress-button {
     min-height: 34px;
-    padding: 6px 10px;
+    padding-block: 6px;
     font-size: 12px;
 }
 
-.movie-extra-actions .movie-media-download-button.is-progress {
-    width: max-content;
-    padding-right: 68px;
-}
-
-.movie-media-download-control.is-panel .movie-media-download-button.is-progress,
-.movie-extra-actions .movie-media-download-button.is-progress {
+.movie-media-download-control.is-panel .progress-button-root.is-progress,
+.movie-extra-actions .progress-button-root.is-progress {
     min-width: 150px;
 }
 
@@ -206,24 +149,5 @@
     .movie-download-unavailable {
         border-color: rgba(255, 255, 255, 0.14);
         background: rgba(255, 255, 255, 0.05);
-    }
-
-    .movie-media-download-button.is-progress,
-    .movie-media-download-button.is-progress:disabled {
-        border-color: rgba(96, 165, 250, 0.38);
-        background: rgba(96, 165, 250, 0.12);
-    }
-
-    .movie-media-download-progress-fill {
-        background: rgba(96, 165, 250, 0.34);
-    }
-
-    .movie-download-action-menu .action-menu-item-control {
-        background: rgba(255, 255, 255, 0.1);
-    }
-
-    .movie-download-action-menu .action-menu-item-control:hover,
-    .movie-download-action-menu .action-menu-item-control:focus-visible {
-        background: rgba(255, 255, 255, 0.16);
     }
 }
