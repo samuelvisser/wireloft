@@ -122,6 +122,27 @@ class ShowDeleteDownloadsOperation(_ShowDownloadMaintenanceOperation):
     kind = "show.delete_downloads"
     task = _DELETE_DOWNLOADS_TASK_KEY
 
+    def __init__(
+        self,
+        show: Show,
+        *,
+        local_media_profile_id: int | None,
+        selected_profile_count: int,
+        disabled_profile_count: int,
+    ) -> None:
+        super().__init__(
+            show,
+            local_media_profile_id=local_media_profile_id,
+            selected_profile_count=selected_profile_count,
+        )
+        self.disabled_profile_count = disabled_profile_count
+
+    def task_kwargs(self) -> dict[str, object]:
+        return {
+            **super().task_kwargs(),
+            "download_profiles_disabled": self.disabled_profile_count,
+        }
+
 
 class ShowRedownloadOperation(_ShowDownloadMaintenanceOperation):
     kind = "show.redownload_episodes"

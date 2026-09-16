@@ -17,6 +17,9 @@ from task_manager.scheduler.operations import (
     complete_operation,
     queue_operation_target_dispatch,
 )
+from task_manager.tasks.helpers.download_profiles import (
+    disable_download_profiles_for_episode_scope,
+)
 
 from .events import ShowAdded
 from .operations import (
@@ -53,6 +56,44 @@ def _select_show_episode_download_scope(
             detail="Local Media Profile has no downloads for this show",
         )
     return scope.select(local_media_profile_id=local_media_profile_id)
+
+
+def _resolve_show_download_maintenance_scope(
+        s: Session,
+        show_slug: str,
+        local_media_profile_id: int | None,
+) -> tuple[Show, EpisodeDownloadScope]:
+    show = (
+        s.query(Show)
+        .filter_by(slug=show_slug)
+        .one_or_none()
+    )
+    if show is None:
+        raise HTTPException(status_code=404, detail="Show not found")
+
+    scope = _select_show_episode_download_scope(
+        EpisodeDownloadScope.resolve(s, show_id=show.id),
+        local_media_profile_id=local_media_profile_id,
+    )
+    return show, scope
+
+
+def _queue_show_download_maintenance(
+        s: Session,
+        scope: EpisodeDownloadScope,
+        operation: _ShowDownloadMaintenanceOperation,
+) -> dict[str, bool | int | str]:
+    queued_operation = create_operation(s, operation)
+    queue_operation_target_dispatch(
+        s,
+        queued_operation.id,
+        queued_operation.targets[0].slot_key,
+    )
+    return {
+        "queued": True,
+        "local_media_profiles_queued": scope.local_media_profile_count,
+        "operation_id": queued_operation.id,
+    }
 
 
 def get_shows_list(s: Session) -> list[ShowAPIRead]:
@@ -99,7 +140,6 @@ def update_show(s: Session, show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
-    # Apply changes and flush
     update_database_fields(show, body)
     s.flush()
 
@@ -192,53 +232,36 @@ def request_show_metadata_refresh(
     }
 
 
-def _request_show_download_maintenance(
-        s: Session,
-        show_slug: str,
-        local_media_profile_id: int | None,
-        operation_type: type[_ShowDownloadMaintenanceOperation],
-) -> dict[str, bool | int | str]:
-    """Queue a destructive show download action through the shared download scope."""
-    show = (
-        s.query(Show)
-        .filter_by(slug=show_slug)
-        .one_or_none()
-    )
-    if show is None:
-        raise HTTPException(status_code=404, detail="Show not found")
-
-    scope = _select_show_episode_download_scope(
-        EpisodeDownloadScope.resolve(s, show_id=show.id),
-        local_media_profile_id=local_media_profile_id,
-    )
-    operation = create_operation(
-        s,
-        operation_type(
-            show,
-            local_media_profile_id=local_media_profile_id,
-            selected_profile_count=scope.local_media_profile_count,
-        ),
-    )
-    queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
-    return {
-        "queued": True,
-        "local_media_profiles_queued": scope.local_media_profile_count,
-        "operation_id": operation.id,
-    }
-
-
 def request_show_download_delete(
         s: Session,
         show_slug: str,
         local_media_profile_id: int | None,
 ) -> dict[str, bool | int | str]:
-    """Queue deletion of existing show artifacts in the selected profile scope."""
-    return _request_show_download_maintenance(
+    """Disable affected profiles and queue deletion in the same durable transaction."""
+    show, scope = _resolve_show_download_maintenance_scope(
         s,
         show_slug,
         local_media_profile_id,
-        ShowDeleteDownloadsOperation,
     )
+
+    # Disable before the operation can be dispatched. The router commits these
+    # profile changes and the operation atomically, so no newly dispatched delete
+    # worker can ever observe the selected profiles still enabled.
+    disabled_profile_count = disable_download_profiles_for_episode_scope(s, scope)
+    result = _queue_show_download_maintenance(
+        s,
+        scope,
+        ShowDeleteDownloadsOperation(
+            show,
+            local_media_profile_id=local_media_profile_id,
+            selected_profile_count=scope.local_media_profile_count,
+            disabled_profile_count=disabled_profile_count,
+        ),
+    )
+    return {
+        **result,
+        "download_profiles_disabled": disabled_profile_count,
+    }
 
 
 def request_show_episode_redownload(
@@ -247,11 +270,19 @@ def request_show_episode_redownload(
         local_media_profile_id: int | None,
 ) -> dict[str, bool | int | str]:
     """Queue replacement downloads for existing show artifacts in the selected profile scope."""
-    return _request_show_download_maintenance(
+    show, scope = _resolve_show_download_maintenance_scope(
         s,
         show_slug,
         local_media_profile_id,
-        ShowRedownloadOperation,
+    )
+    return _queue_show_download_maintenance(
+        s,
+        scope,
+        ShowRedownloadOperation(
+            show,
+            local_media_profile_id=local_media_profile_id,
+            selected_profile_count=scope.local_media_profile_count,
+        ),
     )
 
 

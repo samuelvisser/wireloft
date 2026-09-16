@@ -146,8 +146,9 @@ def _library(session: Session, tmp_path: Path):
     )
 
 
-def test_show_delete_downloads_request_uses_existing_local_media_profiles(tmp_path):
+def test_show_delete_downloads_request_disables_profiles_before_worker_dispatch(tmp_path):
     from backend.api.endpoints.shows import service
+    from backend.db.models import DownloadProfileBase
     from task_manager.scheduler.db import TaskOperationTarget
 
     session, engine = _session()
@@ -156,23 +157,36 @@ def test_show_delete_downloads_request_uses_existing_local_media_profiles(tmp_pa
             show,
             audio_profile,
             unused_profile,
-            _download_profiles,
+            download_profiles,
             _audio_download,
             _video_download,
             _audio_path,
             _video_path,
         ) = _library(session, tmp_path)
+        audio_download_profile, video_download_profile, unused_download_profile = download_profiles
 
         result = service.request_show_download_delete(session, show.slug, None)
         assert result["queued"] is True
         assert result["local_media_profiles_queued"] == 2
+        assert result["download_profiles_disabled"] == 2
         UUID(str(result["operation_id"]))
 
         all_target = session.query(TaskOperationTarget).filter_by(
             operation_id=result["operation_id"]
         ).one()
         assert all_target.task_key == "delete_show_downloads_worker"
-        assert all_target.task_kwargs == {"local_media_profile_id": None}
+        assert all_target.task_kwargs == {
+            "local_media_profile_id": None,
+            "download_profiles_disabled": 2,
+        }
+
+        assert session.get(DownloadProfileBase, audio_download_profile.id).enable_profile is False
+        assert session.get(DownloadProfileBase, video_download_profile.id).enable_profile is False
+        assert session.get(DownloadProfileBase, unused_download_profile.id).enable_profile is True
+
+        # The request has not been committed in this service-level test. Roll it
+        # back so the scoped case starts from the original enabled state.
+        session.rollback()
 
         selected = service.request_show_download_delete(
             session,
@@ -180,13 +194,19 @@ def test_show_delete_downloads_request_uses_existing_local_media_profiles(tmp_pa
             audio_profile.id,
         )
         assert selected["local_media_profiles_queued"] == 1
+        assert selected["download_profiles_disabled"] == 1
         selected_target = session.query(TaskOperationTarget).filter_by(
             operation_id=selected["operation_id"]
         ).one()
         assert selected_target.task_kwargs == {
             "local_media_profile_id": audio_profile.id,
+            "download_profiles_disabled": 1,
         }
+        assert session.get(DownloadProfileBase, audio_download_profile.id).enable_profile is False
+        assert session.get(DownloadProfileBase, video_download_profile.id).enable_profile is True
+        assert session.get(DownloadProfileBase, unused_download_profile.id).enable_profile is True
 
+        session.rollback()
         with pytest.raises(HTTPException) as exc:
             service.request_show_download_delete(
                 session,
