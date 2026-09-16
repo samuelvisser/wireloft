@@ -57,6 +57,11 @@ It should also be easy to understand for a moderately tech-literate audience.
 The wiki should document the big picture for WireLoft: code comments are for explaining 
 programming implementation details.
 
+## The Daily Wire
+When referring to The Daily Wire, in most cases, use the full name, "The Daily Wire". 
+However, in some contexts, it may read better to use "Daily Wire" instead. This is not the 'correct'
+name though, so should only be used if "The Daily Wire" reads awkwardly in the sentence.
+
 ## Test your work
 Before you push your branch, please run all appropriate tests to verify your work.  
 Also be sure to launch both the backend and frontend servers and verify your work in the UI.
