@@ -7,11 +7,13 @@ import { useDownloadProfilesView, useEpisodes, useMediaDownloadsView, useShow, u
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
+import ActionConfirmDialogue, {type ActionConfirmDialogueLocalMediaProfile} from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import ShowIndexingProgress from '../../components/ShowIndexingProgress/ShowIndexingProgress'
 import ShowSyncLogModal from '../../components/ShowSyncLogModal/ShowSyncLogModal'
+import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {OperationControlError, type OperationControlAction, useControlOperation, useStartOperation} from '../../lib/operations'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import {loadEpisodesFromStorage, removeEpisodesFromStorage, saveEpisodesToStorage} from '../../lib/cache'
@@ -26,7 +28,6 @@ function preferredFormatLabel(value?: string | null) {
 }
 
 const EPISODE_SKELETON_COUNT = 12
-const OPERATION_STARTING_MESSAGE = 'This task is starting...'
 const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
 
 export default function ShowPage() {
@@ -70,16 +71,9 @@ export default function ShowPage() {
   const [confirm, setConfirm] = useState(false)
   const [syncStarting, setSyncStarting] = useState(false)
   const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)
-  const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
   const [fileRenameConfirm, setFileRenameConfirm] = useState(false)
-  const [fileRenameStarting, setFileRenameStarting] = useState(false)
-  const [fileRenameLocalMediaProfileId, setFileRenameLocalMediaProfileId] = useState('')
   const [deleteDownloadsConfirm, setDeleteDownloadsConfirm] = useState(false)
-  const [deleteDownloadsStarting, setDeleteDownloadsStarting] = useState(false)
-  const [deleteDownloadsLocalMediaProfileId, setDeleteDownloadsLocalMediaProfileId] = useState('')
   const [redownloadConfirm, setRedownloadConfirm] = useState(false)
-  const [redownloadStarting, setRedownloadStarting] = useState(false)
-  const [redownloadLocalMediaProfileId, setRedownloadLocalMediaProfileId] = useState('')
   const [syncLogOpen, setSyncLogOpen] = useState(false)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
@@ -93,11 +87,10 @@ export default function ShowPage() {
   const redownloadOperation = useActiveOperation('show.redownload_episodes', 'show', operationResourceId)
   const manualSyncing = syncOperation !== undefined
   const syncBusy = syncStarting || manualSyncing
-  const metadataRefreshBusy = metadataRefreshStarting || metadataRefreshOperation !== undefined
-  const fileRenameBusy = fileRenameStarting || fileRenameOperation !== undefined
-  const deleteDownloadsBusy = deleteDownloadsStarting || deleteDownloadsOperation !== undefined
-  const redownloadBusy = redownloadStarting || redownloadOperation !== undefined
-  const downloadMaintenanceBusy = deleteDownloadsBusy || redownloadBusy
+  const metadataRefreshBusy = metadataRefreshOperation !== undefined
+  const fileRenameBusy = fileRenameOperation !== undefined
+  const deleteDownloadsBusy = deleteDownloadsOperation !== undefined
+  const redownloadBusy = redownloadOperation !== undefined
 
   useEffect(() => {
     if (!id || episodesPlaceholder || episodesData === undefined) return
@@ -138,6 +131,13 @@ export default function ShowPage() {
     }
     return [...profiles.values()].sort((left, right) => left.name.localeCompare(right.name))
   }, [downloads, id])
+  const actionLocalMediaProfiles = useMemo<ActionConfirmDialogueLocalMediaProfile[]>(
+    () => downloadLocalMediaProfiles.map((profile) => ({
+      id: profile.id,
+      label: `${profile.name} · ${preferredFormatLabel(profile.preferredFormat)}`,
+    })),
+    [downloadLocalMediaProfiles],
+  )
   const displayedEpisodes = useMemo(() => {
     if (!isSeasonal) return episodes
     if (selectedSeasonId === null) return []
@@ -207,21 +207,19 @@ export default function ShowPage() {
   const episodesViewLoading = episodesInitialLoading || seasonViewLoading
 
   const syncDisabledReason = syncStarting
-    ? OPERATION_STARTING_MESSAGE
+    ? 'This task is starting...'
     : syncOperation
       ? syncOperation.status === 'WAITING'
         ? syncOperation.message || OPERATION_WAITING_MESSAGE
         : `A sync is running for ${show.title}.`
       : undefined
-  const metadataRefreshDisabledReason = metadataRefreshStarting
-    ? OPERATION_STARTING_MESSAGE
-    : metadataRefreshOperation
-      ? metadataRefreshOperation.status === 'WAITING'
-        ? metadataRefreshOperation.message || OPERATION_WAITING_MESSAGE
-        : `A metadata refresh is running for ${show.title}.${metadataRefreshOperation.progressTotal > 0
-          ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} episodes have finished.`
-          : ''}`
-      : undefined
+  const metadataRefreshDisabledReason = metadataRefreshOperation
+    ? metadataRefreshOperation.status === 'WAITING'
+      ? metadataRefreshOperation.message || OPERATION_WAITING_MESSAGE
+      : `A metadata refresh is running for ${show.title}.${metadataRefreshOperation.progressTotal > 0
+        ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} episodes have finished.`
+        : ''}`
+    : undefined
   const downloadStateUnknown = downloadsLoading && downloads === undefined
   const downloadStateFailed = Boolean(downloadsError) && downloads === undefined
   const downloadStateDisabledReason = downloadStateUnknown
@@ -231,31 +229,25 @@ export default function ShowPage() {
       : downloadLocalMediaProfiles.length === 0
         ? `No downloaded episodes exist for ${show.title}.`
         : undefined
-  const fileRenameDisabledReason = fileRenameStarting
-    ? OPERATION_STARTING_MESSAGE
-    : fileRenameOperation
-      ? fileRenameOperation.status === 'WAITING'
-        ? fileRenameOperation.message || OPERATION_WAITING_MESSAGE
-        : `A File Rename operation is running for ${show.title}.`
-      : downloadStateDisabledReason
-  const deleteDownloadsDisabledReason = deleteDownloadsStarting || redownloadStarting
-    ? OPERATION_STARTING_MESSAGE
-    : deleteDownloadsOperation
-      ? deleteDownloadsOperation.status === 'WAITING'
-        ? deleteDownloadsOperation.message || OPERATION_WAITING_MESSAGE
-        : `A delete downloads operation is running for ${show.title}.`
-      : redownloadOperation
-        ? `A delete and re-download operation is running for ${show.title}.`
-        : downloadStateDisabledReason
-  const redownloadDisabledReason = deleteDownloadsStarting || redownloadStarting
-    ? OPERATION_STARTING_MESSAGE
+  const fileRenameDisabledReason = fileRenameOperation
+    ? fileRenameOperation.status === 'WAITING'
+      ? fileRenameOperation.message || OPERATION_WAITING_MESSAGE
+      : `A File Rename operation is running for ${show.title}.`
+    : downloadStateDisabledReason
+  const deleteDownloadsDisabledReason = deleteDownloadsOperation
+    ? deleteDownloadsOperation.status === 'WAITING'
+      ? deleteDownloadsOperation.message || OPERATION_WAITING_MESSAGE
+      : `A delete downloads operation is running for ${show.title}.`
     : redownloadOperation
-      ? redownloadOperation.status === 'WAITING'
-        ? redownloadOperation.message || OPERATION_WAITING_MESSAGE
-        : `A delete and re-download operation is running for ${show.title}.`
-      : deleteDownloadsOperation
-        ? `A delete downloads operation is running for ${show.title}.`
-        : downloadStateDisabledReason
+      ? `A delete and re-download operation is running for ${show.title}.`
+      : downloadStateDisabledReason
+  const redownloadDisabledReason = redownloadOperation
+    ? redownloadOperation.status === 'WAITING'
+      ? redownloadOperation.message || OPERATION_WAITING_MESSAGE
+      : `A delete and re-download operation is running for ${show.title}.`
+    : deleteDownloadsOperation
+      ? `A delete downloads operation is running for ${show.title}.`
+      : downloadStateDisabledReason
 
   const controlTaskOperation = async (
     operationId: string,
@@ -313,165 +305,6 @@ export default function ShowPage() {
       toast.error(`Could not start sync for ${show.title}`)
     } finally {
       setSyncStarting(false)
-    }
-  }
-
-  const refreshAllMetadata = async () => {
-    if (metadataRefreshBusy) return
-    setMetadataRefreshStarting(true)
-    try {
-      const base = (window as any).appConfig?.API_URL || '/api'
-      const result = await startOperation(
-        `${base}/shows/${encodeURIComponent(id)}/refresh-metadata`,
-        {method: 'POST'},
-      )
-      const count = typeof result.episodesQueued === 'number' ? result.episodesQueued : total
-      setMetadataRefreshConfirm(false)
-      if (count > 0) {
-        toast.success(`Metadata refresh started for ${count} ${count === 1 ? 'episode' : 'episodes'} in ${show.title}`)
-      }
-    } catch {
-      toast.error(`Could not start metadata refresh for ${show.title}`)
-    } finally {
-      setMetadataRefreshStarting(false)
-    }
-  }
-
-  const openFileRenameConfirm = () => {
-    if (downloadStateUnknown) {
-      toast('WireLoft is still checking for downloaded episodes in this show')
-      return
-    }
-    if (downloadStateFailed) {
-      toast.error('Could not determine whether this show has downloaded episodes')
-      return
-    }
-    if (!downloadLocalMediaProfiles.length) {
-      toast(`There are no downloaded episodes in ${show.title}`)
-      return
-    }
-    setFileRenameLocalMediaProfileId(
-      downloadLocalMediaProfiles.length > 1 ? 'all' : String(downloadLocalMediaProfiles[0].id),
-    )
-    setFileRenameConfirm(true)
-  }
-
-  const renameFiles = async () => {
-    if (fileRenameBusy || !fileRenameLocalMediaProfileId) return
-    setFileRenameStarting(true)
-    try {
-      const base = (window as any).appConfig?.API_URL || '/api'
-      const result = await startOperation(`${base}/shows/${encodeURIComponent(id)}/rename-files`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          localMediaProfileId: fileRenameLocalMediaProfileId === 'all'
-            ? null
-            : Number(fileRenameLocalMediaProfileId),
-        }),
-      })
-      const episodeCount = typeof result?.episodesQueued === 'number' ? result.episodesQueued : 0
-      const profileCount = typeof result?.localMediaProfilesQueued === 'number'
-        ? result.localMediaProfilesQueued
-        : (fileRenameLocalMediaProfileId === 'all' ? downloadLocalMediaProfiles.length : 1)
-      setFileRenameConfirm(false)
-      if (episodeCount > 0) {
-        toast.success(
-          `File Rename started for ${episodeCount} ${episodeCount === 1 ? 'episode' : 'episodes'} in ${show.title} using ${profileCount} ${profileCount === 1 ? 'Local Media Profile' : 'Local Media Profiles'}`,
-        )
-      }
-    } catch {
-      toast.error(`Could not start File Rename for ${show.title}`)
-    } finally {
-      setFileRenameStarting(false)
-    }
-  }
-
-  const getInitialDownloadMaintenanceLocalMediaProfileId = () => {
-    if (downloadStateUnknown) {
-      toast('WireLoft is still checking for downloaded episodes in this show')
-      return null
-    }
-    if (downloadStateFailed) {
-      toast.error('Could not determine whether this show has downloaded episodes')
-      return null
-    }
-    if (!downloadLocalMediaProfiles.length) {
-      toast(`There are no downloaded episodes in ${show.title}`)
-      return null
-    }
-    return downloadLocalMediaProfiles.length > 1
-      ? 'all'
-      : String(downloadLocalMediaProfiles[0].id)
-  }
-
-  const openDeleteDownloadsConfirm = () => {
-    const localMediaProfileId = getInitialDownloadMaintenanceLocalMediaProfileId()
-    if (!localMediaProfileId) return
-    setDeleteDownloadsLocalMediaProfileId(localMediaProfileId)
-    setDeleteDownloadsConfirm(true)
-  }
-
-  const openRedownloadConfirm = () => {
-    const localMediaProfileId = getInitialDownloadMaintenanceLocalMediaProfileId()
-    if (!localMediaProfileId) return
-    setRedownloadLocalMediaProfileId(localMediaProfileId)
-    setRedownloadConfirm(true)
-  }
-
-  const deleteDownloads = async () => {
-    if (downloadMaintenanceBusy || !deleteDownloadsLocalMediaProfileId) return
-    setDeleteDownloadsStarting(true)
-    try {
-      const base = (window as any).appConfig?.API_URL || '/api'
-      const result = await startOperation(`${base}/shows/${encodeURIComponent(id)}/delete-downloads`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          localMediaProfileId: deleteDownloadsLocalMediaProfileId === 'all'
-            ? null
-            : Number(deleteDownloadsLocalMediaProfileId),
-        }),
-      })
-      const profileCount = typeof result?.localMediaProfilesQueued === 'number'
-        ? result.localMediaProfilesQueued
-        : (deleteDownloadsLocalMediaProfileId === 'all' ? downloadLocalMediaProfiles.length : 1)
-      setDeleteDownloadsConfirm(false)
-      toast.success(
-        `Download deletion started for ${show.title} using ${profileCount} ${profileCount === 1 ? 'Local Media Profile' : 'Local Media Profiles'}`,
-      )
-    } catch {
-      toast.error(`Could not start download deletion for ${show.title}`)
-    } finally {
-      setDeleteDownloadsStarting(false)
-    }
-  }
-
-  const redownloadEpisodes = async () => {
-    if (downloadMaintenanceBusy || !redownloadLocalMediaProfileId) return
-    setRedownloadStarting(true)
-    try {
-      const base = (window as any).appConfig?.API_URL || '/api'
-      const result = await startOperation(`${base}/shows/${encodeURIComponent(id)}/redownload-episodes`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          localMediaProfileId: redownloadLocalMediaProfileId === 'all'
-            ? null
-            : Number(redownloadLocalMediaProfileId),
-        }),
-      })
-      const profileCount = typeof result?.localMediaProfilesQueued === 'number'
-        ? result.localMediaProfilesQueued
-        : (redownloadLocalMediaProfileId === 'all' ? downloadLocalMediaProfiles.length : 1)
-      setRedownloadConfirm(false)
-      toast.success(
-        `Re-download started for ${show.title} using ${profileCount} ${profileCount === 1 ? 'Local Media Profile' : 'Local Media Profiles'}`,
-      )
-    } catch {
-      toast.error(`Could not start re-download for ${show.title}`)
-    } finally {
-      setRedownloadStarting(false)
     }
   }
 
@@ -570,7 +403,7 @@ export default function ShowPage() {
                   disabledReason: fileRenameDisabledReason,
                   progress: fileRenameOperation ? (fileRenameOperation.progress ?? 0) : undefined,
                   controls: operationControls(fileRenameOperation?.id, 'File Rename'),
-                  onSelect: openFileRenameConfirm,
+                  onSelect: () => setFileRenameConfirm(true),
                 },
                 {
                   label: 'Delete all downloads',
@@ -580,7 +413,7 @@ export default function ShowPage() {
                   disabledReason: deleteDownloadsDisabledReason,
                   progress: deleteDownloadsOperation ? (deleteDownloadsOperation.progress ?? 0) : undefined,
                   controls: operationControls(deleteDownloadsOperation?.id, 'download deletion'),
-                  onSelect: openDeleteDownloadsConfirm,
+                  onSelect: () => setDeleteDownloadsConfirm(true),
                 },
                 {
                   label: 'Delete and re-download all episodes',
@@ -590,7 +423,7 @@ export default function ShowPage() {
                   disabledReason: redownloadDisabledReason,
                   progress: redownloadOperation ? (redownloadOperation.progress ?? 0) : undefined,
                   controls: operationControls(redownloadOperation?.id, 're-download'),
-                  onSelect: openRedownloadConfirm,
+                  onSelect: () => setRedownloadConfirm(true),
                 },
                 {
                   label: 'Create download profile',
@@ -738,81 +571,51 @@ export default function ShowPage() {
         onSyncNow={syncNow}
       />
 
-      <ConfirmDialog
+      <ActionConfirmDialogue
         open={metadataRefreshConfirm}
+        operationDefinition={frontendOperationDefinitions['show.refresh_metadata']}
+        requestPath={`/shows/${encodeURIComponent(id)}/refresh-metadata`}
+        resourceLabel={show.title}
         title="Refresh all metadata"
-        onDismiss={() => {
-          if (!metadataRefreshBusy) setMetadataRefreshConfirm(false)
-        }}
+        onDismiss={() => setMetadataRefreshConfirm(false)}
         icon={['fas', 'arrows-rotate']}
-        dismissOnOverlayClick={!metadataRefreshBusy}
-        cancelButton={{disabled: metadataRefreshBusy}}
-        confirmButton={{
-          label: metadataRefreshBusy ? 'Starting…' : 'Refresh metadata',
-          onClick: refreshAllMetadata,
-          className: 'btn btn-primary',
-          disabled: metadataRefreshBusy,
-        }}
+        confirmLabel="Refresh metadata"
+        disabled={metadataRefreshBusy}
       >
         <p>Refresh metadata for every episode in "{show.title}"? This can take a while and is usually not needed.</p>
-      </ConfirmDialog>
+      </ActionConfirmDialogue>
 
-      <ConfirmDialog
+      <ActionConfirmDialogue
         open={fileRenameConfirm}
+        operationDefinition={frontendOperationDefinitions['show.rename_files']}
+        requestPath={`/shows/${encodeURIComponent(id)}/rename-files`}
+        resourceLabel={show.title}
         title="Rename existing episode files"
-        onDismiss={() => {
-          if (!fileRenameBusy) setFileRenameConfirm(false)
-        }}
+        onDismiss={() => setFileRenameConfirm(false)}
         icon={['fas', 'file-pen']}
-        dismissOnOverlayClick={!fileRenameBusy}
-        cancelButton={{disabled: fileRenameBusy}}
-        confirmButton={{
-          label: fileRenameBusy ? 'Starting…' : 'Rename files',
-          onClick: renameFiles,
-          className: 'btn btn-primary',
-          disabled: fileRenameBusy || !fileRenameLocalMediaProfileId,
-        }}
+        confirmLabel="Rename files"
+        disabled={fileRenameBusy}
+        scope_by_local_media_profile
+        localMediaProfiles={actionLocalMediaProfiles}
       >
         <p>
           Rename existing episode files in "{show.title}" so their paths match the current Local Media Profile output templates.
         </p>
-        <div className="form-row">
-          <label htmlFor="file-rename-profile">Local Media Profile</label>
-          <select
-            id="file-rename-profile"
-            className="input"
-            value={fileRenameLocalMediaProfileId}
-            disabled={fileRenameBusy}
-            onChange={(event) => setFileRenameLocalMediaProfileId(event.target.value)}
-          >
-            {downloadLocalMediaProfiles.length > 1 && (
-              <option value="all">All Local Media Profiles</option>
-            )}
-            {downloadLocalMediaProfiles.map((profile) => (
-              <option key={profile.id} value={String(profile.id)}>
-                {`${profile.name} · ${preferredFormatLabel(profile.preferredFormat)}`}
-              </option>
-            ))}
-          </select>
-        </div>
-      </ConfirmDialog>
+      </ActionConfirmDialogue>
 
-      <ConfirmDialog
+      <ActionConfirmDialogue
         open={deleteDownloadsConfirm}
+        operationDefinition={frontendOperationDefinitions['show.delete_downloads']}
+        requestPath={`/shows/${encodeURIComponent(id)}/delete-downloads`}
+        resourceLabel={show.title}
         title="Delete all downloads"
-        onDismiss={() => {
-          if (!deleteDownloadsStarting) setDeleteDownloadsConfirm(false)
-        }}
+        onDismiss={() => setDeleteDownloadsConfirm(false)}
         icon={['fas', 'trash']}
         iconTone="danger"
-        dismissOnOverlayClick={!deleteDownloadsStarting}
-        cancelButton={{disabled: deleteDownloadsStarting}}
-        confirmButton={{
-          label: deleteDownloadsStarting ? 'Starting…' : 'Delete downloads',
-          onClick: deleteDownloads,
-          className: 'btn btn-danger',
-          disabled: downloadMaintenanceBusy || !deleteDownloadsLocalMediaProfileId,
-        }}
+        confirmLabel="Delete downloads"
+        disabled={deleteDownloadsBusy || redownloadBusy}
+        scope_by_local_media_profile
+        localMediaProfiles={actionLocalMediaProfiles}
       >
         <p>
           Delete downloaded episode files in "{show.title}".
@@ -820,64 +623,27 @@ export default function ShowPage() {
         <p>
           Before deletion, WireLoft will disable the Download Profiles attached to the selected Local Media Profile or Profiles. Other Download Profiles on this show are left unchanged. Re-enable a disabled Download Profile whenever you want WireLoft to download its eligible episodes again. The profiles themselves are not deleted.
         </p>
-        <div className="form-row">
-          <label htmlFor="delete-downloads-profile">Local Media Profile</label>
-          <select
-            id="delete-downloads-profile"
-            className="input"
-            value={deleteDownloadsLocalMediaProfileId}
-            disabled={deleteDownloadsStarting}
-            onChange={(event) => setDeleteDownloadsLocalMediaProfileId(event.target.value)}
-          >
-            {downloadLocalMediaProfiles.length > 1 && <option value="all">All Local Media Profiles</option>}
-            {downloadLocalMediaProfiles.map((profile) => (
-              <option key={profile.id} value={String(profile.id)}>
-                {`${profile.name} · ${preferredFormatLabel(profile.preferredFormat)}`}
-              </option>
-            ))}
-          </select>
-        </div>
-      </ConfirmDialog>
+      </ActionConfirmDialogue>
 
-      <ConfirmDialog
+      <ActionConfirmDialogue
         open={redownloadConfirm}
+        operationDefinition={frontendOperationDefinitions['show.redownload_episodes']}
+        requestPath={`/shows/${encodeURIComponent(id)}/redownload-episodes`}
+        resourceLabel={show.title}
         title="Delete and re-download all episodes"
-        onDismiss={() => {
-          if (!redownloadStarting) setRedownloadConfirm(false)
-        }}
+        onDismiss={() => setRedownloadConfirm(false)}
         icon={['fas', 'arrows-rotate']}
         iconTone="danger"
-        dismissOnOverlayClick={!redownloadStarting}
-        cancelButton={{disabled: redownloadStarting}}
-        confirmButton={{
-          label: redownloadStarting ? 'Starting…' : 'Delete and re-download',
-          onClick: redownloadEpisodes,
-          className: 'btn btn-danger',
-          disabled: downloadMaintenanceBusy || !redownloadLocalMediaProfileId,
-        }}
+        confirmLabel="Delete and re-download"
+        disabled={deleteDownloadsBusy || redownloadBusy}
+        scope_by_local_media_profile
+        localMediaProfiles={actionLocalMediaProfiles}
       >
         <p>
           Delete existing episode files in "{show.title}" and re-download them.
           This can take a long time, use significant bandwidth, and is usually not needed.
         </p>
-        <div className="form-row">
-          <label htmlFor="redownload-profile">Local Media Profile</label>
-          <select
-            id="redownload-profile"
-            className="input"
-            value={redownloadLocalMediaProfileId}
-            disabled={redownloadStarting}
-            onChange={(event) => setRedownloadLocalMediaProfileId(event.target.value)}
-          >
-            {downloadLocalMediaProfiles.length > 1 && <option value="all">All Local Media Profiles</option>}
-            {downloadLocalMediaProfiles.map((profile) => (
-              <option key={profile.id} value={String(profile.id)}>
-                {`${profile.name} · ${preferredFormatLabel(profile.preferredFormat)}`}
-              </option>
-            ))}
-          </select>
-        </div>
-      </ConfirmDialog>
+      </ActionConfirmDialogue>
 
       <ConfirmDialog
         open={confirm}
