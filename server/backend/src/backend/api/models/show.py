@@ -54,10 +54,18 @@ class ShowFileRenameAPIRequest(RequestBase):
     local_media_profile_id: Optional[int] = Field(default=None, gt=0)
 
 
-class ShowRedownloadEpisodesAPIRequest(RequestBase):
-    """Select one Local Media Profile, or every profile with existing episode media."""
+class _ShowDownloadMaintenanceAPIRequest(RequestBase):
+    """Scope a destructive show download action to one or every profile in use."""
 
     local_media_profile_id: Optional[int] = Field(default=None, gt=0)
+
+
+class ShowDeleteDownloadsAPIRequest(_ShowDownloadMaintenanceAPIRequest):
+    """Select downloads to delete by Local Media Profile."""
+
+
+class ShowRedownloadEpisodesAPIRequest(_ShowDownloadMaintenanceAPIRequest):
+    """Select downloads to delete and re-download by Local Media Profile."""
 
 
 # ---------- Lenient output (read) ----------

@@ -11,6 +11,7 @@ _FETCH_EPISODES_TASK_KEY = "fetch_new_episodes"
 _REFRESH_METADATA_TASK_KEY = "refresh_episode_metadata"
 _RENAME_FILE_TASK_KEY = "rename_file_worker"
 _REDOWNLOAD_TASK_KEY = "redownload_show_episodes_worker"
+_DELETE_DOWNLOADS_TASK_KEY = "delete_show_downloads_worker"
 
 
 class _ShowOperation(OperationDefinition[Show]):
@@ -95,10 +96,7 @@ class ShowFileRenameOperation(_ShowOperation):
         }
 
 
-class ShowRedownloadOperation(_ShowOperation):
-    kind = "show.redownload_episodes"
-    task = _REDOWNLOAD_TASK_KEY
-
+class _ShowDownloadMaintenanceOperation(_ShowOperation):
     def __init__(
         self,
         show: Show,
@@ -118,3 +116,13 @@ class ShowRedownloadOperation(_ShowOperation):
             **super().context(),
             "local_media_profiles_requested": self.selected_profile_count,
         }
+
+
+class ShowDeleteDownloadsOperation(_ShowDownloadMaintenanceOperation):
+    kind = "show.delete_downloads"
+    task = _DELETE_DOWNLOADS_TASK_KEY
+
+
+class ShowRedownloadOperation(_ShowDownloadMaintenanceOperation):
+    kind = "show.redownload_episodes"
+    task = _REDOWNLOAD_TASK_KEY

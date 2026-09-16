@@ -5,15 +5,16 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, Show
 from dailywire_downloader import DownloadCancelled
+from task_manager.tasks.helpers.downloads.show_episode_downloads import (
+    resolve_episode_download_scope,
+)
 from task_manager.tasks.helpers.progress import update_progress
 from ._helpers import (
     _POLL_INTERVAL_SECONDS,
     _cancel_targets,
     _check_targets,
     _prepare_redownloads,
-    _selected_downloads,
 )
 
 
@@ -26,39 +27,14 @@ async def run_redownload_show_episodes_worker(
         progress=None,
 ) -> dict[str, Any]:
     """Coordinate replacement downloads for existing episode media rows."""
-    if (show_id is None) == (episode_id is None):
-        raise ValueError("Provide exactly one show id or episode id")
-
-    episode: Episode | None = None
-    if episode_id is not None:
-        episode = s.get(Episode, episode_id)
-        if episode is None:
-            raise ValueError(f"Episode {episode_id} no longer exists")
-        show = episode.show
-    else:
-        show = s.get(Show, show_id)
-        if show is None:
-            raise ValueError(f"Show {show_id} no longer exists")
-
-    downloads = _selected_downloads(
+    scope = resolve_episode_download_scope(
         s,
-        show_id=show.id,
-        episode_id=episode.id if episode is not None else None,
+        show_id=show_id,
+        episode_id=episode_id,
         local_media_profile_id=local_media_profile_id,
     )
-    profile_count = len({download.local_media_profile_id for download in downloads})
-    base_result: dict[str, Any] = {
-        "show_id": show.id,
-        "show_slug": show.slug,
-        "show_title": show.title,
-        "local_media_profiles": profile_count,
-    }
-    if episode is not None:
-        base_result.update({
-            "episode_id": episode.id,
-            "episode_slug": episode.slug,
-            "episode_title": episode.title,
-        })
+    base_result = scope.result_data()
+    downloads = list(scope.downloads)
 
     if not downloads:
         update_progress(progress, 100, "No downloaded episodes match this request")

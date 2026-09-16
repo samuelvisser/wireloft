@@ -5,20 +5,18 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode
-from backend.db.models.media_download import EpisodeMediaDownload
-from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.output_template import resolve_episode_output_path
 from task_manager.scheduler.db import TaskOperation
 from task_manager.scheduler.operation_control import cancel_operation
 from task_manager.scheduler.types import OperationSource, OperationStatus
+from task_manager.tasks.helpers.downloads.show_episode_downloads import (
+    cancel_active_download_attempts,
+    delete_episode_download_artifact,
+)
 from task_manager.tasks.media_download_operations import (
     create_media_download_operation,
     dispatch_queued_media_download_operations,
-    get_active_media_download_operation,
-    prepare_media_download_artifact,
 )
-from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
 _POLL_INTERVAL_SECONDS = 0.5
@@ -37,61 +35,16 @@ class RedownloadTarget:
     episode_title: str
 
 
-def _selected_downloads(
-        s: Session,
-        *,
-        show_id: int,
-        episode_id: int | None = None,
-        local_media_profile_id: int | None = None,
-) -> list[EpisodeMediaDownload]:
-    """Return existing episode media rows selected for an explicit re-download."""
-    stmt = (
-        select(EpisodeMediaDownload)
-        .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
-        .where(Episode.show_id == show_id)
-    )
-    if episode_id is not None:
-        stmt = stmt.where(Episode.id == episode_id)
-    if local_media_profile_id is not None:
-        stmt = stmt.where(
-            EpisodeMediaDownload.local_media_profile_id == local_media_profile_id
-        )
-    return list(s.scalars(stmt.order_by(EpisodeMediaDownload.id.asc())))
-
-
-def _cancel_existing_attempts(
-    s: Session,
-    downloads: list[EpisodeMediaDownload],
-) -> None:
-    """Cancel active child operations before this destructive replacement starts."""
-    operation_ids = {
-        active.id
-        for download in downloads
-        for active in (get_active_media_download_operation(s, download.id),)
-        if active is not None
-    }
-
-    # cancel_operation owns its own short transaction. Drop this session's read
-    # transaction first so SQLite never has to upgrade an old snapshot afterwards.
-    s.rollback()
-    for operation_id in operation_ids:
-        try:
-            cancel_operation(
-                operation_id,
-                reason="Replaced by show re-download",
-                acknowledge=True,
-            )
-        except ValueError:
-            pass
-    s.expire_all()
-
-
 def _prepare_redownloads(
         s: Session,
-        downloads: list[EpisodeMediaDownload],
+        downloads,
 ) -> list[RedownloadTarget]:
-    """Replace existing artifacts through one SYSTEM media.download operation each."""
-    _cancel_existing_attempts(s, downloads)
+    """Delete selected artifacts and create one replacement media.download operation each."""
+    cancel_active_download_attempts(
+        s,
+        downloads,
+        reason="Replaced by show re-download",
+    )
     prepared: list[RedownloadTarget] = []
 
     for download in downloads:
@@ -102,13 +55,11 @@ def _prepare_redownloads(
             episode=episode,
         ))
 
-        if download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
-            resolve_media_download_file(
-                s,
-                download,
-                release_read_transaction=True,
-            )
-        prepare_media_download_artifact(s, download)
+        delete_episode_download_artifact(
+            s,
+            download,
+            suppress_automatic_retry=False,
+        )
         download.file_path = target_path
         s.flush()
 

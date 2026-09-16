@@ -28,8 +28,16 @@ class LocalMediaProfileFileRenameOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
 
 
-class ShowRedownloadOperationAccepted(TaskOperationAccepted):
+class _ShowDownloadMaintenanceOperationAccepted(TaskOperationAccepted):
     local_media_profiles_queued: int
+
+
+class ShowDeleteDownloadsOperationAccepted(_ShowDownloadMaintenanceOperationAccepted):
+    pass
+
+
+class ShowRedownloadOperationAccepted(_ShowDownloadMaintenanceOperationAccepted):
+    pass
 
 
 class EpisodeMetadataOperationAccepted(TaskOperationAccepted):

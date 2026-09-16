@@ -233,6 +233,19 @@ export const frontendOperationDefinitions = {
       return fileRenameSuccessMessage(operation, profileName)
     },
   },
+  'show.delete_downloads': {
+    label: 'Delete downloads',
+    invalidate: invalidateShowFiles,
+    success: (operation) => {
+      const showTitle = contextString(operation, 'show_title') || operation.title
+      const files = resultNumber(operation, 'episode_files') ?? 0
+      const profiles = resultNumber(operation, 'local_media_profiles')
+      const profileDetail = profiles === undefined
+        ? ''
+        : ` using ${profiles} ${plural(profiles, 'Local Media Profile')}`
+      return `Deleted downloads for ${showTitle}: ${files} episode ${plural(files, 'file')} deleted${profileDetail}`
+    },
+  },
   'show.redownload_episodes': {
     label: 'Re-download',
     invalidate: invalidateShowFiles,

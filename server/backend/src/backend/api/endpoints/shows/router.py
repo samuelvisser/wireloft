@@ -11,9 +11,11 @@ from .service import (
     request_show_sync,
     request_show_metadata_refresh,
     request_show_file_rename,
+    request_show_download_delete,
     request_show_episode_redownload,
 )
 from ...models.operations import (
+    ShowDeleteDownloadsOperationAccepted,
     ShowFileRenameOperationAccepted,
     ShowMetadataOperationAccepted,
     ShowRedownloadOperationAccepted,
@@ -23,6 +25,7 @@ from ...models.show import (
     ShowAPIRead,
     ShowAPICreate,
     ShowAPIUpdate,
+    ShowDeleteDownloadsAPIRequest,
     ShowFileRenameAPIRequest,
     ShowRedownloadEpisodesAPIRequest,
 )
@@ -107,6 +110,27 @@ def show_rename_files(show_slug: str, body: ShowFileRenameAPIRequest):
     with db_session() as s:
         try:
             result = request_show_file_rename(
+                s,
+                show_slug,
+                body.local_media_profile_id,
+            )
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post(
+    "/{show_slug}/delete-downloads",
+    response_model=ShowDeleteDownloadsOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def show_delete_downloads(show_slug: str, body: ShowDeleteDownloadsAPIRequest):
+    """Delete show downloads for one or every Local Media Profile in use."""
+    with db_session() as s:
+        try:
+            result = request_show_download_delete(
                 s,
                 show_slug,
                 body.local_media_profile_id,

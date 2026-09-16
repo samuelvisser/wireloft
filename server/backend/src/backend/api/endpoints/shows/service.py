@@ -20,6 +20,7 @@ from task_manager.scheduler.operations import (
 
 from .events import ShowAdded
 from .operations import (
+    ShowDeleteDownloadsOperation,
     ShowFileRenameOperation,
     ShowIndexOperation,
     ShowMetadataRefreshOperation,
@@ -32,6 +33,7 @@ _PHYSICAL_ARTIFACT_STATUSES = (
     MediaDownloadArtifactStatus.AVAILABLE.value,
     MediaDownloadArtifactStatus.CORRUPTED.value,
 )
+_ShowDownloadMaintenanceOperation = ShowDeleteDownloadsOperation | ShowRedownloadOperation
 
 
 def _show_local_media_profile_ids(s: Session, show_id: int) -> list[int]:
@@ -202,12 +204,13 @@ def request_show_metadata_refresh(
     }
 
 
-def request_show_episode_redownload(
+def _request_show_download_maintenance(
         s: Session,
         show_slug: str,
         local_media_profile_id: int | None,
+        operation_type: type[_ShowDownloadMaintenanceOperation],
 ) -> dict[str, bool | int | str]:
-    """Queue replacement downloads for existing show artifacts in the selected profile scope."""
+    """Queue a destructive show download action through the shared profile scope."""
     show = (
         s.query(Show)
         .filter_by(slug=show_slug)
@@ -223,7 +226,7 @@ def request_show_episode_redownload(
     )
     operation = create_operation(
         s,
-        ShowRedownloadOperation(
+        operation_type(
             show,
             local_media_profile_id=local_media_profile_id,
             selected_profile_count=len(selected_profile_ids),
@@ -235,6 +238,34 @@ def request_show_episode_redownload(
         "local_media_profiles_queued": len(selected_profile_ids),
         "operation_id": operation.id,
     }
+
+
+def request_show_download_delete(
+        s: Session,
+        show_slug: str,
+        local_media_profile_id: int | None,
+) -> dict[str, bool | int | str]:
+    """Queue deletion of existing show artifacts in the selected profile scope."""
+    return _request_show_download_maintenance(
+        s,
+        show_slug,
+        local_media_profile_id,
+        ShowDeleteDownloadsOperation,
+    )
+
+
+def request_show_episode_redownload(
+        s: Session,
+        show_slug: str,
+        local_media_profile_id: int | None,
+) -> dict[str, bool | int | str]:
+    """Queue replacement downloads for existing show artifacts in the selected profile scope."""
+    return _request_show_download_maintenance(
+        s,
+        show_slug,
+        local_media_profile_id,
+        ShowRedownloadOperation,
+    )
 
 
 def request_show_file_rename(
@@ -301,4 +332,3 @@ def request_show_file_rename(
         "local_media_profiles_queued": len(selected_profile_ids),
         "operation_id": operation.id,
     }
-
