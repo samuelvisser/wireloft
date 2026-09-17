@@ -17,9 +17,13 @@ import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 import ReadMore from '../../utils/ReadMore'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import {
-    compactOutputTemplate,
+    analyzeJinjaStatement,
     editorPositionForCompactOffset,
-    formatOutputTemplateForEditor,
+    getOpenJinjaBlocks,
+    parseOutputTemplate,
+    renderCompactOutputTemplate,
+    renderEditorOutputTemplate,
+    type JinjaBlockNode,
 } from './outputTemplateFormatting'
 import {getOutputTemplateVariables} from './outputTemplateVariables'
 import './OutputTemplateEditor.css'
@@ -114,6 +118,45 @@ function responseErrorMessage(payload: any): string {
     return 'The template could not be rendered.'
 }
 
+function replaceJinjaStatementCompletion(
+    view: EditorView,
+    completion: Completion,
+    from: number,
+    to: number,
+    insert: string,
+    anchorOffset = insert.length,
+) {
+    const statementStart = view.state.sliceDoc(0, from).lastIndexOf('{%')
+    const replaceFrom = statementStart >= 0 ? statementStart + 2 : from
+    const closingTag = /^\s*%}/.exec(view.state.sliceDoc(to))
+    const replaceTo = closingTag ? to + closingTag[0].length : to
+    view.dispatch({
+        changes: {from: replaceFrom, to: replaceTo, insert},
+        selection: {anchor: replaceFrom + anchorOffset},
+        annotations: pickedCompletion.of(completion),
+    })
+}
+
+function closingBlockCompletion(openBlocks: JinjaBlockNode[], count: number): Completion {
+    const blocks = openBlocks.slice(openBlocks.length - count).reverse()
+    const closers = blocks.map(({expectedCloser}) => expectedCloser)
+    const label = closers.join(', ')
+    const insert = closers
+        .map((closer, index) => index === 0 ? ` ${closer} %}` : `{% ${closer} %}`)
+        .join('')
+    const blockLabels = blocks.map(({keyword}) => keyword).join(', ')
+
+    return {
+        label,
+        type: 'keyword',
+        detail: count === 1 ? `Close the ${blockLabels} block` : `Close ${blockLabels} blocks in order`,
+        boost: 200 - count,
+        apply: (view, completion, from, to) => {
+            replaceJinjaStatementCompletion(view, completion, from, to, insert)
+        },
+    }
+}
+
 function structuralEdit(update: ViewUpdate): boolean {
     let structural = false
     update.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
@@ -140,17 +183,19 @@ function formatEditorAfterStructuralEdit(update: ViewUpdate) {
     if (!update.docChanged || !update.state.selection.main.empty || !structuralEdit(update)) return
 
     const original = update.state.doc.toString()
-    const formatted = formatOutputTemplateForEditor(original)
-    if (formatted === original) return
+    const rendered = renderEditorOutputTemplate(parseOutputTemplate(original, 'editor'))
+    if (rendered.value === original) return
 
     const cursor = update.state.selection.main.head
-    const compactOffset = compactOutputTemplate(original.slice(0, cursor)).length
+    const compactOffset = renderCompactOutputTemplate(
+        parseOutputTemplate(original.slice(0, cursor), 'editor'),
+    ).length
     queueMicrotask(() => {
         const view = update.view
         if (view.state.doc.toString() !== original) return
-        const anchor = editorPositionForCompactOffset(formatted, compactOffset)
+        const anchor = editorPositionForCompactOffset(rendered, compactOffset)
         view.dispatch({
-            changes: {from: 0, to: view.state.doc.length, insert: formatted},
+            changes: {from: 0, to: view.state.doc.length, insert: rendered.value},
             selection: {anchor},
         })
     })
@@ -178,16 +223,14 @@ function indentAfterNewline(update: ViewUpdate) {
         const previousIndent = previousLine.text.match(/^\t*/)?.[0] ?? ''
         const previousContent = previousLine.text.slice(previousIndent.length).trimEnd()
         const statement = previousContent.match(/{%\s*([A-Za-z_][A-Za-z0-9_]*)\b[^%]*(?:%})?\s*$/)
-        const keyword = statement?.[1] ?? ''
-        const opensBlock = ['if', 'for', 'block', 'macro', 'call', 'filter', 'with', 'raw', 'autoescape'].includes(keyword)
-            || (keyword === 'set' && !previousContent.slice(previousContent.indexOf('set') + 3).includes('='))
-        const branch = keyword === 'else' || keyword === 'elif'
-        const incompleteKeywordNeedsSpace = !!statement
+        const info = statement ? analyzeJinjaStatement(statement[0]) : undefined
+        const definition = info ? jinjaStatements.find(({label}) => label === info.keyword) : undefined
+        const incompleteKeywordNeedsSpace = !!info
             && !previousContent.includes('%}')
-            && ['if', 'elif', 'for', 'set', 'block', 'macro', 'call', 'filter', 'with', 'autoescape'].includes(keyword)
-            && previousContent.trimEnd().endsWith(keyword)
+            && !!definition?.acceptsExpression
+            && previousContent.trimEnd().endsWith(info.keyword)
 
-        const desiredIndent = `${previousIndent}${opensBlock || branch ? '\t' : ''}${incompleteKeywordNeedsSpace ? ' ' : ''}`
+        const desiredIndent = `${previousIndent}${info?.opensBlock || info?.isBranch ? '\t' : ''}${incompleteKeywordNeedsSpace ? ' ' : ''}`
         const currentIndent = line.text.match(/^[\t ]*/)?.[0] ?? ''
         if (cursor > line.from + currentIndent.length || currentIndent === desiredIndent) return
 
@@ -207,13 +250,15 @@ function TemplateCodeEditor({
     onBlur,
 }: TemplateCodeEditorProps) {
     const canonicalValue = value ?? ''
-    const [editorValue, setEditorValue] = useState(() => formatOutputTemplateForEditor(canonicalValue))
+    const [editorValue, setEditorValue] = useState(() => (
+        renderEditorOutputTemplate(parseOutputTemplate(canonicalValue, 'compact')).value
+    ))
     const lastCanonicalValue = useRef(canonicalValue)
 
     useEffect(() => {
         if (canonicalValue === lastCanonicalValue.current) return
         lastCanonicalValue.current = canonicalValue
-        setEditorValue(formatOutputTemplateForEditor(canonicalValue))
+        setEditorValue(renderEditorOutputTemplate(parseOutputTemplate(canonicalValue, 'compact')).value)
     }, [canonicalValue])
 
     return (
@@ -233,12 +278,14 @@ function TemplateCodeEditor({
             }}
             onChange={(nextValue) => {
                 setEditorValue(nextValue)
-                const compactValue = compactOutputTemplate(nextValue)
+                const compactValue = renderCompactOutputTemplate(parseOutputTemplate(nextValue, 'editor'))
                 lastCanonicalValue.current = compactValue
                 onChange(compactValue)
             }}
             onBlur={() => {
-                setEditorValue((current) => formatOutputTemplateForEditor(current))
+                setEditorValue((current) => (
+                    renderEditorOutputTemplate(parseOutputTemplate(current, 'editor')).value
+                ))
                 onBlur()
             }}
             aria-label="Output path template"
@@ -305,26 +352,20 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         [variables],
     )
     const statementCompletionOptions = useMemo<Completion[]>(
-        () => jinjaStatements.map((statement) => ({
-            label: statement.label,
-            type: 'keyword',
-            detail: statement.detail,
-            apply: (view, completion, from, to) => {
-                const statementStart = view.state.sliceDoc(0, from).lastIndexOf('{%')
-                const replaceFrom = statementStart >= 0 ? statementStart + 2 : from
-                const closingTag = /^\s*%}/.exec(view.state.sliceDoc(to))
-                const replaceTo = closingTag ? to + closingTag[0].length : to
-                const insert = ` ${statement.label}${statement.acceptsExpression ? '  ' : ' '}%}`
-                const anchor = statement.acceptsExpression
-                    ? replaceFrom + ` ${statement.label} `.length
-                    : replaceFrom + insert.length
-                view.dispatch({
-                    changes: {from: replaceFrom, to: replaceTo, insert},
-                    selection: {anchor},
-                    annotations: pickedCompletion.of(completion),
-                })
-            },
-        })),
+        () => jinjaStatements
+            .filter(({label}) => !label.startsWith('end'))
+            .map((statement) => ({
+                label: statement.label,
+                type: 'keyword',
+                detail: statement.detail,
+                apply: (view, completion, from, to) => {
+                    const insert = ` ${statement.label}${statement.acceptsExpression ? '  ' : ' '}%}`
+                    const anchorOffset = statement.acceptsExpression
+                        ? ` ${statement.label} `.length
+                        : insert.length
+                    replaceJinjaStatementCompletion(view, completion, from, to, insert, anchorOffset)
+                },
+            })),
         [],
     )
     const editorExtensions = useMemo(() => {
@@ -353,10 +394,22 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             const statement = beforeCursor.slice(statementStart + 2)
             if (!/^\s*[A-Za-z_]*$/.test(statement)) return null
             const currentWord = statement.match(/[A-Za-z_]*$/)?.[0] ?? ''
+            const openBlocks = getOpenJinjaBlocks(beforeCursor.slice(0, statementStart))
+            const currentBlock = openBlocks[openBlocks.length - 1]
+            const hasElse = currentBlock?.branches.some(({statement: branch}) => branch.keyword === 'else') ?? false
+            const contextualOptions = openBlocks
+                .map((_block, index) => closingBlockCompletion(openBlocks, index + 1))
+            const generalOptions = statementCompletionOptions.filter(({label}) => {
+                if (label === 'elif') return currentBlock?.keyword === 'if' && !hasElse
+                if (label === 'else') {
+                    return (currentBlock?.keyword === 'if' || currentBlock?.keyword === 'for') && !hasElse
+                }
+                return true
+            })
 
             return {
                 from: context.pos - currentWord.length,
-                options: statementCompletionOptions,
+                options: [...contextualOptions, ...generalOptions],
                 validFor: /^[A-Za-z_]*$/,
             }
         }
