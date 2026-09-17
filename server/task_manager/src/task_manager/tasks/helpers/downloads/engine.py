@@ -98,6 +98,12 @@ class TaskProgressWriter:
             meta={"selected_format": selected_format},
         )
 
+    def set_processing(self) -> None:
+        """Mark the completed transfer as local post-download processing."""
+        self._last_pct = 99
+        if self._task_progress is not None:
+            self._task_progress.set(99, meta={"phase": "local_processing"})
+
     def __call__(self, progress: DownloadProgress) -> None:
         fraction = progress.fraction
         if fraction is None:
@@ -243,6 +249,7 @@ def _execute_temporary_plan(
             plan,
             workspace.workspace,
             cancellation=cancellation,
+            on_processing_started=task_progress.set_processing,
         )
         if thumbnail_source is not None and wants_thumbnail_embed(plan.thumbnail_mode):
             embed_thumbnail(
@@ -307,6 +314,7 @@ def _execute_direct_plan(
                 plan,
                 Path(thumbnail_workspace),
                 cancellation=cancellation,
+                on_processing_started=task_progress.set_processing,
             )
             if thumbnail_source is not None and wants_thumbnail_embed(plan.thumbnail_mode):
                 embed_thumbnail(

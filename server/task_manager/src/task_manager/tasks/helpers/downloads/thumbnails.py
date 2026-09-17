@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from fastapi import Path
 
 from config.settings.submodels import ThumbnailMode
@@ -19,6 +21,7 @@ def prepare_thumbnail(
     workspace: Path,
     *,
     cancellation,
+    on_processing_started: Callable[[], None] | None = None,
 ) -> Path | None:
     from task_manager.tasks.helpers.downloads.engine import ensure_not_cancelled
     from dailywire_downloader import probe
@@ -26,6 +29,9 @@ def prepare_thumbnail(
 
     if plan.thumbnail_mode is ThumbnailMode.NO_THUMBNAIL or not plan.thumbnail_url:
         return None
+
+    if on_processing_started is not None:
+        on_processing_started()
 
     ensure_not_cancelled(cancellation)
     info = probe(plan.thumbnail_url)

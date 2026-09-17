@@ -53,6 +53,58 @@ def test_select_thumbnail_url_ignores_non_http_paths():
     assert select_thumbnail_url(media) == "https://example.test/landscape.jpg"
 
 
+def test_thumbnail_processing_phase_reports_99_percent():
+    from task_manager.tasks.helpers.downloads.engine import TaskProgressWriter
+
+    calls: list[tuple[int, dict | None]] = []
+
+    class Progress:
+        def set(self, percent: int, message=None, meta=None) -> None:
+            calls.append((percent, meta))
+
+    writer = TaskProgressWriter(Progress())
+    writer.set_processing()
+
+    assert calls == [(99, {"phase": "local_processing"})]
+
+
+def test_prepare_thumbnail_marks_processing_before_network_work(tmp_path, monkeypatch):
+    import dailywire_downloader
+
+    from config.settings.submodels import ThumbnailMode
+    from task_manager.tasks.helpers.downloads.thumbnails import prepare_thumbnail
+
+    events: list[str] = []
+    plan = SimpleNamespace(
+        thumbnail_mode=ThumbnailMode.EMBED,
+        thumbnail_url="https://example.test/thumbnail.jpg",
+    )
+
+    def fake_probe(url: str):
+        assert url == plan.thumbnail_url
+        events.append("probe")
+        return SimpleNamespace(suggested_extension="jpg")
+
+    def fake_download_file(url: str, destination: str, *, should_cancel=None):
+        assert url == plan.thumbnail_url
+        events.append("download")
+        with open(destination, "wb") as handle:
+            handle.write(b"image")
+
+    monkeypatch.setattr(dailywire_downloader, "probe", fake_probe)
+    monkeypatch.setattr(dailywire_downloader, "download_file", fake_download_file)
+
+    thumbnail = prepare_thumbnail(
+        plan,
+        tmp_path,
+        cancellation=None,
+        on_processing_started=lambda: events.append("processing"),
+    )
+
+    assert events == ["processing", "probe", "download"]
+    assert thumbnail == tmp_path / "thumbnail.jpg"
+
+
 def test_embed_thumbnail_uses_attached_picture_stream_for_audio(tmp_path, monkeypatch):
     from dailywire_downloader import ffmpeg as ffmpeg_module
 

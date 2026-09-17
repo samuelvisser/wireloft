@@ -408,7 +408,11 @@ function presentationStatus(
     operation?: TaskOperationRead,
 ): string {
     if (operation?.status === 'QUEUED') return 'pending'
-    if (operation?.status === 'RUNNING' || operation?.status === 'WAITING') return 'downloading'
+    if (operation?.status === 'RUNNING' || operation?.status === 'WAITING') {
+        return progressMetaString(operation, 'phase') === 'local_processing'
+            ? 'local_processing'
+            : 'downloading'
+    }
     if (operation?.status === 'FAILED' || operation?.status === 'PARTIAL') return 'error'
     if (operation?.status === 'CANCELED') return 'cancelled'
     if (operation?.status === 'SUCCEEDED') {
