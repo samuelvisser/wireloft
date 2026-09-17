@@ -129,6 +129,7 @@ export const ShowReadSchema = z.looseObject({
     thumbnailLandscapePath: z.string().nullable().optional(),
     thumbnailPortraitPath: z.string().nullable().optional(),
     thumbnailSquarePath: z.string().nullable().optional(),
+    customMetadata: z.record(z.string(), z.string()).default({}),
 
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,

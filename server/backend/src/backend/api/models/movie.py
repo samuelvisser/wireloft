@@ -115,6 +115,7 @@ class _MovieAPIBaseOut(ResponseBase):
     official_trailer_id: Optional[int]
     official_trailer: Optional[MovieExtraAPIRead]
     movie_extras: list[MovieExtraAPIRead]
+    custom_metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class MovieAPIRead(_MovieAPIBaseOut):

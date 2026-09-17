@@ -20,6 +20,20 @@
     font-weight: 600;
 }
 
+.template-metadata-warning {
+    padding: 8px 10px;
+    border: 1px solid rgba(217, 119, 6, 0.28);
+    border-radius: 8px;
+    background: rgba(245, 158, 11, 0.08);
+    color: #92400e;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.template-metadata-warning code {
+    color: inherit;
+}
+
 .template-preview-path-tree {
     display: grid;
     gap: 2px;
@@ -56,5 +70,11 @@
     .output-template-code-editor .cm-jinja-variable {
         background: rgba(56, 189, 248, 0.1);
         color: #7dd3fc;
+    }
+
+    .template-metadata-warning {
+        border-color: rgba(251, 191, 36, 0.3);
+        background: rgba(245, 158, 11, 0.1);
+        color: #fbbf24;
     }
 }

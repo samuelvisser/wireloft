@@ -17,5 +17,6 @@ from .tasks import task_router
 from .rss_stream_profiles import rss_stream_profile_router
 from .stream_profiles import stream_profile_router
 from .feeds import feeds_router
+from .custom_metadata import router as custom_metadata_router
 
 from .meta_router import router as meta_router

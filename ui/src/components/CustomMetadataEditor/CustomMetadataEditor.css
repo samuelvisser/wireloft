@@ -1,0 +1,96 @@
+.custom-metadata-modal {
+    width: min(920px, calc(100vw - 32px));
+    max-width: 920px;
+}
+
+.custom-metadata-content {
+    display: grid;
+    gap: 14px;
+    margin: 8px 0 18px;
+}
+
+.custom-metadata-intro,
+.custom-metadata-description,
+.custom-metadata-note,
+.custom-metadata-empty {
+    margin: 0;
+    color: var(--muted);
+}
+
+.custom-metadata-intro {
+    color: var(--text);
+}
+
+.custom-metadata-note {
+    font-size: 13px;
+}
+
+.custom-metadata-rows {
+    display: grid;
+    gap: 12px;
+}
+
+.custom-metadata-row {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) auto;
+    gap: 10px;
+    align-items: start;
+    padding: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 10px;
+}
+
+.custom-metadata-field {
+    display: grid;
+    min-width: 0;
+    gap: 6px;
+}
+
+.custom-metadata-field .input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.custom-metadata-field label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.custom-metadata-remove {
+    align-self: start;
+    margin-top: 22px;
+    white-space: nowrap;
+}
+
+.custom-metadata-variable {
+    grid-column: 1 / -1;
+    min-width: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    color: var(--muted);
+}
+
+.custom-metadata-add {
+    justify-self: start;
+}
+
+@media (max-width: 720px) {
+    .custom-metadata-row {
+        grid-template-columns: 1fr;
+    }
+
+    .custom-metadata-field,
+    .custom-metadata-value,
+    .custom-metadata-remove,
+    .custom-metadata-variable {
+        grid-column: 1;
+    }
+
+    .custom-metadata-remove {
+        justify-self: start;
+        align-self: auto;
+        margin-top: 0;
+    }
+}
