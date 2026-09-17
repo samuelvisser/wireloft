@@ -684,7 +684,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 )}
                 {pathHasLeadingSpace && (
                     <div className="template-metadata-warning" role="status">
-                        One or more path parts begin with a space. This is usually not intentional.
+                        One or more path parts begins with a space. This is usually not intentional.
                     </div>
                 )}
 
