@@ -605,7 +605,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                                     <div className="template-test-values-grid">
                                         {usedVariables.map((variable) => (
                                             <label key={variable.name}>
-                                                <span><code>{`{{ ${variable.name} }}`}</code> <small>{variable.description}</small></span>
+                                                <span><code>{`{{\u00a0${variable.name}\u00a0}}`}</code> <small>{variable.description}</small></span>
                                                 <input
                                                     className="input"
                                                     type="text"
