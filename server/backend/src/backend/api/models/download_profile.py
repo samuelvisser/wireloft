@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from pydantic import Field
+
 from backend.api.models.base import ResponseBase, RequestBase
 from backend.types.download_profile_types import EpIdType
 
@@ -35,6 +37,7 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     type: str
     enable_profile: bool
     ep_id_type_list: list[EpIdType]
+    custom_metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class DownloadProfileAPIRead(DownloadProfileAPIBaseOut):

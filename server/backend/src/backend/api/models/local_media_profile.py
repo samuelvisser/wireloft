@@ -15,7 +15,9 @@ from backend.types.local_media_profile_types import (
 )
 from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
+    MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
     SHOW_OUTPUT_TEMPLATE_FIELDS,
+    SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
     movie_template_has_media_item_field,
     validate_output_template_path_requirements,
 )
@@ -53,14 +55,16 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
         if profile_type is None:
             return v
 
-        allowed_fields = (
-            MOVIE_OUTPUT_TEMPLATE_FIELDS
-            if profile_type == LocalMediaProfileType.MOVIE
-            else SHOW_OUTPUT_TEMPLATE_FIELDS
-        )
+        if profile_type == LocalMediaProfileType.MOVIE:
+            allowed_fields = MOVIE_OUTPUT_TEMPLATE_FIELDS
+            allowed_metadata_scopes = MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES
+        else:
+            allowed_fields = SHOW_OUTPUT_TEMPLATE_FIELDS
+            allowed_metadata_scopes = SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES
         validate_output_template_path_requirements(
             v,
             allowed_fields=allowed_fields,
+            allowed_metadata_scopes=allowed_metadata_scopes,
         )
 
         if (
@@ -144,6 +148,11 @@ class LocalMediaProfileAPIRead(_LocalMediaProfileAPIBaseOut):
     updated_at: datetime
 
 
+class LocalMediaProfileTemplateVariable(ResponseBase):
+    name: str
+    description: str
+
+
 class LocalMediaProfileTemplateSource(ResponseBase):
     id: str
     label: str
@@ -153,6 +162,7 @@ class LocalMediaProfileTemplateSource(ResponseBase):
 
 class LocalMediaProfileTemplateSources(ResponseBase):
     sources: list[LocalMediaProfileTemplateSource]
+    variables: list[LocalMediaProfileTemplateVariable] = Field(default_factory=list)
 
 
 class LocalMediaProfileTemplatePreview(RequestBase):

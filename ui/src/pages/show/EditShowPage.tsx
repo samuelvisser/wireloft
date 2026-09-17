@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import ShowForm, { ShowFormValue, defaultShowFormValue } from '../../components/ShowForm'
+import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
 import { useQueryClient } from '@tanstack/react-query'
+import {useShow} from '../../lib/queries'
 
 type RouteParams = { id?: string }
 
@@ -26,6 +28,8 @@ export default function EditShowPage() {
   const { id } = useParams<RouteParams>()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const [metadataOpen, setMetadataOpen] = useState(false)
+  const {data: show} = useShow(id)
 
   const [form, setForm] = useState<FormState>(() => {
     const base = defaultShowData(id)
@@ -117,6 +121,11 @@ export default function EditShowPage() {
     <section className="view" aria-labelledby="edit-show-title">
       <div className="view-header">
         <h1 id="edit-show-title">Edit show</h1>
+        {show && (
+          <button type="button" className="btn" onClick={() => setMetadataOpen(true)}>
+            Custom metadata
+          </button>
+        )}
       </div>
 
       <form className="form" onSubmit={(e) => e.preventDefault()}>
@@ -133,8 +142,6 @@ export default function EditShowPage() {
             disabled
           />
         </div>
-
-
 
         <div className="form-row">
           <label htmlFor="media-profile">Media Profile</label>
@@ -167,6 +174,20 @@ export default function EditShowPage() {
           <button type="button" className="btn btn-primary" onClick={onSave}>Save changes</button>
         </div>
       </form>
+
+      <CustomMetadataEditor
+        open={metadataOpen}
+        title="Show custom metadata"
+        scope="show"
+        metadata={show?.customMetadata ?? {}}
+        endpoint={`/shows/${encodeURIComponent(id)}/metadata`}
+        invalidateQueryKeys={[
+          ['show', id],
+          ['shows'],
+          ['showsView'],
+        ]}
+        onDismiss={() => setMetadataOpen(false)}
+      />
     </section>
   )
 }

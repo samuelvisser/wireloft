@@ -121,6 +121,7 @@ export const MovieReadSchema = z.looseObject({
     productionCompanies: z.array(z.unknown()),
     starring: z.array(z.string()),
     writtenBy: z.array(z.string()),
+    customMetadata: z.record(z.string(), z.string()).default({}),
     // Calendar dates stay calendar dates. Do not invent midnight or a timezone.
     releaseDate: z.iso.date().nullable(),
     releaseDateSource: z.string().nullable(),

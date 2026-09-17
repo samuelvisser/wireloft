@@ -113,6 +113,7 @@ async def run_rename_file_worker(
             destination = resolve_episode_output_path(
                 output_template,
                 episode=episode,
+                download_profile=download.download_profile,
                 extension=extension,
             )
 

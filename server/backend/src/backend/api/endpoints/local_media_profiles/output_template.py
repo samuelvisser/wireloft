@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from backend.api.models.local_media_profile import (
@@ -7,12 +8,22 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplatePreviewResult,
     LocalMediaProfileTemplateSource,
     LocalMediaProfileTemplateSources,
+    LocalMediaProfileTemplateVariable,
 )
-from backend.db.models import Episode, Movie
+from backend.db.models import DownloadProfileBase, Episode, Movie, Show
+from backend.db.models.Metadata import Metadata
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
+from backend.utils.custom_metadata import (
+    CUSTOM_METADATA_DB_PREFIX,
+    CustomMetadataScope,
+    custom_metadata_template_variable,
+    is_valid_custom_metadata_key,
+)
 from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
+    MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
     SHOW_OUTPUT_TEMPLATE_FIELDS,
+    SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
     episode_output_template_values,
     movie_output_template_values,
     output_template_fields,
@@ -84,11 +95,61 @@ _EXAMPLE_MOVIE_VALUES = {
 }
 
 
+def _custom_template_variables(
+    session: Session,
+    profile_type: LocalMediaProfileType,
+) -> list[LocalMediaProfileTemplateVariable]:
+    if profile_type == LocalMediaProfileType.SHOW:
+        sources: dict[str, tuple[CustomMetadataScope, str]] = {
+            Show.__tablename__: ("show", "Custom show metadata"),
+            DownloadProfileBase.__tablename__: ("download", "Custom Download Profile metadata"),
+        }
+    elif profile_type == LocalMediaProfileType.MOVIE:
+        sources = {
+            Movie.__tablename__: ("movie", "Custom movie metadata"),
+        }
+    else:
+        return []
+
+    rows = session.execute(
+        select(Metadata.parent_table, Metadata.key)
+        .where(
+            Metadata.parent_table.in_(tuple(sources)),
+            Metadata.key.like(f"{CUSTOM_METADATA_DB_PREFIX}%"),
+        )
+        .distinct()
+    ).all()
+
+    variables: dict[str, LocalMediaProfileTemplateVariable] = {}
+    for parent_table, storage_key in rows:
+        scope, description = sources[parent_table]
+        key = storage_key[len(CUSTOM_METADATA_DB_PREFIX):]
+        if not is_valid_custom_metadata_key(key):
+            continue
+        name = custom_metadata_template_variable(scope, key)
+        variables[name] = LocalMediaProfileTemplateVariable(
+            name=name,
+            description=f"{description}: {key}",
+        )
+    return [variables[name] for name in sorted(variables)]
+
+
+def _with_custom_variable_defaults(
+    source: LocalMediaProfileTemplateSource,
+    variables: list[LocalMediaProfileTemplateVariable],
+) -> LocalMediaProfileTemplateSource:
+    for variable in variables:
+        source.values.setdefault(variable.name, "")
+    return source
+
+
 def get_output_template_sources(
     s: Session,
     profile_type: LocalMediaProfileType,
 ) -> LocalMediaProfileTemplateSources:
-    """Return recent locally stored examples, or one complete fallback example."""
+    """Return recent locally stored examples and discovered custom metadata variables."""
+    variables = _custom_template_variables(s, profile_type)
+
     if profile_type == LocalMediaProfileType.SHOW:
         episodes = (
             s.query(Episode)
@@ -144,7 +205,11 @@ def get_output_template_sources(
             values=dict(fallback_values),
             fallback=True,
         )]
-    return LocalMediaProfileTemplateSources(sources=sources)
+
+    return LocalMediaProfileTemplateSources(
+        sources=[_with_custom_variable_defaults(source, variables) for source in sources],
+        variables=variables,
+    )
 
 
 def get_output_template_preview(
@@ -152,8 +217,10 @@ def get_output_template_preview(
 ) -> LocalMediaProfileTemplatePreviewResult:
     if body.type == LocalMediaProfileType.SHOW:
         allowed_fields = SHOW_OUTPUT_TEMPLATE_FIELDS
+        allowed_metadata_scopes = SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES
     elif body.type == LocalMediaProfileType.MOVIE:
         allowed_fields = MOVIE_OUTPUT_TEMPLATE_FIELDS
+        allowed_metadata_scopes = MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES
     else:
         raise ValueError("Template previews are only available for Show and Movie profiles")
 
@@ -161,6 +228,7 @@ def get_output_template_preview(
         body.output_template,
         body.values,
         allowed_fields=allowed_fields,
+        allowed_metadata_scopes=allowed_metadata_scopes,
     )
     extension = "m4a" if body.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY else "mp4"
     return LocalMediaProfileTemplatePreviewResult(

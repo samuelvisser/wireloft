@@ -16,7 +16,7 @@ import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import ReadMore from '../../utils/ReadMore'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
-import {getOutputTemplateVariables} from './outputTemplateVariables'
+import {getOutputTemplateVariables, type OutputTemplateVariable} from './outputTemplateVariables'
 import './OutputTemplateEditor.css'
 
 type TemplateSource = {
@@ -28,6 +28,7 @@ type TemplateSource = {
 
 type TemplateSourcesResponse = {
     sources: TemplateSource[]
+    variables?: OutputTemplateVariable[]
 }
 
 type TemplatePreviewResponse = {
@@ -72,7 +73,11 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
-    const variables = useMemo(() => getOutputTemplateVariables(mode), [mode])
+    const [customVariables, setCustomVariables] = useState<OutputTemplateVariable[]>([])
+    const variables = useMemo(
+        () => getOutputTemplateVariables(mode, customVariables),
+        [customVariables, mode],
+    )
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
     const usedVariables = useMemo(
         () => {
@@ -157,6 +162,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const [testValues, setTestValues] = useState<Record<string, string>>({})
     const [testValuesExpanded, setTestValuesExpanded] = useState(false)
     const selectedSource = sources.find(({id}) => id === selectedSourceId) ?? sources[0]
+
+    useEffect(() => {
+        setCustomVariables(sourceData?.variables ?? [])
+    }, [sourceData?.variables])
 
     useEffect(() => {
         if (!sources.length) return

@@ -7,6 +7,7 @@ from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
+from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.types.download_profile_types import DownloadProfileType
 
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
     from backend.db.models import EpisodeMediaDownload, LocalMediaProfileBase, Show
 
 
-class DownloadProfileBase(Base, HasTaskResourcesMixin):
+class DownloadProfileBase(Base, HasMetadataMixin, HasTaskResourcesMixin):
     __tablename__ = "download_profiles"
     __mapper_args__ = {
         "polymorphic_on": "type",

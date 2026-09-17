@@ -78,6 +78,41 @@ The `/downloads/` prefix maps to WireLoft's configured **Download root**. In a n
 
 The Local Media Profile editor includes a variable picker and path preview. Use those rather than memorizing the full reference below. The preview is especially helpful when optional values or Jinja conditionals are involved.
 
+### Custom metadata
+
+Shows, movies, and Download Profiles can store user-defined **Custom metadata**. This is useful when a media server needs a value that The Daily Wire and WireLoft do not know automatically.
+
+For example, if Plex should see a show folder named `Parenting (2026)` but no release year is available from The Daily Wire, add this metadata to the show:
+
+- key: `year`
+- value: `2026`
+
+Show metadata is then available in Show Local Media Profile templates as:
+
+```jinja
+{{ meta_show_year }}
+```
+
+A complete example is:
+
+```jinja
+/downloads/TV Shows/{{ show_title }} ({{ meta_show_year }})/{{ title }}.ext
+```
+
+Custom metadata variables use these prefixes:
+
+| Metadata owner | Template variable prefix | Available in |
+| --- | --- | --- |
+| Show | `meta_show_` | Show Local Media Profiles |
+| Movie | `meta_movie_` | Movie Local Media Profiles |
+| Download Profile | `meta_download_` | Show Local Media Profiles |
+
+For example, a Download Profile key named `library` becomes `{{ meta_download_library }}`. Keys use lowercase letters, numbers, and underscores and must begin with a letter or underscore.
+
+Once a custom metadata key exists, the corresponding variable appears in the output-template autocomplete and in the editor's available-variable reference. A missing custom value renders as an empty value, so the same template can be shared by shows or profiles that do not all define the same metadata.
+
+Changing custom metadata affects future path resolution. WireLoft does not move already-downloaded files merely because a metadata value changed; use the existing rename-file action where applicable if you want existing show files to adopt the new path.
+
 ## Optional values and conditionals
 
 Some metadata, such as a release date, may not exist for every item. Missing values are empty, so Jinja conditionals can omit the punctuation or folder that belongs with them.

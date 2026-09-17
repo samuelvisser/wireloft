@@ -251,6 +251,7 @@ def _attempt_download(
     requested_destination = resolve_episode_output_path(
         output_template,
         episode=episode,
+        download_profile=getattr(download, "download_profile", None),
         extension=source.extension,
     )
 

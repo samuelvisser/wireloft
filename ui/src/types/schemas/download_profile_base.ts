@@ -26,6 +26,7 @@ export const DownloadProfileSchemaResponse = z.looseObject({
     localMediaProfileId: z.int(),
     enableProfile: z.boolean(),
     epIdTypeList: z.array(z.union([z.enum(EpisodeTypeReg.values), z.string()])),
+    customMetadata: z.record(z.string(), z.string()).default({}),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })

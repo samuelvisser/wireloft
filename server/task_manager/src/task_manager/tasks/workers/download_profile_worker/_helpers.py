@@ -192,6 +192,7 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
     target_path = str(resolve_episode_output_path(
         profile.local_media_profile.output_template,
         episode=episode,
+        download_profile=profile,
     ))
 
     if existing is None:
