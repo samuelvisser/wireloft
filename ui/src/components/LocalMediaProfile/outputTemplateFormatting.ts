@@ -89,6 +89,7 @@ const BLOCK_CLOSERS: Record<string, string> = {
 }
 
 const BRANCH_KEYWORDS = new Set(['elif', 'else'])
+const LEADING_PATH_SPACE_MARKER = '␣'
 
 function statementKeyword(source: string): string {
     const body = source.startsWith('{%') ? source.slice(2, source.endsWith('%}') ? -2 : undefined) : source
@@ -119,6 +120,8 @@ function normalizeEditorSource(value: string): string {
     let index = 0
     let lineStart = true
     let jinjaEnd: '}}' | '%}' | '#}' | null = null
+    let jinjaStart: '{{' | '{%' | '{#' | null = null
+    let jinjaContentStart = -1
     let quote: "'" | '"' | null = null
     let escaped = false
 
@@ -127,7 +130,14 @@ function normalizeEditorSource(value: string): string {
 
         if (character === '\r' || character === '\n') {
             if (character === '\r' && value[index + 1] === '\n') index += 1
-            if (jinjaEnd && canonical && !/\s$/.test(canonical)) canonical += ' '
+            if (
+                jinjaEnd
+                && canonical
+                && !/\s$/.test(canonical)
+                && !(jinjaStart === '{{' && canonical.length === jinjaContentStart)
+            ) {
+                canonical += ' '
+            }
             lineStart = true
             index += 1
             continue
@@ -145,13 +155,15 @@ function normalizeEditorSource(value: string): string {
             if (end) {
                 canonical += pair
                 jinjaEnd = end
+                jinjaStart = pair as '{{' | '{%' | '{#'
+                jinjaContentStart = canonical.length
                 quote = null
                 escaped = false
                 index += 2
                 continue
             }
 
-            canonical += character
+            canonical += character === LEADING_PATH_SPACE_MARKER ? ' ' : character
             index += 1
             continue
         }
@@ -160,6 +172,8 @@ function normalizeEditorSource(value: string): string {
             if (pair === '#}') {
                 canonical += pair
                 jinjaEnd = null
+                jinjaStart = null
+                jinjaContentStart = -1
                 index += 2
                 continue
             }
@@ -189,9 +203,24 @@ function normalizeEditorSource(value: string): string {
         }
 
         if (pair === jinjaEnd) {
+            if (jinjaStart === '{{' && jinjaContentStart >= 0) {
+                const body = canonical.slice(jinjaContentStart).replace(/[ \t]+$/, '')
+                canonical = canonical.slice(0, jinjaContentStart) + body
+            }
             canonical += pair
             jinjaEnd = null
+            jinjaStart = null
+            jinjaContentStart = -1
             index += 2
+            continue
+        }
+
+        if (
+            jinjaStart === '{{'
+            && canonical.length === jinjaContentStart
+            && (character === ' ' || character === '\t')
+        ) {
+            index += 1
             continue
         }
 
@@ -414,12 +443,18 @@ class EditorRenderer {
     private readonly compactToEditor: number[] = [0]
     private atLineStart = true
     private pathStarted = false
+    private atPathPartStart = false
     private leadingLogicBeforePath = false
     private leadingPathComment = false
 
     private appendPresentation(value: string) {
         if (!value) return
         this.output += value
+    }
+
+    private appendMappedPresentation(value: string) {
+        this.appendPresentation(value)
+        this.compactToEditor[this.compactOffset] = this.output.length
     }
 
     private appendSource(value: string, indent: number) {
@@ -430,6 +465,26 @@ class EditorRenderer {
         }
         for (const character of value) {
             this.output += character
+            this.compactOffset += 1
+            this.compactToEditor[this.compactOffset] = this.output.length
+        }
+    }
+
+    private appendSourceReplacement(source: string, presentation: string, indent: number) {
+        if (!source) return
+        if (this.atLineStart) {
+            this.appendPresentation('\t'.repeat(Math.max(0, indent)))
+            this.atLineStart = false
+        }
+        for (let index = 0; index < source.length; index += 1) {
+            this.output += presentation[index] ?? ''
+            this.compactOffset += 1
+            this.compactToEditor[this.compactOffset] = this.output.length
+        }
+    }
+
+    private consumeSource(value: string) {
+        for (let index = 0; index < value.length; index += 1) {
             this.compactOffset += 1
             this.compactToEditor[this.compactOffset] = this.output.length
         }
@@ -446,19 +501,67 @@ class EditorRenderer {
             this.appendPresentation('\n')
         }
         this.pathStarted = true
+        this.atPathPartStart = true
         this.leadingPathComment = false
         this.appendSource('/', indent)
+    }
+
+    private renderTextChunk(value: string, indent: number) {
+        if (!value) return
+        if (this.atPathPartStart) {
+            const leadingSpaces = value.match(/^ +/)?.[0] ?? ''
+            if (leadingSpaces) {
+                this.appendSourceReplacement(
+                    leadingSpaces,
+                    LEADING_PATH_SPACE_MARKER.repeat(leadingSpaces.length),
+                    indent,
+                )
+                this.atPathPartStart = false
+                value = value.slice(leadingSpaces.length)
+            }
+        }
+        if (value) {
+            this.appendSource(value, indent)
+            this.atPathPartStart = false
+        }
     }
 
     private renderText(value: string, indent: number) {
         let cursor = 0
         for (let slash = value.indexOf('/', cursor); slash >= 0; slash = value.indexOf('/', cursor)) {
-            this.appendSource(value.slice(cursor, slash), indent)
+            this.renderTextChunk(value.slice(cursor, slash), indent)
             this.breakLine()
             this.startPathLine(indent)
             cursor = slash + 1
         }
-        this.appendSource(value.slice(cursor), indent)
+        this.renderTextChunk(value.slice(cursor), indent)
+    }
+
+    private renderExpression(source: string, complete: boolean, indent: number) {
+        if (!complete || !source.startsWith('{{') || !source.endsWith('}}')) {
+            this.appendSource(source, indent)
+            if (source) this.atPathPartStart = false
+            return
+        }
+
+        const body = source.slice(2, -2)
+        const trimmedBody = body.trim()
+        if (!trimmedBody) {
+            this.appendSource(source, indent)
+            this.atPathPartStart = false
+            return
+        }
+
+        const contentStart = body.length - body.trimStart().length
+        const contentEnd = body.trimEnd().length
+        this.appendSource('{{', indent)
+        this.consumeSource(body.slice(0, contentStart))
+        this.appendMappedPresentation(' ')
+        this.appendSource(body.slice(contentStart, contentEnd), indent)
+        this.appendMappedPresentation(' ')
+        this.consumeSource(body.slice(contentEnd))
+        this.appendSource('}}', indent)
+        this.atPathPartStart = false
     }
 
     private renderComment(source: string, indent: number, leadsIntoPath: boolean) {
@@ -504,7 +607,7 @@ class EditorRenderer {
                 continue
             }
             if (node.type === 'expression') {
-                this.appendSource(node.source, indent)
+                this.renderExpression(node.source, node.complete, indent)
                 continue
             }
             if (node.type === 'comment') {
