@@ -80,11 +80,17 @@
 
 .output-template-code-editor .cm-tooltip-autocomplete,
 .output-template-code-editor .cm-tooltip-autocomplete > ul {
+    width: max-content;
     max-width: calc(100vw - 16px);
 }
 
 .output-template-code-editor .cm-tooltip-autocomplete > ul {
-    width: max-content;
+    white-space: normal;
+}
+
+.output-template-code-editor .cm-tooltip-autocomplete > ul > li {
+    overflow-x: visible;
+    text-overflow: clip;
 }
 
 .template-workbench {
