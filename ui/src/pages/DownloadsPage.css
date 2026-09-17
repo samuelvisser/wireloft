@@ -49,6 +49,29 @@
     min-width: 0;
 }
 
+/* The available table width can become much smaller than the viewport when
+   WireLoft's sidebar (or a browser side panel) is present. React to the table
+   container itself rather than a viewport breakpoint: Size is the least
+   important live-download column, so hide it before Format/Status become
+   unreadable. At extremely narrow desktop widths, Updated yields next. */
+.downloads-table-wrapper {
+    container-type: inline-size;
+}
+
+@container (max-width: 41.25rem) {
+    .downloads-table th:nth-child(5),
+    .downloads-table td:nth-child(5) {
+        display: none;
+    }
+}
+
+@container (max-width: 32.5rem) {
+    .downloads-table th:nth-child(6),
+    .downloads-table td:nth-child(6) {
+        display: none;
+    }
+}
+
 @media (prefers-color-scheme: dark) {
     .downloads-action-row {
         background: rgba(255, 255, 255, 0.035);
