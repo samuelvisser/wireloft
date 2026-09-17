@@ -163,8 +163,8 @@ function isRetryableDownload(row: MediaDownloadViewRead): boolean {
     return _RETRYABLE_STATUSES.has(String(row.downloadStatus))
 }
 
-function hasRetryableError(row: MediaDownloadViewRead): boolean {
-    return Boolean(row.errorMessage?.trim()) && isRetryableDownload(row)
+function isCancellableDownload(row: MediaDownloadViewRead): boolean {
+    return ACTIVE_DOWNLOAD_STATUSES.has(String(row.downloadStatus))
 }
 
 function defaultDownloadOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
@@ -247,12 +247,12 @@ export default function DownloadsPage() {
             .sort(defaultDownloadOrder),
         [downloads, statusFilter],
     )
-    const retryableErrorDownloads = useMemo(
-        () => filteredDownloads.filter(hasRetryableError),
+    const retryableDownloads = useMemo(
+        () => filteredDownloads.filter(isRetryableDownload),
         [filteredDownloads],
     )
     const cancellableDownloads = useMemo(
-        () => filteredDownloads.filter((row) => ACTIVE_DOWNLOAD_STATUSES.has(String(row.downloadStatus))),
+        () => filteredDownloads.filter(isCancellableDownload),
         [filteredDownloads],
     )
 
@@ -263,7 +263,7 @@ export default function DownloadsPage() {
         || bulkActionStarting,
     )
     const showActionRow = Boolean(
-        retryableErrorDownloads.length
+        retryableDownloads.length
         || cancellableDownloads.length
         || filteredDownloads.length
         || retryAllOperation
@@ -463,19 +463,19 @@ export default function DownloadsPage() {
             </div>
             {showActionRow && (
                 <div className="downloads-action-row" role="group" aria-label="Actions for visible downloads">
-                    {(retryableErrorDownloads.length > 0 || retryAllOperation || bulkActionStarting === 'retry') && (
+                    {(retryableDownloads.length > 0 || retryAllOperation || bulkActionStarting === 'retry') && (
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_retry']}
                             label="Retry all"
                             icon={['fas', 'rotate-right']}
-                            onClick={() => void startBulkAction('retry', retryableErrorDownloads)}
+                            onClick={() => void startBulkAction('retry', retryableDownloads)}
                             disabled={bulkOperationActive && !retryAllOperation && bulkActionStarting !== 'retry'}
                             primary={false}
                             starting={bulkActionStarting === 'retry'}
                             active={retryAllOperation !== undefined}
                             progress={retryAllOperation?.progress ?? 0}
                             activeLabel={bulkOperationLabel(retryAllOperation, bulkActionStarting === 'retry')}
-                            ariaLabel={`Retry ${retryableErrorDownloads.length} visible retryable downloads with errors`}
+                            ariaLabel={`Retry ${retryableDownloads.length} visible retryable downloads`}
                             onCancel={retryAllOperation ? () => void cancelBulkOperation(retryAllOperation) : undefined}
                             cancelDisabled={bulkControlBusy === retryAllOperation?.id}
                             cancelLabel="Cancel retry all"
@@ -590,7 +590,7 @@ export default function DownloadsPage() {
                                 classes: 'btn',
                             })
                         }
-                        if (ACTIVE_DOWNLOAD_STATUSES.has(status)) {
+                        if (isCancellableDownload(row)) {
                             actions.push({
                                 onClick: () => void cancel(row),
                                 icon: ['fas', 'ban'],
