@@ -12,7 +12,9 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileAPIUpdate,
 )
 from backend.db.models import (
+    DownloadProfileBase,
     LocalMediaProfileBase,
+    MediaDownloadBase,
     MovieLocalMediaProfile,
     ShowLocalMediaProfile,
 )
@@ -25,6 +27,46 @@ _PROFILE_MODELS = {
     LocalMediaProfileType.SHOW.value: ShowLocalMediaProfile,
     LocalMediaProfileType.MOVIE.value: MovieLocalMediaProfile,
 }
+
+
+def _raise_profile_in_use(message: str) -> None:
+    raise HTTPException(
+        status_code=409,
+        detail=[{
+            "loc": ["body", "__all__"],
+            "msg": message,
+            "type": "resource_in_use",
+        }],
+    )
+
+
+def _ensure_local_media_profile_can_be_deleted(
+    s: Session,
+    local_media_profile: LocalMediaProfileBase,
+) -> None:
+    has_downloads = (
+        s.query(MediaDownloadBase.id)
+        .filter(MediaDownloadBase.local_media_profile_id == local_media_profile.id)
+        .first()
+        is not None
+    )
+    if has_downloads:
+        _raise_profile_in_use(
+            "This Local Media Profile cannot be deleted because downloads are still attached to it. "
+            "Delete those downloads before deleting the profile."
+        )
+
+    has_download_profiles = (
+        s.query(DownloadProfileBase.id)
+        .filter(DownloadProfileBase.local_media_profile_id == local_media_profile.id)
+        .first()
+        is not None
+    )
+    if has_download_profiles:
+        _raise_profile_in_use(
+            "This Local Media Profile cannot be deleted because one or more Download Profiles still use it. "
+            "Change or delete those Download Profiles before deleting the profile."
+        )
 
 
 def get_local_media_profiles_list(s: Session) -> list[LocalMediaProfileAPIRead]:
@@ -89,6 +131,8 @@ def delete_local_media_profile(s: Session, local_media_profile_slug: str) -> Loc
     )
     if local_media_profile is None:
         raise HTTPException(status_code=404, detail="Media profile not found")
+
+    _ensure_local_media_profile_can_be_deleted(s, local_media_profile)
 
     payload = LocalMediaProfileAPIRead.model_validate(local_media_profile)
     s.delete(local_media_profile)

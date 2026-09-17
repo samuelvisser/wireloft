@@ -72,10 +72,12 @@ class LocalMediaProfileBase(Base):
     )
 
     download_profiles: Mapped[list["DownloadProfileBase"]] = relationship(
-        back_populates="local_media_profile"
+        back_populates="local_media_profile",
+        passive_deletes="all",
     )
     media_downloads: Mapped[list["MediaDownloadBase"]] = relationship(
-        back_populates="local_media_profile"
+        back_populates="local_media_profile",
+        passive_deletes="all",
     )
 
     def __repr__(self) -> str:

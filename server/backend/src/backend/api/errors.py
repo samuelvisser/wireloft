@@ -67,7 +67,7 @@ async def integrity_error_handler(request: Request, exc: Exception) -> JSONRespo
                 "detail": [
                     {
                         "loc": ["body", "__all__"],
-                        "msg": err.orig,
+                        "msg": str(err.orig),
                         "type": "integrity_error"
                     }
                 ]
