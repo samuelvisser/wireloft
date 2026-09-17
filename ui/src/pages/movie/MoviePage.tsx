@@ -495,7 +495,8 @@ export default function MoviePage() {
                 )}
                 {localMovie && slug && (
                     <Link className="btn" to={`/edit-movie/${encodeURIComponent(slug)}`}>
-                        Edit
+                        <FontAwesomeIcon icon={['fas', 'pen-to-square']} />
+                        <span>Edit</span>
                     </Link>
                 )}
                 {localMovie && (
