@@ -6,9 +6,8 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
-from jinja2 import StrictUndefined, meta, nodes
+from jinja2 import meta, nodes
 from jinja2.exceptions import SecurityError, TemplateError, TemplateSyntaxError, UndefinedError
-from jinja2.sandbox import ImmutableSandboxedEnvironment
 
 from .custom_metadata import (
     CustomMetadataScope,
@@ -16,6 +15,7 @@ from .custom_metadata import (
     is_allowed_custom_metadata_template_variable,
 )
 from .episode import episode_type_info
+from .output_template_jinja import create_output_template_environment
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
 
@@ -66,18 +66,6 @@ class MovieReleaseDateUnavailableError(ValueError):
     """Deprecated: missing movie dates now render as empty values for Jinja conditions."""
 
 
-def _jinja_environment() -> ImmutableSandboxedEnvironment:
-    environment = ImmutableSandboxedEnvironment(
-        autoescape=False,
-        undefined=StrictUndefined,
-        keep_trailing_newline=True,
-    )
-    # Path templates only need the explicitly supplied media values. Removing
-    # globals also keeps helpers such as range() unavailable to user templates.
-    environment.globals.clear()
-    return environment
-
-
 def _reject_single_brace_template_variables(output_template: str) -> None:
     """Require all output-template variables to use Jinja expression syntax."""
     if _SINGLE_BRACE_TEMPLATE_VARIABLE.search(output_template):
@@ -90,7 +78,7 @@ def _reject_single_brace_template_variables(output_template: str) -> None:
 def _parse_output_template(output_template: str) -> nodes.Template:
     """Parse an output template with WireLoft's sandbox and normalized errors."""
     _reject_single_brace_template_variables(output_template)
-    environment = _jinja_environment()
+    environment = create_output_template_environment()
     try:
         return environment.parse(output_template)
     except TemplateSyntaxError as exc:
@@ -380,7 +368,7 @@ def render_output_template(
         field: _sanitize_template_value(values.get(field, ""), mode=mode)
         for field in allowed_fields | dynamic_fields
     }
-    environment = _jinja_environment()
+    environment = create_output_template_environment()
     try:
         rendered = environment.from_string(normalized).render(context)
     except (SecurityError, UndefinedError, TemplateError) as exc:
