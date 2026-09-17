@@ -275,10 +275,7 @@ export default function CustomMetadataEditor({
                 }}
             >
                 <p>
-                    <strong>{confirmRemoval?.key}</strong> is a shared metadata field for all {scopeLabel.plural}. Removing it will remove the field and its saved value from every {scopeLabel.singular}.
-                </p>
-                <p>
-                    Nothing is deleted yet. The field will only be removed globally when you click <strong>Save metadata</strong>.
+                    <strong>{confirmRemoval?.key}</strong> is a shared metadata field for all {scopeLabel.plural}. Removing it will remove the field and its saved value from every {scopeLabel.singular}. Are you sure?
                 </p>
             </ConfirmDialog>
         </>
