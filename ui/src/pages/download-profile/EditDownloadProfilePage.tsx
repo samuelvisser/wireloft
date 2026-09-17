@@ -1,10 +1,9 @@
-import {useCallback, useEffect, useMemo, useState} from 'react'
+import {useCallback, useEffect, useMemo} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
 import {useDownloadProfilesByShowSlug, useLocalMediaProfiles, useShowSeasons} from '../../lib/queries'
 import DownloadProfileForm, {DownloadProfileMode} from '../../components/DownloadProfile/DownloadProfileForm'
-import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
 import {
     PodcastDownloadProfileUpdateIn,
     PodcastDownloadProfileUpdateSchema
@@ -28,7 +27,6 @@ export default function EditDownloadProfilePage() {
     const navigate = useNavigate()
     const {type, id} = useParams<RouteParams>()
     const qc = useQueryClient()
-    const [metadataOpen, setMetadataOpen] = useState(false)
 
     const mode: DownloadProfileMode | undefined = (type === 'podcast' || type === 'series') ? type : undefined
     const profileId = id ? Number(id) : undefined
@@ -142,11 +140,6 @@ export default function EditDownloadProfilePage() {
         <section className="view" aria-labelledby="edit-download-profile-title">
             <div className="view-header">
                 <h1 id="edit-download-profile-title">Edit Download Profile</h1>
-                {downloadProfile && (
-                    <button type="button" className="btn" onClick={() => setMetadataOpen(true)}>
-                        Custom metadata
-                    </button>
-                )}
             </div>
 
             {isLoading ? (
@@ -218,23 +211,6 @@ export default function EditDownloadProfilePage() {
                         <input type="submit" className="btn btn-primary" value="Save changes" disabled={isSubmitting}/>
                     </div>
                 </form>
-            )}
-
-            {downloadProfile && (
-                <CustomMetadataEditor
-                    open={metadataOpen}
-                    title="Download Profile custom metadata"
-                    scope="download"
-                    metadata={downloadProfile.customMetadata ?? {}}
-                    endpoint={`/download-profiles/${profileId}/metadata`}
-                    invalidateQueryKeys={[
-                        ['downloadProfile', id],
-                        ['downloadProfilesView'],
-                        ['podcastDownloadProfiles'],
-                        ['seriesDownloadProfiles'],
-                    ]}
-                    onDismiss={() => setMetadataOpen(false)}
-                />
             )}
         </section>
     )

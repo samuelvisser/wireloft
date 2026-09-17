@@ -80,11 +80,11 @@ The Local Media Profile editor includes a variable picker and path preview. Use 
 
 ### Custom metadata
 
-Shows, movies, and Download Profiles can store user-defined **Custom metadata**. This is useful when a media server needs a value that The Daily Wire and WireLoft do not know automatically.
+Shows and movies can store user-defined **Custom metadata**. This is useful when a media server needs a value that The Daily Wire and WireLoft do not know automatically.
 
 For example, if Plex should see a show folder named `Parenting (2026)` but no release year is available from The Daily Wire, add this metadata to the show:
 
-- key: `year`
+- field: `year`
 - value: `2026`
 
 Show metadata is then available in Show Local Media Profile templates as:
@@ -99,19 +99,18 @@ A complete example is:
 /downloads/TV Shows/{{ show_title }} ({{ meta_show_year }})/{{ title }}.ext
 ```
 
+Metadata fields are shared within their media type. Adding a `year` field to one show makes that same field available on every show, but each show stores its own value. A show that has no value for `year` simply exposes `{{ meta_show_year }}` as an empty value. Movie metadata works the same way, independently from show metadata.
+
 Custom metadata variables use these prefixes:
 
 | Metadata owner | Template variable prefix | Available in |
 | --- | --- | --- |
 | Show | `meta_show_` | Show Local Media Profiles |
 | Movie | `meta_movie_` | Movie Local Media Profiles |
-| Download Profile | `meta_download_` | Show Local Media Profiles |
 
-For example, a Download Profile key named `library` becomes `{{ meta_download_library }}`. Keys use lowercase letters, numbers, and underscores and must begin with a letter or underscore.
+Field names use lowercase letters, numbers, and underscores and must begin with a letter or underscore. Once a custom metadata field exists, the corresponding variable appears in the output-template autocomplete and in the editor's available-variable reference.
 
-Once a custom metadata key exists, the corresponding variable appears in the output-template autocomplete and in the editor's available-variable reference. A missing custom value renders as an empty value, so the same template can be shared by shows or profiles that do not all define the same metadata.
-
-Changing custom metadata affects future path resolution. WireLoft does not move already-downloaded files merely because a metadata value changed; use the existing rename-file action where applicable if you want existing show files to adopt the new path.
+Changing a custom metadata value affects future path resolution. WireLoft does not move already-downloaded files merely because a metadata value changed; use the existing rename-file action where applicable if you want existing show files to adopt the new path.
 
 ## Optional values and conditionals
 

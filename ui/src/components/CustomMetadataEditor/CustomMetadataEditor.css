@@ -1,6 +1,6 @@
 .custom-metadata-modal {
-    width: min(760px, calc(100vw - 32px));
-    max-width: 760px;
+    width: min(920px, calc(100vw - 32px));
+    max-width: 920px;
 }
 
 .custom-metadata-content {
@@ -27,7 +27,7 @@
 
 .custom-metadata-row {
     display: grid;
-    grid-template-columns: minmax(140px, 0.7fr) minmax(180px, 1.3fr) auto;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) auto;
     gap: 10px;
     align-items: start;
     padding: 12px;
@@ -37,7 +37,14 @@
 
 .custom-metadata-field {
     display: grid;
+    min-width: 0;
     gap: 6px;
+}
+
+.custom-metadata-field .input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .custom-metadata-field label {
@@ -49,6 +56,7 @@
 .custom-metadata-remove {
     align-self: end;
     margin-bottom: 1px;
+    white-space: nowrap;
 }
 
 .custom-metadata-variable {
@@ -63,7 +71,7 @@
     justify-self: start;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 720px) {
     .custom-metadata-row {
         grid-template-columns: 1fr;
     }

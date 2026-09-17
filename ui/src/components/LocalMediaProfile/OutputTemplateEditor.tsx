@@ -1,5 +1,4 @@
 import {useEffect, useMemo, useState, type ReactNode} from 'react'
-import {useQuery} from '@tanstack/react-query'
 import CodeMirror from '@uiw/react-codemirror'
 import {
     autocompletion,
@@ -14,22 +13,11 @@ import {EditorView} from '@codemirror/view'
 import {tags} from '@lezer/highlight'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
+import {useLocalMediaProfileTemplateSources} from '../../lib/localMediaProfileTemplateSources'
 import ReadMore from '../../utils/ReadMore'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
-import {getOutputTemplateVariables, type OutputTemplateVariable} from './outputTemplateVariables'
+import {getOutputTemplateVariables} from './outputTemplateVariables'
 import './OutputTemplateEditor.css'
-
-type TemplateSource = {
-    id: string
-    label: string
-    values: Record<string, string>
-    fallback: boolean
-}
-
-type TemplateSourcesResponse = {
-    sources: TemplateSource[]
-    variables?: OutputTemplateVariable[]
-}
 
 type TemplatePreviewResponse = {
     outputPath: string
@@ -73,10 +61,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
-    const [customVariables, setCustomVariables] = useState<OutputTemplateVariable[]>([])
+    const {data: sourceData, isLoading: sourcesLoading, isError: sourcesFailed} = useLocalMediaProfileTemplateSources(mode)
     const variables = useMemo(
-        () => getOutputTemplateVariables(mode, customVariables),
-        [customVariables, mode],
+        () => getOutputTemplateVariables(mode, sourceData?.variables ?? []),
+        [mode, sourceData?.variables],
     )
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
     const usedVariables = useMemo(
@@ -145,27 +133,11 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         ]
     }, [completionOptions])
 
-    const {data: sourceData, isLoading: sourcesLoading, isError: sourcesFailed} = useQuery<TemplateSourcesResponse>({
-        queryKey: ['localMediaProfileTemplateSources', mode],
-        queryFn: async ({signal}) => {
-            const response = await fetch(
-                `${(window as any).appConfig.API_URL}/local-media-profiles/template/sources?type=${mode}`,
-                {signal, credentials: 'include'},
-            )
-            if (!response.ok) throw new Error(`Failed to load template examples (${response.status})`)
-            return response.json()
-        },
-        staleTime: 30_000,
-    })
-    const sources = sourceData?.sources ?? []
+    const sources = useMemo(() => sourceData?.sources ?? [], [sourceData?.sources])
     const [selectedSourceId, setSelectedSourceId] = useState('')
     const [testValues, setTestValues] = useState<Record<string, string>>({})
     const [testValuesExpanded, setTestValuesExpanded] = useState(false)
     const selectedSource = sources.find(({id}) => id === selectedSourceId) ?? sources[0]
-
-    useEffect(() => {
-        setCustomVariables(sourceData?.variables ?? [])
-    }, [sourceData?.variables])
 
     useEffect(() => {
         if (!sources.length) return

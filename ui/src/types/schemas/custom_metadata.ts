@@ -40,10 +40,14 @@ export const CustomMetadataFormSchema = z.object({
 
 export type CustomMetadataFormValues = z.infer<typeof CustomMetadataFormSchema>
 
-export function customMetadataToEntries(metadata: Record<string, string>): CustomMetadataFormValues['entries'] {
-    return Object.entries(metadata)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, value]) => ({key, value}))
+export function customMetadataToEntries(
+    metadata: Record<string, string>,
+    fields: readonly string[] = [],
+): CustomMetadataFormValues['entries'] {
+    const keys = new Set([...fields, ...Object.keys(metadata)])
+    return [...keys]
+        .sort((left, right) => left.localeCompare(right))
+        .map((key) => ({key, value: metadata[key] ?? ''}))
 }
 
 export function entriesToCustomMetadata(entries: CustomMetadataFormValues['entries']): Record<string, string> {

@@ -1,9 +1,10 @@
-import {useEffect, useId} from 'react'
+import {useEffect, useId, useMemo, useRef} from 'react'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useFieldArray, useForm} from 'react-hook-form'
 import {useQueryClient, type QueryKey} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
+import {useLocalMediaProfileTemplateSources} from '../../lib/localMediaProfileTemplateSources'
 import {
     CustomMetadataFormSchema,
     customMetadataToEntries,
@@ -13,7 +14,7 @@ import {
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import './CustomMetadataEditor.css'
 
-export type CustomMetadataScope = 'show' | 'movie' | 'download'
+export type CustomMetadataScope = 'show' | 'movie'
 
 type Props = {
     open: boolean
@@ -28,13 +29,11 @@ type Props = {
 const VARIABLE_PREFIX: Record<CustomMetadataScope, string> = {
     show: 'meta_show_',
     movie: 'meta_movie_',
-    download: 'meta_download_',
 }
 
-const SCOPE_LABEL: Record<CustomMetadataScope, string> = {
-    show: 'show',
-    movie: 'movie',
-    download: 'Download Profile',
+const SCOPE_LABEL: Record<CustomMetadataScope, {singular: string; plural: string}> = {
+    show: {singular: 'show', plural: 'shows'},
+    movie: {singular: 'movie', plural: 'movies'},
 }
 
 export default function CustomMetadataEditor({
@@ -49,20 +48,39 @@ export default function CustomMetadataEditor({
     const queryClient = useQueryClient()
     const titleId = `custom-metadata-title-${useId()}`
     const descriptionId = `custom-metadata-description-${useId()}`
+    const variablePrefix = VARIABLE_PREFIX[scope]
+    const scopeLabel = SCOPE_LABEL[scope]
+    const {
+        data: templateSources,
+        isLoading: fieldsLoading,
+        isError: fieldsFailed,
+    } = useLocalMediaProfileTemplateSources(scope, open)
+
+    const metadataFields = useMemo(() => {
+        const discovered = (templateSources?.variables ?? [])
+            .map(({name}) => name.startsWith(variablePrefix) ? name.slice(variablePrefix.length) : null)
+            .filter((key): key is string => Boolean(key))
+        return [...new Set([...discovered, ...Object.keys(metadata)])]
+            .sort((left, right) => left.localeCompare(right))
+    }, [metadata, templateSources?.variables, variablePrefix])
+    const knownFields = useMemo(() => new Set(metadataFields), [metadataFields])
+
     const form = useForm<CustomMetadataFormValues>({
         resolver: zodResolver(CustomMetadataFormSchema),
-        defaultValues: {entries: customMetadataToEntries(metadata)},
+        defaultValues: {entries: customMetadataToEntries(metadata, metadataFields)},
         mode: 'onBlur',
         shouldFocusError: true,
     })
     const {fields, append, remove} = useFieldArray({control: form.control, name: 'entries'})
-    const {errors, isSubmitting} = form.formState
-    const variablePrefix = VARIABLE_PREFIX[scope]
+    const {errors, isDirty, isSubmitting} = form.formState
+    const wasOpen = useRef(false)
 
     useEffect(() => {
-        if (!open) return
-        form.reset({entries: customMetadataToEntries(metadata)})
-    }, [form, metadata, open])
+        const justOpened = open && !wasOpen.current
+        wasOpen.current = open
+        if (!open || (!justOpened && isDirty)) return
+        form.reset({entries: customMetadataToEntries(metadata, metadataFields)})
+    }, [form, isDirty, metadata, metadataFields, open])
 
     const submit = buildServerAwareSubmit<CustomMetadataFormValues>(
         form,
@@ -105,11 +123,11 @@ export default function CustomMetadataEditor({
                 <form onSubmit={submit} noValidate>
                     <div className="custom-metadata-content">
                         <p id={descriptionId} className="custom-metadata-description">
-                            Add values that WireLoft does not know automatically. A key such as <code>year</code> is available in output templates as{' '}
+                            Metadata fields are shared by all {scopeLabel.plural}, while each {scopeLabel.singular} has its own value. A field such as <code>year</code> is available in output templates as{' '}
                             <code>{`{{ ${variablePrefix}year }}`}</code>.
                         </p>
                         <p className="custom-metadata-note">
-                            Keys use lowercase letters, numbers, and underscores. Existing downloaded files are not moved automatically when metadata changes.
+                            Adding a field here makes it available to every {scopeLabel.singular}; leave its value empty where it does not apply. Field names use lowercase letters, numbers, and underscores. Existing downloaded files are not moved automatically when metadata changes.
                         </p>
 
                         {errors.root && (
@@ -117,71 +135,94 @@ export default function CustomMetadataEditor({
                                 {String(errors.root.message)}
                             </div>
                         )}
+                        {fieldsFailed && (
+                            <div className="form-error-card" role="alert" aria-live="polite">
+                                WireLoft could not load metadata fields used by other {scopeLabel.plural}. Existing values can still be edited.
+                            </div>
+                        )}
 
-                        <div className="custom-metadata-rows">
-                            {fields.length === 0 && (
-                                <p className="custom-metadata-empty">No custom metadata has been added to this {SCOPE_LABEL[scope]} yet.</p>
-                            )}
-                            {fields.map((field, index) => {
-                                const key = form.watch(`entries.${index}.key`)
-                                return (
-                                    <div className="custom-metadata-row" key={field.id}>
-                                        <div className="custom-metadata-field">
-                                            <label htmlFor={`custom-metadata-key-${field.id}`}>Key</label>
-                                            <input
-                                                id={`custom-metadata-key-${field.id}`}
-                                                className="input"
-                                                placeholder="year"
-                                                autoComplete="off"
-                                                aria-invalid={!!errors.entries?.[index]?.key}
-                                                {...form.register(`entries.${index}.key`)}
-                                            />
-                                            {errors.entries?.[index]?.key && (
-                                                <div className="error">{String(errors.entries[index]?.key?.message)}</div>
-                                            )}
+                        {fieldsLoading ? (
+                            <p className="custom-metadata-empty">Loading metadata fields…</p>
+                        ) : (
+                            <div className="custom-metadata-rows">
+                                {fields.length === 0 && (
+                                    <p className="custom-metadata-empty">No custom metadata fields have been added to any {scopeLabel.plural} yet.</p>
+                                )}
+                                {fields.map((field, index) => {
+                                    const key = form.watch(`entries.${index}.key`)
+                                    const value = form.watch(`entries.${index}.value`)
+                                    const firstIndexForKey = form.getValues('entries').findIndex((entry) => entry.key === key)
+                                    const knownField = knownFields.has(key) && firstIndexForKey === index
+                                    return (
+                                        <div className="custom-metadata-row" key={field.id}>
+                                            <div className="custom-metadata-field">
+                                                <label htmlFor={`custom-metadata-key-${field.id}`}>Field</label>
+                                                <input
+                                                    id={`custom-metadata-key-${field.id}`}
+                                                    className="input"
+                                                    placeholder="year"
+                                                    autoComplete="off"
+                                                    readOnly={knownField}
+                                                    title={knownField ? `This field is shared by all ${scopeLabel.plural}` : undefined}
+                                                    aria-invalid={!!errors.entries?.[index]?.key}
+                                                    {...form.register(`entries.${index}.key`)}
+                                                />
+                                                {errors.entries?.[index]?.key && (
+                                                    <div className="error">{String(errors.entries[index]?.key?.message)}</div>
+                                                )}
+                                            </div>
+                                            <div className="custom-metadata-field custom-metadata-value">
+                                                <label htmlFor={`custom-metadata-value-${field.id}`}>Value</label>
+                                                <input
+                                                    id={`custom-metadata-value-${field.id}`}
+                                                    className="input"
+                                                    placeholder="2026"
+                                                    aria-invalid={!!errors.entries?.[index]?.value}
+                                                    {...form.register(`entries.${index}.value`)}
+                                                />
+                                                {errors.entries?.[index]?.value && (
+                                                    <div className="error">{String(errors.entries[index]?.value?.message)}</div>
+                                                )}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="btn custom-metadata-remove"
+                                                onClick={() => {
+                                                    if (knownField) {
+                                                        form.setValue(`entries.${index}.value`, '', {
+                                                            shouldDirty: true,
+                                                            shouldValidate: true,
+                                                        })
+                                                    } else {
+                                                        remove(index)
+                                                    }
+                                                }}
+                                                disabled={isSubmitting || (knownField && !value)}
+                                            >
+                                                {knownField ? 'Clear' : 'Remove'}
+                                            </button>
+                                            <code className="custom-metadata-variable">
+                                                {`{{ ${variablePrefix}${key || '<field>'} }}`}
+                                            </code>
                                         </div>
-                                        <div className="custom-metadata-field custom-metadata-value">
-                                            <label htmlFor={`custom-metadata-value-${field.id}`}>Value</label>
-                                            <input
-                                                id={`custom-metadata-value-${field.id}`}
-                                                className="input"
-                                                placeholder="2026"
-                                                aria-invalid={!!errors.entries?.[index]?.value}
-                                                {...form.register(`entries.${index}.value`)}
-                                            />
-                                            {errors.entries?.[index]?.value && (
-                                                <div className="error">{String(errors.entries[index]?.value?.message)}</div>
-                                            )}
-                                        </div>
-                                        <button
-                                            type="button"
-                                            className="btn custom-metadata-remove"
-                                            onClick={() => remove(index)}
-                                            disabled={isSubmitting}
-                                        >
-                                            Remove
-                                        </button>
-                                        <code className="custom-metadata-variable">
-                                            {`{{ ${variablePrefix}${key || '<key>'} }}`}
-                                        </code>
-                                    </div>
-                                )
-                            })}
-                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
 
                         <button
                             type="button"
                             className="btn custom-metadata-add"
                             onClick={() => append({key: '', value: ''})}
-                            disabled={isSubmitting || fields.length >= 100}
+                            disabled={isSubmitting || fieldsLoading || fields.length >= 100}
                         >
-                            Add metadata
+                            Add field
                         </button>
                     </div>
 
                     <div className="modal-actions">
                         <button type="button" className="btn" onClick={onDismiss} disabled={isSubmitting}>Cancel</button>
-                        <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                        <button type="submit" className="btn btn-primary" disabled={isSubmitting || fieldsLoading}>
                             {isSubmitting ? 'Saving…' : 'Save metadata'}
                         </button>
                     </div>
