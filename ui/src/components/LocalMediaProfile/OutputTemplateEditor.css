@@ -86,18 +86,6 @@
     max-width: calc(100vw - 16px) !important;
 }
 
-.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete > ul,
-.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete > ul > li,
-.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete .cm-completionLabel,
-.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete .cm-completionDetail {
-    white-space: nowrap !important;
-}
-
-.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete > ul > li {
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-}
-
 .template-workbench {
     display: grid;
     gap: 12px;

@@ -356,7 +356,6 @@ export default function MoviePage() {
                 toast.error(message || `Could not add ${movie.title} to WireLoft`)
                 return
             }
-
             toast.success(`${movie.title} added to WireLoft`)
             await queryClient.invalidateQueries({queryKey: ['movies']})
             navigate(`/movie/${encodeURIComponent(slug)}`, {replace: true})
@@ -493,6 +492,12 @@ export default function MoviePage() {
                         <FontAwesomeIcon icon={['fas', 'plus']}/>
                         {addingMovie ? 'Adding to WireLoft…' : 'Add to WireLoft'}
                     </button>
+                )}
+                {localMovie && slug && (
+                    <Link className="btn" to={`/edit-movie/${encodeURIComponent(slug)}`}>
+                        <FontAwesomeIcon icon={['fas', 'pen-to-square']} />
+                        <span>Edit</span>
+                    </Link>
                 )}
                 {localMovie && (
                     <button type="button" className="btn" onClick={() => void refreshMovieExtras()} disabled={refreshingExtras}>

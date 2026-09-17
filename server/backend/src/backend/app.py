@@ -204,6 +204,7 @@ def create_app() -> FastAPI:
         stream_profile_router,
         task_router,
         feeds_router,
+        custom_metadata_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
@@ -231,6 +232,7 @@ def create_app() -> FastAPI:
     app.include_router(puller_router, prefix="/api")
     app.include_router(setting_router, prefix="/api")
     app.include_router(local_media_profile_router, prefix="/api")
+    app.include_router(custom_metadata_router, prefix="/api")
     app.include_router(meta_router, prefix="/api")
     app.include_router(config_router, prefix="/api")
     app.include_router(rss_stream_profile_router, prefix="/api")

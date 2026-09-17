@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import ShowForm, { ShowFormValue, defaultShowFormValue } from '../../components/ShowForm'
+import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
 import { useQueryClient } from '@tanstack/react-query'
+import {useShow} from '../../lib/queries'
 
 type RouteParams = { id?: string }
 
@@ -10,37 +12,35 @@ type FormState = ShowFormValue & {
   localMediaProfileId: string
 }
 
-function defaultShowData(id?: string): { url: string; name: string; author: string } | undefined {
-  if (!id) return undefined
-  const map: Record<string, { name: string; author: string }> = {
-    'the-ben-shapiro-show': { name: 'The Ben Shapiro Show', author: 'Ben Shapiro' },
-    'the-matt-walsh-show': { name: 'The Matt Walsh Show', author: 'Matt Walsh' },
-    'ben-after-dark': { name: 'Ben After Dark', author: 'Ben Shapiro' },
-  }
-  const found = map[id]
-  if (!found) return { url: `https://www.dailywire.com/show/${id}`, name: id, author: '' }
-  return { url: `https://www.dailywire.com/show/${id}`, name: found.name, author: found.author }
-}
-
 export default function EditShowPage() {
   const { id } = useParams<RouteParams>()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const [metadataOpen, setMetadataOpen] = useState(false)
+  const {data: show} = useShow(id)
+  const initializedShowId = useRef<string | undefined>(undefined)
 
-  const [form, setForm] = useState<FormState>(() => {
-    const base = defaultShowData(id)
-    return {
-      url: base?.url ?? '',
-      localMediaProfileId: 'p1',
-      ...defaultShowFormValue,
-      name: base?.name ?? defaultShowFormValue.name,
-      author: base?.author ?? defaultShowFormValue.author,
-    }
-  })
+  const [form, setForm] = useState<FormState>(() => ({
+    url: id ? `https://www.dailywire.com/show/${id}` : '',
+    localMediaProfileId: 'p1',
+    ...defaultShowFormValue,
+  }))
 
   type LocalMediaProfileName = { id: string; name: string }
   const [profiles, setProfiles] = useState<LocalMediaProfileName[] | null>(null)
   const [profilesError, setProfilesError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!id || !show || show.slug !== id || initializedShowId.current === id) return
+
+    initializedShowId.current = id
+    setForm((prev) => ({
+      ...prev,
+      url: show.sharingUrl,
+      name: show.title,
+      author: show.authorName,
+    }))
+  }, [id, show])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -70,18 +70,19 @@ export default function EditShowPage() {
 
   const onCancel = () => navigate(`/show/${id ?? ''}`)
   const onSave = async () => {
-    if (!id) return
+    if (!id || !show) return
     const payload = {
-      url: form.url,
-      localMediaProfileSlug: form.localMediaProfileId,
-      name: form.name,
-      author: form.author,
-      downloadMedia: form.downloadMedia,
-      downloadDelayMinutes: form.downloadDelayMinutes,
-      redownloadAfterMinutes: form.redownloadAfterMinutes,
-      downloadDays: form.downloadDays,
-      deleteOlder: form.deleteOlder,
-      titleFilter: form.titleFilter,
+      title: form.name,
+      description: show.description,
+      sharingUrl: form.url,
+      membershipLevel: show.membershipLevel,
+      authorName: form.author,
+      authorHeadshotPath: show.authorHeadshotPath ?? null,
+      backgroundImagePath: show.backgroundImagePath ?? null,
+      logoImagePath: show.logoImagePath ?? null,
+      thumbnailLandscapePath: show.thumbnailLandscapePath ?? null,
+      thumbnailPortraitPath: show.thumbnailPortraitPath ?? null,
+      thumbnailSquarePath: show.thumbnailSquarePath ?? null,
     }
     const r = await fetch(`${(window as any).appConfig.API_URL}/shows/${id}`, {
       method: 'PATCH',
@@ -95,7 +96,11 @@ export default function EditShowPage() {
       alert(msg)
       return
     }
-    await qc.invalidateQueries({ queryKey: ['shows'] })
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['show', id] }),
+      qc.invalidateQueries({ queryKey: ['shows'] }),
+      qc.invalidateQueries({ queryKey: ['showsView'] }),
+    ])
     navigate(`/show/${id ?? ''}`)
   }
 
@@ -117,6 +122,11 @@ export default function EditShowPage() {
     <section className="view" aria-labelledby="edit-show-title">
       <div className="view-header">
         <h1 id="edit-show-title">Edit show</h1>
+        {show && (
+          <button type="button" className="btn" onClick={() => setMetadataOpen(true)}>
+            Custom metadata
+          </button>
+        )}
       </div>
 
       <form className="form" onSubmit={(e) => e.preventDefault()}>
@@ -133,8 +143,6 @@ export default function EditShowPage() {
             disabled
           />
         </div>
-
-
 
         <div className="form-row">
           <label htmlFor="media-profile">Media Profile</label>
@@ -164,9 +172,23 @@ export default function EditShowPage() {
 
         <div className="actions">
           <button type="button" className="btn" onClick={onCancel}>Cancel</button>
-          <button type="button" className="btn btn-primary" onClick={onSave}>Save changes</button>
+          <button type="button" className="btn btn-primary" onClick={onSave} disabled={!show}>Save changes</button>
         </div>
       </form>
+
+      <CustomMetadataEditor
+        open={metadataOpen}
+        title="Show custom metadata"
+        scope="show"
+        metadata={show?.customMetadata ?? {}}
+        endpoint={`/shows/${encodeURIComponent(id)}/metadata`}
+        invalidateQueryKeys={[
+          ['show', id],
+          ['shows'],
+          ['showsView'],
+        ]}
+        onDismiss={() => setMetadataOpen(false)}
+      />
     </section>
   )
 }

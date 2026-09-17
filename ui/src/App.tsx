@@ -24,6 +24,7 @@ import DownloadsPage from './pages/DownloadsPage'
 import LibraryPage from './pages/LibraryPage'
 import BrowsePage from './pages/BrowsePage'
 import MoviePage from './pages/movie/MoviePage'
+import EditMoviePage from './pages/movie/EditMoviePage'
 
 type OnboardingStatus = {
   completed: boolean
@@ -138,6 +139,7 @@ export default function App() {
           <Route path="/edit-stream-profile/:type/:id" element={<EditStreamProfilePage />} />
           <Route path="/show/:id" element={<ShowPage />} />
           <Route path="/movie/:slug" element={<MoviePage />} />
+          <Route path="/edit-movie/:slug" element={<EditMoviePage />} />
           <Route path="/show/:id/episode/:episodeId" element={<EpisodePage />} />
           <Route path="/edit-show/:id" element={<EditShow />} />
           <Route path="*" element={<Navigate to="/" replace />} />

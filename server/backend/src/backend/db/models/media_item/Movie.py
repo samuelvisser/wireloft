@@ -7,6 +7,7 @@ from sqlalchemy import Date, ForeignKey, Index, JSON, PrimaryKeyConstraint, Uniq
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.datetime_types import UTCDateTime
+from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.MediaContentMetadataMixin import MediaContentMetadataMixin
 from backend.types.media_types import MediaType
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
     from .MovieExtra import MovieExtra
 
 
-class Movie(MediaItemBase, MediaContentMetadataMixin, HasTaskResourcesMixin):
+class Movie(MediaItemBase, MediaContentMetadataMixin, HasMetadataMixin, HasTaskResourcesMixin):
     __tablename__ = "media_items_movie"
     __mapper_args__ = {"polymorphic_identity": MediaType.MOVIE.value, "polymorphic_load": "selectin"}
     __task_resource_types__ = ("movie",)

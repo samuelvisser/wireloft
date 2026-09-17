@@ -89,6 +89,7 @@ class _ShowAPIBaseOut(ResponseBase):
     thumbnail_landscape_path: Optional[str] = None
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
+    custom_metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class ShowAPIRead(_ShowAPIBaseOut):
