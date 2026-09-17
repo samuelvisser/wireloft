@@ -11,7 +11,8 @@ GET http://localhost:5001/api/tasks/runs?resource_type=show&resource_id=2
 <> 2025-10-23T173248.200.json
 <> 2025-10-23T165834.200.json
 
-
+### TEst
+GET http://localhost:5001/api/local-media-profiles/template/sources?type=show&show_scope=false
 
 ### Get last 5 episodes for The Ben Shapiro Show
 GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-ben-shapiro-show

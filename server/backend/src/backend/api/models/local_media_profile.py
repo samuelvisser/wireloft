@@ -21,6 +21,7 @@ from backend.utils.output_template import (
     movie_template_has_media_item_field,
     validate_output_template_path_requirements,
 )
+from backend.utils.output_template_formatting import normalize_output_template_expression_spacing
 from backend.utils.helpers import slugify
 
 
@@ -47,6 +48,13 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
     @property
     def slug(self) -> str:
         return slugify(self.name)
+
+    @field_validator("output_template", mode="before")
+    @classmethod
+    def _normalize_output_template(cls, v: object) -> object:
+        if isinstance(v, str):
+            return normalize_output_template_expression_spacing(v)
+        return v
 
     @field_validator("output_template")
     @classmethod

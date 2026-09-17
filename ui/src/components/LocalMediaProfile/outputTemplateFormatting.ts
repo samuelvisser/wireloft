@@ -1,5 +1,5 @@
 // Frontend-only syntax tree for the output-template editor. The form/API value stays compact Jinja;
-// editor whitespace is produced only by the editor renderer and never sent to the backend.
+// editor-only layout whitespace is produced by the editor renderer, while normalized Jinja expression spacing is canonical.
 export type OutputTemplateSourceMode = 'compact' | 'editor'
 
 type TextNode = {
@@ -93,6 +93,12 @@ const BRANCH_KEYWORDS = new Set(['elif', 'else'])
 function statementKeyword(source: string): string {
     const body = source.startsWith('{%') ? source.slice(2, source.endsWith('%}') ? -2 : undefined) : source
     return body.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)/)?.[1] ?? ''
+}
+
+function normalizeJinjaExpressionSource(source: string, complete: boolean): string {
+    if (!complete || !source.startsWith('{{') || !source.endsWith('}}')) return source
+    const body = source.slice(2, -2).trim()
+    return body ? `{{ ${body} }}` : source
 }
 
 export function analyzeJinjaStatement(source: string): JinjaStatementInfo {
@@ -313,7 +319,11 @@ export function parseOutputTemplate(value: string, mode: OutputTemplateSourceMod
             continue
         }
         if (token.type === 'expression') {
-            currentChildren.push({type: 'expression', source: token.source, complete: token.complete})
+            currentChildren.push({
+                type: 'expression',
+                source: normalizeJinjaExpressionSource(token.source, token.complete),
+                complete: token.complete,
+            })
             continue
         }
         if (token.type === 'comment') {
@@ -389,6 +399,19 @@ function renderCompactNodes(nodes: OutputTemplateNode[]): string {
 
 export function renderCompactOutputTemplate(ast: OutputTemplateAst): string {
     return renderCompactNodes(ast.children)
+}
+
+function nodesHaveLeadingPathPartSpace(nodes: OutputTemplateNode[]): boolean {
+    return nodes.some((node) => {
+        if (node.type === 'text') return /\/ +/.test(node.value)
+        if (node.type !== 'block') return false
+        return nodesHaveLeadingPathPartSpace(node.body)
+            || node.branches.some((branch) => nodesHaveLeadingPathPartSpace(branch.children))
+    })
+}
+
+export function hasLeadingPathPartSpace(ast: OutputTemplateAst): boolean {
+    return nodesHaveLeadingPathPartSpace(ast.children)
 }
 
 function nodeContainsPathStart(node: OutputTemplateNode): boolean {
