@@ -1,5 +1,4 @@
 import {useEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode} from 'react'
-import {useQuery} from '@tanstack/react-query'
 import CodeMirror from '@uiw/react-codemirror'
 import {
     autocompletion,
@@ -15,6 +14,7 @@ import {tags} from '@lezer/highlight'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import ReadMore from '../../utils/ReadMore'
+import {useLocalMediaProfileTemplateSources} from '../../lib/localMediaProfileTemplateSources'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import {
     analyzeJinjaStatement,
@@ -25,20 +25,9 @@ import {
     renderEditorOutputTemplate,
     type JinjaBlockNode,
 } from './outputTemplateFormatting'
-import {getOutputTemplateVariables} from './outputTemplateVariables'
+import {getOutputTemplateVariables, type OutputTemplateVariable} from './outputTemplateVariables'
 import './OutputTemplateEditor.css'
 import './OutputTemplateEditorIde.css'
-
-type TemplateSource = {
-    id: string
-    label: string
-    values: Record<string, string>
-    fallback: boolean
-}
-
-type TemplateSourcesResponse = {
-    sources: TemplateSource[]
-}
 
 type TemplatePreviewResponse = {
     outputPath: string
@@ -320,7 +309,16 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
-    const variables = useMemo(() => getOutputTemplateVariables(mode), [mode])
+    const {
+        data: sourceData,
+        isLoading: sourcesLoading,
+        isError: sourcesFailed,
+    } = useLocalMediaProfileTemplateSources(mode)
+    const customVariables = (sourceData?.variables ?? []) as OutputTemplateVariable[]
+    const variables = useMemo(
+        () => getOutputTemplateVariables(mode, customVariables),
+        [customVariables, mode],
+    )
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
     const usedVariables = useMemo(
         () => {
@@ -330,6 +328,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         [usedVariableNames, variables],
     )
     const usedVariablesKey = usedVariables.map(({name}) => name).join('|')
+    const missingMetadataVariables = useMemo(() => {
+        const prefix = mode === 'movie' ? 'meta_movie_' : 'meta_show_'
+        const available = new Set(customVariables.map(({name}) => name))
+        return [...new Set(
+            usedVariableNames.filter((name) => name.startsWith(prefix) && !available.has(name)),
+        )].sort()
+    }, [customVariables, mode, usedVariableNames])
 
     const completionOptions = useMemo<Completion[]>(
         () => variables.map((variable) => ({
@@ -438,18 +443,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         ]
     }, [completionOptions, statementCompletionOptions])
 
-    const {data: sourceData, isLoading: sourcesLoading, isError: sourcesFailed} = useQuery<TemplateSourcesResponse>({
-        queryKey: ['localMediaProfileTemplateSources', mode],
-        queryFn: async ({signal}) => {
-            const response = await fetch(
-                `${(window as any).appConfig.API_URL}/local-media-profiles/template/sources?type=${mode}`,
-                {signal, credentials: 'include'},
-            )
-            if (!response.ok) throw new Error(`Failed to load template examples (${response.status})`)
-            return response.json()
-        },
-        staleTime: 30_000,
-    })
     const sources = sourceData?.sources ?? []
     const [selectedSourceId, setSelectedSourceId] = useState('')
     const [testValues, setTestValues] = useState<Record<string, string>>({})
@@ -511,6 +504,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 )
                 const payload = await response.json()
                 if (!response.ok) {
+                    setUsedVariableNames([])
                     setPreviewError(responseErrorMessage(payload))
                     return
                 }
@@ -520,6 +514,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 setPreviewError('')
             } catch (error) {
                 if ((error as Error).name !== 'AbortError') {
+                    setUsedVariableNames([])
                     setPreviewError('The preview is temporarily unavailable.')
                 }
             } finally {
@@ -568,6 +563,17 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 {errors.outputTemplate && (
                     <div id="mp-path-error" className="error" role="alert" aria-live="polite">
                         {String(errors.outputTemplate.message)}
+                    </div>
+                )}
+                {missingMetadataVariables.length > 0 && (
+                    <div className="template-metadata-warning" role="status">
+                        {missingMetadataVariables.length === 1 ? 'Custom metadata field ' : 'Custom metadata fields '}
+                        {missingMetadataVariables.map((name, index) => (
+                            <span key={name}>
+                                {index > 0 ? ', ' : ''}<code>{`{{\u00a0${name}\u00a0}}`}</code>
+                            </span>
+                        ))}
+                        {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
                     </div>
                 )}
 

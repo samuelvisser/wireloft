@@ -71,6 +71,12 @@ const MOVIE_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'second', description: 'Downloaded item second'},
 ]
 
-export function getOutputTemplateVariables(mode: LocalMediaProfileMode): readonly OutputTemplateVariable[] {
-    return mode === 'movie' ? MOVIE_VARIABLES : SHOW_VARIABLES
+export function getOutputTemplateVariables(
+    mode: LocalMediaProfileMode,
+    customVariables: readonly OutputTemplateVariable[] = [],
+): readonly OutputTemplateVariable[] {
+    const baseVariables = mode === 'movie' ? MOVIE_VARIABLES : SHOW_VARIABLES
+    const merged = new Map(baseVariables.map((variable) => [variable.name, variable]))
+    for (const variable of customVariables) merged.set(variable.name, variable)
+    return [...merged.values()]
 }

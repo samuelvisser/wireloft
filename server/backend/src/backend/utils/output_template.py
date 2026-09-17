@@ -10,6 +10,11 @@ from jinja2 import StrictUndefined, meta, nodes
 from jinja2.exceptions import SecurityError, TemplateError, TemplateSyntaxError, UndefinedError
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 
+from .custom_metadata import (
+    CustomMetadataScope,
+    custom_metadata_template_values,
+    is_allowed_custom_metadata_template_variable,
+)
 from .episode import episode_type_info
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
@@ -45,6 +50,9 @@ MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "slug", "title", "extended_title",
     "author", "mature_rating", "rating", "duration_seconds", "media_type",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS | MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS
+
+SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"show"})
+MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"movie"})
 
 # These values describe the actual downloaded item rather than always describing
 # its owning movie. They are useful when making movie and extra paths distinct.
@@ -119,6 +127,7 @@ def validate_output_template_path_requirements(
     output_template: str,
     *,
     allowed_fields: frozenset[str],
+    allowed_metadata_scopes: frozenset[CustomMetadataScope] = frozenset(),
 ) -> str:
     """Validate save-time path boundaries without interpreting Jinja in the frontend.
 
@@ -130,7 +139,11 @@ def validate_output_template_path_requirements(
     if not output_template.endswith(".ext"):
         raise ValueError("Output template must end with '.ext'")
 
-    validate_output_template_fields(output_template, allowed_fields=allowed_fields)
+    validate_output_template_fields(
+        output_template,
+        allowed_fields=allowed_fields,
+        allowed_metadata_scopes=allowed_metadata_scopes,
+    )
     parsed = _parse_output_template(output_template)
 
     for statement in parsed.body:
@@ -212,9 +225,22 @@ def _sanitize_rendered_path(rendered: str, *, mode: FilenameRestrictionMode) -> 
     return _DOWNLOADS_PREFIX + "/".join(sanitized)
 
 
-def validate_output_template_fields(output_template: str, *, allowed_fields: frozenset[str]) -> str:
+def validate_output_template_fields(
+    output_template: str,
+    *,
+    allowed_fields: frozenset[str],
+    allowed_metadata_scopes: frozenset[CustomMetadataScope] = frozenset(),
+) -> str:
     """Validate Jinja syntax and reject variables unavailable for this media type."""
-    unsupported = sorted(output_template_fields(output_template) - allowed_fields)
+    unsupported = sorted(
+        field
+        for field in output_template_fields(output_template)
+        if field not in allowed_fields
+        and not is_allowed_custom_metadata_template_variable(
+            field,
+            scopes=allowed_metadata_scopes,
+        )
+    )
     if unsupported:
         fields = ", ".join("{{ " + field + " }}" for field in unsupported)
         raise ValueError(f"Unsupported output template variable(s): {fields}")
@@ -243,7 +269,7 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
 
     ep_info = episode_type_info(episode_identifier)
     published_at = episode.published_date
-    return {
+    values = {
         "show": episode.show.slug,
         "show_title": episode.show.title,
         "season": episode.season.slug if episode.season else "",
@@ -261,6 +287,11 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "episode_published_datetime": published_at.strftime("%Y-%m-%d %H:%M:%S") if published_at else "",
         **_date_substitutions(published_at),
     }
+    values.update(custom_metadata_template_values(
+        "show",
+        getattr(episode.show, "custom_metadata", None),
+    ))
+    return values
 
 
 def movie_output_template_values(
@@ -297,7 +328,7 @@ def movie_output_template_values(
         for field, value in _date_substitutions(getattr(movie, "release_date", None)).items()
     }
 
-    return {
+    values = {
         "movie_slug": movie.slug,
         "movie_title": movie.title,
         "movie_extended_title": movie_extended_title,
@@ -315,6 +346,11 @@ def movie_output_template_values(
         "media_type": media_type,
         **_date_substitutions(item_date),
     }
+    values.update(custom_metadata_template_values(
+        "movie",
+        getattr(movie, "custom_metadata", None),
+    ))
+    return values
 
 
 def render_output_template(
@@ -322,13 +358,27 @@ def render_output_template(
     values: dict[str, object],
     *,
     allowed_fields: frozenset[str],
+    allowed_metadata_scopes: frozenset[CustomMetadataScope] = frozenset(),
 ) -> str:
     """Render a path template using the same sandbox and sanitization as downloads."""
-    normalized = validate_output_template_fields(output_template, allowed_fields=allowed_fields)
+    normalized = validate_output_template_fields(
+        output_template,
+        allowed_fields=allowed_fields,
+        allowed_metadata_scopes=allowed_metadata_scopes,
+    )
+    referenced_fields = output_template_fields(normalized)
+    dynamic_fields = frozenset(
+        field
+        for field in referenced_fields
+        if is_allowed_custom_metadata_template_variable(
+            field,
+            scopes=allowed_metadata_scopes,
+        )
+    )
     mode = get_settings().download_settings.filename_restriction_mode
     context = {
         field: _sanitize_template_value(values.get(field, ""), mode=mode)
-        for field in allowed_fields
+        for field in allowed_fields | dynamic_fields
     }
     environment = _jinja_environment()
     try:
@@ -357,6 +407,7 @@ def resolve_episode_output_path(
         output_template,
         episode_output_template_values(episode),
         allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
     )
     return _finish_output_path(rendered, extension=extension)
 
@@ -379,6 +430,7 @@ def resolve_movie_output_path(
         output_template,
         values,
         allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
     )
     if append_media_type_to_filename and values["media_type"] != "movie":
         rendered = _append_filename_suffix(rendered, f"-{values['media_type']}")

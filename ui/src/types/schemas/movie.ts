@@ -131,6 +131,7 @@ export const MovieReadSchema = z.looseObject({
     officialTrailerId: z.int().nullable(),
     officialTrailer: MovieExtraReadSchema.nullable(),
     movieExtras: z.array(MovieExtraReadSchema),
+    customMetadata: z.record(z.string(), z.string()).default({}),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })
