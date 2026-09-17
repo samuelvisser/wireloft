@@ -58,12 +58,16 @@ export default function LocalMediaProfilesPage() {
         {
             header: 'Available for',
             accessor: getAvailableForLabel,
-            width: 110,
+            width: '1%',
+            headerStyle: {whiteSpace: 'nowrap'},
+            cellStyle: {whiteSpace: 'nowrap'},
         },
         {
             header: 'Preferred Format',
             accessor: (p) => PreferredFormatReg.getLabelLoose(p.preferredFormat),
-            width: 130,
+            width: '1%',
+            headerStyle: {whiteSpace: 'nowrap'},
+            cellStyle: {whiteSpace: 'nowrap'},
         }
     ]
 
