@@ -78,8 +78,13 @@
     font-style: italic;
 }
 
-.output-template-code-editor .cm-tooltip-autocomplete {
-    max-width: min(420px, calc(100vw - 32px));
+.output-template-code-editor .cm-tooltip-autocomplete,
+.output-template-code-editor .cm-tooltip-autocomplete > ul {
+    max-width: calc(100vw - 16px);
+}
+
+.output-template-code-editor .cm-tooltip-autocomplete > ul {
+    width: max-content;
 }
 
 .template-workbench {
