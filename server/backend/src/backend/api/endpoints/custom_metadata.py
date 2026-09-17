@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
@@ -11,7 +11,9 @@ from backend.app import db_session
 from backend.db.models import Show
 from backend.db.models.Metadata import Metadata
 from backend.db.models.media_item import Movie
-from backend.utils.custom_metadata import custom_metadata_storage_key
+from backend.utils.custom_metadata import CustomMetadataScope, custom_metadata_storage_key
+
+from .custom_metadata_service import get_custom_metadata_fields
 
 
 router = APIRouter(tags=["Custom Metadata"])
@@ -44,6 +46,15 @@ def _remove_shared_fields(
 
 def _replace_custom_metadata(resource, body: CustomMetadataAPIUpdate) -> None:
     resource.replace_custom_metadata(body.custom_metadata)
+
+
+@router.get("/custom-metadata/fields", response_model=list[str])
+def custom_metadata_fields(
+    scope: CustomMetadataScope = Query(...),
+) -> list[str]:
+    """List shared custom metadata field names for one media scope."""
+    with db_session() as session:
+        return get_custom_metadata_fields(session, scope)
 
 
 @router.put("/shows/{show_slug}/metadata", response_model=ShowAPIRead)

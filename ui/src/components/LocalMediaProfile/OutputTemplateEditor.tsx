@@ -16,6 +16,7 @@ import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 import ReadMore from '../../utils/ReadMore'
 import {useLocalMediaProfileTemplateSources} from '../../lib/localMediaProfileTemplateSources'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
+import TemplateSourceSelect from './TemplateSourceSelect'
 import {
     analyzeJinjaStatement,
     editorPositionForCompactOffset,
@@ -97,7 +98,8 @@ const jinjaHighlightStyle = HighlightStyle.define([
         tag: [tags.operator, tags.arithmeticOperator, tags.logicOperator, tags.compareOperator],
         class: 'cm-jinja-operator',
     },
-    {tag: [tags.comment, tags.blockComment], class: 'cm-jinja-comment'},
+    {tag: tags.comment, class: 'cm-jinja-comment'},
+    {tag: tags.blockComment, class: 'cm-jinja-comment'},
 ])
 
 function responseErrorMessage(payload: any): string {
@@ -314,7 +316,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         data: sourceData,
         isLoading: sourcesLoading,
         isError: sourcesFailed,
-    } = useLocalMediaProfileTemplateSources(mode, showScope)
+    } = useLocalMediaProfileTemplateSources(mode, {showScope})
     const customVariables = (sourceData?.variables ?? []) as OutputTemplateVariable[]
     const variables = useMemo(
         () => getOutputTemplateVariables(mode, customVariables),
@@ -586,17 +588,14 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                             <p>Try different values here. Your profile is not changed.</p>
                         </div>
                         {sources.length > 0 && (
-                            <label className="template-source-label">
+                            <label className="template-source-label" htmlFor="template-example-source">
                                 <span>Example source</span>
-                                <select
-                                    className="input"
-                                    value={selectedSource?.id ?? ''}
-                                    onChange={(event) => chooseSource(event.target.value)}
-                                >
-                                    {sources.map((source) => (
-                                        <option key={source.id} value={source.id}>{source.label}</option>
-                                    ))}
-                                </select>
+                                <TemplateSourceSelect
+                                    mode={mode}
+                                    sources={sources}
+                                    selectedSourceId={selectedSource?.id ?? ''}
+                                    onChange={chooseSource}
+                                />
                             </label>
                         )}
                     </div>

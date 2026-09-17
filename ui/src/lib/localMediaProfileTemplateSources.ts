@@ -21,10 +21,17 @@ export type LocalMediaProfileTemplateSourcesResponse = {
     variables?: LocalMediaProfileTemplateVariable[]
 }
 
+type LocalMediaProfileTemplateSourceOptions = {
+    showScope?: ShowLocalMediaProfileScope
+    enabled?: boolean
+}
+
 export function useLocalMediaProfileTemplateSources(
     mode: LocalMediaProfileTemplateSourceMode,
-    showScope: ShowLocalMediaProfileScope = 'both',
-    enabled = true,
+    {
+        showScope = 'both',
+        enabled = true,
+    }: LocalMediaProfileTemplateSourceOptions = {},
 ) {
     return useQuery<LocalMediaProfileTemplateSourcesResponse>({
         queryKey: ['localMediaProfileTemplateSources', mode, showScope],

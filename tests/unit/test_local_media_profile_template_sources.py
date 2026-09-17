@@ -171,3 +171,31 @@ def test_single_show_scope_excludes_the_other_show_type(db_session):
 
     assert episodes
     assert {episode.show.type for episode in episodes} == {ShowType.SERIES.value}
+
+
+def test_sources_are_sorted_by_show_then_episode_index(db_session):
+    from backend.api.endpoints.local_media_profiles.template_source_selection import (
+        select_show_template_source_episodes,
+    )
+    from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
+    from backend.types.show_types import ShowType
+
+    newest = datetime(2026, 9, 17, 12, 0, 0)
+    zulu = _make_show(db_session, slug="zulu-show", show_type=ShowType.SERIES.value)
+    alpha = _make_show(db_session, slug="alpha-show", show_type=ShowType.SERIES.value)
+    _add_episodes(db_session, zulu, count=3, newest_at=newest)
+    _add_episodes(db_session, alpha, count=3, newest_at=newest - timedelta(days=1))
+
+    episodes = select_show_template_source_episodes(
+        db_session,
+        ShowLocalMediaProfileScope.SERIES,
+    )
+
+    assert [(episode.show.title, episode.index) for episode in episodes] == [
+        ("Alpha Show", 1),
+        ("Alpha Show", 2),
+        ("Alpha Show", 3),
+        ("Zulu Show", 1),
+        ("Zulu Show", 2),
+        ("Zulu Show", 3),
+    ]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from backend.db.models import Episode, Show
@@ -143,13 +143,17 @@ def select_show_template_source_episodes(
     if not episode_ids:
         return []
 
-    selected_order = case(
-        {episode_id: index for index, episode_id in enumerate(episode_ids)},
-        value=Episode.id,
-    )
-    return list(s.scalars(
+    episodes = list(s.scalars(
         select(Episode)
         .options(joinedload(Episode.show), joinedload(Episode.season))
         .where(Episode.id.in_(episode_ids))
-        .order_by(selected_order)
     ).all())
+    return sorted(
+        episodes,
+        key=lambda episode: (
+            episode.show.title.casefold(),
+            episode.show.id,
+            episode.index,
+            episode.id,
+        ),
+    )

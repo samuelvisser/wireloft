@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.api.models.local_media_profile import (
@@ -10,18 +9,15 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplateSources,
     LocalMediaProfileTemplateVariable,
 )
-from backend.db.models import Movie, Show
-from backend.db.models.Metadata import Metadata
+from backend.db.models import Movie
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
     PreferredFormat,
     ShowLocalMediaProfileScope,
 )
 from backend.utils.custom_metadata import (
-    CUSTOM_METADATA_DB_PREFIX,
     CustomMetadataScope,
     custom_metadata_template_variable,
-    is_valid_custom_metadata_key,
 )
 from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
@@ -35,6 +31,7 @@ from backend.utils.output_template import (
     render_output_template,
 )
 
+from ..custom_metadata_service import get_custom_metadata_fields
 from .template_source_selection import select_show_template_source_episodes
 
 
@@ -106,36 +103,21 @@ def _custom_template_variables(
     profile_type: LocalMediaProfileType,
 ) -> list[LocalMediaProfileTemplateVariable]:
     if profile_type == LocalMediaProfileType.SHOW:
-        parent_table = Show.__tablename__
         scope: CustomMetadataScope = "show"
         description = "Custom show metadata"
     elif profile_type == LocalMediaProfileType.MOVIE:
-        parent_table = Movie.__tablename__
         scope = "movie"
         description = "Custom movie metadata"
     else:
         return []
 
-    rows = session.scalars(
-        select(Metadata.key)
-        .where(
-            Metadata.parent_table == parent_table,
-            Metadata.key.like(f"{CUSTOM_METADATA_DB_PREFIX}%"),
-        )
-        .distinct()
-        .order_by(Metadata.key)
-    ).all()
-
-    variables: list[LocalMediaProfileTemplateVariable] = []
-    for storage_key in rows:
-        key = storage_key[len(CUSTOM_METADATA_DB_PREFIX):]
-        if not is_valid_custom_metadata_key(key):
-            continue
-        variables.append(LocalMediaProfileTemplateVariable(
+    return [
+        LocalMediaProfileTemplateVariable(
             name=custom_metadata_template_variable(scope, key),
             description=f"{description}: {key}",
-        ))
-    return variables
+        )
+        for key in get_custom_metadata_fields(session, scope)
+    ]
 
 
 def get_output_template_sources(

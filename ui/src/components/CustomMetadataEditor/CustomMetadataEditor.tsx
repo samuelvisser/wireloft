@@ -5,7 +5,7 @@ import {useQueryClient, type QueryKey} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
-import {useLocalMediaProfileTemplateSources} from '../../lib/localMediaProfileTemplateSources'
+import {useCustomMetadataFields} from '../../lib/customMetadataFields'
 import {
     CustomMetadataFormSchema,
     customMetadataToEntries,
@@ -59,18 +59,15 @@ export default function CustomMetadataEditor({
     const [pendingRemovedFields, setPendingRemovedFields] = useState<Set<string>>(() => new Set())
     const [confirmRemoval, setConfirmRemoval] = useState<PendingRemoval | null>(null)
     const {
-        data: templateSources,
+        data: sharedFields,
         isLoading: fieldsLoading,
         isError: fieldsFailed,
-    } = useLocalMediaProfileTemplateSources(scope, open)
+    } = useCustomMetadataFields(scope, open)
 
-    const metadataFields = useMemo(() => {
-        const discovered = (templateSources?.variables ?? [])
-            .map(({name}) => name.startsWith(variablePrefix) ? name.slice(variablePrefix.length) : null)
-            .filter((key): key is string => Boolean(key))
-        return [...new Set([...discovered, ...Object.keys(metadata)])]
+    const metadataFields = useMemo(() => (
+        [...new Set([...(sharedFields ?? []), ...Object.keys(metadata)])]
             .sort((left, right) => left.localeCompare(right))
-    }, [metadata, templateSources?.variables, variablePrefix])
+    ), [metadata, sharedFields])
     const persistedFields = useMemo(() => new Set(metadataFields), [metadataFields])
 
     const form = useForm<CustomMetadataFormValues>({
@@ -117,6 +114,7 @@ export default function CustomMetadataEditor({
             onSuccess: async () => {
                 await Promise.all([
                     ...invalidateQueryKeys.map((queryKey) => queryClient.invalidateQueries({queryKey})),
+                    queryClient.invalidateQueries({queryKey: ['customMetadataFields']}),
                     queryClient.invalidateQueries({queryKey: ['localMediaProfileTemplateSources']}),
                 ])
                 toast.success('Custom metadata saved')
