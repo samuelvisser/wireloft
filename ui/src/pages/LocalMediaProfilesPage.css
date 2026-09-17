@@ -4,9 +4,11 @@
   }
 
   .local-media-profiles-table {
-    table-layout: fixed;
+    width: 100%;
+    table-layout: auto;
   }
 
+  .local-media-profile-name,
   .local-media-profile-output-template {
     display: block;
     width: 100%;
