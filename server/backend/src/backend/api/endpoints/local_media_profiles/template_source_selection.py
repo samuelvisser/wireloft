@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from backend.db.models import Episode, Show
 from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
@@ -53,6 +55,31 @@ def _latest_show_ids(
     ).all())
 
 
+def _balanced_episode_ids(
+    show_ids: Sequence[int],
+    episode_ids_by_show: Mapping[int, Sequence[int]],
+    limit: int,
+) -> list[int]:
+    """Fill the quota in rounds so every show gets another episode before any show gets two more."""
+    selected: list[int] = []
+    episode_index = 0
+    while len(selected) < limit:
+        added_episode = False
+        for show_id in show_ids:
+            show_episode_ids = episode_ids_by_show.get(show_id, ())
+            if episode_index >= len(show_episode_ids):
+                continue
+            selected.append(show_episode_ids[episode_index])
+            added_episode = True
+            if len(selected) == limit:
+                return selected
+        if not added_episode:
+            break
+        episode_index += 1
+
+    return selected
+
+
 def _episode_ids_for_show_type(
     s: Session,
     show_type: ShowType,
@@ -97,23 +124,7 @@ def _episode_ids_for_show_type(
     for episode_id, show_id in rows:
         episode_ids_by_show[show_id].append(episode_id)
 
-    selected: list[int] = []
-    episode_index = 0
-    while len(selected) < limit:
-        added_episode = False
-        for show_id in show_ids:
-            show_episode_ids = episode_ids_by_show[show_id]
-            if episode_index >= len(show_episode_ids):
-                continue
-            selected.append(show_episode_ids[episode_index])
-            added_episode = True
-            if len(selected) == limit:
-                return selected
-        if not added_episode:
-            break
-        episode_index += 1
-
-    return selected
+    return _balanced_episode_ids(show_ids, episode_ids_by_show, limit)
 
 
 def select_show_template_source_episodes(
@@ -143,17 +154,15 @@ def select_show_template_source_episodes(
     if not episode_ids:
         return []
 
-    episodes = list(s.scalars(
+    return list(s.scalars(
         select(Episode)
-        .options(joinedload(Episode.show), joinedload(Episode.season))
+        .join(Episode.show)
+        .options(contains_eager(Episode.show), joinedload(Episode.season))
         .where(Episode.id.in_(episode_ids))
+        .order_by(
+            func.lower(Show.title),
+            Show.id,
+            Episode.index,
+            Episode.id,
+        )
     ).all())
-    return sorted(
-        episodes,
-        key=lambda episode: (
-            episode.show.title.casefold(),
-            episode.show.id,
-            episode.index,
-            episode.id,
-        ),
-    )
