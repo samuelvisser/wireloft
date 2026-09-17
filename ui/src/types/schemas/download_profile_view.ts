@@ -8,6 +8,7 @@ export const DownloadProfileReadViewSchema = DownloadProfileReadSchema.extend({
     // External table fields
     showTitle: z.string(),
     showSlug: z.string(),
+    localMediaProfileName: z.string(),
     localMediaProfilePreferredFormat: z.string(),
 
     // Concrete implementation payload (depends on `type`)

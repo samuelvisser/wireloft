@@ -63,6 +63,10 @@ export default function DownloadProfilesPage() {
             mobileHidden: true,
         },
         {
+            header: 'Local Media Profile',
+            accessor: (p) => p.localMediaProfileName,
+        },
+        {
             header: 'Preferred Format',
             accessor: (p) => PreferredFormatReg.getLabelLoose(p.localMediaProfilePreferredFormat),
         },
@@ -110,6 +114,8 @@ export default function DownloadProfilesPage() {
                         <>
                             <span className="mobile-summary-title">{p.showTitle}</span>
                             <span className="mobile-summary-meta">
+                                <span>{p.localMediaProfileName}</span>
+                                <span aria-hidden="true">•</span>
                                 <span>{PreferredFormatReg.getLabelLoose(p.localMediaProfilePreferredFormat)}</span>
                                 <span aria-hidden="true">•</span>
                                 <span>{ShowTypeReg.getLabelLoose(p.type)}</span>

@@ -17,9 +17,9 @@ def _to_view(item: AliasedClass[DownloadProfileBase]) -> DownloadProfileAPIReadV
     base = DownloadProfileAPIRead.model_validate(item).model_dump()
     show_title = item.show.title if getattr(item, "show", None) is not None else None
     show_slug = item.show.slug if getattr(item, "show", None) is not None else None
-    preferred_format = (
-        item.local_media_profile.preferred_format if getattr(item, "local_media_profile", None) is not None else None
-    )
+    local_media_profile = getattr(item, "local_media_profile", None)
+    local_media_profile_name = local_media_profile.name if local_media_profile is not None else None
+    preferred_format = local_media_profile.preferred_format if local_media_profile is not None else None
 
     # Map concrete implementation payload based on type discriminator
     t = str(getattr(item, "type", ""))
@@ -35,6 +35,7 @@ def _to_view(item: AliasedClass[DownloadProfileBase]) -> DownloadProfileAPIReadV
         **base,
         "show_title": show_title or "",
         "show_slug": show_slug or "",
+        "local_media_profile_name": local_media_profile_name or "",
         "local_media_profile_preferred_format": preferred_format or "",
         "download_profile_impl": impl,
     })
