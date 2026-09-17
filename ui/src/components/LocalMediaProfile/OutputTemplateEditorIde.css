@@ -1,6 +1,6 @@
 /* Presentation-only formatting. The form value stays as a compact single-line Jinja template. */
 .output-template-code-editor .cm-content {
-    tab-size: 2;
+    tab-size: 4;
 }
 
 .output-template-code-editor .cm-jinja-brace {

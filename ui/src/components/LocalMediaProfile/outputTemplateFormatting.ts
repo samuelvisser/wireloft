@@ -17,8 +17,30 @@ const BLOCK_OPENERS = new Set([
 
 const BLOCK_BRANCHES = new Set(['else', 'elif'])
 
+function linePrefix(value: string, index: number): string {
+    const lineStart = value.lastIndexOf('\n', index - 1) + 1
+    return value.slice(lineStart, index)
+}
+
+function isPresentationWhitespace(value: string, index: number): boolean {
+    const character = value[index]
+    if (character === '\n' || character === '\r') return true
+    if (character !== ' ' && character !== '\t') return false
+
+    const prefix = linePrefix(value, index)
+    if (/^[\t ]*$/.test(prefix)) return true
+
+    // A visual gap after a path separator makes lines such as
+    // `/ {{ movie_title }}` easier to scan. It is not part of the saved template.
+    return character === ' ' && /^[\t ]*\/ *$/.test(prefix)
+}
+
 export function compactOutputTemplate(value: string): string {
-    return value.replace(/^\t+/, '').replace(/\r?\n\t*/g, '')
+    let compact = ''
+    for (let index = 0; index < value.length; index += 1) {
+        if (!isPresentationWhitespace(value, index)) compact += value[index]
+    }
+    return compact
 }
 
 function tokenizeTemplate(template: string): TemplateToken[] {
@@ -76,17 +98,20 @@ export function formatOutputTemplateForEditor(value: string): string {
     if (!template) return ''
 
     const lines: string[] = []
+    const blockIndents: number[] = []
     let current = ''
     let currentIndent = 0
-    let pathDepth = 0
-    let blockDepth = 0
     let pathStarted = false
+    let separateLeadingStatementsFromPath = false
 
-    const defaultIndent = () => pathDepth + blockDepth
-    const ensureCurrent = (indent = defaultIndent()) => {
+    const contentIndent = () => {
+        const blockIndent = blockIndents[blockIndents.length - 1]
+        return blockIndent === undefined ? 0 : blockIndent + 1
+    }
+    const ensureCurrent = (indent = contentIndent()) => {
         if (!current) currentIndent = indent
     }
-    const append = (text: string, indent = defaultIndent()) => {
+    const append = (text: string, indent = contentIndent()) => {
         if (!text) return
         ensureCurrent(indent)
         current += text
@@ -96,15 +121,20 @@ export function formatOutputTemplateForEditor(value: string): string {
         lines.push(`${'\t'.repeat(Math.max(0, currentIndent))}${current}`)
         current = ''
     }
+    const startPathLine = () => {
+        if (!pathStarted && separateLeadingStatementsFromPath && lines[lines.length - 1] !== '') {
+            lines.push('')
+        }
+        pathStarted = true
+        append('/', contentIndent())
+    }
 
     const appendText = (text: string) => {
         let cursor = 0
         for (let slash = text.indexOf('/', cursor); slash >= 0; slash = text.indexOf('/', cursor)) {
             append(text.slice(cursor, slash))
             flush()
-            if (pathStarted) pathDepth += 1
-            else pathStarted = true
-            append('/', pathDepth + blockDepth)
+            startPathLine()
             cursor = slash + 1
         }
         append(text.slice(cursor))
@@ -117,6 +147,7 @@ export function formatOutputTemplateForEditor(value: string): string {
         }
 
         if (token.type === 'expression' || token.type === 'comment') {
+            if (current === '/') current += ' '
             append(token.value)
             continue
         }
@@ -127,13 +158,25 @@ export function formatOutputTemplateForEditor(value: string): string {
         const isOpening = opensBlock(token.value, keyword)
 
         flush()
-        if (isClosing) blockDepth = Math.max(0, blockDepth - 1)
 
-        const statementIndent = pathDepth + (isBranch ? Math.max(0, blockDepth - 1) : blockDepth)
+        let statementIndent: number
+        if (isClosing) {
+            statementIndent = blockIndents.pop() ?? 0
+        } else if (isBranch) {
+            statementIndent = blockIndents[blockIndents.length - 1] ?? (pathStarted ? 1 : 0)
+        } else if (isOpening) {
+            statementIndent = blockIndents.length > 0 ? contentIndent() : (pathStarted ? 1 : 0)
+        } else {
+            statementIndent = contentIndent()
+        }
+
         append(token.value, statementIndent)
         flush()
 
-        if (isOpening) blockDepth += 1
+        if (isOpening) blockIndents.push(statementIndent)
+        if (!pathStarted && !isOpening && !isClosing && !isBranch && blockIndents.length === 0) {
+            separateLeadingStatementsFromPath = true
+        }
     }
 
     flush()
@@ -145,13 +188,21 @@ export function editorPositionForCompactOffset(formatted: string, compactOffset:
 
     let compactPosition = 0
     for (let index = 0; index < formatted.length; index += 1) {
-        if (formatted[index] === '\n') {
-            while (formatted[index + 1] === '\t') index += 1
-            continue
-        }
+        if (isPresentationWhitespace(formatted, index)) continue
 
         compactPosition += 1
-        if (compactPosition >= compactOffset) return index + 1
+        if (compactPosition >= compactOffset) {
+            let editorPosition = index + 1
+            while (
+                editorPosition < formatted.length
+                && formatted[editorPosition] !== '\n'
+                && formatted[editorPosition] !== '\r'
+                && isPresentationWhitespace(formatted, editorPosition)
+            ) {
+                editorPosition += 1
+            }
+            return editorPosition
+        }
     }
 
     return formatted.length
