@@ -78,19 +78,30 @@
     font-style: italic;
 }
 
-.output-template-code-editor .cm-tooltip-autocomplete,
-.output-template-code-editor .cm-tooltip-autocomplete > ul {
-    width: max-content;
-    max-width: calc(100vw - 16px);
+/* CodeMirror's base autocomplete theme has higher generated selector specificity and
+   otherwise re-applies its 700px cap, nowrap rows, and ellipsis after these styles. */
+.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete,
+.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete > ul {
+    width: max-content !important;
+    max-width: calc(100vw - 16px) !important;
 }
 
-.output-template-code-editor .cm-tooltip-autocomplete > ul {
+.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete > ul {
+    white-space: normal !important;
+}
+
+.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete > ul > li {
+    overflow-x: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+}
+
+.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete .cm-completionLabel {
+    white-space: nowrap;
+}
+
+.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete .cm-completionDetail {
     white-space: normal;
-}
-
-.output-template-code-editor .cm-tooltip-autocomplete > ul > li {
-    overflow-x: visible;
-    text-overflow: clip;
 }
 
 .template-workbench {
