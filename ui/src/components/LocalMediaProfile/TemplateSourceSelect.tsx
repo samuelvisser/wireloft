@@ -1,5 +1,5 @@
 import {useMemo} from 'react'
-import Select, {type GroupBase} from 'react-select'
+import Select, {createFilter, type GroupBase} from 'react-select'
 
 import type {
     LocalMediaProfileTemplateSource,
@@ -21,6 +21,10 @@ type SourceOption = {
 }
 
 type SourceGroup = GroupBase<SourceOption>
+
+const filterSourceOption = createFilter<SourceOption>({
+    stringify: ({data}) => data.fullLabel,
+})
 
 function optionForSource(
     source: LocalMediaProfileTemplateSource,
@@ -91,6 +95,7 @@ export default function TemplateSourceSelect({
             options={options}
             value={selectedOption}
             onChange={(option) => option && onChange(option.value)}
+            filterOption={filterSourceOption}
             isClearable={false}
             isSearchable={sources.length > 7}
             maxMenuHeight={360}
