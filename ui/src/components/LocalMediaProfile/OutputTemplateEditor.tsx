@@ -21,6 +21,7 @@ import {
     analyzeJinjaStatement,
     editorPositionForCompactOffset,
     getOpenJinjaBlocks,
+    hasLeadingPathPartSpace,
     parseOutputTemplate,
     renderCompactOutputTemplate,
     renderEditorOutputTemplate,
@@ -325,6 +326,23 @@ function TemplateCodeEditor({
     )
 }
 
+function PreviewPathPart({part}: {part: string}) {
+    const leadingSpaceCount = part.match(/^ +/)?.[0].length ?? 0
+    return (
+        <>
+            {leadingSpaceCount > 0 && (
+                <span
+                    title={leadingSpaceCount === 1 ? 'Leading space' : `${leadingSpaceCount} leading spaces`}
+                    aria-label={leadingSpaceCount === 1 ? 'leading space' : `${leadingSpaceCount} leading spaces`}
+                >
+                    {'␣'.repeat(leadingSpaceCount)}
+                </span>
+            )}
+            {part.slice(leadingSpaceCount)}
+        </>
+    )
+}
+
 function PreviewPath({path}: {path: string}) {
     const absolute = path.startsWith('/')
     const parts = path.split('/').filter(Boolean)
@@ -339,7 +357,7 @@ function PreviewPath({path}: {path: string}) {
                     style={{'--template-path-depth': index} as CSSProperties}
                 >
                     <span className="template-preview-path-branch" aria-hidden="true">{index === 0 ? '' : '└─ '}</span>
-                    {index === 0 ? '/' : ''}{part}{index < parts.length - 1 ? '/' : ''}
+                    {index === 0 ? '/' : ''}<PreviewPathPart part={part}/>{index < parts.length - 1 ? '/' : ''}
                 </span>
             ))}
         </code>
@@ -351,6 +369,24 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
     const showScope = useWatch({control, name: 'showScope'}) ?? 'both'
+    const canonicalTemplate = useMemo(
+        () => renderCompactOutputTemplate(parseOutputTemplate(template, 'compact')),
+        [template],
+    )
+    const pathHasLeadingSpace = useMemo(
+        () => hasLeadingPathPartSpace(parseOutputTemplate(canonicalTemplate, 'compact')),
+        [canonicalTemplate],
+    )
+
+    useEffect(() => {
+        if (canonicalTemplate === template) return
+        form.setValue('outputTemplate', canonicalTemplate, {
+            shouldDirty: false,
+            shouldTouch: false,
+            shouldValidate: false,
+        })
+    }, [canonicalTemplate, form, template])
+
     const {
         data: sourceData,
         isLoading: sourcesLoading,
@@ -644,6 +680,12 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                             </span>
                         ))}
                         {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
+                    </div>
+                )}
+                {pathHasLeadingSpace && (
+                    <div className="template-metadata-warning" role="status">
+                        One or more path parts begin with a space. The <code>␣</code> marker in Example output shows each
+                        leading space; that space is part of the actual folder or filename.
                     </div>
                 )}
 
