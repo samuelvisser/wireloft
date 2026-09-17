@@ -122,9 +122,12 @@ export default function CustomMetadataEditor({
 
                 <form onSubmit={submit} noValidate>
                     <div className="custom-metadata-content">
-                        <p id={descriptionId} className="custom-metadata-description">
-                            Metadata fields are shared by all {scopeLabel.plural}, while each {scopeLabel.singular} has its own value. A field such as <code>year</code> is available in output templates as{' '}
-                            <code>{`{{ ${variablePrefix}year }}`}</code>.
+                        <p>
+                            Add custom metadata fields to a {scopeLabel.singular} here.
+                        </p>
+                        <p>
+                            Metadata fields can be used in output templates as <code>{`{{\u00A0${variablePrefix}field_name\u00A0}}`}</code>. This can therefore
+                            be a very powerful way to add any arbitrary metadata to the output path of downloaded files for this {scopeLabel.singular}.
                         </p>
                         <p className="custom-metadata-note">
                             Adding a field here makes it available to every {scopeLabel.singular}; leave its value empty where it does not apply. Field names use lowercase letters, numbers, and underscores. Existing downloaded files are not moved automatically when metadata changes.
@@ -160,7 +163,7 @@ export default function CustomMetadataEditor({
                                                 <input
                                                     id={`custom-metadata-key-${field.id}`}
                                                     className="input"
-                                                    placeholder="year"
+                                                    placeholder="name"
                                                     autoComplete="off"
                                                     readOnly={knownField}
                                                     title={knownField ? `This field is shared by all ${scopeLabel.plural}` : undefined}
@@ -176,7 +179,7 @@ export default function CustomMetadataEditor({
                                                 <input
                                                     id={`custom-metadata-value-${field.id}`}
                                                     className="input"
-                                                    placeholder="2026"
+                                                    placeholder="data"
                                                     aria-invalid={!!errors.entries?.[index]?.value}
                                                     {...form.register(`entries.${index}.value`)}
                                                 />
