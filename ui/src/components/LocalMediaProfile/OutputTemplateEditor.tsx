@@ -684,8 +684,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 )}
                 {pathHasLeadingSpace && (
                     <div className="template-metadata-warning" role="status">
-                        One or more path parts begin with a space. The <code>␣</code> marker in Example output shows each
-                        leading space; that space is part of the actual folder or filename.
+                        One or more path parts begin with a space. This is usually not intentional.
                     </div>
                 )}
 
