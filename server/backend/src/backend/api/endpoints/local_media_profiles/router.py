@@ -10,7 +10,10 @@ from backend.api.models.local_media_profile import (
 )
 from backend.api.models.operations import LocalMediaProfileFileRenameOperationAccepted
 from backend.app import db_session
-from backend.types.local_media_profile_types import LocalMediaProfileType
+from backend.types.local_media_profile_types import (
+    LocalMediaProfileType,
+    ShowLocalMediaProfileScope,
+)
 
 from .file_rename import request_local_media_profile_file_rename
 from .output_template import (
@@ -51,11 +54,12 @@ def local_media_profiles_create(body: LocalMediaProfileAPICreate):
 @router.get("/template/sources", response_model=LocalMediaProfileTemplateSources)
 def local_media_profile_template_sources(
     type: LocalMediaProfileType = Query(...),
+    show_scope: ShowLocalMediaProfileScope = Query(ShowLocalMediaProfileScope.BOTH),
 ):
-    """Return up to ten recent media items for testing an output path template."""
+    """Return recent media items for testing an output path template."""
     with db_session() as s:
         try:
-            return get_output_template_sources(s, type)
+            return get_output_template_sources(s, type, show_scope)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

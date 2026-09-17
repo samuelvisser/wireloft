@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, selectinload
 
 from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplatePreview,
@@ -10,9 +10,13 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplateSources,
     LocalMediaProfileTemplateVariable,
 )
-from backend.db.models import Episode, Movie, Show
+from backend.db.models import Movie, Show
 from backend.db.models.Metadata import Metadata
-from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
+from backend.types.local_media_profile_types import (
+    LocalMediaProfileType,
+    PreferredFormat,
+    ShowLocalMediaProfileScope,
+)
 from backend.utils.custom_metadata import (
     CUSTOM_METADATA_DB_PREFIX,
     CustomMetadataScope,
@@ -30,6 +34,8 @@ from backend.utils.output_template import (
     replace_output_extension,
     render_output_template,
 )
+
+from .template_source_selection import select_show_template_source_episodes
 
 
 _EXAMPLE_SHOW_VALUES = {
@@ -135,18 +141,13 @@ def _custom_template_variables(
 def get_output_template_sources(
     s: Session,
     profile_type: LocalMediaProfileType,
+    show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH,
 ) -> LocalMediaProfileTemplateSources:
     """Return recent examples plus custom metadata fields shared by this media type."""
     variables = _custom_template_variables(s, profile_type)
 
     if profile_type == LocalMediaProfileType.SHOW:
-        episodes = (
-            s.query(Episode)
-            .options(joinedload(Episode.show), joinedload(Episode.season))
-            .order_by(Episode.published_date.desc().nullslast(), Episode.created_at.desc(), Episode.id.desc())
-            .limit(10)
-            .all()
-        )
+        episodes = select_show_template_source_episodes(s, show_scope)
         sources = [
             LocalMediaProfileTemplateSource(
                 id=f"episode:{episode.id}",

@@ -309,11 +309,12 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
+    const showScope = useWatch({control, name: 'showScope'}) ?? 'both'
     const {
         data: sourceData,
         isLoading: sourcesLoading,
         isError: sourcesFailed,
-    } = useLocalMediaProfileTemplateSources(mode)
+    } = useLocalMediaProfileTemplateSources(mode, showScope)
     const customVariables = (sourceData?.variables ?? []) as OutputTemplateVariable[]
     const variables = useMemo(
         () => getOutputTemplateVariables(mode, customVariables),
