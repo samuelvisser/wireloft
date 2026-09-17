@@ -132,15 +132,6 @@ def _custom_template_variables(
     return variables
 
 
-def _with_custom_variable_defaults(
-    source: LocalMediaProfileTemplateSource,
-    variables: list[LocalMediaProfileTemplateVariable],
-) -> LocalMediaProfileTemplateSource:
-    for variable in variables:
-        source.values.setdefault(variable.name, "")
-    return source
-
-
 def get_output_template_sources(
     s: Session,
     profile_type: LocalMediaProfileType,
@@ -204,10 +195,7 @@ def get_output_template_sources(
             fallback=True,
         )]
 
-    return LocalMediaProfileTemplateSources(
-        sources=[_with_custom_variable_defaults(source, variables) for source in sources],
-        variables=variables,
-    )
+    return LocalMediaProfileTemplateSources(sources=sources, variables=variables)
 
 
 def get_output_template_preview(
