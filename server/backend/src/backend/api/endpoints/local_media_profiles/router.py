@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, status
+from jinja2.exceptions import TemplateAssertionError
 
 from backend.api.models.local_media_profile import (
     LocalMediaProfileAPICreate,
@@ -69,12 +70,13 @@ def local_media_profile_template_preview(body: LocalMediaProfileTemplatePreview)
     """Render an unsaved output path template against editable example values."""
     try:
         return get_output_template_preview(body)
-    except ValueError as exc:
+    except (ValueError, TemplateAssertionError) as exc:
+        message = exc.message if isinstance(exc, TemplateAssertionError) else str(exc)
         raise HTTPException(
             status_code=422,
             detail=[{
                 "loc": ["body", "outputTemplate"],
-                "msg": str(exc),
+                "msg": message,
                 "type": "value_error",
             }],
         ) from exc
