@@ -118,6 +118,45 @@ function responseErrorMessage(payload: any): string {
     return 'The template could not be rendered.'
 }
 
+function statementVariableExpression(statement: string): string | null {
+    const keywordMatch = /^\s*([A-Za-z_][A-Za-z0-9_]*)\b/.exec(statement)
+    if (!keywordMatch) return null
+
+    const keyword = keywordMatch[1]
+    const tail = statement.slice(keywordMatch[0].length)
+    if (keyword === 'set') {
+        const assignment = tail.indexOf('=')
+        return assignment >= 0 ? tail.slice(assignment + 1) : null
+    }
+    if (keyword === 'for') {
+        const iterable = /\bin\b/.exec(tail)
+        return iterable ? tail.slice(iterable.index + iterable[0].length) : null
+    }
+    if (keyword === 'if' || keyword === 'elif' || keyword === 'call' || keyword === 'autoescape') {
+        return tail
+    }
+    return null
+}
+
+function isInsideQuotedString(source: string): boolean {
+    let quote: "'" | '"' | null = null
+    let escaped = false
+    for (const character of source) {
+        if (escaped) {
+            escaped = false
+            continue
+        }
+        if (character === '\\' && quote) {
+            escaped = true
+            continue
+        }
+        if (character === "'" || character === '"') {
+            quote = quote === character ? null : (quote ?? character)
+        }
+    }
+    return quote !== null
+}
+
 function replaceJinjaStatementCompletion(
     view: EditorView,
     completion: Completion,
@@ -331,17 +370,23 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     )
     const usedVariablesKey = usedVariables.map(({name}) => name).join('|')
 
-    const completionOptions = useMemo<Completion[]>(
+    const variableCompletionOptions = useMemo<Completion[]>(
         () => variables.map((variable) => ({
             label: variable.name,
             type: 'variable',
             detail: variable.description,
+        })),
+        [variables],
+    )
+    const printVariableCompletionOptions = useMemo<Completion[]>(
+        () => variableCompletionOptions.map((option) => ({
+            ...option,
             apply: (view, completion, from, to) => {
                 const variableStart = view.state.sliceDoc(0, from).lastIndexOf('{{')
                 const replaceFrom = variableStart >= 0 ? variableStart + 2 : from
                 const closingBraces = /^\s*}}/.exec(view.state.sliceDoc(to))
                 const replaceTo = closingBraces ? to + closingBraces[0].length : to
-                const insert = ` ${variable.name} }}`
+                const insert = ` ${completion.label} }}`
                 view.dispatch({
                     changes: {from: replaceFrom, to: replaceTo, insert},
                     selection: {anchor: replaceFrom + insert.length},
@@ -349,7 +394,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 })
             },
         })),
-        [variables],
+        [variableCompletionOptions],
     )
     const statementCompletionOptions = useMemo<Completion[]>(
         () => jinjaStatements
@@ -373,16 +418,38 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             const beforeCursor = context.state.sliceDoc(0, context.pos)
             const variableStart = beforeCursor.lastIndexOf('{{')
             const variableEnd = beforeCursor.lastIndexOf('}}')
-            if (variableStart <= variableEnd) return null
+            const statementStart = beforeCursor.lastIndexOf('{%')
+            const statementEnd = beforeCursor.lastIndexOf('%}')
 
-            const expression = beforeCursor.slice(variableStart + 2)
-            if (!/^\s*[A-Za-z_]*$/.test(expression)) return null
-            const currentWord = expression.match(/[A-Za-z_]*$/)?.[0] ?? ''
+            if (variableStart > variableEnd && variableStart > statementStart) {
+                const expression = beforeCursor.slice(variableStart + 2)
+                if (!/^\s*[A-Za-z_][A-Za-z0-9_]*$/.test(expression) && !/^\s*$/.test(expression)) return null
+                const currentWord = expression.match(/[A-Za-z_][A-Za-z0-9_]*$/)?.[0] ?? ''
+
+                return {
+                    from: context.pos - currentWord.length,
+                    options: printVariableCompletionOptions,
+                    validFor: /^(?:[A-Za-z_][A-Za-z0-9_]*)?$/,
+                }
+            }
+
+            if (statementStart <= statementEnd) return null
+            const statement = beforeCursor.slice(statementStart + 2)
+            const expression = statementVariableExpression(statement)
+            if (expression === null) return null
+
+            const currentWord = expression.match(/[A-Za-z_][A-Za-z0-9_]*$/)?.[0] ?? ''
+            if (!currentWord && !context.explicit) return null
+            const expressionBeforeWord = expression.slice(0, expression.length - currentWord.length)
+            if (isInsideQuotedString(expressionBeforeWord)) return null
+
+            const previousSignificantCharacter = expressionBeforeWord.trimEnd().slice(-1)
+            if (previousSignificantCharacter === '.' || previousSignificantCharacter === '|') return null
 
             return {
                 from: context.pos - currentWord.length,
-                options: completionOptions,
-                validFor: /^[A-Za-z_]*$/,
+                options: variableCompletionOptions,
+                validFor: /^(?:[A-Za-z_][A-Za-z0-9_]*)?$/,
             }
         }
         const statementCompletionSource = (context: CompletionContext) => {
@@ -436,7 +503,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 '.cm-content': {fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'},
             }),
         ]
-    }, [completionOptions, statementCompletionOptions])
+    }, [printVariableCompletionOptions, statementCompletionOptions, variableCompletionOptions])
 
     const {data: sourceData, isLoading: sourcesLoading, isError: sourcesFailed} = useQuery<TemplateSourcesResponse>({
         queryKey: ['localMediaProfileTemplateSources', mode],
