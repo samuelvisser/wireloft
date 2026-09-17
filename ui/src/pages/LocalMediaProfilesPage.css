@@ -16,4 +16,14 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  .local-media-profiles-table th:last-child,
+  .local-media-profiles-table td:last-child {
+    min-width: 100px;
+    white-space: nowrap;
+  }
+
+  .local-media-profiles-table td:last-child > div {
+    flex-wrap: nowrap !important;
+  }
 }
