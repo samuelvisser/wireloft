@@ -88,7 +88,7 @@ _STARTER_PROFILES = (
         "type": "movie",
         "slug": "wireloft-movies",
         "name": "WireLoft Movies",
-        "output_template": "/downloads/movies/{movie_title}/{title}.ext",
+        "output_template": "{% set output_year = ' (' ~ movie_year ~ ')' if movie_year %}/downloads/movies/{{ movie_title }}{{ output_year }}/{{ movie_title }}{{ output_year }}{% if media_type != 'movie' %}-{{ media_type }} [{{ title }}]{% endif %}.ext",
         "preferred_format": "format_1080p",
         "append_media_type_to_filename": True,
         "detail_table": "local_media_profiles_movie",
