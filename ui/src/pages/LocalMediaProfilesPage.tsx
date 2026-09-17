@@ -13,6 +13,12 @@ import ConfirmDeleteDialog, { ConfirmDeleteDialogRef } from '../components/Confi
 import PageSubtitle from "../components/common/PageSubtitle";
 import './LocalMediaProfilesPage.css'
 
+function getAvailableForLabel(profile: LocalMediaProfileRead) {
+    return profile.type === 'show'
+        ? ShowLocalMediaProfileScopeReg.getLabelLoose(profile.showScope)
+        : 'Movies'
+}
+
 export default function LocalMediaProfilesPage() {
     const navigate = useNavigate()
     const onAdd = useCallback(() => navigate('/add-local-media-profile'), [navigate])
@@ -24,10 +30,14 @@ export default function LocalMediaProfilesPage() {
     const columns: Column<LocalMediaProfileRead>[] = [
         {
             header: 'Name',
-            accessor: (p) => p.name,
-            width: 180,
-            headerStyle: {whiteSpace: 'nowrap'},
-            cellStyle: {whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'},
+            cell: (p) => (
+                <span className="local-media-profile-name" title={p.name}>
+                    {p.name}
+                </span>
+            ),
+            width: '1%',
+            headerStyle: {minWidth: 180, maxWidth: '30%', whiteSpace: 'nowrap'},
+            cellStyle: {minWidth: 180, maxWidth: '30%', whiteSpace: 'nowrap', overflow: 'hidden'},
             mobileHidden: true,
         },
         {
@@ -37,6 +47,8 @@ export default function LocalMediaProfilesPage() {
                     {p.outputTemplate}
                 </span>
             ),
+            width: '100%',
+            cellStyle: {maxWidth: 0},
         },
         {
             header: 'Type',
@@ -45,13 +57,17 @@ export default function LocalMediaProfilesPage() {
         },
         {
             header: 'Available for',
-            accessor: (p) => p.type === 'show' ? ShowLocalMediaProfileScopeReg.getLabelLoose(p.showScope) : '—',
-            width: 110,
+            accessor: getAvailableForLabel,
+            width: '1%',
+            headerStyle: {whiteSpace: 'nowrap'},
+            cellStyle: {whiteSpace: 'nowrap'},
         },
         {
             header: 'Preferred Format',
             accessor: (p) => PreferredFormatReg.getLabelLoose(p.preferredFormat),
-            width: 130,
+            width: '1%',
+            headerStyle: {whiteSpace: 'nowrap'},
+            cellStyle: {whiteSpace: 'nowrap'},
         }
     ]
 
@@ -85,7 +101,7 @@ export default function LocalMediaProfilesPage() {
                             <span className="mobile-summary-title">{p.name}</span>
                             <span className="mobile-summary-meta">
                                 <span>{LocalMediaProfileTypeReg.getLabelLoose(p.type)}</span>
-                                {p.type === 'show' && <span>{ShowLocalMediaProfileScopeReg.getLabelLoose(p.showScope)}</span>}
+                                <span>{getAvailableForLabel(p)}</span>
                                 <span>{PreferredFormatReg.getLabelLoose(p.preferredFormat)}</span>
                             </span>
                         </>
