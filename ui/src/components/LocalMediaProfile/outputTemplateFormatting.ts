@@ -391,6 +391,23 @@ export function renderCompactOutputTemplate(ast: OutputTemplateAst): string {
     return renderCompactNodes(ast.children)
 }
 
+function nodeContainsPathStart(node: OutputTemplateNode): boolean {
+    if (node.type === 'text') return node.value.includes('/')
+    if (node.type !== 'block') return false
+
+    return node.body.some(nodeContainsPathStart)
+        || node.branches.some((branch) => branch.children.some(nodeContainsPathStart))
+}
+
+function commentLeadsIntoPath(nodes: OutputTemplateNode[], commentIndex: number): boolean {
+    for (let index = commentIndex + 1; index < nodes.length; index += 1) {
+        const node = nodes[index]
+        if (node.type === 'comment') continue
+        return nodeContainsPathStart(node)
+    }
+    return false
+}
+
 class EditorRenderer {
     private output = ''
     private compactOffset = 0
@@ -398,6 +415,7 @@ class EditorRenderer {
     private atLineStart = true
     private pathStarted = false
     private leadingLogicBeforePath = false
+    private leadingPathComment = false
 
     private appendPresentation(value: string) {
         if (!value) return
@@ -424,10 +442,11 @@ class EditorRenderer {
     }
 
     private startPathLine(indent: number) {
-        if (!this.pathStarted && this.leadingLogicBeforePath && this.output.endsWith('\n')) {
+        if (!this.pathStarted && this.leadingLogicBeforePath && !this.leadingPathComment && this.output.endsWith('\n')) {
             this.appendPresentation('\n')
         }
         this.pathStarted = true
+        this.leadingPathComment = false
         this.appendSource('/', indent)
     }
 
@@ -440,6 +459,18 @@ class EditorRenderer {
             cursor = slash + 1
         }
         this.appendSource(value.slice(cursor), indent)
+    }
+
+    private renderComment(source: string, indent: number, leadsIntoPath: boolean) {
+        this.breakLine()
+        if (!this.pathStarted && leadsIntoPath && this.leadingLogicBeforePath && !this.leadingPathComment) {
+            this.appendPresentation('\n')
+        }
+
+        const commentIndent = indent > 0 ? indent : (this.pathStarted ? 1 : 0)
+        this.appendSource(source, commentIndent)
+        this.breakLine()
+        if (!this.pathStarted && leadsIntoPath) this.leadingPathComment = true
     }
 
     private renderBlock(block: JinjaBlockNode, indent: number) {
@@ -466,13 +497,18 @@ class EditorRenderer {
     }
 
     private renderNodes(nodes: OutputTemplateNode[], indent: number) {
-        for (const node of nodes) {
+        for (let index = 0; index < nodes.length; index += 1) {
+            const node = nodes[index]
             if (node.type === 'text') {
                 this.renderText(node.value, indent)
                 continue
             }
-            if (node.type === 'expression' || node.type === 'comment') {
+            if (node.type === 'expression') {
                 this.appendSource(node.source, indent)
+                continue
+            }
+            if (node.type === 'comment') {
+                this.renderComment(node.source, indent, commentLeadsIntoPath(nodes, index))
                 continue
             }
             if (node.type === 'block') {
