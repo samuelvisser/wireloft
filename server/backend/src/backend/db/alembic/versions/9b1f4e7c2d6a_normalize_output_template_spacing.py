@@ -1,7 +1,7 @@
 """Normalize Jinja output-template expression spacing.
 
 Revision ID: 9b1f4e7c2d6a
-Revises: f2c6a9d41e7b
+Revises: a4e7d18c2f90
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 revision = "9b1f4e7c2d6a"
-down_revision = "f2c6a9d41e7b"
+down_revision = "a4e7d18c2f90"
 branch_labels = None
 depends_on = None
 
