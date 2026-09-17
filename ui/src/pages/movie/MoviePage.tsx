@@ -7,7 +7,6 @@ import toast from 'react-hot-toast'
 import ProgressBar from '../../components/common/ProgressBar'
 import ProgressButton from '../../components/common/ProgressButton'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
-import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
 import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
@@ -199,7 +198,6 @@ export default function MoviePage() {
     const [submitting, setSubmitting] = useState<string | null>(null)
     const [addingMovie, setAddingMovie] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
-    const [metadataOpen, setMetadataOpen] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [retryingMetadata, setRetryingMetadata] = useState(false)
     const [refreshingExtrasStarting, setRefreshingExtrasStarting] = useState(false)
@@ -495,10 +493,10 @@ export default function MoviePage() {
                         {addingMovie ? 'Adding to WireLoft…' : 'Add to WireLoft'}
                     </button>
                 )}
-                {localMovie && (
-                    <button type="button" className="btn" onClick={() => setMetadataOpen(true)}>
-                        Custom metadata
-                    </button>
+                {localMovie && slug && (
+                    <Link className="btn" to={`/edit-movie/${encodeURIComponent(slug)}`}>
+                        Edit
+                    </Link>
                 )}
                 {localMovie && (
                     <button type="button" className="btn" onClick={() => void refreshMovieExtras()} disabled={refreshingExtras}>
@@ -662,20 +660,6 @@ export default function MoviePage() {
             )}
 
             <DownloadLogDialog row={logDownload} onClose={() => setLogDownloadId(null)}/>
-
-            {localMovie && slug && (
-                <CustomMetadataEditor
-                    open={metadataOpen}
-                    title="Movie custom metadata"
-                    scope="movie"
-                    metadata={localMovie.customMetadata ?? {}}
-                    endpoint={`/movies/${encodeURIComponent(slug)}/metadata`}
-                    invalidateQueryKeys={[
-                        ['movies'],
-                    ]}
-                    onDismiss={() => setMetadataOpen(false)}
-                />
-            )}
 
             <ConfirmDialog
                 open={confirmDelete && Boolean(localMovie)}
