@@ -160,8 +160,8 @@ export default function CustomMetadataEditor({
                                 Add custom metadata fields to a {scopeLabel.singular} here.
                             </p>
                             <p id={descriptionId} className="custom-metadata-description">
-                                Metadata fields can be used in output templates as{' '}
-                                <code>{`{{ ${variablePrefix}<field_name> }}`}</code>. This makes it possible to add arbitrary metadata to the output path of downloaded files for this {scopeLabel.singular}.
+                                Metadata fields can be used in output templates as <code>{`{{\u00A0${variablePrefix}field_name\u00A0}}`}</code>.
+                                This can therefore be a very powerful way to add any arbitrary metadata to the output path of downloaded files for this {scopeLabel.singular}.
                             </p>
                             <p className="custom-metadata-note">
                                 Adding a field here makes it available to every {scopeLabel.singular}; leave its value empty where it does not apply. Field names use lowercase letters, numbers, and underscores. Existing downloaded files are not moved automatically when metadata changes.
@@ -195,7 +195,7 @@ export default function CustomMetadataEditor({
                                                     <input
                                                         id={`custom-metadata-key-${field.id}`}
                                                         className="input"
-                                                        placeholder="year"
+                                                        placeholder="name"
                                                         autoComplete="off"
                                                         readOnly={isPersistedField}
                                                         title={isPersistedField ? `This field is shared by all ${scopeLabel.plural}` : undefined}
@@ -211,7 +211,7 @@ export default function CustomMetadataEditor({
                                                     <input
                                                         id={`custom-metadata-value-${field.id}`}
                                                         className="input"
-                                                        placeholder="2026"
+                                                        placeholder="data"
                                                         aria-invalid={!!errors.entries?.[index]?.value}
                                                         {...form.register(`entries.${index}.value`)}
                                                     />
@@ -234,7 +234,7 @@ export default function CustomMetadataEditor({
                                                     Remove
                                                 </button>
                                                 <code className="custom-metadata-variable">
-                                                    {`{{ ${variablePrefix}${key || '<field>'} }}`}
+                                                    {`{{\u00A0${variablePrefix}${key || '<field>'}\u00A0}}`}
                                                 </code>
                                             </div>
                                         )
