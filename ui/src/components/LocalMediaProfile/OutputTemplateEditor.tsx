@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState, type ReactNode} from 'react'
+import {useEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import CodeMirror from '@uiw/react-codemirror'
 import {
@@ -8,16 +8,22 @@ import {
     type Completion,
     type CompletionContext,
 } from '@codemirror/autocomplete'
+import {indentUnit, HighlightStyle, syntaxHighlighting} from '@codemirror/language'
 import {jinja} from '@codemirror/lang-jinja'
-import {HighlightStyle, syntaxHighlighting} from '@codemirror/language'
-import {EditorView} from '@codemirror/view'
+import {EditorView, type ViewUpdate} from '@codemirror/view'
 import {tags} from '@lezer/highlight'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import ReadMore from '../../utils/ReadMore'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
+import {
+    compactOutputTemplate,
+    editorPositionForCompactOffset,
+    formatOutputTemplateForEditor,
+} from './outputTemplateFormatting'
 import {getOutputTemplateVariables} from './outputTemplateVariables'
 import './OutputTemplateEditor.css'
+import './OutputTemplateEditorIde.css'
 
 type TemplateSource = {
     id: string
@@ -41,6 +47,46 @@ type Props = {
     placeholder: string
     help: ReactNode
 }
+
+type TemplateCodeEditorProps = {
+    value: string
+    placeholder: string
+    extensions: ComponentProps<typeof CodeMirror>['extensions']
+    invalid: boolean
+    onChange: (value: string) => void
+    onBlur: () => void
+}
+
+type JinjaStatement = {
+    label: string
+    detail: string
+    acceptsExpression?: boolean
+}
+
+const jinjaStatements: JinjaStatement[] = [
+    {label: 'if', detail: 'Start a conditional block', acceptsExpression: true},
+    {label: 'elif', detail: 'Add another conditional branch', acceptsExpression: true},
+    {label: 'else', detail: 'Add a fallback branch'},
+    {label: 'endif', detail: 'End a conditional block'},
+    {label: 'for', detail: 'Start a loop', acceptsExpression: true},
+    {label: 'endfor', detail: 'End a loop'},
+    {label: 'set', detail: 'Assign a value', acceptsExpression: true},
+    {label: 'endset', detail: 'End a block assignment'},
+    {label: 'block', detail: 'Start a named block', acceptsExpression: true},
+    {label: 'endblock', detail: 'End a named block'},
+    {label: 'macro', detail: 'Define a macro', acceptsExpression: true},
+    {label: 'endmacro', detail: 'End a macro'},
+    {label: 'call', detail: 'Call a macro with a body', acceptsExpression: true},
+    {label: 'endcall', detail: 'End a call block'},
+    {label: 'filter', detail: 'Apply a filter to a block', acceptsExpression: true},
+    {label: 'endfilter', detail: 'End a filter block'},
+    {label: 'with', detail: 'Start a scoped block', acceptsExpression: true},
+    {label: 'endwith', detail: 'End a scoped block'},
+    {label: 'raw', detail: 'Start a raw Jinja block'},
+    {label: 'endraw', detail: 'End a raw Jinja block'},
+    {label: 'autoescape', detail: 'Start an autoescape block', acceptsExpression: true},
+    {label: 'endautoescape', detail: 'End an autoescape block'},
+]
 
 const jinjaHighlightStyle = HighlightStyle.define([
     {tag: tags.brace, class: 'cm-jinja-brace'},
@@ -66,6 +112,161 @@ function responseErrorMessage(payload: any): string {
     if (Array.isArray(detail) && detail.length) return detail[0]?.msg ?? 'The template could not be rendered.'
     if (typeof detail === 'string') return detail
     return 'The template could not be rendered.'
+}
+
+function structuralEdit(update: ViewUpdate): boolean {
+    let structural = false
+    update.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+        const added = inserted.toString()
+        const removed = update.startState.doc.sliceString(fromA, toA)
+        if (added.includes('\n') || added.includes('\r')) return
+        if (
+            added.includes('/')
+            || added.includes('%}')
+            || added.includes('}}')
+            || added.includes('#}')
+            || removed.includes('/')
+            || removed.includes('%}')
+            || removed.includes('}}')
+            || removed.includes('#}')
+        ) {
+            structural = true
+        }
+    })
+    return structural
+}
+
+function formatEditorAfterStructuralEdit(update: ViewUpdate) {
+    if (!update.docChanged || !update.state.selection.main.empty || !structuralEdit(update)) return
+
+    const original = update.state.doc.toString()
+    const formatted = formatOutputTemplateForEditor(original)
+    if (formatted === original) return
+
+    const cursor = update.state.selection.main.head
+    const compactOffset = compactOutputTemplate(original.slice(0, cursor)).length
+    queueMicrotask(() => {
+        const view = update.view
+        if (view.state.doc.toString() !== original) return
+        const anchor = editorPositionForCompactOffset(formatted, compactOffset)
+        view.dispatch({
+            changes: {from: 0, to: view.state.doc.length, insert: formatted},
+            selection: {anchor},
+        })
+    })
+}
+
+function indentAfterNewline(update: ViewUpdate) {
+    if (!update.docChanged || !update.state.selection.main.empty) return
+
+    let insertedNewline = false
+    update.changes.iterChanges((_fromA, _toA, _fromB, _toB, inserted) => {
+        if (inserted.toString().includes('\n')) insertedNewline = true
+    })
+    if (!insertedNewline) return
+
+    const documentAfterEnter = update.state.doc.toString()
+    queueMicrotask(() => {
+        const view = update.view
+        if (view.state.doc.toString() !== documentAfterEnter || !view.state.selection.main.empty) return
+
+        const cursor = view.state.selection.main.head
+        const line = view.state.doc.lineAt(cursor)
+        if (line.number <= 1) return
+
+        const previousLine = view.state.doc.line(line.number - 1)
+        const previousIndent = previousLine.text.match(/^\t*/)?.[0] ?? ''
+        const previousContent = previousLine.text.slice(previousIndent.length).trimEnd()
+        const statement = previousContent.match(/{%\s*([A-Za-z_][A-Za-z0-9_]*)\b[^%]*(?:%})?\s*$/)
+        const keyword = statement?.[1] ?? ''
+        const opensBlock = ['if', 'for', 'block', 'macro', 'call', 'filter', 'with', 'raw', 'autoescape'].includes(keyword)
+            || (keyword === 'set' && !previousContent.slice(previousContent.indexOf('set') + 3).includes('='))
+        const branch = keyword === 'else' || keyword === 'elif'
+        const incompleteKeywordNeedsSpace = !!statement
+            && !previousContent.includes('%}')
+            && ['if', 'elif', 'for', 'set', 'block', 'macro', 'call', 'filter', 'with', 'autoescape'].includes(keyword)
+            && previousContent.trimEnd().endsWith(keyword)
+
+        const desiredIndent = `${previousIndent}${opensBlock || branch ? '\t' : ''}${incompleteKeywordNeedsSpace ? ' ' : ''}`
+        const currentIndent = line.text.match(/^[\t ]*/)?.[0] ?? ''
+        if (cursor > line.from + currentIndent.length || currentIndent === desiredIndent) return
+
+        view.dispatch({
+            changes: {from: line.from, to: line.from + currentIndent.length, insert: desiredIndent},
+            selection: {anchor: line.from + desiredIndent.length},
+        })
+    })
+}
+
+function TemplateCodeEditor({
+    value,
+    placeholder,
+    extensions,
+    invalid,
+    onChange,
+    onBlur,
+}: TemplateCodeEditorProps) {
+    const canonicalValue = value ?? ''
+    const [editorValue, setEditorValue] = useState(() => formatOutputTemplateForEditor(canonicalValue))
+    const lastCanonicalValue = useRef(canonicalValue)
+
+    useEffect(() => {
+        if (canonicalValue === lastCanonicalValue.current) return
+        lastCanonicalValue.current = canonicalValue
+        setEditorValue(formatOutputTemplateForEditor(canonicalValue))
+    }, [canonicalValue])
+
+    return (
+        <CodeMirror
+            id="mp-path"
+            className="output-template-code-editor"
+            value={editorValue}
+            minHeight="96px"
+            placeholder={placeholder}
+            extensions={extensions}
+            basicSetup={{
+                lineNumbers: false,
+                foldGutter: false,
+                highlightActiveLine: false,
+                highlightActiveLineGutter: false,
+                autocompletion: false,
+            }}
+            onChange={(nextValue) => {
+                setEditorValue(nextValue)
+                const compactValue = compactOutputTemplate(nextValue)
+                lastCanonicalValue.current = compactValue
+                onChange(compactValue)
+            }}
+            onBlur={() => {
+                setEditorValue((current) => formatOutputTemplateForEditor(current))
+                onBlur()
+            }}
+            aria-label="Output path template"
+            aria-invalid={invalid}
+            aria-describedby={invalid ? 'mp-path-error' : 'mp-path-help'}
+        />
+    )
+}
+
+function PreviewPath({path}: {path: string}) {
+    const absolute = path.startsWith('/')
+    const parts = path.split('/').filter(Boolean)
+    if (!absolute || parts.length < 2) return <code>{path}</code>
+
+    return (
+        <code className="template-preview-path-tree" title={path}>
+            {parts.map((part, index) => (
+                <span
+                    key={`${part}-${index}`}
+                    className="template-preview-path-segment"
+                    style={{'--template-path-depth': index} as CSSProperties}
+                >
+                    <span className="template-preview-path-branch" aria-hidden="true">{index === 0 ? '' : '└─ '}</span>
+                    {index === 0 ? '/' : ''}{part}{index < parts.length - 1 ? '/' : ''}
+                </span>
+            ))}
+        </code>
+    )
 }
 
 export default function OutputTemplateEditor({form, mode, placeholder, help}: Props) {
@@ -103,6 +304,29 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         })),
         [variables],
     )
+    const statementCompletionOptions = useMemo<Completion[]>(
+        () => jinjaStatements.map((statement) => ({
+            label: statement.label,
+            type: 'keyword',
+            detail: statement.detail,
+            apply: (view, completion, from, to) => {
+                const statementStart = view.state.sliceDoc(0, from).lastIndexOf('{%')
+                const replaceFrom = statementStart >= 0 ? statementStart + 2 : from
+                const closingTag = /^\s*%}/.exec(view.state.sliceDoc(to))
+                const replaceTo = closingTag ? to + closingTag[0].length : to
+                const insert = ` ${statement.label}${statement.acceptsExpression ? '  ' : ' '}%}`
+                const anchor = statement.acceptsExpression
+                    ? replaceFrom + ` ${statement.label} `.length
+                    : replaceFrom + insert.length
+                view.dispatch({
+                    changes: {from: replaceFrom, to: replaceTo, insert},
+                    selection: {anchor},
+                    annotations: pickedCompletion.of(completion),
+                })
+            },
+        })),
+        [],
+    )
     const editorExtensions = useMemo(() => {
         const variableCompletionSource = (context: CompletionContext) => {
             const beforeCursor = context.state.sliceDoc(0, context.pos)
@@ -120,25 +344,46 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 validFor: /^[A-Za-z_]*$/,
             }
         }
-        const openVariablesAfterDoubleBrace = EditorView.updateListener.of((update) => {
+        const statementCompletionSource = (context: CompletionContext) => {
+            const beforeCursor = context.state.sliceDoc(0, context.pos)
+            const statementStart = beforeCursor.lastIndexOf('{%')
+            const statementEnd = beforeCursor.lastIndexOf('%}')
+            if (statementStart <= statementEnd) return null
+
+            const statement = beforeCursor.slice(statementStart + 2)
+            if (!/^\s*[A-Za-z_]*$/.test(statement)) return null
+            const currentWord = statement.match(/[A-Za-z_]*$/)?.[0] ?? ''
+
+            return {
+                from: context.pos - currentWord.length,
+                options: statementCompletionOptions,
+                validFor: /^[A-Za-z_]*$/,
+            }
+        }
+        const openCompletionsAfterJinjaDelimiter = EditorView.updateListener.of((update) => {
             if (!update.docChanged || !update.state.selection.main.empty) return
             const cursor = update.state.selection.main.head
-            if (cursor >= 2 && update.state.doc.sliceString(cursor - 2, cursor) === '{{') {
+            if (cursor < 2) return
+            const delimiter = update.state.doc.sliceString(cursor - 2, cursor)
+            if (delimiter === '{{' || delimiter === '{%') {
                 queueMicrotask(() => startCompletion(update.view))
             }
         })
         return [
             jinja(),
-            autocompletion({override: [variableCompletionSource]}),
+            indentUnit.of('\t'),
+            autocompletion({override: [variableCompletionSource, statementCompletionSource]}),
             syntaxHighlighting(jinjaHighlightStyle),
             EditorView.lineWrapping,
-            openVariablesAfterDoubleBrace,
+            openCompletionsAfterJinjaDelimiter,
+            EditorView.updateListener.of(indentAfterNewline),
+            EditorView.updateListener.of(formatEditorAfterStructuralEdit),
             EditorView.theme({
                 '&': {fontSize: '16px'},
                 '.cm-content': {fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'},
             }),
         ]
-    }, [completionOptions])
+    }, [completionOptions, statementCompletionOptions])
 
     const {data: sourceData, isLoading: sourcesLoading, isError: sourcesFailed} = useQuery<TemplateSourcesResponse>({
         queryKey: ['localMediaProfileTemplateSources', mode],
@@ -246,7 +491,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 <div className="template-editor-heading">
                     <div>
                         <label id="template-editor-heading" htmlFor="mp-path">Output path template</label>
-                        <p>Type <code>{'{{'}</code> to insert an available variable.</p>
+                        <p>Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>
                     </div>
                     <span className="template-language-badge">Jinja</span>
                 </div>
@@ -254,28 +499,16 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                     control={control}
                     name="outputTemplate"
                     render={({field}) => (
-                        <CodeMirror
-                            id="mp-path"
-                            className="output-template-code-editor"
+                        <TemplateCodeEditor
                             value={field.value ?? ''}
-                            minHeight="96px"
                             placeholder={placeholder}
                             extensions={editorExtensions}
-                            basicSetup={{
-                                lineNumbers: false,
-                                foldGutter: false,
-                                highlightActiveLine: false,
-                                highlightActiveLineGutter: false,
-                                autocompletion: false,
-                            }}
+                            invalid={!!errors.outputTemplate}
                             onChange={(value) => {
                                 field.onChange(value)
                                 form.clearErrors('outputTemplate')
                             }}
                             onBlur={field.onBlur}
-                            aria-label="Output path template"
-                            aria-invalid={!!errors.outputTemplate}
-                            aria-describedby={errors.outputTemplate ? 'mp-path-error' : 'mp-path-help'}
                         />
                     )}
                 />
@@ -320,7 +553,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                         <span className="template-preview-output-label">Path</span>
                         {previewError
                             ? <span className="error">{previewError}</span>
-                            : <code>{previewPath || (previewLoading ? 'Rendering…' : 'Add a variable to preview this path.')}</code>
+                            : previewPath
+                                ? <PreviewPath path={previewPath}/>
+                                : <code>{previewLoading ? 'Rendering…' : 'Add a variable to preview this path.'}</code>
                         }
                     </div>
 

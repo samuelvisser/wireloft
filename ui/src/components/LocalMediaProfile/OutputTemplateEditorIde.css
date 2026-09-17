@@ -1,0 +1,60 @@
+/* Presentation-only formatting. The form value stays as a compact single-line Jinja template. */
+.output-template-code-editor .cm-content {
+    tab-size: 2;
+}
+
+.output-template-code-editor .cm-jinja-brace {
+    color: #64748b;
+    font-weight: 500;
+}
+
+.output-template-code-editor .cm-jinja-keyword {
+    color: #6d28d9;
+    font-weight: 700;
+}
+
+.output-template-code-editor .cm-jinja-variable {
+    border-radius: 3px;
+    background: rgba(14, 116, 144, 0.08);
+    color: #0369a1;
+    font-weight: 600;
+}
+
+.template-preview-path-tree {
+    display: grid;
+    gap: 2px;
+    overflow-x: auto;
+    max-width: 100%;
+    white-space: nowrap;
+}
+
+.template-preview-path-segment {
+    display: block;
+    padding-inline-start: calc(var(--template-path-depth) * 16px);
+}
+
+.template-preview-path-branch {
+    color: var(--muted);
+    user-select: none;
+}
+
+@media (max-width: 600px) {
+    .template-preview-path-segment {
+        padding-inline-start: calc(var(--template-path-depth) * 12px);
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    .output-template-code-editor .cm-jinja-brace {
+        color: #94a3b8;
+    }
+
+    .output-template-code-editor .cm-jinja-keyword {
+        color: #c4b5fd;
+    }
+
+    .output-template-code-editor .cm-jinja-variable {
+        background: rgba(56, 189, 248, 0.1);
+        color: #7dd3fc;
+    }
+}
