@@ -30,8 +30,8 @@ function isPresentationWhitespace(value: string, index: number): boolean {
     const prefix = linePrefix(value, index)
     if (/^[\t ]*$/.test(prefix)) return true
 
-    // A visual gap after a path separator makes lines such as
-    // `/ {{ movie_title }}` easier to scan. It is not part of the saved template.
+    // Keep a space immediately after a path separator presentation-only so it
+    // can never accidentally become part of the saved output path.
     return character === ' ' && /^[\t ]*\/ *$/.test(prefix)
 }
 
@@ -147,7 +147,6 @@ export function formatOutputTemplateForEditor(value: string): string {
         }
 
         if (token.type === 'expression' || token.type === 'comment') {
-            if (current === '/') current += ' '
             append(token.value)
             continue
         }
