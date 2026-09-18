@@ -32,48 +32,23 @@ def _record(number: int):
     )
 
 
-def test_reclaimed_head_advances_rolled_back_numbered_counter():
+def test_vacated_source_identifier_is_recognized_without_high_water_state():
     from backend.types.show_types import EpisodeIdentifier
-    from task_manager.tasks.helpers.episodes.mapper import _identify_with_vacated_reclaims
+    from task_manager.tasks.helpers.episodes.mapper import _is_vacated_replacement
 
     replacement = _record(2500)
-    mapped, values = _identify_with_vacated_reclaims(
-        identifier_type=EpisodeIdentifier.NUMBERED,
-        episodes=[replacement],
-        current_values={
-            "ep_id.latest_ep_num": 2499,
-            "ep_id.latest_ep_extra_num": 7,
-            "ep_id.latest_aux_num": 3,
-        },
-        season=SimpleNamespace(index=1),
-        vacated_identifiers={"ep.2500"},
+    season = SimpleNamespace(
+        index=1,
+        season_number=1,
+        season_type="normal",
     )
 
-    assert mapped == [("ep.2500", replacement)]
-    assert values["ep_id.latest_ep_num"] == 2500
-    assert values["ep_id.latest_ep_extra_num"] == 0
-    assert values["ep_id.latest_aux_num"] == 3
-
-
-def test_reclaimed_older_identifier_never_rewinds_newer_counter():
-    from backend.types.show_types import EpisodeIdentifier
-    from task_manager.tasks.helpers.episodes.mapper import _identify_with_vacated_reclaims
-
-    replacement = _record(2500)
-    mapped, values = _identify_with_vacated_reclaims(
-        identifier_type=EpisodeIdentifier.NUMBERED,
-        episodes=[replacement],
-        current_values={
-            "ep_id.latest_ep_num": 2501,
-            "ep_id.latest_ep_extra_num": 2,
-        },
-        season=SimpleNamespace(index=1),
-        vacated_identifiers={"ep.2500"},
+    assert _is_vacated_replacement(
+        EpisodeIdentifier.NUMBERED,
+        season,
+        replacement,
+        {"ep.2500"},
     )
-
-    assert mapped == [("ep.2500", replacement)]
-    assert values["ep_id.latest_ep_num"] == 2501
-    assert values["ep_id.latest_ep_extra_num"] == 2
 
 
 @pytest.mark.parametrize(
@@ -119,7 +94,14 @@ def test_quarantine_identifier_reservation_is_atomic_across_sessions(
                 author_name="Host",
                 author_slug="host",
             )
-            season = Season(show=show, index=1, slug="season-1", name="One")
+            season = Season(
+                show=show,
+                index=1,
+                slug="season-1",
+                name="One",
+                season_type="normal",
+                season_number=1,
+            )
             session.add_all([show, season])
             session.flush()
             if initial_counter is not None:
@@ -133,7 +115,7 @@ def test_quarantine_identifier_reservation_is_atomic_across_sessions(
                     show=show,
                     season=season,
                     index=index,
-                    episode_identifier=f"ep-extra.1.{index}",
+                    episode_identifier=f"ep-extra.other.1.{index}",
                     slug=f"concurrent-episode-{index}",
                     title=f"Concurrent episode {index}",
                     duration=100.0,

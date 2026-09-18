@@ -19,11 +19,11 @@ class DwEpisodeRecord(BaseRecord):
     description: ValOrNone[str] = None
     duration: ValOrZero[float]
 
-    # Episode numbering, straight from Daily Wire's API. `episode_number` is a string
-    # like "2460.10": the whole part is the episode number, the fractional part is a
-    # segment/variant (.00 = main episode, .10 = memberblock, .20 = other extra, ...).
-    # `display_episode_number` is Daily Wire's own presentation string (e.g. "Ep. 2324"
-    # or "" when they don't want to show one).
+    # Episode numbering, straight from The Daily Wire's API. `episode_number` is a
+    # string such as "2460.10": the whole part is the main number and the fractional
+    # part is an upstream segment/variant number. The meaning of a non-zero segment
+    # depends on season context; it is not itself proof of an episode-extra relation.
+    # `display_episode_number` is The Daily Wire's own presentation string.
     episode_number: ValOrEmpty = ""
     display_episode_number: ValOrEmpty = ""
 
@@ -31,6 +31,9 @@ class DwEpisodeRecord(BaseRecord):
     sharing_url: str
     publish_status: str = Field(validation_alias="status")
     is_downloadable: bool
+    # getEpisode exposes this authoritatively. Paginated episode rows may omit it,
+    # hence Optional rather than defaulting absence to False.
+    is_trailer: Optional[bool] = None
 
     has_free_and_paid_video: bool = False
     is_paid_video: bool = False

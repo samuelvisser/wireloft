@@ -28,6 +28,8 @@ def test_show_output_template_supports_season_index(tmp_path, monkeypatch):
         index=12,
         slug="the-ben-shapiro-show-2026-season",
         name="2026",
+        season_type="normal",
+        season_number=6,
     )
     episode = Episode(
         uuid="episode-season-index",
@@ -36,6 +38,7 @@ def test_show_output_template_supports_season_index(tmp_path, monkeypatch):
         season=season,
         index=2497,
         episode_identifier="ep.2497",
+        dw_episode_number="2497.00",
         slug="episode-2497",
         title="Example Episode",
         description=None,
@@ -49,6 +52,8 @@ def test_show_output_template_supports_season_index(tmp_path, monkeypatch):
     values = episode_output_template_values(episode)
     assert values["season_name"] == "2026"
     assert values["season_index"] == "12"
+    assert values["season_number"] == "6"
+    assert values["season_type"] == "normal"
 
     output_path = resolve_episode_output_path(
         "/downloads/Video/TV Shows/{{ show_title }}/Season {{ season_index }}/"

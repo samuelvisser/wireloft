@@ -38,6 +38,8 @@ class _SeasonAPIBaseOut(ResponseBase):
     index: int
     name: str
     slug: str
+    season_type: str
+    season_number: int
 
 
 class SeasonAPIRead(_SeasonAPIBaseOut):

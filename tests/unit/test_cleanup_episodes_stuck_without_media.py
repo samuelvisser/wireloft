@@ -39,7 +39,6 @@ def _make_episode(session, show, *, slug="episode", identifier="ep.2"):
         published_date=(datetime.now(timezone.utc) - timedelta(hours=6)).replace(tzinfo=None),
     )
     session.add(episode)
-    show.set_meta("ep_id.latest_ep_num", "2")
     session.flush()
     return episode
 

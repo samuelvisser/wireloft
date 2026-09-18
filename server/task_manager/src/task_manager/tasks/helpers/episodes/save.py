@@ -65,6 +65,7 @@ def upsert_episode(
                 "season_id": season.id,
                 "index": index_value,
                 "episode_identifier": ep_id,
+                "dw_episode_number": ep.episode_number or None,
                 "metadata_is_final": metadata_is_final_for_new_episode(
                     ep.publish_status,
                     ep.published_date,
@@ -73,10 +74,16 @@ def upsert_episode(
         })
         s.add(episode)
     else:
-        update_database_fields(episode, ep, ignore_extra_fields=True)
+        update_database_fields(
+            episode,
+            ep,
+            exclude_fields={"episode_number"},
+            ignore_extra_fields=True,
+        )
         episode.season_id = season.id
         episode.index = index_value
         episode.episode_identifier = ep_id
+        episode.dw_episode_number = ep.episode_number or None
         episode.publish_status = ep.publish_status
         episode.metadata_is_final = metadata_is_final_for_new_episode(
             ep.publish_status,

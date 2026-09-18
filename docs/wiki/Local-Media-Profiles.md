@@ -52,7 +52,7 @@ A simple show example is:
 A media-server-friendly series example is:
 
 ```jinja
-/downloads/TV Shows/{{ show_title }}/Season {{ season_index }}/{{ show_title }} - {{ episode_label }} - {{ title }}.ext
+/downloads/TV Shows/{{ show_title }}/Season {{ season_number }}/{{ show_title }} - {{ episode_label }} - {{ title }}.ext
 ```
 
 `.ext` is a WireLoft placeholder. It is replaced with the extension that matches the file WireLoft actually produces.
@@ -96,13 +96,18 @@ Example:
 | `show_title` | Show title |
 | `season` | Season slug, or empty when unavailable |
 | `season_name` | Season name, or empty when unavailable |
-| `season_index` | WireLoft season index, or empty when unavailable |
+| `season_index` | WireLoft's internal persistent season index |
+| `season_type` | `normal` or `extra` |
+| `season_number` | Stable media-library season number; Extras seasons use `0` |
 | `episode` | Episode slug |
 | `episode_title` | Episode title |
 | `title` | Episode title |
-| `episode_type` | Parsed episode type |
-| `episode_number` | Parsed episode number |
-| `episode_label` | Human-facing episode label without the type prefix; convenient but not guaranteed unique |
+| `dw_episode_number` | Raw episode number exactly as returned by The Daily Wire |
+| `episode_type` | `ep`, `ep-extra`, `aux`, or `trailer` |
+| `episode_extra_type` | `other` or `trailer` for attached episode extras; empty otherwise |
+| `episode_number` | The Daily Wire main episode number for `ep`/`ep-extra`, or WireLoft's show-global counter for `aux`/`trailer` |
+| `episode_sub_number` | The Daily Wire fractional/sub-episode number for `ep-extra`; empty otherwise |
+| `episode_label` | Canonical identifier label without the type prefix |
 | `episode_identifier` | Full WireLoft episode identifier; unique within the show |
 | `episode_published_date` | Publication date as `YYYY-MM-DD` |
 | `episode_published_time` | Publication time as `HH:MM:SS` |
@@ -117,7 +122,9 @@ Example:
 | `minute` | Minute value |
 | `second` | Second value |
 
-`season_index` is useful when a media server expects numbered season folders even if The Daily Wire uses custom season names.
+`season_number` is the value intended for media-library season numbering. It ignores Daily Wire Extras collections and remains stable if another Extras season appears later. `season_index` remains available for templates that specifically need WireLoft's internal season ordering.
+
+WireLoft preserves The Daily Wire's episode number for full episodes and attached episode extras. It only invents show-global numbers for auxiliary content and standalone show trailers. Extras seasons use `season_type == 'extra'` and `season_number == 0`, which makes them suitable for Plex-style Specials layouts without treating their fractional Daily Wire numbers as parent/extra relationships.
 
 ## Movies and extras
 

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 
-def _fake_episode(*, status: str, identifier: str = "ep-extra.2500.1"):
+def _fake_episode(*, status: str, identifier: str = "ep-extra.other.2500.1"):
     metadata: dict[str, str | None] = {}
     show = SimpleNamespace(id=7, slug="test-show")
     episode = SimpleNamespace(
@@ -54,7 +54,7 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
         for call in queued.call_args_list
     )
 
-    episode.episode_identifier = "ep-extra.2500.1"
+    episode.episode_identifier = "ep-extra.other.2500.1"
     episode.publish_status = EpisodePublishStatus.DW_PROCESSING.value
     events.queue_episode_status_events(
         object(),
@@ -82,7 +82,7 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
     assert len(matching) == 1
     payload = matching[0].args[2]
     assert payload["resource_id"] == episode.id
-    assert payload["old_episode_identifier"] == "ep-extra.2500.1"
+    assert payload["old_episode_identifier"] == "ep-extra.other.2500.1"
     assert payload["new_episode_identifier"] == "ep.2500"
 
 
@@ -126,7 +126,7 @@ def test_identifier_change_event_limits_rename_to_identifier_fields(monkeypatch)
 
     asyncio.run(entrypoint.rename_file_worker(
         resource_id=42,
-        old_episode_identifier="ep-extra.2500.1",
+        old_episode_identifier="ep-extra.other.2500.1",
         new_episode_identifier="ep.2500",
     ))
 

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
+from backend.types.season_types import SeasonType
 
 if TYPE_CHECKING:
     from backend.db.models import Show
@@ -27,6 +28,13 @@ class Season(Base, HasTaskResourcesMixin):
     index: Mapped[int]
     slug: Mapped[str] = mapped_column(index=True)
     name: Mapped[str]
+    season_type: Mapped[str] = mapped_column(
+        default=SeasonType.NORMAL.value,
+        server_default=SeasonType.NORMAL.value,
+    )
+    # Media-library season number. Extra collections deliberately share season 0;
+    # normal seasons receive stable 1..N values independently from internal index.
+    season_number: Mapped[int] = mapped_column(default=1, server_default="1")
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
@@ -40,4 +48,9 @@ class Season(Base, HasTaskResourcesMixin):
     episodes: Mapped[list["Episode"]] = relationship(back_populates="season")
 
     def __repr__(self):
-        return f"<Season(id={self.id}, slug={self.slug}, show_id={self.show_id}, index={self.index}, created_at={self.created_at}, updated_at={self.updated_at})>"
+        return (
+            f"<Season(id={self.id}, slug={self.slug}, show_id={self.show_id}, "
+            f"index={self.index}, season_type={self.season_type}, "
+            f"season_number={self.season_number}, created_at={self.created_at}, "
+            f"updated_at={self.updated_at})>"
+        )

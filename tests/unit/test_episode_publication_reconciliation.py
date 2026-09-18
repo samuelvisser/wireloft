@@ -188,7 +188,14 @@ def test_incremental_mapper_reclaims_vacated_identifier_before_final_cursor():
         def get_episodes_paginated(self, show_slug, selector):
             return EpisodesPaginatedResult([cursor, replacement], None, False)
 
-    season = SimpleNamespace(id=11, index=1, slug="season-1", name="One")
+    season = SimpleNamespace(
+        id=11,
+        index=1,
+        slug="season-1",
+        name="One",
+        season_type="normal",
+        season_number=1,
+    )
     show = SimpleNamespace(slug="test-show", episode_identifier="numbered")
     since_episode = SimpleNamespace(slug=cursor.slug, season=season)
 
@@ -199,7 +206,7 @@ def test_incremental_mapper_reclaims_vacated_identifier_before_final_cursor():
         seasons=[season],
         dw_id_by_slug={season.slug: "remote-season"},
         since_episode=since_episode,
-        prev_max_values={"ep_id.latest_ep_num": 2501},
+        prev_max_values={},
         known_episode_slugs={cursor.slug},
         vacated_identifiers={"ep.2500"},
         order=RecordOrder.ASC,
@@ -208,7 +215,7 @@ def test_incremental_mapper_reclaims_vacated_identifier_before_final_cursor():
     assert [(identifier, record.slug) for identifier, record in episode_map[season.id]] == [
         ("ep.2500", replacement.slug),
     ]
-    assert max_values["ep_id.latest_ep_num"] == 2501
+    assert "ep_id.latest_ep_num" not in max_values
 
 
 def _make_show_and_episode(session, *, identifier: str):
@@ -221,7 +228,14 @@ def _make_show_and_episode(session, *, identifier: str):
         type=ShowType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Ben Shapiro", author_slug="ben-shapiro",
     )
-    season = Season(show=show, index=1, slug="2026", name="2026")
+    season = Season(
+        show=show,
+        index=1,
+        slug="2026",
+        name="2026",
+        season_type="normal",
+        season_number=1,
+    )
     session.add_all([show, season])
     session.flush()
     episode = Episode(
@@ -233,8 +247,6 @@ def _make_show_and_episode(session, *, identifier: str):
         published_date=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     session.add(episode)
-    show.set_meta("ep_id.latest_ep_num", "2500")
-    show.set_meta("ep_id.latest_ep_extra_num", "1")
     session.commit()
     return show, episode
 
@@ -246,7 +258,7 @@ def test_metadata_refresh_repairs_wrong_main_episode_identifier(monkeypatch):
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
-    show, episode = _make_show_and_episode(session, identifier="ep-extra.2500.1")
+    show, episode = _make_show_and_episode(session, identifier="ep-extra.other.2500.1")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.00", publish_status="PUBLISHED")
 
     class FakeClient:
@@ -261,8 +273,7 @@ def test_metadata_refresh_repairs_wrong_main_episode_identifier(monkeypatch):
     session.expire_all()
     stored = session.get(type(episode), episode.id)
     assert stored.episode_identifier == "ep.2500"
-    assert show.get_meta("ep_id.latest_ep_num") == "2500"
-    assert show.get_meta("ep_id.latest_ep_extra_num") == "0"
+    assert stored.dw_episode_number == "2500.00"
     session.close()
     engine.dispose()
 
@@ -274,27 +285,28 @@ def test_identifier_reconciliation_can_fix_extra_ordinal_after_collision_is_gone
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
-    show, episode = _make_show_and_episode(session, identifier="ep-extra.2500.2")
+    show, episode = _make_show_and_episode(session, identifier="ep-extra.other.2500.2")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.01")
     assert reconcile_episode_identifier_from_dailywire(session, episode, detail) is True
     session.commit()
-    assert episode.episode_identifier == "ep-extra.2500.1"
-    assert show.get_meta("ep_id.latest_ep_extra_num") == "1"
+    assert episode.episode_identifier == "ep-extra.other.2500.1"
+    assert episode.dw_episode_number == "2500.01"
     session.close()
     engine.dispose()
 
 
-def test_identifier_reconciliation_keeps_wireloft_extra_ordinal_for_dw_segment_10():
+def test_identifier_reconciliation_uses_dailywire_segment_10_directly():
     import backend.db.models  # noqa: F401
     from backend.db import Base
     from task_manager.tasks.helpers.episodes.identifier import reconcile_episode_identifier_from_dailywire
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
-    _show, episode = _make_show_and_episode(session, identifier="ep-extra.2500.1")
+    _show, episode = _make_show_and_episode(session, identifier="ep-extra.other.2500.1")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.10")
-    assert reconcile_episode_identifier_from_dailywire(session, episode, detail) is False
-    assert episode.episode_identifier == "ep-extra.2500.1"
+    assert reconcile_episode_identifier_from_dailywire(session, episode, detail) is True
+    assert episode.episode_identifier == "ep-extra.other.2500.10"
+    assert episode.dw_episode_number == "2500.10"
     session.close()
     engine.dispose()
 
