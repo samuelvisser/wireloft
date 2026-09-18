@@ -782,11 +782,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
 
                     <div className={`template-preview-output${previewError ? ' has-error' : ''}`} aria-live="polite">
                         <span className="template-preview-output-label">Path</span>
-                        {previewError
-                            ? <span className="error">{previewError}</span>
-                            : previewPath
-                                ? <PreviewPath path={previewPath}/>
-                                : <code>{previewLoading ? 'Rendering…' : 'Add a variable to preview this path.'}</code>
+                        {!selectedSource && sourceQuery.isLoading
+                            ? <code>Loading example source</code>
+                            : previewError
+                                ? <span className="error">{previewError}</span>
+                                : previewPath
+                                    ? <PreviewPath path={previewPath}/>
+                                    : <code>{previewLoading ? 'Rendering…' : 'Add a variable to preview this path.'}</code>
                         }
                     </div>
 
