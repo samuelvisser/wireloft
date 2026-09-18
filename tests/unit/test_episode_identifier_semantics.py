@@ -446,3 +446,71 @@ def test_mapper_does_not_mutate_callers_occupied_identifier_snapshot():
 
     assert episode_map[season.id][0][0] == "ep.2500"
     assert occupied == {"ep.2499"}
+
+
+
+def test_compact_episode_view_includes_identifier_semantics():
+    import backend.db.models  # noqa: F401
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from backend.api.endpoints.episodes.service import get_episode_views_by_show_list
+    from backend.db import Base
+    from backend.db.models import Episode, Season, Show
+    from backend.types.show_types import EpisodeIdentifier, ShowType
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+
+    show = Show(
+        uuid="show-view-semantics",
+        slug="view-semantics",
+        title="View Semantics",
+        description=None,
+        sharing_url="https://example.test/show",
+        membership_level="FREE",
+        type=ShowType.SERIES.value,
+        episode_identifier=EpisodeIdentifier.SEASONAL.value,
+        author_name="Host",
+        author_slug="host",
+    )
+    season = Season(
+        show=show,
+        index=3,
+        slug="season-3",
+        name="Season 3",
+        season_type="normal",
+        season_number=3,
+    )
+    episode = Episode(
+        uuid="episode-view-semantics",
+        type="episode",
+        show=show,
+        season=season,
+        index=12,
+        episode_identifier="ep-extra.trailer.S03E12.5",
+        dw_episode_number="12.05",
+        slug="season-3-episode-12-trailer",
+        title="Episode 12 Trailer",
+        description=None,
+        downloaded_date=None,
+        duration=60,
+        publish_status="published_final",
+        sharing_url="https://example.test/episode",
+        published_date=datetime(2026, 9, 18, 12, 0, 0),
+    )
+    session.add_all([show, season, episode])
+    session.commit()
+
+    [view] = get_episode_views_by_show_list(session, show.slug)
+
+    assert view.dw_episode_number == "12.05"
+    assert view.episode_type == "ep-extra"
+    assert view.episode_extra_type == "trailer"
+    assert view.episode_number == "12"
+    assert view.episode_sub_number == "5"
+    assert view.episode_label == "S03E12.5"
+
+    session.close()
+    engine.dispose()
