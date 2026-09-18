@@ -71,7 +71,14 @@ When referring to The Daily Wire, in most cases, use the full name, "The Daily W
 However, in some contexts, it may read better to use "Daily Wire" instead. This is not the 'correct'
 name though, so should only be used if "The Daily Wire" reads awkwardly in the sentence.
 
-## Test your work
+## Tests
+You are allowed to create tests for your work. However, make sure to never add domain — level wiring
+just to support tests. You can add test helpers, but those belong in the test files themselves.
+
+Never add helpers or other domain-level functions just to support tests. Only use domain helpers
+when they are necessary for the domain logic itself.
+
+### Test your work
 Before you push your branch, please run all appropriate tests to verify your work.  
 Also be sure to launch both the backend and frontend servers and verify your work in the UI.
 First, run `uv sync` and `npm install` from the repository root to install all dependencies.
