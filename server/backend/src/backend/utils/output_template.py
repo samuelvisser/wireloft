@@ -381,7 +381,10 @@ def render_output_template(
     if len(rendered) > _MAX_RENDERED_PATH_LENGTH:
         raise ValueError("Rendered output path is too long")
     if not rendered.startswith(_DOWNLOADS_PREFIX):
-        raise ValueError("Rendered output path must start with '/downloads/'")
+        raise ValueError(
+            "Rendered output path must start with '/downloads/'. \n"
+            f"Actual output: {rendered!r}"
+        )
     if not rendered.endswith(".ext"):
         raise ValueError("Rendered output path must end with '.ext'")
     return _sanitize_rendered_path(rendered, mode=mode)

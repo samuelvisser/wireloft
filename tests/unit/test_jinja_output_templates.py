@@ -305,6 +305,24 @@ def test_preview_uses_edited_values_and_returns_referenced_variables():
     assert "movie" not in result.used_variables
 
 
+def test_preview_prefix_error_includes_actual_rendered_output():
+    from backend.api.endpoints.local_media_profiles.output_template import get_output_template_preview
+    from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
+
+    preview = LocalMediaProfileTemplatePreview(
+        type="show",
+        preferred_format="format_audio_only",
+        output_template="{{ show_title }}/downloads/{{ episode_title }}.ext",
+        values={"show_title": "Example Show", "episode_title": "Episode One"},
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"Actual output: 'Example Show/downloads/Episode One\\.ext'",
+    ):
+        get_output_template_preview(preview)
+
+
 def test_preview_resolves_audio_extension_in_backend():
     from backend.api.endpoints.local_media_profiles.output_template import get_output_template_preview
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
