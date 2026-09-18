@@ -83,6 +83,21 @@ const jinjaStatements: JinjaStatement[] = [
     {label: 'endautoescape', detail: 'End an autoescape block'},
 ]
 
+const jinjaFilterCompletionOptions: Completion[] = [
+    {
+        label: 'regex_replace',
+        type: 'function',
+        detail: 'regex_replace(pattern, replacement, count=0)',
+        info: 'Replace regex matches. count=0 replaces all matches.',
+    },
+    {
+        label: 'regex_search',
+        type: 'function',
+        detail: 'regex_search(pattern)',
+        info: 'Return true when the regex matches anywhere in the value.',
+    },
+]
+
 const jinjaHighlightStyle = HighlightStyle.define([
     {tag: tags.brace, class: 'cm-jinja-brace'},
     {
@@ -128,6 +143,19 @@ function statementVariableExpression(statement: string): string | null {
         return tail
     }
     return null
+}
+
+function activeJinjaExpression(beforeCursor: string): string | null {
+    const variableStart = beforeCursor.lastIndexOf('{{')
+    const variableEnd = beforeCursor.lastIndexOf('}}')
+    const statementStart = beforeCursor.lastIndexOf('{%')
+    const statementEnd = beforeCursor.lastIndexOf('%}')
+
+    if (variableStart > variableEnd && variableStart > statementStart) {
+        return beforeCursor.slice(variableStart + 2)
+    }
+    if (statementStart <= statementEnd) return null
+    return statementVariableExpression(beforeCursor.slice(statementStart + 2))
 }
 
 function isInsideQuotedString(source: string): boolean {
@@ -458,6 +486,22 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         [],
     )
     const editorExtensions = useMemo(() => {
+        const filterCompletionSource = (context: CompletionContext) => {
+            const beforeCursor = context.state.sliceDoc(0, context.pos)
+            const expression = activeJinjaExpression(beforeCursor)
+            if (expression === null) return null
+
+            const filterMatch = /\|\s*([A-Za-z_][A-Za-z0-9_]*)?$/.exec(expression)
+            if (!filterMatch) return null
+            if (isInsideQuotedString(expression.slice(0, filterMatch.index))) return null
+
+            const currentWord = filterMatch[1] ?? ''
+            return {
+                from: context.pos - currentWord.length,
+                options: jinjaFilterCompletionOptions,
+                validFor: /^(?:[A-Za-z_][A-Za-z0-9_]*)?$/,
+            }
+        }
         const variableCompletionSource = (context: CompletionContext) => {
             const beforeCursor = context.state.sliceDoc(0, context.pos)
             const variableStart = beforeCursor.lastIndexOf('{{')
@@ -527,16 +571,19 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         const openCompletionsAfterJinjaDelimiter = EditorView.updateListener.of((update) => {
             if (!update.docChanged || !update.state.selection.main.empty) return
             const cursor = update.state.selection.main.head
-            if (cursor < 2) return
-            const delimiter = update.state.doc.sliceString(cursor - 2, cursor)
-            if (delimiter === '{{' || delimiter === '{%') {
+            if (cursor < 1) return
+
+            const beforeCursor = update.state.doc.sliceString(0, cursor)
+            const delimiter = cursor >= 2 ? beforeCursor.slice(-2) : ''
+            const justTypedFilter = beforeCursor.endsWith('|') && activeJinjaExpression(beforeCursor) !== null
+            if (delimiter === '{{' || delimiter === '{%' || justTypedFilter) {
                 queueMicrotask(() => startCompletion(update.view))
             }
         })
         return [
             jinja(),
             indentUnit.of('\t'),
-            autocompletion({override: [variableCompletionSource, statementCompletionSource]}),
+            autocompletion({override: [filterCompletionSource, variableCompletionSource, statementCompletionSource]}),
             syntaxHighlighting(jinjaHighlightStyle),
             EditorView.lineWrapping,
             openCompletionsAfterJinjaDelimiter,
