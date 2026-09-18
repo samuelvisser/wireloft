@@ -1,14 +1,33 @@
 from __future__ import annotations
 
-from pydantic import Field, field_validator, model_validator
+from collections.abc import Mapping
 
-from backend.api.models.base import RequestBase
+from pydantic import AliasChoices, Field, field_validator, model_validator
+
+from backend.api.models.base import RequestBase, ResponseBase
 from backend.utils.custom_metadata import (
     CUSTOM_METADATA_KEY_MAX_LENGTH,
     CUSTOM_METADATA_MAX_ITEMS,
     CUSTOM_METADATA_VALUE_MAX_LENGTH,
+    custom_metadata_from_items,
     is_valid_custom_metadata_key,
 )
+
+
+class CustomMetadataResponseBase(ResponseBase):
+    """Response model base that derives custom metadata from generic metadata items."""
+
+    custom_metadata: dict[str, str] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("custom_metadata", "meta_items"),
+    )
+
+    @field_validator("custom_metadata", mode="before")
+    @classmethod
+    def _read_custom_metadata(cls, value):
+        if isinstance(value, Mapping):
+            return dict(value)
+        return custom_metadata_from_items(value)
 
 
 class CustomMetadataAPIUpdate(RequestBase):
