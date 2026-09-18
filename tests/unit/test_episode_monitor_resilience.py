@@ -71,10 +71,36 @@ def _monitor_fixture():
         ep=_episode_record("live-episode").model_copy(update={"publish_status": EpisodePublishStatus.LIVE.value}, deep=True),
         index_value=2, ep_id="ep.101",
     )
-    show.set_meta("ep_id.latest_ep_num", "101")
     session.commit()
     return engine, session, show, episode
 
+
+
+def test_upsert_existing_episode_stores_raw_source_number_separately():
+    from task_manager.tasks.helpers.episodes.save import upsert_episode
+
+    engine, session, show, episode = _monitor_fixture()
+    record = _episode_record(episode.slug).model_copy(
+        update={"episode_number": "101.10", "title": "Updated episode"},
+        deep=True,
+    )
+
+    updated = upsert_episode(
+        session,
+        show=show,
+        season=episode.season,
+        ep=record,
+        index_value=episode.index,
+        ep_id="ep-extra.other.101.10",
+    )
+
+    assert updated.id == episode.id
+    assert updated.dw_episode_number == "101.10"
+    assert updated.episode_number == "101"
+    assert updated.episode_sub_number == "10"
+    assert updated.title == "Updated episode"
+    session.close()
+    engine.dispose()
 
 def test_pending_monitor_marks_unreconciled_404_as_no_usable_media(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus

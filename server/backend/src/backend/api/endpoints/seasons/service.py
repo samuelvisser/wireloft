@@ -8,7 +8,9 @@ from fastapi import HTTPException
 from backend.api.helpers import update_database_fields
 from backend.api.models.season import *
 from backend.db.models import Season
+from backend.types.season_types import SeasonType
 from backend.types.show_types import ShowType
+from backend.utils.season_ordering import season_type_from_name
 from task_manager.events.transactional import queue_event
 
 
@@ -43,7 +45,24 @@ def create_season(s: Session, body: SeasonAPICreate, *, update_show_profiles=Fal
     # Build model from validated Pydantic data
     data = body.model_dump(by_alias=True)
 
-    season = Season(**data)
+    season_type = season_type_from_name(body.name)
+    if season_type is SeasonType.EXTRA:
+        season_number = 0
+    else:
+        season_number = max(
+            (
+                existing.season_number
+                for existing in s.query(Season).filter(Season.show_id == body.show_id)
+                if existing.season_type == SeasonType.NORMAL.value
+            ),
+            default=0,
+        ) + 1
+
+    season = Season(
+        **data,
+        season_type=season_type.value,
+        season_number=season_number,
+    )
     s.add(season)
     s.flush()
 

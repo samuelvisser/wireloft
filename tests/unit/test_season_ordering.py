@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from backend.api.models.season import SeasonAPIRequestDetached
-from backend.utils.season_ordering import order_initial_seasons
+from backend.utils.season_ordering import order_initial_seasons, season_type_from_name
 
 
 def _season(name: str, slug: str) -> SeasonAPIRequestDetached:
@@ -76,3 +76,33 @@ def test_initial_order_leaves_fully_unstructured_api_order_unchanged():
     ]
 
     assert order_initial_seasons(seasons) == seasons
+
+
+def test_jordan_peterson_keeps_internal_order_but_classifies_extras_by_name():
+    seasons = [
+        _season("Extras 3", "purple-season-1-season"),
+        _season("Extras 2", "purple-season-2-season"),
+        _season("Extras 1", "purple-season-3-season"),
+        _season("2020", "2020"),
+        _season("2021", "2021"),
+        _season("2022", "2022"),
+        _season("2023", "2023"),
+        _season("2024", "2024"),
+        _season("2025", "purple-season-4-season"),
+    ]
+
+    ordered = order_initial_seasons(seasons)
+
+    assert [season.name for season in ordered] == [
+        "2020",
+        "2021",
+        "2022",
+        "2023",
+        "2024",
+        "Extras 3",
+        "Extras 2",
+        "Extras 1",
+        "2025",
+    ]
+    assert season_type_from_name("Extras 1").value == "extra"
+    assert season_type_from_name("2025").value == "normal"
