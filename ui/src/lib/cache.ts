@@ -14,7 +14,7 @@ const KEY_PROFILES = STORAGE_PREFIX + 'localMediaProfiles'
 const LEGACY_KEY_EPISODES_PREFIX = STORAGE_PREFIX + 'episodes:'
 
 const SHOW_CACHE_PREFIX = 'wl_show_cache_v2:'
-const SHOW_CACHE_VERSION = 1
+const SHOW_CACHE_VERSION = 2
 const KEY_EPISODES_PREFIX = SHOW_CACHE_PREFIX + 'episodes:'
 const KEY_EPISODES_META_PREFIX = SHOW_CACHE_PREFIX + 'episodes-meta:'
 const KEY_SEASONS_PREFIX = SHOW_CACHE_PREFIX + 'seasons:'
@@ -118,6 +118,12 @@ function compactEpisodes(data: EpisodeReadView[]): EpisodeReadView[] {
     seasonId: episode.seasonId,
     index: episode.index,
     episodeIdentifier: episode.episodeIdentifier,
+    dwEpisodeNumber: episode.dwEpisodeNumber,
+    episodeType: episode.episodeType,
+    episodeExtraType: episode.episodeExtraType,
+    episodeNumber: episode.episodeNumber,
+    episodeSubNumber: episode.episodeSubNumber,
+    episodeLabel: episode.episodeLabel,
     slug: episode.slug,
     title: episode.title,
     publishStatus: episode.publishStatus,
