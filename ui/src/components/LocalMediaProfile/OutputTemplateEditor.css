@@ -86,6 +86,23 @@
     max-width: calc(100vw - 16px) !important;
 }
 
+.output-template-field {
+    width: 1250px;
+    max-width: calc(100vw - 308px);
+}
+
+@media (max-width: 900px) {
+    .output-template-field {
+        max-width: calc(100vw - 32px);
+    }
+}
+
+@media (max-width: 560px) {
+    .output-template-field {
+        max-width: calc(100vw - 24px);
+    }
+}
+
 .template-workbench {
     display: grid;
     gap: 12px;
