@@ -4,12 +4,21 @@
 When I ask you to implement a new feature, please follow these guidelines:
 - Create a new branch from develop. If your are an OpenAI product create it inside
 codex/, if you are a Anthropic product, place it inside claude/. If you are anything
-else, use a relevant name to identify yourself by in git.
+else, use a relevant name to identify yourself within git.
 - If I ask you to do follow-up work on that same feature, please continue to use the
 same branch. Only base a new branch on develop again if you are implementing a new feature.
 - When you are done, please squash your commits into a single commit and push to your branch.
 - Only squash within a single request. After you are done with a commit, I add context or ask 
 for another change, this should be its own new commit.
+
+### OpenAI GitHub connector
+If you are an OpenAI product, it is important to know the GitHub connector you use often stalls
+for long sessions. It just stops responding, causing your work to stall as well.
+To work around this, I found it is often better to create and push small commits through the connector 
+while you are working, and only when done at the end squash all commits into a single commit.  
+
+If the GitHub connector still stalls, please try to sleep for a little and then try again instead
+of stalling the entire session.
 
 ## Database migrations
 If you need to do any database migrations to implement the feature, please follow these guidelines:
