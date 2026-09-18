@@ -13,6 +13,7 @@ from jinja2.sandbox import ImmutableSandboxedEnvironment
 from .custom_metadata import (
     CustomMetadataScope,
     custom_metadata_template_values,
+    get_custom_metadata,
     is_allowed_custom_metadata_template_variable,
 )
 from .episode import episode_type_info
@@ -289,7 +290,7 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
     }
     values.update(custom_metadata_template_values(
         "show",
-        getattr(episode.show, "custom_metadata", None),
+        get_custom_metadata(episode.show),
     ))
     return values
 
@@ -348,7 +349,7 @@ def movie_output_template_values(
     }
     values.update(custom_metadata_template_values(
         "movie",
-        getattr(movie, "custom_metadata", None),
+        get_custom_metadata(movie),
     ))
     return values
 

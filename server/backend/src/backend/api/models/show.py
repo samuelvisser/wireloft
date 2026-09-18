@@ -5,7 +5,8 @@ from datetime import datetime
 
 from pydantic import computed_field, Field
 
-from backend.api.models.base import RequestBase, ResponseBase
+from backend.api.models.base import RequestBase
+from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.show_types import ShowType, EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
@@ -69,7 +70,7 @@ class ShowRedownloadEpisodesAPIRequest(_ShowDownloadMaintenanceAPIRequest):
 
 
 # ---------- Lenient output (read) ----------
-class _ShowAPIBaseOut(ResponseBase):
+class _ShowAPIBaseOut(CustomMetadataResponseBase):
     """Fields for responses: no validators, no constraints."""
 
     id: int
@@ -89,7 +90,6 @@ class _ShowAPIBaseOut(ResponseBase):
     thumbnail_landscape_path: Optional[str] = None
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
-    custom_metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class ShowAPIRead(_ShowAPIBaseOut):
