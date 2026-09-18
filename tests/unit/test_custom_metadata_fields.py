@@ -19,7 +19,7 @@ def db_session():
 
 
 def test_custom_metadata_fields_are_scoped_sorted_and_validated(db_session):
-    from backend.api.endpoints.custom_metadata_service import get_custom_metadata_fields
+    from backend.api.endpoints.custom_metadata.service import get_custom_metadata_fields
     from backend.db.models import Show
     from backend.db.models.Metadata import Metadata
     from backend.db.models.media_item import Movie

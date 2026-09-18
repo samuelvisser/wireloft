@@ -339,3 +339,49 @@ GET https://middleware-prod.dailywire.com/middleware/v4/getPaginatedEpisodes
     &showOffset=0
     &podcastOffset=0
 Authorization: Bearer {{access_token}}
+
+
+
+
+
+### Michael Knowles: item that incorrectly consumed episode 1645
+GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=michael-reacts-to-lib-triggering-comedy
+Authorization: Bearer {{access_token}}
+
+### Michael Knowles: actual episode 1645
+GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=ep-1645
+Authorization: Bearer {{access_token}}
+
+### Michael Knowles: first locally assigned 1843
+GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=mks-251025-1-member-exclusive
+Authorization: Bearer {{access_token}}
+
+### Michael Knowles: 1844 already published before later 1843-related material
+GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=mks-251026-member-exclusive
+Authorization: Bearer {{access_token}}
+
+### Michael Knowles: later item whose slug says 1843
+GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=ep-1843-watch-gavin-newsom-tries-to-be-a-black-president
+Authorization: Bearer {{access_token}}
+
+### Michael Knowles: later 1843 memberblock
+GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=mks-ep-1843-memberblock
+Authorization: Bearer {{access_token}}
+
+### Michael Knowles: comparison 1844 extra
+GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=ep-1844-is-trump-going-to-run-for-a-third-term
+Authorization: Bearer {{access_token}}
+
+
+### Jordan Peterson: obtain current season IDs
+GET https://middleware-prod.dailywire.com/middleware/v4/getShowPage?slug=the-jordan-b-peterson-podcast&membershipPlan=ALL_ACCESS
+Authorization: Bearer {{access_token}}
+
+### Jordan Peterson: complete Extras 1 season as seen by initial indexing
+GET https://middleware-prod.dailywire.com/middleware/v4/getPaginatedEpisodes?slug=the-jordan-b-peterson-podcast&membershipPlan=ALL_ACCESS&orderBy=CreatedAt_ASC&pageNumber=1&pageSize=50&showOffset=0&podcastOffset=0&showSeasonId=5e62917f-2ed4-46a6-960c-676057949e61
+Authorization: Bearer {{access_token}}
+
+
+### Jordan Peterson: compare season-list metadata with authoritative detail
+GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=reality-and-the-sacred
+Authorization: Bearer {{access_token}}

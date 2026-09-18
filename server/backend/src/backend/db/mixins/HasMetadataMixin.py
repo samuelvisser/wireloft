@@ -1,14 +1,7 @@
-from collections.abc import Mapping
-
 from sqlalchemy import event
 from sqlalchemy.orm import declared_attr, Mapped
 
 from backend.db.models.Metadata import Metadata
-from backend.utils.custom_metadata import (
-    CUSTOM_METADATA_DB_PREFIX,
-    custom_metadata_storage_key,
-    is_valid_custom_metadata_key,
-)
 
 
 class HasMetadataMixin:
@@ -43,42 +36,6 @@ class HasMetadataMixin:
             if m.key == key:
                 return m.value
         return None
-
-    @property
-    def custom_metadata(self) -> dict[str, str]:
-        """Return only user-editable metadata, isolated from WireLoft internal keys."""
-        result: dict[str, str] = {}
-        for item in self.meta_items:
-            if not item.key.startswith(CUSTOM_METADATA_DB_PREFIX):
-                continue
-            key = item.key[len(CUSTOM_METADATA_DB_PREFIX):]
-            if is_valid_custom_metadata_key(key):
-                result[key] = item.value
-        return result
-
-    def replace_custom_metadata(self, values: Mapping[str, str]) -> None:
-        """Replace this item's custom values without touching WireLoft metadata."""
-        storage_values = {
-            custom_metadata_storage_key(key): value
-            for key, value in values.items()
-        }
-        current = {
-            item.key: item
-            for item in self.meta_items
-            if item.key.startswith(CUSTOM_METADATA_DB_PREFIX)
-        }
-
-        for storage_key, item in list(current.items()):
-            if storage_key not in storage_values:
-                self.meta_items.remove(item)
-
-        for storage_key, value in storage_values.items():
-            item = current.get(storage_key)
-            if item is None:
-                self.meta_items.append(Metadata(key=storage_key, value=value))
-            else:
-                item.value = value
-
 
 def _on_append(parent, meta, initiator):
     meta.parent_table = parent.__class__.__tablename__

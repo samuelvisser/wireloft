@@ -5,7 +5,8 @@ from typing import Any, Optional
 
 from pydantic import AwareDatetime, Field, computed_field
 
-from backend.api.models.base import ResponseBase, RequestBase
+from backend.api.models.base import RequestBase
+from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.api.models.movie_extra import MovieExtraAPICreate, MovieExtraAPIRead
 from backend.utils.helpers import generate_uuid
 
@@ -70,7 +71,7 @@ class MovieAPIUpdate(_MovieAPIBaseIn):
 
 
 # ---------- Lenient output (read) ----------
-class _MovieAPIBaseOut(ResponseBase):
+class _MovieAPIBaseOut(CustomMetadataResponseBase):
     """Fields for responses: no validators, no constraints."""
 
     id: int
@@ -115,7 +116,6 @@ class _MovieAPIBaseOut(ResponseBase):
     official_trailer_id: Optional[int]
     official_trailer: Optional[MovieExtraAPIRead]
     movie_extras: list[MovieExtraAPIRead]
-    custom_metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class MovieAPIRead(_MovieAPIBaseOut):

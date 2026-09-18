@@ -4,12 +4,21 @@
 When I ask you to implement a new feature, please follow these guidelines:
 - Create a new branch from develop. If your are an OpenAI product create it inside
 codex/, if you are a Anthropic product, place it inside claude/. If you are anything
-else, use a relevant name to identify yourself by in git.
+else, use a relevant name to identify yourself within git.
 - If I ask you to do follow-up work on that same feature, please continue to use the
 same branch. Only base a new branch on develop again if you are implementing a new feature.
 - When you are done, please squash your commits into a single commit and push to your branch.
 - Only squash within a single request. After you are done with a commit, I add context or ask 
 for another change, this should be its own new commit.
+
+### OpenAI GitHub connector
+If you are an OpenAI product, it is important to know the GitHub connector you use often stalls
+for long sessions. It just stops responding, causing your work to stall as well.
+To work around this, I found it is often better to create and push small commits through the connector 
+while you are working, and only when done at the end squash all commits into a single commit.  
+
+If the GitHub connector still stalls, please try to sleep for a little and then try again instead
+of stalling the entire session.
 
 ## Database migrations
 If you need to do any database migrations to implement the feature, please follow these guidelines:
@@ -62,27 +71,23 @@ When referring to The Daily Wire, in most cases, use the full name, "The Daily W
 However, in some contexts, it may read better to use "Daily Wire" instead. This is not the 'correct'
 name though, so should only be used if "The Daily Wire" reads awkwardly in the sentence.
 
-## Test your work
+## Tests
+You are allowed to create tests for your work. However, make sure to never add domain — level wiring
+just to support tests. You can add test helpers, but those belong in the test files themselves.
+
+Never add helpers or other domain-level functions just to support tests. Only use domain helpers
+when they are necessary for the domain logic itself.
+
+### Test your work
 Before you push your branch, please run all appropriate tests to verify your work.  
 Also be sure to launch both the backend and frontend servers and verify your work in the UI.
 First, run `uv sync` and `npm install` from the repository root to install all dependencies.
 The backend is started with: `backend-api run` and the frontend is started with `npm run dev` from the repository root.
 If your environment is not able to run any of these tests, you can skip this step.
 
-### Frontend icon builds
-WireLoft uses a paid Font Awesome kit for its full icon set, but access to that kit is never required for normal development, automated agents, CI, or public contributors.
+## Font Awesome pro and free icon versions
+WireLoft uses a paid Font Awesome kit for its full icon set, but access to that kit is not required for normal development, automated agents, CI, or public contributors.
 
-For a clean checkout without Font Awesome credentials, install UI dependencies with `npm --prefix ui ci --registry=https://registry.npmjs.org`. The paid kit is an optional dependency; npm can skip it when credentials are unavailable while still installing other optional dependencies required by the frontend toolchain.
+Do not replace or remove an intended Pro icon merely because the paid kit is unavailable in your environment. Normal dev builds deliberately use the centralized registry in `ui/src/icons/fontAwesome.ts` and the mappings in `ui/src/icons/freeIconFallbacks.json`.
 
-From the repository root:
-
-- `npm run build` uses Font Awesome Free and is the normal validation path.
-- `npm run build:pro-icons` uses the paid Font Awesome kit and requires valid Font Awesome npm credentials plus access to the WireLoft kit.
-
-Free Font Awesome packages are pinned to the same Font Awesome 6 generation as the paid WireLoft kit so icons that exist in both sets render consistently.
-
-Do not replace or remove an intended Pro icon merely because the paid kit is unavailable in your environment. Free builds deliberately use the centralized registry in `ui/src/icons/fontAwesome.ts` and the mappings in `ui/src/icons/freeIconFallbacks.json`.
-
-When adding an icon that is Pro-only, add a visually and semantically similar Font Awesome Free icon to `freeIconFallbacks.json`. Both icon build commands run a validator that rejects a referenced Pro-only solid icon when no Free fallback is defined.
-
-A successful normal `npm run build` is sufficient frontend build validation for agents and contributors that do not have the paid kit.
+When adding an icon that is Pro-only, add a visually and semantically similar Font Awesome Free icon to `freeIconFallbacks.json`. Both icon build commands run a validator that rejects a referenced Pro-only icon when no Free fallback is defined.

@@ -10,7 +10,7 @@ from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
 from backend.types.show_types import ShowType
 
 
-SHOW_TEMPLATE_SOURCE_LIMIT = 10
+SHOW_TEMPLATE_SOURCE_LIMIT = 20
 
 
 def _episode_ordering():

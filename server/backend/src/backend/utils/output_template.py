@@ -12,6 +12,7 @@ from jinja2.exceptions import SecurityError, TemplateError, TemplateSyntaxError,
 from .custom_metadata import (
     CustomMetadataScope,
     custom_metadata_template_values,
+    get_custom_metadata,
     is_allowed_custom_metadata_template_variable,
 )
 from .episode import episode_type_info
@@ -54,11 +55,10 @@ MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
 SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"show"})
 MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"movie"})
 
-# These values describe the actual downloaded item rather than always describing
-# its owning movie. They are useful when making movie and extra paths distinct.
-MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "slug", "title", "extended_title", "author", "mature_rating", "rating",
-    "duration_seconds", "media_type",
+# These are values likely to be different between Movies and Movie Extra's.
+# They are useful for verifying movie and movie extra paths are distinct.
+MOVIE_MEDIA_ITEM_UNIQUE_OUTPUT_TEMPLATE_FIELDS = frozenset({
+    "slug", "title", "extended_title", "author", "duration_seconds", "media_type",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 
@@ -237,7 +237,7 @@ def validate_output_template_fields(
 
 def movie_template_has_media_item_field(output_template: str) -> bool:
     """Whether a movie template references a value that varies by downloaded item."""
-    return bool(output_template_fields(output_template) & MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS)
+    return bool(output_template_fields(output_template) & MOVIE_MEDIA_ITEM_UNIQUE_OUTPUT_TEMPLATE_FIELDS)
 
 
 def movie_template_uses_release_date(output_template: str) -> bool:
@@ -277,7 +277,7 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
     }
     values.update(custom_metadata_template_values(
         "show",
-        getattr(episode.show, "custom_metadata", None),
+        get_custom_metadata(episode.show),
     ))
     return values
 
@@ -336,7 +336,7 @@ def movie_output_template_values(
     }
     values.update(custom_metadata_template_values(
         "movie",
-        getattr(movie, "custom_metadata", None),
+        get_custom_metadata(movie),
     ))
     return values
 

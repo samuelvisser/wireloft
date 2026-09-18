@@ -6,12 +6,19 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 
+def _metadata_items(values=None):
+    return [
+        SimpleNamespace(key=f"custom.{key}", value=value)
+        for key, value in (values or {}).items()
+    ]
+
+
 def _episode(*, show_metadata=None):
     return SimpleNamespace(
         show=SimpleNamespace(
             slug="parenting",
             title="Parenting",
-            custom_metadata=show_metadata or {},
+            meta_items=_metadata_items(show_metadata),
         ),
         season=None,
         slug="episode-one",
@@ -31,7 +38,7 @@ def _movie(*, movie_metadata=None):
         mature_rating="R",
         duration=6540,
         release_date=None,
-        custom_metadata=movie_metadata or {},
+        meta_items=_metadata_items(movie_metadata),
     )
 
 
@@ -138,17 +145,21 @@ def test_movie_metadata_is_scoped_to_movie_templates() -> None:
 
 
 def test_removing_shared_field_deletes_values_from_every_show(db_session: Session) -> None:
-    from backend.api.endpoints.custom_metadata import _remove_shared_fields
+    from backend.api.endpoints.custom_metadata.service import (
+        remove_shared_custom_metadata_fields,
+    )
     from backend.db.models import Show
     from backend.db.models.Metadata import Metadata
+    from backend.utils.custom_metadata import get_custom_metadata, replace_custom_metadata
 
     first = _make_show(db_session, slug="first-show")
     second = _make_show(db_session, slug="second-show")
-    first.replace_custom_metadata({"year": "2026", "library": "Plex"})
-    second.replace_custom_metadata({"year": "2025"})
+
+    replace_custom_metadata(first, {"year": "2026", "library": "Plex"})
+    replace_custom_metadata(second, {"year": "2025"})
     db_session.flush()
 
-    _remove_shared_fields(
+    remove_shared_custom_metadata_fields(
         db_session,
         first,
         parent_table=Show.__tablename__,
@@ -163,8 +174,19 @@ def test_removing_shared_field_deletes_values_from_every_show(db_session: Sessio
         )
     ))
     assert remaining == []
-    assert db_session.get(Show, first.id).custom_metadata == {"library": "Plex"}
-    assert db_session.get(Show, second.id).custom_metadata == {}
+    assert get_custom_metadata(db_session.get(Show, first.id)) == {"library": "Plex"}
+    assert get_custom_metadata(db_session.get(Show, second.id)) == {}
+
+
+def test_show_api_read_exposes_custom_metadata(db_session: Session) -> None:
+    from backend.api.models.show import ShowAPIRead
+    from backend.utils.custom_metadata import replace_custom_metadata
+
+    show = _make_show(db_session, slug="metadata-show")
+    replace_custom_metadata(show, {"library": "Plex"})
+    db_session.flush()
+
+    assert ShowAPIRead.model_validate(show).custom_metadata == {"library": "Plex"}
 
 
 def test_custom_metadata_update_validates_removed_fields() -> None:

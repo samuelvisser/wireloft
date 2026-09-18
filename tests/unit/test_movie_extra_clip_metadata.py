@@ -1,7 +1,25 @@
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+
+
+def test_movie_extra_source_metadata_update_rejects_different_slug() -> None:
+    from backend.api.endpoints.movie_extras.service import (
+        update_movie_extra_source_metadata,
+    )
+    from backend.db.models import MovieExtraSource
+    from dailywire_api.records import DwMovieExtraRecord
+
+    source = MovieExtraSource(slug="expected", title="Original")
+    metadata = DwMovieExtraRecord(slug="different", title="Updated")
+
+    with pytest.raises(
+        ValueError,
+        match="MovieExtraSource metadata can only be updated for the same slug",
+    ):
+        update_movie_extra_source_metadata(source, metadata)
 
 
 def test_download_clip_metadata_refresh_updates_canonical_source() -> None:

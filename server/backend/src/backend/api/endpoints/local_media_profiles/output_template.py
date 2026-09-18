@@ -31,7 +31,7 @@ from backend.utils.output_template import (
     render_output_template,
 )
 
-from ..custom_metadata_service import get_custom_metadata_fields
+from ..custom_metadata.service import get_custom_metadata_fields
 from .template_source_selection import select_show_template_source_episodes
 
 

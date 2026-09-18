@@ -13,7 +13,7 @@ from backend.db.models.media_download import EpisodeMediaDownload
 
 @dataclass(frozen=True)
 class EpisodeDownloadScope:
-    """Reusable selection of existing episode MediaDownloads.
+    """Reusable selection of episode MediaDownloads.
 
     The base scope is anchored to either one show or one episode. Actions can then
     narrow it to one Local Media Profile (or leave it as all profiles), and may
