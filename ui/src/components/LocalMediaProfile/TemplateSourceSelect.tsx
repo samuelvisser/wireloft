@@ -1,6 +1,8 @@
 import {useMemo} from 'react'
-import Select, {createFilter, type GroupBase} from 'react-select'
 
+import LazySearchSelect, {
+    type LazySearchSelectOption,
+} from '../common/LazySearchSelect'
 import type {
     LocalMediaProfileTemplateSource,
     LocalMediaProfileTemplateSourceMode,
@@ -10,106 +12,92 @@ import './TemplateSourceSelect.css'
 type Props = {
     mode: LocalMediaProfileTemplateSourceMode
     sources: LocalMediaProfileTemplateSource[]
-    selectedSourceId: string
-    onChange: (sourceId: string) => void
+    selectedSource: LocalMediaProfileTemplateSource | null
+    isLoading: boolean
+    hasMore: boolean
+    onChange: (source: LocalMediaProfileTemplateSource) => void
+    onSearchChange: (search: string) => void
+    onLoadMore: () => void
 }
-
-type SourceOption = {
-    value: string
-    label: string
-    fullLabel: string
-}
-
-type SourceGroup = GroupBase<SourceOption>
-
-const filterSourceOption = createFilter<SourceOption>({
-    stringify: ({data}) => data.fullLabel,
-})
 
 function optionForSource(
     source: LocalMediaProfileTemplateSource,
     mode: LocalMediaProfileTemplateSourceMode,
-): SourceOption {
-    if (mode !== 'show') {
+): LazySearchSelectOption {
+    if (source.fallback) {
         return {
             value: source.id,
             label: source.label,
-            fullLabel: source.label,
+            selectedLabel: source.label,
         }
     }
 
-    const showTitle = source.values.show_title?.trim()
-    const episodeTitle = source.values.episode_title?.trim()
-    if (!showTitle || !episodeTitle) {
+    if (mode === 'show') {
+        const showTitle = source.values.show_title?.trim()
+        const episodeTitle = source.values.episode_title?.trim()
         return {
             value: source.id,
-            label: source.label,
-            fullLabel: source.label,
+            label: episodeTitle || source.label,
+            selectedLabel: showTitle && episodeTitle
+                ? `${showTitle} — ${episodeTitle}`
+                : source.label,
+            group: showTitle || undefined,
         }
     }
 
+    const movieTitle = source.values.movie_title?.trim()
+    const mediaTitle = source.values.title?.trim()
+    const isMovie = source.values.media_type === 'movie'
     return {
         value: source.id,
-        label: episodeTitle,
-        fullLabel: `${showTitle} — ${episodeTitle}`,
+        label: mediaTitle || source.label,
+        selectedLabel: movieTitle && mediaTitle && !isMovie
+            ? `${movieTitle} — ${mediaTitle}`
+            : (mediaTitle || source.label),
+        group: movieTitle || undefined,
     }
 }
 
 export default function TemplateSourceSelect({
     mode,
     sources,
-    selectedSourceId,
+    selectedSource,
+    isLoading,
+    hasMore,
     onChange,
+    onSearchChange,
+    onLoadMore,
 }: Props) {
-    const options = useMemo<readonly (SourceOption | SourceGroup)[]>(() => {
-        if (mode !== 'show') {
-            return sources.map((source) => optionForSource(source, mode))
-        }
-
-        const groups = new Map<string, SourceOption[]>()
-        for (const source of sources) {
-            const showTitle = source.values.show_title?.trim() || 'Other examples'
-            const optionsForShow = groups.get(showTitle) ?? []
-            optionsForShow.push(optionForSource(source, mode))
-            groups.set(showTitle, optionsForShow)
-        }
-
-        return [...groups.entries()].map(([label, groupOptions]) => ({
-            label,
-            options: groupOptions,
-        }))
-    }, [mode, sources])
-
-    const selectedOption = useMemo(() => {
-        for (const source of sources) {
-            if (source.id === selectedSourceId) return optionForSource(source, mode)
-        }
-        return null
-    }, [mode, selectedSourceId, sources])
+    const options = useMemo(
+        () => sources.map((source) => optionForSource(source, mode)),
+        [mode, sources],
+    )
+    const selectedOption = useMemo(
+        () => selectedSource ? optionForSource(selectedSource, mode) : null,
+        [mode, selectedSource],
+    )
+    const sourcesById = useMemo(
+        () => new Map(sources.map((source) => [source.id, source])),
+        [sources],
+    )
 
     return (
-        <Select<SourceOption, false, SourceGroup>
+        <LazySearchSelect
             inputId="template-example-source"
             className="template-source-select"
-            classNamePrefix="select"
             options={options}
             value={selectedOption}
-            onChange={(option) => option && onChange(option.value)}
-            filterOption={filterSourceOption}
-            isClearable={false}
-            isSearchable={sources.length > 7}
-            maxMenuHeight={360}
-            menuPlacement="auto"
-            formatOptionLabel={(option, {context}) => (
-                context === 'value' ? option.fullLabel : option.label
-            )}
-            formatGroupLabel={(group) => (
-                <div className="template-source-group-heading">
-                    <span>{group.label}</span>
-                    <span className="template-source-group-count">{group.options.length}</span>
-                </div>
-            )}
-            aria-label="Example source"
+            isLoading={isLoading}
+            hasMore={hasMore}
+            onChange={(option) => {
+                const source = sourcesById.get(option.value)
+                if (source) onChange(source)
+            }}
+            onSearchChange={onSearchChange}
+            onLoadMore={onLoadMore}
+            placeholder="Search media…"
+            noOptionsMessage="No matching media found"
+            ariaLabel="Example source"
         />
     )
 }

@@ -7,7 +7,8 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileAPIUpdate,
     LocalMediaProfileTemplatePreview,
     LocalMediaProfileTemplatePreviewResult,
-    LocalMediaProfileTemplateSources,
+    LocalMediaProfileTemplateSourcePage,
+    LocalMediaProfileTemplateVariable,
 )
 from backend.api.models.operations import LocalMediaProfileFileRenameOperationAccepted
 from backend.app import db_session
@@ -18,8 +19,9 @@ from backend.types.local_media_profile_types import (
 
 from .file_rename import request_local_media_profile_file_rename
 from .output_template import (
-    get_output_template_sources,
     get_output_template_preview,
+    get_output_template_source_page,
+    get_output_template_variables,
 )
 from .service import (
     create_local_media_profile,
@@ -52,15 +54,37 @@ def local_media_profiles_create(body: LocalMediaProfileAPICreate):
             raise
 
 
-@router.get("/template/sources", response_model=LocalMediaProfileTemplateSources)
+@router.get("/template/variables", response_model=list[LocalMediaProfileTemplateVariable])
+def local_media_profile_template_variables(
+    type: LocalMediaProfileType = Query(...),
+):
+    """Return custom variables available to one output-template type."""
+    with db_session() as s:
+        try:
+            return get_output_template_variables(s, type)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/template/sources", response_model=LocalMediaProfileTemplateSourcePage)
 def local_media_profile_template_sources(
     type: LocalMediaProfileType = Query(...),
     show_scope: ShowLocalMediaProfileScope = Query(ShowLocalMediaProfileScope.BOTH),
+    search: str | None = Query(None, max_length=200),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(30, ge=1, le=100),
 ):
-    """Return recent media items for testing an output path template."""
+    """Search applicable media items for testing an output path template."""
     with db_session() as s:
         try:
-            return get_output_template_sources(s, type, show_scope)
+            return get_output_template_source_page(
+                s,
+                type,
+                show_scope,
+                search=search,
+                offset=offset,
+                limit=limit,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

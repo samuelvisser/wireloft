@@ -14,7 +14,11 @@ import {tags} from '@lezer/highlight'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import ReadMore from '../../utils/ReadMore'
-import {useLocalMediaProfileTemplateSources} from '../../lib/localMediaProfileTemplateSources'
+import {
+    type LocalMediaProfileTemplateSource,
+    useLocalMediaProfileTemplateSources,
+    useLocalMediaProfileTemplateVariables,
+} from '../../lib/localMediaProfileTemplateSources'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import TemplateSourceSelect from './TemplateSourceSelect'
 import {
@@ -415,12 +419,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         })
     }, [canonicalTemplate, form, template])
 
-    const {
-        data: sourceData,
-        isLoading: sourcesLoading,
-        isError: sourcesFailed,
-    } = useLocalMediaProfileTemplateSources(mode, {showScope})
-    const customVariables = (sourceData?.variables ?? []) as OutputTemplateVariable[]
+    const [sourceSearch, setSourceSearch] = useState('')
+    const sourceQuery = useLocalMediaProfileTemplateSources(mode, {
+        showScope,
+        search: sourceSearch,
+    })
+    const variableQuery = useLocalMediaProfileTemplateVariables(mode)
+    const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]
     const variables = useMemo(
         () => getOutputTemplateVariables(mode, customVariables),
         [customVariables, mode],
@@ -596,19 +601,25 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         ]
     }, [printVariableCompletionOptions, statementCompletionOptions, variableCompletionOptions])
 
-    const sources = sourceData?.sources ?? []
-    const [selectedSourceId, setSelectedSourceId] = useState('')
+    const sources = useMemo(
+        () => sourceQuery.data?.pages.flatMap((page) => page.items) ?? [],
+        [sourceQuery.data],
+    )
+    const [selectedSource, setSelectedSource] = useState<LocalMediaProfileTemplateSource | null>(null)
     const [testValues, setTestValues] = useState<Record<string, string>>({})
     const [testValuesExpanded, setTestValuesExpanded] = useState(false)
-    const selectedSource = sources.find(({id}) => id === selectedSourceId) ?? sources[0]
 
     useEffect(() => {
-        if (!sources.length) return
-        if (!sources.some(({id}) => id === selectedSourceId)) {
-            setSelectedSourceId(sources[0].id)
-            setTestValues({...sources[0].values})
-        }
-    }, [selectedSourceId, sources])
+        setSelectedSource(null)
+        setTestValues({})
+        setSourceSearch('')
+    }, [mode, showScope])
+
+    useEffect(() => {
+        if (selectedSource || !sources.length) return
+        setSelectedSource(sources[0])
+        setTestValues({...sources[0].values})
+    }, [selectedSource, sources])
 
     useEffect(() => {
         setTestValues((current) => {
@@ -680,10 +691,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         }
     }, [mode, preferredFormat, previewValuesKey, selectedSource, template])
 
-    function chooseSource(sourceId: string) {
-        const source = sources.find(({id}) => id === sourceId)
-        setSelectedSourceId(sourceId)
-        if (source) setTestValues({...source.values})
+    function chooseSource(source: LocalMediaProfileTemplateSource) {
+        setSelectedSource(source)
+        setTestValues({...source.values})
     }
 
     return (
@@ -718,6 +728,11 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                         {String(errors.outputTemplate.message)}
                     </div>
                 )}
+                {variableQuery.isError && (
+                    <div className="error" role="alert">
+                        Custom metadata fields could not be loaded. Try refreshing the page.
+                    </div>
+                )}
                 {missingMetadataVariables.length > 0 && (
                     <div className="template-metadata-warning" role="status">
                         {missingMetadataVariables.length === 1 ? 'Custom metadata field ' : 'Custom metadata fields '}
@@ -742,21 +757,23 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                             <h3 id="template-preview-heading">Example output</h3>
                             <p>Try different values here. Your profile is not changed.</p>
                         </div>
-                        {sources.length > 0 && (
-                            <label className="template-source-label" htmlFor="template-example-source">
-                                <span>Example source</span>
-                                <TemplateSourceSelect
-                                    mode={mode}
-                                    sources={sources}
-                                    selectedSourceId={selectedSource?.id ?? ''}
-                                    onChange={chooseSource}
-                                />
-                            </label>
-                        )}
+                        <label className="template-source-label" htmlFor="template-example-source">
+                            <span>Example source</span>
+                            <TemplateSourceSelect
+                                mode={mode}
+                                sources={sources}
+                                selectedSource={selectedSource}
+                                isLoading={sourceQuery.isLoading || sourceQuery.isFetchingNextPage}
+                                hasMore={sourceQuery.hasNextPage ?? false}
+                                onChange={chooseSource}
+                                onSearchChange={setSourceSearch}
+                                onLoadMore={() => void sourceQuery.fetchNextPage()}
+                            />
+                        </label>
                     </div>
 
-                    {sourcesLoading && <p className="template-preview-status">Loading an example…</p>}
-                    {sourcesFailed && (
+                    {sourceQuery.isLoading && <p className="template-preview-status">Loading an example…</p>}
+                    {sourceQuery.isError && (
                         <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
                     )}
                     {selectedSource?.fallback && (
