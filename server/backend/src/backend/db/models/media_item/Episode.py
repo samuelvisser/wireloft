@@ -38,9 +38,7 @@ class Episode(
     season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
     index: Mapped[int]
     episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the show")
-    dw_episode_number: Mapped[Optional[str]] = mapped_column(
-        comment="Episode number exactly as returned by The Daily Wire"
-    )
+    dw_episode_number: Mapped[Optional[str]] = mapped_column(comment="Episode number exactly as returned by The Daily Wire")
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     publish_status: Mapped[str]
     metadata_is_final: Mapped[bool] = mapped_column(

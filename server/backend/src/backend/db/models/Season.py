@@ -32,9 +32,7 @@ class Season(Base, HasTaskResourcesMixin):
         default=SeasonType.NORMAL.value,
         server_default=SeasonType.NORMAL.value,
     )
-    # Media-library season number. Extra collections deliberately share season 0;
-    # normal seasons receive stable 1..N values independently from internal index.
-    season_number: Mapped[int] = mapped_column(default=1, server_default="1")
+    season_number: Mapped[int] = mapped_column(default=1, server_default="1", comment="Numbered based on it's logical order within the show. Seasons of type 'extra' always are numbered 0")
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
@@ -48,9 +46,4 @@ class Season(Base, HasTaskResourcesMixin):
     episodes: Mapped[list["Episode"]] = relationship(back_populates="season")
 
     def __repr__(self):
-        return (
-            f"<Season(id={self.id}, slug={self.slug}, show_id={self.show_id}, "
-            f"index={self.index}, season_type={self.season_type}, "
-            f"season_number={self.season_number}, created_at={self.created_at}, "
-            f"updated_at={self.updated_at})>"
-        )
+        return f"<Season(id={self.id}, slug={self.slug}, show_id={self.show_id}, index={self.index}, season_type={self.season_type}, season_number={self.season_number}, created_at={self.created_at}, updated_at={self.updated_at})>"
