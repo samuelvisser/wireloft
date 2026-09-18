@@ -151,6 +151,32 @@ def test_show_source_search_can_match_parent_and_episode_terms(db_session):
     ]
 
 
+def test_show_source_search_ranks_the_strongest_phrase_match_first(db_session):
+    from backend.api.endpoints.local_media_profiles.output_template import (
+        get_output_template_source_page,
+    )
+    from backend.types.local_media_profile_types import LocalMediaProfileType
+    from backend.types.show_types import ShowType
+
+    show = _make_show(
+        db_session,
+        slug="the-ben-shapiro-show",
+        show_type=ShowType.PODCAST.value,
+    )
+    _add_episode(db_session, show, index=1, title="Trump Gets It Right On Radical Islam")
+    _add_episode(db_session, show, index=2, title="Radical Islam's Front Group EXPOSED By Texas!")
+    _add_episode(db_session, show, index=3, title="Radical Islam INVADES The US Senate?!")
+    _add_episode(db_session, show, index=4, title="Radical Islam Is On The March")
+
+    result = get_output_template_source_page(
+        db_session,
+        LocalMediaProfileType.SHOW,
+        search="Radical Islam is on the",
+    )
+
+    assert result.items[0].values["episode_title"] == "Radical Islam Is On The March"
+
+
 def test_show_scope_excludes_other_show_types_even_when_search_matches(db_session):
     from backend.api.endpoints.local_media_profiles.output_template import (
         get_output_template_source_page,
@@ -244,6 +270,59 @@ def test_movie_sources_include_movies_and_every_extra_with_server_search(db_sess
     ]
     assert {source.values["movie_title"] for source in combined} == {"Alpha Movie"}
     assert [source.values["title"] for source in trailer_search.items] == ["Official Trailer"]
+
+
+def test_movie_source_search_ranks_matching_extra_title_by_relevance(db_session):
+    from backend.api.endpoints.local_media_profiles.output_template import (
+        get_output_template_source_page,
+    )
+    from backend.db.models import Movie, MovieExtra
+    from backend.types.local_media_profile_types import LocalMediaProfileType
+
+    movie = Movie(
+        uuid="radical-islam-movie",
+        type="movie",
+        slug="radical-islam-movie",
+        title="The Radical Islam Documentary",
+        description=None,
+        duration=6000,
+        release_date=date(2024, 1, 2),
+    )
+    movie.movie_extras.extend([
+        MovieExtra(
+            uuid="radical-islam-commentary",
+            type="movie_extra",
+            movie_extra_type="commentary",
+            slug="radical-islam-commentary",
+            title="Trump Gets It Right On Radical Islam",
+            description=None,
+            duration=120,
+            published_date=datetime(2024, 1, 3, 12, 0, 0),
+        ),
+        MovieExtra(
+            uuid="radical-islam-march",
+            type="movie_extra",
+            movie_extra_type="commentary",
+            slug="radical-islam-march",
+            title="Radical Islam Is On The March",
+            description=None,
+            duration=300,
+            published_date=datetime(2024, 1, 4, 12, 0, 0),
+        ),
+    ])
+    db_session.add(movie)
+    db_session.commit()
+
+    result = get_output_template_source_page(
+        db_session,
+        LocalMediaProfileType.MOVIE,
+        search="Radical Islam is on the",
+    )
+
+    assert [source.values["title"] for source in result.items] == [
+        "Radical Islam Is On The March",
+        "Trump Gets It Right On Radical Islam",
+    ]
 
 
 def test_empty_library_uses_fallback_but_empty_search_does_not(db_session):

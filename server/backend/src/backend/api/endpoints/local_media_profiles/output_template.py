@@ -32,7 +32,7 @@ from backend.utils.output_template import (
     replace_output_extension,
     render_output_template,
 )
-from backend.utils.search import search_all_terms
+from backend.utils.search import search_all_terms, search_relevance_score
 
 from ..custom_metadata.service import get_custom_metadata_fields
 
@@ -141,6 +141,26 @@ def _show_source_page(
     offset: int,
     limit: int,
 ) -> tuple[list[LocalMediaProfileTemplateSource], bool]:
+    relevance = search_relevance_score(
+        search,
+        Episode.title,
+        Show.title,
+        Season.name,
+        Episode.slug,
+        Show.slug,
+        Episode.episode_identifier,
+        Show.author_name,
+        Season.slug,
+    )
+    ordering = [
+        func.lower(Show.title),
+        Show.id,
+        Episode.index,
+        Episode.id,
+    ]
+    if relevance is not None:
+        ordering.insert(0, relevance.desc())
+
     query = (
         select(Episode)
         .join(Episode.show)
@@ -158,12 +178,7 @@ def _show_source_page(
             Season.name,
             Season.slug,
         ))
-        .order_by(
-            func.lower(Show.title),
-            Show.id,
-            Episode.index,
-            Episode.id,
-        )
+        .order_by(*ordering)
         .offset(offset)
         .limit(limit + 1)
     )
@@ -187,11 +202,34 @@ def _movie_source_page(
     offset: int,
     limit: int,
 ) -> tuple[list[LocalMediaProfileTemplateSource], bool]:
+    movie_relevance = search_relevance_score(
+        search,
+        Movie.title,
+        Movie.extended_title,
+        Movie.slug,
+        Movie.author_name,
+    )
+    if movie_relevance is None:
+        movie_relevance = literal(0)
+
+    extra_relevance = search_relevance_score(
+        search,
+        MovieExtraSource.title,
+        Movie.title,
+        Movie.extended_title,
+        MovieExtraSource.slug,
+        Movie.slug,
+        MovieExtra.movie_extra_type,
+    )
+    if extra_relevance is None:
+        extra_relevance = literal(0)
+
     movie_query = (
         select(
             literal("movie").label("kind"),
             Movie.id.label("item_id"),
             Movie.id.label("movie_id"),
+            movie_relevance.label("relevance"),
             func.lower(Movie.title).label("group_sort"),
             literal(0).label("kind_sort"),
             func.lower(Movie.title).label("item_sort"),
@@ -209,6 +247,7 @@ def _movie_source_page(
             literal("movie-extra").label("kind"),
             MovieExtra.id.label("item_id"),
             Movie.id.label("movie_id"),
+            extra_relevance.label("relevance"),
             func.lower(Movie.title).label("group_sort"),
             literal(1).label("kind_sort"),
             func.lower(MovieExtraSource.title).label("item_sort"),
@@ -226,19 +265,23 @@ def _movie_source_page(
         ))
     )
     candidates = union_all(movie_query, extra_query).subquery()
+    ordering = [
+        candidates.c.group_sort,
+        candidates.c.movie_id,
+        candidates.c.kind_sort,
+        candidates.c.item_sort,
+        candidates.c.item_id,
+    ]
+    if (search or "").strip():
+        ordering.insert(0, candidates.c.relevance.desc())
+
     rows = session.execute(
         select(
             candidates.c.kind,
             candidates.c.item_id,
             candidates.c.movie_id,
         )
-        .order_by(
-            candidates.c.group_sort,
-            candidates.c.movie_id,
-            candidates.c.kind_sort,
-            candidates.c.item_sort,
-            candidates.c.item_id,
-        )
+        .order_by(*ordering)
         .offset(offset)
         .limit(limit + 1)
     ).all()
