@@ -122,9 +122,9 @@ Example:
 | `minute` | Minute value |
 | `second` | Second value |
 
-`season_number` is the value intended for media-library season numbering. It ignores Daily Wire Extras collections and remains stable if another Extras season appears later. `season_index` remains available for templates that specifically need WireLoft's internal season ordering.
+`season_number` is the value intended for media-library season numbering. It ignores Daily Wire Extras collections and remains stable if another Extras season appears later. `season_index` remains is used by WireLoft to order the seasons themselves and is unique for a season within a show.
 
-WireLoft preserves The Daily Wire's episode number for full episodes and attached episode extras. It only invents show-global numbers for auxiliary content and standalone show trailers. Extras seasons use `season_type == 'extra'` and `season_number == 0`, which makes them suitable for Plex-style Specials layouts without treating their fractional Daily Wire numbers as parent/extra relationships.
+WireLoft preserves The Daily Wire's episode number for full episodes and attached episode extras. It only invents show-global numbers for auxiliary content and standalone show trailers. Extras seasons use `season_type == 'extra'` and `season_number == 0`, which is handy if you want specials to end up in a different 'Specials' directory, for example.
 
 ## Movies and extras
 
