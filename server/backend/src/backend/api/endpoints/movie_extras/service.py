@@ -12,10 +12,35 @@ from backend.api.models.movie_extra import (
     MovieExtraAPIRead,
     MovieExtraAPIUpdate,
 )
-from backend.db.models import Movie, MovieExtra
+from backend.db.models import Movie, MovieExtra, MovieExtraSource
 from backend.types.media_types import MediaType, MovieExtraType
 from backend.utils.helpers import generate_uuid
 from dailywire_api.records import DwMovieExtraRecord
+
+
+def update_movie_extra_source_metadata(
+    source: MovieExtraSource,
+    metadata: DwMovieExtraRecord,
+) -> None:
+    """Apply authoritative metadata returned for an existing source clip.
+
+    Only fields actually supplied by The Daily Wire are updated. Explicit empty
+    values are retained, while response-only fields that are not persisted on
+    MovieExtraSource are ignored.
+    """
+    if metadata.slug != source.slug:
+        raise ValueError("MovieExtraSource metadata can only be updated for the same slug")
+
+    values = metadata.model_dump(
+        mode="python",
+        by_alias=False,
+        exclude_unset=True,
+    )
+    for column in MovieExtraSource.__table__.columns:
+        field = column.key
+        if field in {"id", "slug"} or field not in values:
+            continue
+        setattr(source, field, values[field])
 
 
 def create_movie_extra(

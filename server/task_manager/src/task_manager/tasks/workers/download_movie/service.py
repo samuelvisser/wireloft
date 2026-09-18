@@ -6,6 +6,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from backend.api.endpoints.movie_extras.service import update_movie_extra_source_metadata
 from backend.db.models import Movie, MovieExtra
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -275,12 +276,7 @@ def _persist_movie_extra_metadata(
     if extra is None:
         raise DownloadCancelled("Movie extra was deleted while resolving playback")
 
-    metadata_values = metadata.model_dump(
-        mode="python",
-        by_alias=False,
-        exclude_unset=True,
-    )
-    extra.source.update_metadata(metadata_values)
+    update_movie_extra_source_metadata(extra.source, metadata)
 
     thumbnail_fields = {
         "thumbnail_landscape_path",
