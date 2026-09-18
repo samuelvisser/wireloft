@@ -46,9 +46,8 @@ def _configure_sqlite_connection(dbapi_connection, connection_record) -> None:
     """Apply per-connection SQLite settings used by API and worker threads."""
     cursor = dbapi_connection.cursor()
     try:
-        # WireLoft's schema deliberately uses ON DELETE cascades for scheduler
-        # bookkeeping and joined-table media rows. SQLite leaves foreign-key
-        # enforcement disabled unless every connection explicitly enables it.
+        # For SQLite, enable Foreign Key Support explicitly, according to official docs:
+        # https://docs.sqlalchemy.org/en/21/dialects/sqlite.html#sqlite-foreign-keys
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute(f"PRAGMA busy_timeout={_SQLITE_BUSY_TIMEOUT_MS}")
     finally:

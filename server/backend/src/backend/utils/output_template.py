@@ -55,11 +55,10 @@ MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
 SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"show"})
 MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"movie"})
 
-# These values describe the actual downloaded item rather than always describing
-# its owning movie. They are useful when making movie and extra paths distinct.
-MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "slug", "title", "extended_title", "author", "mature_rating", "rating",
-    "duration_seconds", "media_type",
+# These are values likely to be different between Movies and Movie Extra's.
+# They are useful for verifying movie and movie extra paths are distinct.
+MOVIE_MEDIA_ITEM_UNIQUE_OUTPUT_TEMPLATE_FIELDS = frozenset({
+    "slug", "title", "extended_title", "author", "duration_seconds", "media_type",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 
@@ -250,7 +249,7 @@ def validate_output_template_fields(
 
 def movie_template_has_media_item_field(output_template: str) -> bool:
     """Whether a movie template references a value that varies by downloaded item."""
-    return bool(output_template_fields(output_template) & MOVIE_MEDIA_ITEM_OUTPUT_TEMPLATE_FIELDS)
+    return bool(output_template_fields(output_template) & MOVIE_MEDIA_ITEM_UNIQUE_OUTPUT_TEMPLATE_FIELDS)
 
 
 def movie_template_uses_release_date(output_template: str) -> bool:
