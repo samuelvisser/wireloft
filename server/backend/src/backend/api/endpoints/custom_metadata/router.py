@@ -13,7 +13,7 @@ from backend.db.models.Metadata import Metadata
 from backend.db.models.media_item import Movie
 from backend.utils.custom_metadata import CustomMetadataScope, custom_metadata_storage_key
 
-from .custom_metadata_service import get_custom_metadata_fields
+from .service import get_custom_metadata_fields
 
 
 router = APIRouter(tags=["Custom Metadata"])
