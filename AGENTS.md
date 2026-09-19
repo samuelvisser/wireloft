@@ -20,10 +20,32 @@ while you are working, and only when done at the end squash all commits into a s
 If the GitHub connector still stalls, please try to sleep for a little and then try again instead
 of stalling the entire session.
 
-## Database migrations
-If you need to do any database migrations to implement the feature, please follow these guidelines:
+## Migrations
+WireLoft knows about two separate migration paths, each to serve a separate need:
+- Database migrations
+- Background migrations
+
+Database migrations should be used strictly to change the database schema. It can move local data
+around if needed, but it can never use external resources such as API calls or the filesystem.
+Database migrations are expected to finish relatively quickly due to their local- only nature.
+They run before WireLoft starts anything else.
+
+Background migrations run in the background while WireLoft is running. They can use external resources
+such as API calls or the filesystem if needed. They are designed specifically for migrations that are
+expected to take longer and therefore do not interrupt the WireLoft startup process.
+Background migrations do, however, pause all scheduled work while they are running.
+
+### Database migrations
+If you need to do any database migrations to implement a feature, please follow these guidelines:
 - Create a new alembic migration script in server/backend/src/backend/db/alembic/versions/
-- Run `backend db history` to verify the new migration is the current head, and no multiple
+- Run `backend-api db history` to verify the new migration is the current head, and no multiple
+migration heads exist.
+
+### Background migrations
+If you need to do any API/ filesystem or any other long- running migration work to implement a feature
+or fix faulty data caused by a historical bug, please follow these guidelines:
+- Create a new background migration script in server/backend/src/backend/db/background_migrations/versions/
+- Run `backend-api background-migrations history` to verify the new migration is the current head, and no multiple
 migration heads exist.
 
 ### Legacy stored values

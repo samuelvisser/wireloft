@@ -8,7 +8,7 @@
 
 ### Get episode details
 @access_token = variable value
-GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=ep-2324-the-trump-administration-cracks-down-on-third-world-migration
+GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=real-history-with-matt-walsh
 Authorization: Bearer {{access_token}}
 
 
@@ -384,4 +384,26 @@ Authorization: Bearer {{access_token}}
 
 ### Jordan Peterson: compare season-list metadata with authoritative detail
 GET https://middleware-prod.dailywire.com/middleware/v4/getEpisode?slug=reality-and-the-sacred
+Authorization: Bearer {{access_token}}
+
+
+
+### Real History with Matt Walsh - show and seasons
+GET https://middleware-prod.dailywire.com/middleware/v4/getShowPage
+    ?slug=real-history-with-matt-walsh
+    &membershipPlan=ALL_ACCESS
+Authorization: Bearer {{access_token}}
+
+
+
+### Real History - season contents
+GET https://middleware-prod.dailywire.com/middleware/v4/getPaginatedEpisodes
+    ?slug=real-history-with-matt-walsh
+    &membershipPlan=ALL_ACCESS
+    &orderBy=CreatedAt_ASC
+    &pageNumber=1
+    &pageSize=50
+    &showOffset=0
+    &podcastOffset=0
+    &showSeasonId=651f72d2-2303-407b-b122-68740f5d4780
 Authorization: Bearer {{access_token}}
