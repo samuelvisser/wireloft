@@ -9,6 +9,7 @@ from typing import Any
 # workers legitimately import backend services. Eager worker registration here
 # therefore creates circular imports purely from package initialization order.
 _WORKER_EXPORTS = {
+    "background_migration_runner": ".workers.background_migration_runner",
     "debug_ep_details": ".workers.debug_ep_details",
     "download_episode": ".workers.download_episode",
     "download_movie": ".workers.download_movie",

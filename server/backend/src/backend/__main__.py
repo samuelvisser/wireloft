@@ -13,6 +13,11 @@ import uvicorn
 from sqlalchemy import text
 
 from backend.db import configure_db, get_db_path, get_engine, seed_db
+from backend.db.background_migrations import (
+    BackgroundMigrationError,
+    get_background_migration_history,
+    validate_background_migration_state,
+)
 from backend.db.migrations import (
     DatabaseMigrationError,
     check_database,
@@ -74,6 +79,24 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     )
     revision_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
     revision_parser.add_argument("-m", "--message", required=True, help="Migration description")
+
+    background_parser = subparsers.add_parser(
+        "background-migrations",
+        aliases=["migrate"],
+        help="Inspect background data migrations",
+    )
+    background_subparsers = background_parser.add_subparsers(
+        dest="background_migration_command",
+        required=True,
+        help="Background migration operation",
+    )
+    for command_name, help_text in (
+        ("current", "Show the current and latest background migration keys"),
+        ("history", "Show the ordered background migration history"),
+        ("check", "Verify the background migration chain and stored key"),
+    ):
+        command_parser = background_subparsers.add_parser(command_name, help=help_text)
+        command_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
 
     subparsers.add_parser("stop", help="Stop all running backend-api processes")
     return parser.parse_args(argv)
@@ -249,6 +272,43 @@ def _handle_db_command(args: argparse.Namespace) -> None:
     raise RuntimeError(f"Unsupported database command: {args.db_command}")
 
 
+def _handle_background_migration_command(args: argparse.Namespace) -> None:
+    _configure_database_for_args(args)
+
+    if args.background_migration_command == "history":
+        history = get_background_migration_history()
+        if not history:
+            print("No background migrations registered.")
+            return
+        for migration in history:
+            upstream = migration.upstream_key or "<base>"
+            print(f"{upstream} -> {migration.key}  {migration.title}")
+        return
+
+    require_database_current()
+    current, head = validate_background_migration_state()
+    current_label = current or "base / not initialized"
+    head_label = head or "base / none"
+
+    if args.background_migration_command == "current":
+        status = "up to date" if current == head else "migration required"
+        print(f"Current background migration: {current_label}")
+        print(f"Latest background migration:  {head_label}")
+        print(f"Status: {status}")
+        return
+
+    if args.background_migration_command == "check":
+        print(
+            "Background migration chain and stored key are valid "
+            f"(current: {current_label}, head: {head_label})."
+        )
+        return
+
+    raise RuntimeError(
+        f"Unsupported background migration command: {args.background_migration_command}"
+    )
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     args = _parse_args(argv)
 
@@ -259,6 +319,10 @@ def main(argv: Optional[list[str]] = None) -> None:
     try:
         if args.command == "db":
             _handle_db_command(args)
+            return
+
+        if args.command in {"background-migrations", "migrate"}:
+            _handle_background_migration_command(args)
             return
 
         if args.command == "run":
@@ -288,6 +352,9 @@ def main(argv: Optional[list[str]] = None) -> None:
                 if debug:
                     _reload_startup_marker(os.getpid()).unlink(missing_ok=True)
             return
+    except BackgroundMigrationError as exc:
+        print(f"Background migration error: {exc}", file=sys.stderr)
+        sys.exit(1)
     except DatabaseMigrationError as exc:
         print(f"Database migration error: {exc}", file=sys.stderr)
         sys.exit(1)

@@ -1,0 +1,31 @@
+.background-migration-banner {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(217, 119, 6, 0.32);
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.background-migration-banner strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.background-migration-banner p {
+  margin: 0;
+  color: var(--text);
+}
+
+.background-migration-banner span {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .background-migration-banner {
+    border-color: rgba(251, 191, 36, 0.28);
+    background: rgba(245, 158, 11, 0.12);
+  }
+}

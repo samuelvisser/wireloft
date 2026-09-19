@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "b1d7c3e9f205"
+HEAD_REVISION = "e5f1a2c7d903"
 WIRELOFT_1_0_REVISION = "c8d4e2f1a7b9"
 BASE_REVISION = "0001"
 
@@ -175,17 +175,17 @@ def _seed_wireloft_1_0_data(database_path: Path, engine) -> dict[str, int | str]
     }
 
 
-def test_release_migration_history_is_single_1_1_boundary(migration_database):
+def test_migration_history_has_one_head(migration_database):
     _database_path, _engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     script = ScriptDirectory.from_config(
         get_alembic_config(allow_version_storage_migration=True)
     )
-    revisions = [revision.revision for revision in script.walk_revisions()]
 
-    assert revisions == [HEAD_REVISION, WIRELOFT_1_0_REVISION, BASE_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_0_REVISION
+    assert script.get_heads() == [HEAD_REVISION]
+    assert script.get_revision(HEAD_REVISION) is not None
+    assert script.get_revision(BASE_REVISION) is not None
 
 
 def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
@@ -205,6 +205,11 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
     assert "movie_extra_sources" in tables
     assert "media_download_attempts" not in tables
     assert "alembic_version" not in tables
+
+    settings_columns = {
+        column["name"] for column in inspector.get_columns("settings")
+    }
+    assert "background_migration_version" in settings_columns
 
     profile_columns = {
         column["name"] for column in inspector.get_columns("local_media_profiles")
@@ -331,6 +336,9 @@ def test_wireloft_1_1_downgrades_to_1_0_schema(migration_database):
     }
     assert "download_status" in {
         column["name"] for column in inspector.get_columns("media_downloads")
+    }
+    assert "background_migration_version" not in {
+        column["name"] for column in inspector.get_columns("settings")
     }
 
     with engine.connect() as connection:

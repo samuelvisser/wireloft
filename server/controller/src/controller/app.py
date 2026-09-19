@@ -266,33 +266,49 @@ def start_controller() -> None:
             # Make sure interrupted tasks don't remain forever.
             clear_interrupted_task_runs()
 
-            if get_settings().scheduler.enabled:
-                sync_registry_to_db()
-                start_scheduler()
+            settings = get_settings()
+
+            # Task execution is always available. The scheduler.enabled setting
+            # controls automatic schedules/events only, so manual operations,
+            # recovery, and mandatory background migrations continue to work.
+            sync_registry_to_db()
+            start_scheduler()
+
+            if settings.scheduler.enabled:
                 reload_user_schedules()
                 setup_triggers_from_registry()
-                install_stalled_work_watchdog()
 
-                recovered_targets = recover_pending_operations()
-                if recovered_targets:
-                    logger.info(
-                        "Recovered %s TaskOperation target(s) after restart",
-                        recovered_targets,
-                    )
+            install_stalled_work_watchdog()
 
-                # Queue-managed task definitions restore their own available
-                # slots after generic operation recovery. This keeps recovery
-                # generic while preserving policies such as a constrained
-                # concurrency lane instead of blasting every target at APScheduler.
-                recovery_dispatchers = run_recovery_dispatchers()
-                if recovery_dispatchers:
-                    logger.info(
-                        "Ran %s TaskOperation recovery dispatcher(s)",
-                        recovery_dispatchers,
-                    )
+            recovered_targets = recover_pending_operations()
+            if recovered_targets:
+                logger.info(
+                    "Recovered %s TaskOperation target(s) after restart",
+                    recovered_targets,
+                )
 
-                if _should_emit_startup_event():
-                    emit_startup_event()
+            # Queue-managed task definitions restore their own available slots
+            # after generic operation recovery.
+            recovery_dispatchers = run_recovery_dispatchers()
+            if recovery_dispatchers:
+                logger.info(
+                    "Ran %s TaskOperation recovery dispatcher(s)",
+                    recovery_dispatchers,
+                )
+
+            from task_manager.tasks.workers.background_migration_runner.scheduling import (
+                ensure_background_migration_operation,
+            )
+
+            migration_operation_id = ensure_background_migration_operation()
+            if migration_operation_id:
+                logger.info(
+                    "Background migrations queued as TaskOperation %s",
+                    migration_operation_id,
+                )
+
+            if settings.scheduler.enabled and _should_emit_startup_event():
+                emit_startup_event()
 
             _controller_started = True
         except Exception:

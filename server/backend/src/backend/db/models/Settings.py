@@ -22,6 +22,10 @@ class Settings(Base):
         String(32),
         nullable=True,
     )
+    background_migration_version: Mapped[Optional[str]] = mapped_column(
+        String(32),
+        nullable=True,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
@@ -32,5 +36,8 @@ class Settings(Base):
 
     def __repr__(self):
         return (
-            f"<Settings(id={self.id}, onboarding_completed={self.onboarding_completed}, alembic_version_num={self.alembic_version_num}, created_at={self.created_at}, updated_at={self.updated_at})>"
+            f"<Settings(id={self.id}, onboarding_completed={self.onboarding_completed}, "
+            f"alembic_version_num={self.alembic_version_num}, "
+            f"background_migration_version={self.background_migration_version}, "
+            f"created_at={self.created_at}, updated_at={self.updated_at})>"
         )

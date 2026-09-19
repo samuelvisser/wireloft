@@ -127,7 +127,7 @@ These settings are available under **Settings → Automation**.
 
 | Setting | Environment variable | Default | What it does |
 | --- | --- | --- | --- |
-| `scheduler.enabled` | `WL_SCHEDULER__ENABLED` | `true` | Enables automatic background work. |
+| `scheduler.enabled` | `WL_SCHEDULER__ENABLED` | `true` | Enables automatic indexing, monitoring and scheduled work. Manual operations, recovery and required maintenance still use the task execution system when this is disabled. |
 | `scheduler.maxWorkers` | `WL_SCHEDULER__MAX_WORKERS` | `15` | Maximum general background tasks that may run in parallel. Download concurrency is controlled separately. |
 | `scheduler.stalledTaskTimeoutMinutes` | `WL_SCHEDULER__STALLED_TASK_TIMEOUT_MINUTES` | `20` | Cancels work whose progress has not changed for this long. |
 | `scheduler.defaultMaxRetries` | `WL_SCHEDULER__DEFAULT_MAX_RETRIES` | `3` | Default retry count for eligible background tasks. |

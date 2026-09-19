@@ -82,16 +82,13 @@ async def application_lifespan(app: FastAPI):
     from task_manager.scheduler.scheduler import start_scheduler
 
     settings = get_settings()
-    scheduler = None
 
     # The download crash-recovery scans can be very expensive on a large or
-    # network-backed library. Start APScheduler empty and paused first, then let
-    # controller startup restore its jobs while keeping all of them fenced. This
-    # makes the API/UI ready immediately without allowing recovered downloads to
-    # race stale path reservations or temporary publication state.
-    if settings.scheduler.enabled:
-        scheduler = start_scheduler()
-        scheduler.pause()
+    # network-backed library. Start task execution paused first, then let
+    # controller startup restore its jobs while keeping all of them fenced. Task
+    # execution remains available even when automatic scheduling is disabled.
+    scheduler = start_scheduler()
+    scheduler.pause()
 
     started = False
     try:

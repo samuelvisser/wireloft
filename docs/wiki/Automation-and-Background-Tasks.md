@@ -90,7 +90,7 @@ See [[Downloads-and-File-Integrity]] for more details.
 
 ## Scheduler settings
 
-The background scheduler is enabled by default. Disabling it stops normal automatic indexing, monitoring, verification, and scheduled download behavior after restart.
+Automatic background scheduling is enabled by default. Disabling it stops normal automatic indexing, monitoring, verification, and scheduled download behavior after restart. It does not disable WireLoft's task execution system: manual operations, restart recovery, and required maintenance such as background migrations can still run.
 
 The default **Maximum workers** value is **15**. This controls how much general background work can run in parallel; download concurrency is controlled separately by **Concurrent downloads**.
 

@@ -28,6 +28,7 @@ class OperationSource(str, Enum):
 
 
 class ResourceType(str, Enum):
+    SYSTEM = "system"
     SHOW = "show"
     SEASON = "season"
     EPISODE = "episode"

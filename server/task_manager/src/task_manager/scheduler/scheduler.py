@@ -86,14 +86,12 @@ def start_scheduler() -> AsyncIOScheduler:
     if _scheduler is not None:
         return _scheduler
 
-    if not get_settings().scheduler.enabled:
-        # create but don't start to simplify call sites (no-ops)
-        _scheduler = _new_scheduler()
-        return _scheduler
-
-    # Use in-memory job store (default MemoryJobStore). User-created schedules
-    # are reloaded from TaskSchedule on startup. Honor WireLoft's configured
-    # worker limit instead of APScheduler's independent default of ten threads.
+    # Task execution is core infrastructure and remains available even when
+    # automatic scheduling is disabled. scheduler.enabled is enforced where
+    # recurring/event-driven automation is installed, not here.
+    #
+    # Use the in-memory job store (default MemoryJobStore). Durable TaskRuns and
+    # TaskOperations are recovered from WireLoft's database after a restart.
     loop = _get_or_start_event_loop()
     _scheduler = _new_scheduler(loop)
     _scheduler.start(paused=False)

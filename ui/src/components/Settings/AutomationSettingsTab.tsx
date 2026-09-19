@@ -21,13 +21,13 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
             >
                 <ToggleField
                     id="settings-scheduler-enabled"
-                    label="Enable background scheduler"
+                    label="Enable automatic background tasks"
                     checked={draft.scheduler.enabled}
                     environmentVariable={environmentVariableFor('scheduler.enabled')}
                     onChange={(checked) => updateDraft((next) => {
                         next.scheduler.enabled = checked
                     })}
-                    help="Disabling this stops automatic indexing, monitoring and scheduled downloads after restart."
+                    help="Disabling this stops automatic indexing, monitoring and scheduled downloads after restart. Manual operations, recovery and required maintenance can still run."
                     wide
                 />
                 <NumberField

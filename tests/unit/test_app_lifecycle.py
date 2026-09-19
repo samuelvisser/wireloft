@@ -38,6 +38,7 @@ assert 'refresh_movie_extras' in {definition.key for definition in all_definitio
 def test_app_factory_is_side_effect_free_and_lifespan_owns_controller(monkeypatch):
     import backend.app as backend_app
     import controller
+    import task_manager.scheduler.scheduler as scheduler_module
     from config import get_settings
 
     start = Mock()
@@ -58,11 +59,13 @@ def test_app_factory_is_side_effect_free_and_lifespan_owns_controller(monkeypatc
 
     asyncio.run(run_lifespan(first_app, 1, 0))
     assert stop.call_count == 1
+    scheduler_module.shutdown_scheduler(wait=False)
 
     second_app = backend_app.create_app()
     asyncio.run(run_lifespan(second_app, 2, 1))
     assert start.call_count == 2
     assert stop.call_count == 2
+    scheduler_module.shutdown_scheduler(wait=False)
 
 
 def test_controller_uses_asgi_loop_and_resets_scheduler(task_database, monkeypatch):

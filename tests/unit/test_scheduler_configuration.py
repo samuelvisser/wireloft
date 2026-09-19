@@ -48,3 +48,23 @@ def test_immediate_operation_jobs_do_not_expire_while_waiting_for_worker(monkeyp
     assert job_id == "job-id"
     assert captured["misfire_grace_time"] is None
     assert captured["kwargs"]["operation_ids"] == ("operation-id",)
+
+
+def test_scheduler_disabled_keeps_task_execution_available(monkeypatch):
+    import task_manager.scheduler.scheduler as scheduler_module
+
+    settings = SimpleNamespace(
+        timezone="UTC",
+        scheduler=SimpleNamespace(
+            enabled=False,
+            max_workers=2,
+        ),
+    )
+    monkeypatch.setattr(scheduler_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(scheduler_module, "_scheduler", None)
+
+    scheduler = scheduler_module.start_scheduler()
+    try:
+        assert scheduler.running
+    finally:
+        scheduler_module.shutdown_scheduler(wait=False)

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import Sidebar from './components/Sidebar'
 import Footer from './components/Sidebar/Footer'
 import OnboardingFlow from './components/Onboarding/OnboardingFlow'
+import BackgroundMigrationBanner from './components/BackgroundMigrationBanner/BackgroundMigrationBanner'
 import HomePage from './pages/HomePage'
 import LocalMediaProfilesPage from './pages/LocalMediaProfilesPage'
 import SettingsPage from './pages/SettingsPage'
@@ -120,6 +121,8 @@ export default function App() {
     <div className="app">
       <Sidebar />
       <main className="content" role="main">
+        {/* Deliberately mounted only after onboarding so first-run setup never shows this banner. */}
+        <BackgroundMigrationBanner />
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/library" element={<LibraryPage />} />
