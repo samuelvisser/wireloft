@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "e5f1a2c7d903"
+HEAD_REVISION = "7c2a9e5d4b10"
 WIRELOFT_1_0_REVISION = "c8d4e2f1a7b9"
 BASE_REVISION = "0001"
 
@@ -62,13 +62,29 @@ def _seed_wireloft_1_0_data(database_path: Path, engine) -> dict[str, int | str]
             "(uuid, slug, title, description, sharing_url, membership_level, type, "
             "episode_identifier, author_name, author_slug) VALUES "
             "('release-show-uuid', 'release-show', 'Release Show', 'Description', "
-            "'https://example.test/release-show', 'FREE', 'series', 'seasonal', "
+            "'https://www.dailywire.com/show/release-show', 'FREE', 'series', 'seasonal', "
             "'Host', 'host')"
         )).lastrowid
+        extra_season_id = connection.execute(text(
+            "INSERT INTO seasons (show_id, `index`, slug, name) "
+            "VALUES (:show_id, 1, 'extras', 'Extras')"
+        ), {"show_id": show_id}).lastrowid
         season_id = connection.execute(text(
             "INSERT INTO seasons (show_id, `index`, slug, name) "
-            "VALUES (:show_id, 1, 'season-1', 'Season 1')"
+            "VALUES (:show_id, 2, 'season-1', 'Season 1')"
         ), {"show_id": show_id}).lastrowid
+        for key, value in (
+            ("ep_id.latest_ep_num", "1"),
+            ("ep_id.latest_ep_extra_num", "1"),
+            ("ep_id.latest_season_2_ep", "1"),
+        ):
+            connection.execute(
+                text(
+                    "INSERT INTO metadata (parent_table, parent_id, key, value) "
+                    "VALUES ('shows', :show_id, :key, :value)"
+                ),
+                {"show_id": show_id, "key": key, "value": value},
+            )
 
         episode_id = connection.execute(text(
             "INSERT INTO media_items "
@@ -81,7 +97,7 @@ def _seed_wireloft_1_0_data(database_path: Path, engine) -> dict[str, int | str]
             "INSERT INTO episodes "
             "(id, show_id, season_id, `index`, episode_identifier, slug, publish_status, "
             "video_url, audio_url, sharing_url, published_date, metadata_is_final) "
-            "VALUES (:id, :show_id, :season_id, 1, 'ep.S01E01', 'release-episode', "
+            "VALUES (:id, :show_id, :season_id, 1, 'ep.S02E01', 'release-episode', "
             "'published', 'https://video.test/master.m3u8', NULL, "
             "'https://example.test/release-episode', '2026-09-01 12:00:00', 1)"
         ), {
@@ -93,6 +109,28 @@ def _seed_wireloft_1_0_data(database_path: Path, engine) -> dict[str, int | str]
             "INSERT INTO metadata (parent_table, parent_id, key, value) "
             "VALUES ('episodes', :episode_id, 'dw_processing.reason', 'release-test')"
         ), {"episode_id": episode_id})
+
+        trailer_episode_id = connection.execute(text(
+            "INSERT INTO media_items "
+            "(uuid, type, title, description, duration, background_image_path, "
+            "thumbnail_landscape_path, thumbnail_portrait_path, thumbnail_square_path) "
+            "VALUES ('release-trailer-episode-uuid', 'episode', "
+            "'Release Show | Official Trailer', 'Trailer description', 90, NULL, "
+            "'trailer-episode-land.jpg', NULL, NULL)"
+        )).lastrowid
+        connection.execute(text(
+            "INSERT INTO episodes "
+            "(id, show_id, season_id, `index`, episode_identifier, slug, publish_status, "
+            "video_url, audio_url, sharing_url, published_date, metadata_is_final) "
+            "VALUES (:id, :show_id, :season_id, 2, 'aux.1', 'release-show-trailer', "
+            "'published', 'https://video.test/trailer.m3u8', NULL, "
+            "'https://example.test/release-show-trailer', "
+            "'2026-08-31 12:00:00', 1)"
+        ), {
+            "id": trailer_episode_id,
+            "show_id": show_id,
+            "season_id": extra_season_id,
+        })
 
         download_id = connection.execute(text(
             "INSERT INTO media_downloads "
@@ -166,7 +204,10 @@ def _seed_wireloft_1_0_data(database_path: Path, engine) -> dict[str, int | str]
     return {
         "profile_id": int(profile_id),
         "show_id": int(show_id),
+        "extra_season_id": int(extra_season_id),
+        "season_id": int(season_id),
         "episode_id": int(episode_id),
+        "trailer_episode_id": int(trailer_episode_id),
         "download_id": int(download_id),
         "task_definition_id": int(task_definition_id),
         "movie_id": int(movie_id),
@@ -184,7 +225,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION) is not None
+    assert script.get_revision(HEAD_REVISION).down_revision == "e4c91a7b2d30"
+    assert script.get_revision("e4c91a7b2d30").down_revision == "e5f1a2c7d903"
     assert script.get_revision(BASE_REVISION) is not None
 
 
@@ -245,15 +287,52 @@ def test_upgrade_from_wireloft_1_0_preserves_release_data(migration_database):
         )).scalar_one() == HEAD_REVISION
 
         episode = connection.execute(text(
-            "SELECT slug, title, metadata_is_final "
+            "SELECT slug, title, metadata_is_final, dw_episode_number, episode_identifier "
             "FROM media_items_episode WHERE id = :id"
         ), {"id": seeded["episode_id"]}).mappings().one()
         assert episode["slug"] == "release-episode"
         assert episode["title"] == "Release Episode"
         assert bool(episode["metadata_is_final"])
+        assert episode["dw_episode_number"] is None
+        assert episode["episode_identifier"] == "ep.S01E01"
+
+        trailer_episode = connection.execute(text(
+            "SELECT title, episode_identifier FROM media_items_episode WHERE id = :id"
+        ), {"id": seeded["trailer_episode_id"]}).mappings().one()
+        assert trailer_episode["title"] == "Release Show | Official Trailer"
+        assert trailer_episode["episode_identifier"] == "trailer.1"
+
+        extra_season = connection.execute(text(
+            "SELECT season_type, season_number FROM seasons WHERE id = :id"
+        ), {"id": seeded["extra_season_id"]}).mappings().one()
+        assert extra_season["season_type"] == "extra"
+        assert extra_season["season_number"] == 0
+
+        season = connection.execute(text(
+            "SELECT season_type, season_number FROM seasons WHERE id = :id"
+        ), {"id": seeded["season_id"]}).mappings().one()
+        assert season["season_type"] == "normal"
+        assert season["season_number"] == 1
+
+        retired_counters = connection.execute(
+            text(
+                "SELECT key FROM metadata "
+                "WHERE parent_table = 'shows' AND parent_id = :show_id "
+                "AND (key = 'ep_id.latest_ep_num' "
+                "OR key = 'ep_id.latest_ep_extra_num' "
+                "OR key LIKE 'ep_id.latest_season_%_ep')"
+            ),
+            {"show_id": seeded["show_id"]},
+        ).scalars().all()
+        assert retired_counters == []
+
+        assert connection.execute(text(
+            "SELECT background_migration_version FROM settings"
+        )).scalar_one() is None
 
         metadata = connection.execute(text(
-            "SELECT parent_table, key, value FROM metadata WHERE parent_id = :id"
+            "SELECT parent_table, key, value FROM metadata "
+            "WHERE parent_table = 'media_items_episode' AND parent_id = :id"
         ), {"id": seeded["episode_id"]}).mappings().one()
         assert metadata["parent_table"] == "media_items_episode"
         assert metadata["key"] == "no_usable_media.reason"
@@ -340,6 +419,15 @@ def test_wireloft_1_1_downgrades_to_1_0_schema(migration_database):
     assert "background_migration_version" not in {
         column["name"] for column in inspector.get_columns("settings")
     }
+    assert "dw_episode_number" not in {
+        column["name"] for column in inspector.get_columns("episodes")
+    }
+    assert "season_type" not in {
+        column["name"] for column in inspector.get_columns("seasons")
+    }
+    assert "season_number" not in {
+        column["name"] for column in inspector.get_columns("seasons")
+    }
 
     with engine.connect() as connection:
         # The old attempt table is structurally restored, but its 1.0 history was
@@ -347,9 +435,12 @@ def test_wireloft_1_1_downgrades_to_1_0_schema(migration_database):
         assert connection.execute(text(
             "SELECT COUNT(*) FROM media_download_attempts"
         )).scalar_one() == 0
-        assert connection.execute(text(
-            "SELECT slug FROM episodes WHERE id = :id"
-        ), {"id": seeded["episode_id"]}).scalar_one() == "release-episode"
+        downgraded_episode = connection.execute(
+            text("SELECT slug, episode_identifier FROM episodes WHERE id = :id"),
+            {"id": seeded["episode_id"]},
+        ).mappings().one()
+        assert downgraded_episode["slug"] == "release-episode"
+        assert downgraded_episode["episode_identifier"] == "ep.S02E01"
         assert connection.execute(text(
             "SELECT slug FROM movies WHERE id = :id"
         ), {"id": seeded["movie_id"]}).scalar_one() == "release-movie"

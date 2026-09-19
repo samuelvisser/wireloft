@@ -414,8 +414,8 @@ def test_mapper_skips_detail_lookup_for_explicit_official_trailer_title():
     assert episode_map[season.id][0][0] == "trailer.1"
 
 
-def test_reindex_migration_verifies_ambiguous_trailer_title_with_detail():
-    from backend.db.alembic.versions.e4c91a7b2d30_episode_indexing_semantics import (
+def test_background_reindex_verifies_ambiguous_trailer_title_with_detail():
+    from backend.db.background_migrations.versions.episode_indexing_semantics import (
         _resolve_possible_trailer,
     )
 
@@ -443,8 +443,8 @@ def test_reindex_migration_verifies_ambiguous_trailer_title_with_detail():
     assert resolved.is_trailer is False
 
 
-def test_reindex_migration_accepts_true_paginated_trailer_flag_without_detail():
-    from backend.db.alembic.versions.e4c91a7b2d30_episode_indexing_semantics import (
+def test_background_reindex_accepts_true_paginated_trailer_flag_without_detail():
+    from backend.db.background_migrations.versions.episode_indexing_semantics import (
         _resolve_possible_trailer,
     )
 
@@ -468,8 +468,8 @@ def test_reindex_migration_accepts_true_paginated_trailer_flag_without_detail():
     assert resolved is record
 
 
-def test_reindex_migration_skips_detail_lookup_for_official_trailer_title():
-    from backend.db.alembic.versions.e4c91a7b2d30_episode_indexing_semantics import (
+def test_background_reindex_skips_detail_lookup_for_official_trailer_title():
+    from backend.db.background_migrations.versions.episode_indexing_semantics import (
         _resolve_possible_trailer,
     )
 
@@ -493,8 +493,8 @@ def test_reindex_migration_skips_detail_lookup_for_official_trailer_title():
     assert resolved is record
 
 
-def test_reindex_migration_uses_the_same_canonical_identifier_rules():
-    from backend.db.alembic.versions.e4c91a7b2d30_episode_indexing_semantics import (
+def test_background_reindex_uses_the_same_canonical_identifier_rules():
+    from backend.db.background_migrations.versions.episode_indexing_semantics import (
         _direct_identifier,
         _generated_type,
     )
@@ -564,6 +564,58 @@ def test_reindex_migration_uses_the_same_canonical_identifier_rules():
     ) == "trailer"
 
 
+def test_background_reindex_only_updates_raw_number_when_remote_record_exists():
+    from backend.db.background_migrations.versions.episode_indexing_semantics import (
+        LocalEpisode,
+        LocalSeason,
+        LocalShow,
+        _plan_show,
+    )
+
+    season = LocalSeason(
+        id=11,
+        slug="season-1",
+        season_type="normal",
+        season_number=1,
+    )
+    matched = LocalEpisode(
+        id=101,
+        season_id=11,
+        index=1,
+        slug="matched",
+        identifier="ep.1",
+        previous_identifier=None,
+    )
+    missing = LocalEpisode(
+        id=102,
+        season_id=11,
+        index=2,
+        slug="missing",
+        identifier="ep.2",
+        previous_identifier=None,
+    )
+    show = LocalShow(
+        id=1,
+        slug="test-show",
+        sharing_url="https://www.dailywire.com/show/test-show",
+        membership_level="FREE",
+        identifier_mode="numbered",
+        seasons=(season,),
+        episodes=(matched, missing),
+        latest_aux_num=0,
+        latest_trailer_num=0,
+    )
+    remote = _record("", slug="matched")
+
+    plan = _plan_show(show, {11: {"matched": remote}})
+    by_id = {episode.episode_id: episode for episode in plan.episodes}
+
+    assert by_id[101].update_dw_episode_number is True
+    assert by_id[101].dw_episode_number is None
+    assert by_id[102].update_dw_episode_number is False
+    assert by_id[102].identifier == "ep.2"
+
+
 def test_resolved_batch_is_reidentified_from_authoritative_detail_numbers():
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.helpers.episodes.save import ResolvedEpisode
@@ -613,10 +665,13 @@ def test_resolved_batch_is_reidentified_from_authoritative_detail_numbers():
     assert "ep_id.latest_ep_extra_num" not in values
 
 
-def test_reindex_migration_downgrade_restores_previous_identifier_grammar():
-    from backend.db.alembic.versions.e4c91a7b2d30_episode_indexing_semantics import (
-        _identifier_for_previous_release,
+def test_background_reindex_downgrade_restores_previous_identifier_grammar():
+    from importlib import import_module
+
+    migration = import_module(
+        "backend.db.alembic.versions.7c2a9e5d4b10_normalize_episode_identifiers"
     )
+    _identifier_for_previous_release = migration._identifier_for_previous_release
 
     assert _identifier_for_previous_release(
         "numbered",

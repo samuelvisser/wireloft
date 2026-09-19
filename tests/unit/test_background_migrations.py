@@ -47,6 +47,18 @@ def test_background_migration_chain_rejects_branches():
         )
 
 
+def test_episode_indexing_is_one_registered_background_migration():
+    from backend.db.background_migrations.registry import (
+        get_background_migration_history,
+    )
+
+    history = get_background_migration_history()
+
+    assert [(migration.key, migration.upstream_key) for migration in history] == [
+        ("episode_indexing_semantics", None),
+    ]
+
+
 def test_background_migration_runner_uses_stored_key_as_source_of_truth(monkeypatch):
     from backend.db.background_migrations import runner
 
