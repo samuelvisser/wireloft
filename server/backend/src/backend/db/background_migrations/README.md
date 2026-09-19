@@ -41,6 +41,12 @@ short-lived sessions around reads/writes, and report granular work with
 TaskOperation is only the execution layer. It provides progress, retries, restart recovery and UI
 visibility for the single `background_migration_runner` task; it is never the migration ledger.
 
+The runner is registered as critical work with `pauses_scheduled_work=True`. It executes on the
+scheduler's dedicated critical lane while the normal scheduler remains paused. That pause survives
+TaskRun retries and is released only when the migration TaskRun becomes terminal. Startup filesystem
+recovery uses the same reference-counted pause mechanism, so overlapping maintenance cannot resume
+normal work prematurely.
+
 ## CLI
 
 Use either command name:

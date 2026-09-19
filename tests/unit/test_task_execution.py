@@ -6,7 +6,14 @@ import pytest
 from sqlalchemy import select
 
 
-def _install_task(monkeypatch, *, key: str, function, default_max_retries: int = 3):
+def _install_task(
+    monkeypatch,
+    *,
+    key: str,
+    function,
+    default_max_retries: int = 3,
+    pauses_scheduled_work: bool = False,
+):
     import task_manager.scheduler.registry as registry_module
 
     monkeypatch.setattr(registry_module, "_REGISTRY", {})
@@ -16,6 +23,7 @@ def _install_task(monkeypatch, *, key: str, function, default_max_retries: int =
         description="Original description",
         allowed_resource_types=("show",),
         default_max_retries=default_max_retries,
+        pauses_scheduled_work=pauses_scheduled_work,
     )(function)
     registry_module.sync_registry_to_db()
     return decorated
@@ -195,3 +203,90 @@ def test_retry_run_is_nonterminal_then_clears_retry_state_on_success(task_databa
         assert run.next_retry_at is None
         assert run.finished_at is not None
         assert run.last_error is None
+
+
+def test_critical_task_keeps_scheduled_work_paused_across_retry(task_database, monkeypatch):
+    import task_manager.scheduler.scheduler as scheduler_module
+    from task_manager.scheduler.db import TaskRun
+    from task_manager.scheduler.executor import execute_task
+
+    attempts = 0
+
+    async def worker(*, resource_id=None, progress=None):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("retry critical work")
+
+    _install_task(
+        monkeypatch,
+        key="test_critical_retry",
+        function=worker,
+        default_max_retries=1,
+        pauses_scheduled_work=True,
+    )
+    monkeypatch.setattr(scheduler_module, "schedule_retry", Mock())
+
+    scheduler_module.shutdown_scheduler(wait=False)
+    try:
+        execute_task(
+            def_key="test_critical_retry",
+            resource_type="show",
+            resource_id=5,
+        )
+
+        with task_database() as session:
+            run = session.execute(select(TaskRun)).scalar_one()
+            run_id = run.id
+            assert run.status == "RETRY_SCHEDULED"
+
+        assert scheduler_module.scheduled_work_is_paused()
+        assert scheduler_module._scheduler is not None
+        assert scheduler_module._scheduler.state == scheduler_module.STATE_PAUSED
+
+        execute_task(
+            def_key="test_critical_retry",
+            resource_type="show",
+            resource_id=5,
+            run_id=run_id,
+        )
+
+        assert not scheduler_module.scheduled_work_is_paused()
+        assert scheduler_module._scheduler.state != scheduler_module.STATE_PAUSED
+    finally:
+        scheduler_module.shutdown_scheduler(wait=False)
+
+
+def test_canceling_waiting_critical_task_releases_scheduled_work_pause(task_database, monkeypatch):
+    import task_manager.scheduler.scheduler as scheduler_module
+    from task_manager.scheduler.db import TaskRun
+    from task_manager.scheduler.executor import execute_task
+    from task_manager.scheduler.operation_control import cancel_task_run
+
+    async def worker(*, resource_id=None, progress=None):
+        raise RuntimeError("retry critical work")
+
+    _install_task(
+        monkeypatch,
+        key="test_critical_cancel",
+        function=worker,
+        default_max_retries=1,
+        pauses_scheduled_work=True,
+    )
+    monkeypatch.setattr(scheduler_module, "schedule_retry", Mock())
+
+    scheduler_module.shutdown_scheduler(wait=False)
+    try:
+        execute_task(
+            def_key="test_critical_cancel",
+            resource_type="show",
+            resource_id=6,
+        )
+        with task_database() as session:
+            run_id = session.execute(select(TaskRun.id)).scalar_one()
+
+        assert scheduler_module.scheduled_work_is_paused()
+        assert cancel_task_run(run_id, reason="Test cancellation")
+        assert not scheduler_module.scheduled_work_is_paused()
+    finally:
+        scheduler_module.shutdown_scheduler(wait=False)

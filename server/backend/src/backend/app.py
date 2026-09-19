@@ -31,13 +31,13 @@ def db_session():
         s.close()
 
 
-def _recover_download_filesystem(download_settings, scheduler) -> None:
+def _recover_download_filesystem(download_settings, scheduled_work_pause) -> None:
     """Reconcile crash leftovers without delaying API readiness.
 
-    The scheduler is deliberately paused before the controller restores its jobs,
-    so startup/recovery work can be queued safely while these filesystem scans run
-    in the background. Only after the stale download claims and temporary
-    workspaces have been reconciled may scheduled work begin executing.
+    The caller acquires a scheduled-work pause before controller startup and
+    hands that lease to this background thread. Other critical work may hold its
+    own lease at the same time; normal work resumes only after the final lease is
+    released.
     """
     from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_download_path_reservations,
@@ -62,48 +62,51 @@ def _recover_download_filesystem(download_settings, scheduler) -> None:
         # Filesystem recovery is best-effort crash cleanup. A transient mount or
         # permissions problem must not leave every background task paused forever.
         logger.exception(
-            "Download filesystem recovery failed; resuming scheduled work without complete cleanup"
+            "Download filesystem recovery failed; releasing its scheduled-work pause without complete cleanup"
         )
     finally:
-        if scheduler is not None and scheduler.running:
-            try:
-                scheduler.resume()
-            except Exception:
-                # The scheduler may have been shut down while the daemon recovery
-                # thread was still scanning a slow/network-backed download root.
-                if scheduler.running:
-                    logger.exception("Could not resume scheduler after download filesystem recovery")
+        scheduled_work_pause.release()
 
 
 @asynccontextmanager
 async def application_lifespan(app: FastAPI):
     """Own the background controller for exactly one ASGI app lifespan."""
     import controller
-    from task_manager.scheduler.scheduler import start_scheduler
+    from task_manager.scheduler.scheduler import (
+        pause_scheduled_work,
+        start_scheduler,
+    )
 
     settings = get_settings()
 
-    # The download crash-recovery scans can be very expensive on a large or
-    # network-backed library. Start task execution paused first, then let
-    # controller startup restore its jobs while keeping all of them fenced. Task
-    # execution remains available even when automatic scheduling is disabled.
-    scheduler = start_scheduler()
-    scheduler.pause()
+    # Acquire the filesystem-recovery lease before controller startup so no
+    # normal job can slip through while durable work is being restored. Critical
+    # tasks (for example background migrations) use their own scheduler lane and
+    # may start while this lease is active.
+    start_scheduler()
+    filesystem_pause = pause_scheduled_work(
+        "download filesystem recovery",
+        owner_key="startup-download-filesystem-recovery",
+    )
 
     started = False
+    recovery_started = False
     try:
         controller.start_controller()
         started = True
 
         recovery_thread = threading.Thread(
             target=_recover_download_filesystem,
-            args=(settings.download_settings, scheduler),
+            args=(settings.download_settings, filesystem_pause),
             name="wireloft-startup-download-recovery",
             daemon=True,
         )
         recovery_thread.start()
+        recovery_started = True
         yield
     finally:
+        if not recovery_started:
+            filesystem_pause.release()
         if started:
             controller.stop_controller()
 

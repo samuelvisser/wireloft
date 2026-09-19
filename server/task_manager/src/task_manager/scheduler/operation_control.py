@@ -109,6 +109,7 @@ def cancel_operation(
     """
     session = get_session()
     cancelable_run_ids: set[int] = set()
+    released_run_ids: set[int] = set()
     released_definition_ids: set[int] = set()
     terminal_callbacks: set = set()
     try:
@@ -140,6 +141,7 @@ def cancel_operation(
                     # reaches its cooperative cancellation boundary and invokes
                     # the same terminal callback itself.
                     if _task_status(run.status) == TaskStatus.CANCELED:
+                        released_run_ids.add(run.id)
                         released_definition_ids.add(run.definition_id)
 
         now = datetime.now(timezone.utc)
@@ -164,12 +166,17 @@ def cancel_operation(
     finally:
         session.close()
 
-    from task_manager.scheduler.scheduler import cancel_pending_operation_jobs
+    from task_manager.scheduler.scheduler import (
+        cancel_pending_operation_jobs,
+        release_scheduled_work_pause,
+    )
 
     cancel_pending_operation_jobs(
         operation_id=operation_id,
         run_ids=cancelable_run_ids,
     )
+    for run_id in released_run_ids:
+        release_scheduled_work_pause(owner_key=f"task-run:{run_id}")
     _run_terminal_callbacks(terminal_callbacks)
 
     from task_manager.scheduler.operations import get_operation
@@ -216,9 +223,14 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
     finally:
         session.close()
 
-    from task_manager.scheduler.scheduler import cancel_pending_task_run_jobs
+    from task_manager.scheduler.scheduler import (
+        cancel_pending_task_run_jobs,
+        release_scheduled_work_pause,
+    )
 
     cancel_pending_task_run_jobs((run_id,))
+    if not was_running:
+        release_scheduled_work_pause(owner_key=f"task-run:{run_id}")
     _run_terminal_callbacks(callbacks)
     return True
 
@@ -236,6 +248,7 @@ def restart_operation(operation_id: str) -> dict | None:
 
     session = get_session()
     cancelable_run_ids: set[int] = set()
+    released_run_ids: set[int] = set()
     queue_dispatchers: set = set()
     try:
         operation = _load_operation(session, operation_id)
@@ -274,6 +287,8 @@ def restart_operation(operation_id: str) -> dict | None:
                     reason="Replaced by restarted operation",
                 ):
                     cancelable_run_ids.add(run.id)
+                    if _task_status(run.status) == TaskStatus.CANCELED:
+                        released_run_ids.add(run.id)
                 session.delete(link)
 
             if keep_link is None:
@@ -315,6 +330,14 @@ def restart_operation(operation_id: str) -> dict | None:
         session.commit()
     finally:
         session.close()
+
+    # queue_task_after_commit dispatches replacement workers before commit()
+    # returns. Release old critical-task pause leases only after that handoff so
+    # a replacement critical job has already acquired its dispatch lease.
+    from task_manager.scheduler.scheduler import release_scheduled_work_pause
+
+    for run_id in released_run_ids:
+        release_scheduled_work_pause(owner_key=f"task-run:{run_id}")
 
     # Queue-managed work is dispatched only after the restarted operation is
     # durable. Each dispatcher decides how many slots are available.

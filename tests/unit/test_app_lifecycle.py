@@ -46,7 +46,11 @@ def test_app_factory_is_side_effect_free_and_lifespan_owns_controller(monkeypatc
     monkeypatch.setattr(controller, "start_controller", start)
     monkeypatch.setattr(controller, "stop_controller", stop)
     monkeypatch.setattr(get_settings().scheduler, "enabled", False)
-    monkeypatch.setattr(backend_app, "_recover_download_filesystem", lambda *_args: None)
+    monkeypatch.setattr(
+        backend_app,
+        "_recover_download_filesystem",
+        lambda *_args: _args[-1].release(),
+    )
 
     first_app = backend_app.create_app()
     assert start.call_count == 0
@@ -79,9 +83,13 @@ def test_controller_uses_asgi_loop_and_resets_scheduler(task_database, monkeypat
         controller_app.start_controller()
         try:
             scheduler = scheduler_module._scheduler
+            critical_scheduler = scheduler_module._critical_scheduler
             assert scheduler is not None
+            assert critical_scheduler is not None
             assert scheduler.running
+            assert critical_scheduler.running
             assert scheduler._eventloop is asyncio.get_running_loop()
+            assert critical_scheduler._eventloop is asyncio.get_running_loop()
             assert scheduler_module._loop_thread is None
         finally:
             controller_app.stop_controller()
@@ -89,6 +97,7 @@ def test_controller_uses_asgi_loop_and_resets_scheduler(task_database, monkeypat
     asyncio.run(run_controller())
 
     assert scheduler_module._scheduler is None
+    assert scheduler_module._critical_scheduler is None
     assert scheduler_module._loop is None
     assert scheduler_module._loop_thread is None
     assert not any(thread.name.startswith("wireloft") for thread in threading.enumerate())

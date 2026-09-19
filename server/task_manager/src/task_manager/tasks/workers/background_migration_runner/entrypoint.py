@@ -12,6 +12,7 @@ from task_manager.scheduler.results import TaskResult
     allowed_resource_types=("system",),
     default_max_retries=3,
     tracks_progress=True,
+    pauses_scheduled_work=True,
 )
 async def background_migration_runner(
     *,

@@ -469,6 +469,7 @@ def execute_task(
         max_retries: Optional[int] = None,
         operation_ids: tuple[str, ...] | list[str] | None = None,
         operation_slot: str | None = None,
+        _scheduled_work_pause_token: str | None = None,
         **kwargs,
 ):
     """
@@ -483,20 +484,64 @@ def execute_task(
     )
 
     task_meta, fn = get_task(def_key)
-    prepared = _prepare_execution(
-        def_key=def_key,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        schedule_id=schedule_id,
-        run_id=run_id,
-        max_retries=max_retries,
-        operation_ids=explicit_operation_ids,
-        operation_slot=operation_slot,
-        worker_callable=fn,
-        kwargs=dict(kwargs),
-    )
+    preparation_pause = None
+    dispatch_pause_token = _scheduled_work_pause_token
+    if task_meta.pauses_scheduled_work:
+        if run_id is not None:
+            scheduler.pause_scheduled_work(
+                task_meta.title,
+                owner_key=f"task-run:{run_id}",
+            )
+        elif dispatch_pause_token is None:
+            # Direct executor calls do not pass through trigger_now(). Hold a
+            # temporary lease before touching execution state, then hand it off
+            # to a retry-stable task-run owner once the run has been persisted.
+            preparation_pause = scheduler.pause_scheduled_work(task_meta.title)
+
+    try:
+        prepared = _prepare_execution(
+            def_key=def_key,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            schedule_id=schedule_id,
+            run_id=run_id,
+            max_retries=max_retries,
+            operation_ids=explicit_operation_ids,
+            operation_slot=operation_slot,
+            worker_callable=fn,
+            kwargs=dict(kwargs),
+        )
+    except Exception:
+        if dispatch_pause_token is not None:
+            scheduler.release_scheduled_work_pause(token=dispatch_pause_token)
+        if preparation_pause is not None:
+            preparation_pause.release()
+        elif task_meta.pauses_scheduled_work and run_id is not None:
+            scheduler.release_scheduled_work_pause(
+                owner_key=f"task-run:{run_id}"
+            )
+        raise
+
     if prepared is None:
+        if dispatch_pause_token is not None:
+            scheduler.release_scheduled_work_pause(token=dispatch_pause_token)
+        if preparation_pause is not None:
+            preparation_pause.release()
+        elif task_meta.pauses_scheduled_work and run_id is not None:
+            scheduler.release_scheduled_work_pause(
+                owner_key=f"task-run:{run_id}"
+            )
         return
+
+    if task_meta.pauses_scheduled_work and run_id is None:
+        scheduler.pause_scheduled_work(
+            task_meta.title,
+            owner_key=f"task-run:{prepared.run_id}",
+        )
+        if dispatch_pause_token is not None:
+            scheduler.release_scheduled_work_pause(token=dispatch_pause_token)
+        if preparation_pause is not None:
+            preparation_pause.release()
 
     updater = ProgressUpdater(prepared.run_id)
     worker_result: Any = None
@@ -566,6 +611,11 @@ def execute_task(
             # A post-terminal queue/backfill hook must never rewrite the outcome
             # of the TaskRun that has already been durably finalized.
             logger.exception("Terminal callback failed for task %s run %s", def_key, prepared.run_id)
+
+    if task_meta.pauses_scheduled_work:
+        scheduler.release_scheduled_work_pause(
+            owner_key=f"task-run:{prepared.run_id}"
+        )
 
     if terminal_error is not None:
         raise terminal_error

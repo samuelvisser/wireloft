@@ -66,3 +66,15 @@ def test_background_migration_operation_is_not_created_when_current(monkeypatch)
     )
 
     assert scheduling.ensure_background_migration_operation() is None
+
+
+def test_background_migration_runner_uses_critical_scheduler_lane():
+    from task_manager.scheduler.registry import get_task
+    from task_manager.tasks.workers.background_migration_runner.entrypoint import (
+        background_migration_runner,
+    )
+
+    meta, worker = get_task("background_migration_runner")
+
+    assert worker is background_migration_runner
+    assert meta.pauses_scheduled_work is True

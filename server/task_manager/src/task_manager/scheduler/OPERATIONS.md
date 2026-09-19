@@ -120,6 +120,16 @@ Cancellation immediately marks the TaskOperation canceled and removes exclusivel
 
 This is why recovery and control state must live in scheduler infrastructure rather than in React state or worker-specific request IDs.
 
+## Critical work and scheduled-work pauses
+
+Some maintenance must complete without normal scheduled work changing the same application state. A worker can declare this with `@task(..., pauses_scheduled_work=True)`.
+
+Critical tasks run on a dedicated serialized scheduler lane. When the first critical attempt starts, WireLoft acquires a reference-counted scheduled-work pause before preparing the TaskRun. The pause is retained across retries and released only when that TaskRun becomes terminal. Normal recurring jobs, immediate operations and retries remain queued in the normal scheduler while the pause is active.
+
+Non-task startup maintenance uses the same pause-lease API directly. Download filesystem recovery acquires its lease before controller recovery begins and releases it when the filesystem scan finishes. If filesystem recovery and a background migration overlap, both leases coexist and normal work resumes only after both have completed.
+
+The critical lane exists only to execute work responsible for a pause; it is not a second general-purpose worker pool. Keep `pauses_scheduled_work=True` for maintenance whose correctness requires normal scheduler quiescence.
+
 ## Stalled-work watchdog
 
 APScheduler can limit concurrent jobs and decide how to handle late/misfired jobs, but it cannot decide whether WireLoft's application-level progress percentage has stopped changing. WireLoft installs a lightweight watchdog job for that purpose.

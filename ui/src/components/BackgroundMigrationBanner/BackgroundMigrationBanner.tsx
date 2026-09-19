@@ -23,8 +23,8 @@ export default function BackgroundMigrationBanner() {
         {progress > 0 ? ` — ${progress}%` : ''}
       </strong>
       <p>
-        A background migration is currently running. WireLoft might be a little slow for a few
-        minutes. Please keep WireLoft running while the migration is in progress.
+        A background migration is currently running. Other scheduled work is temporarily paused.
+        Please keep WireLoft running while the migration is in progress.
       </p>
       {operation.message && operation.message !== 'Running' && (
         <span>{operation.message}</span>
