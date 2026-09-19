@@ -5,11 +5,13 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from backend.api.endpoints.download_profiles.service import require_unique_download_profile_episode_types
-from backend.api.helpers import create_database_fields, update_database_fields
+from backend.api.helpers import update_database_fields
 from backend.api.models.series_download_profile import *
 from backend.db.models.download_profile import SeriesDownloadProfile
 from backend.db.models import Season
 from backend.types.local_media_profile_types import LocalMediaProfileType
+from backend.types.season_types import SeasonType
+from backend.utils.season_ordering import season_type_from_name
 from backend.utils.local_media_profiles import require_local_media_profile_type
 from task_manager.events.transactional import queue_event
 
@@ -56,16 +58,38 @@ def _resolve_or_create_seasons_for_show(s: Session, show_id: int, seasons_req: l
 
     result: list[Season] = []
     seen_ids: set[int] = set()
+    show_seasons = s.query(Season).filter(Season.show_id == show_id).all()
+    next_index = max((season.index for season in show_seasons), default=0)
+    next_regular_number = max(
+        (
+            season.season_number
+            for season in show_seasons
+            if season.season_type == SeasonType.NORMAL.value
+        ),
+        default=0,
+    )
 
     for season_in in seasons_req:
         match = by_slug.get(season_in.slug)
         if match is None:
-            # Create new Season for this show
-            data = season_in.model_dump(exclude_none=True, exclude_unset=True)
-            data["show_id"] = show_id
-            match = create_database_fields(Season, data)
+            # This is normally pre-created by show indexing, but keep the profile
+            # endpoint correct when it receives a newly discovered season first.
+            next_index += 1
+            season_type = season_type_from_name(season_in.name)
+            if season_type is SeasonType.NORMAL:
+                next_regular_number += 1
+                season_number = next_regular_number
+            else:
+                season_number = 0
+            match = Season(
+                show_id=show_id,
+                index=next_index,
+                slug=season_in.slug,
+                name=season_in.name,
+                season_type=season_type.value,
+                season_number=season_number,
+            )
             s.add(match)
-            # Also register into map so next duplicates reuse
             by_slug.setdefault(match.slug, match)
         if match.id is not None:
             if match.id not in seen_ids:

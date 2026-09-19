@@ -674,8 +674,13 @@ a.btn,
 }
 .card-title { font-weight: 700; }
 .card-sub {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: 12px;
   color: var(--muted);
+  text-overflow: ellipsis;
   word-break: break-all;
 }
 .card-meta {

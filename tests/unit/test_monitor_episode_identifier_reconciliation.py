@@ -39,11 +39,11 @@ def test_monitor_reconciles_identifier_and_rekeys_recurring_job(monkeypatch):
         author_name="Ben Shapiro",
         author_slug="ben-shapiro",
     )
-    season = Season(show=show, index=1, slug="2026", name="2026")
+    season = Season(show=show, index=1, slug="2026", name="2026", season_type="normal", season_number=1)
     session.add_all([show, season])
     session.flush()
 
-    old_identifier = "ep-extra.2500.1"
+    old_identifier = "ep-extra.other.2500.1"
     episode = Episode(
         uuid=generate_uuid(),
         type="episode",
@@ -58,11 +58,8 @@ def test_monitor_reconciles_identifier_and_rekeys_recurring_job(monkeypatch):
         metadata_is_final=False,
         sharing_url="https://example.test/episode",
         published_date=datetime.now(timezone.utc).replace(tzinfo=None),
-        is_no_show_today=False,
     )
     session.add(episode)
-    show.set_meta("ep_id.latest_ep_num", "2500")
-    show.set_meta("ep_id.latest_ep_extra_num", "1")
     session.commit()
 
     published_at = datetime.now(timezone.utc)
@@ -120,7 +117,7 @@ def test_monitor_reconciles_identifier_and_rekeys_recurring_job(monkeypatch):
     stored = session.get(Episode, episode.id)
     assert stored is not None
     assert stored.episode_identifier == "ep.2500"
-    assert show.get_meta("ep_id.latest_ep_extra_num") == "0"
+    assert stored.dw_episode_number == "2500.00"
 
     completed = [
         call.args[2]

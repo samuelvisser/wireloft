@@ -6,6 +6,7 @@ from typing import Union
 from pydantic import Field, ValidationInfo, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.api.models.pagination import OffsetPageRead
 from backend.types.local_media_profile_types import (
     LocalMediaProfileStorageMode,
     LocalMediaProfileThumbnailMode,
@@ -168,9 +169,8 @@ class LocalMediaProfileTemplateSource(ResponseBase):
     fallback: bool = False
 
 
-class LocalMediaProfileTemplateSources(ResponseBase):
-    sources: list[LocalMediaProfileTemplateSource]
-    variables: list[LocalMediaProfileTemplateVariable] = Field(default_factory=list)
+class LocalMediaProfileTemplateSourcePage(OffsetPageRead[LocalMediaProfileTemplateSource]):
+    pass
 
 
 class LocalMediaProfileTemplatePreview(RequestBase):

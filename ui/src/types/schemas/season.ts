@@ -39,6 +39,8 @@ export const SeasonReadSchema = z.looseObject({
     index: z.int(),
     name: z.string(),
     slug: z.string(),
+    seasonType: z.enum(['normal', 'extra']),
+    seasonNumber: z.int(),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })

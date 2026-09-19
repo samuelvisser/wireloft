@@ -14,7 +14,8 @@ from backend.db.models.download_profile import PodcastDownloadProfile, SeriesDow
 from backend.db.models.stream_profile import RssStreamProfile
 from backend.utils.feed_urls import build_rss_feed_url
 from backend.utils.helpers import generate_stream_profile_token
-from backend.utils.season_ordering import order_initial_seasons
+from backend.types.season_types import SeasonType
+from backend.utils.season_ordering import order_initial_seasons, season_type_from_name
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 
@@ -57,9 +58,18 @@ def create_show_bundle(s: Session, request: Request, payload: ShowAPICreateBundl
     # fetch-new-episodes worker runs. Normalize them here so their persistent
     # indices are correct from the moment they are first stored.
     seasons: list[Season] = []
+    regular_season_number = 0
     for index, season_in in enumerate(order_initial_seasons(payload.seasons), start=1):
         season = create_database_fields(Season, season_in.model_dump(exclude_none=True))
+        season_type = season_type_from_name(season_in.name)
+        if season_type is SeasonType.NORMAL:
+            regular_season_number += 1
+            season_number = regular_season_number
+        else:
+            season_number = 0
         season.index = index
+        season.season_type = season_type.value
+        season.season_number = season_number
         season.show = show
         s.add(season)
         seasons.append(season)

@@ -1,20 +1,35 @@
 from __future__ import annotations
 
-from collections import Counter
 import re
-from typing import Tuple, Optional, Sequence, List, Any, OrderedDict
+from typing import Any, List, Optional, OrderedDict, Sequence, Tuple
 
-from backend.db.models import Show, Episode, Season
+from backend.db.models import Episode, Season, Show
 from backend.types.show_types import EpisodeIdentifier
-from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason, ByNextPage
+from dailywire_api.dw_api.client import (
+    ByNextPage,
+    ByShowSeason,
+    MiddlewareAPIError,
+    MiddlewareClient,
+)
 from dailywire_api.records import DwEpisodeRecord
-from task_manager.tasks.helpers.episodes.identifier import EpisodeWithIdentifier, IdentifierMaxValues, identify_episodes_in_season
-from task_manager.tasks.helpers.progress import update_progress, ProgressBounds, CollectionListProgressTracker
+from task_manager.tasks.helpers.episodes.identifier import (
+    EpisodeWithIdentifier,
+    IdentifierMaxValues,
+    direct_identifier_for_episode,
+    identify_episodes_in_season,
+)
+from task_manager.tasks.helpers.progress import (
+    CollectionListProgressTracker,
+    ProgressBounds,
+    update_progress,
+)
 from task_manager.tasks.types.general import RecordOrder
-from ..general import datetime_to_string
 
 
 type EpisodeMapTuple = OrderedDict[int, List[EpisodeWithIdentifier]]
+
+_TRAILER_TITLE_RE = re.compile(r"\btrailer\b", re.IGNORECASE)
+_OFFICIAL_TRAILER_RE = re.compile(r"\bofficial\s+trailer\b", re.IGNORECASE)
 
 
 def count_total_episodes(episodes_map: EpisodeMapTuple) -> int:
@@ -32,13 +47,9 @@ def get_dw_episodes_by_seasons(
     progress_bounds: ProgressBounds = ProgressBounds(1, 100),
     order: RecordOrder,
     prefetched_by_season: dict[int, list[DwEpisodeRecord]] | None = None,
-    vacated_identifiers: set[str] | None = None,
+    occupied_identifiers: set[str] | None = None,
 ) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
-    """
-    Fetch all episodes for the given *local* seasons.
-
-    Returns a mapping in descending order
-    """
+    """Fetch and identify all episodes for the given local seasons."""
     return _scan_seasons(
         client,
         show=show,
@@ -49,7 +60,7 @@ def get_dw_episodes_by_seasons(
         progress=progress,
         order=order,
         prefetched_by_season=prefetched_by_season,
-        vacated_identifiers=vacated_identifiers,
+        occupied_identifiers=occupied_identifiers,
     )
 
 
@@ -68,14 +79,18 @@ def get_dw_episodes_since_ep(
     order: RecordOrder,
     prefetched_by_season: dict[int, list[DwEpisodeRecord]] | None = None,
     vacated_identifiers: set[str] | None = None,
+    occupied_identifiers: set[str] | None = None,
 ) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
-    """
-    Fetch episodes strictly *after* the given final episode, across *all* remote seasons that follow it.
-
-    Returns a mapping in descending order
-    """
+    """Fetch episodes after the settled cursor, including vacated replacements."""
     if since_episode is not None:
-        index = next((i for i, season in enumerate(seasons) if season.slug == since_episode.season.slug), -1) + 1
+        index = next(
+            (
+                i
+                for i, season in enumerate(seasons)
+                if season.slug == since_episode.season.slug
+            ),
+            -1,
+        ) + 1
         seasons_to_scan = seasons[:index]
     else:
         seasons_to_scan = seasons
@@ -94,33 +109,8 @@ def get_dw_episodes_since_ep(
         order=order,
         prefetched_by_season=prefetched_by_season,
         vacated_identifiers=vacated_identifiers,
+        occupied_identifiers=occupied_identifiers,
     )
-
-
-def _canonical_main_identifier(
-    identifier_type: EpisodeIdentifier,
-    season: Season,
-    episode: DwEpisodeRecord,
-) -> str | None:
-    """Return the canonical main identifier a remote record can safely reclaim."""
-    if re.search(r"official trailer", episode.title, re.IGNORECASE):
-        return None
-
-    if identifier_type is EpisodeIdentifier.DATE_BASED:
-        return f"ep.{datetime_to_string(episode.published_date)}"
-    if (
-        identifier_type is EpisodeIdentifier.NUMBERED
-        and episode.ep_number is not None
-        and episode.ep_segment == 0
-    ):
-        return f"ep.{episode.ep_number}"
-    if (
-        identifier_type is EpisodeIdentifier.SEASONAL
-        and episode.ep_number is not None
-        and episode.ep_segment == 0
-    ):
-        return f"ep.S{season.index:02d}E{episode.ep_number:02d}"
-    return None
 
 
 def _is_vacated_replacement(
@@ -129,99 +119,43 @@ def _is_vacated_replacement(
     episode: DwEpisodeRecord,
     vacated_identifiers: set[str],
 ) -> bool:
-    desired = _canonical_main_identifier(identifier_type, season, episode)
+    desired = direct_identifier_for_episode(identifier_type, season, episode)
     return desired is not None and desired in vacated_identifiers
 
 
-def _advance_reclaimed_counter(
+def _resolve_trailer_candidates(
+    client: MiddlewareClient,
     *,
-    identifier_type: EpisodeIdentifier,
-    episode: DwEpisodeRecord,
-    season: Season,
-    current_values: IdentifierMaxValues,
-) -> IdentifierMaxValues:
-    """Advance a rolled-back high-water mark without ever rewinding a newer one."""
-    values = dict(current_values)
-    if identifier_type is EpisodeIdentifier.DATE_BASED:
-        timestamp = int(episode.published_date.timestamp())
-        values["ep_id.latest_ep_date"] = max(
-            values.get("ep_id.latest_ep_date", 0),
-            timestamp,
-        )
-        return values
-
-    if episode.ep_number is None:
-        return values
-
-    if identifier_type is EpisodeIdentifier.NUMBERED:
-        previous = values.get("ep_id.latest_ep_num", 0)
-        values["ep_id.latest_ep_num"] = max(previous, episode.ep_number)
-        if episode.ep_number > previous:
-            values["ep_id.latest_ep_extra_num"] = 0
-        return values
-
-    if identifier_type is EpisodeIdentifier.SEASONAL:
-        key = f"ep_id.latest_season_{season.index}_ep"
-        previous = values.get(key, 0)
-        values[key] = max(previous, episode.ep_number)
-        if episode.ep_number > previous:
-            values["ep_id.latest_ep_extra_num"] = 0
-        return values
-
-    return values
-
-
-def _identify_with_vacated_reclaims(
-    *,
-    identifier_type: EpisodeIdentifier,
     episodes: list[DwEpisodeRecord],
-    current_values: IdentifierMaxValues,
-    season: Season,
-    vacated_identifiers: set[str],
-) -> tuple[list[EpisodeWithIdentifier], IdentifierMaxValues]:
-    """Identify records while allowing unambiguous reclamation of quarantined main ids.
-
-    Normal identifier allocation is intentionally monotonic. A replacement for an
-    older quarantined episode is the exception: if its canonical main identifier is
-    currently free and recorded as vacated, it may reclaim that identifier without
-    rewinding a newer high-water counter. Multiple candidates for one vacated id are
-    deliberately treated as ambiguous and fall back to normal allocation.
-    """
-    desired_identifiers = [
-        _canonical_main_identifier(identifier_type, season, episode)
-        for episode in episodes
-    ]
-    candidate_counts = Counter(
-        identifier
-        for identifier in desired_identifiers
-        if identifier is not None and identifier in vacated_identifiers
-    )
-
-    identified: list[EpisodeWithIdentifier] = []
-    for episode, desired in zip(episodes, desired_identifiers, strict=True):
-        if (
-            desired is not None
-            and desired in vacated_identifiers
-            and candidate_counts[desired] == 1
-        ):
-            identified.append((desired, episode))
-            current_values = _advance_reclaimed_counter(
-                identifier_type=identifier_type,
-                episode=episode,
-                season=season,
-                current_values=current_values,
-            )
-            vacated_identifiers.remove(desired)
+    require_member_exclusive: bool,
+) -> list[DwEpisodeRecord]:
+    """Resolve ambiguous trailer titles while trusting explicit Official Trailer titles."""
+    resolved: list[DwEpisodeRecord] = []
+    for episode in episodes:
+        if episode.is_trailer is True:
+            resolved.append(episode)
             continue
 
-        mapped, current_values = identify_episodes_in_season(
-            identifier_type,
-            [episode],
-            current_values,
-            season=season,
-        )
-        identified.extend(mapped)
-    return identified, current_values
+        if _OFFICIAL_TRAILER_RE.search(episode.title or ""):
+            resolved.append(episode)
+            continue
+
+        if not _TRAILER_TITLE_RE.search(episode.title or ""):
+            resolved.append(episode)
+            continue
+
+        try:
+            detail = client.get_episode_details(
+                episode.slug,
+                require_member_exclusive=require_member_exclusive,
+            )
+        except MiddlewareAPIError as exc:
+            if exc.status_code != 404:
+                raise
+            resolved.append(episode)
+        else:
+            resolved.append(detail)
+    return resolved
 
 
 def _scan_seasons(
@@ -239,40 +173,58 @@ def _scan_seasons(
     order: RecordOrder,
     prefetched_by_season: dict[int, list[DwEpisodeRecord]] | None = None,
     vacated_identifiers: set[str] | None = None,
+    occupied_identifiers: set[str] | None = None,
 ) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
     ep_map: EpisodeMapTuple = OrderedDict()
     current_values: IdentifierMaxValues = dict(prev_max_values) if prev_max_values else {}
     known_episode_slugs = known_episode_slugs or set()
     prefetched_by_season = prefetched_by_season or {}
     available_vacated_identifiers = set(vacated_identifiers or ())
+    # Identifier allocation mutates this set while scanning multiple seasons.
+    # Keep that mutation local so the caller's persisted-identifier snapshot can
+    # be reused for the authoritative post-detail identifier pass.
+    occupied = set(occupied_identifiers or ())
 
     seasons_asc = sorted(seasons, key=lambda season: season.index)
     season_count = len(seasons_asc)
     update_progress(progress, bounds.min_pct, f"Scanning episodes for '{show.slug}'...")
-    tracker = CollectionListProgressTracker(progress_sink=progress, bounds=bounds, collection_count=season_count)
+    tracker = CollectionListProgressTracker(
+        progress_sink=progress,
+        bounds=bounds,
+        collection_count=season_count,
+    )
+
+    identifier_type = EpisodeIdentifier(show.episode_identifier)
+    require_member_exclusive = membership_plan != "FREE"
 
     for idx, season in enumerate(seasons_asc):
-        eps = list(prefetched_by_season.get(season.id) or fetch_all_episodes_paginated(
-            client,
-            show.slug,
-            ByShowSeason(
-                season_dw_id=dw_id_by_slug[season.slug],
-                membership_plan=membership_plan,
-                page_size=50,
-                order_by="CreatedAt_ASC",
-            ),
-        ))
+        eps = list(
+            prefetched_by_season.get(season.id)
+            or fetch_all_episodes_paginated(
+                client,
+                show.slug,
+                ByShowSeason(
+                    season_dw_id=dw_id_by_slug[season.slug],
+                    membership_plan=membership_plan,
+                    page_size=50,
+                    order_by="CreatedAt_ASC",
+                ),
+            )
+        )
         eps = list(dict.fromkeys(eps))
         eps.sort(key=lambda rec: (rec.published_date, rec.ep_number or 0, rec.ep_segment))
-        identifier_type = EpisodeIdentifier(show.episode_identifier)
+        eps = _resolve_trailer_candidates(
+            client,
+            episodes=eps,
+            require_member_exclusive=require_member_exclusive,
+        )
 
         if since_episode is not None:
-            cursor_index = next((i for i, rec in enumerate(eps) if rec.slug == since_episode.slug), None)
+            cursor_index = next(
+                (i for i, rec in enumerate(eps) if rec.slug == since_episode.slug),
+                None,
+            )
             if cursor_index is not None:
-                # Normally incremental discovery only needs records after the last
-                # settled cursor. A replacement for a quarantined older episode is
-                # the deliberate exception: keep those pre-cursor records so the
-                # vacated canonical identifier can be reclaimed.
                 before_cursor = [
                     rec
                     for rec in eps[:cursor_index]
@@ -283,27 +235,41 @@ def _scan_seasons(
                         available_vacated_identifiers,
                     )
                 ]
-                eps = before_cursor + eps[cursor_index + 1:]
+                eps = before_cursor + eps[cursor_index + 1 :]
 
         if known_episode_slugs:
             eps = [rec for rec in eps if rec.slug not in known_episode_slugs]
 
-        eps_with_id, current_values = _identify_with_vacated_reclaims(
-            identifier_type=identifier_type,
-            episodes=eps,
-            current_values=current_values,
+        eps_with_id, current_values = identify_episodes_in_season(
+            identifier_type,
+            eps,
+            current_values,
             season=season,
-            vacated_identifiers=available_vacated_identifiers,
+            occupied_identifiers=occupied,
         )
+        for identifier, _episode in eps_with_id:
+            available_vacated_identifiers.discard(identifier)
+
         if order == RecordOrder.DESC:
             eps_with_id.reverse()
         ep_map[season.id] = eps_with_id
 
         tracker.record_collection_actual(idx, len(eps))
-        tracker.update(f"Mapped {sum(tracker.actual)} episodes so far (season {season.index}: {season.name})")
+        tracker.update(
+            f"Mapped {sum(tracker.actual)} episodes so far "
+            f"(season {season.index}: {season.name})"
+        )
 
-    ep_map_final = OrderedDict(reversed(list(ep_map.items()))) if order == RecordOrder.DESC else ep_map
-    update_progress(progress, bounds.max_pct, f"Finished scanning {season_count} season(s) for '{show.slug}'.")
+    ep_map_final = (
+        OrderedDict(reversed(list(ep_map.items())))
+        if order == RecordOrder.DESC
+        else ep_map
+    )
+    update_progress(
+        progress,
+        bounds.max_pct,
+        f"Finished scanning {season_count} season(s) for '{show.slug}'.",
+    )
     return ep_map_final, current_values
 
 
@@ -312,7 +278,7 @@ def fetch_all_episodes_paginated(
     show_slug: str,
     by: ByShowSeason,
 ) -> List[DwEpisodeRecord]:
-    """Fetch one entire Daily Wire season while preserving request pagination."""
+    """Fetch one entire Daily Wire season, following nextPageUrl until absent."""
     items, next_page_url, has_next = client.get_episodes_paginated(show_slug, by)
     all_items: List[DwEpisodeRecord] = list(items) if items else []
     while has_next and next_page_url:

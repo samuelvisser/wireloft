@@ -3,13 +3,17 @@ from __future__ import annotations
 import re
 from typing import Protocol, Sequence, TypeVar
 
+from backend.types.season_types import SeasonType
 
-class SeasonWithSlug(Protocol):
+
+class SeasonWithNameAndSlug(Protocol):
+    name: str
     slug: str
 
 
-SeasonT = TypeVar("SeasonT", bound=SeasonWithSlug)
+SeasonT = TypeVar("SeasonT", bound=SeasonWithNameAndSlug)
 
+_EXTRAS_NAME_PATTERN = re.compile(r"\bextras?\b", re.IGNORECASE)
 _YEAR_SEASON_PATTERNS = (
     re.compile(r"(?:^|-)season-((?:19|20)\d{2})(?:-|$)", re.IGNORECASE),
     re.compile(r"(?:^|-)((?:19|20)\d{2})-season(?:-|$)", re.IGNORECASE),
@@ -20,13 +24,23 @@ _NUMBERED_SEASON_PATTERN = re.compile(
 )
 
 
-def order_initial_seasons(seasons: Sequence[SeasonT]) -> list[SeasonT]:
-    """Return deterministic season order for the moment a show is first created.
+def season_type_from_name(name: str) -> SeasonType:
+    """Infer The Daily Wire season semantics from its human-readable name."""
+    return (
+        SeasonType.EXTRA
+        if _EXTRAS_NAME_PATTERN.search(name or "")
+        else SeasonType.NORMAL
+    )
 
-    Daily Wire normally returns seasons oldest-to-newest, but some shows return
-    numbered or year-based seasons out of order. Unstructured seasons such as
-    ``Extras`` stay first in their API order. Recognizable numbered/year seasons
-    follow, sorted ascending by the number encoded in their slug.
+
+def order_initial_seasons(seasons: Sequence[SeasonT]) -> list[SeasonT]:
+    """Return deterministic persistent season order for a newly added show.
+
+    This deliberately preserves WireLoft's existing internal-index behavior:
+    unstructured slugs stay first in The Daily Wire API order, while recognizable
+    numbered/year slugs follow in ascending order. Semantic season numbering is
+    handled separately by season_type/season_number so an Extras name can override
+    a misleading numbered slug without changing the internal index.
     """
     decorated: list[tuple[tuple[int, int, int], SeasonT]] = []
     for api_position, season in enumerate(seasons):

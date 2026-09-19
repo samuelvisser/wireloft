@@ -1,20 +1,22 @@
 from __future__ import annotations
 
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import func, literal, select, union_all
+from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplatePreview,
     LocalMediaProfileTemplatePreviewResult,
     LocalMediaProfileTemplateSource,
-    LocalMediaProfileTemplateSources,
+    LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
 )
-from backend.db.models import Movie
+from backend.db.models import Episode, Movie, MovieExtra, MovieExtraSource, Season, Show
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
     PreferredFormat,
     ShowLocalMediaProfileScope,
 )
+from backend.types.show_types import ShowType
 from backend.utils.custom_metadata import (
     CustomMetadataScope,
     custom_metadata_template_variable,
@@ -30,9 +32,9 @@ from backend.utils.output_template import (
     replace_output_extension,
     render_output_template,
 )
+from backend.utils.search import search_all_terms, search_relevance_score
 
 from ..custom_metadata.service import get_custom_metadata_fields
-from .template_source_selection import select_show_template_source_episodes
 
 
 _EXAMPLE_SHOW_VALUES = {
@@ -41,11 +43,16 @@ _EXAMPLE_SHOW_VALUES = {
     "season": "season-1",
     "season_name": "Season 1",
     "season_index": "1",
+    "season_type": "normal",
+    "season_number": "1",
     "episode": "the-first-episode",
     "episode_title": "The First Episode",
     "title": "The First Episode",
+    "dw_episode_number": "1.00",
     "episode_type": "ep",
+    "episode_extra_type": "",
     "episode_number": "1",
+    "episode_sub_number": "",
     "episode_label": "1",
     "episode_identifier": "ep.1",
     "episode_published_date": "2026-08-30",
@@ -98,10 +105,11 @@ _EXAMPLE_MOVIE_VALUES = {
 }
 
 
-def _custom_template_variables(
+def get_output_template_variables(
     session: Session,
     profile_type: LocalMediaProfileType,
 ) -> list[LocalMediaProfileTemplateVariable]:
+    """Return custom template variables available to one Local Media Profile type."""
     if profile_type == LocalMediaProfileType.SHOW:
         scope: CustomMetadataScope = "show"
         description = "Custom show metadata"
@@ -109,7 +117,7 @@ def _custom_template_variables(
         scope = "movie"
         description = "Custom movie metadata"
     else:
-        return []
+        raise ValueError("Template variables are only available for Show and Movie profiles")
 
     return [
         LocalMediaProfileTemplateVariable(
@@ -120,57 +128,246 @@ def _custom_template_variables(
     ]
 
 
-def get_output_template_sources(
-    s: Session,
-    profile_type: LocalMediaProfileType,
-    show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH,
-) -> LocalMediaProfileTemplateSources:
-    """Return recent examples plus custom metadata fields shared by this media type."""
-    variables = _custom_template_variables(s, profile_type)
+def _show_type_values(show_scope: ShowLocalMediaProfileScope) -> tuple[str, ...]:
+    if show_scope == ShowLocalMediaProfileScope.BOTH:
+        return (ShowType.PODCAST.value, ShowType.SERIES.value)
+    if show_scope == ShowLocalMediaProfileScope.PODCAST:
+        return (ShowType.PODCAST.value,)
+    if show_scope == ShowLocalMediaProfileScope.SERIES:
+        return (ShowType.SERIES.value,)
+    raise ValueError(f"Unsupported show template source scope: {show_scope}")
 
-    if profile_type == LocalMediaProfileType.SHOW:
-        episodes = select_show_template_source_episodes(s, show_scope)
-        sources = [
-            LocalMediaProfileTemplateSource(
-                id=f"episode:{episode.id}",
-                label=f"{episode.show.title} — {episode.title}",
-                values=episode_output_template_values(episode),
-            )
-            for episode in episodes
-        ]
-        fallback_values = _EXAMPLE_SHOW_VALUES
-        fallback_label = "Example show episode"
-    elif profile_type == LocalMediaProfileType.MOVIE:
-        movies = (
-            s.query(Movie)
-            .options(selectinload(Movie.movie_extras))
-            .order_by(Movie.created_at.desc(), Movie.id.desc())
-            .limit(20)
-            .all()
+
+def _show_source_page(
+    session: Session,
+    show_scope: ShowLocalMediaProfileScope,
+    *,
+    search: str | None,
+    offset: int,
+    limit: int,
+) -> tuple[list[LocalMediaProfileTemplateSource], bool]:
+    relevance = search_relevance_score(
+        search,
+        Episode.title,
+        Show.title,
+        Season.name,
+        Episode.slug,
+        Show.slug,
+        Episode.episode_identifier,
+        Show.author_name,
+        Season.slug,
+    )
+    ordering = [
+        func.lower(Show.title),
+        Show.id,
+        Episode.index,
+        Episode.id,
+    ]
+    if relevance is not None:
+        ordering.insert(0, relevance.desc())
+
+    query = (
+        select(Episode)
+        .join(Episode.show)
+        .join(Episode.season)
+        .options(contains_eager(Episode.show), contains_eager(Episode.season))
+        .where(Show.type.in_(_show_type_values(show_scope)))
+        .where(*search_all_terms(
+            search,
+            Show.title,
+            Show.slug,
+            Show.author_name,
+            Episode.title,
+            Episode.slug,
+            Episode.episode_identifier,
+            Season.name,
+            Season.slug,
+        ))
+        .order_by(*ordering)
+        .offset(offset)
+        .limit(limit + 1)
+    )
+    episodes = list(session.scalars(query).unique().all())
+    has_more = len(episodes) > limit
+    episodes = episodes[:limit]
+    return [
+        LocalMediaProfileTemplateSource(
+            id=f"episode:{episode.id}",
+            label=f"{episode.show.title} — {episode.title}",
+            values=episode_output_template_values(episode),
         )
-        sources = []
-        for movie in movies:
-            if len(sources) >= 20:
-                break
+        for episode in episodes
+    ], has_more
+
+
+def _movie_source_page(
+    session: Session,
+    *,
+    search: str | None,
+    offset: int,
+    limit: int,
+) -> tuple[list[LocalMediaProfileTemplateSource], bool]:
+    movie_relevance = search_relevance_score(
+        search,
+        Movie.title,
+        Movie.extended_title,
+        Movie.slug,
+        Movie.author_name,
+    )
+    if movie_relevance is None:
+        movie_relevance = literal(0)
+
+    extra_relevance = search_relevance_score(
+        search,
+        MovieExtraSource.title,
+        Movie.title,
+        Movie.extended_title,
+        MovieExtraSource.slug,
+        Movie.slug,
+        MovieExtra.movie_extra_type,
+    )
+    if extra_relevance is None:
+        extra_relevance = literal(0)
+
+    movie_query = (
+        select(
+            literal("movie").label("kind"),
+            Movie.id.label("item_id"),
+            Movie.id.label("movie_id"),
+            movie_relevance.label("relevance"),
+            func.lower(Movie.title).label("group_sort"),
+            literal(0).label("kind_sort"),
+            func.lower(Movie.title).label("item_sort"),
+        )
+        .where(*search_all_terms(
+            search,
+            Movie.title,
+            Movie.extended_title,
+            Movie.slug,
+            Movie.author_name,
+        ))
+    )
+    extra_query = (
+        select(
+            literal("movie-extra").label("kind"),
+            MovieExtra.id.label("item_id"),
+            Movie.id.label("movie_id"),
+            extra_relevance.label("relevance"),
+            func.lower(Movie.title).label("group_sort"),
+            literal(1).label("kind_sort"),
+            func.lower(MovieExtraSource.title).label("item_sort"),
+        )
+        .join(Movie, Movie.id == MovieExtra.movie_id)
+        .join(MovieExtraSource, MovieExtraSource.id == MovieExtra.source_id)
+        .where(*search_all_terms(
+            search,
+            Movie.title,
+            Movie.extended_title,
+            Movie.slug,
+            MovieExtraSource.title,
+            MovieExtraSource.slug,
+            MovieExtra.movie_extra_type,
+        ))
+    )
+    candidates = union_all(movie_query, extra_query).subquery()
+    ordering = [
+        candidates.c.group_sort,
+        candidates.c.movie_id,
+        candidates.c.kind_sort,
+        candidates.c.item_sort,
+        candidates.c.item_id,
+    ]
+    if (search or "").strip():
+        ordering.insert(0, candidates.c.relevance.desc())
+
+    rows = session.execute(
+        select(
+            candidates.c.kind,
+            candidates.c.item_id,
+            candidates.c.movie_id,
+        )
+        .order_by(*ordering)
+        .offset(offset)
+        .limit(limit + 1)
+    ).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+
+    movie_ids = {row.movie_id for row in rows}
+    extra_ids = {row.item_id for row in rows if row.kind == "movie-extra"}
+    movies = {
+        movie.id: movie
+        for movie in session.scalars(
+            select(Movie).where(Movie.id.in_(movie_ids))
+        ).all()
+    } if movie_ids else {}
+    extras = {
+        extra.id: extra
+        for extra in session.scalars(
+            select(MovieExtra)
+            .options(joinedload(MovieExtra.movie))
+            .where(MovieExtra.id.in_(extra_ids))
+        ).unique().all()
+    } if extra_ids else {}
+
+    sources: list[LocalMediaProfileTemplateSource] = []
+    for row in rows:
+        movie = movies.get(row.movie_id)
+        if movie is None:
+            continue
+        if row.kind == "movie":
             sources.append(LocalMediaProfileTemplateSource(
                 id=f"movie:{movie.id}",
                 label=movie.title,
                 values=movie_output_template_values(movie),
             ))
-            for movie_extra in movie.movie_extras:
-                if len(sources) >= 20:
-                    break
-                sources.append(LocalMediaProfileTemplateSource(
-                    id=f"movie-extra:{movie_extra.id}",
-                    label=f"\u00a0\u00a0↳ {movie_extra.title}",
-                    values=movie_output_template_values(movie, movie_extra),
-                ))
+            continue
+
+        extra = extras.get(row.item_id)
+        if extra is None:
+            continue
+        sources.append(LocalMediaProfileTemplateSource(
+            id=f"movie-extra:{extra.id}",
+            label=f"{movie.title} — {extra.title}",
+            values=movie_output_template_values(movie, extra),
+        ))
+
+    return sources, has_more
+
+
+def get_output_template_source_page(
+    session: Session,
+    profile_type: LocalMediaProfileType,
+    show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH,
+    *,
+    search: str | None = None,
+    offset: int = 0,
+    limit: int = 30,
+) -> LocalMediaProfileTemplateSourcePage:
+    """Search every locally stored media item applicable to a Local Media Profile."""
+    if profile_type == LocalMediaProfileType.SHOW:
+        sources, has_more = _show_source_page(
+            session,
+            show_scope,
+            search=search,
+            offset=offset,
+            limit=limit,
+        )
+        fallback_values = _EXAMPLE_SHOW_VALUES
+        fallback_label = "Example show episode"
+    elif profile_type == LocalMediaProfileType.MOVIE:
+        sources, has_more = _movie_source_page(
+            session,
+            search=search,
+            offset=offset,
+            limit=limit,
+        )
         fallback_values = _EXAMPLE_MOVIE_VALUES
         fallback_label = "Example movie"
     else:
         raise ValueError("Template examples are only available for Show and Movie profiles")
 
-    if not sources:
+    if not sources and offset == 0 and not (search or "").strip():
         sources = [LocalMediaProfileTemplateSource(
             id=f"example:{profile_type.value}",
             label=fallback_label,
@@ -178,7 +375,12 @@ def get_output_template_sources(
             fallback=True,
         )]
 
-    return LocalMediaProfileTemplateSources(sources=sources, variables=variables)
+    return LocalMediaProfileTemplateSourcePage(
+        items=sources,
+        offset=offset,
+        limit=limit,
+        has_more=has_more,
+    )
 
 
 def get_output_template_preview(

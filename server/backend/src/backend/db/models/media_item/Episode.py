@@ -10,6 +10,7 @@ from backend.types.media_types import MediaType
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.MediaContentMetadataMixin import MediaContentMetadataMixin
+from backend.utils.episode import EpisodeIdentifierInfo
 from backend.utils.episode_slug import is_no_show_today_slug
 
 if TYPE_CHECKING:
@@ -37,6 +38,7 @@ class Episode(
     season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
     index: Mapped[int]
     episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the show")
+    dw_episode_number: Mapped[Optional[str]] = mapped_column(comment="Episode number exactly as returned by The Daily Wire")
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     publish_status: Mapped[str]
     metadata_is_final: Mapped[bool] = mapped_column(
@@ -55,6 +57,30 @@ class Episode(
     # Relationships
     show: Mapped["Show"] = relationship(back_populates="episodes")
     season: Mapped["Season"] = relationship(back_populates="episodes")
+
+    @property
+    def episode_identifier_info(self) -> EpisodeIdentifierInfo:
+        return EpisodeIdentifierInfo.from_identifier(self.episode_identifier)
+
+    @property
+    def episode_type(self) -> str | None:
+        return self.episode_identifier_info.type
+
+    @property
+    def episode_extra_type(self) -> str | None:
+        return self.episode_identifier_info.extra_type
+
+    @property
+    def episode_number(self) -> str | None:
+        return self.episode_identifier_info.episode_number
+
+    @property
+    def episode_sub_number(self) -> str | None:
+        return self.episode_identifier_info.sub_episode_number
+
+    @property
+    def episode_label(self) -> str:
+        return self.episode_identifier_info.label
 
     @property
     def is_no_show_today(self) -> bool:

@@ -64,7 +64,7 @@ def _enabled_profiles_for_show(s: Session, show_id: int) -> Sequence[DownloadPro
 
 
 def _episode_type_prefix(episode: Episode) -> str:
-    return episode.episode_identifier.split(".", 1)[0]
+    return episode.episode_type or ""
 
 
 def _episode_recency_key(episode: Episode) -> tuple[datetime, int]:

@@ -50,6 +50,12 @@ class _EpisodeAPIBaseOut(ResponseBase):
     season_id: int
     index: int
     episode_identifier: str
+    dw_episode_number: Optional[str]
+    episode_type: Optional[str]
+    episode_extra_type: Optional[str]
+    episode_number: Optional[str]
+    episode_sub_number: Optional[str]
+    episode_label: str
     publish_status: Union[EpisodePublishStatus, str]
     went_live_date: Optional[datetime]
     published_date: Optional[datetime]
@@ -83,6 +89,12 @@ class EpisodeAPIReadView(ResponseBase):
     season_id: int
     index: int
     episode_identifier: str
+    dw_episode_number: Optional[str]
+    episode_type: Optional[str]
+    episode_extra_type: Optional[str]
+    episode_number: Optional[str]
+    episode_sub_number: Optional[str]
+    episode_label: str
     publish_status: Union[EpisodePublishStatus, str]
     title: str
     slug: str

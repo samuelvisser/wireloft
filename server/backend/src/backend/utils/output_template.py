@@ -15,7 +15,7 @@ from .custom_metadata import (
     get_custom_metadata,
     is_allowed_custom_metadata_template_variable,
 )
-from .episode import episode_type_info
+from .episode import EpisodeIdentifierInfo
 from .output_template_jinja import create_output_template_environment
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
@@ -40,8 +40,9 @@ MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
 })
 
 SHOW_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "show", "show_title", "season", "season_name", "season_index", "episode", "episode_title", "title",
-    "episode_type", "episode_number", "episode_label", "episode_identifier", "episode_published_date",
+    "show", "show_title", "season", "season_name", "season_index", "season_type", "season_number",
+    "episode", "episode_title", "title", "dw_episode_number", "episode_type", "episode_extra_type",
+    "episode_number", "episode_sub_number", "episode_label", "episode_identifier", "episode_published_date",
     "episode_published_time", "episode_published_datetime",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
@@ -251,11 +252,7 @@ def movie_template_uses_release_date(output_template: str) -> bool:
 def episode_output_template_values(episode: "Episode") -> dict[str, str]:
     """Build the complete Show-profile context for an episode."""
     episode_identifier = episode.episode_identifier or ""
-    _, label_separator, episode_label = episode_identifier.partition(".")
-    if not label_separator:
-        episode_label = episode_identifier
-
-    ep_info = episode_type_info(episode_identifier)
+    ep_info = EpisodeIdentifierInfo.from_identifier(episode_identifier)
     published_at = episode.published_date
     values = {
         "show": episode.show.slug,
@@ -263,12 +260,17 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "season": episode.season.slug if episode.season else "",
         "season_name": episode.season.name if episode.season else "",
         "season_index": str(episode.season.index) if episode.season else "",
+        "season_type": episode.season.season_type if episode.season else "",
+        "season_number": str(episode.season.season_number) if episode.season else "",
         "episode": episode.slug,
         "episode_title": episode.title,
         "title": episode.title,
-        "episode_type": ep_info["type"],
-        "episode_number": ep_info["number"],
-        "episode_label": episode_label,
+        "dw_episode_number": episode.dw_episode_number or "",
+        "episode_type": ep_info.type or "",
+        "episode_extra_type": ep_info.extra_type or "",
+        "episode_number": ep_info.episode_number or "",
+        "episode_sub_number": ep_info.sub_episode_number or "",
+        "episode_label": ep_info.label,
         "episode_identifier": episode_identifier,
         "episode_published_date": published_at.strftime("%Y-%m-%d") if published_at else "",
         "episode_published_time": published_at.strftime("%H:%M:%S") if published_at else "",
@@ -379,7 +381,10 @@ def render_output_template(
     if len(rendered) > _MAX_RENDERED_PATH_LENGTH:
         raise ValueError("Rendered output path is too long")
     if not rendered.startswith(_DOWNLOADS_PREFIX):
-        raise ValueError("Rendered output path must start with '/downloads/'")
+        raise ValueError(
+            "Rendered output path must start with '/downloads/'. "
+            f"Actual output: {rendered!r}"
+        )
     if not rendered.endswith(".ext"):
         raise ValueError("Rendered output path must end with '.ext'")
     return _sanitize_rendered_path(rendered, mode=mode)

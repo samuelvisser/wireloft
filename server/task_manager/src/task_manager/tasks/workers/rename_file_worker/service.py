@@ -24,7 +24,9 @@ _IDENTIFIER_DERIVED_TEMPLATE_FIELDS = frozenset({
     "episode_identifier",
     "episode_label",
     "episode_number",
+    "episode_sub_number",
     "episode_type",
+    "episode_extra_type",
 })
 
 

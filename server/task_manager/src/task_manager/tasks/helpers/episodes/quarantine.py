@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime
 
 from sqlalchemy import Integer, cast, func, select
@@ -11,78 +10,16 @@ from backend.db.models import Episode
 from backend.db.models.Metadata import Metadata
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.show_types import EpisodeIdentifier
+from backend.utils.episode import EpisodeIdentifierInfo
 from .metadata import ensure_utc
 
 
 PREVIOUS_IDENTIFIER_META_KEY = "no_usable_media.previous_identifier"
 _NOT_USABLE_COUNTER_KEY = "ep_id.latest_not_usable_num"
-_NUMBERED_MAIN_RE = re.compile(r"^ep\.(\d+)$")
-_SEASONAL_MAIN_RE = re.compile(r"^ep\.S(\d+)E(\d+)$")
-_EXTRA_NUMBERED_RE_TEMPLATE = r"^ep-extra\.%s\.(\d+)$"
-_EXTRA_SEASONAL_RE_TEMPLATE = r"^ep-extra\.S%02dE%02d\.(\d+)$"
 
 
 def _utc_timestamp(value: datetime) -> int:
     return int(ensure_utc(value).timestamp())
-
-
-def _identifiers_for_show(s: Session, episode: Episode) -> list[str]:
-    return list(s.scalars(
-        select(Episode.episode_identifier).where(
-            Episode.show_id == episode.show_id,
-            Episode.id != episode.id,
-        )
-    ))
-
-
-def _max_matching(identifiers: list[str], pattern: re.Pattern[str], group: int = 1) -> int:
-    maximum = 0
-    for identifier in identifiers:
-        match = pattern.fullmatch(identifier)
-        if match:
-            maximum = max(maximum, int(match.group(group)))
-    return maximum
-
-
-def _rollback_numbered_head(s: Session, episode: Episode, previous_identifier: str) -> None:
-    match = _NUMBERED_MAIN_RE.fullmatch(previous_identifier)
-    if not match:
-        return
-    episode_number = int(match.group(1))
-    show = episode.show
-    if int(show.get_meta("ep_id.latest_ep_num") or 0) != episode_number:
-        return
-
-    identifiers = _identifiers_for_show(s, episode)
-    new_head = _max_matching(identifiers, _NUMBERED_MAIN_RE)
-    show.set_meta("ep_id.latest_ep_num", str(new_head))
-    extra_pattern = re.compile(_EXTRA_NUMBERED_RE_TEMPLATE % new_head) if new_head else re.compile(r"a^")
-    show.set_meta("ep_id.latest_ep_extra_num", str(_max_matching(identifiers, extra_pattern)))
-
-
-def _rollback_seasonal_head(s: Session, episode: Episode, previous_identifier: str) -> None:
-    match = _SEASONAL_MAIN_RE.fullmatch(previous_identifier)
-    if not match:
-        return
-    season_number = int(match.group(1))
-    episode_number = int(match.group(2))
-    if episode.season is None or episode.season.index != season_number:
-        return
-    show = episode.show
-    counter_key = f"ep_id.latest_season_{season_number}_ep"
-    if int(show.get_meta(counter_key) or 0) != episode_number:
-        return
-
-    identifiers = _identifiers_for_show(s, episode)
-    main_pattern = re.compile(rf"^ep\.S{season_number:02d}E(\d+)$")
-    new_head = _max_matching(identifiers, main_pattern)
-    show.set_meta(counter_key, str(new_head))
-    extra_pattern = (
-        re.compile(_EXTRA_SEASONAL_RE_TEMPLATE % (season_number, new_head))
-        if new_head
-        else re.compile(r"a^")
-    )
-    show.set_meta("ep_id.latest_ep_extra_num", str(_max_matching(identifiers, extra_pattern)))
 
 
 def _rollback_date_head(s: Session, episode: Episode, previous_identifier: str) -> None:
@@ -92,40 +29,29 @@ def _rollback_date_head(s: Session, episode: Episode, previous_identifier: str) 
     timestamp = _utc_timestamp(episode.published_date)
     if int(show.get_meta("ep_id.latest_ep_date") or 0) != timestamp:
         return
-    remaining = list(s.scalars(
-        select(Episode.published_date).where(
-            Episode.show_id == episode.show_id,
-            Episode.id != episode.id,
-            Episode.episode_identifier.startswith("ep."),
-            Episode.published_date.is_not(None),
+    remaining = list(
+        s.scalars(
+            select(Episode.published_date).where(
+                Episode.show_id == episode.show_id,
+                Episode.id != episode.id,
+                Episode.episode_identifier.startswith("ep."),
+                Episode.published_date.is_not(None),
+            )
         )
-    ))
+    )
     new_head = max((_utc_timestamp(value) for value in remaining), default=0)
     show.set_meta("ep_id.latest_ep_date", str(new_head))
 
 
 def rollback_identifier_head(s: Session, episode: Episode, previous_identifier: str) -> None:
-    identifier_type = EpisodeIdentifier(episode.show.episode_identifier)
-    if identifier_type is EpisodeIdentifier.NUMBERED:
-        _rollback_numbered_head(s, episode, previous_identifier)
-    elif identifier_type is EpisodeIdentifier.SEASONAL:
-        _rollback_seasonal_head(s, episode, previous_identifier)
-    elif identifier_type is EpisodeIdentifier.DATE_BASED:
+    """Roll back only state that still participates in canonical allocation."""
+    if EpisodeIdentifier(episode.show.episode_identifier) is EpisodeIdentifier.DATE_BASED:
         _rollback_date_head(s, episode, previous_identifier)
 
 
 def _reserve_not_usable_number(s: Session, episode: Episode) -> int:
-    """Atomically reserve the next per-show quarantine identifier number.
-
-    Pending-episode workers run independently and can quarantine several episodes
-    from the same show at once. Here, we increment the not usable number counter
-    using SQLite's upsert, making sure it is unique.
-    """
-    # Flush any ORM-side metadata first so the Core upsert sees the transaction's
-    # complete state. This remains part of the caller's transaction and rolls back
-    # together with the episode transition if anything later fails.
+    """Atomically reserve the next per-show quarantine identifier number."""
     s.flush()
-
     statement = (
         sqlite_insert(Metadata)
         .values(
@@ -144,16 +70,12 @@ def _reserve_not_usable_number(s: Session, episode: Episode) -> int:
         .returning(Metadata.value)
     )
     current = int(s.execute(statement).scalar_one())
-
-    # The Show relationship may have been eagerly loaded before another worker
-    # advanced the counter. Force the next metadata access in this transaction to
-    # see the value reserved by the database rather than that stale collection.
     s.expire(episode.show, ["meta_items"])
     return current
 
 
 def quarantine_episode_identifier(s: Session, episode: Episode) -> bool:
-    """Move an episode out of the canonical identifier namespace without file side effects."""
+    """Move an episode out of the canonical identifier namespace."""
     if episode.episode_identifier.startswith("not-usable."):
         return False
 
@@ -168,49 +90,48 @@ def quarantine_episode_identifier(s: Session, episode: Episode) -> bool:
 
 
 def vacated_canonical_identifiers_for_show(s: Session, show_id: int) -> set[str]:
-    """Return currently-free canonical identifiers reserved by quarantined rows.
-
-    This allows a replacement Daily Wire row to reclaim a logical main identifier
-    even when a newer episode has already advanced the normal monotonic allocator.
-    If another local row already owns the identifier, it is no longer considered
-    vacated and is never offered for reclamation.
-    """
+    """Return currently free source-backed identifiers displaced by quarantine."""
     episodes = list(s.scalars(select(Episode).where(Episode.show_id == show_id)))
     occupied = {episode.episode_identifier for episode in episodes}
+    show_identifier_type = None
+    if episodes:
+        show_identifier_type = EpisodeIdentifier(episodes[0].show.episode_identifier)
     vacated: set[str] = set()
     for episode in episodes:
         if episode.publish_status != EpisodePublishStatus.NO_USABLE_MEDIA.value:
             continue
         previous = episode.get_meta(PREVIOUS_IDENTIFIER_META_KEY)
-        if previous and previous.startswith("ep.") and previous not in occupied:
+        if not previous or previous in occupied:
+            continue
+        try:
+            info = EpisodeIdentifierInfo.from_identifier(previous)
+        except ValueError:
+            continue
+        if info.source_slot is not None or (
+            show_identifier_type is EpisodeIdentifier.DATE_BASED
+            and info.type == "ep"
+        ):
             vacated.add(previous)
     return vacated
 
 
-def _advance_head_for_identifier(s: Session, episode: Episode, identifier: str) -> None:
-    show = episode.show
-    identifiers = _identifiers_for_show(s, episode)
-    identifier_type = EpisodeIdentifier(show.episode_identifier)
-
-    if identifier_type is EpisodeIdentifier.NUMBERED:
-        match = _NUMBERED_MAIN_RE.fullmatch(identifier)
-        if match:
-            number = int(match.group(1))
-            show.set_meta("ep_id.latest_ep_num", str(max(int(show.get_meta("ep_id.latest_ep_num") or 0), number)))
-            extra_pattern = re.compile(_EXTRA_NUMBERED_RE_TEMPLATE % number)
-            show.set_meta("ep_id.latest_ep_extra_num", str(_max_matching(identifiers, extra_pattern)))
-    elif identifier_type is EpisodeIdentifier.SEASONAL:
-        match = _SEASONAL_MAIN_RE.fullmatch(identifier)
-        if match:
-            season_number = int(match.group(1))
-            number = int(match.group(2))
-            key = f"ep_id.latest_season_{season_number}_ep"
-            show.set_meta(key, str(max(int(show.get_meta(key) or 0), number)))
-            extra_pattern = re.compile(_EXTRA_SEASONAL_RE_TEMPLATE % (season_number, number))
-            show.set_meta("ep_id.latest_ep_extra_num", str(_max_matching(identifiers, extra_pattern)))
-    elif identifier_type is EpisodeIdentifier.DATE_BASED and episode.published_date is not None:
-        timestamp = _utc_timestamp(episode.published_date)
-        show.set_meta("ep_id.latest_ep_date", str(max(int(show.get_meta("ep_id.latest_ep_date") or 0), timestamp)))
+def _advance_date_head_for_identifier(episode: Episode, identifier: str) -> None:
+    if (
+        EpisodeIdentifier(episode.show.episode_identifier) is not EpisodeIdentifier.DATE_BASED
+        or episode.published_date is None
+    ):
+        return
+    try:
+        info = EpisodeIdentifierInfo.from_identifier(identifier)
+    except ValueError:
+        return
+    if info.type != "ep":
+        return
+    timestamp = _utc_timestamp(episode.published_date)
+    episode.show.set_meta(
+        "ep_id.latest_ep_date",
+        str(max(int(episode.show.get_meta("ep_id.latest_ep_date") or 0), timestamp)),
+    )
 
 
 def restore_quarantined_identifier(s: Session, episode: Episode) -> bool:
@@ -220,17 +141,19 @@ def restore_quarantined_identifier(s: Session, episode: Episode) -> bool:
         return True
 
     collision = s.scalar(
-        select(Episode.id).where(
+        select(Episode.id)
+        .where(
             Episode.show_id == episode.show_id,
             Episode.id != episode.id,
             Episode.episode_identifier == previous_identifier,
-        ).limit(1)
+        )
+        .limit(1)
     )
     if collision is not None:
         return False
 
     episode.episode_identifier = previous_identifier
-    _advance_head_for_identifier(s, episode, previous_identifier)
+    _advance_date_head_for_identifier(episode, previous_identifier)
     for item in list(episode.meta_items):
         if item.key == PREVIOUS_IDENTIFIER_META_KEY:
             episode.meta_items.remove(item)

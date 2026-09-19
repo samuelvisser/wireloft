@@ -147,7 +147,7 @@ def _select_best_resolvable_download(
 
 
 def _episode_type_prefix(episode: Episode) -> str:
-    return episode.episode_identifier.split(".", 1)[0]
+    return episode.episode_type or ""
 
 
 def _profile_allows_episode(profile: RssStreamProfile, episode: Episode) -> bool:

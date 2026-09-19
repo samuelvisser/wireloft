@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from asyncio.log import logger
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Optional, Sequence
 
 from sqlalchemy import select
@@ -10,13 +10,14 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode, Season, Show
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
+from backend.types.show_types import EpisodeIdentifier
 from dailywire_api.dw_api.client import ByShowSeason, MiddlewareClient
 from dailywire_api.records import DwEpisodeRecord, DwSeasonRecord
 from dailywire_authorisation import DeviceAuthClient
 from task_manager.events.transactional import queue_event
 from ._helpers import get_latest_ep_index, get_season_from_list_by_id, get_shows
 from ...helpers.episodes.events import queue_episode_status_events
-from ...helpers.episodes.identifier import IdentifierMaxValues
+from ...helpers.episodes.identifier import IdentifierMaxValues, identify_episodes_in_season
 from ...helpers.episodes.mapper import (
     count_total_episodes,
     fetch_all_episodes_paginated,
@@ -40,6 +41,48 @@ from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
 
 
 SHOW_INDEXED_EVENT = "show.indexed"
+
+
+def _canonicalize_resolved_identifiers(
+    *,
+    show: Show,
+    resolved_by_season: dict[int, list[ResolvedEpisode]],
+    previous_values: IdentifierMaxValues,
+    occupied_identifiers: set[str],
+) -> tuple[dict[int, list[ResolvedEpisode]], IdentifierMaxValues]:
+    """Re-run one complete identifier pass over authoritative resolved records.
+
+    Pagination is enough to discover candidate episodes, but getEpisode can refine
+    fields such as episodeNumber/isTrailer. Re-identifying the complete batch before
+    any row is written prevents one corrected record from temporarily stealing an
+    identifier that another record in the same batch is about to vacate.
+    """
+    values = dict(previous_values)
+    occupied = set(occupied_identifiers)
+    identifier_type = EpisodeIdentifier(show.episode_identifier)
+    canonical: dict[int, list[ResolvedEpisode]] = {}
+
+    for season_id, resolved_episodes in resolved_by_season.items():
+        season = get_season_from_list_by_id(show.seasons, season_id)
+        if season is None:
+            continue
+        mapped, values = identify_episodes_in_season(
+            identifier_type,
+            [resolved.record for resolved in resolved_episodes],
+            values,
+            season=season,
+            occupied_identifiers=occupied,
+        )
+        canonical[season_id] = [
+            replace(resolved, episode_identifier=identifier)
+            for resolved, (identifier, _record) in zip(
+                resolved_episodes,
+                mapped,
+                strict=True,
+            )
+        ]
+
+    return canonical, values
 
 
 @dataclass(frozen=True)
@@ -241,10 +284,17 @@ async def _fetch_show(
                 monitor_requests[episode.id] = _monitor_request_for_db_episode(show, episode)
 
     known_episode_slugs = set(s.scalars(select(Episode.slug).where(Episode.show_id == show_id)))
+    occupied_identifiers = set(
+        s.scalars(select(Episode.episode_identifier).where(Episode.show_id == show_id))
+    )
     prev_max_values: IdentifierMaxValues = {
         item.key: int(item.value)
         for item in show.meta_items
-        if item.key.startswith("ep_id")
+        if item.key in {
+            "ep_id.latest_aux_num",
+            "ep_id.latest_trailer_num",
+            "ep_id.latest_ep_date",
+        }
     }
     season_count = max(1, min(len(show.seasons), 5))
     upper = int(65 + (season_count - 1) * (95 - 65) / 4) if season_count > 1 else 65
@@ -263,6 +313,7 @@ async def _fetch_show(
         order=RecordOrder.ASC,
         prefetched_by_season=prefetched,
         vacated_identifiers=vacated_canonical_identifiers_for_show(s, show_id),
+        occupied_identifiers=occupied_identifiers,
     )
 
     if dry_run:
@@ -298,6 +349,12 @@ async def _fetch_show(
     show = s.get(Show, show_id)
     if show is None:
         raise ValueError(f"Show {show_id} was removed while it was being indexed")
+    resolved_by_season, identifier_max_values = _canonicalize_resolved_identifiers(
+        show=show,
+        resolved_by_season=resolved_by_season,
+        previous_values=prev_max_values,
+        occupied_identifiers=occupied_identifiers,
+    )
     for key, value in identifier_max_values.items():
         show.set_meta(key=key, value=str(value))
 

@@ -1,4 +1,9 @@
-from enum import Enum
+from enum import Enum, StrEnum
+
+
+class EpisodeExtraType(StrEnum):
+    OTHER = "other"
+    TRAILER = "trailer"
 
 
 class EpisodePublishStatus(Enum):

@@ -68,13 +68,6 @@ const TYPE_BADGE_LABEL: Record<string, string> = {
     aux: 'Auxiliary',
 }
 
-/** Splits an episode_identifier like "ep.4232" or "ep-extra.101.2" into its type and number. */
-function episodeTypeInfo(identifier: string | null | undefined): { type: string | null; number: string | null } {
-    if (!identifier) return {type: null, number: null}
-    const [type, ...rest] = identifier.split('.')
-    return {type: type || null, number: rest.length ? rest.join('.') : null}
-}
-
 function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }) {
     if (downloads.length === 0) {
         return (
@@ -133,13 +126,12 @@ export default function EpisodeCard({ep, showSlug, downloads}: Props) {
     const style = imageUrl ? {backgroundImage: `url(${imageUrl})`} : undefined
     const isLive = String(ep.publishStatus).toLowerCase() === 'live'
 
-    const {type, number} = episodeTypeInfo(ep.episodeIdentifier)
-    // Bottom-right badge: the episode number for regular/extra episodes (color-coded
-    // by type), or the content-type label for trailers/auxiliary content, which have
-    // no meaningful episode number.
-    const showNumberBadge = (type === 'ep' || type === 'ep-extra') && !!number
+    const type = ep.episodeType
+    // Identifier semantics are parsed once by the backend. The card only decides
+    // how those semantics should be presented.
+    const showNumberBadge = (type === 'ep' || type === 'ep-extra') && !!ep.episodeLabel
     const typeBadgeLabel = type ? TYPE_BADGE_LABEL[type] : undefined
-    const cornerBadgeText = showNumberBadge ? `#${number}` : typeBadgeLabel
+    const cornerBadgeText = showNumberBadge ? `#${ep.episodeLabel}` : typeBadgeLabel
 
     const navigate = useNavigate()
     const goToEpisode = () => navigate(`/show/${showSlug}/episode/${ep.slug}`)

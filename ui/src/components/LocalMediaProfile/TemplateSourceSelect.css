@@ -59,28 +59,6 @@
     text-transform: none;
 }
 
-.template-source-group-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-}
-
-.template-source-group-count {
-    display: inline-flex;
-    min-width: 20px;
-    height: 20px;
-    align-items: center;
-    justify-content: center;
-    padding: 0 6px;
-    border-radius: 999px;
-    background: #e8eff9;
-    color: #315f9f;
-    font-size: 10px;
-}
 
 .template-source-select .select__option {
     margin: 1px 0;
@@ -121,10 +99,6 @@
         border-top-color: #34445c;
     }
 
-    .template-source-group-count {
-        background: #223047;
-        color: #9ec3ff;
-    }
 
     .template-source-select .select__option--is-focused {
         background: #223754;
