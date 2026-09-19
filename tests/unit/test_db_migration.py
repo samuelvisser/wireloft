@@ -225,8 +225,7 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == "e4c91a7b2d30"
-    assert script.get_revision("e4c91a7b2d30").down_revision == "e5f1a2c7d903"
+    assert script.get_revision(HEAD_REVISION).down_revision == "e5f1a2c7d903"
     assert script.get_revision(BASE_REVISION) is not None
 
 
