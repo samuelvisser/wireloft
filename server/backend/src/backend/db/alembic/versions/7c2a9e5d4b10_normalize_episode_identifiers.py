@@ -41,6 +41,53 @@ def _season_type(name: str) -> str:
     return "extra" if _EXTRAS_RE.search(name or "") else "normal"
 
 
+def _column_names(connection, table_name: str) -> set[str]:
+    return {
+        str(column["name"])
+        for column in sa.inspect(connection).get_columns(table_name)
+    }
+
+
+def _add_episode_indexing_columns(connection) -> None:
+    """Add new columns while allowing an interrupted SQLite upgrade to resume.
+
+    SQLite can persist ALTER TABLE ADD COLUMN statements even when a later step in
+    the same Alembic revision fails. Alembic then correctly leaves the stored
+    revision at the previous head, so a retry must tolerate any subset of these
+    three additive columns already being present.
+    """
+    season_columns = _column_names(connection, "seasons")
+    missing_season_columns = []
+    if "season_type" not in season_columns:
+        missing_season_columns.append(
+            sa.Column(
+                "season_type",
+                sa.String(),
+                nullable=False,
+                server_default="normal",
+            )
+        )
+    if "season_number" not in season_columns:
+        missing_season_columns.append(
+            sa.Column(
+                "season_number",
+                sa.Integer(),
+                nullable=False,
+                server_default="1",
+            )
+        )
+    if missing_season_columns:
+        with op.batch_alter_table("seasons") as batch_op:
+            for column in missing_season_columns:
+                batch_op.add_column(column)
+
+    if "dw_episode_number" not in _column_names(connection, "media_items_episode"):
+        with op.batch_alter_table("media_items_episode") as batch_op:
+            batch_op.add_column(
+                sa.Column("dw_episode_number", sa.String(), nullable=True)
+            )
+
+
 def _generated_number(identifier: str, expected_type: str) -> int | None:
     match = _GENERATED_RE.fullmatch(identifier)
     if not match or match.group(1) != expected_type:
@@ -166,30 +213,8 @@ def _previous_identifier_rows(connection, metadata_table) -> dict[int, tuple[int
 
 
 def upgrade() -> None:
-    with op.batch_alter_table("seasons") as batch_op:
-        batch_op.add_column(
-            sa.Column(
-                "season_type",
-                sa.String(),
-                nullable=False,
-                server_default="normal",
-            )
-        )
-        batch_op.add_column(
-            sa.Column(
-                "season_number",
-                sa.Integer(),
-                nullable=False,
-                server_default="1",
-            )
-        )
-
-    with op.batch_alter_table("media_items_episode") as batch_op:
-        batch_op.add_column(
-            sa.Column("dw_episode_number", sa.String(), nullable=True)
-        )
-
     connection = op.get_bind()
+    _add_episode_indexing_columns(connection)
     metadata = sa.MetaData()
     shows = sa.Table("shows", metadata, autoload_with=connection)
     seasons = sa.Table("seasons", metadata, autoload_with=connection)

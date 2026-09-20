@@ -294,6 +294,47 @@ def test_episode_indexing_migration_upgrades_from_previous_development_head(migr
     assert head == HEAD_REVISION
 
 
+def test_episode_indexing_migration_resumes_after_interrupted_column_adds(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config, get_database_status, upgrade_database
+
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        PREVIOUS_DEVELOPMENT_REVISION,
+    )
+
+    # SQLite can retain these additive DDL changes when a later statement in the
+    # revision fails. Reproduce that state while leaving Alembic at e5f1a2c7d903.
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "ALTER TABLE seasons ADD COLUMN season_type VARCHAR DEFAULT 'normal' NOT NULL"
+        )
+        connection.exec_driver_sql(
+            "ALTER TABLE seasons ADD COLUMN season_number INTEGER DEFAULT 1 NOT NULL"
+        )
+        connection.exec_driver_sql(
+            "ALTER TABLE media_items_episode ADD COLUMN dw_episode_number VARCHAR"
+        )
+
+    current, _head = get_database_status()
+    assert current == (PREVIOUS_DEVELOPMENT_REVISION,)
+
+    upgrade_database()
+
+    current, head = get_database_status()
+    assert current == (HEAD_REVISION,)
+    assert head == HEAD_REVISION
+
+    inspector = inspect(engine)
+    season_columns = [column["name"] for column in inspector.get_columns("seasons")]
+    episode_columns = [
+        column["name"] for column in inspector.get_columns("media_items_episode")
+    ]
+    assert season_columns.count("season_type") == 1
+    assert season_columns.count("season_number") == 1
+    assert episode_columns.count("dw_episode_number") == 1
+
+
 def test_upgrade_from_wireloft_1_0_preserves_release_data(migration_database):
     database_path, engine = migration_database
     from backend.db.migrations import upgrade_database
