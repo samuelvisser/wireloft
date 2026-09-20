@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 
 HEAD_REVISION = "7c2a9e5d4b10"
+PREVIOUS_DEVELOPMENT_REVISION = "e5f1a2c7d903"
 WIRELOFT_1_0_REVISION = "c8d4e2f1a7b9"
 BASE_REVISION = "0001"
 
@@ -264,6 +265,33 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
         assert connection.execute(text(
             "SELECT alembic_version_num FROM settings"
         )).scalar_one() == HEAD_REVISION
+
+
+def test_episode_indexing_migration_upgrades_from_previous_development_head(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config, get_database_status, upgrade_database
+
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        PREVIOUS_DEVELOPMENT_REVISION,
+    )
+
+    # The media database refactor has already moved content metadata onto the
+    # concrete episode table by this revision. The episode-indexing migration
+    # must therefore read title from media_items_episode, not media_items.
+    inspector = inspect(engine)
+    assert "title" not in {
+        column["name"] for column in inspector.get_columns("media_items")
+    }
+    assert "title" in {
+        column["name"] for column in inspector.get_columns("media_items_episode")
+    }
+
+    upgrade_database()
+
+    current, head = get_database_status()
+    assert current == (HEAD_REVISION,)
+    assert head == HEAD_REVISION
 
 
 def test_upgrade_from_wireloft_1_0_preserves_release_data(migration_database):

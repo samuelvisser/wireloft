@@ -194,7 +194,6 @@ def upgrade() -> None:
     shows = sa.Table("shows", metadata, autoload_with=connection)
     seasons = sa.Table("seasons", metadata, autoload_with=connection)
     episodes = sa.Table("media_items_episode", metadata, autoload_with=connection)
-    media_items = sa.Table("media_items", metadata, autoload_with=connection)
     metadata_table = sa.Table("metadata", metadata, autoload_with=connection)
 
     show_modes = {
@@ -243,9 +242,8 @@ def upgrade() -> None:
             episodes.c.season_id,
             episodes.c.index,
             episodes.c.episode_identifier,
-            media_items.c.title,
+            episodes.c.title,
         )
-        .join(media_items, media_items.c.id == episodes.c.id)
         .order_by(episodes.c.show_id, episodes.c.index, episodes.c.id)
     ).mappings().all()
     rows_by_id = {int(row["id"]): row for row in episode_rows}
