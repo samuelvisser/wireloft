@@ -24,9 +24,10 @@ logger = logging.getLogger(__name__)
 type IdentifierMaxValues = Dict[str, int]
 type EpisodeWithIdentifier = Tuple[str, DwEpisodeRecord]
 
-# Any non-zero Daily Wire segment is source-backed episode-extra content.
-# Standalone auxiliary allocation is reserved for records without a usable
-# source number, duplicate source slots, or records in an extra season.
+# The Daily Wire uses .01-.19 for content attached to an episode. Segment .20
+# and above is show-level auxiliary content and must use WireLoft's show-global
+# AUX/TRAILER namespace instead of an episode-extra identifier.
+_SHOW_AUX_SEGMENT_START = 20
 _OFFICIAL_TRAILER_RE = re.compile(r"\bofficial\s+trailer\b", re.IGNORECASE)
 
 
@@ -235,7 +236,7 @@ def direct_identifier_for_episode(
             season_number = _normal_season_number(season)
             return f"{EpIdType.EP}.S{season_number:02d}E{ep_num:02d}"
 
-    if segment > 0:
+    if 0 < segment < _SHOW_AUX_SEGMENT_START:
         extra_type = EpisodeExtraType.TRAILER if trailer else EpisodeExtraType.OTHER
         if identifier_type is EpisodeIdentifier.NUMBERED:
             return f"{EpIdType.EP_EXTRA}.{extra_type}.{ep_num}.{segment}"
@@ -285,7 +286,7 @@ def _get_episode_identifier_map_numbered(
                     occupied=occupied,
                     occupied_source_slots=occupied_source_slots,
                 )
-        elif segment > 0:
+        elif 0 < segment < _SHOW_AUX_SEGMENT_START:
             extra_type = (
                 EpisodeExtraType.TRAILER
                 if trailer
@@ -349,7 +350,7 @@ def _get_episode_identifier_map_seasonal(
                     occupied=occupied,
                     occupied_source_slots=occupied_source_slots,
                 )
-        elif segment > 0:
+        elif 0 < segment < _SHOW_AUX_SEGMENT_START:
             extra_type = (
                 EpisodeExtraType.TRAILER
                 if trailer
@@ -432,6 +433,12 @@ def _generated_type_for_record(
     if identifier_type in {EpisodeIdentifier.NUMBERED, EpisodeIdentifier.SEASONAL}:
         if segment == 0 and is_episode_trailer(dw_episode):
             return EpIdType.TRAILER
+        if segment >= _SHOW_AUX_SEGMENT_START:
+            return (
+                EpIdType.TRAILER
+                if is_episode_trailer(dw_episode)
+                else EpIdType.AUX
+            )
         return None
 
     return None

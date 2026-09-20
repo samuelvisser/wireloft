@@ -90,7 +90,7 @@ def test_background_migration_filename_must_start_with_revision():
         _migration_from_module(module)
 
 
-def test_episode_indexing_is_one_registered_background_migration():
+def test_episode_indexing_background_migration_history_is_linear():
     from backend.db.background_migrations.registry import (
         get_background_migration_history,
     )
@@ -102,9 +102,13 @@ def test_episode_indexing_is_one_registered_background_migration():
         for migration in history
     ] == [
         ("f6a1c3d8b427", None),
+        ("9d4b7e2c1a63", "f6a1c3d8b427"),
     ]
     assert history[0].module_name.endswith(
         ".f6a1c3d8b427_episode_indexing_semantics"
+    )
+    assert history[1].module_name.endswith(
+        ".9d4b7e2c1a63_restore_high_segment_auxiliary"
     )
 
 

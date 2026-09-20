@@ -45,6 +45,7 @@ _SEASONAL_EXTRA_RE = re.compile(
     r"^ep-extra\.(?:other|trailer)\.(S\d+E\d+)\.(\d+)$"
 )
 _PREVIOUS_IDENTIFIER_KEY = "no_usable_media.previous_identifier"
+_SHOW_AUX_SEGMENT_START = 20
 
 
 @dataclass(frozen=True)
@@ -188,7 +189,7 @@ def _direct_identifier(
                 f"S{season_number:02d}E{number:02d}.0",
             )
 
-    if segment > 0:
+    if 0 < segment < _SHOW_AUX_SEGMENT_START:
         extra_type = "trailer" if _is_trailer(record) else "other"
         if identifier_mode == "numbered":
             return (
@@ -221,6 +222,8 @@ def _generated_type(
         return "trailer" if _is_trailer(record) else "aux"
     if segment == 0 and _is_trailer(record):
         return "trailer"
+    if segment >= _SHOW_AUX_SEGMENT_START:
+        return "trailer" if _is_trailer(record) else "aux"
     return None
 
 

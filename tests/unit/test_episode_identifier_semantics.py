@@ -109,21 +109,40 @@ def test_extra_can_arrive_after_a_newer_main():
     assert mapped[0][0] == "ep-extra.other.1843.1"
 
 
-def test_all_nonzero_dailywire_segments_are_used_directly():
+def test_dailywire_segments_20_and_above_are_show_auxiliary_content():
     from backend.types.show_types import EpisodeIdentifier
     from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
     mapped, values = identify_episodes_in_season(
         EpisodeIdentifier.NUMBERED,
-        [_record("2000.20"), _record("2000.30", slug="second")],
+        [
+            _record("2000.19", slug="attached-extra"),
+            _record("2000.20", slug="first-aux"),
+            _record("2000.30", slug="second-aux"),
+        ],
         season=_season(),
     )
 
     assert [identifier for identifier, _ in mapped] == [
-        "ep-extra.other.2000.20",
-        "ep-extra.other.2000.30",
+        "ep-extra.other.2000.19",
+        "aux.1",
+        "aux.2",
     ]
-    assert "ep_id.latest_aux_num" not in values
+    assert values["ep_id.latest_aux_num"] == 2
+
+
+def test_dailywire_segments_20_and_above_are_auxiliary_for_seasonal_shows():
+    from backend.types.show_types import EpisodeIdentifier
+    from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
+
+    mapped, values = identify_episodes_in_season(
+        EpisodeIdentifier.SEASONAL,
+        [_record("42.20")],
+        season=_season(season_number=3),
+    )
+
+    assert mapped[0][0] == "aux.1"
+    assert values["ep_id.latest_aux_num"] == 1
 
 
 def test_extras_season_numbers_do_not_create_episode_relationships():
@@ -415,7 +434,7 @@ def test_mapper_skips_detail_lookup_for_explicit_official_trailer_title():
 
 
 def test_background_reindex_verifies_ambiguous_trailer_title_with_detail():
-    from backend.db.background_migrations.versions.episode_indexing_semantics import (
+    from backend.db.background_migrations.versions.f6a1c3d8b427_episode_indexing_semantics import (
         _resolve_possible_trailer,
     )
 
@@ -444,7 +463,7 @@ def test_background_reindex_verifies_ambiguous_trailer_title_with_detail():
 
 
 def test_background_reindex_accepts_true_paginated_trailer_flag_without_detail():
-    from backend.db.background_migrations.versions.episode_indexing_semantics import (
+    from backend.db.background_migrations.versions.f6a1c3d8b427_episode_indexing_semantics import (
         _resolve_possible_trailer,
     )
 
@@ -469,7 +488,7 @@ def test_background_reindex_accepts_true_paginated_trailer_flag_without_detail()
 
 
 def test_background_reindex_skips_detail_lookup_for_official_trailer_title():
-    from backend.db.background_migrations.versions.episode_indexing_semantics import (
+    from backend.db.background_migrations.versions.f6a1c3d8b427_episode_indexing_semantics import (
         _resolve_possible_trailer,
     )
 
@@ -494,7 +513,7 @@ def test_background_reindex_skips_detail_lookup_for_official_trailer_title():
 
 
 def test_background_reindex_uses_the_same_canonical_identifier_rules():
-    from backend.db.background_migrations.versions.episode_indexing_semantics import (
+    from backend.db.background_migrations.versions.f6a1c3d8b427_episode_indexing_semantics import (
         _direct_identifier,
         _generated_type,
     )
@@ -531,12 +550,12 @@ def test_background_reindex_uses_the_same_canonical_identifier_rules():
         season_type="normal",
         season_number=1,
         record=high_segment,
-    ) == ("ep-extra.other.1645.20", "1645.20")
+    ) == (None, None)
     assert _generated_type(
         "numbered",
         season_type="normal",
         record=high_segment,
-    ) is None
+    ) == "aux"
 
     extras_item = _record("27.10", slug="extras-item")
     assert _direct_identifier(
@@ -565,7 +584,7 @@ def test_background_reindex_uses_the_same_canonical_identifier_rules():
 
 
 def test_background_reindex_only_updates_raw_number_when_remote_record_exists():
-    from backend.db.background_migrations.versions.episode_indexing_semantics import (
+    from backend.db.background_migrations.versions.f6a1c3d8b427_episode_indexing_semantics import (
         LocalEpisode,
         LocalSeason,
         LocalShow,
@@ -663,6 +682,154 @@ def test_resolved_batch_is_reidentified_from_authoritative_detail_numbers():
         "ep.1844",
     ]
     assert "ep_id.latest_ep_extra_num" not in values
+
+
+def test_high_segment_repair_background_migration_reclassifies_existing_rows(
+    monkeypatch,
+):
+    from importlib import import_module
+
+    import backend.db.models  # noqa: F401
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session, sessionmaker
+
+    from backend.db import Base
+    from backend.db.models import Episode, Season, Show
+    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from task_manager.tasks.helpers.episodes import events
+
+    migration = import_module(
+        "backend.db.background_migrations.versions."
+        "9d4b7e2c1a63_restore_high_segment_auxiliary"
+    )
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr(migration, "get_session", session_factory)
+
+    identifier_events: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        events,
+        "queue_episode_identifier_changed_event",
+        lambda _session, *, episode, old_episode_identifier, **_kwargs: (
+            identifier_events.append(
+                (old_episode_identifier, episode.episode_identifier)
+            )
+            or True
+        ),
+    )
+
+    with Session(engine) as session:
+        show = Show(
+            uuid="high-segment-show",
+            slug="high-segment-show",
+            title="High Segment Show",
+            description=None,
+            sharing_url="https://www.dailywire.com/show/high-segment-show",
+            membership_level="FREE",
+            type=ShowType.PODCAST.value,
+            episode_identifier=EpisodeIdentifier.NUMBERED.value,
+            author_name="Host",
+            author_slug="host",
+        )
+        show.set_meta("ep_id.latest_aux_num", "3")
+        season = Season(
+            show=show,
+            index=1,
+            slug="season-1",
+            name="Season 1",
+            season_type="normal",
+            season_number=1,
+        )
+        high = Episode(
+            uuid="high-segment-episode",
+            type="episode",
+            show=show,
+            season=season,
+            index=1,
+            episode_identifier="ep-extra.other.2509.20",
+            dw_episode_number="2509.20",
+            slug="high-segment-episode",
+            title="High Segment Episode",
+            description=None,
+            duration=60,
+            publish_status="published_final",
+            sharing_url="https://www.dailywire.com/episode/high-segment-episode",
+            published_date=datetime(2026, 9, 20, tzinfo=timezone.utc),
+        )
+        attached = Episode(
+            uuid="attached-extra",
+            type="episode",
+            show=show,
+            season=season,
+            index=2,
+            episode_identifier="ep-extra.other.2509.10",
+            dw_episode_number="2509.10",
+            slug="attached-extra",
+            title="Attached Extra",
+            description=None,
+            duration=60,
+            publish_status="published_final",
+            sharing_url="https://www.dailywire.com/episode/attached-extra",
+            published_date=datetime(2026, 9, 20, tzinfo=timezone.utc),
+        )
+        quarantined = Episode(
+            uuid="quarantined-high-segment",
+            type="episode",
+            show=show,
+            season=season,
+            index=3,
+            episode_identifier="not-usable.3",
+            dw_episode_number="2510.20",
+            slug="quarantined-high-segment",
+            title="Quarantined High Segment",
+            description=None,
+            duration=60,
+            publish_status="no_usable_media",
+            sharing_url="https://www.dailywire.com/episode/quarantined-high-segment",
+            published_date=datetime(2026, 9, 20, tzinfo=timezone.utc),
+        )
+        quarantined.set_meta(
+            "no_usable_media.previous_identifier",
+            "ep-extra.other.2510.20",
+        )
+        session.add_all([show, season, high, attached, quarantined])
+        session.commit()
+        show_id = show.id
+        high_id = high.id
+        attached_id = attached.id
+        quarantined_id = quarantined.id
+
+    assert migration._repair_show(show_id) == 2
+
+    with Session(engine) as session:
+        high = session.get(Episode, high_id)
+        attached = session.get(Episode, attached_id)
+        quarantined = session.get(Episode, quarantined_id)
+        show = session.get(Show, show_id)
+
+        assert high is not None
+        assert high.episode_identifier == "aux.4"
+        assert attached is not None
+        assert attached.episode_identifier == "ep-extra.other.2509.10"
+        assert quarantined is not None
+        assert quarantined.episode_identifier == "not-usable.3"
+        assert (
+            quarantined.get_meta("no_usable_media.previous_identifier")
+            == "aux.5"
+        )
+        assert show is not None
+        assert show.get_meta("ep_id.latest_aux_num") == "5"
+
+    assert identifier_events == [
+        ("ep-extra.other.2509.20", "aux.4"),
+    ]
+
+    # The repair is idempotent once all .20+ records have left ep-extra.
+    assert migration._repair_show(show_id) == 0
+
+    engine.dispose()
 
 
 def test_background_reindex_downgrade_restores_previous_identifier_grammar():
