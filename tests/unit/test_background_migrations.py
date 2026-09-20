@@ -90,6 +90,41 @@ def test_background_migration_filename_must_start_with_revision():
         _migration_from_module(module)
 
 
+def test_unknown_stored_background_revision_reports_history_mismatch(monkeypatch):
+    from backend.db.background_migrations import registry
+
+    first = "111111111111"
+    head = "222222222222"
+    unknown = "aaaaaaaaaaaa"
+    history = (
+        _migration(first, None),
+        _migration(head, first),
+    )
+    monkeypatch.setattr(
+        registry,
+        "get_background_migration_history",
+        lambda: history,
+    )
+
+    with pytest.raises(
+        registry.UnknownBackgroundMigrationRevisionError
+    ) as exc_info:
+        registry.get_pending_background_migrations(unknown)
+
+    error = exc_info.value
+    assert error.current_revision == unknown
+    assert error.known_revisions == (first, head)
+    assert error.head_revision == head
+
+    message = str(error)
+    assert f"Database is at background migration revision {unknown!r}" in message
+    assert "does not contain that revision" in message
+    assert f"Known revisions: {first!r}, {head!r}" in message
+    assert f"Latest known revision: {head!r}" in message
+    assert "newer or different WireLoft build" in message
+    assert "squashed without preserving its latest applied revision" in message
+
+
 def test_episode_indexing_background_migration_history_is_linear():
     from backend.db.background_migrations.registry import (
         get_background_migration_history,
@@ -196,3 +231,46 @@ def test_background_migration_runner_returns_when_already_current(monkeypatch):
 
     assert result.current_revision == current
     assert result.applied_revisions == ()
+
+
+def test_backend_run_validates_background_migration_state_before_uvicorn(
+    monkeypatch,
+    capsys,
+):
+    import importlib
+
+    from backend.db.background_migrations import UnknownBackgroundMigrationRevisionError
+
+    cli = importlib.import_module("backend.__main__")
+    unknown = "aaaaaaaaaaaa"
+    known = ("111111111111", "222222222222")
+    uvicorn_calls: list[tuple[tuple, dict]] = []
+
+    monkeypatch.setattr(cli, "_configure_database_for_args", lambda _args: None)
+    monkeypatch.setattr(cli, "_validate_db_health", lambda: None)
+    monkeypatch.setattr(cli, "require_database_current", lambda: None)
+
+    def reject_unknown_revision():
+        raise UnknownBackgroundMigrationRevisionError(unknown, known)
+
+    monkeypatch.setattr(
+        cli,
+        "validate_background_migration_state",
+        reject_unknown_revision,
+    )
+    monkeypatch.setattr(
+        cli.uvicorn,
+        "run",
+        lambda *args, **kwargs: uvicorn_calls.append((args, kwargs)),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["run"])
+
+    assert exc_info.value.code == 1
+    assert uvicorn_calls == []
+
+    stderr = capsys.readouterr().err
+    assert "Background migration error:" in stderr
+    assert f"Database is at background migration revision {unknown!r}" in stderr
+    assert "does not contain that revision" in stderr
