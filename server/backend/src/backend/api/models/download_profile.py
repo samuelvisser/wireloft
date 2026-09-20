@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from backend.api.models.base import ResponseBase, RequestBase
+from backend.api.models.base import ResponseBase, RequestBase, response_model_config
 from backend.types.download_profile_types import EpIdType
 
 
@@ -29,6 +29,8 @@ class DownloadProfileAPIUpdate(DownloadProfileAPIBaseIn):
 
 # ---------- Lenient output (read) ----------
 class DownloadProfileAPIBaseOut(ResponseBase):
+    model_config = response_model_config(nested_source="profile")
+
     id: int
     show_id: int
     local_media_profile_id: int

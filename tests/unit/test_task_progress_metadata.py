@@ -50,7 +50,7 @@ def _target(run):
 def test_task_operation_exposes_progress_metadata_only_for_active_single_target():
     from task_manager.scheduler.operations import (
         TASK_RUN_PROGRESS_META_KEY,
-        _operation_to_dict,
+        _operation_snapshot,
     )
     from task_manager.scheduler.types import TaskStatus
 
@@ -62,11 +62,11 @@ def test_task_operation_exposes_progress_metadata_only_for_active_single_target(
     )
     target = _target(run)
 
-    payload = _operation_to_dict(_operation(status="RUNNING", targets=[target]))
-    assert payload["progress_meta"] == {"selected_format": "1920x1080"}
+    payload = _operation_snapshot(_operation(status="RUNNING", targets=[target]))
+    assert payload.progress_meta == {"selected_format": "1920x1080"}
 
-    finished = _operation_to_dict(_operation(status="SUCCEEDED", targets=[target]))
-    assert finished["progress_meta"] is None
+    finished = _operation_snapshot(_operation(status="SUCCEEDED", targets=[target]))
+    assert finished.progress_meta is None
 
-    multi = _operation_to_dict(_operation(status="RUNNING", targets=[target, target]))
-    assert multi["progress_meta"] is None
+    multi = _operation_snapshot(_operation(status="RUNNING", targets=[target, target]))
+    assert multi.progress_meta is None

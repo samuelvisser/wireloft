@@ -13,6 +13,7 @@ from ...models.tasks import (
     TaskRunRead,
     TaskScheduleCreate,
     TaskScheduleRead,
+    TaskTriggerRead,
 )
 from .service import (
     create_schedule,
@@ -48,7 +49,7 @@ def delete(schedule_id: int):
     return {"ok": True}
 
 
-@router.post("/runs/trigger")
+@router.post("/runs/trigger", response_model=TaskTriggerRead)
 def trigger(definition_key: str, resource_type: str, resource_id: int, max_retries: int | None = None):
     return trigger_now(definition_key, resource_type, resource_id, max_retries)
 

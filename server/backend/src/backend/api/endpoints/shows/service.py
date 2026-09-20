@@ -4,7 +4,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.api.helpers import update_database_fields
+from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.show import *
 from fastapi import HTTPException
 
@@ -119,9 +119,7 @@ def get_show(s: Session, show_slug: str) -> ShowAPIRead:
 
 
 def create_show(s: Session, body: ShowAPICreate) -> ShowAPIRead:
-    data = body.model_dump(by_alias=True)
-
-    show = Show(**data)
+    show = create_database_fields(Show, body)
     s.add(show)
     s.flush()
 

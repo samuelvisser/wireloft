@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Optional
 
-from backend.api.models.base import RequestBase, ResponseBase
+from pydantic import AliasPath, Field
+
+from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
 
@@ -32,6 +34,8 @@ class MediaDownloadBulkActionAPIRequest(RequestBase):
 
 # ---------- Persistent artifact output ----------
 class _MediaDownloadAPIBaseOut(ResponseBase):
+    model_config = response_model_config(nested_source="download")
+
     id: int
     type: str
     media_item_id: int
@@ -54,30 +58,52 @@ class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):
 
 
 class MediaDownloadAPIReadView(MediaDownloadAPIRead):
-    """A persistent artifact joined with media/profile context and latest TaskRun facts."""
+    """Persistent artifact context plus the latest canonical TaskRun facts."""
 
-    media_slug: Optional[str]
-    media_title: Optional[str]
-    episode_slug: Optional[str]
-    episode_title: Optional[str]
-    episode_identifier: Optional[str]
-    show_slug: Optional[str]
-    show_title: Optional[str]
-    movie_slug: Optional[str]
-    movie_title: Optional[str]
-    movie_extra_type: Optional[str]
-    local_media_profile_name: Optional[str]
-    preferred_format: Optional[str]
-    downloaded_publish_status: Optional[str]
+    media_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("media", "slug"))
+    media_title: Optional[str] = Field(default=None, validation_alias=AliasPath("media", "title"))
+    episode_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("episode", "slug"))
+    episode_title: Optional[str] = Field(default=None, validation_alias=AliasPath("episode", "title"))
+    episode_identifier: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasPath("episode", "episode_identifier"),
+    )
+    show_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("show", "slug"))
+    show_title: Optional[str] = Field(default=None, validation_alias=AliasPath("show", "title"))
+    movie_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("movie", "slug"))
+    movie_title: Optional[str] = Field(default=None, validation_alias=AliasPath("movie", "title"))
+    movie_extra_type: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasPath("movie_extra", "movie_extra_type"),
+    )
+    local_media_profile_name: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasPath("profile", "name"),
+    )
+    preferred_format: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasPath("profile", "preferred_format"),
+    )
+    downloaded_publish_status: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasPath("download", "downloaded_publish_status"),
+    )
 
-    # Position among queued downloads that have not claimed a concurrency slot.
-    # None means this download is not waiting in the dispatcher queue.
-    queue_position: Optional[int]
-
-    # Generic facts from the latest canonical download TaskRun. Full history is
-    # served by /tasks/ledger rather than a MediaDownload-specific audit table.
-    latest_task_status: Optional[str]
-    latest_task_error: Optional[str]
-    latest_task_is_redownload: Optional[bool]
-    latest_task_started_at: Optional[datetime]
-    latest_task_finished_at: Optional[datetime]
+    queue_position: Optional[int] = None
+    latest_task_status: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasPath("latest_run", "status"),
+    )
+    latest_task_error: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasPath("latest_run", "last_error"),
+    )
+    latest_task_is_redownload: Optional[bool] = None
+    latest_task_started_at: Optional[datetime] = Field(
+        default=None,
+        validation_alias=AliasPath("latest_run", "started_at"),
+    )
+    latest_task_finished_at: Optional[datetime] = Field(
+        default=None,
+        validation_alias=AliasPath("latest_run", "finished_at"),
+    )

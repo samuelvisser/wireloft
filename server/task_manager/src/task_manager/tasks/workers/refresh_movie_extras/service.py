@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from backend.api.endpoints.movie_extras.service import sync_movie_extras
-from backend.api.endpoints.movies.service import sync_dailywire_movie_metadata
+from backend.services.movies import sync_dailywire_movie_metadata, sync_movie_extras
 from backend.db.models import Movie
 from dailywire_api.dw_api.movie import MovieMiddlewareClient
 from dailywire_authorisation import DeviceAuthClient

@@ -4,9 +4,11 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 
-def _task_item(task_id: int) -> dict:
+def _task_item(task_id: int):
+    from backend.api.models.tasks import TaskLedgerEntryRead
+
     finished_at = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
-    return {
+    return TaskLedgerEntryRead.model_validate({
         "id": task_id,
         "definition_key": "download_movie",
         "resource_type": "media_download",
@@ -19,7 +21,7 @@ def _task_item(task_id: int) -> dict:
         "started_at": finished_at,
         "finished_at": finished_at,
         "runtime_ms": 1000,
-    }
+    })
 
 
 class _FakeSession:
@@ -49,13 +51,14 @@ def test_download_history_projects_corrupted_artifact_after_task_run(monkeypatch
 
     def fake_query_ledger(_session, **kwargs):
         calls.append(kwargs)
-        return {
-            "items": [_task_item(7)],
-            "total": 1,
-            "offset": kwargs["offset"],
-            "limit": kwargs["limit"],
-            "has_more": False,
-        }
+        from backend.api.models.tasks import TaskLedgerPageRead
+        return TaskLedgerPageRead(
+            items=[_task_item(7)],
+            total=1,
+            offset=kwargs["offset"],
+            limit=kwargs["limit"],
+            has_more=False,
+        )
 
     monkeypatch.setattr(history, "query_ledger", fake_query_ledger)
 
@@ -97,22 +100,23 @@ def test_download_history_paginates_past_artifact_entry(monkeypatch):
 
     def fake_query_ledger(_session, **kwargs):
         requested_offsets.append(kwargs["offset"])
-        return {
-            "items": [_task_item(2), _task_item(1)],
-            "total": 3,
-            "offset": kwargs["offset"],
-            "limit": kwargs["limit"],
-            "has_more": True,
-        }
+        from backend.api.models.tasks import TaskLedgerPageRead
+        return TaskLedgerPageRead(
+            items=[_task_item(2), _task_item(1)],
+            total=3,
+            offset=kwargs["offset"],
+            limit=kwargs["limit"],
+            has_more=True,
+        )
 
     monkeypatch.setattr(history, "query_ledger", fake_query_ledger)
 
     result = history.get_media_download_history(_FakeSession(download), 42, offset=2, limit=2)
 
     assert requested_offsets == [1]
-    assert [item["source"] for item in result["items"]] == ["task", "task"]
-    assert result["total"] == 4
-    assert result["has_more"] is False
+    assert [item.source for item in result.items] == ["task", "task"]
+    assert result.total == 4
+    assert result.has_more is False
 
 
 def test_download_history_does_not_add_healthy_artifact(monkeypatch):
@@ -132,20 +136,21 @@ def test_download_history_does_not_add_healthy_artifact(monkeypatch):
     def fake_query_ledger(_session, **kwargs):
         definition_keys.append(kwargs["definition_key"])
         task = _task_item(3)
-        task["definition_key"] = kwargs["definition_key"]
-        return {
-            "items": [task],
-            "total": 1,
-            "offset": kwargs["offset"],
-            "limit": kwargs["limit"],
-            "has_more": False,
-        }
+        task.definition_key = kwargs["definition_key"]
+        from backend.api.models.tasks import TaskLedgerPageRead
+        return TaskLedgerPageRead(
+            items=[task],
+            total=1,
+            offset=kwargs["offset"],
+            limit=kwargs["limit"],
+            has_more=False,
+        )
 
     monkeypatch.setattr(history, "query_ledger", fake_query_ledger)
 
     result = history.get_media_download_history(_FakeSession(download), 42)
 
     assert definition_keys == ["download_episode"]
-    assert result["total"] == 1
-    assert result["items"][0]["source"] == "task"
-    assert result["items"][0]["definition_key"] == "download_episode"
+    assert result.total == 1
+    assert result.items[0].source == "task"
+    assert result.items[0].definition_key == "download_episode"

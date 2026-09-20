@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from backend.api.helpers import update_database_fields
+from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.local_media_profile import (
     LocalMediaProfileAPICreate,
     LocalMediaProfileAPIRead,
@@ -91,11 +91,17 @@ def get_local_media_profile(s: Session, local_media_profile_slug: str) -> LocalM
 
 def create_local_media_profile(s: Session, body: LocalMediaProfileAPICreate) -> LocalMediaProfileAPIRead:
     ensure_unique_profile_settings(s, body)
-    data = body.model_dump(by_alias=True)
-    if body.type != LocalMediaProfileType.SHOW:
-        data.pop("show_scope", None)
     profile_model = _PROFILE_MODELS[body.type]
-    mp = profile_model(**data)
+    exclude_fields = (
+        set()
+        if body.type == LocalMediaProfileType.SHOW
+        else {"show_scope"}
+    )
+    mp = create_database_fields(
+        profile_model,
+        body,
+        exclude_fields=exclude_fields,
+    )
     s.add(mp)
     s.flush()
     return LocalMediaProfileAPIRead.model_validate(mp)

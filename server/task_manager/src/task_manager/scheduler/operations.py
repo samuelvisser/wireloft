@@ -58,6 +58,30 @@ class OperationTargetSpec:
         return f"{self.task_key}:{self.resource_type}:{resource_id}"
 
 
+@dataclass(frozen=True)
+class OperationSnapshot:
+    id: str
+    kind: str
+    source: str
+    resource_type: str
+    resource_id: int | None
+    title: str
+    status: str
+    progress: int | None
+    progress_current: int
+    progress_total: int
+    message: str | None
+    result: dict[str, Any] | None
+    context: dict[str, Any] | None
+    progress_meta: dict[str, Any] | None
+    error: str | None
+    notification_seen_at: datetime | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
 def create_operation(
         session: Session,
         *,
@@ -438,7 +462,7 @@ def list_operations(
         kind: str | None = None,
         relevant: bool = False,
         limit: int = 100,
-) -> list[dict[str, Any]]:
+) -> list[OperationSnapshot]:
     session = get_session()
     try:
         statement = select(TaskOperation).options(_operation_run_graph())
@@ -463,28 +487,28 @@ def list_operations(
         for operation in operations:
             _refresh_loaded_operation(operation)
         session.flush()
-        payloads = [_operation_to_dict(operation) for operation in operations]
+        payloads = [_operation_snapshot(operation) for operation in operations]
         session.commit()
         return payloads
     finally:
         session.close()
 
 
-def get_operation(operation_id: str) -> dict[str, Any] | None:
+def get_operation(operation_id: str) -> OperationSnapshot | None:
     session = get_session()
     try:
         operation = refresh_operation(session, operation_id)
         if operation is None:
             return None
         session.flush()
-        payload = _operation_to_dict(operation)
+        payload = _operation_snapshot(operation)
         session.commit()
         return payload
     finally:
         session.close()
 
 
-def mark_operation_seen(operation_id: str) -> dict[str, Any] | None:
+def mark_operation_seen(operation_id: str) -> OperationSnapshot | None:
     session = get_session()
     try:
         operation = _load_operation_with_runs(session, operation_id)
@@ -493,7 +517,7 @@ def mark_operation_seen(operation_id: str) -> dict[str, Any] | None:
         _refresh_loaded_operation(operation)
         operation.notification_seen_at = datetime.now(timezone.utc)
         session.flush()
-        payload = _operation_to_dict(operation)
+        payload = _operation_snapshot(operation)
         session.commit()
         return payload
     finally:
@@ -514,36 +538,35 @@ def _operation_progress_meta(
     return dict(progress_meta) if isinstance(progress_meta, dict) else None
 
 
-def _operation_to_dict(operation: TaskOperation) -> dict[str, Any]:
+def _operation_snapshot(operation: TaskOperation) -> OperationSnapshot:
     targets = list(operation.targets)
     effective_runs = [_effective_run_for_target(target) for target in targets]
     terminal_count = sum(
         run is not None and _task_status(run.status) in _TERMINAL_TASK_STATUSES
         for run in effective_runs
     )
-    return {
-        "id": operation.id,
-        "kind": operation.kind,
-        "source": operation.source,
-        "resource_type": operation.resource_type,
-        "resource_id": operation.resource_id,
-        "title": operation.title,
-        "status": operation.status,
-        "progress": operation.progress,
-        "progress_current": terminal_count,
-        "progress_total": len(targets),
-        "message": operation.message,
-        "result": operation.result,
-        "context": operation.context,
-        "progress_meta": _operation_progress_meta(operation, effective_runs),
-        "error": operation.error,
-        "notification_seen_at": operation.notification_seen_at.isoformat() if operation.notification_seen_at else None,
-        "started_at": operation.started_at.isoformat() if operation.started_at else None,
-        "finished_at": operation.finished_at.isoformat() if operation.finished_at else None,
-        "created_at": operation.created_at.isoformat() if operation.created_at else None,
-        "updated_at": operation.updated_at.isoformat() if operation.updated_at else None,
-    }
-
+    return OperationSnapshot(
+        id=operation.id,
+        kind=operation.kind,
+        source=operation.source,
+        resource_type=operation.resource_type,
+        resource_id=operation.resource_id,
+        title=operation.title,
+        status=operation.status,
+        progress=operation.progress,
+        progress_current=terminal_count,
+        progress_total=len(targets),
+        message=operation.message,
+        result=operation.result,
+        context=operation.context,
+        progress_meta=_operation_progress_meta(operation, effective_runs),
+        error=operation.error,
+        notification_seen_at=operation.notification_seen_at,
+        started_at=operation.started_at,
+        finished_at=operation.finished_at,
+        created_at=operation.created_at,
+        updated_at=operation.updated_at,
+    )
 
 def _operation_run_graph():
     return (

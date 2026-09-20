@@ -11,6 +11,7 @@ from backend.db.datetime_types import UTCDateTime
 from task_manager.scheduler.types import ResourceType, TaskStatus
 
 if TYPE_CHECKING:
+    from .TaskDefinition import TaskDefinition
     from .TaskOperationRun import TaskOperationRun
 
 
@@ -42,6 +43,8 @@ class TaskRun(Base):
 
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now(), onupdate=func.now())
+
+    definition: Mapped["TaskDefinition"] = relationship()
 
     operation_links: Mapped[list["TaskOperationRun"]] = relationship(
         back_populates="task_run",

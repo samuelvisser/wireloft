@@ -203,14 +203,14 @@ def test_cancel_operation_is_durable_and_requests_running_worker_stop(task_datab
 
     payload = cancel_operation(operation_id)
     assert payload is not None
-    assert payload["status"] == OperationStatus.CANCELED.value
-    assert payload["progress"] == 42
+    assert payload.status == OperationStatus.CANCELED.value
+    assert payload.progress == 42
     assert canceled_jobs == [(operation_id, {run_id})]
 
     # Refreshing the operation must not resurrect it from linked RUNNING state.
     refreshed = get_operation(operation_id)
     assert refreshed is not None
-    assert refreshed["status"] == OperationStatus.CANCELED.value
+    assert refreshed.status == OperationStatus.CANCELED.value
 
     session = task_database()
     try:
@@ -292,7 +292,7 @@ def test_cancel_operation_does_not_stop_run_shared_with_another_active_operation
 
     payload = cancel_operation(first_id)
     assert payload is not None
-    assert payload["status"] == OperationStatus.CANCELED.value
+    assert payload.status == OperationStatus.CANCELED.value
     assert canceled_jobs == [(first_id, set())]
 
     session = task_database()
@@ -314,8 +314,8 @@ def test_restart_operation_reports_restarted_progress(task_database, monkeypatch
     scenario = _restart_scenario(task_database, monkeypatch)
     payload = scenario["payload"]
     assert payload is not None
-    assert payload["status"] in {OperationStatus.QUEUED.value, OperationStatus.RUNNING.value}
-    assert payload["progress"] == 50
+    assert payload.status in {OperationStatus.QUEUED.value, OperationStatus.RUNNING.value}
+    assert payload.progress == 50
 
 
 def test_restart_operation_cancels_old_and_dispatches_unfinished(task_database, monkeypatch):

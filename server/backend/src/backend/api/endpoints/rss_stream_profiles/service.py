@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
-from backend.api.helpers import update_database_fields
+from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.rss_stream_profile import *
 from backend.db.models import Show
 from backend.db.models.stream_profile import RssStreamProfile
@@ -42,30 +42,31 @@ def create_stream_profile_rss(s: Session, request: Request, body: RssStreamProfi
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
-    data = body.model_dump(by_alias=True)
-    feed_url = (data.pop("feed_url", None) or "").strip()
+    feed_url = (body.feed_url or "").strip()
     token = generate_stream_profile_token()
 
     if feed_url:
         feed_url = set_rss_feed_dw_video_method(
             feed_url,
-            use_dw_stream=data["use_dw_stream"],
-            dw_video_method=data["dw_video_method"],
+            use_dw_stream=body.use_dw_stream,
+            dw_video_method=body.dw_video_method,
         )
     else:
         feed_url = build_rss_feed_url(
             request,
             token=token,
             show_slug=show.slug,
-            use_dw_stream=data["use_dw_stream"],
-            dw_video_method=data["dw_video_method"],
+            use_dw_stream=body.use_dw_stream,
+            dw_video_method=body.dw_video_method,
         )
 
-    item = RssStreamProfile(
-        **data,
-        token=token,
-        feed_url=feed_url,
+    item = create_database_fields(
+        RssStreamProfile,
+        body,
+        exclude_fields={"feed_url"},
     )
+    item.token = token
+    item.feed_url = feed_url
     s.add(item)
     s.flush()
     return RssStreamProfileAPIRead.model_validate(item)
