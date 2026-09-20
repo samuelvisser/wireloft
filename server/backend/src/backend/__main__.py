@@ -331,6 +331,7 @@ def main(argv: Optional[list[str]] = None) -> None:
             print("Starting Wireloft backend...")
             _validate_db_health()
             require_database_current()
+            validate_background_migration_state()
             debug = args.debug
 
             if debug:

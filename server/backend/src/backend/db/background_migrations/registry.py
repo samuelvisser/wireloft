@@ -13,6 +13,34 @@ class BackgroundMigrationError(RuntimeError):
     """Raised when WireLoft cannot safely resolve background migration history."""
 
 
+class UnknownBackgroundMigrationRevisionError(BackgroundMigrationError):
+    """Raised when the database points at a revision absent from this build."""
+
+    def __init__(
+        self,
+        current_revision: str,
+        known_revisions: tuple[str, ...],
+    ) -> None:
+        self.current_revision = current_revision
+        self.known_revisions = known_revisions
+        self.head_revision = known_revisions[-1] if known_revisions else None
+
+        known_label = ", ".join(repr(revision) for revision in known_revisions)
+        if not known_label:
+            known_label = "<none>"
+        head_label = repr(self.head_revision) if self.head_revision is not None else "<none>"
+
+        super().__init__(
+            f"Database is at background migration revision {current_revision!r}, but this "
+            "WireLoft build does not contain that revision. "
+            f"Known revisions: {known_label}. Latest known revision: {head_label}. "
+            "WireLoft cannot safely determine which background migrations are pending. "
+            "This usually means the database was used by a newer or different WireLoft "
+            "build, or the background migration history was changed or squashed without "
+            "preserving its latest applied revision."
+        )
+
+
 _REVISION_RE = re.compile(r"^[0-9a-f]{12}$")
 
 
@@ -187,6 +215,7 @@ def get_pending_background_migrations(
         if migration.revision == current_revision:
             return history[index + 1 :]
 
-    raise BackgroundMigrationError(
-        f"Database references unknown background migration revision {current_revision!r}."
+    raise UnknownBackgroundMigrationRevisionError(
+        current_revision,
+        tuple(migration.revision for migration in history),
     )
