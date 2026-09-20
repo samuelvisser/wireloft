@@ -58,14 +58,27 @@ migration heads exist.
 WireLoft is still in an early stage and application code should not contain compatibility handling
 for legacy persisted values. If a change renames or otherwise changes the representation of a stored
 configuration value, key, enum/string value, profile option, or other persisted database value, add
-an Alembic data migration that rewrites existing stored data to the new canonical representation.
+a data migration that rewrites existing stored data to the new canonical representation.
 
 After that migration, frontend and backend application code must only know about the current canonical
 values. Do not add aliases, legacy-value normalization, fallback branches, dual-read/dual-write logic,
 or other runtime handling whose only purpose is to support values used by an older WireLoft version.
-Legacy identifiers may appear in the Alembic migration itself and in migration-specific tests or
+Legacy identifiers may appear in the migration file itself and in migration-specific tests or
 fixtures needed to verify that migration, but not in normal application code. Treat legacy data
 compatibility as a one-time migration concern rather than a permanent application-code concern.
+
+### Migration squashing
+When releasing a new version of WireLoft, I will often ask you to merge all migrations after the last
+migration in the previous official release into one, making it one big migration from the previous
+WireLoft version into the next. When I ask you to do this, please make sure the new merged migration 
+file uses the same version number as the last pre-merge migration did. In this way, my testing 
+environments that have been upgrading through these smaller upgrades, will know they are already 
+up-to-date and do not require an update even if the migration file merged everything together.
+
+I often like to merge Alembic migrations for updates, but keep background migrations separate. Though
+I might change how I do this for any particular release, if I ask you to prepare for a new release
+and did not ask you to merge migrations, please always ask me whether I want that. I might just simply
+have forgotten to ask you.
 
 ## Forms
 WireLoft forms are configured within React Hook Form and Zod to ensure field validation in the frontend.
