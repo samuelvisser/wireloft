@@ -1,4 +1,8 @@
-"""Refresh historical episode identifiers from The Daily Wire."""
+"""Refresh historical episode identifiers from The Daily Wire.
+
+Revision ID: f6a1c3d8b427
+Revises: <base>
+"""
 
 from __future__ import annotations
 
@@ -24,8 +28,8 @@ from dailywire_api.records import DwEpisodeRecord
 from dailywire_authorisation import DeviceAuthClient
 
 
-key = "episode_indexing_semantics"
-upstream_key = None
+revision = "f6a1c3d8b427"
+down_revision = None
 title = "Refresh episode indexing from The Daily Wire"
 
 

@@ -44,7 +44,13 @@ migration heads exist.
 ### Background migrations
 If you need to do any API/ filesystem or any other long- running migration work to implement a feature
 or fix faulty data caused by a historical bug, please follow these guidelines:
-- Create a new background migration script in server/backend/src/backend/db/background_migrations/versions/
+- Create a new background migration script in server/backend/src/backend/db/background_migrations/versions/.
+- Name it `<revision>_<description>.py`, using an opaque 12-character lowercase hexadecimal revision
+  like Alembic. The description belongs only in the filename suffix/title; never encode migration
+  semantics in the revision itself.
+- Declare `revision` and `down_revision` in the migration module, just like Alembic.
+- When consolidating prerelease background migrations for a release, keep the revision of the latest
+  migration being replaced so development/test databases that already reached it remain current.
 - Run `backend-api background-migrations history` to verify the new migration is the current head, and no multiple
 migration heads exist.
 

@@ -6,19 +6,19 @@ from typing import Any
 
 from .registry import (
     BackgroundMigration,
-    get_background_migration_head_key,
+    get_background_migration_head_revision,
     get_pending_background_migrations,
 )
 from .state import (
-    advance_background_migration_version,
-    get_current_background_migration_key,
+    advance_background_migration_revision,
+    get_current_background_migration_revision,
 )
 
 
 @dataclass(frozen=True)
 class BackgroundMigrationRunResult:
-    current_key: str | None
-    applied_keys: tuple[str, ...]
+    current_revision: str | None
+    applied_revisions: tuple[str, ...]
 
 
 class BackgroundMigrationContext:
@@ -56,7 +56,7 @@ class BackgroundMigrationContext:
             (self.migration_index - 1) + max(0.0, min(1.0, fraction))
         ) / self.migration_total
         meta = {
-            "migration_key": self.migration.key,
+            "migration_revision": self.migration.revision,
             "migration_title": self.migration.title,
             "migration_current": self.migration_index,
             "migration_total": self.migration_total,
@@ -101,18 +101,18 @@ async def run_pending_background_migrations(
 ) -> BackgroundMigrationRunResult:
     """Run every unapplied migration in strict registry order.
 
-    The Settings key is the source of truth. TaskOperation state is deliberately
+    The Settings revision is the source of truth. TaskOperation state is deliberately
     not consulted here, so retries and restart recovery can invoke the runner
     again without repeating migrations that already completed.
     """
 
-    head = get_background_migration_head_key()
+    head = get_background_migration_head_revision()
     if head is None:
-        return BackgroundMigrationRunResult(current_key=None, applied_keys=())
+        return BackgroundMigrationRunResult(current_revision=None, applied_revisions=())
 
-    current = get_current_background_migration_key()
+    current = get_current_background_migration_revision()
     if current == head:
-        return BackgroundMigrationRunResult(current_key=current, applied_keys=())
+        return BackgroundMigrationRunResult(current_revision=current, applied_revisions=())
 
     pending = get_pending_background_migrations(current)
     applied: list[str] = []
@@ -132,15 +132,15 @@ async def run_pending_background_migrations(
             await result
 
         context.raise_if_cancelled()
-        advance_background_migration_version(
-            expected_key=migration.upstream_key,
-            new_key=migration.key,
+        advance_background_migration_revision(
+            expected_revision=migration.down_revision,
+            new_revision=migration.revision,
         )
-        applied.append(migration.key)
-        current = migration.key
+        applied.append(migration.revision)
+        current = migration.revision
         context.completed()
 
     return BackgroundMigrationRunResult(
-        current_key=current,
-        applied_keys=tuple(applied),
+        current_revision=current,
+        applied_revisions=tuple(applied),
     )

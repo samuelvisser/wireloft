@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from backend.db.background_migrations import (
-    get_current_background_migration_key,
+    get_current_background_migration_revision,
     get_pending_background_migrations,
 )
 from backend.db.core import get_session
@@ -27,9 +27,9 @@ _ACTIVE_OPERATION_STATUSES = (
 
 
 def ensure_background_migration_operation() -> str | None:
-    """Create one system operation when the Settings key is behind code history."""
+    """Create one system operation when the Settings revision is behind code history."""
 
-    current = get_current_background_migration_key()
+    current = get_current_background_migration_revision()
     pending = get_pending_background_migrations(current)
     if not pending:
         return None
@@ -63,7 +63,7 @@ def ensure_background_migration_operation() -> str | None:
                 ),
             ),
             context={
-                "target_key": pending[-1].key,
+                "target_revision": pending[-1].revision,
                 "migrations_pending": len(pending),
             },
         )

@@ -35,6 +35,8 @@ _CANONICAL_SEASONAL_EXTRA_RE = re.compile(
     r"^ep-extra\.(?:other|trailer)\.S\d+E(\d+)\.(\d+)$"
 )
 _PREVIOUS_IDENTIFIER_KEY = "no_usable_media.previous_identifier"
+_BACKGROUND_MIGRATION_REVISION = "f6a1c3d8b427"
+_LEGACY_BACKGROUND_MIGRATION_VERSION = "episode_indexing_semantics"
 
 
 def _season_type(name: str) -> str:
@@ -86,6 +88,36 @@ def _add_episode_indexing_columns(connection) -> None:
             batch_op.add_column(
                 sa.Column("dw_episode_number", sa.String(), nullable=True)
             )
+
+
+def _normalize_background_migration_revision(connection) -> None:
+    """Rewrite the prerelease descriptive ledger value to the opaque revision."""
+    settings = sa.Table("settings", sa.MetaData(), autoload_with=connection)
+    connection.execute(
+        sa.update(settings)
+        .where(
+            settings.c.background_migration_version
+            == _LEGACY_BACKGROUND_MIGRATION_VERSION
+        )
+        .values(background_migration_version=_BACKGROUND_MIGRATION_REVISION)
+    )
+
+
+def _reset_background_migration_revision_for_downgrade(connection) -> None:
+    """Return the ledger to develop, which has no registered background revisions."""
+    settings = sa.Table("settings", sa.MetaData(), autoload_with=connection)
+    connection.execute(
+        sa.update(settings)
+        .where(
+            settings.c.background_migration_version.in_(
+                (
+                    _BACKGROUND_MIGRATION_REVISION,
+                    _LEGACY_BACKGROUND_MIGRATION_VERSION,
+                )
+            )
+        )
+        .values(background_migration_version=None)
+    )
 
 
 def _generated_number(identifier: str, expected_type: str) -> int | None:
@@ -215,6 +247,7 @@ def _previous_identifier_rows(connection, metadata_table) -> dict[int, tuple[int
 def upgrade() -> None:
     connection = op.get_bind()
     _add_episode_indexing_columns(connection)
+    _normalize_background_migration_revision(connection)
     metadata = sa.MetaData()
     shows = sa.Table("shows", metadata, autoload_with=connection)
     seasons = sa.Table("seasons", metadata, autoload_with=connection)
@@ -540,6 +573,7 @@ def _restore_previous_allocator_metadata(
 
 def downgrade() -> None:
     connection = op.get_bind()
+    _reset_background_migration_revision_for_downgrade(connection)
     metadata = sa.MetaData()
     shows = sa.Table("shows", metadata, autoload_with=connection)
     seasons = sa.Table("seasons", metadata, autoload_with=connection)

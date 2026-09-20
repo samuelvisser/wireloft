@@ -335,6 +335,39 @@ def test_episode_indexing_migration_resumes_after_interrupted_column_adds(migrat
     assert episode_columns.count("dw_episode_number") == 1
 
 
+def test_episode_indexing_migration_normalizes_background_revision(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import (
+        downgrade_database,
+        get_alembic_config,
+        upgrade_database,
+    )
+
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        PREVIOUS_DEVELOPMENT_REVISION,
+    )
+    with engine.begin() as connection:
+        connection.execute(text(
+            "UPDATE settings SET background_migration_version = "
+            "'episode_indexing_semantics'"
+        ))
+
+    upgrade_database()
+
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT background_migration_version FROM settings"
+        )).scalar_one() == "f6a1c3d8b427"
+
+    downgrade_database(PREVIOUS_DEVELOPMENT_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT background_migration_version FROM settings"
+        )).scalar_one() is None
+
+
 def test_upgrade_from_wireloft_1_0_preserves_release_data(migration_database):
     database_path, engine = migration_database
     from backend.db.migrations import upgrade_database

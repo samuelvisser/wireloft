@@ -1,34 +1,38 @@
 from __future__ import annotations
 
 import asyncio
+from types import ModuleType
 
 import pytest
 
 
-def _migration(key: str, upstream_key: str | None):
+def _migration(revision: str, down_revision: str | None):
     from backend.db.background_migrations.registry import BackgroundMigration
 
     return BackgroundMigration(
-        key=key,
-        upstream_key=upstream_key,
-        title=key,
+        revision=revision,
+        down_revision=down_revision,
+        title=revision,
         migrate=lambda _context: None,
-        module_name=f"test.{key}",
+        module_name=f"test.{revision}_migration",
     )
 
 
-def test_background_migration_chain_is_ordered_by_upstream_key():
+def test_background_migration_chain_is_ordered_by_down_revision():
     from backend.db.background_migrations.registry import _validate_migration_chain
 
+    first = "111111111111"
+    second = "222222222222"
+    third = "333333333333"
     ordered = _validate_migration_chain(
         [
-            _migration("third", "second"),
-            _migration("first", None),
-            _migration("second", "first"),
+            _migration(third, second),
+            _migration(first, None),
+            _migration(second, first),
         ]
     )
 
-    assert [migration.key for migration in ordered] == ["first", "second", "third"]
+    assert [migration.revision for migration in ordered] == [first, second, third]
 
 
 def test_background_migration_chain_rejects_branches():
@@ -37,14 +41,53 @@ def test_background_migration_chain_rejects_branches():
         _validate_migration_chain,
     )
 
+    first = "111111111111"
     with pytest.raises(BackgroundMigrationError, match="multiple successors"):
         _validate_migration_chain(
             [
-                _migration("first", None),
-                _migration("second", "first"),
-                _migration("alternate", "first"),
+                _migration(first, None),
+                _migration("222222222222", first),
+                _migration("333333333333", first),
             ]
         )
+
+
+def test_background_migration_revision_must_be_alembic_style():
+    from backend.db.background_migrations.registry import (
+        BackgroundMigrationError,
+        _migration_from_module,
+    )
+
+    module = ModuleType(
+        "backend.db.background_migrations.versions.episode_indexing_semantics"
+    )
+    module.revision = "episode_indexing_semantics"
+    module.down_revision = None
+    module.migrate = lambda _context: None
+
+    with pytest.raises(
+        BackgroundMigrationError,
+        match="12-character lowercase hexadecimal revision",
+    ):
+        _migration_from_module(module)
+
+
+def test_background_migration_filename_must_start_with_revision():
+    from backend.db.background_migrations.registry import (
+        BackgroundMigrationError,
+        _migration_from_module,
+    )
+
+    module = ModuleType("backend.db.background_migrations.versions.wrong_name")
+    module.revision = "111111111111"
+    module.down_revision = None
+    module.migrate = lambda _context: None
+
+    with pytest.raises(
+        BackgroundMigrationError,
+        match="111111111111_<description>",
+    ):
+        _migration_from_module(module)
 
 
 def test_episode_indexing_is_one_registered_background_migration():
@@ -54,16 +97,26 @@ def test_episode_indexing_is_one_registered_background_migration():
 
     history = get_background_migration_history()
 
-    assert [(migration.key, migration.upstream_key) for migration in history] == [
-        ("episode_indexing_semantics", None),
+    assert [
+        (migration.revision, migration.down_revision)
+        for migration in history
+    ] == [
+        ("f6a1c3d8b427", None),
     ]
+    assert history[0].module_name.endswith(
+        ".f6a1c3d8b427_episode_indexing_semantics"
+    )
 
 
-def test_background_migration_runner_uses_stored_key_as_source_of_truth(monkeypatch):
+def test_background_migration_runner_uses_stored_revision_as_source_of_truth(monkeypatch):
     from backend.db.background_migrations import runner
 
     calls: list[str] = []
     advances: list[tuple[str | None, str]] = []
+
+    first = "111111111111"
+    second_revision = "222222222222"
+    third_revision = "333333333333"
 
     async def migrate_second(_context):
         calls.append("second")
@@ -72,48 +125,70 @@ def test_background_migration_runner_uses_stored_key_as_source_of_truth(monkeypa
         calls.append("third")
 
     second = runner.BackgroundMigration(
-        key="second",
-        upstream_key="first",
+        revision=second_revision,
+        down_revision=first,
         title="Second",
         migrate=migrate_second,
-        module_name="test.second",
+        module_name=f"test.{second_revision}_second",
     )
     third = runner.BackgroundMigration(
-        key="third",
-        upstream_key="second",
+        revision=third_revision,
+        down_revision=second_revision,
         title="Third",
         migrate=migrate_third,
-        module_name="test.third",
+        module_name=f"test.{third_revision}_third",
     )
 
-    monkeypatch.setattr(runner, "get_background_migration_head_key", lambda: "third")
-    monkeypatch.setattr(runner, "get_current_background_migration_key", lambda: "first")
+    monkeypatch.setattr(
+        runner,
+        "get_background_migration_head_revision",
+        lambda: third_revision,
+    )
+    monkeypatch.setattr(
+        runner,
+        "get_current_background_migration_revision",
+        lambda: first,
+    )
     monkeypatch.setattr(
         runner,
         "get_pending_background_migrations",
-        lambda current: (second, third) if current == "first" else (),
+        lambda current: (second, third) if current == first else (),
     )
     monkeypatch.setattr(
         runner,
-        "advance_background_migration_version",
-        lambda *, expected_key, new_key: advances.append((expected_key, new_key)),
+        "advance_background_migration_revision",
+        lambda *, expected_revision, new_revision: advances.append(
+            (expected_revision, new_revision)
+        ),
     )
 
     result = asyncio.run(runner.run_pending_background_migrations())
 
     assert calls == ["second", "third"]
-    assert advances == [("first", "second"), ("second", "third")]
-    assert result.current_key == "third"
-    assert result.applied_keys == ("second", "third")
+    assert advances == [
+        (first, second_revision),
+        (second_revision, third_revision),
+    ]
+    assert result.current_revision == third_revision
+    assert result.applied_revisions == (second_revision, third_revision)
 
 
 def test_background_migration_runner_returns_when_already_current(monkeypatch):
     from backend.db.background_migrations import runner
 
-    monkeypatch.setattr(runner, "get_background_migration_head_key", lambda: "current")
-    monkeypatch.setattr(runner, "get_current_background_migration_key", lambda: "current")
+    current = "111111111111"
+    monkeypatch.setattr(
+        runner,
+        "get_background_migration_head_revision",
+        lambda: current,
+    )
+    monkeypatch.setattr(
+        runner,
+        "get_current_background_migration_revision",
+        lambda: current,
+    )
 
     result = asyncio.run(runner.run_pending_background_migrations())
 
-    assert result.current_key == "current"
-    assert result.applied_keys == ()
+    assert result.current_revision == current
+    assert result.applied_revisions == ()

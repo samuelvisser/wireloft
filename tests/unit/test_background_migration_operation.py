@@ -6,14 +6,14 @@ def test_background_migration_operation_is_created_once(task_database, monkeypat
     from task_manager.tasks.workers.background_migration_runner import scheduling
 
     pending = [
-        type("Migration", (), {"key": "first"})(),
-        type("Migration", (), {"key": "second"})(),
+        type("Migration", (), {"revision": "111111111111"})(),
+        type("Migration", (), {"revision": "222222222222"})(),
     ]
     dispatched: list[tuple[str, str]] = []
 
     monkeypatch.setattr(
         scheduling,
-        "get_current_background_migration_key",
+        "get_current_background_migration_revision",
         lambda: None,
     )
     monkeypatch.setattr(
@@ -44,7 +44,7 @@ def test_background_migration_operation_is_created_once(task_database, monkeypat
         assert operation.resource_type == "system"
         assert operation.resource_id is None
         assert operation.context == {
-            "target_key": "second",
+            "target_revision": "222222222222",
             "migrations_pending": 2,
         }
         assert len(operation.targets) == 1
@@ -56,7 +56,7 @@ def test_background_migration_operation_is_not_created_when_current(monkeypatch)
 
     monkeypatch.setattr(
         scheduling,
-        "get_current_background_migration_key",
+        "get_current_background_migration_revision",
         lambda: "current",
     )
     monkeypatch.setattr(

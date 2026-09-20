@@ -91,9 +91,9 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         help="Background migration operation",
     )
     for command_name, help_text in (
-        ("current", "Show the current and latest background migration keys"),
+        ("current", "Show the current and latest background migration revisions"),
         ("history", "Show the ordered background migration history"),
-        ("check", "Verify the background migration chain and stored key"),
+        ("check", "Verify the background migration chain and stored revision"),
     ):
         command_parser = background_subparsers.add_parser(command_name, help=help_text)
         command_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
@@ -281,8 +281,8 @@ def _handle_background_migration_command(args: argparse.Namespace) -> None:
             print("No background migrations registered.")
             return
         for migration in history:
-            upstream = migration.upstream_key or "<base>"
-            print(f"{upstream} -> {migration.key}  {migration.title}")
+            upstream = migration.down_revision or "<base>"
+            print(f"{upstream} -> {migration.revision}  {migration.title}")
         return
 
     require_database_current()
@@ -292,14 +292,14 @@ def _handle_background_migration_command(args: argparse.Namespace) -> None:
 
     if args.background_migration_command == "current":
         status = "up to date" if current == head else "migration required"
-        print(f"Current background migration: {current_label}")
-        print(f"Latest background migration:  {head_label}")
+        print(f"Current background migration revision: {current_label}")
+        print(f"Latest background migration revision:  {head_label}")
         print(f"Status: {status}")
         return
 
     if args.background_migration_command == "check":
         print(
-            "Background migration chain and stored key are valid "
+            "Background migration chain and stored revision are valid "
             f"(current: {current_label}, head: {head_label})."
         )
         return

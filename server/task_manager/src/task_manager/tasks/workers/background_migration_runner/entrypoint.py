@@ -20,7 +20,7 @@ async def background_migration_runner(
     progress=None,
 ) -> TaskResult:
     result = await run_pending_background_migrations(progress=progress)
-    applied = len(result.applied_keys)
+    applied = len(result.applied_revisions)
     return TaskResult(
         summary=(
             "Background migrations are up to date"
@@ -29,6 +29,6 @@ async def background_migration_runner(
         ),
         data={
             "applied": applied,
-            "background_migration_version": result.current_key,
+            "background_migration_revision": result.current_revision,
         },
     )
