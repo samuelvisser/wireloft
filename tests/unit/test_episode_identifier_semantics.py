@@ -893,6 +893,31 @@ def test_mapper_does_not_mutate_callers_occupied_identifier_snapshot():
 
 
 
+def test_episode_read_view_derives_identifier_fields_during_model_validation():
+    from backend.api.models.episode import EpisodeAPIReadView
+
+    view = EpisodeAPIReadView.model_validate(
+        {
+            "id": 1,
+            "show_id": 2,
+            "season_id": 3,
+            "index": 4,
+            "episode_identifier": "ep-extra.other.S03E42.10",
+            "dw_episode_number": "42.10",
+            "publish_status": "published_final",
+            "title": "Episode",
+            "slug": "episode",
+            "thumbnail_portrait_path": None,
+        }
+    )
+
+    assert view.episode_type == "ep-extra"
+    assert view.episode_extra_type == "other"
+    assert view.episode_number == "42"
+    assert view.episode_sub_number == "10"
+    assert view.episode_label == "S03E42.10"
+
+
 def test_compact_episode_view_includes_identifier_semantics():
     import backend.db.models  # noqa: F401
     from sqlalchemy import create_engine

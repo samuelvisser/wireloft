@@ -10,7 +10,6 @@ from backend.api.models.episode import *
 from backend.db.models import Show
 from backend.db.models.media_item import Episode
 from backend.types.episode_types import EpisodePublishStatus
-from backend.utils.episode import EpisodeIdentifierInfo
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
@@ -73,19 +72,10 @@ def get_episode_views_by_show_list(
     if limit is not None:
         stmt = stmt.limit(limit)
 
-    views: list[EpisodeAPIReadView] = []
-    for row in s.execute(stmt).mappings():
-        values = dict(row)
-        identifier_info = EpisodeIdentifierInfo.from_identifier(values["episode_identifier"])
-        values.update(
-            episode_type=identifier_info.type,
-            episode_extra_type=identifier_info.extra_type,
-            episode_number=identifier_info.episode_number,
-            episode_sub_number=identifier_info.sub_episode_number,
-            episode_label=identifier_info.label,
-        )
-        views.append(EpisodeAPIReadView.model_validate(values))
-    return views
+    return [
+        EpisodeAPIReadView.model_validate(row)
+        for row in s.execute(stmt).mappings().all()
+    ]
 
 
 def get_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:

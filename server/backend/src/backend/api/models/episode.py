@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from typing import Optional, Union
+from collections.abc import Mapping
+from typing import Any, Optional, Union
 from datetime import datetime
 
-from pydantic import AwareDatetime, computed_field
+from pydantic import AwareDatetime, computed_field, model_validator
 
 from backend.api.models.base import ResponseBase, RequestBase
 from backend.types.episode_types import EpisodePublishStatus
+from backend.utils.episode import EpisodeIdentifierInfo
 
 from backend.utils.helpers import generate_uuid
 
@@ -42,13 +44,9 @@ class EpisodeAPIUpdate(_EpisodeAPIBaseIn):
     pass
 
 # ---------- Lenient output (read) ----------
-class _EpisodeAPIBaseOut(ResponseBase):
-    """Fields for responses: no validators, keep types for doc/serialization."""
+class _EpisodeIdentifierAPIOut(ResponseBase):
+    """Shared canonical episode-identifier fields for API response models."""
 
-    id: int
-    show_id: int
-    season_id: int
-    index: int
     episode_identifier: str
     dw_episode_number: Optional[str]
     episode_type: Optional[str]
@@ -56,6 +54,37 @@ class _EpisodeAPIBaseOut(ResponseBase):
     episode_number: Optional[str]
     episode_sub_number: Optional[str]
     episode_label: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def derive_identifier_fields(cls, value: Any) -> Any:
+        """Expand compact SQLAlchemy row mappings from the canonical identifier."""
+        if not isinstance(value, Mapping):
+            return value
+
+        identifier = value.get("episode_identifier")
+        if not isinstance(identifier, str):
+            return value
+
+        identifier_info = EpisodeIdentifierInfo.from_identifier(identifier)
+        values = dict(value)
+        values.update(
+            episode_type=identifier_info.type,
+            episode_extra_type=identifier_info.extra_type,
+            episode_number=identifier_info.episode_number,
+            episode_sub_number=identifier_info.sub_episode_number,
+            episode_label=identifier_info.label,
+        )
+        return values
+
+
+class _EpisodeAPIBaseOut(_EpisodeIdentifierAPIOut):
+    """Complete episode response fields shared by full read models."""
+
+    id: int
+    show_id: int
+    season_id: int
+    index: int
     publish_status: Union[EpisodePublishStatus, str]
     went_live_date: Optional[datetime]
     published_date: Optional[datetime]
@@ -81,20 +110,13 @@ class EpisodeAPIRead(_EpisodeAPIBaseOut):
     updated_at: datetime
 
 
-class EpisodeAPIReadView(ResponseBase):
+class EpisodeAPIReadView(_EpisodeIdentifierAPIOut):
     """Small episode representation used by show grids and browser-side warm caches."""
 
     id: int
     show_id: int
     season_id: int
     index: int
-    episode_identifier: str
-    dw_episode_number: Optional[str]
-    episode_type: Optional[str]
-    episode_extra_type: Optional[str]
-    episode_number: Optional[str]
-    episode_sub_number: Optional[str]
-    episode_label: str
     publish_status: Union[EpisodePublishStatus, str]
     title: str
     slug: str
