@@ -263,6 +263,7 @@ def get_feed_items(
 
     previous_handoffs = set(profile.live_episode_handoff_ids or [])
     next_handoffs: set[int] = set()
+    new_handoff_candidates: set[int] = set()
     items: list[tuple[Episode, Optional[EpisodeMediaDownload]]] = []
 
     for episode in episodes:
@@ -277,7 +278,7 @@ def get_feed_items(
             # the episode itself is live. Force HLS so this item is genuinely live.
             items.append((episode, None))
             if not profile.use_dw_stream:
-                next_handoffs.add(episode.id)
+                new_handoff_candidates.add(episode.id)
             continue
 
         best = None
@@ -309,10 +310,6 @@ def get_feed_items(
         if profile.use_dw_stream:
             items.append((episode, None))
 
-    normalized_handoffs = sorted(next_handoffs)
-    if list(profile.live_episode_handoff_ids or []) != normalized_handoffs:
-        profile.live_episode_handoff_ids = normalized_handoffs
-
     def sort_key(pair: tuple[Episode, Optional[EpisodeMediaDownload]]):
         episode = pair[0]
         value = (
@@ -323,7 +320,15 @@ def get_feed_items(
         return utc_datetime(value)
 
     items.sort(key=sort_key, reverse=True)
-    return items[:profile.max_items] if profile.max_items > 0 else items
+    result = items[:profile.max_items] if profile.max_items > 0 else items
+
+    emitted_episode_ids = {episode.id for episode, _ in result}
+    next_handoffs.update(new_handoff_candidates & emitted_episode_ids)
+    normalized_handoffs = sorted(next_handoffs)
+    if list(profile.live_episode_handoff_ids or []) != normalized_handoffs:
+        profile.live_episode_handoff_ids = normalized_handoffs
+
+    return result
 
 
 def get_media_for_episode(
