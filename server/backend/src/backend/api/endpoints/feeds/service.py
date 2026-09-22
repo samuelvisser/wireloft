@@ -706,6 +706,15 @@ def render_rss_feed(
                     episode.slug,
                     exc.detail,
                 )
+                if (
+                    not profile.use_dw_stream
+                    and _profile_streams_live_hls(profile)
+                    and (
+                        episode.publish_status == EpisodePublishStatus.LIVE.value
+                        or episode.id in set(profile.live_episode_handoff_ids or [])
+                    )
+                ):
+                    continue
 
         preserve_live_guid = (
             not profile.use_dw_stream
