@@ -9,7 +9,7 @@ import {
 } from '@codemirror/autocomplete'
 import {indentUnit, HighlightStyle, syntaxHighlighting} from '@codemirror/language'
 import {jinja} from '@codemirror/lang-jinja'
-import {EditorView, type ViewUpdate} from '@codemirror/view'
+import {Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate} from '@codemirror/view'
 import {tags} from '@lezer/highlight'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
@@ -121,6 +121,84 @@ const jinjaHighlightStyle = HighlightStyle.define([
     {tag: tags.comment, class: 'cm-jinja-comment'},
     {tag: tags.blockComment, class: 'cm-jinja-comment'},
 ])
+
+const jinjaWordOperators = new Set(['and', 'or', 'not', 'in', 'is'])
+const jinjaWordOperatorDecoration = Decoration.mark({class: 'cm-jinja-keyword'})
+
+function jinjaWordOperatorDecorations(view: EditorView): DecorationSet {
+    const source = view.state.doc.toString()
+    const ranges: Array<ReturnType<typeof jinjaWordOperatorDecoration.range>> = []
+    const openingTagPattern = /{[{%#]/g
+
+    let openingTag: RegExpExecArray | null
+    while ((openingTag = openingTagPattern.exec(source)) !== null) {
+        const opener = openingTag[0]
+        const closer = opener === '{{' ? '}}' : opener === '{%' ? '%}' : '#}'
+        let cursor = openingTag.index + opener.length
+
+        if (opener === '{#') {
+            const commentEnd = source.indexOf(closer, cursor)
+            openingTagPattern.lastIndex = commentEnd >= 0 ? commentEnd + closer.length : source.length
+            continue
+        }
+
+        let quote: "'" | '"' | null = null
+        while (cursor < source.length) {
+            if (!quote && source.startsWith(closer, cursor)) {
+                cursor += closer.length
+                break
+            }
+
+            const character = source[cursor]
+            if (quote) {
+                if (character === '\\') {
+                    cursor += 2
+                    continue
+                }
+                if (character === quote) quote = null
+                cursor += 1
+                continue
+            }
+
+            if (character === "'" || character === '"') {
+                quote = character
+                cursor += 1
+                continue
+            }
+
+            if (/[A-Za-z_]/.test(character)) {
+                const start = cursor
+                cursor += 1
+                while (cursor < source.length && /[A-Za-z0-9_]/.test(source[cursor])) cursor += 1
+
+                if (jinjaWordOperators.has(source.slice(start, cursor))) {
+                    ranges.push(jinjaWordOperatorDecoration.range(start, cursor))
+                }
+                continue
+            }
+
+            cursor += 1
+        }
+
+        openingTagPattern.lastIndex = cursor
+    }
+
+    return Decoration.set(ranges, true)
+}
+
+const jinjaWordOperatorHighlighting = ViewPlugin.fromClass(class {
+    decorations: DecorationSet
+
+    constructor(view: EditorView) {
+        this.decorations = jinjaWordOperatorDecorations(view)
+    }
+
+    update(update: ViewUpdate) {
+        if (update.docChanged) this.decorations = jinjaWordOperatorDecorations(update.view)
+    }
+}, {
+    decorations: (plugin) => plugin.decorations,
+})
 
 function responseErrorMessage(payload: any): string {
     const detail = payload?.detail
@@ -590,6 +668,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             indentUnit.of('\t'),
             autocompletion({override: [filterCompletionSource, variableCompletionSource, statementCompletionSource]}),
             syntaxHighlighting(jinjaHighlightStyle),
+            jinjaWordOperatorHighlighting,
             EditorView.lineWrapping,
             openCompletionsAfterJinjaDelimiter,
             EditorView.updateListener.of(indentAfterNewline),
