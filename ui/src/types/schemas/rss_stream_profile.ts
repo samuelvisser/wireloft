@@ -14,6 +14,7 @@ const RssStreamProfileBaseSchema = z.object({
     epIdTypeList: z.array(z.enum(EpisodeTypeReg.values)).default(['ep', 'aux']),
     dwVideoMethod: z.enum(RssDwVideoMethodReg.values).default('stream_hls_download_m4a'),
     maxItems: z.int().nonnegative().default(0),
+    streamLiveEpisodes: z.boolean().default(false),
 })
 
 export const RssStreamProfileCreateSchema = RssStreamProfileBaseSchema.extend({
@@ -40,6 +41,7 @@ export const RssStreamProfileReadSchema = z.looseObject({
     epIdTypeList: z.array(z.union([z.enum(EpisodeTypeReg.values), z.string()])),
     dwVideoMethod: z.union([z.enum(RssDwVideoMethodReg.values), z.string()]),
     maxItems: z.number(),
+    streamLiveEpisodes: z.boolean(),
     feedUrl: z.string(),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
