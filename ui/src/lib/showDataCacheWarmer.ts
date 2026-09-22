@@ -87,10 +87,7 @@ async function warmEpisodes(queryClient: QueryClient, show: ShowRead) {
   const queryUpdatedAt = queryClient.getQueryState(options.queryKey)?.dataUpdatedAt
   const cachedAt = getEpisodesCacheFetchedAt(show.slug)
 
-  // A recent localStorage timestamp used to make the warmer return here without putting the
-  // episodes into React Query. That left navigation dependent on parsing storage (or refetching)
-  // at the moment the show was opened. Hydrate recent persisted data during the background pass
-  // so every show is actually warm in memory after startup.
+  // If the cached data is recent, do put it in memory so it can immediately be used
   if (
     cachedAt !== undefined
     && isFresh(cachedAt)
