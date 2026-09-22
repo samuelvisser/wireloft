@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from fastapi import HTTPException
 
-from backend.api.helpers import update_database_fields
+from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.episode import *
 from backend.db.models import Show
 from backend.db.models.media_item import Episode
@@ -203,10 +203,7 @@ def request_episode_early_delete(
 
 
 def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:
-    # Build model from validated Pydantic data
-    data = body.model_dump(by_alias=True)
-
-    episode = Episode(**data)
+    episode = create_database_fields(Episode, body)
     s.add(episode)
     s.flush()
 

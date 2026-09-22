@@ -6,6 +6,8 @@ from .seasons import season_router
 from .episodes import episode_router
 from .media_downloads import media_download_router
 from .local_media_profiles import local_media_profile_router
+from .show_local_media_profiles import show_local_media_profile_router
+from .movie_local_media_profiles import movie_local_media_profile_router
 from .movies import movie_router
 from .onboarding import onboarding_router
 from .operations import operation_router

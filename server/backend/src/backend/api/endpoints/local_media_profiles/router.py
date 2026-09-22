@@ -1,57 +1,44 @@
-from fastapi import APIRouter, HTTPException, Query, status
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query
 from jinja2.exceptions import TemplateAssertionError
+from pydantic import Field
 
 from backend.api.models.local_media_profile import (
-    LocalMediaProfileAPICreate,
-    LocalMediaProfileAPIRead,
-    LocalMediaProfileAPIUpdate,
     LocalMediaProfileTemplatePreview,
     LocalMediaProfileTemplatePreviewResult,
     LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
 )
-from backend.api.models.operations import LocalMediaProfileFileRenameOperationAccepted
+from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPIRead
+from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPIRead
 from backend.app import db_session
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
     ShowLocalMediaProfileScope,
 )
 
-from .file_rename import request_local_media_profile_file_rename
 from .output_template import (
     get_output_template_preview,
     get_output_template_source_page,
     get_output_template_variables,
 )
-from .service import (
-    create_local_media_profile,
-    delete_local_media_profile,
-    get_local_media_profile,
-    get_local_media_profiles_list,
-    update_local_media_profile,
-)
+from .service import get_local_media_profile, get_local_media_profiles_list
 
-router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles"])
+
+LocalMediaProfileAPIRead = Annotated[
+    ShowLocalMediaProfileAPIRead | MovieLocalMediaProfileAPIRead,
+    Field(discriminator="type"),
+]
+
+router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles (base)"])
 
 
 @router.get("", response_model=list[LocalMediaProfileAPIRead])
 def local_media_profiles_list():
-    """List all media profiles in the system."""
+    """List Local Media Profiles of every type."""
     with db_session() as s:
         return get_local_media_profiles_list(s)
-
-
-@router.post("", response_model=LocalMediaProfileAPIRead, status_code=status.HTTP_201_CREATED)
-def local_media_profiles_create(body: LocalMediaProfileAPICreate):
-    """Create a new media profile."""
-    with db_session() as s:
-        try:
-            result = create_local_media_profile(s, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
 
 
 @router.get("/template/variables", response_model=list[LocalMediaProfileTemplateVariable])
@@ -106,51 +93,8 @@ def local_media_profile_template_preview(body: LocalMediaProfileTemplatePreview)
         ) from exc
 
 
-@router.post(
-    "/{local_media_profile_slug}/rename-files",
-    response_model=LocalMediaProfileFileRenameOperationAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-def local_media_profile_rename_files(local_media_profile_slug: str):
-    """Rename every existing episode file affected by this Local Media Profile."""
-    with db_session() as s:
-        try:
-            result = request_local_media_profile_file_rename(s, local_media_profile_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
-
-
 @router.get("/{local_media_profile_slug}", response_model=LocalMediaProfileAPIRead)
 def local_media_profiles_detail(local_media_profile_slug: str):
-    """Retrieve detailed information for a specific media profile."""
+    """Retrieve a Local Media Profile of any type."""
     with db_session() as s:
         return get_local_media_profile(s, local_media_profile_slug)
-
-
-@router.patch("/{local_media_profile_slug}", response_model=LocalMediaProfileAPIRead)
-def local_media_profiles_update(local_media_profile_slug: str, body: LocalMediaProfileAPIUpdate):
-    """Update an existing media profile's configuration."""
-    with db_session() as s:
-        try:
-            result = update_local_media_profile(s, local_media_profile_slug, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
-
-
-@router.delete("/{local_media_profile_slug}", response_model=LocalMediaProfileAPIRead)
-def local_media_profiles_delete(local_media_profile_slug: str):
-    """Delete a media profile from the system."""
-    with db_session() as s:
-        try:
-            result = delete_local_media_profile(s, local_media_profile_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise

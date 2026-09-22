@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from backend.api.endpoints.download_profiles.service import require_unique_download_profile_episode_types
-from backend.api.helpers import update_database_fields
+from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.series_download_profile import *
 from backend.db.models.download_profile import SeriesDownloadProfile
 from backend.db.models import Season
@@ -113,8 +113,11 @@ def create_download_profile_series(s: Session, body: SeriesDownloadProfileAPICre
         episode_types=body.ep_id_type_list,
     )
     # Create the profile without directly assigning seasons
-    data = body.model_dump(by_alias=True, exclude={"seasons"}, exclude_none=True, exclude_unset=True)
-    item = SeriesDownloadProfile(**data)
+    item = create_database_fields(
+        SeriesDownloadProfile,
+        body,
+        exclude_fields={"seasons"},
+    )
     s.add(item)
 
     # Resolve existing seasons or create missing ones for this show

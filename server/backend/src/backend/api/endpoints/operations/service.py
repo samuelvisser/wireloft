@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.api.models.operations import TaskOperationRead
 from task_manager.scheduler.operation_control import (
     cancel_operation as cancel_task_operation,
     restart_operation as restart_task_operation,
@@ -11,6 +12,10 @@ from task_manager.scheduler.operations import (
 )
 
 
+def _read(snapshot) -> TaskOperationRead | None:
+    return TaskOperationRead.model_validate(snapshot) if snapshot is not None else None
+
+
 def list_operations(
         *,
         source: str | None = None,
@@ -19,28 +24,31 @@ def list_operations(
         kind: str | None = None,
         relevant: bool = False,
         limit: int = 100,
-) -> list[dict]:
-    return list_task_operations(
-        source=source,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        kind=kind,
-        relevant=relevant,
-        limit=limit,
-    )
+) -> list[TaskOperationRead]:
+    return [
+        TaskOperationRead.model_validate(snapshot)
+        for snapshot in list_task_operations(
+            source=source,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            kind=kind,
+            relevant=relevant,
+            limit=limit,
+        )
+    ]
 
 
-def get_operation(operation_id: str) -> dict | None:
-    return get_task_operation(operation_id)
+def get_operation(operation_id: str) -> TaskOperationRead | None:
+    return _read(get_task_operation(operation_id))
 
 
-def mark_operation_seen(operation_id: str) -> dict | None:
-    return mark_task_operation_seen(operation_id)
+def mark_operation_seen(operation_id: str) -> TaskOperationRead | None:
+    return _read(mark_task_operation_seen(operation_id))
 
 
-def cancel_operation(operation_id: str) -> dict | None:
-    return cancel_task_operation(operation_id)
+def cancel_operation(operation_id: str) -> TaskOperationRead | None:
+    return _read(cancel_task_operation(operation_id))
 
 
-def restart_operation(operation_id: str) -> dict | None:
-    return restart_task_operation(operation_id)
+def restart_operation(operation_id: str) -> TaskOperationRead | None:
+    return _read(restart_task_operation(operation_id))

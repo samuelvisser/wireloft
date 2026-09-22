@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
+
+from pydantic import Field
 
 from backend.api.models.base import RequestBase
 from backend.api.models.download_profile import DownloadProfileAPIBaseIn, DownloadProfileAPICreate, DownloadProfileAPIUpdate, \
     DownloadProfileAPIBaseOut
 from backend.api.models.season import SeasonAPIRequestDetached, SeasonAPIRead
+from backend.types.download_profile_types import DownloadProfileType
 
 
 # ---------- Strict input (create/update) ----------
@@ -34,6 +38,8 @@ class SeriesDownloadProfileAPIUpdate(_SeriesDownloadProfileAPIBaseIn, DownloadPr
 # ---------- Lenient output (read) ----------
 class _SeriesDownloadProfileAPIBaseOut(DownloadProfileAPIBaseOut):
     """Fields for responses: no validators, no constraints."""
+
+    type: Literal["series"] = Field(default=DownloadProfileType.SERIES.value, validation_alias="type")
 
     seasons: list[SeasonAPIRead]
     include_upcoming_seasons: bool

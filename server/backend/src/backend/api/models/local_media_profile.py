@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Union
 
-from pydantic import Field, ValidationInfo, computed_field, field_validator
+from pydantic import Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.pagination import OffsetPageRead
@@ -12,34 +12,15 @@ from backend.types.local_media_profile_types import (
     LocalMediaProfileThumbnailMode,
     LocalMediaProfileType,
     PreferredFormat,
-    ShowLocalMediaProfileScope,
-)
-from backend.utils.output_template import (
-    MOVIE_OUTPUT_TEMPLATE_FIELDS,
-    MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
-    SHOW_OUTPUT_TEMPLATE_FIELDS,
-    SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
-    movie_template_has_media_item_field,
-    validate_output_template_path_requirements,
 )
 from backend.utils.output_template_formatting import normalize_output_template_expression_spacing
 from backend.utils.helpers import slugify
 
 
-_MOVIE_EXTRA_COLLISION_MESSAGE = (
-    "Movie and movie-extra downloads could resolve to the same file. Include at least "
-    "one variable that describes the downloaded item, such as {{ title }}, {{ slug }}, "
-    "{{ duration_seconds }}, or {{ media_type }}."
-)
-
-
-# ---------- Strict input (create/update) ----------
-class _LocalMediaProfileAPIBaseIn(RequestBase):
-    """Fields for requests: validate hard here."""
+class LocalMediaProfileAPIBaseIn(RequestBase):
+    """Fields shared by all Local Media Profile request models."""
 
     name: str = Field(min_length=1)
-    type: LocalMediaProfileType
-    show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH
     preferred_format: PreferredFormat
     download_mode: LocalMediaProfileStorageMode = LocalMediaProfileStorageMode.SYSTEM
     thumbnail_mode: LocalMediaProfileThumbnailMode = LocalMediaProfileThumbnailMode.SYSTEM
@@ -52,91 +33,14 @@ class _LocalMediaProfileAPIBaseIn(RequestBase):
 
     @field_validator("output_template", mode="before")
     @classmethod
-    def _normalize_output_template(cls, v: object) -> object:
-        if isinstance(v, str):
-            return normalize_output_template_expression_spacing(v)
-        return v
-
-    @field_validator("output_template")
-    @classmethod
-    def _validate_output_template(cls, v: str, info: ValidationInfo) -> str:
-        profile_type = info.data.get("type")
-        if profile_type is None:
-            return v
-
-        if profile_type == LocalMediaProfileType.MOVIE:
-            allowed_fields = MOVIE_OUTPUT_TEMPLATE_FIELDS
-            allowed_metadata_scopes = MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES
-        else:
-            allowed_fields = SHOW_OUTPUT_TEMPLATE_FIELDS
-            allowed_metadata_scopes = SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES
-        validate_output_template_path_requirements(
-            v,
-            allowed_fields=allowed_fields,
-            allowed_metadata_scopes=allowed_metadata_scopes,
-        )
-
-        if (
-            profile_type == LocalMediaProfileType.MOVIE
-            and not movie_template_has_media_item_field(v)
-        ):
-            raise ValueError(_MOVIE_EXTRA_COLLISION_MESSAGE)
-        return v
-
-    @field_validator("type")
-    @classmethod
-    def _validate_type(cls, v: LocalMediaProfileType) -> LocalMediaProfileType:
-        if v == LocalMediaProfileType.BASE:
-            raise ValueError("A Local Media Profile must be for shows or movies")
-        return v
-
-    @field_validator("show_scope")
-    @classmethod
-    def _validate_show_scope(
-        cls,
-        v: ShowLocalMediaProfileScope,
-        info: ValidationInfo,
-    ) -> ShowLocalMediaProfileScope:
-        if (
-            info.data.get("type") == LocalMediaProfileType.MOVIE
-            and v != ShowLocalMediaProfileScope.BOTH
-        ):
-            raise ValueError("Show availability only applies to Show Local Media Profiles")
-        return v
-
-    @field_validator("preferred_format")
-    @classmethod
-    def _validate_preferred_format(
-        cls,
-        v: PreferredFormat,
-        info: ValidationInfo,
-    ) -> PreferredFormat:
-        if (
-            info.data.get("type") == LocalMediaProfileType.MOVIE
-            and v == PreferredFormat.FORMAT_AUDIO_ONLY
-        ):
-            raise ValueError("Movie Local Media Profiles require a video format")
-        return v
+    def _normalize_output_template(cls, value: object) -> object:
+        if isinstance(value, str):
+            return normalize_output_template_expression_spacing(value)
+        return value
 
 
-class _TypedLocalMediaProfileAPIBaseIn(_LocalMediaProfileAPIBaseIn):
-    pass
-
-
-class LocalMediaProfileAPICreate(_TypedLocalMediaProfileAPIBaseIn):
-    """Request body for creating a media profile. Slug derived from name."""
-
-    type: LocalMediaProfileType = LocalMediaProfileType.SHOW
-
-
-class LocalMediaProfileAPIUpdate(_TypedLocalMediaProfileAPIBaseIn):
-    """Request body for updating a media profile."""
-    pass
-
-
-# ---------- Lenient output (read) ----------
-class _LocalMediaProfileAPIBaseOut(ResponseBase):
-    """Fields for responses: no validators, no constraints."""
+class LocalMediaProfileAPIBaseOut(ResponseBase):
+    """Fields shared by all Local Media Profile response models."""
 
     id: int
     type: Union[LocalMediaProfileType, str]
@@ -147,12 +51,6 @@ class _LocalMediaProfileAPIBaseOut(ResponseBase):
     download_mode: Union[LocalMediaProfileStorageMode, str] = LocalMediaProfileStorageMode.SYSTEM
     thumbnail_mode: Union[LocalMediaProfileThumbnailMode, str] = LocalMediaProfileThumbnailMode.SYSTEM
     append_media_type_to_filename: bool
-    show_scope: Union[ShowLocalMediaProfileScope, str, None] = None
-
-
-class LocalMediaProfileAPIRead(_LocalMediaProfileAPIBaseOut):
-    """Response body for a media profile."""
-
     created_at: datetime
     updated_at: datetime
 

@@ -129,7 +129,10 @@ export default function LocalMediaProfilesPage() {
                 title="Delete media profile"
                 subjectProp="name"
                 deleteRequest={(p) => {
-                    const path = `local-media-profiles/${p.slug}`
+                    const endpoint = p.type === 'movie'
+                        ? 'movie-local-media-profiles'
+                        : 'show-local-media-profiles'
+                    const path = `${endpoint}/${p.slug}`
                     return fetch(`${(window as any).appConfig.API_URL}/${path}`, { method: 'DELETE', credentials: 'include' })
                 }}
                 invalidateQueries={[["localMediaProfiles"]]}

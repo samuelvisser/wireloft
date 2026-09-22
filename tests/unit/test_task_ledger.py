@@ -167,10 +167,10 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
         offset=0,
         limit=1,
     )
-    assert first["total"] == 2
-    assert first["has_more"] is True
-    assert [item["message"] for item in first["items"]] == ["global success"]
-    assert first["items"][0]["result"]["data"]["shows"][0]["episodes_found"] == 3
+    assert first.total == 2
+    assert first.has_more is True
+    assert [item.message for item in first.items] == ["global success"]
+    assert first.items[0].result["data"]["shows"][0]["episodes_found"] == 3
 
     second = service.list_ledger(
         definition_key="fetch_new_episodes",
@@ -183,9 +183,9 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
         offset=1,
         limit=1,
     )
-    assert second["has_more"] is False
-    assert [item["message"] for item in second["items"]] == ["direct failure"]
-    assert second["items"][0]["last_error"] == "boom"
-    assert second["items"][0]["inputs"] == {"show_slug": "show-seven"}
+    assert second.has_more is False
+    assert [item.message for item in second.items] == ["direct failure"]
+    assert second.items[0].last_error == "boom"
+    assert second.items[0].inputs == {"show_slug": "show-seven"}
 
     engine.dispose()

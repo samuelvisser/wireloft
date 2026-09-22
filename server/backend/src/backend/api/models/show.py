@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import Optional, Union
 from datetime import datetime
 
-from pydantic import computed_field, Field
+from pydantic import AliasChoices, AliasPath, computed_field, Field
 
-from backend.api.models.base import RequestBase
+from backend.api.models.base import RequestBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.show_types import ShowType, EpisodeIdentifier
@@ -73,6 +73,16 @@ class ShowRedownloadEpisodesAPIRequest(_ShowDownloadMaintenanceAPIRequest):
 class _ShowAPIBaseOut(CustomMetadataResponseBase):
     """Fields for responses: no validators, no constraints."""
 
+    model_config = response_model_config(nested_source="show")
+
+    custom_metadata: dict[str, str] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices(
+            "custom_metadata",
+            "meta_items",
+            AliasPath("show", "meta_items"),
+        ),
+    )
     id: int
     uuid: str
     slug: str

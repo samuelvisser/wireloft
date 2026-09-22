@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import Field, model_validator
 
 from backend.api.models.download_profile import DownloadProfileAPIBaseIn, DownloadProfileAPICreate, DownloadProfileAPIUpdate, \
     DownloadProfileAPIBaseOut
+from backend.types.download_profile_types import DownloadProfileType
 
 
 # ---------- Strict input (create/update) ----------
@@ -48,6 +50,8 @@ class PodcastDownloadProfileAPIUpdate(_PodcastDownloadProfileAPIBaseIn, Download
 # ---------- Lenient output (read) ----------
 class _PodcastDownloadProfileAPIBaseOut(DownloadProfileAPIBaseOut):
     """Fields for responses: no validators, no constraints."""
+
+    type: Literal["podcast"] = Field(default=DownloadProfileType.PODCAST.value, validation_alias="type")
 
     download_with_countdown: bool
     redownload_final: bool

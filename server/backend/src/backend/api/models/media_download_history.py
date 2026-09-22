@@ -23,7 +23,7 @@ class MediaDownloadArtifactHistoryEntryRead(ResponseBase):
     artifact_status: MediaDownloadArtifactStatus | str
     artifact_error: Optional[str]
     file_path: str
-    observed_at: datetime
+    observed_at: datetime = Field(validation_alias="updated_at")
 
 
 MediaDownloadHistoryEntryRead = Annotated[

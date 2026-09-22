@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -17,6 +17,10 @@ from task_manager.scheduler.db import (
 )
 from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import OperationStatus, TaskStatus
+
+
+if TYPE_CHECKING:
+    from task_manager.scheduler.operations import OperationSnapshot
 
 
 logger = logging.getLogger(__name__)
@@ -100,7 +104,7 @@ def cancel_operation(
         *,
         reason: str = "Canceled by user",
         acknowledge: bool = True,
-) -> dict | None:
+) -> OperationSnapshot | None:
     """Cancel a high-level operation and every exclusively owned pending/running run.
 
     UI-initiated cancellation is acknowledged by the request itself. System
@@ -235,7 +239,7 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
     return True
 
 
-def restart_operation(operation_id: str) -> dict | None:
+def restart_operation(operation_id: str) -> OperationSnapshot | None:
     """Restart only unfinished logical targets, preserving generic queue policies.
 
     Ordinary targets are dispatched directly after commit. A task definition may

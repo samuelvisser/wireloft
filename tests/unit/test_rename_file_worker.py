@@ -240,7 +240,7 @@ def test_local_media_profile_rename_operation_targets_affected_episodes(tmp_path
     try:
         _show, episode, local_profile, _download, _old_path = _library(session, tmp_path)
 
-        result = file_rename.request_local_media_profile_file_rename(session, local_profile.slug)
+        result = file_rename.request_show_local_media_profile_file_rename(session, local_profile.slug)
 
         assert result["queued"] is True
         assert result["episodes_queued"] == 1

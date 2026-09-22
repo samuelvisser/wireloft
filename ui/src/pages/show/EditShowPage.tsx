@@ -44,7 +44,7 @@ export default function EditShowPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${(window as any).appConfig.API_URL}/local-media-profiles`, { signal: controller.signal, credentials: 'include' })
+    fetch(`${(window as any).appConfig.API_URL}/show-local-media-profiles`, { signal: controller.signal, credentials: 'include' })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const data = await r.json()

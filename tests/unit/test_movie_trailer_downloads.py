@@ -9,13 +9,13 @@ from sqlalchemy.orm import Session
 
 
 def test_movie_profile_requires_an_item_specific_variable() -> None:
-    from backend.api.models.local_media_profile import LocalMediaProfileAPICreate
+    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
 
     with pytest.raises(
         ValidationError,
         match="Movie and movie-extra downloads could resolve to the same file",
     ) as exc_info:
-        LocalMediaProfileAPICreate.model_validate({
+        MovieLocalMediaProfileAPICreate.model_validate({
             "type": "movie",
             "name": "Unsafe",
             "outputTemplate": "/downloads/movies/{{ movie_title }}/{{ movie_title }}.ext",
@@ -24,7 +24,7 @@ def test_movie_profile_requires_an_item_specific_variable() -> None:
 
     assert exc_info.value.errors(include_url=False)[0]["loc"] == ("outputTemplate",)
 
-    profile = LocalMediaProfileAPICreate(
+    profile = MovieLocalMediaProfileAPICreate(
         type="movie",
         name="Safe",
         output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
@@ -34,9 +34,9 @@ def test_movie_profile_requires_an_item_specific_variable() -> None:
 
 
 def test_movie_profile_accepts_media_type_placeholder_without_suffix() -> None:
-    from backend.api.models.local_media_profile import LocalMediaProfileAPICreate
+    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
 
-    profile = LocalMediaProfileAPICreate(
+    profile = MovieLocalMediaProfileAPICreate(
         type="movie",
         name="Typed",
         output_template="/downloads/movies/{{ movie_title }}/{{ movie_title }}-{{ media_type }}.ext",

@@ -80,6 +80,20 @@ I might change how I do this for any particular release, if I ask you to prepare
 and did not ask you to merge migrations, please always ask me whether I want that. I might just simply
 have forgotten to ask you.
 
+## API model boundaries
+WireLoft uses Pydantic as the API mapping and serialization boundary. Keep that boundary declarative:
+- Prefer `model_validate()`, `from_attributes`, field aliases/`AliasPath`, discriminated unions, and small typed
+  source envelopes over manually building dictionaries that mirror response models.
+- Services should compute business facts and select data sources, but must not manually serialize enums/datetimes,
+  duplicate response defaults, or validate -> dump -> rebuild another response model.
+- Do not move a hand-written serializer into a Pydantic validator. Validators should express actual validation or
+  small semantic derivations; straightforward source mapping belongs in Pydantic field aliases.
+- Task manager and other lower-level packages must not import `backend.api.models`, `backend.api.endpoints`, or
+  other API-layer modules. Shared application/domain behavior belongs below `backend.api` so both workers and
+  endpoints can call it.
+- API request models describe HTTP input. Do not reuse them as internal domain DTOs for Daily Wire records or worker
+  data merely because the fields currently happen to overlap.
+
 ## Forms
 WireLoft forms are configured within React Hook Form and Zod to ensure field validation in the frontend.
 However, all backend API endpoints use Pydantic models to do their own validation. In most cases,

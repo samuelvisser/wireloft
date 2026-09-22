@@ -6,7 +6,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.api.helpers import update_database_fields, create_database_fields
+from backend.db.model_mapping import update_database_fields, create_database_fields
 from backend.db.models import Show, Season
 from backend.db.models.media_item import Episode
 from backend.types.episode_types import EpisodePublishStatus

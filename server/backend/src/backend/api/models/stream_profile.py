@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Union
 
-from backend.api.models.base import ResponseBase
+from pydantic import AliasPath, Field
+
+from backend.api.models.base import ResponseBase, response_model_config
 from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
 from backend.types.stream_profile_types import StreamProfileType
 
@@ -15,6 +17,8 @@ class StreamProfileAPIRead(ResponseBase):
     Create/Update/Delete of concrete profiles should be done via the
     type-specific endpoints (e.g., RSS).
     """
+
+    model_config = response_model_config(nested_source="profile")
 
     id: int
     show_id: int
@@ -31,13 +35,10 @@ class StreamProfileAPIRead(ResponseBase):
 
 
 class StreamProfileAPIReadView(StreamProfileAPIRead):
-    """Denormalized view for a stream profile adding related display fields.
+    """Denormalized stream-profile view sourced from ORM relationships."""
 
-    Extends StreamProfileAPIRead with:
-    - show_title: the title of the related show
-    - stream_profile_impl: the concrete profile payload (e.g., RSS)
-    """
-
-    show_title: str
-    show_slug: str
-    stream_profile_impl: Union[RssStreamProfileAPIRead]
+    show_title: str = Field(validation_alias=AliasPath("profile", "show", "title"))
+    show_slug: str = Field(validation_alias=AliasPath("profile", "show", "slug"))
+    stream_profile_impl: RssStreamProfileAPIRead = Field(
+        validation_alias="profile"
+    )

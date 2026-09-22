@@ -75,8 +75,8 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
             const isUpdating = selectedSlug !== null
             const response = await fetch(
                 isUpdating
-                    ? `${base}/local-media-profiles/${encodeURIComponent(selectedSlug)}`
-                    : `${base}/local-media-profiles`,
+                    ? `${base}/movie-local-media-profiles/${encodeURIComponent(selectedSlug)}`
+                    : `${base}/movie-local-media-profiles`,
                 {
                     method: isUpdating ? 'PATCH' : 'POST',
                     credentials: 'include',

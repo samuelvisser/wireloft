@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import Field
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.types.download_profile_types import EpIdType
-from backend.types.stream_profile_types import RssDwVideoMethod
+from backend.types.stream_profile_types import RssDwVideoMethod, StreamProfileType
 
 
 def _default_episode_types() -> list[EpIdType]:
@@ -49,6 +49,8 @@ class RssStreamProfileAPIUpdate(_RssStreamProfileAPIBaseIn):
 # ---------- Lenient output (read) ----------
 class _RssStreamProfileAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, no constraints."""
+
+    type: Literal["rss"] = StreamProfileType.RSS.value
 
     id: int
     show_id: int

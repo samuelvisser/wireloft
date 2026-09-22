@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional, Literal
 
+from pydantic import AliasPath, Field
+
 from backend.api.models.base import ResponseBase, RequestBase
 
 
@@ -26,7 +28,7 @@ class TaskScheduleCreate(RequestBase):
 
 class TaskScheduleRead(ResponseBase):
     id: int
-    definition_key: str
+    definition_key: str = Field(validation_alias=AliasPath("definition", "key"))
     resource_type: str
     resource_id: int
     trigger: str
@@ -38,7 +40,7 @@ class TaskScheduleRead(ResponseBase):
 
 class TaskRunRead(ResponseBase):
     id: int
-    definition_key: str
+    definition_key: str = Field(validation_alias=AliasPath("definition", "key"))
     resource_type: str
     resource_id: Optional[int]
     status: str
@@ -57,13 +59,16 @@ class TaskLedgerEntryRead(ResponseBase):
     """Durable execution facts for one canonical TaskRun."""
 
     id: int
-    definition_key: str
+    definition_key: str = Field(validation_alias=AliasPath("definition", "key"))
     resource_type: str
     resource_id: Optional[int]
     status: str
     message: Optional[str]
     last_error: Optional[str]
-    inputs: dict[str, Any]
+    inputs: dict[str, Any] = Field(
+        default_factory=dict,
+        validation_alias=AliasPath("meta", "inputs"),
+    )
     result: Optional[dict[str, Any]]
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
@@ -76,3 +81,7 @@ class TaskLedgerPageRead(ResponseBase):
     offset: int
     limit: int
     has_more: bool
+
+
+class TaskTriggerRead(ResponseBase):
+    job_id: str

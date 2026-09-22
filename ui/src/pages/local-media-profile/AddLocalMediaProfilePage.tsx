@@ -84,7 +84,10 @@ export default function AddLocalMediaProfilePage() {
     }, [draftKey, form, mode])
 
     const submitFn = async (data: LocalMediaProfileCreateOut) => {
-        return fetch(`${(window as any).appConfig.API_URL}/local-media-profiles`, {
+        const endpoint = mode === 'movie'
+            ? 'movie-local-media-profiles'
+            : 'show-local-media-profiles'
+        return fetch(`${(window as any).appConfig.API_URL}/${endpoint}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',

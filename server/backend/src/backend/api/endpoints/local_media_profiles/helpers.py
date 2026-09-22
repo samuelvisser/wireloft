@@ -7,10 +7,7 @@ from jinja2 import nodes
 from jinja2.visitor import NodeTransformer
 from sqlalchemy.orm import Session
 
-from backend.api.models.local_media_profile import (
-    LocalMediaProfileAPICreate,
-    LocalMediaProfileAPIUpdate,
-)
+from backend.api.models.local_media_profile import LocalMediaProfileAPIBaseIn
 from backend.db.models import LocalMediaProfileBase
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.utils.output_template import _parse_output_template, replace_output_extension
@@ -111,11 +108,12 @@ def _profile_output_patterns(
 
 def ensure_unique_profile_settings(
     s: Session,
-    body: LocalMediaProfileAPICreate | LocalMediaProfileAPIUpdate,
+    profile_model: type[LocalMediaProfileBase],
+    body: LocalMediaProfileAPIBaseIn,
     *,
     exclude_id: int | None = None,
 ) -> None:
-    query = s.query(LocalMediaProfileBase).filter(LocalMediaProfileBase.type == body.type)
+    query = s.query(profile_model)
     if exclude_id is not None:
         query = query.filter(LocalMediaProfileBase.id != exclude_id)
 
@@ -132,7 +130,7 @@ def ensure_unique_profile_settings(
                 status_code=409,
                 detail=[{
                     "loc": ["body", "outputTemplate"],
-                    "msg": "A Local Media Profile with this type, output path template, and preferred format already exists",
+                    "msg": "A Local Media Profile with this output path template and preferred format already exists",
                     "type": "unique_violation",
                 }],
             )
