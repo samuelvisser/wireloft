@@ -34,7 +34,7 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
         description: 'Season type: normal or extra',
         readMore: {
             paragraphs: [
-                'WireLoft attempts to classify whether a season is regular or extra based on it\'s title.' +
+                'WireLoft attempts to classify whether a season is regular or extra based on it\'s title. ' +
                 'Use this value in Jinja conditions when normal and extra seasons need different paths.',
                 '<strong>normal</strong> season contains regular show episodes',
                 '<strong>extra</strong> season contains extra\'s for the show'
@@ -60,7 +60,16 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'episode_number', description: 'Main episode number, or WireLoft counter for aux/trailer'},
     {name: 'episode_sub_number', description: 'The Daily Wire sub-episode number for episode extras; empty otherwise'},
     {name: 'episode_label', description: 'Canonical label without the type prefix (e.g. 2497, 2497.1, S01E07, S01E07.1)'},
-    {name: 'episode_identifier', description: 'Full WireLoft episode identifier including the type prefix; guaranteed unique within the show'},
+    {
+        name: 'episode_identifier',
+        description: 'Guaranteed unique WireLoft episode identifier',
+        readMore: {
+            paragraphs: [
+                'The full WireLoft episode identifier includes the type prefix, making it guaranteed unique within the show.',
+                'This is mainly meant for WireLoft internal usage, but can be handy nevertheless due to its guaranteed unique nature for naming files.'
+            ]
+        }
+    },
     {name: 'episode_published_date', description: 'Published date as YYYY-MM-DD'},
     {name: 'episode_published_time', description: 'Published time as HH:MM:SS'},
     {name: 'episode_published_datetime', description: 'Published date and time'},
