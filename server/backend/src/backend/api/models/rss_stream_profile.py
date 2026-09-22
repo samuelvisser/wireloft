@@ -26,6 +26,7 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     ep_id_type_list: list[EpIdType] = Field(default_factory=_default_episode_types)
     dw_video_method: RssDwVideoMethod = RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value
     max_items: int = Field(default=0, ge=0)
+    stream_live_episodes: bool = False
 
 
 class RssStreamProfileAPICreate(_RssStreamProfileAPIBaseIn):
@@ -62,6 +63,7 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
     ep_id_type_list: list[str]
     dw_video_method: str
     max_items: int
+    stream_live_episodes: bool
     feed_url: str
 
 
