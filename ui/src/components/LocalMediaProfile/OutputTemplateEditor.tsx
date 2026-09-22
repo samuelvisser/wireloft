@@ -945,7 +945,18 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                         {variables.map((variable) => (
                             <div key={variable.name}>
                                 <dt><code>{`{{ ${variable.name} }}`}</code></dt>
-                                <dd>{variable.description}</dd>
+                                <dd>
+                                    {variable.readMore ? (
+                                        <ReadMore summary={variable.readMore.summary ?? variable.description}>
+                                            {variable.readMore.paragraphs.map((paragraph) => (
+                                                <p
+                                                    key={paragraph}
+                                                    dangerouslySetInnerHTML={{__html: paragraph}}
+                                                />
+                                            ))}
+                                        </ReadMore>
+                                    ) : variable.description}
+                                </dd>
                             </div>
                         ))}
                     </dl>
