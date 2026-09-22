@@ -34,8 +34,10 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
         description: 'Season type: normal or extra',
         readMore: {
             paragraphs: [
-                'WireLoft classifies each season explicitly instead of inferring an extras season from its title.',
+                'WireLoft attempts to classify whether a season is regular or extra based on it\'s title.' +
                 'Use this value in Jinja conditions when normal and extra seasons need different paths.',
+                '<strong>normal</strong> season contains regular show episodes<br>',
+                '<strong>extra</strong> season contains extra\'s for the show'
             ],
         },
     },
