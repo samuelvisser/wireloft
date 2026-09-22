@@ -15,3 +15,9 @@ class RssDwVideoMethod(str, Enum):
 
 
 DEFAULT_RSS_DW_VIDEO_METHOD = RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value
+
+
+RSS_HLS_VIDEO_METHODS = frozenset({
+    RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value,
+    RssDwVideoMethod.STREAM_HLS_DOWNLOAD_MP4.value,
+})
