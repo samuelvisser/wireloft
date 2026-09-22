@@ -201,10 +201,22 @@ def _has_video_download_profile_for_episode(
         ):
             continue
         if isinstance(download_profile, SeriesDownloadProfile):
-            if episode.season_id not in {
-                season.id for season in download_profile.seasons
-            }:
-                continue
+            selected_seasons = list(download_profile.seasons)
+            selected_season_ids = {season.id for season in selected_seasons}
+            if episode.season_id not in selected_season_ids:
+                max_selected_index = (
+                    max(season.index for season in selected_seasons)
+                    if selected_seasons
+                    else None
+                )
+                is_upcoming = (
+                    download_profile.include_upcoming_seasons
+                    and max_selected_index is not None
+                    and episode.season is not None
+                    and episode.season.index > max_selected_index
+                )
+                if not is_upcoming:
+                    continue
         return True
     return False
 
@@ -276,6 +288,14 @@ def get_feed_items(
             # A local file can only represent an earlier/static artifact while
             # the episode itself is live. Force HLS so this item is genuinely live.
             items.append((episode, None))
+            # Once a live item was successfully exposed, preserve that fact
+            # through transient refresh failures until a local artifact completes
+            # the handoff. New handoffs are still created only after HLS resolves.
+            if (
+                episode.id in previous_handoffs
+                and _profile_keeps_live_handoff(profile)
+            ):
+                next_handoffs.add(episode.id)
             continue
 
         best = None
