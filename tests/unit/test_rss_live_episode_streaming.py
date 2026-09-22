@@ -848,9 +848,10 @@ def test_failed_live_hls_resolution_does_not_start_handoff(
 
     monkeypatch.setattr(feed_service, "MiddlewareClient", FakeClient)
     request = type("Request", (), {"base_url": "https://wireloft.test/"})()
-    feed_service.render_rss_feed(db_session, request, profile)
+    xml = feed_service.render_rss_feed(db_session, request, profile).decode("utf-8")
 
     assert profile.live_episode_handoff_ids == []
+    assert "<title>Episode 1</title>" not in xml
 
 
 def test_non_hls_video_method_never_enables_live_streaming(db_session: Session):
