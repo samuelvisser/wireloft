@@ -311,6 +311,12 @@
     gap: 12px;
 }
 
+/* Nested variable ReadMore blocks should keep the global half-line paragraph spacing.
+   The outer help block uses a grid gap; applying that same gap again would double the spacing. */
+.output-template-variable-reference .read-more-content {
+    display: block;
+}
+
 .output-template-help h4,
 .output-template-help p,
 .output-template-variable-reference {

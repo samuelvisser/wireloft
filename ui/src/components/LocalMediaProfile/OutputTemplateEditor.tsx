@@ -870,7 +870,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                                     {variable.readMore ? (
                                         <ReadMore summary={variable.readMore.summary ?? variable.description}>
                                             {variable.readMore.paragraphs.map((paragraph) => (
-                                                <p key={paragraph}>{paragraph}</p>
+                                                <p
+                                                    key={paragraph}
+                                                    dangerouslySetInnerHTML={{__html: paragraph}}
+                                                />
                                             ))}
                                         </ReadMore>
                                     ) : variable.description}
