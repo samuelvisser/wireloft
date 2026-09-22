@@ -263,7 +263,6 @@ def get_feed_items(
 
     previous_handoffs = set(profile.live_episode_handoff_ids or [])
     next_handoffs: set[int] = set()
-    new_handoff_candidates: set[int] = set()
     items: list[tuple[Episode, Optional[EpisodeMediaDownload]]] = []
 
     for episode in episodes:
@@ -277,8 +276,6 @@ def get_feed_items(
             # A local file can only represent an earlier/static artifact while
             # the episode itself is live. Force HLS so this item is genuinely live.
             items.append((episode, None))
-            if not profile.use_dw_stream:
-                new_handoff_candidates.add(episode.id)
             continue
 
         best = None
@@ -322,8 +319,6 @@ def get_feed_items(
     items.sort(key=sort_key, reverse=True)
     result = items[:profile.max_items] if profile.max_items > 0 else items
 
-    emitted_episode_ids = {episode.id for episode, _ in result}
-    next_handoffs.update(new_handoff_candidates & emitted_episode_ids)
     normalized_handoffs = sorted(next_handoffs)
     if list(profile.live_episode_handoff_ids or []) != normalized_handoffs:
         profile.live_episode_handoff_ids = normalized_handoffs
@@ -585,6 +580,22 @@ def _append_item(
         SubElement(item, "itunes:image", {"href": image_url})
 
 
+def _remember_live_episode_handoff(
+        profile: RssStreamProfile,
+        episode: Episode,
+) -> None:
+    if (
+        episode.publish_status != EpisodePublishStatus.LIVE.value
+        or not _profile_keeps_live_handoff(profile)
+    ):
+        return
+
+    handoff_ids = set(profile.live_episode_handoff_ids or [])
+    if episode.id not in handoff_ids:
+        handoff_ids.add(episode.id)
+        profile.live_episode_handoff_ids = sorted(handoff_ids)
+
+
 def render_rss_feed(
         s: Session,
         request: Request,
@@ -666,6 +677,7 @@ def render_rss_feed(
                     media_kind="video",
                     client=client,
                 )
+                _remember_live_episode_handoff(profile, episode)
             except HTTPException as exc:
                 logger.warning(
                     "Could not add Daily Wire video stream for episode '%s': %s",
