@@ -19,3 +19,9 @@ export const RssDwVideoMethodReg = createSelectRegistry("RssDwVideoMethod", {
     help: "Stream immediately with Podcasting 2.0 and use cached MP4 for downloads and fallback",
   },
 });
+
+
+export const RssHlsVideoMethods = new Set([
+  'stream_hls_download_m4a',
+  'stream_hls_download_mp4',
+])
