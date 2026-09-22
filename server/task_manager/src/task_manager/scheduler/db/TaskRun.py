@@ -24,10 +24,10 @@ class TaskRun(Base):
     schedule_id: Mapped[Optional[int]] = mapped_column(ForeignKey("task_schedules.id", ondelete="SET NULL"), index=True)
     definition_id: Mapped[int] = mapped_column(ForeignKey("task_definitions.id", ondelete="CASCADE"), index=True)
 
-    resource_type: Mapped[ResourceType] = mapped_column(SAEnum(ResourceType), index=True)
+    resource_type: Mapped[ResourceType] = mapped_column(SAEnum(ResourceType, native_enum=False, create_constraint=False), index=True)
     resource_id: Mapped[Optional[int]] = mapped_column(index=True)
 
-    status: Mapped[TaskStatus] = mapped_column(SAEnum(TaskStatus), index=True)
+    status: Mapped[TaskStatus] = mapped_column(SAEnum(TaskStatus, native_enum=False, create_constraint=False), index=True)
     progress: Mapped[Optional[int]]
     message: Mapped[Optional[str]]
     meta: Mapped[Optional[dict]] = mapped_column(JSON)

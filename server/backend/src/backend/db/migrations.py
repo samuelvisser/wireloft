@@ -16,7 +16,7 @@ from .alembic_version import (
     SETTINGS_VERSION_TABLE,
     VERSION_STORAGE_MIGRATION_ATTRIBUTE,
 )
-from .core import get_db_path, get_engine
+from .core import get_database_label, get_engine, get_sqlite_database_path
 
 
 ALEMBIC_DIR = Path(__file__).with_name("alembic")
@@ -55,12 +55,18 @@ def get_head_revision() -> str:
     return heads[0]
 
 
+def _sqlite_database_missing() -> bool:
+    path = get_sqlite_database_path()
+    return path is not None and not path.exists()
+
+
 def _settings_revisions(connection: Connection) -> tuple[str, ...]:
     """Read the current revision from WireLoft's only supported version store."""
     inspector = sa_inspect(connection)
+    database = get_database_label()
     if not inspector.has_table(SETTINGS_VERSION_TABLE):
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' does not contain current WireLoft migration metadata. "
+            f"Database '{database}' does not contain current WireLoft migration metadata. "
             "Run 'backend-api db upgrade' to migrate it."
         )
 
@@ -69,7 +75,7 @@ def _settings_revisions(connection: Connection) -> tuple[str, ...]:
     }
     if SETTINGS_VERSION_COLUMN not in settings_columns:
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' predates the current WireLoft migration metadata. "
+            f"Database '{database}' predates the current WireLoft migration metadata. "
             "Run 'backend-api db upgrade' to migrate it."
         )
 
@@ -88,8 +94,7 @@ def _settings_revisions(connection: Connection) -> tuple[str, ...]:
 
 
 def get_current_revisions() -> tuple[str, ...]:
-    path = get_db_path()
-    if not path.exists():
+    if _sqlite_database_missing():
         return ()
 
     engine = get_engine()
@@ -101,8 +106,7 @@ def get_current_revisions() -> tuple[str, ...]:
 
 
 def _database_tables() -> set[str]:
-    path = get_db_path()
-    if not path.exists():
+    if _sqlite_database_missing():
         return set()
     return set(sa_inspect(get_engine()).get_table_names())
 
@@ -114,10 +118,11 @@ def validate_database_migration_state() -> None:
     if not application_tables:
         return
 
+    database = get_database_label()
     current = get_current_revisions()
     if not current:
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' contains WireLoft tables but its Alembic revision is empty. "
+            f"Database '{database}' contains WireLoft tables but its Alembic revision is empty. "
             "Refusing to guess the schema version."
         )
 
@@ -127,7 +132,7 @@ def validate_database_migration_state() -> None:
             scripts.get_revision(revision)
         except (CommandError, ResolutionError) as exc:
             raise DatabaseMigrationError(
-                f"Database '{get_db_path()}' references unknown Alembic revision '{revision}'."
+                f"Database '{database}' references unknown Alembic revision '{revision}'."
             ) from exc
 
 
@@ -147,7 +152,7 @@ def require_database_current() -> None:
 def initialize_database() -> None:
     if _database_tables():
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' is not empty; db init only supports new or empty databases."
+            f"Database '{get_database_label()}' is not empty; db init only supports new or empty databases."
         )
     upgrade_database()
 
@@ -176,7 +181,7 @@ def _validate_downgrade_target(revision: str) -> list:
     current = get_current_revisions()
     if not current:
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' has no current Alembic revision to downgrade."
+            f"Database '{get_database_label()}' has no current Alembic revision to downgrade."
         )
 
     if len(current) > 1 and _is_relative_downgrade(revision):

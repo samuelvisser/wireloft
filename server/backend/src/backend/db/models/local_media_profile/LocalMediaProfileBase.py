@@ -60,7 +60,7 @@ class LocalMediaProfileBase(Base):
     append_media_type_to_filename: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
-        server_default="0",
+        server_default=false(),
         nullable=False,
     )
 
