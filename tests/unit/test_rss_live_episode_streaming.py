@@ -586,6 +586,43 @@ def test_series_download_profile_must_cover_live_episode_season(
     assert get_feed_items(db_session, profile) == [(episode, None)]
 
 
+def test_series_upcoming_season_can_cover_live_episode(
+        db_session: Session,
+):
+    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.db.models import SeriesDownloadProfile
+
+    show = _make_show(db_session)
+    selected_season = _make_season(db_session, show, index=1)
+    upcoming_season = _make_season(db_session, show, index=2)
+    episode = _make_episode(db_session, show, upcoming_season, index=1)
+    video = _make_local_media_profile(
+        db_session,
+        slug="video",
+        preferred_format="format_1080p",
+    )
+    download_profile = SeriesDownloadProfile(
+        show=show,
+        local_media_profile=video,
+        enable_profile=True,
+        ep_id_type_list=["ep"],
+        include_upcoming_seasons=True,
+    )
+    download_profile.seasons = [selected_season]
+    db_session.add(download_profile)
+    db_session.flush()
+
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        use_downloads=True,
+        use_dw_stream=False,
+        stream_live_episodes=True,
+    )
+
+    assert get_feed_items(db_session, profile) == [(episode, None)]
+
+
 def test_live_handoff_is_only_created_for_live_items_emitted_by_max_items(
         db_session: Session,
         monkeypatch,
@@ -688,6 +725,49 @@ def test_live_episode_is_rendered_from_dailywire_even_when_normal_dw_streaming_i
     xml = feed_service.render_rss_feed(db_session, request, profile).decode("utf-8")
 
     assert "https://media.example/live.m3u8" in xml
+    assert profile.live_episode_handoff_ids == [episode.id]
+
+
+def test_existing_live_handoff_survives_failed_live_refresh(
+        db_session: Session,
+        monkeypatch,
+):
+    import backend.api.endpoints.feeds.service as feed_service
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(db_session, show, season, index=1)
+    video = _make_local_media_profile(
+        db_session,
+        slug="video",
+        preferred_format="format_1080p",
+    )
+    _make_download_profile(
+        db_session,
+        show,
+        video,
+        episode_types=["ep"],
+    )
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        use_downloads=True,
+        use_dw_stream=False,
+        stream_live_episodes=True,
+    )
+    profile.live_episode_handoff_ids = [episode.id]
+
+    class FakeClient:
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            return type("Detail", (), {
+                "video_url": None,
+                "audio_url": "https://media.example/live.m4a",
+            })()
+
+    monkeypatch.setattr(feed_service, "MiddlewareClient", FakeClient)
+    request = type("Request", (), {"base_url": "https://wireloft.test/"})()
+    feed_service.render_rss_feed(db_session, request, profile)
+
     assert profile.live_episode_handoff_ids == [episode.id]
 
 
