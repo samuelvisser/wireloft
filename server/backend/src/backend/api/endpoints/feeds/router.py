@@ -68,7 +68,12 @@ def _cached_mp4_head_response(file_path: Path | None, *, filename: str) -> Respo
 def rss_feed(token: str, show_slug: str, request: Request):
     with db_session() as s:
         profile = get_rss_stream_profile_by_token(s, token)
-        xml = render_rss_feed(s, request, profile)
+        xml = render_rss_feed(
+            s,
+            request,
+            profile,
+            record_live_handoffs=request.method != "HEAD",
+        )
         if s.dirty:
             s.commit()
     return _rss_response(xml, head_only=request.method == "HEAD")
