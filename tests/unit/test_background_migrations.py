@@ -138,12 +138,16 @@ def test_episode_indexing_background_migration_history_is_linear():
     ] == [
         ("f6a1c3d8b427", None),
         ("9d4b7e2c1a63", "f6a1c3d8b427"),
+        ("3c8f6a1d2b47", "9d4b7e2c1a63"),
     ]
     assert history[0].module_name.endswith(
         ".f6a1c3d8b427_episode_indexing_semantics"
     )
     assert history[1].module_name.endswith(
         ".9d4b7e2c1a63_restore_high_segment_auxiliary"
+    )
+    assert history[2].module_name.endswith(
+        ".3c8f6a1d2b47_square_show_thumbnails"
     )
 
 

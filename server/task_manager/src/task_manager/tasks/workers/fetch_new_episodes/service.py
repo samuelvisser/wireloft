@@ -136,6 +136,7 @@ async def run_fetch_new_episodes(
     show_id: Optional[int] = None,
     show_slug: Optional[str] = None,
     dry_run: bool = False,
+    initial_index: bool = False,
     progress=None,
 ) -> FetchNewEpisodesResult:
     shows: Sequence[Show] = get_shows(s, show_id=show_id, show_slug=show_slug)
@@ -159,6 +160,7 @@ async def run_fetch_new_episodes(
                 client=client,
                 access_token=access_token,
                 dry_run=dry_run,
+                initial_index=initial_index,
                 progress=progress,
             )
         except Exception:
@@ -180,6 +182,7 @@ async def _fetch_show(
     client: MiddlewareClient,
     access_token: str | None,
     dry_run: bool,
+    initial_index: bool,
     progress=None,
 ) -> int:
     show_id = show.id
@@ -215,12 +218,21 @@ async def _fetch_show(
     # The local snapshot is complete. Release its transaction before the first
     # Daily Wire request so an outage cannot pin a DB connection per worker.
     s.rollback()
+
+    square_thumbnail_path: str | None = None
+    if initial_index and not dry_run:
+        square_thumbnail_path = client.get_square_show_thumbnails(
+            membership_plan=membership_plan,
+        ).get(show_slug)
+
     dw_show = client.get_show_page(show_slug, membership_plan=membership_plan)
     all_dw_seasons: list[DwSeasonRecord] = dw_show.seasons
 
     show = s.get(Show, show_id)
     if show is None:
         raise ValueError(f"Show {show_id} was removed while it was being indexed")
+    if square_thumbnail_path:
+        show.thumbnail_square_path = square_thumbnail_path
     for remote_season in all_dw_seasons:
         if not any(season.slug == remote_season.slug for season in show.seasons):
             create_season_by_dw_season(s, show=show, dw_season=remote_season)

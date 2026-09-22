@@ -266,6 +266,51 @@ class MiddlewareClient:
             movies=sorted(movies.values(), key=lambda value: value.title.casefold()),
         )
 
+    def get_square_show_thumbnails(
+        self,
+        *,
+        membership_plan: Optional[str] = None,
+    ) -> dict[str, str]:
+        """Return square show artwork exposed by the Watch page carousel.
+
+        The Daily Wire currently leaves images.thumbnail.square empty in this
+        component and places the square artwork in the otherwise generic
+        land/port fields. The carousel render type is therefore part of the
+        contract: these fallback fields are only interpreted as square art
+        while parsing squareShowCarousel.
+        """
+        params: Dict[str, Any] = {'slug': 'watch-page'}
+        if membership_plan:
+            params['membershipPlan'] = membership_plan
+        payload = self._get('v4/getPage', params)
+
+        thumbnails: dict[str, str] = {}
+        for component in payload.get('components') or []:
+            if (
+                not isinstance(component, dict)
+                or component.get('renderType') != 'squareShowCarousel'
+            ):
+                continue
+
+            for item in component.get('items') or []:
+                if not isinstance(item, dict):
+                    continue
+                raw_show = item.get('show')
+                if not isinstance(raw_show, dict):
+                    continue
+
+                record = self._catalog_show_from_payload(raw_show)
+                square_path = (
+                    record.thumbnail_square_path
+                    or record.thumbnail_landscape_path
+                    or record.thumbnail_portrait_path
+                )
+                if not record.slug or not square_path:
+                    continue
+                thumbnails.setdefault(record.slug, square_path)
+
+        return thumbnails
+
     def get_movie_playback(self, slug: str) -> DwMovieDetailRecord:
         """Fetch Daily Wire's current signed movie playback URL.
 

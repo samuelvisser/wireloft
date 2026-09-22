@@ -28,6 +28,11 @@ class ShowIndexOperation(_ShowOperation):
     kind = "show.index"
     task = _FETCH_EPISODES_TASK_KEY
 
+    def task_kwargs(self) -> dict[str, object]:
+        # Recovery dispatches this durable target directly, without replaying the
+        # show.added event, so initial-index behavior must live on the operation too.
+        return {"initial_index": True}
+
 
 class ShowSyncOperation(_ShowOperation):
     kind = "show.sync"
