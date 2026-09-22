@@ -132,7 +132,10 @@ export default function EditLocalMediaProfilePage() {
 
     const submitFn = async (data: LocalMediaProfileUpdateOut) => {
         try {
-            const response = await fetch(`${(window as any).appConfig.API_URL}/local-media-profiles/${data.slug}`, {
+            const endpoint = profile.type === 'movie'
+                ? 'movie-local-media-profiles'
+                : 'show-local-media-profiles'
+            const response = await fetch(`${(window as any).appConfig.API_URL}/${endpoint}/${data.slug}`, {
                 method: 'PATCH',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',
@@ -151,7 +154,7 @@ export default function EditLocalMediaProfilePage() {
             try {
                 const base = (window as any).appConfig?.API_URL || '/api'
                 await startOperation(
-                    `${base}/local-media-profiles/${encodeURIComponent(slug)}/rename-files`,
+                    `${base}/show-local-media-profiles/${encodeURIComponent(slug)}/rename-files`,
                     {method: 'POST'},
                 )
             } catch (renameError) {

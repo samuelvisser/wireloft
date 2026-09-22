@@ -8,14 +8,14 @@ from fastapi import HTTPException, Request
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.show import ShowAPIRead
 from backend.api.models.show_as_bundle import (
-    LocalMediaProfileAPIUpsert,
-    LocalMediaProfileCreateNew,
-    LocalMediaProfileUpdateBySlug,
+    ShowLocalMediaProfileAPIUpsert,
+    ShowLocalMediaProfileCreateNew,
+    ShowLocalMediaProfileUpdateBySlug,
     PodcastDownloadProfileCreateInBundle,
     SeriesDownloadProfileCreateInBundle,
     ShowAPICreateBundle,
 )
-from backend.db.models import LocalMediaProfileBase, Season, Show, ShowLocalMediaProfile
+from backend.db.models import Season, Show, ShowLocalMediaProfile
 from backend.db.models.download_profile import PodcastDownloadProfile, SeriesDownloadProfile
 from backend.db.models.stream_profile import RssStreamProfile
 from backend.utils.feed_urls import build_rss_feed_url
@@ -29,11 +29,11 @@ from ..events import ShowAdded
 from ..operations import ShowIndexOperation
 
 
-def upsert_local_media_profile(
+def upsert_show_local_media_profile(
     s: Session,
-    mp_input: LocalMediaProfileAPIUpsert,
-) -> LocalMediaProfileBase:
-    if isinstance(mp_input, LocalMediaProfileCreateNew):
+    mp_input: ShowLocalMediaProfileAPIUpsert,
+) -> ShowLocalMediaProfile:
+    if isinstance(mp_input, ShowLocalMediaProfileCreateNew):
         local_media_profile = create_database_fields(
             ShowLocalMediaProfile,
             mp_input,
@@ -42,7 +42,7 @@ def upsert_local_media_profile(
         s.add(local_media_profile)
         return local_media_profile
 
-    if isinstance(mp_input, LocalMediaProfileUpdateBySlug):
+    if isinstance(mp_input, ShowLocalMediaProfileUpdateBySlug):
         local_media_profile: Optional[ShowLocalMediaProfile] = (
             s.query(ShowLocalMediaProfile)
             .filter_by(slug=mp_input.slug_selector)
@@ -86,9 +86,9 @@ def create_show_bundle(s: Session, request: Request, payload: ShowAPICreateBundl
         s.add(season)
         seasons.append(season)
 
-    local_media_profile: Optional[LocalMediaProfileBase] = None
+    local_media_profile: Optional[ShowLocalMediaProfile] = None
     if payload.local_media_profile is not None:
-        local_media_profile = upsert_local_media_profile(s, payload.local_media_profile)
+        local_media_profile = upsert_show_local_media_profile(s, payload.local_media_profile)
 
     if payload.download_profile is not None:
         if local_media_profile is None:

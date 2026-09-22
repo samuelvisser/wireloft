@@ -22,9 +22,9 @@ def test_system_download_storage_defaults_to_direct_mode():
 
 
 def test_local_media_profile_defaults_to_system_storage_and_thumbnail_modes():
-    from backend.api.models.local_media_profile import LocalMediaProfileAPICreate
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
 
-    body = LocalMediaProfileAPICreate(
+    body = ShowLocalMediaProfileAPICreate(
         name="Audio",
         type="show",
         preferred_format="format_audio_only",
@@ -39,10 +39,10 @@ def test_local_media_profile_defaults_to_system_storage_and_thumbnail_modes():
 
 
 def test_local_media_profile_accepts_each_storage_override():
-    from backend.api.models.local_media_profile import LocalMediaProfileAPICreate
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
 
     for mode in ("system", "direct", "temporary"):
-        body = LocalMediaProfileAPICreate(
+        body = ShowLocalMediaProfileAPICreate(
             name=f"Audio {mode}",
             type="show",
             preferred_format="format_audio_only",
@@ -53,10 +53,10 @@ def test_local_media_profile_accepts_each_storage_override():
 
 
 def test_local_media_profile_accepts_each_thumbnail_override():
-    from backend.api.models.local_media_profile import LocalMediaProfileAPICreate
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
 
     for mode in ("system", "no_thumbnail", "embed", "sidecar", "embed_and_sidecar"):
-        body = LocalMediaProfileAPICreate(
+        body = ShowLocalMediaProfileAPICreate(
             name=f"Audio {mode}",
             type="show",
             preferred_format="format_audio_only",

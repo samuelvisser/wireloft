@@ -1,32 +1,13 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from backend.db.model_mapping import create_database_fields, update_database_fields
-from backend.api.models.local_media_profile import (
-    LocalMediaProfileAPICreate,
-    LocalMediaProfileAPIRead,
-    LocalMediaProfileAPIUpdate,
-)
 from backend.db.models import (
     DownloadProfileBase,
     LocalMediaProfileBase,
     MediaDownloadBase,
-    MovieLocalMediaProfile,
-    ShowLocalMediaProfile,
 )
-from backend.types.local_media_profile_types import LocalMediaProfileType
-
-from .helpers import ensure_unique_profile_settings
-
-
-_PROFILE_MODELS = {
-    LocalMediaProfileType.SHOW.value: ShowLocalMediaProfile,
-    LocalMediaProfileType.MOVIE.value: MovieLocalMediaProfile,
-}
 
 
 def _raise_profile_in_use(message: str) -> None:
@@ -40,7 +21,7 @@ def _raise_profile_in_use(message: str) -> None:
     )
 
 
-def _ensure_local_media_profile_can_be_deleted(
+def ensure_local_media_profile_can_be_deleted(
     s: Session,
     local_media_profile: LocalMediaProfileBase,
 ) -> None:
@@ -69,67 +50,18 @@ def _ensure_local_media_profile_can_be_deleted(
         )
 
 
-def get_local_media_profiles_list(s: Session) -> list[LocalMediaProfileAPIRead]:
-    local_media_profiles = (
+def get_local_media_profiles_list(s: Session) -> list[LocalMediaProfileBase]:
+    return (
         s.query(LocalMediaProfileBase)
         .order_by(LocalMediaProfileBase.id)
         .all()
     )
-    return [LocalMediaProfileAPIRead.model_validate(mp) for mp in local_media_profiles]
 
 
-def get_local_media_profile(s: Session, local_media_profile_slug: str) -> LocalMediaProfileAPIRead:
-    local_media_profile = (
-        s.query(LocalMediaProfileBase)
-        .filter_by(slug=local_media_profile_slug)
-        .one_or_none()
-    )
-    if local_media_profile is None:
-        raise HTTPException(status_code=404, detail="Media profile not found")
-    return LocalMediaProfileAPIRead.model_validate(local_media_profile)
-
-
-def create_local_media_profile(s: Session, body: LocalMediaProfileAPICreate) -> LocalMediaProfileAPIRead:
-    ensure_unique_profile_settings(s, body)
-    profile_model = _PROFILE_MODELS[body.type]
-    exclude_fields = (
-        set()
-        if body.type == LocalMediaProfileType.SHOW
-        else {"show_scope"}
-    )
-    mp = create_database_fields(
-        profile_model,
-        body,
-        exclude_fields=exclude_fields,
-    )
-    s.add(mp)
-    s.flush()
-    return LocalMediaProfileAPIRead.model_validate(mp)
-
-
-def update_local_media_profile(
+def get_local_media_profile(
     s: Session,
     local_media_profile_slug: str,
-    body: LocalMediaProfileAPIUpdate,
-) -> LocalMediaProfileAPIRead:
-    local_media_profile: Optional[LocalMediaProfileBase] = (
-        s.query(LocalMediaProfileBase)
-        .filter_by(slug=local_media_profile_slug)
-        .one_or_none()
-    )
-    if local_media_profile is None:
-        raise HTTPException(status_code=404, detail="Media profile not found")
-    if local_media_profile.type != body.type:
-        raise HTTPException(status_code=422, detail="A Local Media Profile's type cannot be changed")
-
-    ensure_unique_profile_settings(s, body, exclude_id=local_media_profile.id)
-    exclude_fields = {"show_scope"} if local_media_profile.type != LocalMediaProfileType.SHOW.value else None
-    update_database_fields(local_media_profile, body, exclude_fields=exclude_fields)
-    s.flush()
-    return LocalMediaProfileAPIRead.model_validate(local_media_profile)
-
-
-def delete_local_media_profile(s: Session, local_media_profile_slug: str) -> LocalMediaProfileAPIRead:
+) -> LocalMediaProfileBase:
     local_media_profile = (
         s.query(LocalMediaProfileBase)
         .filter_by(slug=local_media_profile_slug)
@@ -137,10 +69,13 @@ def delete_local_media_profile(s: Session, local_media_profile_slug: str) -> Loc
     )
     if local_media_profile is None:
         raise HTTPException(status_code=404, detail="Media profile not found")
+    return local_media_profile
 
-    _ensure_local_media_profile_can_be_deleted(s, local_media_profile)
 
-    payload = LocalMediaProfileAPIRead.model_validate(local_media_profile)
+def delete_local_media_profile_record(
+    s: Session,
+    local_media_profile: LocalMediaProfileBase,
+) -> None:
+    ensure_local_media_profile_can_be_deleted(s, local_media_profile)
     s.delete(local_media_profile)
     s.flush()
-    return payload

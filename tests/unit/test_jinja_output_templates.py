@@ -127,7 +127,7 @@ def test_jinja_validation_reports_syntax_and_unknown_variables():
 
 
 def test_single_brace_placeholders_are_rejected_instead_of_upgraded():
-    from backend.api.models.local_media_profile import LocalMediaProfileAPICreate
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
     from backend.utils.output_template import (
         SHOW_OUTPUT_TEMPLATE_FIELDS,
         validate_output_template_fields,
@@ -141,7 +141,7 @@ def test_single_brace_placeholders_are_rejected_instead_of_upgraded():
         )
 
     with pytest.raises(ValueError, match="Jinja syntax"):
-        LocalMediaProfileAPICreate.model_validate({
+        ShowLocalMediaProfileAPICreate.model_validate({
             "type": "show",
             "name": "Old style",
             "outputTemplate": old_style,

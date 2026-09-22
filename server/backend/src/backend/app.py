@@ -198,6 +198,8 @@ def create_app() -> FastAPI:
         season_router,
         setting_router,
         local_media_profile_router,
+        show_local_media_profile_router,
+        movie_local_media_profile_router,
         meta_router,
         config_router,
         rss_stream_profile_router,
@@ -232,6 +234,8 @@ def create_app() -> FastAPI:
     app.include_router(puller_router, prefix="/api")
     app.include_router(setting_router, prefix="/api")
     app.include_router(local_media_profile_router, prefix="/api")
+    app.include_router(show_local_media_profile_router, prefix="/api")
+    app.include_router(movie_local_media_profile_router, prefix="/api")
     app.include_router(custom_metadata_router, prefix="/api")
     app.include_router(meta_router, prefix="/api")
     app.include_router(config_router, prefix="/api")

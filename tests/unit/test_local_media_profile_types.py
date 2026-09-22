@@ -63,9 +63,10 @@ def test_local_media_profile_models_are_polymorphic_and_unique_by_type() -> None
 
 
 def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders() -> None:
-    from backend.api.models.local_media_profile import LocalMediaProfileAPICreate
+    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
 
-    movie = LocalMediaProfileAPICreate(
+    movie = MovieLocalMediaProfileAPICreate(
         type="movie",
         name="Movie 1080p",
         output_template="/downloads/movies/{{ movie_extended_title }}/{{ title }}.ext",
@@ -75,40 +76,35 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
     assert movie.output_template == "/downloads/movies/{{ movie_extended_title }}/{{ title }}.ext"
 
     with pytest.raises(ValidationError, match="require a video format"):
-        LocalMediaProfileAPICreate(
-            type="movie",
+        MovieLocalMediaProfileAPICreate(
             name="Movie audio",
             output_template="/downloads/movies/{{ movie_slug }}.ext",
             preferred_format="format_audio_only",
         )
 
     with pytest.raises(ValidationError, match="episode"):
-        LocalMediaProfileAPICreate(
-            type="movie",
+        MovieLocalMediaProfileAPICreate(
             name="Wrong movie template",
             output_template="/downloads/movies/{{ episode }}.ext",
             preferred_format="format_720p",
         )
 
     with pytest.raises(ValidationError, match="dw_id"):
-        LocalMediaProfileAPICreate(
-            type="movie",
+        MovieLocalMediaProfileAPICreate(
             name="Rotating ID template",
             output_template="/downloads/movies/{{ movie_title }}/{{ dw_id }}.ext",
             preferred_format="format_1080p",
         )
 
     with pytest.raises(ValidationError, match="movie_dw_id"):
-        LocalMediaProfileAPICreate(
-            type="movie",
+        MovieLocalMediaProfileAPICreate(
             name="Rotating parent ID template",
             output_template="/downloads/movies/{{ movie_dw_id }}/{{ title }}.ext",
             preferred_format="format_1080p",
         )
 
     with pytest.raises(ValidationError, match="movie"):
-        LocalMediaProfileAPICreate(
-            type="show",
+        ShowLocalMediaProfileAPICreate(
             name="Wrong show template",
             output_template="/downloads/shows/{{ movie_slug }}.ext",
             preferred_format="format_audio_only",
@@ -116,13 +112,19 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
 
 
 def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -> None:
-    from backend.api.endpoints.local_media_profiles.service import (
-        create_local_media_profile,
-        update_local_media_profile,
+    from backend.api.endpoints.movie_local_media_profiles.service import (
+        create_movie_local_media_profile,
     )
-    from backend.api.models.local_media_profile import (
-        LocalMediaProfileAPICreate,
-        LocalMediaProfileAPIUpdate,
+    from backend.api.endpoints.show_local_media_profiles.service import (
+        create_show_local_media_profile,
+        update_show_local_media_profile,
+    )
+    from backend.api.models.movie_local_media_profile import (
+        MovieLocalMediaProfileAPICreate,
+    )
+    from backend.api.models.show_local_media_profile import (
+        ShowLocalMediaProfileAPICreate,
+        ShowLocalMediaProfileAPIUpdate,
     )
 
     session, engine = _new_session()
@@ -130,13 +132,13 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
         "output_template": "/downloads/library/{{ title }}.ext",
         "preferred_format": "format_1080p",
     }
-    show = create_local_media_profile(
+    show = create_show_local_media_profile(
         session,
-        LocalMediaProfileAPICreate(type="show", name="Show", **common),
+        ShowLocalMediaProfileAPICreate(name="Show", **common),
     )
-    movie = create_local_media_profile(
+    movie = create_movie_local_media_profile(
         session,
-        LocalMediaProfileAPICreate(type="movie", name="Movie", **common),
+        MovieLocalMediaProfileAPICreate(name="Movie", **common),
     )
     assert show.type == "show"
     assert movie.type == "movie"
@@ -144,9 +146,9 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
     # Exact uniqueness remains type + output template + preferred format. A
     # different Local Media Profile storage override does not make it unique.
     with pytest.raises(HTTPException) as exact_error:
-        create_local_media_profile(
+        create_show_local_media_profile(
             session,
-            LocalMediaProfileAPICreate(
+            ShowLocalMediaProfileAPICreate(
                 type="show",
                 name="Duplicate",
                 download_mode="temporary",
@@ -154,7 +156,7 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
             ),
         )
     assert exact_error.value.status_code == 409
-    assert "type, output path template, and preferred format" in exact_error.value.detail[0]["msg"]
+    assert "output path template and preferred format" in exact_error.value.detail[0]["msg"]
 
     # A different Jinja string that renders to the same path is also a conflict.
     equivalent_template = (
@@ -162,9 +164,9 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
         "/downloads/library/{{ media_title }}.ext"
     )
     with pytest.raises(HTTPException) as semantic_error:
-        create_local_media_profile(
+        create_show_local_media_profile(
             session,
-            LocalMediaProfileAPICreate(
+            ShowLocalMediaProfileAPICreate(
                 type="show",
                 name="Equivalent",
                 output_template=equivalent_template,
@@ -178,9 +180,9 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
     # Video qualities still resolve to the same concrete .mp4 path, so they may
     # not share an effective output even though preferred_format differs.
     with pytest.raises(HTTPException) as video_quality_error:
-        create_local_media_profile(
+        create_show_local_media_profile(
             session,
-            LocalMediaProfileAPICreate(
+            ShowLocalMediaProfileAPICreate(
                 type="show",
                 name="Show 720p",
                 output_template=common["output_template"],
@@ -192,10 +194,9 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
 
     # Audio and video may safely use the same template because their concrete
     # output extensions differ.
-    audio = create_local_media_profile(
+    audio = create_show_local_media_profile(
         session,
-        LocalMediaProfileAPICreate(
-            type="show",
+        ShowLocalMediaProfileAPICreate(
             name="Show audio",
             output_template=common["output_template"],
             preferred_format="format_audio_only",
@@ -203,20 +204,19 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
     )
     assert audio.preferred_format == "format_audio_only"
 
-    distinct = create_local_media_profile(
+    distinct = create_show_local_media_profile(
         session,
-        LocalMediaProfileAPICreate(
-            type="show",
+        ShowLocalMediaProfileAPICreate(
             name="Distinct",
             output_template="/downloads/distinct/{{ title }}.ext",
             preferred_format="format_1080p",
         ),
     )
     with pytest.raises(HTTPException) as update_error:
-        update_local_media_profile(
+        update_show_local_media_profile(
             session,
             distinct.slug,
-            LocalMediaProfileAPIUpdate(
+            ShowLocalMediaProfileAPIUpdate(
                 type="show",
                 name="Distinct",
                 output_template=equivalent_template,
