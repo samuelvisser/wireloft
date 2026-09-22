@@ -21,7 +21,7 @@ def upgrade() -> None:
                 "stream_live_episodes",
                 sa.Boolean(),
                 nullable=False,
-                server_default="0",
+                server_default=sa.false(),
             )
         )
         batch_op.add_column(
