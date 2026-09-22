@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -507,8 +506,89 @@ def test_non_live_undownloaded_episode_never_gets_temporary_dailywire_fallback(
     assert profile.live_episode_handoff_ids == []
 
 
+def test_historical_live_date_does_not_recreate_dailywire_fallback(
+        db_session: Session,
+):
+    from backend.api.endpoints.feeds.service import get_feed_items
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        index=1,
+        status="published_final",
+    )
+    episode.went_live_date = datetime.now(timezone.utc) - timedelta(hours=1)
+    video = _make_local_media_profile(
+        db_session,
+        slug="video",
+        preferred_format="format_1080p",
+    )
+    _make_download_profile(
+        db_session,
+        show,
+        video,
+        episode_types=["ep"],
+    )
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        use_downloads=True,
+        use_dw_stream=False,
+        stream_live_episodes=True,
+    )
+    db_session.flush()
+
+    assert get_feed_items(db_session, profile) == []
+    assert profile.live_episode_handoff_ids == []
+
+
+def test_series_download_profile_must_cover_live_episode_season(
+        db_session: Session,
+):
+    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.db.models import SeriesDownloadProfile
+
+    show = _make_show(db_session)
+    current_season = _make_season(db_session, show, index=1)
+    other_season = _make_season(db_session, show, index=2)
+    episode = _make_episode(db_session, show, current_season, index=1)
+    video = _make_local_media_profile(
+        db_session,
+        slug="video",
+        preferred_format="format_1080p",
+    )
+    download_profile = SeriesDownloadProfile(
+        show=show,
+        local_media_profile=video,
+        enable_profile=True,
+        ep_id_type_list=["ep"],
+        include_upcoming_seasons=False,
+    )
+    download_profile.seasons = [other_season]
+    db_session.add(download_profile)
+    db_session.flush()
+
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        use_downloads=True,
+        use_dw_stream=False,
+        stream_live_episodes=True,
+    )
+
+    assert get_feed_items(db_session, profile) == []
+
+    download_profile.seasons = [current_season]
+    db_session.flush()
+    assert get_feed_items(db_session, profile) == [(episode, None)]
+
+
 def test_live_handoff_is_only_created_for_live_items_emitted_by_max_items(
         db_session: Session,
+        monkeypatch,
 ):
     from backend.api.endpoints.feeds.service import get_feed_items
 
@@ -558,13 +638,9 @@ def test_live_handoff_is_only_created_for_live_items_emitted_by_max_items(
                 "audio_url": f"https://media.example/{slug}.m4a",
             })()
 
-    monkeypatch = pytest.MonkeyPatch()
-    try:
-        monkeypatch.setattr(feed_service, "MiddlewareClient", FakeClient)
-        request = type("Request", (), {"base_url": "https://wireloft.test/"})()
-        feed_service.render_rss_feed(db_session, request, profile)
-    finally:
-        monkeypatch.undo()
+    monkeypatch.setattr(feed_service, "MiddlewareClient", FakeClient)
+    request = type("Request", (), {"base_url": "https://wireloft.test/"})()
+    feed_service.render_rss_feed(db_session, request, profile)
 
     assert profile.live_episode_handoff_ids == [newer.id]
     assert older.id not in profile.live_episode_handoff_ids
@@ -613,6 +689,48 @@ def test_live_episode_is_rendered_from_dailywire_even_when_normal_dw_streaming_i
 
     assert "https://media.example/live.m3u8" in xml
     assert profile.live_episode_handoff_ids == [episode.id]
+
+
+def test_failed_live_hls_resolution_does_not_start_handoff(
+        db_session: Session,
+        monkeypatch,
+):
+    import backend.api.endpoints.feeds.service as feed_service
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(db_session, show, season, index=1)
+    video = _make_local_media_profile(
+        db_session,
+        slug="video",
+        preferred_format="format_1080p",
+    )
+    _make_download_profile(
+        db_session,
+        show,
+        video,
+        episode_types=["ep"],
+    )
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        use_downloads=True,
+        use_dw_stream=False,
+        stream_live_episodes=True,
+    )
+
+    class FakeClient:
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            return type("Detail", (), {
+                "video_url": None,
+                "audio_url": "https://media.example/live.m4a",
+            })()
+
+    monkeypatch.setattr(feed_service, "MiddlewareClient", FakeClient)
+    request = type("Request", (), {"base_url": "https://wireloft.test/"})()
+    feed_service.render_rss_feed(db_session, request, profile)
+
+    assert profile.live_episode_handoff_ids == []
 
 
 def test_non_hls_video_method_never_enables_live_streaming(db_session: Session):
