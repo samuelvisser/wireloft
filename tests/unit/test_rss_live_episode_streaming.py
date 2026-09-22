@@ -761,6 +761,10 @@ def test_live_episode_is_rendered_from_dailywire_even_when_normal_dw_streaming_i
     xml = feed_service.render_rss_feed(db_session, request, profile).decode("utf-8")
 
     assert "https://media.example/live.m3u8" in xml
+    assert (
+        f'<guid isPermaLink="false">{episode.uuid}</guid>'
+        in xml
+    )
     assert profile.live_episode_handoff_ids == [episode.id]
 
 
