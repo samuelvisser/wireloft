@@ -27,7 +27,7 @@ def task_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Configure scheduler tests with a file-backed, disposable SQLite DB."""
     from backend.db import core
     from backend.db.core import Base
-    from backend.db.models import Settings
+    from backend.db.models import DownloadPathClaim, Settings
     from task_manager.scheduler.db import (
         TaskDefinition,
         TaskOperation,
@@ -52,6 +52,7 @@ def task_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         engine,
         tables=[
             Settings.__table__,
+            DownloadPathClaim.__table__,
             TaskDefinition.__table__,
             TaskSchedule.__table__,
             TaskRun.__table__,

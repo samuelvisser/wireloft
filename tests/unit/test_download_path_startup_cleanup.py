@@ -5,23 +5,79 @@ import os
 import threading
 
 
-def test_startup_cleanup_removes_abandoned_placeholder(tmp_path):
+def test_startup_cleanup_removes_abandoned_placeholder(tmp_path, task_database):
     from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_download_path_reservations,
         reserve_unique_download_path,
+    )
+    from task_manager.tasks.helpers.downloads.recovery_journal import (
+        DownloadPathClaimType,
+        list_download_path_claims,
     )
 
     reservation = reserve_unique_download_path(tmp_path / "Same title.m4a")
     path = reservation.path
     marker_path = reservation.marker_path
 
+    assert len(list_download_path_claims(DownloadPathClaimType.DIRECT_RESERVATION)) == 1
     assert cleanup_abandoned_download_path_reservations(tmp_path) == 1
 
     assert not path.exists()
     assert not marker_path.exists()
+    assert list_download_path_claims(DownloadPathClaimType.DIRECT_RESERVATION) == []
 
 
-def test_startup_cleanup_preserves_unmarked_zero_byte_files(tmp_path):
+def test_startup_cleanup_discards_database_claim_when_marker_was_never_created(
+    tmp_path,
+    task_database,
+):
+    from task_manager.tasks.helpers.downloads.download_paths import (
+        cleanup_abandoned_download_path_reservations,
+    )
+    from task_manager.tasks.helpers.downloads.recovery_journal import (
+        DownloadPathClaimType,
+        create_download_path_claim,
+        list_download_path_claims,
+    )
+
+    candidate = tmp_path / "Never created.m4a"
+    record = create_download_path_claim(
+        DownloadPathClaimType.DIRECT_RESERVATION,
+        candidate,
+    )
+    assert record is not None
+    assert candidate.parent.exists()
+
+    assert cleanup_abandoned_download_path_reservations(tmp_path) == 1
+    assert list_download_path_claims(DownloadPathClaimType.DIRECT_RESERVATION) == []
+
+
+def test_startup_cleanup_preserves_claim_when_download_root_is_unavailable(
+    tmp_path,
+    task_database,
+):
+    from task_manager.tasks.helpers.downloads.download_paths import (
+        cleanup_abandoned_download_path_reservations,
+    )
+    from task_manager.tasks.helpers.downloads.recovery_journal import (
+        DownloadPathClaimType,
+        create_download_path_claim,
+        list_download_path_claims,
+    )
+
+    unavailable_root = tmp_path / "not-mounted"
+    candidate = unavailable_root / "Episode.m4a"
+    record = create_download_path_claim(
+        DownloadPathClaimType.DIRECT_RESERVATION,
+        candidate,
+    )
+    assert record is not None
+
+    assert cleanup_abandoned_download_path_reservations(unavailable_root) == 0
+    assert list_download_path_claims(DownloadPathClaimType.DIRECT_RESERVATION) == [record]
+
+
+def test_startup_cleanup_preserves_unmarked_zero_byte_files(tmp_path, task_database):
     from task_manager.tasks.helpers.downloads.download_paths import cleanup_abandoned_download_path_reservations
 
     external = tmp_path / "External empty file.m4a"
@@ -32,7 +88,10 @@ def test_startup_cleanup_preserves_unmarked_zero_byte_files(tmp_path):
     assert external.stat().st_size == 0
 
 
-def test_startup_cleanup_preserves_completed_file_if_marker_was_not_released(tmp_path):
+def test_startup_cleanup_preserves_completed_file_if_marker_was_not_released(
+    tmp_path,
+    task_database,
+):
     from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_download_path_reservations,
         reserve_unique_download_path,
@@ -49,19 +108,53 @@ def test_startup_cleanup_preserves_completed_file_if_marker_was_not_released(tmp
     assert not reservation.marker_path.exists()
 
 
-def test_startup_cleanup_removes_stale_temporary_publication_lock(tmp_path):
-    import task_manager.tasks.helpers.downloads.download_paths as download_paths
+def test_startup_cleanup_removes_stale_temporary_publication_lock(
+    tmp_path,
+    task_database,
+):
+    from task_manager.tasks.helpers.downloads.download_paths import (
+        cleanup_abandoned_download_path_reservations,
+    )
+    from task_manager.tasks.helpers.downloads.mode_temp_folder_download import (
+        _claim_publication_lock,
+    )
 
-    tmp_path.mkdir(exist_ok=True)
-    lock = download_paths._claim_publication_lock(tmp_path / "Episode.m4a")
+    lock = _claim_publication_lock(tmp_path / "Episode.m4a")
     assert lock is not None
     assert lock.path.exists()
 
-    assert download_paths.cleanup_abandoned_download_path_reservations(tmp_path) == 1
+    assert cleanup_abandoned_download_path_reservations(tmp_path) == 1
     assert not lock.path.exists()
 
 
-def test_startup_cleanup_removes_abandoned_temporary_workspace(tmp_path):
+def test_startup_claim_cleanup_never_walks_the_download_library(
+    tmp_path,
+    task_database,
+    monkeypatch,
+):
+    from task_manager.tasks.helpers.downloads.download_paths import (
+        cleanup_abandoned_download_path_reservations,
+        reserve_unique_download_path,
+    )
+    from task_manager.tasks.helpers.downloads.mode_temp_folder_download import (
+        _claim_publication_lock,
+    )
+
+    reservation = reserve_unique_download_path(tmp_path / "Direct.m4a")
+    lock = _claim_publication_lock(tmp_path / "Temporary.m4a")
+    assert lock is not None
+
+    def fail_walk(*_args, **_kwargs):
+        raise AssertionError("startup claim cleanup must not recursively walk download_root")
+
+    monkeypatch.setattr(os, "walk", fail_walk)
+
+    assert cleanup_abandoned_download_path_reservations(tmp_path) == 2
+    assert not reservation.marker_path.exists()
+    assert not lock.path.exists()
+
+
+def test_startup_cleanup_removes_abandoned_temporary_workspace(tmp_path, task_database):
     from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_temporary_downloads,
         create_temporary_download_workspace,
@@ -77,13 +170,17 @@ def test_startup_cleanup_removes_abandoned_temporary_workspace(tmp_path):
     assert cleanup_abandoned_temporary_downloads(
         temporary_root,
         download_root,
-        is_published_artifact=lambda *_args: False,
     ) == 1
     assert not workspace.workspace.exists()
     assert not destination.exists()
 
 
-def test_startup_cleanup_removes_published_file_not_committed_to_database(tmp_path):
+def test_startup_cleanup_removes_published_file_not_committed_to_database(
+    tmp_path,
+    task_database,
+    monkeypatch,
+):
+    import task_manager.tasks.helpers.downloads.mode_temp_folder_download as temporary_downloads
     from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_temporary_downloads,
         create_temporary_download_workspace,
@@ -96,19 +193,28 @@ def test_startup_cleanup_removes_published_file_not_committed_to_database(tmp_pa
     workspace = create_temporary_download_workspace(temporary_root, destination)
     workspace.path.write_bytes(b"complete media")
     published = publish_temporary_download(workspace.path, destination)
+    monkeypatch.setattr(
+        temporary_downloads,
+        "_is_committed_download_artifact",
+        lambda *_args: False,
+    )
 
     assert published.read_bytes() == b"complete media"
     assert cleanup_abandoned_temporary_downloads(
         temporary_root,
         download_root,
-        is_published_artifact=lambda *_args: False,
     ) == 1
 
     assert not published.exists()
     assert not workspace.workspace.exists()
 
 
-def test_startup_cleanup_preserves_published_file_committed_to_database(tmp_path):
+def test_startup_cleanup_preserves_published_file_committed_to_database(
+    tmp_path,
+    task_database,
+    monkeypatch,
+):
+    import task_manager.tasks.helpers.downloads.mode_temp_folder_download as temporary_downloads
     from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_temporary_downloads,
         create_temporary_download_workspace,
@@ -128,10 +234,15 @@ def test_startup_cleanup_preserves_published_file_committed_to_database(tmp_path
         seen["fingerprint"] = identity.fingerprint
         return path == published
 
+    monkeypatch.setattr(
+        temporary_downloads,
+        "_is_committed_download_artifact",
+        is_published,
+    )
+
     assert cleanup_abandoned_temporary_downloads(
         temporary_root,
         download_root,
-        is_published_artifact=is_published,
     ) == 1
 
     assert seen["fingerprint"]
@@ -213,7 +324,10 @@ def test_application_lifespan_is_ready_while_download_recovery_runs(monkeypatch)
     assert calls.index("resume") < calls.index("stop")
 
 
-def test_startup_cleanup_removes_partial_marker_without_touching_external_empty_file(tmp_path):
+def test_startup_cleanup_removes_partial_marker_without_touching_external_empty_file(
+    tmp_path,
+    task_database,
+):
     from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_download_path_reservations,
         reserve_unique_download_path,

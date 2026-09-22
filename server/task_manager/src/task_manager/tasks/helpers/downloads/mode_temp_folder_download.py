@@ -26,6 +26,12 @@ from .helpers import (
     _unlink_if_identity,
     _write_all,
 )
+from .recovery_journal import (
+    DownloadPathClaimType,
+    create_download_path_claim,
+    delete_download_path_claim,
+    list_download_path_claims,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,14 +69,40 @@ def _is_publication_lock_name(filename: str) -> bool:
     return len(digest) == 64 and all(char in "0123456789abcdef" for char in digest)
 
 
+def _decode_publication_lock(marker: Path, payload: bytes) -> Path | None:
+    if not payload.startswith(_PUBLICATION_LOCK_MAGIC):
+        return None
+    encoded_name = payload[len(_PUBLICATION_LOCK_MAGIC):]
+    if not encoded_name.endswith(b"\0"):
+        return None
+    encoded_name = encoded_name[:-1]
+    if not encoded_name:
+        return None
+
+    candidate_name = os.fsdecode(encoded_name)
+    if candidate_name in {"", ".", ".."} or Path(candidate_name).name != candidate_name:
+        return None
+    candidate = marker.parent / candidate_name
+    if _publication_lock_path(candidate).name != marker.name:
+        return None
+    return candidate
+
+
 @dataclass(frozen=True)
 class _PublicationLock:
     path: Path
     stat_dev: int
     stat_ino: int
+    recovery_record_id: str
 
     def release(self) -> None:
-        _unlink_if_identity(self.path, stat_dev=self.stat_dev, stat_ino=self.stat_ino)
+        marker_removed = _unlink_if_identity(
+            self.path,
+            stat_dev=self.stat_dev,
+            stat_ino=self.stat_ino,
+        )
+        if marker_removed or not _path_exists(self.path):
+            delete_download_path_claim(self.recovery_record_id)
 
 
 @dataclass(frozen=True)
@@ -246,11 +278,22 @@ def _decode_legacy_staging_publication_marker(
 
 
 def _claim_publication_lock(candidate: Path) -> _PublicationLock | None:
+    recovery_record = create_download_path_claim(
+        DownloadPathClaimType.PUBLICATION_LOCK,
+        candidate,
+    )
+    if recovery_record is None:
+        return None
+
     lock_path = _publication_lock_path(candidate)
     try:
         fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:
+        delete_download_path_claim(recovery_record.id)
         return None
+    except BaseException:
+        delete_download_path_claim(recovery_record.id)
+        raise
 
     lock_stat = os.fstat(fd)
     failed = False
@@ -263,13 +306,20 @@ def _claim_publication_lock(candidate: Path) -> _PublicationLock | None:
     finally:
         os.close(fd)
         if failed:
-            _unlink_if_identity(
+            marker_removed = _unlink_if_identity(
                 lock_path,
                 stat_dev=lock_stat.st_dev,
                 stat_ino=lock_stat.st_ino,
             )
+            if marker_removed or not _path_exists(lock_path):
+                delete_download_path_claim(recovery_record.id)
 
-    return _PublicationLock(lock_path, lock_stat.st_dev, lock_stat.st_ino)
+    return _PublicationLock(
+        lock_path,
+        lock_stat.st_dev,
+        lock_stat.st_ino,
+        recovery_record.id,
+    )
 
 
 def _portable_publication_path(parent: Path) -> Path:
@@ -441,8 +491,8 @@ def publish_temporary_download(
 
 
 def cleanup_abandoned_publication_locks(download_root: str | Path) -> int:
-    """Remove temporary-mode publication locks left behind by a previous process."""
-    root = Path(download_root)
+    """Remove temporary-mode publication locks named by the recovery journal."""
+    root = Path(os.path.abspath(download_root))
     try:
         if not root.is_dir():
             return 0
@@ -455,47 +505,86 @@ def cleanup_abandoned_publication_locks(download_root: str | Path) -> int:
         return 0
 
     removed = 0
-
-    def walk_error(error: OSError) -> None:
-        logger.warning(
-            "Could not scan downloads directory for abandoned publication locks: %s",
-            error,
-        )
-
-    for directory, _subdirs, filenames in os.walk(root, onerror=walk_error, followlinks=False):
-        parent = Path(directory)
-        for filename in filenames:
-            if not _is_publication_lock_name(filename):
-                continue
-
-            marker = parent / filename
-            try:
-                marker_stat = marker.lstat()
-                if not stat.S_ISREG(marker_stat.st_mode):
-                    continue
-                with marker.open("rb") as handle:
-                    payload = handle.read(_MAX_MARKER_BYTES + 1)
-            except FileNotFoundError:
-                continue
-            except OSError:
-                logger.warning("Could not inspect publication lock '%s'", marker, exc_info=True)
-                continue
-
-            managed = (
-                payload == b""
-                or _PUBLICATION_LOCK_MAGIC.startswith(payload)
-                or payload.startswith(_PUBLICATION_LOCK_MAGIC)
+    for recovery_record in list_download_path_claims(
+        DownloadPathClaimType.PUBLICATION_LOCK
+    ):
+        candidate = recovery_record.candidate_path
+        if not _path_is_within(candidate, root):
+            logger.warning(
+                "Preserving download publication claim '%s' because '%s' is outside the configured download root '%s'",
+                recovery_record.id,
+                candidate,
+                root,
             )
-            if managed and _unlink_if_identity(
+            continue
+
+        marker = _publication_lock_path(candidate)
+        try:
+            marker_stat = marker.lstat()
+        except FileNotFoundError:
+            if delete_download_path_claim(recovery_record.id):
+                removed += 1
+            continue
+        except OSError:
+            logger.warning("Could not inspect publication lock '%s'", marker, exc_info=True)
+            continue
+
+        if not stat.S_ISREG(marker_stat.st_mode):
+            if delete_download_path_claim(recovery_record.id):
+                removed += 1
+            continue
+
+        try:
+            with marker.open("rb") as handle:
+                payload = handle.read(_MAX_MARKER_BYTES + 1)
+        except FileNotFoundError:
+            if delete_download_path_claim(recovery_record.id):
+                removed += 1
+            continue
+        except OSError:
+            logger.warning("Could not inspect publication lock '%s'", marker, exc_info=True)
+            continue
+
+        managed = (
+            payload == b""
+            or _PUBLICATION_LOCK_MAGIC.startswith(payload)
+            or payload.startswith(_PUBLICATION_LOCK_MAGIC)
+        )
+        if not managed:
+            if delete_download_path_claim(recovery_record.id):
+                removed += 1
+            continue
+
+        decoded_candidate = (
+            _decode_publication_lock(marker, payload)
+            if len(payload) <= _MAX_MARKER_BYTES
+            else None
+        )
+        if (
+            decoded_candidate is not None
+            and Path(os.path.abspath(decoded_candidate)) != candidate
+        ):
+            logger.warning(
+                "Download publication lock '%s' does not match its recovery journal path '%s'; preserving the filesystem entry",
                 marker,
-                stat_dev=marker_stat.st_dev,
-                stat_ino=marker_stat.st_ino,
-            ):
+                candidate,
+            )
+            if delete_download_path_claim(recovery_record.id):
+                removed += 1
+            continue
+
+        marker_removed = _unlink_if_identity(
+            marker,
+            stat_dev=marker_stat.st_dev,
+            stat_ino=marker_stat.st_ino,
+        )
+        if marker_removed or not _path_exists(marker):
+            if delete_download_path_claim(recovery_record.id):
                 removed += 1
 
     if removed:
         logger.warning(
-            "Removed %s abandoned download publication lock(s) from a previous WireLoft process",
+            "Recovered %s abandoned download publication lock claim(s) from a previous WireLoft process",
             removed,
         )
     return removed
