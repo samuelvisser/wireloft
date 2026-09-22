@@ -237,6 +237,15 @@ def _can_stream_live_episode(
     )
 
 
+def _download_completes_live_handoff(
+        download: EpisodeMediaDownload,
+) -> bool:
+    return (
+        download.downloaded_publish_status
+        == EpisodePublishStatus.PUBLISHED_FINAL.value
+    )
+
+
 def get_feed_items(
         s: Session,
         profile: RssStreamProfile,
@@ -308,13 +317,19 @@ def get_feed_items(
                 require_exact_match=profile.require_exact_match,
             )
 
-        if best is not None:
-            # The first usable local artifact completes the temporary live ->
-            # download bridge. Do not preserve the handoff after this point.
+        handoff_active = (
+            episode.id in previous_handoffs
+            and _profile_keeps_live_handoff(profile)
+        )
+        if best is not None and (
+            not handoff_active or _download_completes_live_handoff(best)
+        ):
+            # A final local artifact completes the temporary live -> download
+            # bridge. Older countdown/static artifacts must not end continuity.
             items.append((episode, best))
             continue
 
-        if episode.id in previous_handoffs and _profile_keeps_live_handoff(profile):
+        if handoff_active:
             # This episode was exposed while live with normal Daily Wire
             # streaming disabled. Keep its remote HLS path alive until the
             # configured Download Profile produces the first usable video.
@@ -389,13 +404,16 @@ def get_media_for_episode(
             require_exact_match=profile.require_exact_match,
         )
 
-    if best is not None:
-        return episode, best
-
-    if (
+    handoff_active = (
         episode.id in set(profile.live_episode_handoff_ids or [])
         and _profile_keeps_live_handoff(profile)
+    )
+    if best is not None and (
+        not handoff_active or _download_completes_live_handoff(best)
     ):
+        return episode, best
+
+    if handoff_active:
         return episode, None
 
     if episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
