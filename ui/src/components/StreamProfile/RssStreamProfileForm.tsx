@@ -65,7 +65,7 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
                 </div>
             </div>
 
-            {usesDwVideo && (
+            {usesVideo && (
                 <div className="form-row">
                     <label htmlFor="rss-dw-video-method">Stream DW video method</label>
                     <Controller
@@ -106,6 +106,11 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
                             <p>
                                 Downloaded files are always served directly and are not affected by this setting.
                             </p>
+                            {!useDwStream && (
+                                <p>
+                                    Normal Daily Wire streaming is disabled for this profile, but this method still determines how an explicitly enabled live video is exposed.
+                                </p>
+                            )}
                         </ReadMore>
                     </div>
                 </div>
