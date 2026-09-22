@@ -211,6 +211,99 @@ def test_api_defaults_live_episode_streaming_off():
     assert profile.stream_live_episodes is False
 
 
+def test_api_read_does_not_expose_internal_live_handoff_state(db_session: Session):
+    from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
+
+    show = _make_show(db_session)
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        use_downloads=True,
+        use_dw_stream=False,
+        stream_live_episodes=True,
+    )
+    profile.live_episode_handoff_ids = [123]
+    db_session.flush()
+
+    payload = RssStreamProfileAPIRead.model_validate(profile).model_dump()
+
+    assert payload["stream_live_episodes"] is True
+    assert "live_episode_handoff_ids" not in payload
+
+
+def test_profile_update_clears_handoff_when_live_continuity_is_disabled(
+        db_session: Session,
+):
+    from backend.api.endpoints.rss_stream_profiles.service import (
+        update_stream_profile_rss,
+    )
+    from backend.api.models.rss_stream_profile import RssStreamProfileAPIUpdate
+
+    show = _make_show(db_session)
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        use_downloads=True,
+        use_dw_stream=False,
+        stream_live_episodes=True,
+    )
+    profile.live_episode_handoff_ids = [111, 222]
+    db_session.flush()
+
+    body = RssStreamProfileAPIUpdate(
+        enable_profile=True,
+        use_downloads=True,
+        use_dw_stream=False,
+        preferred_format="format_1080p",
+        require_exact_match=False,
+        ep_id_type_list=["ep"],
+        dw_video_method="stream_hls_download_m4a",
+        max_items=0,
+        stream_live_episodes=False,
+        feed_url=profile.feed_url,
+    )
+    updated = update_stream_profile_rss(db_session, profile.id, body)
+
+    assert updated.stream_live_episodes is False
+    assert profile.live_episode_handoff_ids == []
+
+
+def test_profile_update_preserves_handoff_while_continuity_remains_enabled(
+        db_session: Session,
+):
+    from backend.api.endpoints.rss_stream_profiles.service import (
+        update_stream_profile_rss,
+    )
+    from backend.api.models.rss_stream_profile import RssStreamProfileAPIUpdate
+
+    show = _make_show(db_session)
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        use_downloads=True,
+        use_dw_stream=False,
+        stream_live_episodes=True,
+    )
+    profile.live_episode_handoff_ids = [111]
+    db_session.flush()
+
+    body = RssStreamProfileAPIUpdate(
+        enable_profile=True,
+        use_downloads=True,
+        use_dw_stream=False,
+        preferred_format="format_1080p",
+        require_exact_match=False,
+        ep_id_type_list=["ep"],
+        dw_video_method="stream_hls_download_m4a",
+        max_items=10,
+        stream_live_episodes=True,
+        feed_url=profile.feed_url,
+    )
+    update_stream_profile_rss(db_session, profile.id, body)
+
+    assert profile.live_episode_handoff_ids == [111]
+
+
 def test_live_episode_requires_setting_even_when_dailywire_streaming_is_enabled(
         db_session: Session,
 ):
@@ -663,8 +756,6 @@ def test_live_handoff_is_only_created_for_live_items_emitted_by_max_items(
         db_session: Session,
         monkeypatch,
 ):
-    from backend.api.endpoints.feeds.service import get_feed_items
-
     show = _make_show(db_session)
     season = _make_season(db_session, show)
     now = datetime.now(timezone.utc)
