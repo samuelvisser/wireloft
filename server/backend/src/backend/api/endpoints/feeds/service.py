@@ -622,6 +622,8 @@ def render_rss_feed(
         s: Session,
         request: Request,
         profile: RssStreamProfile,
+        *,
+        record_live_handoffs: bool = True,
 ) -> bytes:
     show = profile.show
     items = get_feed_items(s, profile)
@@ -699,7 +701,8 @@ def render_rss_feed(
                     media_kind="video",
                     client=client,
                 )
-                _remember_live_episode_handoff(profile, episode)
+                if record_live_handoffs:
+                    _remember_live_episode_handoff(profile, episode)
             except HTTPException as exc:
                 logger.warning(
                     "Could not add Daily Wire video stream for episode '%s': %s",
