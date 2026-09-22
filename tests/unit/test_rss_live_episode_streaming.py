@@ -69,7 +69,7 @@ def _make_episode(
 ):
     from backend.db.models import Episode
 
-    when = when or datetime.now(timezone.utc).replace(tzinfo=None)
+    when = when or datetime.now(timezone.utc)
     episode = Episode(
         uuid=f"episode-{index}-uuid",
         type="episode",
@@ -189,7 +189,7 @@ def _make_available_download(
         file_path=str(file_path),
         artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
         downloaded_bytes=file_path.stat().st_size,
-        downloaded_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        downloaded_at=datetime.now(timezone.utc),
         downloaded_publish_status=episode.publish_status,
     )
     session.add(download)
@@ -504,7 +504,7 @@ def test_live_handoff_is_only_created_for_live_items_emitted_by_max_items(
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(timezone.utc)
     older = _make_episode(
         db_session,
         show,
