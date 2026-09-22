@@ -169,6 +169,14 @@ def _profile_streams_live_hls(profile: RssStreamProfile) -> bool:
     )
 
 
+def _profile_keeps_live_handoff(profile: RssStreamProfile) -> bool:
+    return (
+        _profile_streams_live_hls(profile)
+        and not profile.use_dw_stream
+        and profile.use_downloads
+    )
+
+
 def _has_video_download_profile_for_episode(
         s: Session,
         episode: Episode,
@@ -287,7 +295,7 @@ def get_feed_items(
             items.append((episode, best))
             continue
 
-        if episode.id in previous_handoffs and live_hls_enabled:
+        if episode.id in previous_handoffs and _profile_keeps_live_handoff(profile):
             # This episode was exposed while live with normal Daily Wire
             # streaming disabled. Keep its remote HLS path alive until the
             # configured Download Profile produces the first usable video.
@@ -365,7 +373,7 @@ def get_media_for_episode(
 
     if (
         episode.id in set(profile.live_episode_handoff_ids or [])
-        and _profile_streams_live_hls(profile)
+        and _profile_keeps_live_handoff(profile)
     ):
         return episode, None
 
