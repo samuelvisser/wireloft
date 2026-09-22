@@ -179,6 +179,7 @@ def _profile_keeps_live_handoff(profile: RssStreamProfile) -> bool:
 
 def _has_video_download_profile_for_episode(
         s: Session,
+        profile: RssStreamProfile,
         episode: Episode,
 ) -> bool:
     """Return whether an enabled Download Profile will retain this live type."""
@@ -195,10 +196,10 @@ def _has_video_download_profile_for_episode(
     for download_profile in profiles:
         if episode_type not in set(download_profile.ep_id_type_list or []):
             continue
-        if (
-            download_profile.local_media_profile.preferred_format
-            == PreferredFormat.FORMAT_AUDIO_ONLY.value
-        ):
+        download_format = download_profile.local_media_profile.preferred_format
+        if download_format == PreferredFormat.FORMAT_AUDIO_ONLY.value:
+            continue
+        if profile.require_exact_match and download_format != profile.preferred_format:
             continue
         if isinstance(download_profile, SeriesDownloadProfile):
             selected_seasons = list(download_profile.seasons)
@@ -232,7 +233,7 @@ def _can_stream_live_episode(
         return True
     return (
         profile.use_downloads
-        and _has_video_download_profile_for_episode(s, episode)
+        and _has_video_download_profile_for_episode(s, profile, episode)
     )
 
 
