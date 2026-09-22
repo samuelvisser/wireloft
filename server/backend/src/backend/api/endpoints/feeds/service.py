@@ -514,13 +514,14 @@ def _append_item(
         preferred_format: str,
         dw_video_method: str = DEFAULT_RSS_DW_VIDEO_METHOD,
         dw_video_url: str | None = None,
+        guid_override: str | None = None,
 ) -> None:
     item = SubElement(channel, "item")
     _sub_text(item, "title", episode.title)
 
     wants_audio = preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
-    guid_value = episode.uuid
-    if download is None and not wants_audio:
+    guid_value = guid_override or episode.uuid
+    if guid_override is None and download is None and not wants_audio:
         guid_value = f"{guid_value}:{dw_video_method}"
 
     guid = SubElement(item, "guid", {"isPermaLink": "false"})
@@ -706,6 +707,14 @@ def render_rss_feed(
                     exc.detail,
                 )
 
+        preserve_live_guid = (
+            not profile.use_dw_stream
+            and _profile_streams_live_hls(profile)
+            and (
+                episode.publish_status == EpisodePublishStatus.LIVE.value
+                or episode.id in set(profile.live_episode_handoff_ids or [])
+            )
+        )
         _append_item(
             channel,
             media_base_url=media_base_url,
@@ -714,6 +723,7 @@ def render_rss_feed(
             preferred_format=profile.preferred_format,
             dw_video_method=dw_video_method,
             dw_video_url=dw_video_url,
+            guid_override=episode.uuid if preserve_live_guid else None,
         )
 
     return tostring(rss, encoding="UTF-8", xml_declaration=True)
