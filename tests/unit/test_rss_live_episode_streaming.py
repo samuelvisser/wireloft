@@ -312,7 +312,7 @@ def test_download_only_live_stream_requires_matching_video_download_profile(
     items = get_feed_items(db_session, profile)
 
     assert items == [(episode, None)]
-    assert profile.live_episode_handoff_ids == [episode.id]
+    assert profile.live_episode_handoff_ids == []
     assert matching.enable_profile is True
 
 
@@ -390,7 +390,7 @@ def test_live_episode_prefers_live_hls_over_existing_local_artifact(
     )
 
     assert feed_service.get_feed_items(db_session, profile) == [(episode, None)]
-    assert profile.live_episode_handoff_ids == [episode.id]
+    assert profile.live_episode_handoff_ids == []
 
 
 def test_live_handoff_bridges_processing_until_first_local_video(
@@ -427,7 +427,17 @@ def test_live_handoff_bridges_processing_until_first_local_video(
         lambda _session, download, **_kwargs: Path(download.file_path),
     )
 
-    assert feed_service.get_feed_items(db_session, profile) == [(episode, None)]
+    class FakeClient:
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            assert slug == episode.slug
+            return type("Detail", (), {
+                "video_url": "https://media.example/live.m3u8",
+                "audio_url": "https://media.example/live.m4a",
+            })()
+
+    monkeypatch.setattr(feed_service, "MiddlewareClient", FakeClient)
+    request = type("Request", (), {"base_url": "https://wireloft.test/"})()
+    feed_service.render_rss_feed(db_session, request, profile)
     assert profile.live_episode_handoff_ids == [episode.id]
 
     episode.publish_status = "dw_processing"
@@ -539,7 +549,23 @@ def test_live_handoff_is_only_created_for_live_items_emitted_by_max_items(
         max_items=1,
     )
 
-    assert get_feed_items(db_session, profile) == [(newer, None)]
+    import backend.api.endpoints.feeds.service as feed_service
+
+    class FakeClient:
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            return type("Detail", (), {
+                "video_url": f"https://media.example/{slug}.m3u8",
+                "audio_url": f"https://media.example/{slug}.m4a",
+            })()
+
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(feed_service, "MiddlewareClient", FakeClient)
+        request = type("Request", (), {"base_url": "https://wireloft.test/"})()
+        feed_service.render_rss_feed(db_session, request, profile)
+    finally:
+        monkeypatch.undo()
+
     assert profile.live_episode_handoff_ids == [newer.id]
     assert older.id not in profile.live_episode_handoff_ids
 
