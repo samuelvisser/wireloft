@@ -315,6 +315,42 @@ def test_download_only_live_stream_requires_matching_video_download_profile(
     assert matching.enable_profile is True
 
 
+def test_live_coverage_honors_stream_profile_exact_match(
+        db_session: Session,
+):
+    from backend.api.endpoints.feeds.service import get_feed_items
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(db_session, show, season, index=1)
+    video = _make_local_media_profile(
+        db_session,
+        slug="video-720",
+        preferred_format="format_720p",
+    )
+    _make_download_profile(
+        db_session,
+        show,
+        video,
+        episode_types=["ep"],
+    )
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        use_downloads=True,
+        use_dw_stream=False,
+        stream_live_episodes=True,
+    )
+    profile.require_exact_match = True
+    db_session.flush()
+
+    assert get_feed_items(db_session, profile) == []
+
+    profile.require_exact_match = False
+    db_session.flush()
+    assert get_feed_items(db_session, profile) == [(episode, None)]
+
+
 def test_disabled_video_download_profile_does_not_enable_live_stream(
         db_session: Session,
 ):
