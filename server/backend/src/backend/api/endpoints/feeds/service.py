@@ -14,7 +14,13 @@ from sqlalchemy.orm import Session, joinedload
 from config.network import is_no_internet_error
 from .cached_video import get_cached_mp4_size
 from backend.db.datetime_types import utc_datetime
-from backend.db.models import Episode, LocalMediaProfile, RssStreamProfile
+from backend.db.models import (
+    DownloadProfileBase,
+    Episode,
+    LocalMediaProfile,
+    RssStreamProfile,
+    SeriesDownloadProfile,
+)
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -22,6 +28,7 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import (
     DEFAULT_RSS_DW_VIDEO_METHOD,
+    RSS_HLS_VIDEO_METHODS,
     RssDwVideoMethod,
 )
 from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
@@ -154,18 +161,77 @@ def _profile_allows_episode(profile: RssStreamProfile, episode: Episode) -> bool
     return _episode_type_prefix(episode) in set(profile.ep_id_type_list or [])
 
 
+def _profile_streams_live_hls(profile: RssStreamProfile) -> bool:
+    return (
+        profile.stream_live_episodes
+        and profile.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value
+        and profile.dw_video_method in RSS_HLS_VIDEO_METHODS
+    )
+
+
+def _has_video_download_profile_for_episode(
+        s: Session,
+        episode: Episode,
+) -> bool:
+    """Return whether an enabled Download Profile will retain this live type."""
+    episode_type = _episode_type_prefix(episode)
+    profiles = (
+        s.query(DownloadProfileBase)
+        .options(joinedload(DownloadProfileBase.local_media_profile))
+        .filter(
+            DownloadProfileBase.show_id == episode.show_id,
+            DownloadProfileBase.enable_profile.is_(True),
+        )
+        .all()
+    )
+    for download_profile in profiles:
+        if episode_type not in set(download_profile.ep_id_type_list or []):
+            continue
+        if (
+            download_profile.local_media_profile.preferred_format
+            == PreferredFormat.FORMAT_AUDIO_ONLY.value
+        ):
+            continue
+        if isinstance(download_profile, SeriesDownloadProfile):
+            if episode.season_id not in {
+                season.id for season in download_profile.seasons
+            }:
+                continue
+        return True
+    return False
+
+
+def _can_stream_live_episode(
+        s: Session,
+        profile: RssStreamProfile,
+        episode: Episode,
+) -> bool:
+    if not _profile_streams_live_hls(profile):
+        return False
+    if profile.use_dw_stream:
+        return True
+    return (
+        profile.use_downloads
+        and _has_video_download_profile_for_episode(s, episode)
+    )
+
+
 def get_feed_items(
         s: Session,
         profile: RssStreamProfile,
 ) -> list[tuple[Episode, Optional[EpisodeMediaDownload]]]:
-    """Return eligible episodes newest first."""
-    if not profile.use_downloads and not profile.use_dw_stream:
+    """Return eligible episodes newest first and maintain live handoff state."""
+    live_hls_enabled = _profile_streams_live_hls(profile)
+    if (
+        not profile.use_downloads
+        and not profile.use_dw_stream
+        and not live_hls_enabled
+    ):
         return []
 
     episodes = (
         s.query(Episode)
         .filter(Episode.show_id == profile.show_id)
-        .filter(Episode.publish_status.notin_(_UNAVAILABLE_PUBLISH_STATUSES))
         .all()
     )
 
@@ -187,9 +253,23 @@ def get_feed_items(
                 [],
             ).append(download)
 
+    previous_handoffs = set(profile.live_episode_handoff_ids or [])
+    next_handoffs: set[int] = set()
     items: list[tuple[Episode, Optional[EpisodeMediaDownload]]] = []
+
     for episode in episodes:
         if not _profile_allows_episode(profile, episode):
+            continue
+
+        is_live = episode.publish_status == EpisodePublishStatus.LIVE.value
+        if is_live:
+            if not _can_stream_live_episode(s, profile, episode):
+                continue
+            # A local file can only represent an earlier/static artifact while
+            # the episode itself is live. Force HLS so this item is genuinely live.
+            items.append((episode, None))
+            if not profile.use_dw_stream:
+                next_handoffs.add(episode.id)
             continue
 
         best = None
@@ -200,8 +280,30 @@ def get_feed_items(
                 preferred_format=profile.preferred_format,
                 require_exact_match=profile.require_exact_match,
             )
-        if best is not None or profile.use_dw_stream:
+
+        if best is not None:
+            # The first usable local artifact completes the temporary live ->
+            # download bridge. Do not preserve the handoff after this point.
             items.append((episode, best))
+            continue
+
+        if episode.id in previous_handoffs and live_hls_enabled:
+            # This episode was exposed while live with normal Daily Wire
+            # streaming disabled. Keep its remote HLS path alive until the
+            # configured Download Profile produces the first usable video.
+            items.append((episode, None))
+            next_handoffs.add(episode.id)
+            continue
+
+        if episode.publish_status in _UNAVAILABLE_PUBLISH_STATUSES:
+            continue
+
+        if profile.use_dw_stream:
+            items.append((episode, None))
+
+    normalized_handoffs = sorted(next_handoffs)
+    if list(profile.live_episode_handoff_ids or []) != normalized_handoffs:
+        profile.live_episode_handoff_ids = normalized_handoffs
 
     def sort_key(pair: tuple[Episode, Optional[EpisodeMediaDownload]]):
         episode = pair[0]
@@ -221,7 +323,7 @@ def get_media_for_episode(
         profile: RssStreamProfile,
         episode_slug: str,
 ) -> tuple[Episode, Optional[EpisodeMediaDownload]]:
-    """Resolve an enclosure to a local artifact or a Daily Wire fallback."""
+    """Resolve an enclosure to a local artifact or an allowed remote fallback."""
     episode: Optional[Episode] = (
         s.query(Episode)
         .filter_by(slug=episode_slug, show_id=profile.show_id)
@@ -231,10 +333,14 @@ def get_media_for_episode(
         raise HTTPException(status_code=404, detail="Episode not found")
     if not _profile_allows_episode(profile, episode):
         raise HTTPException(status_code=404, detail="Episode not included in this feed")
-    if episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
-        raise HTTPException(status_code=404, detail="Episode has no usable media")
-    if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
-        raise HTTPException(status_code=404, detail="Episode media is still processing")
+
+    if episode.publish_status == EpisodePublishStatus.LIVE.value:
+        if _can_stream_live_episode(s, profile, episode):
+            return episode, None
+        raise HTTPException(
+            status_code=404,
+            detail="Live episode streaming is not available for this episode",
+        )
 
     best = None
     if profile.use_downloads:
@@ -256,6 +362,18 @@ def get_media_for_episode(
 
     if best is not None:
         return episode, best
+
+    if (
+        episode.id in set(profile.live_episode_handoff_ids or [])
+        and _profile_streams_live_hls(profile)
+    ):
+        return episode, None
+
+    if episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
+        raise HTTPException(status_code=404, detail="Episode has no usable media")
+    if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
+        raise HTTPException(status_code=404, detail="Episode media is still processing")
+
     if profile.use_dw_stream:
         return episode, None
 
