@@ -581,6 +581,8 @@ def test_live_handoff_bridges_processing_until_first_local_video(
     assert download is None
     assert profile.live_episode_handoff_ids == [episode.id]
 
+    episode.publish_status = "published_final"
+    db_session.flush()
     local_download = _make_available_download(
         db_session,
         episode,
@@ -596,6 +598,63 @@ def test_live_handoff_bridges_processing_until_first_local_video(
     db_session.delete(local_download)
     db_session.flush()
     assert feed_service.get_feed_items(db_session, profile) == []
+
+
+def test_pre_live_artifact_does_not_end_live_handoff(
+        db_session: Session,
+        tmp_path: Path,
+        monkeypatch,
+):
+    import backend.api.endpoints.feeds.service as feed_service
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(db_session, show, season, index=1)
+    video = _make_local_media_profile(
+        db_session,
+        slug="video",
+        preferred_format="format_1080p",
+    )
+    download_profile = _make_download_profile(
+        db_session,
+        show,
+        video,
+        episode_types=["ep"],
+    )
+    stale = _make_available_download(
+        db_session,
+        episode,
+        video,
+        download_profile,
+        tmp_path / "countdown.mp4",
+    )
+    stale.downloaded_publish_status = "published_with_countdown"
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        use_downloads=True,
+        use_dw_stream=False,
+        stream_live_episodes=True,
+    )
+    profile.live_episode_handoff_ids = [episode.id]
+    monkeypatch.setattr(
+        feed_service,
+        "resolve_media_download_file",
+        lambda _session, download, **_kwargs: Path(download.file_path),
+    )
+
+    episode.publish_status = "dw_processing"
+    db_session.flush()
+
+    assert feed_service.get_feed_items(db_session, profile) == [(episode, None)]
+    resolved_episode, download = feed_service.get_media_for_episode(
+        db_session,
+        profile,
+        episode.slug,
+    )
+    assert resolved_episode.id == episode.id
+    assert download is None
+    assert profile.live_episode_handoff_ids == [episode.id]
 
 
 def test_non_live_undownloaded_episode_never_gets_temporary_dailywire_fallback(
