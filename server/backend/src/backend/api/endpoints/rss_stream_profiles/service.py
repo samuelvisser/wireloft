@@ -14,6 +14,18 @@ from backend.utils.feed_urls import (
     set_rss_feed_dw_video_method,
 )
 from backend.utils.helpers import generate_stream_profile_token
+from backend.types.local_media_profile_types import PreferredFormat
+from backend.types.stream_profile_types import RSS_HLS_VIDEO_METHODS
+
+
+def _keeps_live_episode_handoff(profile: RssStreamProfile) -> bool:
+    return (
+        profile.stream_live_episodes
+        and profile.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value
+        and profile.dw_video_method in RSS_HLS_VIDEO_METHODS
+        and profile.use_downloads
+        and not profile.use_dw_stream
+    )
 
 
 def get_rss_stream_profiles_list(s: Session) -> list[RssStreamProfileAPIRead]:
@@ -83,6 +95,8 @@ def update_stream_profile_rss(s: Session, stream_profile_id: int, body: RssStrea
 
     feed_url = body.feed_url.strip()
     update_database_fields(item, body, exclude_fields={"feed_url"})
+    if not _keeps_live_episode_handoff(item):
+        item.live_episode_handoff_ids = []
     item.feed_url = set_rss_feed_dw_video_method(
         feed_url,
         use_dw_stream=item.use_dw_stream,
