@@ -1,8 +1,14 @@
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 
+export type OutputTemplateVariableReadMore = {
+    summary?: string
+    paragraphs: readonly string[]
+}
+
 export type OutputTemplateVariable = {
     name: string
     description: string
+    readMore?: OutputTemplateVariableReadMore
 }
 
 const DATE_VARIABLES: readonly OutputTemplateVariable[] = [
@@ -23,8 +29,26 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'season', description: 'Season URL slug'},
     {name: 'season_name', description: 'Season name'},
     {name: 'season_index', description: 'WireLoft internal season index'},
-    {name: 'season_type', description: 'Season type: normal or extra'},
-    {name: 'season_number', description: 'Stable media season number; Extras seasons use 0'},
+    {
+        name: 'season_type',
+        description: 'Season type: normal or extra',
+        readMore: {
+            paragraphs: [
+                'WireLoft classifies each season explicitly instead of inferring an extras season from its title.',
+                'Use this value in Jinja conditions when normal and extra seasons need different paths.',
+            ],
+        },
+    },
+    {
+        name: 'season_number',
+        description: 'Stable media season number; Extras seasons use 0',
+        readMore: {
+            paragraphs: [
+                'Normal seasons use their stable media-facing season number, while every extras season uses 0.',
+                'Unlike the internal season_index, this value is designed for media-server paths and is not affected by where extras seasons appear in The Daily Wire season list.',
+            ],
+        },
+    },
     {name: 'episode', description: 'Episode URL slug'},
     {name: 'episode_title', description: 'Episode title'},
     {name: 'title', description: 'Episode title'},
