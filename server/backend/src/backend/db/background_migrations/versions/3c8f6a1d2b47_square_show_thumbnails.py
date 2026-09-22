@@ -35,12 +35,15 @@ def _apply_square_thumbnails(thumbnails: dict[str, str]) -> int:
     updated = 0
     try:
         for show in session.scalars(select(Show).order_by(Show.id)):
-            square_path = thumbnails.get(show.slug)
-            if not square_path:
+            if show.thumbnail_square_path is not None:
                 continue
-            if show.thumbnail_square_path != square_path:
-                show.thumbnail_square_path = square_path
-                updated += 1
+
+            square_path = thumbnails.get(show.slug)
+            if square_path is None:
+                continue
+
+            show.thumbnail_square_path = square_path
+            updated += 1
         session.commit()
         return updated
     except Exception:

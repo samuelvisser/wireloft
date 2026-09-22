@@ -219,19 +219,21 @@ async def _fetch_show(
     # Daily Wire request so an outage cannot pin a DB connection per worker.
     s.rollback()
 
-    square_thumbnail_path: str | None = None
-    if initial_index and not dry_run:
-        square_thumbnail_path = client.get_square_show_thumbnails(
-            membership_plan=membership_plan,
-        ).get(show_slug)
-
     dw_show = client.get_show_page(show_slug, membership_plan=membership_plan)
     all_dw_seasons: list[DwSeasonRecord] = dw_show.seasons
+
+    square_thumbnail_path: str | None = None
+    if initial_index and not dry_run:
+        square_thumbnail_path = dw_show.thumbnail_square_path
+        if square_thumbnail_path is None:
+            square_thumbnail_path = client.get_square_show_thumbnails(
+                membership_plan=membership_plan,
+            ).get(show_slug)
 
     show = s.get(Show, show_id)
     if show is None:
         raise ValueError(f"Show {show_id} was removed while it was being indexed")
-    if square_thumbnail_path:
+    if initial_index and not dry_run:
         show.thumbnail_square_path = square_thumbnail_path
     for remote_season in all_dw_seasons:
         if not any(season.slug == remote_season.slug for season in show.seasons):

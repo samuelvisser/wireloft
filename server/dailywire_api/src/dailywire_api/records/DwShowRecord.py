@@ -51,6 +51,23 @@ class DwShowRecord(BaseRecord):
     latest_episodes: list[DwEpisodeRecord] = Field(default_factory=list)
 
 
+
+    @model_validator(mode="after")
+    def discard_duplicate_thumbnail_aliases(self):
+        """Remove show thumbnail slots that only repeat the portrait URL."""
+        portrait = self.thumbnail_portrait_path
+        if (
+            self.thumbnail_landscape_path is not None
+            and self.thumbnail_landscape_path == portrait
+        ):
+            object.__setattr__(self, "thumbnail_landscape_path", None)
+        if (
+            self.thumbnail_square_path is not None
+            and self.thumbnail_square_path == portrait
+        ):
+            object.__setattr__(self, "thumbnail_square_path", None)
+        return self
+
     @computed_field(return_type=ProbableShowType)
     @property
     def probable_show_type(self) -> ProbableShowType:

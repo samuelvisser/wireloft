@@ -274,10 +274,10 @@ class MiddlewareClient:
         """Return square show artwork exposed by the Watch page carousel.
 
         The Daily Wire currently leaves images.thumbnail.square empty in this
-        component and places the square artwork in the otherwise generic
-        land/port fields. The carousel render type is therefore part of the
-        contract: these fallback fields are only interpreted as square art
-        while parsing squareShowCarousel.
+        component and currently duplicates the square artwork into both the
+        land and port fields. WireLoft only interprets that duplicate pair as
+        square art when those two URLs are exactly equal, so genuinely distinct
+        future orientations are not mislabeled.
         """
         params: Dict[str, Any] = {'slug': 'watch-page'}
         if membership_plan:
@@ -300,11 +300,18 @@ class MiddlewareClient:
                     continue
 
                 record = self._catalog_show_from_payload(raw_show)
-                square_path = (
-                    record.thumbnail_square_path
-                    or record.thumbnail_landscape_path
-                    or record.thumbnail_portrait_path
-                )
+                square_path = record.thumbnail_square_path
+                if square_path is None:
+                    raw_thumbnails = (raw_show.get('images') or {}).get('thumbnail') or {}
+                    raw_landscape = raw_thumbnails.get('land')
+                    raw_portrait = raw_thumbnails.get('port')
+                    if (
+                        isinstance(raw_landscape, str)
+                        and raw_landscape
+                        and raw_landscape == raw_portrait
+                    ):
+                        square_path = raw_landscape
+
                 if not record.slug or not square_path:
                     continue
                 thumbnails.setdefault(record.slug, square_path)

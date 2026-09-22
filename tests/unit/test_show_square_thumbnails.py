@@ -74,24 +74,24 @@ def test_dailywire_square_show_thumbnail_lookup_uses_square_carousel(monkeypatch
                     },
                     {
                         "show": {
-                            "slug": "land-fallback",
+                            "slug": "duplicate-fallback",
                             "images": {
                                 "thumbnail": {
                                     "square": "",
-                                    "land": "land-square.jpg",
-                                    "port": "port-square.jpg",
+                                    "land": "carousel-square.jpg",
+                                    "port": "carousel-square.jpg",
                                 },
                             },
                         },
                     },
                     {
                         "show": {
-                            "slug": "port-fallback",
+                            "slug": "distinct-orientations",
                             "images": {
                                 "thumbnail": {
                                     "square": "",
-                                    "land": "",
-                                    "port": "port-only-square.jpg",
+                                    "land": "landscape.jpg",
+                                    "port": "portrait.jpg",
                                 },
                             },
                         },
@@ -121,8 +121,7 @@ def test_dailywire_square_show_thumbnail_lookup_uses_square_carousel(monkeypatch
     }
     assert result == {
         "explicit-square": "square.jpg",
-        "land-fallback": "land-square.jpg",
-        "port-fallback": "port-only-square.jpg",
+        "duplicate-fallback": "carousel-square.jpg",
     }
 
 
@@ -140,17 +139,25 @@ def test_dailywire_square_show_thumbnail_lookup_allows_missing_carousel(monkeypa
 
 
 @pytest.mark.parametrize(
-    ("remote_thumbnails", "expected"),
+    (
+        "api_square",
+        "remote_thumbnails",
+        "expected",
+        "expected_square_calls",
+    ),
     [
-        ({"test-show": "square.jpg"}, "square.jpg"),
-        ({}, None),
+        (None, {"test-show": "watch-square.jpg"}, "watch-square.jpg", 1),
+        ("api-square.jpg", {"test-show": "watch-square.jpg"}, "api-square.jpg", 0),
+        (None, {}, None, 1),
     ],
 )
-def test_initial_index_saves_square_thumbnail_only_when_show_is_in_carousel(
+def test_initial_index_queries_watch_page_only_when_normalized_square_is_missing(
     db_session,
     monkeypatch,
+    api_square,
     remote_thumbnails,
     expected,
+    expected_square_calls,
 ):
     from task_manager.tasks.workers.fetch_new_episodes import service
 
@@ -167,7 +174,10 @@ def test_initial_index_saves_square_thumbnail_only_when_show_is_in_carousel(
 
         def get_show_page(self, _slug, *, membership_plan=None):
             assert membership_plan == "FREE"
-            return SimpleNamespace(seasons=[])
+            return SimpleNamespace(
+                seasons=[],
+                thumbnail_square_path=api_square,
+            )
 
     client = FakeClient()
     monkeypatch.setattr(
@@ -189,7 +199,7 @@ def test_initial_index_saves_square_thumbnail_only_when_show_is_in_carousel(
     )
 
     assert result == 0
-    assert client.square_calls == 1
+    assert client.square_calls == expected_square_calls
     db_session.expire_all()
     assert db_session.get(type(show), show.id).thumbnail_square_path == expected
 
@@ -318,3 +328,57 @@ def test_square_thumbnail_background_migration_leaves_missing_show_empty(
         assert missing.thumbnail_square_path is None
 
     engine.dispose()
+
+def test_square_thumbnail_background_migration_only_fills_missing_square(
+    monkeypatch,
+):
+    from backend.db import Base
+    import backend.db.models  # noqa: F401
+    from backend.db.models import Show
+    migration = importlib.import_module(
+        "backend.db.background_migrations.versions.3c8f6a1d2b47_square_show_thumbnails"
+    )
+    from backend.types.show_types import EpisodeIdentifier, ShowType
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    def add_show(session, slug, *, square):
+        session.add(Show(
+            uuid=f"{slug}-uuid",
+            slug=slug,
+            title=slug,
+            description=None,
+            sharing_url=f"https://www.dailywire.com/show/{slug}",
+            membership_level="FREE",
+            type=ShowType.PODCAST.value,
+            episode_identifier=EpisodeIdentifier.NUMBERED.value,
+            author_name="Host",
+            author_slug="host",
+            thumbnail_portrait_path="portrait.jpg",
+            thumbnail_square_path=square,
+        ))
+
+    with Session(engine) as session:
+        add_show(session, "native-square", square="native-square.jpg")
+        add_show(session, "missing-square", square=None)
+        add_show(session, "missing-from-carousel", square=None)
+        session.commit()
+
+    monkeypatch.setattr(migration, "get_session", lambda: Session(engine))
+    assert migration._apply_square_thumbnails({
+        "native-square": "watch-square.jpg",
+        "missing-square": "watch-square.jpg",
+    }) == 1
+
+    with Session(engine) as session:
+        native = session.query(Show).filter_by(slug="native-square").one()
+        missing = session.query(Show).filter_by(slug="missing-square").one()
+        absent = session.query(Show).filter_by(slug="missing-from-carousel").one()
+
+        assert native.thumbnail_square_path == "native-square.jpg"
+        assert missing.thumbnail_square_path == "watch-square.jpg"
+        assert absent.thumbnail_square_path is None
+
+    engine.dispose()
+

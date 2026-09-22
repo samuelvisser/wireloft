@@ -48,6 +48,22 @@ class DwEpisodeRecord(BaseRecord):
     published_date: AwareDatetime = Field(validation_alias="publishedAt")
     scheduled_date: Optional[AwareDatetime] = Field(validation_alias="scheduledAt", default=None)
 
+    @model_validator(mode="after")
+    def discard_duplicate_thumbnail_aliases(self):
+        """Remove episode thumbnail slots that only repeat the landscape URL."""
+        landscape = self.thumbnail_landscape_path
+        if (
+            self.thumbnail_portrait_path is not None
+            and self.thumbnail_portrait_path == landscape
+        ):
+            object.__setattr__(self, "thumbnail_portrait_path", None)
+        if (
+            self.thumbnail_square_path is not None
+            and self.thumbnail_square_path == landscape
+        ):
+            object.__setattr__(self, "thumbnail_square_path", None)
+        return self
+
     @property
     def ep_number(self) -> Optional[int]:
         """The whole-number episode number parsed from `episode_number`.
