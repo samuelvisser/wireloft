@@ -1,9 +1,10 @@
 import {ReactNode, useState} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
+import Switch from 'react-switch'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import ReadMore from '../../utils/ReadMore'
-import {RssDwVideoMethodReg} from '../../types/stream_profile'
+import {RssDwVideoMethodReg, RssHlsVideoMethods} from '../../types/stream_profile'
 
 
 const VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p'])
@@ -23,7 +24,10 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
     const feedUrl: string | undefined = watch('feedUrl')
     const useDwStream: boolean = watch('useDwStream')
     const preferredFormat: string | undefined = watch('preferredFormat')
-    const usesDwVideo = useDwStream && VIDEO_FORMATS.has(preferredFormat ?? '')
+    const dwVideoMethod: string | undefined = watch('dwVideoMethod')
+    const usesVideo = VIDEO_FORMATS.has(preferredFormat ?? '')
+    const usesDwVideo = useDwStream && usesVideo
+    const usesHlsVideo = usesVideo && RssHlsVideoMethods.has(dwVideoMethod ?? '')
 
     const onCopy = async () => {
         if (!feedUrl) return
@@ -101,6 +105,47 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
                             </p>
                             <p>
                                 Downloaded files are always served directly and are not affected by this setting.
+                            </p>
+                        </ReadMore>
+                    </div>
+                </div>
+            )}
+
+            {usesHlsVideo && (
+                <div className="form-row">
+                    <label htmlFor="rss-stream-live-episodes">Stream live episodes</label>
+                    <Controller
+                        control={control}
+                        name="streamLiveEpisodes"
+                        render={({field}) => (
+                            <Switch
+                                id="rss-stream-live-episodes"
+                                checked={!!field.value}
+                                onChange={(checked) => field.onChange(checked)}
+                                onColor="#0ea5e9"
+                                offColor="#d1d5db"
+                                uncheckedIcon={false}
+                                checkedIcon={false}
+                                aria-invalid={!!errors.streamLiveEpisodes}
+                                aria-describedby={errors.streamLiveEpisodes ? 'rss-stream-live-episodes-error' : 'rss-stream-live-episodes-help'}
+                            />
+                        )}
+                    />
+                    {errors.streamLiveEpisodes && (
+                        <div id="rss-stream-live-episodes-error" className="error" role="alert" aria-live="polite">
+                            {String(errors.streamLiveEpisodes.message)}
+                        </div>
+                    )}
+                    <div className="help" id="rss-stream-live-episodes-help">
+                        <ReadMore summary={<span>Include matching episodes while they are live.</span>}>
+                            <p>
+                                Live episodes must still match this Stream Profile&apos;s episode-type filter.
+                            </p>
+                            <p>
+                                When direct Daily Wire streaming is disabled, WireLoft only exposes a live episode if an enabled Download Profile for the same show is configured to download video for that episode type.
+                            </p>
+                            <p>
+                                If such an episode stops being live before its download is ready, WireLoft temporarily keeps streaming it from The Daily Wire until the first usable local video becomes available. Episodes that were never live do not receive this temporary fallback.
                             </p>
                         </ReadMore>
                     </div>
