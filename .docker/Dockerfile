@@ -34,9 +34,10 @@ FROM python:3.13-slim AS runtime
 
 # ffmpeg   -> remuxing downloaded video into .mp4 (downloadSettings.remuxVideoToMp4)
 # nginx    -> serves the built UI and reverse-proxies /api/* to the backend
+# sqlite3  -> offline integrity/salvage commands for a damaged WireLoft database
 # tzdata   -> lets the TZ env var select a real timezone
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg nginx tzdata bash \
+    && apt-get install -y --no-install-recommends ffmpeg nginx sqlite3 tzdata bash \
     && rm -rf /var/lib/apt/lists/*
 
 # uv: reproducible installs straight from uv.lock

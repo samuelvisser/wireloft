@@ -15,6 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
 
+from backend.db import is_database_corruption_error
 from backend.db.datetime_types import utc_datetime
 from config import get_settings
 from config.network import is_no_internet_error
@@ -147,13 +148,25 @@ def _reset_scheduled_work_pauses() -> None:
         _resume_scheduled_work_when_clear = False
 
 
-def _execute_task_job(**kwargs) -> None:
-    """Run one task without noisy tracebacks for expected external conditions."""
+def execute_task_job(**kwargs) -> None:
+    """Run one task with centralized handling for expected and unsafe failures."""
     from .executor import execute_task  # local import to avoid cycles
 
     try:
         execute_task(**kwargs)
     except Exception as exc:
+        if is_database_corruption_error(exc):
+            pause_scheduled_work(
+                "SQLite database corruption",
+                owner_key="sqlite-database-corruption",
+            )
+            logger.critical(
+                "SQLite database corruption detected; scheduled background work has been paused. "
+                "Stop WireLoft and run 'backend-api db integrity' or "
+                "'backend-api db recover --replace'. Error: %s",
+                exc,
+            )
+            return
         if is_no_internet_error(exc):
             # execute_task already persisted and logged the normalized outage.
             return
@@ -169,6 +182,11 @@ def _execute_task_job(**kwargs) -> None:
             )
             return
         raise
+
+
+# Compatibility alias for existing scheduler call sites and tests.
+def _execute_task_job(**kwargs) -> None:
+    execute_task_job(**kwargs)
 
 
 def get_trigger(name: str, args: dict):
