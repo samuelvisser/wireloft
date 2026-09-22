@@ -14,6 +14,12 @@ branch_labels = None
 depends_on = None
 
 
+_HLS_VIDEO_METHODS = (
+    "stream_hls_download_m4a",
+    "stream_hls_download_mp4",
+)
+
+
 def upgrade() -> None:
     with op.batch_alter_table("stream_profiles_rss") as batch_op:
         batch_op.add_column(
@@ -32,6 +38,37 @@ def upgrade() -> None:
                 server_default="[]",
             )
         )
+
+    # HLS video profiles using Daily Wire already exposed LIVE episodes before
+    # this setting existed. Keep those existing profiles behaviorally unchanged;
+    # newly created profiles still use the explicit opt-in default.
+    connection = op.get_bind()
+    rss = sa.table(
+        "stream_profiles_rss",
+        sa.column("id", sa.Integer()),
+        sa.column("dw_video_method", sa.String()),
+        sa.column("stream_live_episodes", sa.Boolean()),
+    )
+    base = sa.table(
+        "stream_profiles",
+        sa.column("id", sa.Integer()),
+        sa.column("use_dw_stream", sa.Boolean()),
+        sa.column("preferred_format", sa.String()),
+    )
+    existing_hls_profiles = (
+        sa.select(rss.c.id)
+        .select_from(rss.join(base, base.c.id == rss.c.id))
+        .where(
+            base.c.use_dw_stream.is_(True),
+            base.c.preferred_format != "format_audio_only",
+            rss.c.dw_video_method.in_(_HLS_VIDEO_METHODS),
+        )
+    )
+    connection.execute(
+        rss.update()
+        .where(rss.c.id.in_(existing_hls_profiles))
+        .values(stream_live_episodes=True)
+    )
 
 
 def downgrade() -> None:
