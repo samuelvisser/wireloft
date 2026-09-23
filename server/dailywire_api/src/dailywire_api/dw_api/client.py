@@ -266,6 +266,58 @@ class MiddlewareClient:
             movies=sorted(movies.values(), key=lambda value: value.title.casefold()),
         )
 
+    def get_square_show_thumbnails(
+        self,
+        *,
+        membership_plan: Optional[str] = None,
+    ) -> dict[str, str]:
+        """Return square show artwork exposed by the Watch page carousel.
+
+        The Daily Wire currently leaves images.thumbnail.square empty in this
+        component and currently duplicates the square artwork into both the
+        land and port fields. WireLoft only interprets that duplicate pair as
+        square art when those two URLs are exactly equal, so genuinely distinct
+        future orientations are not mislabeled.
+        """
+        params: Dict[str, Any] = {'slug': 'watch-page'}
+        if membership_plan:
+            params['membershipPlan'] = membership_plan
+        payload = self._get('v4/getPage', params)
+
+        thumbnails: dict[str, str] = {}
+        for component in payload.get('components') or []:
+            if (
+                not isinstance(component, dict)
+                or component.get('renderType') != 'squareShowCarousel'
+            ):
+                continue
+
+            for item in component.get('items') or []:
+                if not isinstance(item, dict):
+                    continue
+                raw_show = item.get('show')
+                if not isinstance(raw_show, dict):
+                    continue
+
+                record = self._catalog_show_from_payload(raw_show)
+                square_path = record.thumbnail_square_path
+                if square_path is None:
+                    raw_thumbnails = (raw_show.get('images') or {}).get('thumbnail') or {}
+                    raw_landscape = raw_thumbnails.get('land')
+                    raw_portrait = raw_thumbnails.get('port')
+                    if (
+                        isinstance(raw_landscape, str)
+                        and raw_landscape
+                        and raw_landscape == raw_portrait
+                    ):
+                        square_path = raw_landscape
+
+                if not record.slug or not square_path:
+                    continue
+                thumbnails.setdefault(record.slug, square_path)
+
+        return thumbnails
+
     def get_movie_playback(self, slug: str) -> DwMovieDetailRecord:
         """Fetch Daily Wire's current signed movie playback URL.
 

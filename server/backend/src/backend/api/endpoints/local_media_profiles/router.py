@@ -1,8 +1,5 @@
-from typing import Annotated
-
 from fastapi import APIRouter, HTTPException, Query
 from jinja2.exceptions import TemplateAssertionError
-from pydantic import Field
 
 from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplatePreview,
@@ -10,8 +7,7 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
 )
-from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPIRead
-from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPIRead
+from backend.api.models.local_media_profile_view import LocalMediaProfileAPIRead
 from backend.app import db_session
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
@@ -24,12 +20,6 @@ from .output_template import (
     get_output_template_variables,
 )
 from .service import get_local_media_profile, get_local_media_profiles_list
-
-
-LocalMediaProfileAPIRead = Annotated[
-    ShowLocalMediaProfileAPIRead | MovieLocalMediaProfileAPIRead,
-    Field(discriminator="type"),
-]
 
 router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles (base)"])
 

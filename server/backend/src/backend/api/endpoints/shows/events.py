@@ -12,4 +12,5 @@ class ShowAdded(dict[str, object]):
             id=show.id,
             slug=show.slug,
             title=show.title,
+            initial_index=True,
         )

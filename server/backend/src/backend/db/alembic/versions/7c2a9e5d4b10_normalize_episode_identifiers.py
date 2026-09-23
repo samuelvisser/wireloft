@@ -1,4 +1,4 @@
-"""Add episode indexing semantics and normalize local episode data.
+"""Normalize local episode indexing data.
 
 Revision ID: 7c2a9e5d4b10
 Revises: e5f1a2c7d903
@@ -51,12 +51,13 @@ def _column_names(connection, table_name: str) -> set[str]:
 
 
 def _add_episode_indexing_columns(connection) -> None:
-    """Add new columns while allowing an interrupted SQLite upgrade to resume.
+    """Ensure episode-indexing columns exist for historical development databases.
 
-    SQLite can persist ALTER TABLE ADD COLUMN statements even when a later step in
-    the same Alembic revision fails. Alembic then correctly leaves the stored
-    revision at the previous head, so a retry must tolerate any subset of these
-    three additive columns already being present.
+    Revision e4c91a7b2d30 originally introduced these columns, but it was briefly
+    removed from the migration graph while e5f1a2c7d903 was already in use. A
+    database stamped at e5 can therefore legitimately be missing them. SQLite can
+    also persist individual ADD COLUMN statements after an interrupted migration,
+    so this remains deliberately idempotent.
     """
     season_columns = _column_names(connection, "seasons")
     missing_season_columns = []
@@ -665,9 +666,6 @@ def downgrade() -> None:
             identifiers=identifiers_by_show.get(show_id, []),
         )
 
-    with op.batch_alter_table("media_items_episode") as batch_op:
-        batch_op.drop_column("dw_episode_number")
-
-    with op.batch_alter_table("seasons") as batch_op:
-        batch_op.drop_column("season_number")
-        batch_op.drop_column("season_type")
+    # e4c91a7b2d30 owns the episode-indexing schema columns. They must remain
+    # present when this revision is downgraded to e5f1a2c7d903; e4 removes them
+    # when the migration chain is downgraded past that historical revision.

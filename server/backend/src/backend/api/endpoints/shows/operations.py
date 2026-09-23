@@ -28,6 +28,9 @@ class ShowIndexOperation(_ShowOperation):
     kind = "show.index"
     task = _FETCH_EPISODES_TASK_KEY
 
+    def task_kwargs(self) -> dict[str, object]:
+        return {"initial_index": True}
+
 
 class ShowSyncOperation(_ShowOperation):
     kind = "show.sync"

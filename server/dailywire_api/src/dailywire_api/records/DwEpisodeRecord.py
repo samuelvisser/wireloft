@@ -8,6 +8,7 @@ from pydantic import (
 
 from dailywire_api.records.BaseRecord import BaseRecord
 from dailywire_api.types.user_info import DwMembershipLevel
+from dailywire_api.utils.thumbnails import normalize_thumbnail_aliases
 from dailywire_api.utils.validators import ValOrNone, ValOrZero, ValOrEmpty, AvailableForList
 
 
@@ -47,6 +48,10 @@ class DwEpisodeRecord(BaseRecord):
 
     published_date: AwareDatetime = Field(validation_alias="publishedAt")
     scheduled_date: Optional[AwareDatetime] = Field(validation_alias="scheduledAt", default=None)
+
+    @model_validator(mode="after")
+    def discard_duplicate_thumbnail_aliases(self):
+        return normalize_thumbnail_aliases(self, default="landscape")
 
     @property
     def ep_number(self) -> Optional[int]:
