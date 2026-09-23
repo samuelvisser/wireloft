@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from pydantic import TypeAdapter
+from sqlalchemy.orm import Session, with_polymorphic
+
+from backend.api.models.local_media_profile_view import LocalMediaProfileAPIRead
 
 from backend.db.models import (
     DownloadProfileBase,
@@ -50,26 +53,39 @@ def ensure_local_media_profile_can_be_deleted(
         )
 
 
-def get_local_media_profiles_list(s: Session) -> list[LocalMediaProfileBase]:
-    return (
-        s.query(LocalMediaProfileBase)
-        .order_by(LocalMediaProfileBase.id)
+_local_media_profile_read_adapter = TypeAdapter(LocalMediaProfileAPIRead)
+
+
+def _to_read(local_media_profile: LocalMediaProfileBase) -> LocalMediaProfileAPIRead:
+    return _local_media_profile_read_adapter.validate_python(
+        local_media_profile,
+        from_attributes=True,
+    )
+
+
+def get_local_media_profiles_list(s: Session) -> list[LocalMediaProfileAPIRead]:
+    profile = with_polymorphic(LocalMediaProfileBase, "*")
+    items = (
+        s.query(profile)
+        .order_by(profile.id)
         .all()
     )
+    return [_to_read(item) for item in items]
 
 
 def get_local_media_profile(
     s: Session,
     local_media_profile_slug: str,
-) -> LocalMediaProfileBase:
+) -> LocalMediaProfileAPIRead:
+    profile = with_polymorphic(LocalMediaProfileBase, "*")
     local_media_profile = (
-        s.query(LocalMediaProfileBase)
-        .filter_by(slug=local_media_profile_slug)
+        s.query(profile)
+        .filter(profile.slug == local_media_profile_slug)
         .one_or_none()
     )
     if local_media_profile is None:
         raise HTTPException(status_code=404, detail="Media profile not found")
-    return local_media_profile
+    return _to_read(local_media_profile)
 
 
 def delete_local_media_profile_record(

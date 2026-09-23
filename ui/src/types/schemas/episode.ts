@@ -71,6 +71,8 @@ export const EpisodeReadViewSchema = z.object({
     slug: z.string(),
     title: z.string(),
     publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),
+    thumbnailLandscapePath: z.string().nullable().optional(),
     thumbnailPortraitPath: z.string().nullable().optional(),
+    thumbnailSquarePath: z.string().nullable().optional(),
 })
 export type EpisodeReadView = z.infer<typeof EpisodeReadViewSchema>

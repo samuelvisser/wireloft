@@ -446,8 +446,8 @@ def _append_item(
     )
 
     image_url = (
-        episode.thumbnail_landscape_path
-        or episode.thumbnail_square_path
+        episode.thumbnail_square_path
+        or episode.thumbnail_landscape_path
         or episode.thumbnail_portrait_path
     )
     if image_url:

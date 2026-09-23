@@ -13,6 +13,8 @@ from pydantic import (
     model_validator,
 )
 
+from dailywire_api.utils.thumbnails import normalize_thumbnail_aliases
+
 from .BaseRecord import BaseRecord
 
 
@@ -73,6 +75,10 @@ class DwCatalogShowRecord(_CatalogTitleRecord):
     thumbnail_landscape_path: Optional[str] = None
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
+
+    @model_validator(mode="after")
+    def discard_duplicate_thumbnail_aliases(self):
+        return normalize_thumbnail_aliases(self, default="portrait")
 
 
 MovieExtraTypeValue = Literal[
@@ -177,6 +183,10 @@ class DwMovieExtraRecord(BaseRecord):
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
 
+    @model_validator(mode="after")
+    def discard_duplicate_thumbnail_aliases(self):
+        return normalize_thumbnail_aliases(self, default="landscape")
+
     # The dedicated trailer object enriches the matching extra with fresh
     # playback data. Retain it in the API record, but never persist signed tokens.
     continue_watching_entity_id: Optional[str] = None
@@ -255,6 +265,10 @@ class DwCatalogMovieRecord(_CatalogTitleRecord):
         ),
         default=None,
     )
+
+    @model_validator(mode="after")
+    def discard_duplicate_thumbnail_aliases(self):
+        return normalize_thumbnail_aliases(self, default="portrait")
 
 
 class DwMovieRecord(DwCatalogMovieRecord):

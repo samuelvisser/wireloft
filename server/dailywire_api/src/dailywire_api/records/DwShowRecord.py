@@ -6,6 +6,7 @@ from pydantic import Field, model_validator, computed_field, AliasPath
 from dailywire_api.records.BaseRecord import BaseRecord
 from dailywire_api.records.DwEpisodeRecord import DwEpisodeRecord
 from dailywire_api.records.DwSeasonRecord import DwSeasonRecord
+from dailywire_api.utils.thumbnails import normalize_thumbnail_aliases
 from dailywire_api.utils.validators import ValOrNone
 
 
@@ -50,6 +51,11 @@ class DwShowRecord(BaseRecord):
     latest_episode: DwEpisodeRecord
     latest_episodes: list[DwEpisodeRecord] = Field(default_factory=list)
 
+
+
+    @model_validator(mode="after")
+    def discard_duplicate_thumbnail_aliases(self):
+        return normalize_thumbnail_aliases(self, default="portrait")
 
     @computed_field(return_type=ProbableShowType)
     @property

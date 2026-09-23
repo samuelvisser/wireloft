@@ -221,7 +221,7 @@ GET https://middleware-prod.dailywire.com/middleware/v4/getNextEpisode?direction
 Authorization: Bearer {{access_token}}
 
 ### Get watch page
-GET https://middleware-prod.dailywire.com/middleware/v4/getPage?slug=watch-page&membershipPlan=ALL_ACCESS
+GET https://middleware-prod.dailywire.com/middleware/v4/getPage?slug=squareShow&membershipPlan=ALL_ACCESS
 Authorization: Bearer {{access_token}}
 
 ### GET the Ben Shapiro Show

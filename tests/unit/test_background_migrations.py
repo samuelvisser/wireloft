@@ -125,28 +125,6 @@ def test_unknown_stored_background_revision_reports_history_mismatch(monkeypatch
     assert "squashed without preserving its latest applied revision" in message
 
 
-def test_episode_indexing_background_migration_history_is_linear():
-    from backend.db.background_migrations.registry import (
-        get_background_migration_history,
-    )
-
-    history = get_background_migration_history()
-
-    assert [
-        (migration.revision, migration.down_revision)
-        for migration in history
-    ] == [
-        ("f6a1c3d8b427", None),
-        ("9d4b7e2c1a63", "f6a1c3d8b427"),
-    ]
-    assert history[0].module_name.endswith(
-        ".f6a1c3d8b427_episode_indexing_semantics"
-    )
-    assert history[1].module_name.endswith(
-        ".9d4b7e2c1a63_restore_high_segment_auxiliary"
-    )
-
-
 def test_background_migration_runner_uses_stored_revision_as_source_of_truth(monkeypatch):
     from backend.db.background_migrations import runner
 

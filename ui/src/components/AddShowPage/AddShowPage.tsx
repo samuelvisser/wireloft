@@ -121,6 +121,8 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
     const qc = useQueryClient()
 
     const [step, setStep] = useState<WizardStep>(() => persisted?.step ?? 1)
+    const wizardRootRef = useRef<HTMLDivElement>(null)
+    const previousStepRef = useRef(step)
     const [showAction, setShowAction] = useState<ShowAction | undefined>(() => persisted?.action)
 
     const [showInput, setShowInput] = useState<Partial<ShowCreatePayloadIn>>(
@@ -170,6 +172,14 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
             enabled: selectedDownloadProfileSubmit.enableProfile,
         }]
     }, [localMediaProfileSubmit, selectedDownloadProfileSubmit])
+
+    useEffect(() => {
+        const previousStep = previousStepRef.current
+        previousStepRef.current = step
+        if (step <= previousStep) return
+
+        wizardRootRef.current?.scrollIntoView({behavior: 'auto', block: 'start'})
+    }, [step])
 
     useEffect(() => {
         saveWizardState({
@@ -307,7 +317,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
             : 'Stream Profile'
 
     return (
-        <div>
+        <div ref={wizardRootRef}>
             {globalMessage && (
                 <div
                     className={globalMessage.type === 'ERROR' ? 'form-error-card' : 'form-info-card'}

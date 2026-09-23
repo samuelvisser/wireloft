@@ -36,6 +36,7 @@ async def fetch_new_episodes(
     resource_id: Optional[int] = None,
     slug: Optional[str] = None,
     dry_run: bool = False,
+    initial_index: bool = False,
     progress=None,
 ) -> TaskResult:
     """Delegate episode discovery to the worker service."""
@@ -45,6 +46,7 @@ async def fetch_new_episodes(
             show_id=resource_id,
             show_slug=slug,
             dry_run=dry_run,
+            initial_index=initial_index,
             progress=progress,
         )
 

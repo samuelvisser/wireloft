@@ -120,9 +120,9 @@ export default function EpisodeCard({ep, showSlug, downloads}: Props) {
         .slice(0, 3)
         .toUpperCase()
 
-    // Prefer episode thumbnailPortraitPath; if missing/empty, use a placeholder with the episode index.
-    const portraitPath = (ep.thumbnailPortraitPath && ep.thumbnailPortraitPath.trim() !== '') ? ep.thumbnailPortraitPath : undefined
-    const imageUrl = portraitPath ? toImageUrl(portraitPath) : `https://placehold.co/640x360/png?text=Episode+%23${ep.index}`
+    // Episode thumbnails are landscape by default; if missing/empty, use a placeholder with the episode index.
+    const landscapePath = (ep.thumbnailLandscapePath && ep.thumbnailLandscapePath.trim() !== '') ? ep.thumbnailLandscapePath : undefined
+    const imageUrl = landscapePath ? toImageUrl(landscapePath) : `https://placehold.co/640x360/png?text=Episode+%23${ep.index}`
     const style = imageUrl ? {backgroundImage: `url(${imageUrl})`} : undefined
     const isLive = String(ep.publishStatus).toLowerCase() === 'live'
 
@@ -153,7 +153,7 @@ export default function EpisodeCard({ep, showSlug, downloads}: Props) {
                     </span>
                 )}
                 {/* Show initials only if we are using the placeholder (i.e., no real thumbnail) */}
-                {!portraitPath && (
+                {!landscapePath && (
                     <span className="cover-text" aria-hidden>
             {initials}
           </span>
