@@ -1,7 +1,7 @@
 """Add background migration version storage.
 
 Revision ID: e5f1a2c7d903
-Revises: 9b1f4e7c2d6a
+Revises: e4c91a7b2d30
 """
 
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 revision = "e5f1a2c7d903"
-down_revision = "9b1f4e7c2d6a"
+down_revision = "e4c91a7b2d30"
 branch_labels = None
 depends_on = None
 

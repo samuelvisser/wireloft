@@ -11,6 +11,8 @@ from sqlalchemy.orm import sessionmaker
 
 HEAD_REVISION = "4e6c9a1b7d2f"
 PREVIOUS_DEVELOPMENT_REVISION = "e5f1a2c7d903"
+HISTORICAL_EPISODE_SCHEMA_REVISION = "e4c91a7b2d30"
+OUTPUT_TEMPLATE_SPACING_REVISION = "9b1f4e7c2d6a"
 WIRELOFT_1_0_REVISION = "c8d4e2f1a7b9"
 BASE_REVISION = "0001"
 
@@ -227,6 +229,14 @@ def test_migration_history_has_one_head(migration_database):
 
     assert script.get_heads() == [HEAD_REVISION]
     assert script.get_revision(HEAD_REVISION).down_revision == "7c2a9e5d4b10"
+    assert (
+        script.get_revision(PREVIOUS_DEVELOPMENT_REVISION).down_revision
+        == HISTORICAL_EPISODE_SCHEMA_REVISION
+    )
+    assert (
+        script.get_revision(HISTORICAL_EPISODE_SCHEMA_REVISION).down_revision
+        == OUTPUT_TEMPLATE_SPACING_REVISION
+    )
     assert script.get_revision(BASE_REVISION) is not None
 
 
@@ -261,6 +271,57 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
     assert "uq_local_media_profiles_type_output_template_preferred_format" in profile_indexes
     assert "uq_local_media_profiles_type_template_format_mode" not in profile_indexes
 
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT alembic_version_num FROM settings"
+        )).scalar_one() == HEAD_REVISION
+
+
+def test_historical_e4_production_database_upgrades_to_current_head(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import (
+        get_alembic_config,
+        get_database_status,
+        upgrade_database,
+    )
+
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        HISTORICAL_EPISODE_SCHEMA_REVISION,
+    )
+
+    inspector = inspect(engine)
+    settings_columns = {
+        column["name"] for column in inspector.get_columns("settings")
+    }
+    season_columns = {
+        column["name"] for column in inspector.get_columns("seasons")
+    }
+    episode_columns = {
+        column["name"] for column in inspector.get_columns("media_items_episode")
+    }
+
+    # This matches the production state that exposed the missing historical
+    # revision: e4 is current, its episode-indexing columns exist, and e5 has not
+    # yet introduced background_migration_version.
+    assert "background_migration_version" not in settings_columns
+    assert {"season_type", "season_number"} <= season_columns
+    assert "dw_episode_number" in episode_columns
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT alembic_version_num FROM settings"
+        )).scalar_one() == HISTORICAL_EPISODE_SCHEMA_REVISION
+
+    upgrade_database()
+
+    current, head = get_database_status()
+    assert current == (HEAD_REVISION,)
+    assert head == HEAD_REVISION
+
+    inspector = inspect(engine)
+    assert "background_migration_version" in {
+        column["name"] for column in inspector.get_columns("settings")
+    }
     with engine.connect() as connection:
         assert connection.execute(text(
             "SELECT alembic_version_num FROM settings"
