@@ -485,6 +485,8 @@ def _missing_playlist_files(playlist: Path, *, root: Path) -> list[Path]:
         return [playlist]
 
     missing: list[Path] = []
+    saw_segment = False
+    resolved_root = root.resolve()
     for raw in text.splitlines():
         line = raw.strip()
         uri: str | None = None
@@ -492,13 +494,16 @@ def _missing_playlist_files(playlist: Path, *, root: Path) -> list[Path]:
             uri = parse_attribute_list(line.split(":", 1)[1]).get("URI")
         elif line and not line.startswith("#"):
             uri = line
+            saw_segment = True
 
         if not uri:
             continue
         candidate = (playlist.parent / uri).resolve()
-        if not candidate.is_relative_to(root.resolve()) or not candidate.is_file():
+        if not candidate.is_relative_to(resolved_root) or not candidate.is_file():
             missing.append(candidate)
 
+    if not saw_segment:
+        missing.append(playlist)
     return missing
 
 

@@ -248,11 +248,25 @@ def test_dailywire_enabled_feed_keeps_undownloaded_episode_with_stable_url(
     assert "dailywire" not in xml.lower()
 
 
+@pytest.mark.parametrize(
+    ("mode", "local_kind", "stable_suffixes"),
+    [
+        ("audio_hls", "hls", ("audio.m4a", "video.m3u8")),
+        ("audio_mp4", "mp4", ("audio.m4a", "video.mp4")),
+        ("mp4", "mp4", ("video.mp4",)),
+        ("mp4_hls", "hls", ("video.mp4", "video.m3u8")),
+    ],
+)
 def test_rss_media_urls_do_not_change_when_download_appears(
         db_session,
         tmp_path,
+        mode,
+        local_kind,
+        stable_suffixes,
 ):
     from backend.api.endpoints.feeds.service import render_rss_feed
+    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader import hls_asset_marker, hls_asset_root
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
@@ -260,33 +274,81 @@ def test_rss_media_urls_do_not_change_when_download_appears(
     profile = _make_rss_profile(
         db_session,
         show,
-        mode="audio_mp4",
+        mode=mode,
         use_downloads=True,
         use_dw_stream=True,
     )
 
     before = render_rss_feed(db_session, _FakeRequest(), profile).decode()
 
-    video = _make_local_media_profile(
-        db_session,
-        slug="video",
-        preferred_format="format_1080p",
-    )
-    _make_available_download(
-        db_session,
-        episode,
-        video,
-        tmp_path / "episode.mp4",
-    )
+    if local_kind == "hls":
+        local_profile = _make_local_media_profile(
+            db_session,
+            slug=f"{mode}-hls",
+            preferred_format="format_hls",
+        )
+        master = tmp_path / f"{mode}.m3u8"
+        master.write_text(
+            "#EXTM3U\n"
+            "#EXT-X-STREAM-INF:BANDWIDTH=1,RESOLUTION=854x480\n"
+            "hls/480p/playlist.m3u8\n"
+            "#EXT-X-STREAM-INF:BANDWIDTH=2,RESOLUTION=1280x720\n"
+            "hls/720p/playlist.m3u8\n"
+            "#EXT-X-STREAM-INF:BANDWIDTH=3,RESOLUTION=1920x1080\n"
+            "hls/1080p/playlist.m3u8\n"
+        )
+        assets = hls_asset_root(master)
+        assets.mkdir()
+        hls_asset_marker(master).write_text("owned")
+        for height in (480, 720, 1080):
+            directory = assets / f"{height}p"
+            directory.mkdir()
+            (directory / "media.ts").write_bytes(b"segment")
+            (directory / "playlist.m3u8").write_text(
+                "#EXTM3U\n"
+                "#EXT-X-VERSION:4\n"
+                "#EXTINF:6.0,\n"
+                "#EXT-X-BYTERANGE:7@0\n"
+                "media.ts\n"
+                "#EXT-X-ENDLIST\n"
+            )
+        download = _make_available_download(
+            db_session,
+            episode,
+            local_profile,
+            master,
+        )
+        identity = inspect_artifact(master)
+        download.artifact_stat_dev = identity.stat_dev
+        download.artifact_stat_ino = identity.stat_ino
+        download.artifact_size_bytes = identity.size_bytes
+        download.artifact_fingerprint = identity.fingerprint
+        download.downloaded_bytes = identity.size_bytes
+        db_session.flush()
+    else:
+        local_profile = _make_local_media_profile(
+            db_session,
+            slug=f"{mode}-video",
+            preferred_format="format_1080p",
+        )
+        _make_available_download(
+            db_session,
+            episode,
+            local_profile,
+            tmp_path / f"{mode}.mp4",
+        )
 
     after = render_rss_feed(db_session, _FakeRequest(), profile).decode()
 
-    stable_audio = "https://wireloft.test/feeds/rss/token/episodes/episode-1/audio.m4a"
-    stable_video = "https://wireloft.test/feeds/rss/token/episodes/episode-1/video.mp4"
-    assert stable_audio in before and stable_audio in after
-    assert stable_video in before and stable_video in after
-    assert f"<guid isPermaLink=\"false\">{episode.uuid}</guid>" in before
-    assert f"<guid isPermaLink=\"false\">{episode.uuid}</guid>" in after
+    base = "https://wireloft.test/feeds/rss/token/episodes/episode-1/"
+    for suffix in stable_suffixes:
+        stable_url = f"{base}{suffix}"
+        assert stable_url in before
+        assert stable_url in after
+
+    guid = f"<guid isPermaLink=\"false\">{episode.uuid}</guid>"
+    assert guid in before
+    assert guid in after
 
 
 def test_max_items_keeps_newest_feed_entries(db_session):
