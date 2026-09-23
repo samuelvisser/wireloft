@@ -6,6 +6,7 @@ from pydantic import Field, model_validator, computed_field, AliasPath
 from dailywire_api.records.BaseRecord import BaseRecord
 from dailywire_api.records.DwEpisodeRecord import DwEpisodeRecord
 from dailywire_api.records.DwSeasonRecord import DwSeasonRecord
+from dailywire_api.utils.thumbnails import normalize_thumbnail_aliases
 from dailywire_api.utils.validators import ValOrNone
 
 
@@ -54,19 +55,7 @@ class DwShowRecord(BaseRecord):
 
     @model_validator(mode="after")
     def discard_duplicate_thumbnail_aliases(self):
-        """Remove show thumbnail slots that only repeat the portrait URL."""
-        portrait = self.thumbnail_portrait_path
-        if (
-            self.thumbnail_landscape_path is not None
-            and self.thumbnail_landscape_path == portrait
-        ):
-            object.__setattr__(self, "thumbnail_landscape_path", None)
-        if (
-            self.thumbnail_square_path is not None
-            and self.thumbnail_square_path == portrait
-        ):
-            object.__setattr__(self, "thumbnail_square_path", None)
-        return self
+        return normalize_thumbnail_aliases(self, default="portrait")
 
     @computed_field(return_type=ProbableShowType)
     @property

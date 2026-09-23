@@ -25,43 +25,44 @@ def _thumbnail_table(table_name: str):
     )
 
 
-def _normalize_thumbnail_aliases(bind) -> None:
-    shows = _thumbnail_table("shows")
-    bind.execute(
-        sa.update(shows)
-        .where(
-            shows.c.thumbnail_landscape_path.is_not(None),
-            shows.c.thumbnail_landscape_path == shows.c.thumbnail_portrait_path,
-        )
-        .values(thumbnail_landscape_path=None)
-    )
-    bind.execute(
-        sa.update(shows)
-        .where(
-            shows.c.thumbnail_square_path.is_not(None),
-            shows.c.thumbnail_square_path == shows.c.thumbnail_portrait_path,
-        )
-        .values(thumbnail_square_path=None)
-    )
+_THUMBNAIL_FIELDS = {
+    "landscape": "thumbnail_landscape_path",
+    "portrait": "thumbnail_portrait_path",
+    "square": "thumbnail_square_path",
+}
 
-    episodes = _thumbnail_table("media_items_episode")
-    bind.execute(
-        sa.update(episodes)
-        .where(
-            episodes.c.thumbnail_portrait_path.is_not(None),
-            episodes.c.thumbnail_portrait_path
-            == episodes.c.thumbnail_landscape_path,
+
+def _normalize_table_thumbnail_aliases(bind, table_name: str, *, default: str) -> None:
+    thumbnails = _thumbnail_table(table_name)
+    default_column = getattr(thumbnails.c, _THUMBNAIL_FIELDS[default])
+
+    for orientation, field_name in _THUMBNAIL_FIELDS.items():
+        if orientation == default:
+            continue
+
+        alternate_column = getattr(thumbnails.c, field_name)
+        bind.execute(
+            sa.update(thumbnails)
+            .where(
+                alternate_column.is_not(None),
+                alternate_column == default_column,
+            )
+            .values({field_name: None})
         )
-        .values(thumbnail_portrait_path=None)
+
+
+def _normalize_thumbnail_aliases(bind) -> None:
+    _normalize_table_thumbnail_aliases(bind, "shows", default="portrait")
+    _normalize_table_thumbnail_aliases(
+        bind,
+        "media_items_episode",
+        default="landscape",
     )
-    bind.execute(
-        sa.update(episodes)
-        .where(
-            episodes.c.thumbnail_square_path.is_not(None),
-            episodes.c.thumbnail_square_path
-            == episodes.c.thumbnail_landscape_path,
-        )
-        .values(thumbnail_square_path=None)
+    _normalize_table_thumbnail_aliases(bind, "media_items_movie", default="portrait")
+    _normalize_table_thumbnail_aliases(
+        bind,
+        "movie_extra_sources",
+        default="landscape",
     )
 
 

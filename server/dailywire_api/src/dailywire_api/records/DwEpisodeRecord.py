@@ -8,6 +8,7 @@ from pydantic import (
 
 from dailywire_api.records.BaseRecord import BaseRecord
 from dailywire_api.types.user_info import DwMembershipLevel
+from dailywire_api.utils.thumbnails import normalize_thumbnail_aliases
 from dailywire_api.utils.validators import ValOrNone, ValOrZero, ValOrEmpty, AvailableForList
 
 
@@ -50,19 +51,7 @@ class DwEpisodeRecord(BaseRecord):
 
     @model_validator(mode="after")
     def discard_duplicate_thumbnail_aliases(self):
-        """Remove episode thumbnail slots that only repeat the landscape URL."""
-        landscape = self.thumbnail_landscape_path
-        if (
-            self.thumbnail_portrait_path is not None
-            and self.thumbnail_portrait_path == landscape
-        ):
-            object.__setattr__(self, "thumbnail_portrait_path", None)
-        if (
-            self.thumbnail_square_path is not None
-            and self.thumbnail_square_path == landscape
-        ):
-            object.__setattr__(self, "thumbnail_square_path", None)
-        return self
+        return normalize_thumbnail_aliases(self, default="landscape")
 
     @property
     def ep_number(self) -> Optional[int]:

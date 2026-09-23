@@ -13,6 +13,8 @@ from pydantic import (
     model_validator,
 )
 
+from dailywire_api.utils.thumbnails import normalize_thumbnail_aliases
+
 from .BaseRecord import BaseRecord
 
 
@@ -76,19 +78,7 @@ class DwCatalogShowRecord(_CatalogTitleRecord):
 
     @model_validator(mode="after")
     def discard_duplicate_thumbnail_aliases(self):
-        """Remove show thumbnail slots that only repeat the portrait URL."""
-        portrait = self.thumbnail_portrait_path
-        if (
-            self.thumbnail_landscape_path is not None
-            and self.thumbnail_landscape_path == portrait
-        ):
-            object.__setattr__(self, "thumbnail_landscape_path", None)
-        if (
-            self.thumbnail_square_path is not None
-            and self.thumbnail_square_path == portrait
-        ):
-            object.__setattr__(self, "thumbnail_square_path", None)
-        return self
+        return normalize_thumbnail_aliases(self, default="portrait")
 
 
 MovieExtraTypeValue = Literal[
@@ -193,6 +183,10 @@ class DwMovieExtraRecord(BaseRecord):
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
 
+    @model_validator(mode="after")
+    def discard_duplicate_thumbnail_aliases(self):
+        return normalize_thumbnail_aliases(self, default="landscape")
+
     # The dedicated trailer object enriches the matching extra with fresh
     # playback data. Retain it in the API record, but never persist signed tokens.
     continue_watching_entity_id: Optional[str] = None
@@ -271,6 +265,10 @@ class DwCatalogMovieRecord(_CatalogTitleRecord):
         ),
         default=None,
     )
+
+    @model_validator(mode="after")
+    def discard_duplicate_thumbnail_aliases(self):
+        return normalize_thumbnail_aliases(self, default="portrait")
 
 
 class DwMovieRecord(DwCatalogMovieRecord):

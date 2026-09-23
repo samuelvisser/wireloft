@@ -135,3 +135,87 @@ def test_episode_record_preserves_distinct_portrait_and_square_urls():
     assert record.thumbnail_landscape_path == "image.jpg"
     assert record.thumbnail_portrait_path == "image.jpg?auto=compress"
     assert record.thumbnail_square_path == "square.jpg"
+
+
+def test_catalog_movie_uses_portrait_as_default_thumbnail():
+    from dailywire_api.records import DwCatalogMovieRecord
+
+    record = DwCatalogMovieRecord(
+        dw_id="movie-1",
+        slug="example-movie",
+        title="Example Movie",
+        thumbnail_landscape_path="portrait.jpg",
+        thumbnail_portrait_path="portrait.jpg",
+        thumbnail_square_path="portrait.jpg",
+    )
+
+    assert record.thumbnail_portrait_path == "portrait.jpg"
+    assert record.thumbnail_landscape_path is None
+    assert record.thumbnail_square_path is None
+
+def test_movie_record_keeps_portrait_and_discards_duplicate_alternates():
+    from dailywire_api.records import DwMovieRecord
+
+    record = DwMovieRecord(
+        dw_id="movie-1",
+        slug="example-movie",
+        title="Example Movie",
+        sharing_url="https://www.dailywire.com/videos/example-movie",
+        thumbnail_landscape_path="portrait.jpg",
+        thumbnail_portrait_path="portrait.jpg",
+        thumbnail_square_path="portrait.jpg",
+    )
+
+    assert record.thumbnail_portrait_path == "portrait.jpg"
+    assert record.thumbnail_landscape_path is None
+    assert record.thumbnail_square_path is None
+
+
+def test_movie_record_preserves_distinct_alternate_thumbnails():
+    from dailywire_api.records import DwMovieRecord
+
+    record = DwMovieRecord(
+        dw_id="movie-1",
+        slug="example-movie",
+        title="Example Movie",
+        sharing_url="https://www.dailywire.com/videos/example-movie",
+        thumbnail_landscape_path="landscape.jpg",
+        thumbnail_portrait_path="portrait.jpg",
+        thumbnail_square_path="square.jpg",
+    )
+
+    assert record.thumbnail_portrait_path == "portrait.jpg"
+    assert record.thumbnail_landscape_path == "landscape.jpg"
+    assert record.thumbnail_square_path == "square.jpg"
+
+
+def test_movie_extra_keeps_landscape_and_discards_duplicate_alternates():
+    from dailywire_api.records import DwMovieExtraRecord
+
+    record = DwMovieExtraRecord(
+        slug="example-extra",
+        title="Example Extra",
+        thumbnail_landscape_path="landscape.jpg",
+        thumbnail_portrait_path="landscape.jpg",
+        thumbnail_square_path="landscape.jpg",
+    )
+
+    assert record.thumbnail_landscape_path == "landscape.jpg"
+    assert record.thumbnail_portrait_path is None
+    assert record.thumbnail_square_path is None
+
+
+def test_movie_extra_preserves_distinct_alternate_thumbnails():
+    from dailywire_api.records import DwMovieExtraRecord
+
+    record = DwMovieExtraRecord(
+        slug="example-extra",
+        title="Example Extra",
+        thumbnail_landscape_path="landscape.jpg",
+        thumbnail_portrait_path="portrait.jpg",
+        thumbnail_square_path="square.jpg",
+    )
+
+    assert record.thumbnail_landscape_path == "landscape.jpg"
+    assert record.thumbnail_portrait_path == "portrait.jpg"
+    assert record.thumbnail_square_path == "square.jpg"
