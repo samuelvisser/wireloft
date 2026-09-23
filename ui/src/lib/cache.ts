@@ -128,6 +128,8 @@ function compactEpisodes(data: EpisodeReadView[]): EpisodeReadView[] {
     title: episode.title,
     publishStatus: episode.publishStatus,
     thumbnailLandscapePath: episode.thumbnailLandscapePath ?? null,
+    thumbnailPortraitPath: episode.thumbnailPortraitPath ?? null,
+    thumbnailSquarePath: episode.thumbnailSquarePath ?? null,
   }))
 }
 

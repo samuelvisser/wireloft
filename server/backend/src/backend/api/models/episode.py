@@ -121,3 +121,5 @@ class EpisodeAPIReadView(_EpisodeIdentifierAPIOut):
     title: str
     slug: str
     thumbnail_landscape_path: Optional[str]
+    thumbnail_portrait_path: Optional[str]
+    thumbnail_square_path: Optional[str]
