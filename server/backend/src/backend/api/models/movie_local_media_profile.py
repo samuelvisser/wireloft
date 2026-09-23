@@ -29,8 +29,8 @@ class _MovieLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
     @field_validator("preferred_format")
     @classmethod
     def _require_video_format(cls, value: PreferredFormat) -> PreferredFormat:
-        if value == PreferredFormat.FORMAT_AUDIO_ONLY:
-            raise ValueError("Movie Local Media Profiles require a video format")
+        if value in {PreferredFormat.FORMAT_AUDIO_ONLY, PreferredFormat.FORMAT_HLS}:
+            raise ValueError("Movie Local Media Profiles require a normal video format")
         return value
 
     @field_validator("output_template")

@@ -8,10 +8,27 @@ class StreamProfileType(Enum):
     BASE = "base"
 
 
-class RssDwVideoMethod(str, Enum):
-    STREAM_HLS_DOWNLOAD_M4A = "stream_hls_download_m4a"
-    STREAM_DOWNLOAD_MP4 = "stream_download_mp4"
-    STREAM_HLS_DOWNLOAD_MP4 = "stream_hls_download_mp4"
+class RssVideoOutputMode(str, Enum):
+    AUDIO_HLS = "audio_hls"
+    AUDIO_MP4 = "audio_mp4"
+    MP4 = "mp4"
+    MP4_HLS = "mp4_hls"
 
 
-DEFAULT_RSS_DW_VIDEO_METHOD = RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value
+DEFAULT_RSS_VIDEO_OUTPUT_MODE = RssVideoOutputMode.AUDIO_HLS.value
+
+RSS_HLS_OUTPUT_MODES = frozenset({
+    RssVideoOutputMode.AUDIO_HLS.value,
+    RssVideoOutputMode.MP4_HLS.value,
+})
+
+RSS_MP4_OUTPUT_MODES = frozenset({
+    RssVideoOutputMode.AUDIO_MP4.value,
+    RssVideoOutputMode.MP4.value,
+    RssVideoOutputMode.MP4_HLS.value,
+})
+
+RSS_AUDIO_PRIMARY_OUTPUT_MODES = frozenset({
+    RssVideoOutputMode.AUDIO_HLS.value,
+    RssVideoOutputMode.AUDIO_MP4.value,
+})

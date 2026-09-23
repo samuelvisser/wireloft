@@ -401,7 +401,12 @@ def get_output_template_preview(
         allowed_fields=allowed_fields,
         allowed_metadata_scopes=allowed_metadata_scopes,
     )
-    extension = "m4a" if body.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY else "mp4"
+    if body.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY:
+        extension = "m4a"
+    elif body.preferred_format == PreferredFormat.FORMAT_HLS:
+        extension = "m3u8"
+    else:
+        extension = "mp4"
     return LocalMediaProfileTemplatePreviewResult(
         output_path=replace_output_extension(output_path, extension),
         used_variables=sorted(output_template_fields(body.output_template)),

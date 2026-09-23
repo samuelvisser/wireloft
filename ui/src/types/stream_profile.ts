@@ -5,17 +5,24 @@ export const MediaTypeReg = createSelectRegistry("PreferredFormat", {
   'format_audio_only': {label: "Audio Only", help: "Stream audio only"},
 });
 
-export const RssDwVideoMethodReg = createSelectRegistry("RssDwVideoMethod", {
-  'stream_hls_download_m4a': {
-    label: "Podcasting 2.0 direct stream with audio fallback (recommended)",
-    help: "Stream Daily Wire video directly through Podcasting 2.0",
+export const RssVideoOutputModeReg = createSelectRegistry("RssVideoOutputMode", {
+  'audio_hls': {
+    label: "Audio with HLS video",
+    help: "Normal M4A podcast enclosure with an adaptive HLS video alternate enclosure",
   },
-  'stream_download_mp4': {
-    label: "Serve as locally cached mp4 (full compatibility)",
-    help: "Prepare and serve a conventional MP4 video file",
+  'audio_mp4': {
+    label: "Audio with MP4 video",
+    help: "Normal M4A podcast enclosure with an MP4 video alternate enclosure",
   },
-  'stream_hls_download_mp4': {
-    label: "Direct stream with cached mp4 fallback",
-    help: "Stream immediately with Podcasting 2.0 and use cached MP4 for downloads and fallback",
+  'mp4': {
+    label: "MP4 video only",
+    help: "Normal MP4 enclosure without a Podcasting 2.0 alternate enclosure",
+  },
+  'mp4_hls': {
+    label: "MP4 video with HLS alternate",
+    help: "Normal MP4 enclosure plus an adaptive HLS alternate enclosure",
   },
 });
+
+export const RssHlsOutputModes = new Set(['audio_hls', 'mp4_hls'])
+export const RssMp4OutputModes = new Set(['audio_mp4', 'mp4', 'mp4_hls'])

@@ -16,6 +16,12 @@ from .errors import (
     MediaUnavailableError,
 )
 from .ffmpeg import embed_thumbnail, ffmpeg_available, remux_to_mp4
+from .hls_bundle import (
+    download_hls_bundle,
+    hls_asset_marker,
+    hls_asset_root,
+    missing_hls_bundle_files,
+)
 from .models import (
     DownloadProgress,
     DownloadResult,
@@ -30,6 +36,10 @@ __all__ = [
     "probe",
     "download_hls",
     "download_file",
+    "download_hls_bundle",
+    "hls_asset_root",
+    "hls_asset_marker",
+    "missing_hls_bundle_files",
     "remux_to_mp4",
     "embed_thumbnail",
     "ffmpeg_available",

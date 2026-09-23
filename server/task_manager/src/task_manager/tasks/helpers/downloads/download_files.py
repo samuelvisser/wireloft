@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 from typing import Optional
+
+from dailywire_downloader import hls_asset_marker, hls_asset_root
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +44,29 @@ def remove_download_artifacts(
                     # An in-flight writer can briefly keep a file open on some hosts.
                     # The worker calls this helper again after observing cancellation.
                     logger.warning("Could not remove cancelled download artifact '%s'", path, exc_info=True)
+
+            if base_path.suffix.lower() == ".m3u8":
+                asset_root = hls_asset_root(base_path)
+                directories = (
+                    (asset_root, hls_asset_marker(base_path)),
+                    (
+                        Path(f"{asset_root}.part"),
+                        Path(f"{asset_root}.part") / ".wireloft-hls-bundle",
+                    ),
+                )
+                for directory, marker in directories:
+                    if not marker.is_file():
+                        continue
+                    try:
+                        shutil.rmtree(directory)
+                    except FileNotFoundError:
+                        pass
+                    except OSError:
+                        logger.warning(
+                            "Could not remove HLS download assets '%s'",
+                            directory,
+                            exc_info=True,
+                        )
 
     if thumbnail_path:
         for path in (Path(thumbnail_path), Path(thumbnail_path + ".part")):

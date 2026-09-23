@@ -8,18 +8,18 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 
-PREVIOUS_REVISION = "a9c4e2f7b106"
-HEAD_REVISION = "a9c4e7b2d610"
+PREVIOUS_REVISION = "b6f3c8a1d2e4"
+HEAD_REVISION = "c1a7e4d9b203"
 
 
-def test_rss_video_method_migration_canonicalizes_existing_values(
+def test_rss_output_mode_migration_rewrites_methods_and_stabilizes_feed_urls(
     tmp_path: Path,
     monkeypatch,
 ):
     from backend.db import core
     from backend.db.migrations import get_alembic_config
 
-    database_path = tmp_path / "rss-video-method-migration.db"
+    database_path = tmp_path / "rss-output-mode-migration.db"
     engine = create_engine(
         f"sqlite:///{database_path.as_posix()}",
         connect_args={"check_same_thread": False},
@@ -33,10 +33,13 @@ def test_rss_video_method_migration_canonicalizes_existing_values(
     config = get_alembic_config(allow_version_storage_migration=True)
     command.upgrade(config, PREVIOUS_REVISION)
 
-    method_cases = [
-        ("podcasting_2_0", "stream_hls_download_m4a"),
-        ("cached_mp4", "stream_download_mp4"),
-        ("podcasting_2_0_cached_mp4", "stream_hls_download_mp4"),
+    cases = [
+        ("stream_hls_download_m4a", "audio_hls"),
+        ("stream_download_mp4", "mp4"),
+        ("stream_hls_download_mp4", "mp4_hls"),
+        # All former experiment-only values intentionally collapse back to the
+        # supported default instead of becoming permanent runtime aliases.
+        ("experiment_hls_local_mp4_or_dw", "audio_hls"),
     ]
 
     try:
@@ -50,48 +53,46 @@ def test_rss_video_method_migration_canonicalizes_existing_values(
                 "'podcast', 'numbered', 'Host', 'host')"
             )).lastrowid
 
-            for index, (legacy_method, _canonical_method) in enumerate(method_cases):
+            for index, (old_method, _new_mode) in enumerate(cases):
                 profile_id = connection.execute(text(
                     "INSERT INTO stream_profiles "
                     "(type, show_id, enable_profile, token, use_downloads, "
-                    "use_dw_stream, preferred_format, require_exact_match) VALUES "
-                    "('rss', :show_id, 1, :token, 0, 1, 'format_1080p', 0)"
+                    "use_dw_stream, preferred_format, require_exact_match, ep_id_type_list) VALUES "
+                    "('rss', :show_id, 1, :token, 1, 1, 'format_1080p', 0, '[]')"
                 ), {
                     "show_id": show_id,
-                    "token": f"legacy-{index}",
+                    "token": f"profile-{index}",
                 }).lastrowid
                 connection.execute(text(
                     "INSERT INTO stream_profiles_rss "
-                    "(id, feed_url, dw_video_method, max_items) VALUES "
-                    "(:id, :feed_url, :method, 0)"
+                    "(id, feed_url, dw_video_method, max_items, "
+                    "stream_live_episodes, live_episode_handoff_ids) VALUES "
+                    "(:id, :feed_url, :method, 0, 0, '[]')"
                 ), {
                     "id": profile_id,
                     "feed_url": (
                         f"https://wireloft.test/feed-{index}.xml?"
-                        f"custom=value&dwVideoMethod={legacy_method}#fragment"
+                        f"custom=value&dwVideoMethod={old_method}#fragment"
                     ),
-                    "method": legacy_method,
+                    "method": old_method,
                 })
 
         command.upgrade(config, HEAD_REVISION)
 
         with engine.connect() as connection:
-            profiles = connection.execute(text(
-                "SELECT base.token, rss.dw_video_method, rss.feed_url "
+            rows = connection.execute(text(
+                "SELECT base.token, rss.video_output_mode, rss.feed_url "
                 "FROM stream_profiles_rss AS rss "
                 "JOIN stream_profiles AS base ON base.id = rss.id "
                 "ORDER BY base.token"
             )).mappings().all()
 
-        profiles_by_token = {profile["token"]: profile for profile in profiles}
-        for index, (_legacy_method, canonical_method) in enumerate(method_cases):
-            profile = profiles_by_token[f"legacy-{index}"]
-            assert profile["dw_video_method"] == canonical_method
-            parts = urlsplit(profile["feed_url"])
-            assert parse_qs(parts.query) == {
-                "custom": ["value"],
-                "dwVideoMethod": [canonical_method],
-            }
+        by_token = {row["token"]: row for row in rows}
+        for index, (_old_method, new_mode) in enumerate(cases):
+            row = by_token[f"profile-{index}"]
+            assert row["video_output_mode"] == new_mode
+            parts = urlsplit(row["feed_url"])
+            assert parse_qs(parts.query) == {"custom": ["value"]}
             assert parts.fragment == "fragment"
     finally:
         engine.dispose()

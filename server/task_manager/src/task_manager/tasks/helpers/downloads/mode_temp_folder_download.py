@@ -17,6 +17,7 @@ from pathlib import Path
 
 from backend.db import get_session
 from backend.utils.artifact_identity import ArtifactIdentity, inspect_artifact
+from dailywire_downloader import hls_asset_marker, hls_asset_root
 
 from .helpers import (
     _numbered_candidate,
@@ -706,6 +707,11 @@ def cleanup_abandoned_temporary_downloads(
                         ):
                             try:
                                 candidate.unlink()
+                                if (
+                                    candidate.suffix.lower() == ".m3u8"
+                                    and hls_asset_marker(candidate).is_file()
+                                ):
+                                    shutil.rmtree(hls_asset_root(candidate))
                             except FileNotFoundError:
                                 pass
                             except OSError:

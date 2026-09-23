@@ -14,6 +14,7 @@ from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.artifact_identity import ArtifactIdentity, inspect_artifact
 from config import get_settings
+from dailywire_downloader import hls_asset_marker, hls_asset_root, missing_hls_bundle_files
 
 from ._helpers import get_tracked_downloads
 
@@ -255,7 +256,32 @@ def _size_problem(
     if size == 0:
         return MediaDownloadArtifactStatus.CORRUPTED, f"File at '{path}' is empty"
 
-    if verify_file_size and download.downloaded_bytes and size < download.downloaded_bytes * _MIN_SIZE_RATIO:
+    is_hls_master = Path(path).suffix.lower() == ".m3u8"
+    is_hls_bundle = (
+        is_hls_master
+        and hls_asset_root(path).is_dir()
+        and hls_asset_marker(path).is_file()
+    )
+    if is_hls_master:
+        if not is_hls_bundle:
+            return (
+                MediaDownloadArtifactStatus.CORRUPTED,
+                f"Local HLS bundle for '{path}' is missing its WireLoft asset directory",
+            )
+        missing_files = missing_hls_bundle_files(path)
+        if missing_files:
+            return (
+                MediaDownloadArtifactStatus.CORRUPTED,
+                "Local HLS bundle is incomplete; missing "
+                + ", ".join(str(item) for item in missing_files),
+            )
+
+    if (
+        verify_file_size
+        and not is_hls_bundle
+        and download.downloaded_bytes
+        and size < download.downloaded_bytes * _MIN_SIZE_RATIO
+    ):
         return MediaDownloadArtifactStatus.CORRUPTED, (
             f"File at '{path}' is only {size} bytes, well under the "
             f"{download.downloaded_bytes} recorded when it finished downloading"

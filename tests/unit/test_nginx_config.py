@@ -22,3 +22,18 @@ def test_public_feed_location_is_not_left_to_spa_fallback():
     config = NGINX_CONFIG.read_text()
 
     assert config.index("location /feeds/ {") < config.index("location / {")
+
+
+
+def test_proxy_preserves_outer_forwarded_https_scheme():
+    config = NGINX_CONFIG.read_text()
+
+    assert "map $http_x_forwarded_proto $wireloft_forwarded_proto {" in config
+    assert '"" $scheme;' in config
+
+    for path in ("/api/", "/feeds/"):
+        block = _location_block(config, path)
+        assert (
+            "proxy_set_header X-Forwarded-Proto "
+            "$wireloft_forwarded_proto;"
+        ) in block

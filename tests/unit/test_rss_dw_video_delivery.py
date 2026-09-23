@@ -1,329 +1,303 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from xml.etree.ElementTree import Element
 
 import pytest
 
 
-PODCASTING_2_0 = "stream_hls_download_m4a"
-CACHED_MP4 = "stream_download_mp4"
-HYBRID = "stream_hls_download_mp4"
+MASTER_URL = "https://media.example/master.m3u8"
 
 
-def _episode(*, slug: str = "episode-1", uuid: str = "episode-uuid"):
-    return SimpleNamespace(
-        title="Episode 1",
-        uuid=uuid,
-        slug=slug,
-        description="Ben & Jeremy",
-        published_date=datetime(2026, 9, 1, tzinfo=timezone.utc),
-        went_live_date=None,
-        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
-        duration=1800.0,
-        thumbnail_landscape_path=None,
-        thumbnail_square_path=None,
-        thumbnail_portrait_path=None,
-    )
+def _master() -> str:
+    return """#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=854x480
+480.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=1800000,RESOLUTION=1280x720
+720.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=3500000,RESOLUTION=1920x1080
+1080.m3u8
+"""
 
 
-def _children(parent: Element, tag: str) -> list[Element]:
-    return [child for child in parent if child.tag == tag]
+def _media(height: int) -> str:
+    return f"""#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:6
+#EXTINF:6.0,
+{height}-000.ts
+#EXTINF:6.0,
+{height}-001.ts
+#EXT-X-ENDLIST
+"""
 
 
-def test_podcasting_2_0_uses_direct_hls_with_audio_fallback():
-    from backend.api.endpoints.feeds.service import _append_item
+class _Response:
+    def __init__(self, payload: bytes):
+        self.payload = payload
 
-    channel = Element("channel")
-    signed_url = "https://stream.example/video.m3u8?token=abc&expires=123"
-    _append_item(
-        channel,
-        media_base_url="https://wireloft.example/feeds/rss/token",
-        episode=_episode(),
-        download=None,
-        preferred_format="format_1080p",
-        dw_video_method=PODCASTING_2_0,
-        dw_video_url=signed_url,
-    )
+    def __enter__(self):
+        return self
 
-    item = channel.find("item")
-    assert item is not None
-    enclosure = item.find("enclosure")
-    assert enclosure is not None
-    assert enclosure.attrib == {
-        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1/audio",
-        "length": "0",
-        "type": "audio/mpeg",
+    def __exit__(self, *_args):
+        return False
+
+    def iter_chunks(self, _size):
+        yield self.payload
+
+
+def test_hls_download_stores_480_720_and_1080_without_transcoding(
+        tmp_path,
+        monkeypatch,
+):
+    import dailywire_downloader.hls_bundle as hls_bundle
+
+    playlists = {
+        MASTER_URL: _master(),
+        "https://media.example/480.m3u8": _media(480),
+        "https://media.example/720.m3u8": _media(720),
+        "https://media.example/1080.m3u8": _media(1080),
     }
 
-    alternates = _children(item, "podcast:alternateEnclosure")
-    assert len(alternates) == 1
-    assert alternates[0].attrib["type"] == "application/x-mpegURL"
-    assert alternates[0].attrib["height"] == "1080"
-    sources = _children(alternates[0], "podcast:source")
-    assert len(sources) == 1
-    assert sources[0].attrib["uri"] == signed_url
-
-
-def test_cached_mp4_uses_video_enclosure_without_audio(monkeypatch):
-    import backend.api.endpoints.feeds.service as feed_service
-
-    monkeypatch.setattr(feed_service, "get_cached_mp4_size", lambda _uuid: 123456)
-
-    channel = Element("channel")
-    feed_service._append_item(
-        channel,
-        media_base_url="https://wireloft.example/feeds/rss/token",
-        episode=_episode(),
-        download=None,
-        preferred_format="format_1080p",
-        dw_video_method=CACHED_MP4,
-    )
-
-    item = channel.find("item")
-    assert item is not None
-    enclosure = item.find("enclosure")
-    assert enclosure is not None
-    assert enclosure.attrib == {
-        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1/video.mp4",
-        "length": "123456",
-        "type": "video/mp4",
-    }
-    assert not _children(item, "podcast:alternateEnclosure")
-
-
-def test_hybrid_uses_direct_hls_with_cached_mp4_fallback(monkeypatch):
-    import backend.api.endpoints.feeds.service as feed_service
-
-    monkeypatch.setattr(feed_service, "get_cached_mp4_size", lambda _uuid: 123456)
-    signed_url = "https://stream.example/video.m3u8?token=abc&expires=123"
-
-    channel = Element("channel")
-    feed_service._append_item(
-        channel,
-        media_base_url="https://wireloft.example/feeds/rss/token",
-        episode=_episode(),
-        download=None,
-        preferred_format="format_1080p",
-        dw_video_method=HYBRID,
-        dw_video_url=signed_url,
-    )
-
-    item = channel.find("item")
-    assert item is not None
-    enclosure = item.find("enclosure")
-    assert enclosure is not None
-    assert enclosure.attrib == {
-        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1/video.mp4",
-        "length": "123456",
-        "type": "video/mp4",
-    }
-
-    alternates = _children(item, "podcast:alternateEnclosure")
-    assert len(alternates) == 1
-    sources = _children(alternates[0], "podcast:source")
-    assert len(sources) == 1
-    assert sources[0].attrib["uri"] == signed_url
-
-
-@pytest.mark.parametrize("method", [PODCASTING_2_0, CACHED_MP4, HYBRID])
-def test_local_download_keeps_download_only_feed_behavior(tmp_path, monkeypatch, method):
-    import backend.api.endpoints.feeds.service as feed_service
-
-    file_path = tmp_path / "episode.mp4"
-    file_path.write_bytes(b"video-data")
-    download = SimpleNamespace(
-        file_path=str(file_path),
-        downloaded_bytes=0,
-        local_media_profile=SimpleNamespace(preferred_format="format_1080p"),
+    monkeypatch.setattr(
+        hls_bundle,
+        "http_get_text",
+        lambda url: playlists[url],
     )
     monkeypatch.setattr(
-        feed_service,
-        "get_cached_mp4_size",
-        lambda _uuid: pytest.fail("cache must not be consulted for local downloads"),
+        hls_bundle,
+        "http_get",
+        lambda url: _Response(f"bytes:{url}".encode()),
     )
 
-    channel = Element("channel")
-    feed_service._append_item(
-        channel,
-        media_base_url="https://wireloft.example/feeds/rss/token",
-        episode=_episode(),
-        download=download,
-        preferred_format="format_1080p",
-        dw_video_method=method,
-    )
+    target = tmp_path / "episode.m3u8"
+    result = hls_bundle.download_hls_bundle(MASTER_URL, str(target))
 
-    item = channel.find("item")
-    assert item is not None
-    enclosure = item.find("enclosure")
-    assert enclosure is not None
-    assert enclosure.attrib == {
-        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1",
-        "length": str(file_path.stat().st_size),
-        "type": "video/mp4",
-    }
-    assert item.find("guid").text == "episode-uuid"
-    assert not _children(item, "podcast:alternateEnclosure")
+    assert result.path == str(target)
+    assert result.segments_downloaded == 6
 
+    master = target.read_text()
+    assert "hls/480p/playlist.m3u8" in master
+    assert "hls/720p/playlist.m3u8" in master
+    assert "hls/1080p/playlist.m3u8" in master
 
-def test_remote_video_guid_changes_with_delivery_method():
-    from backend.api.endpoints.feeds.service import _append_item
-
-    values = []
-    for method in (PODCASTING_2_0, CACHED_MP4, HYBRID):
-        channel = Element("channel")
-        _append_item(
-            channel,
-            media_base_url="https://wireloft.example/feeds/rss/token",
-            episode=_episode(),
-            download=None,
-            preferred_format="format_1080p",
-            dw_video_method=method,
-            dw_video_url="https://stream.example/video.m3u8",
+    assets = hls_bundle.hls_asset_root(target)
+    assert hls_bundle.hls_asset_marker(target).is_file()
+    for height in (480, 720, 1080):
+        rendition_dir = assets / f"{height}p"
+        playlist = (rendition_dir / "playlist.m3u8").read_text()
+        assert playlist.count("#EXT-X-BYTERANGE:") == 2
+        assert playlist.count("media.ts") == 2
+        media_file = rendition_dir / "media.ts"
+        assert media_file.is_file()
+        assert media_file.read_bytes() == (
+            f"bytes:https://media.example/{height}-000.ts".encode()
+            + f"bytes:https://media.example/{height}-001.ts".encode()
         )
-        values.append(channel.find("item/guid").text)
-
-    assert values == [
-        "episode-uuid:stream_hls_download_m4a",
-        "episode-uuid:stream_download_mp4",
-        "episode-uuid:stream_hls_download_mp4",
-    ]
+        assert not list(rendition_dir.glob("segment-*"))
 
 
-def test_feed_url_method_is_added_replaced_and_removed():
-    from backend.utils.feed_urls import set_rss_feed_video_method
+def test_hls_download_requires_all_three_adaptive_renditions(tmp_path, monkeypatch):
+    import dailywire_downloader.hls_bundle as hls_bundle
+    from dailywire_downloader import MediaUnavailableError
 
-    original = "https://wireloft.example/feed.xml?custom=value"
-    direct = set_rss_feed_video_method(
-        original,
-        use_dw_stream=True,
-        dw_video_method=PODCASTING_2_0,
-    )
-    cached = set_rss_feed_video_method(
-        direct,
-        use_dw_stream=True,
-        dw_video_method=CACHED_MP4,
-    )
-    hybrid = set_rss_feed_video_method(
-        cached,
-        use_dw_stream=True,
-        dw_video_method=HYBRID,
-    )
-    disabled = set_rss_feed_video_method(
-        hybrid,
-        use_dw_stream=False,
-        dw_video_method=HYBRID,
-    )
+    master_without_480 = """#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1800000,RESOLUTION=1280x720
+720.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=3500000,RESOLUTION=1920x1080
+1080.m3u8
+"""
+    monkeypatch.setattr(hls_bundle, "http_get_text", lambda _url: master_without_480)
 
-    assert direct == (
-        "https://wireloft.example/feed.xml?custom=value&"
-        "dwVideoMethod=stream_hls_download_m4a"
-    )
-    assert cached == (
-        "https://wireloft.example/feed.xml?custom=value&"
-        "dwVideoMethod=stream_download_mp4"
-    )
-    assert hybrid == (
-        "https://wireloft.example/feed.xml?custom=value&"
-        "dwVideoMethod=stream_hls_download_mp4"
-    )
-    assert disabled == original
+    with pytest.raises(MediaUnavailableError, match="480p, 720p and 1080p"):
+        hls_bundle.download_hls_bundle(
+            MASTER_URL,
+            str(tmp_path / "episode.m3u8"),
+        )
 
 
-def test_build_feed_url_includes_selected_method():
-    from backend.utils.feed_urls import build_rss_feed_url
+def test_hls_download_rejects_live_playlist(tmp_path, monkeypatch):
+    import dailywire_downloader.hls_bundle as hls_bundle
+    from dailywire_downloader import DownloadError
 
-    request = SimpleNamespace(base_url="https://wireloft.example/")
-    assert build_rss_feed_url(
-        request,
-        token="token",
-        show_slug="test-show",
-        use_dw_stream=True,
-        dw_video_method=HYBRID,
-    ) == (
-        "https://wireloft.example/feeds/rss/token/test-show.xml?"
-        "dwVideoMethod=stream_hls_download_mp4"
-    )
-
-
-def test_cached_mp4_is_prepared_once_and_reused(tmp_path, monkeypatch):
-    import backend.api.endpoints.feeds.cached_video as cached_video
-
-    target = tmp_path / "cached.mp4"
-    monkeypatch.setattr(cached_video, "_cache_path", lambda _uuid: target)
-    commands: list[list[str]] = []
-
-    def fake_run(command, **_kwargs):
-        commands.append(command)
-        Path(command[-1]).write_bytes(b"prepared-mp4")
-        return SimpleNamespace(returncode=0, stderr="")
-
-    monkeypatch.setattr(cached_video.subprocess, "run", fake_run)
-
-    first = cached_video.prepare_cached_mp4(
-        "https://stream.example/video.m3u8",
-        episode_uuid="episode-uuid",
-    )
-    second = cached_video.prepare_cached_mp4(
-        "https://stream.example/new-signed-url.m3u8",
-        episode_uuid="episode-uuid",
-    )
-
-    assert first == target
-    assert second == target
-    assert target.read_bytes() == b"prepared-mp4"
-    assert len(commands) == 1
-    assert commands[0][commands[0].index("-c") + 1] == "copy"
-    assert "+faststart" in commands[0]
-
-
-def test_feed_and_media_head_responses_have_matching_headers():
-    from backend.api.endpoints.feeds.router import (
-        _cached_mp4_head_response,
-        _rss_response,
-        _temporary_stream_redirect,
-    )
-
-    xml = b"<?xml version='1.0'?><rss />"
-    feed = _rss_response(xml, head_only=True)
-    assert feed.status_code == 200
-    assert feed.body == b""
-    assert feed.headers["content-length"] == str(len(xml))
-    assert feed.headers["cache-control"] == "no-store, no-cache, must-revalidate"
-
-    redirect = _temporary_stream_redirect(
-        "https://stream.example/audio.mp3?token=fresh",
-        head_only=True,
-    )
-    assert redirect.status_code == 302
-    assert redirect.body == b""
-    assert redirect.headers["location"].startswith("https://stream.example/")
-    assert redirect.headers["cache-control"] == "no-store, no-cache, must-revalidate"
-
-    uncached = _cached_mp4_head_response(None, filename="episode.mp4")
-    assert uncached.status_code == 200
-    assert uncached.body == b""
-    assert "content-length" not in uncached.headers
-    assert uncached.headers["accept-ranges"] == "bytes"
-
-    cached_file = SimpleNamespace(stat=lambda: SimpleNamespace(st_size=321))
-    cached = _cached_mp4_head_response(cached_file, filename="episode.mp4")
-    assert cached.headers["content-length"] == "321"
-
-
-def test_feed_routes_support_get_and_head():
-    from backend.api.endpoints.feeds.router import router
-
-    expected_paths = {
-        "/feeds/rss/{token}/{show_slug}.xml",
-        "/feeds/rss/{token}/episodes/{episode_slug}",
-        "/feeds/rss/{token}/episodes/{episode_slug}/audio",
-        "/feeds/rss/{token}/episodes/{episode_slug}/video.mp4",
+    playlists = {
+        MASTER_URL: _master(),
+        "https://media.example/480.m3u8": _media(480).replace("#EXT-X-ENDLIST\n", ""),
+        "https://media.example/720.m3u8": _media(720),
+        "https://media.example/1080.m3u8": _media(1080),
     }
-    routes = {route.path: route for route in router.routes if route.path in expected_paths}
+    monkeypatch.setattr(hls_bundle, "http_get_text", lambda url: playlists[url])
 
-    assert set(routes) == expected_paths
-    for route in routes.values():
-        assert {"GET", "HEAD"}.issubset(route.methods)
+    with pytest.raises(DownloadError, match="live/incomplete"):
+        hls_bundle.download_hls_bundle(
+            MASTER_URL,
+            str(tmp_path / "episode.m3u8"),
+        )
+
+
+def test_hls_cleanup_removes_owned_companion_assets(tmp_path):
+    from dailywire_downloader import hls_asset_marker, hls_asset_root
+    from task_manager.tasks.helpers.downloads.download_files import (
+        remove_download_artifacts,
+    )
+
+    master = tmp_path / "episode.m3u8"
+    master.write_text("#EXTM3U\n")
+    assets = hls_asset_root(master)
+    assets.mkdir()
+    hls_asset_marker(master).write_text("owned")
+    (assets / "segment.ts").write_bytes(b"segment")
+
+    remove_download_artifacts(str(master))
+
+    assert not master.exists()
+    assert not assets.exists()
+
+
+def test_hls_cleanup_preserves_unowned_similarly_named_directory(tmp_path):
+    from dailywire_downloader import hls_asset_root
+    from task_manager.tasks.helpers.downloads.download_files import (
+        remove_download_artifacts,
+    )
+
+    master = tmp_path / "episode.m3u8"
+    master.write_text("#EXTM3U\n")
+    assets = hls_asset_root(master)
+    assets.mkdir()
+    (assets / "external.txt").write_text("external")
+
+    remove_download_artifacts(str(master))
+
+    assert not master.exists()
+    assert assets.is_dir()
+    assert (assets / "external.txt").read_text() == "external"
+
+
+def test_hls_endpoint_falls_back_directly_to_dailywire_without_mp4_preparation(
+        monkeypatch,
+):
+    import backend.api.endpoints.feeds.router as feed_router
+
+    profile = SimpleNamespace(
+        preferred_format="format_1080p",
+        video_output_mode="audio_hls",
+    )
+    episode = SimpleNamespace(
+        id=10,
+        slug="episode-1",
+        uuid="episode-uuid",
+        publish_status="published_final",
+    )
+
+    class _Session:
+        dirty = set()
+
+        def commit(self):
+            raise AssertionError("ordinary remote fallback must not mutate state")
+
+    @contextmanager
+    def fake_db_session():
+        yield _Session()
+
+    monkeypatch.setattr(feed_router, "db_session", fake_db_session)
+    monkeypatch.setattr(
+        feed_router,
+        "get_rss_stream_profile_by_token",
+        lambda _s, _token: profile,
+    )
+    monkeypatch.setattr(
+        feed_router,
+        "get_episode_for_feed",
+        lambda _s, _profile, _slug: episode,
+    )
+    monkeypatch.setattr(
+        feed_router,
+        "get_local_download_for_episode",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        feed_router,
+        "can_use_dailywire_for_episode",
+        lambda _profile, _episode: True,
+    )
+    monkeypatch.setattr(
+        feed_router,
+        "get_dailywire_stream_url",
+        lambda *_args, **_kwargs: "https://media.example/fresh/master.m3u8",
+    )
+    monkeypatch.setattr(
+        feed_router,
+        "remember_live_episode_handoff",
+        lambda *_args: None,
+    )
+
+    request = SimpleNamespace(method="GET")
+    response = feed_router.rss_feed_episode_video_hls(
+        "token",
+        "episode-1",
+        request,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "https://media.example/fresh/master.m3u8"
+
+
+
+def test_file_watcher_rejects_incomplete_hls_bundle(tmp_path):
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from dailywire_downloader import hls_asset_marker, hls_asset_root
+    from task_manager.tasks.workers.file_watcher.service import _size_problem
+
+    master = tmp_path / "episode.m3u8"
+    master.write_text("#EXTM3U\n")
+    assets = hls_asset_root(master)
+    assets.mkdir()
+    hls_asset_marker(master).write_text("owned")
+    for height in (480, 1080):
+        directory = assets / f"{height}p"
+        directory.mkdir()
+        (directory / "playlist.m3u8").write_text("#EXTM3U\n")
+
+    download = SimpleNamespace(downloaded_bytes=10_000)
+    problem = _size_problem(
+        download,
+        path=str(master),
+        size=master.stat().st_size,
+        verify_file_size=True,
+    )
+
+    assert problem is not None
+    assert problem[0] == MediaDownloadArtifactStatus.CORRUPTED
+    assert "720p" in problem[1]
+
+
+
+def test_compact_hls_bundle_validator_detects_missing_media_file(
+        tmp_path,
+        monkeypatch,
+):
+    import dailywire_downloader.hls_bundle as hls_bundle
+
+    playlists = {
+        MASTER_URL: _master(),
+        "https://media.example/480.m3u8": _media(480),
+        "https://media.example/720.m3u8": _media(720),
+        "https://media.example/1080.m3u8": _media(1080),
+    }
+    monkeypatch.setattr(hls_bundle, "http_get_text", lambda url: playlists[url])
+    monkeypatch.setattr(
+        hls_bundle,
+        "http_get",
+        lambda url: _Response(f"bytes:{url}".encode()),
+    )
+
+    target = tmp_path / "episode.m3u8"
+    hls_bundle.download_hls_bundle(MASTER_URL, str(target))
+    missing_media = hls_bundle.hls_asset_root(target) / "720p" / "media.ts"
+    missing_media.unlink()
+
+    missing = hls_bundle.missing_hls_bundle_files(target)
+
+    assert missing_media.resolve() in missing

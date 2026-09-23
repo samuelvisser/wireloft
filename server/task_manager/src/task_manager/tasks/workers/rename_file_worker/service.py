@@ -10,6 +10,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.episode_download_scope import EpisodeDownloadScope
 from backend.utils.output_template import output_template_fields, resolve_episode_output_path
+from dailywire_downloader import hls_asset_marker, hls_asset_root
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
@@ -131,12 +132,17 @@ async def run_rename_file_worker(
                     raise FileExistsError(
                         f"Cannot rename thumbnail to '{thumbnail_destination}': destination already exists"
                     )
+                _assert_hls_assets_can_move(source, destination)
 
                 shutil.move(str(source), str(destination))
+                hls_assets_moved = False
                 try:
+                    hls_assets_moved = _move_hls_assets_if_present(source, destination)
                     _move_thumbnail_if_present(download, thumbnail_destination)
                 except BaseException:
-                    # Keep the media and its accessory together if the second move fails.
+                    # Keep the media and its accessories together if a later move fails.
+                    if hls_assets_moved:
+                        _rollback_hls_assets(source, destination)
                     if destination.exists() and not source.exists():
                         shutil.move(str(destination), str(source))
                     raise
@@ -149,6 +155,7 @@ async def run_rename_file_worker(
                 # but before its database commit. Reconcile the sidecar in the same
                 # recovery pass so it remains beside the recovered media artifact.
                 thumbnail_destination = _planned_thumbnail_destination(download, destination)
+                _move_hls_assets_if_present(source, destination)
                 _move_thumbnail_if_present(download, thumbnail_destination)
                 _record_artifact_location(download, destination)
                 s.commit()
@@ -182,6 +189,52 @@ async def run_rename_file_worker(
             "files_considered": total,
         },
     )
+
+
+
+def _assert_hls_assets_can_move(source: Path, destination: Path) -> None:
+    if source.suffix.lower() != ".m3u8":
+        return
+    source_marker = hls_asset_marker(source)
+    if not source_marker.is_file():
+        return
+    destination_assets = hls_asset_root(destination)
+    if destination_assets.exists():
+        raise FileExistsError(
+            f"Cannot rename HLS assets to '{destination_assets}': destination already exists"
+        )
+
+
+def _move_hls_assets_if_present(source: Path, destination: Path) -> bool:
+    if source.suffix.lower() != ".m3u8":
+        return False
+
+    source_assets = hls_asset_root(source)
+    destination_assets = hls_asset_root(destination)
+    source_marker = hls_asset_marker(source)
+    destination_marker = hls_asset_marker(destination)
+
+    if source_marker.is_file():
+        if destination_assets.exists():
+            raise FileExistsError(
+                f"Cannot rename HLS assets to '{destination_assets}': destination already exists"
+            )
+        destination_assets.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source_assets), str(destination_assets))
+        return True
+
+    # Recovery after an interrupted rename can find the master at its new name
+    # while the companion directory was already moved before the database commit.
+    if destination_marker.is_file():
+        return False
+    return False
+
+
+def _rollback_hls_assets(source: Path, destination: Path) -> None:
+    source_assets = hls_asset_root(source)
+    destination_assets = hls_asset_root(destination)
+    if hls_asset_marker(destination).is_file() and not source_assets.exists():
+        shutil.move(str(destination_assets), str(source_assets))
 
 
 def _planned_thumbnail_destination(

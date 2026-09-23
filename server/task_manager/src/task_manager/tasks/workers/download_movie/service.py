@@ -72,8 +72,13 @@ async def run_download_movie(
     profile = download.local_media_profile
     if profile.type != LocalMediaProfileType.MOVIE.value:
         raise DownloadError("Movies and movie extras require a Movie Local Media Profile")
-    if profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value:
-        raise DownloadError("Movies and movie extras require a video Local Media Profile")
+    if profile.preferred_format in {
+        PreferredFormat.FORMAT_AUDIO_ONLY.value,
+        PreferredFormat.FORMAT_HLS.value,
+    }:
+        raise DownloadError(
+            "Movies and movie extras require a normal video Local Media Profile"
+        )
 
     if progress is not None:
         progress.set(0, f"Starting download for {media.title}")

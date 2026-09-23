@@ -28,7 +28,7 @@ export default function LocalMediaProfileTypeFields({
     return (
         <>
             <div className="form-row">
-                <label htmlFor="mp-format">Preferred format</label>
+                <label htmlFor="mp-format">Media format</label>
                 <Controller
                     control={control}
                     name="preferredFormat"

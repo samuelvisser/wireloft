@@ -3,11 +3,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.types.download_profile_types import EpIdType
-from backend.types.stream_profile_types import RssDwVideoMethod, StreamProfileType
+from backend.types.local_media_profile_types import PreferredFormat
+from backend.types.stream_profile_types import (
+    RSS_HLS_OUTPUT_MODES,
+    RssVideoOutputMode,
+    StreamProfileType,
+)
 
 
 def _default_episode_types() -> list[EpIdType]:
@@ -24,8 +29,36 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     preferred_format: str = Field(min_length=1)
     require_exact_match: bool
     ep_id_type_list: list[EpIdType] = Field(default_factory=_default_episode_types)
-    dw_video_method: RssDwVideoMethod = RssDwVideoMethod.STREAM_HLS_DOWNLOAD_M4A.value
+    video_output_mode: RssVideoOutputMode = RssVideoOutputMode.AUDIO_HLS.value
+    stream_live_episodes: bool = False
     max_items: int = Field(default=0, ge=0)
+
+    @field_validator("preferred_format")
+    @classmethod
+    def _stream_preferred_format_must_be_playback_media(cls, value: str) -> str:
+        if value == PreferredFormat.FORMAT_HLS.value:
+            raise ValueError(
+                "HLS is a Local Media Profile download format, not a Stream Profile preferred format"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _live_streaming_requires_hls_output(self):
+        if (
+            self.stream_live_episodes
+            and self.video_output_mode.value not in RSS_HLS_OUTPUT_MODES
+        ):
+            raise ValueError(
+                "Live episode streaming requires an HLS video podcast output mode"
+            )
+        if (
+            self.stream_live_episodes
+            and self.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
+        ):
+            raise ValueError(
+                "Live episode streaming requires a video preferred format"
+            )
+        return self
 
 
 class RssStreamProfileAPICreate(_RssStreamProfileAPIBaseIn):
@@ -60,7 +93,8 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
     preferred_format: str
     require_exact_match: bool
     ep_id_type_list: list[str]
-    dw_video_method: str
+    video_output_mode: str
+    stream_live_episodes: bool
     max_items: int
     feed_url: str
 

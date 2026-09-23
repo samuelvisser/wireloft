@@ -251,3 +251,73 @@ def test_local_media_profile_rename_operation_targets_affected_episodes(tmp_path
     finally:
         session.close()
         engine.dispose()
+
+
+
+def test_rename_file_worker_moves_hls_companion_assets(monkeypatch, tmp_path):
+    from backend.utils.artifact_identity import inspect_artifact
+    from config import get_settings
+    from dailywire_downloader import hls_asset_marker, hls_asset_root
+    from task_manager.tasks.workers.rename_file_worker.service import run_rename_file_worker
+
+    session, engine = _session()
+    try:
+        monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+        _show, episode, local_profile, download, old_audio_path = _library(
+            session,
+            tmp_path,
+        )
+
+        old_audio_path.unlink()
+        old_master = old_audio_path.with_suffix(".m3u8")
+        old_master.write_text(
+            "#EXTM3U\n"
+            "#EXT-X-STREAM-INF:BANDWIDTH=1,RESOLUTION=854x480\n"
+            "hls/480p/playlist.m3u8\n"
+            "#EXT-X-STREAM-INF:BANDWIDTH=2,RESOLUTION=1280x720\n"
+            "hls/720p/playlist.m3u8\n"
+            "#EXT-X-STREAM-INF:BANDWIDTH=3,RESOLUTION=1920x1080\n"
+            "hls/1080p/playlist.m3u8\n"
+        )
+        assets = hls_asset_root(old_master)
+        assets.mkdir()
+        hls_asset_marker(old_master).write_text("owned")
+        for height in (480, 720, 1080):
+            directory = assets / f"{height}p"
+            directory.mkdir()
+            (directory / "media.ts").write_bytes(b"segment")
+            (directory / "playlist.m3u8").write_text(
+                "#EXTM3U\n"
+                "#EXT-X-VERSION:4\n"
+                "#EXTINF:6.0,\n"
+                "#EXT-X-BYTERANGE:7@0\n"
+                "media.ts\n"
+                "#EXT-X-ENDLIST\n"
+            )
+
+        identity = inspect_artifact(old_master)
+        local_profile.preferred_format = "format_hls"
+        download.file_path = str(old_master)
+        download.artifact_stat_dev = identity.stat_dev
+        download.artifact_stat_ino = identity.stat_ino
+        download.artifact_size_bytes = identity.size_bytes
+        download.artifact_fingerprint = identity.fingerprint
+        download.downloaded_bytes = identity.size_bytes
+        session.commit()
+
+        result = asyncio.run(run_rename_file_worker(session, episode_id=episode.id))
+
+        expected = (tmp_path / "test-show" / "ep.2.m3u8").resolve()
+        expected_assets = hls_asset_root(expected)
+        session.refresh(download)
+        assert result.data["files_renamed"] == 1
+        assert download.file_path == str(expected)
+        assert expected.is_file()
+        assert hls_asset_marker(expected).is_file()
+        for height in (480, 720, 1080):
+            assert (expected_assets / f"{height}p" / "playlist.m3u8").is_file()
+        assert not old_master.exists()
+        assert not assets.exists()
+    finally:
+        session.close()
+        engine.dispose()

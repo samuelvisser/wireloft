@@ -1,29 +1,48 @@
-import {ReactNode, useState} from 'react'
+import {ReactNode, useEffect, useState} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
+import Switch from 'react-switch'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import ReadMore from '../../utils/ReadMore'
-import {RssDwVideoMethodReg} from '../../types/stream_profile'
+import {RssHlsOutputModes, RssVideoOutputModeReg} from '../../types/stream_profile'
 
 
-const VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p'])
+const VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p', 'format_hls'])
 
 type Props = {
     form: UseFormReturn<any>
     isCreating?: boolean
     onRegenerateToken?: () => void | Promise<void>
     regeneratingToken?: boolean
-    videoMethodAdvisory?: ReactNode
+    videoOutputAdvisory?: ReactNode
 }
 
-export default function RssStreamProfileForm({form, isCreating, onRegenerateToken, regeneratingToken, videoMethodAdvisory}: Props) {
-    const {control, formState: {errors}, register, watch} = form
+export default function RssStreamProfileForm({
+    form,
+    isCreating,
+    onRegenerateToken,
+    regeneratingToken,
+    videoOutputAdvisory,
+}: Props) {
+    const {control, formState: {errors}, register, setValue, watch} = form
     const [copied, setCopied] = useState(false)
 
     const feedUrl: string | undefined = watch('feedUrl')
     const useDwStream: boolean = watch('useDwStream')
     const preferredFormat: string | undefined = watch('preferredFormat')
-    const usesDwVideo = useDwStream && VIDEO_FORMATS.has(preferredFormat ?? '')
+    const videoOutputMode: string | undefined = watch('videoOutputMode')
+    const streamLiveEpisodes: boolean = watch('streamLiveEpisodes')
+    const usesVideo = VIDEO_FORMATS.has(preferredFormat ?? '')
+    const usesHlsVideo = usesVideo && RssHlsOutputModes.has(videoOutputMode ?? '')
+
+    useEffect(() => {
+        if (!usesHlsVideo && streamLiveEpisodes) {
+            setValue('streamLiveEpisodes', false, {
+                shouldDirty: true,
+                shouldValidate: true,
+            })
+        }
+    }, [setValue, streamLiveEpisodes, usesHlsVideo])
 
     const onCopy = async () => {
         if (!feedUrl) return
@@ -61,53 +80,100 @@ export default function RssStreamProfileForm({form, isCreating, onRegenerateToke
                 </div>
             </div>
 
-            {usesDwVideo && (
+            {usesVideo && (
                 <div className="form-row">
-                    <label htmlFor="rss-dw-video-method">Stream DW video method</label>
+                    <label htmlFor="rss-video-output-mode">Video podcast output</label>
                     <Controller
                         control={control}
-                        name="dwVideoMethod"
+                        name="videoOutputMode"
                         render={({field}) => (
                             <Select
-                                inputId="rss-dw-video-method"
+                                inputId="rss-video-output-mode"
                                 classNamePrefix="select"
-                                options={RssDwVideoMethodReg.options}
-                                value={RssDwVideoMethodReg.options.find(option => option.value === field.value) ?? null}
+                                options={RssVideoOutputModeReg.options}
+                                value={RssVideoOutputModeReg.options.find(option => option.value === field.value) ?? null}
                                 onChange={(option) => field.onChange((option as any)?.value)}
                                 onBlur={field.onBlur}
                                 isClearable={false}
-                                aria-invalid={!!errors.dwVideoMethod}
-                                aria-describedby={errors.dwVideoMethod ? 'rss-dw-video-method-error' : 'rss-dw-video-method-help'}
+                                aria-invalid={!!errors.videoOutputMode}
+                                aria-describedby={errors.videoOutputMode ? 'rss-video-output-mode-error' : 'rss-video-output-mode-help'}
                             />
                         )}
                     />
-                    {errors.dwVideoMethod && (
-                        <div id="rss-dw-video-method-error" className="error" role="alert" aria-live="polite">
-                            {String(errors.dwVideoMethod.message)}
+                    {errors.videoOutputMode && (
+                        <div id="rss-video-output-mode-error" className="error" role="alert" aria-live="polite">
+                            {String(errors.videoOutputMode.message)}
                         </div>
                     )}
-                    <div className="help" id="rss-dw-video-method-help">
-                        <ReadMore summary={<span>Choose how Daily Wire video is exposed to podcast apps.</span>}>
+                    <div className="help" id="rss-video-output-mode-help">
+                        <ReadMore summary={<span>Choose the standard enclosure and optional Podcasting 2.0 video enclosure.</span>}>
                             <p>
-                                <strong>Podcasting 2.0 direct stream with audio fallback</strong> acts as a true stream. In a podcast player that supports it, video starts playing immediately.
-                                This is the <a href="https://github.com/Podcast-Standards-Project/hls-video">official</a> Podcasting 2.0 method for handling HLS steams.
-                                However, not every podcast client implements it well, making it in some cases even impossible to watch video if it downloaded audio in the backend.
+                                <strong>Audio with HLS video</strong> keeps a normal M4A podcast enclosure and adds adaptive HLS through Podcasting 2.0. WireLoft prefers a downloaded HLS package containing 480p, 720p and 1080p, and otherwise streams HLS from The Daily Wire when allowed.
                             </p>
                             <p>
-                                <strong>Serve as locally cached mp4</strong> works whenever the podcast app supports video and never serves audio for Daily Wire video. WireLoft must prepare the complete file before it can be served, which can take a while for long episodes.
+                                <strong>Audio with MP4 video</strong> keeps a normal M4A podcast enclosure and adds MP4 video through Podcasting 2.0. A downloaded normal video is served immediately. If none exists and Daily Wire streaming is enabled, WireLoft first prepares the MP4 when the podcast app requests it.
                             </p>
                             <p>
-                                <strong>Direct stream with cached mp4 fallback</strong> combines both approaches. Compatible podcast apps can start the HLS video immediately, while downloads and apps without Podcasting 2.0 support receive a locally cached MP4 instead of audio. Preparing that MP4 can still take a while for long episodes.
+                                <strong>MP4 video only</strong> uses a conventional MP4 enclosure and no alternate enclosure.
                             </p>
                             <p>
-                                Downloaded files are always served directly and are not affected by this setting.
+                                <strong>MP4 video with HLS alternate</strong> combines a conventional MP4 enclosure with an adaptive HLS alternate enclosure.
+                            </p>
+                            <p>
+                                The episode URLs in the RSS never change when a local download appears. The same WireLoft URL resolves to local media when available and to The Daily Wire only when the profile permits that fallback.
                             </p>
                         </ReadMore>
                     </div>
                 </div>
             )}
 
-            {usesDwVideo ? videoMethodAdvisory : null}
+            {usesHlsVideo && (
+                <div className="form-row">
+                    <label htmlFor="rss-stream-live-episodes">Stream live episodes</label>
+                    <Controller
+                        control={control}
+                        name="streamLiveEpisodes"
+                        render={({field}) => (
+                            <Switch
+                                id="rss-stream-live-episodes"
+                                checked={!!field.value}
+                                onChange={(checked) => field.onChange(checked)}
+                                onColor="#0ea5e9"
+                                offColor="#d1d5db"
+                                uncheckedIcon={false}
+                                checkedIcon={false}
+                                aria-invalid={!!errors.streamLiveEpisodes}
+                                aria-describedby={errors.streamLiveEpisodes ? 'rss-stream-live-episodes-error' : 'rss-stream-live-episodes-help'}
+                            />
+                        )}
+                    />
+                    {errors.streamLiveEpisodes && (
+                        <div id="rss-stream-live-episodes-error" className="error" role="alert" aria-live="polite">
+                            {String(errors.streamLiveEpisodes.message)}
+                        </div>
+                    )}
+                    <div className="help" id="rss-stream-live-episodes-help">
+                        <ReadMore summary={<span>Include matching episodes while they are live.</span>}>
+                            <p>
+                                Live episodes still have to match this Stream Profile&apos;s episode-type filter.
+                            </p>
+                            <p>
+                                If normal Daily Wire streaming is disabled, WireLoft only exposes a live episode when an enabled matching Download Profile will create an HLS download for that episode type.
+                            </p>
+                            <p>
+                                Once a podcast app has actually opened that live HLS stream, WireLoft keeps the same URL backed by The Daily Wire after the live event ends until the final local HLS download is ready. It then switches that same URL to the local HLS package.
+                            </p>
+                            {useDwStream && (
+                                <p>
+                                    Because Daily Wire streaming is enabled for this profile, non-live episodes can also fall back to The Daily Wire whenever the requested local media is unavailable.
+                                </p>
+                            )}
+                        </ReadMore>
+                    </div>
+                </div>
+            )}
+
+            {usesVideo ? videoOutputAdvisory : null}
 
             {!isCreating && (
                 <div className="form-row">

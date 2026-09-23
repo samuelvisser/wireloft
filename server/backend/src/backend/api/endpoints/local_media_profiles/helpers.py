@@ -102,7 +102,12 @@ def _profile_output_patterns(
     patterns = _canonical_template_patterns(output_template)
     if patterns is None:
         return None
-    extension = "m4a" if preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY else "mp4"
+    if preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY:
+        extension = "m4a"
+    elif preferred_format == PreferredFormat.FORMAT_HLS:
+        extension = "m3u8"
+    else:
+        extension = "mp4"
     return frozenset(replace_output_extension(pattern, extension) for pattern in patterns)
 
 

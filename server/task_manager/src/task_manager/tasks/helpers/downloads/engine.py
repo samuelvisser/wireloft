@@ -19,7 +19,10 @@ from dailywire_downloader import (
     VideoRendition,
     download_file,
     download_hls,
+    download_hls_bundle,
     embed_thumbnail,
+    hls_asset_marker,
+    hls_asset_root,
     probe,
     remux_to_mp4,
 )
@@ -50,6 +53,7 @@ class ResolvedDownloadSource:
     remux_to_mp4: bool
     extension: str
     audio_only: bool
+    hls_bundle: bool = False
 
 
 @dataclass(frozen=True)
@@ -159,6 +163,21 @@ def resolve_download_source(
     info = probe(url)
     ensure_not_cancelled(cancellation)
 
+    if preferred_format == PreferredFormat.FORMAT_HLS.value:
+        if audio_only:
+            raise DownloadError("HLS media format cannot be used for an audio-only download")
+        if info.kind is not MediaKind.HLS_MASTER:
+            raise DownloadError("HLS media format requires a master HLS source")
+        return ResolvedDownloadSource(
+            url=url,
+            format_downloaded="HLS 480p/720p/1080p",
+            use_hls=False,
+            remux_to_mp4=False,
+            extension="m3u8",
+            audio_only=False,
+            hls_bundle=True,
+        )
+
     if audio_only:
         if info.kind is MediaKind.HLS_MASTER:
             raise DownloadError("Audio URL unexpectedly returned an HLS master playlist")
@@ -190,6 +209,7 @@ def resolve_download_source(
         remux_to_mp4=remux,
         extension="mp4" if remux else info.suggested_extension,
         audio_only=audio_only,
+        hls_bundle=False,
     )
 
 
@@ -244,7 +264,11 @@ def _execute_temporary_plan(
             workspace.workspace,
             cancellation=cancellation,
         )
-        if thumbnail_source is not None and wants_thumbnail_embed(plan.thumbnail_mode):
+        if (
+            thumbnail_source is not None
+            and wants_thumbnail_embed(plan.thumbnail_mode)
+            and not plan.source.hls_bundle
+        ):
             embed_thumbnail(
                 result.path,
                 str(thumbnail_source),
@@ -259,6 +283,8 @@ def _execute_temporary_plan(
             plan.requested_destination,
         )
         published_destination = str(destination)
+        if plan.source.hls_bundle:
+            _publish_hls_assets(workspace.path, destination)
         if thumbnail_source is not None and wants_thumbnail_sidecar(plan.thumbnail_mode):
             thumbnail_path = _publish_sidecar(thumbnail_source, destination)
 
@@ -308,7 +334,11 @@ def _execute_direct_plan(
                 Path(thumbnail_workspace),
                 cancellation=cancellation,
             )
-            if thumbnail_source is not None and wants_thumbnail_embed(plan.thumbnail_mode):
+            if (
+                thumbnail_source is not None
+                and wants_thumbnail_embed(plan.thumbnail_mode)
+                and not plan.source.hls_bundle
+            ):
                 embed_thumbnail(
                     result.path,
                     str(thumbnail_source),
@@ -368,6 +398,30 @@ def _publish_sidecar(source: Path, media_destination: Path) -> str:
         raise
 
 
+
+def _publish_hls_assets(staged_master: Path, published_master: Path) -> None:
+    source = hls_asset_root(staged_master)
+    destination = hls_asset_root(published_master)
+    if not source.is_dir():
+        raise DownloadError("Completed HLS download is missing its media assets")
+    if destination.exists():
+        if hls_asset_marker(published_master).is_file():
+            shutil.rmtree(destination)
+        else:
+            raise DownloadError(
+                f"HLS asset destination already exists and is not owned by WireLoft: {destination}"
+            )
+    try:
+        shutil.copytree(source, destination)
+    except BaseException:
+        try:
+            shutil.rmtree(destination)
+        except FileNotFoundError:
+            pass
+        raise
+    shutil.rmtree(source)
+
+
 def _perform_download(
     source: ResolvedDownloadSource,
     destination: str,
@@ -376,6 +430,13 @@ def _perform_download(
     task_progress: TaskProgressWriter,
     cancellation,
 ) -> DownloadResult:
+    if source.hls_bundle:
+        return download_hls_bundle(
+            source.url,
+            destination,
+            progress=task_progress,
+            should_cancel=cancellation,
+        )
     if source.remux_to_mp4:
         return _download_and_remux_to_mp4(
             source.url,

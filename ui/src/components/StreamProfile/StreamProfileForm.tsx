@@ -24,10 +24,10 @@ export type StreamDownloadProfileDefault = {
 type UIOption = { value: string; label: string }
 
 const DEFAULT_STREAM_EPISODE_TYPES = ['ep', 'aux']
-const MP4_DW_VIDEO_METHODS = new Set([
-    'stream_download_mp4',
-    'stream_hls_download_mp4',
-])
+const STANDARD_VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p'])
+const STREAM_PREFERRED_FORMAT_OPTIONS = PreferredFormatReg.options.filter(
+    (option) => option.value !== 'format_hls'
+)
 
 function sameEpisodeTypes(a: readonly string[], b: readonly string[]) {
     return a.length === b.length && a.every((value) => b.includes(value))
@@ -66,7 +66,7 @@ export default function StreamProfileForm({
     const useDownloads = watch('useDownloads')
     const useDwStream = watch('useDwStream')
     const preferredFormat = watch('preferredFormat')
-    const dwVideoMethod = watch('dwVideoMethod')
+    const videoOutputMode = watch('videoOutputMode')
     const selectedEpisodeTypes: string[] = watch('epIdTypeList') || []
     const internalEpisodeTypesManuallyChanged = useRef(false)
     const episodeTypeDefaultsInitialized = useRef(false)
@@ -84,14 +84,21 @@ export default function StreamProfileForm({
     ), [selectedEpisodeTypes])
 
     const automaticEpisodeTypes = useMemo(() => {
-        if (useDownloads && preferredFormat && downloadProfileDefaults) {
-            const matchingProfile = [...downloadProfileDefaults]
+        if (useDownloads && downloadProfileDefaults) {
+            const candidates = [...downloadProfileDefaults]
+                .filter((profile) => profile.enabled !== false)
                 .sort((a, b) => Number(Boolean(b.enabled)) - Number(Boolean(a.enabled)))
-                .find((profile) => profile.preferredFormat === preferredFormat)
+
+            const matchingProfile = videoOutputMode === 'audio_hls'
+                ? candidates.find((profile) => profile.preferredFormat === 'format_hls')
+                : videoOutputMode === 'audio_mp4'
+                    ? candidates.find((profile) => STANDARD_VIDEO_FORMATS.has(profile.preferredFormat))
+                    : candidates.find((profile) => profile.preferredFormat === preferredFormat)
+
             if (matchingProfile) return [...matchingProfile.episodeTypes]
         }
         return [...DEFAULT_STREAM_EPISODE_TYPES]
-    }, [downloadProfileDefaults, preferredFormat, useDownloads])
+    }, [downloadProfileDefaults, preferredFormat, useDownloads, videoOutputMode])
 
     const episodeTypeDefaultsReady = !useDownloads || downloadProfileDefaults !== undefined
 
@@ -153,12 +160,23 @@ export default function StreamProfileForm({
         setValue('epIdTypeList', values, {shouldDirty: true, shouldValidate: true})
     }
 
+    const advisoryKind = mode === 'rss'
+        && preferredFormat !== 'format_audio_only'
+        ? videoOutputMode === 'audio_hls'
+            ? 'hls'
+            : videoOutputMode === 'audio_mp4'
+                ? 'mp4'
+                : null
+        : null
+
     const matchingDownloadProfiles = useMemo(() => {
-        if (!downloadProfileDefaults || !preferredFormat) return []
-        return downloadProfileDefaults.filter((profile) => (
-            profile.enabled !== false && profile.preferredFormat === preferredFormat
-        ))
-    }, [downloadProfileDefaults, preferredFormat])
+        if (!downloadProfileDefaults || !advisoryKind) return []
+        return downloadProfileDefaults.filter((profile) => {
+            if (profile.enabled === false) return false
+            if (advisoryKind === 'hls') return profile.preferredFormat === 'format_hls'
+            return STANDARD_VIDEO_FORMATS.has(profile.preferredFormat)
+        })
+    }, [advisoryKind, downloadProfileDefaults])
 
     const coveredEpisodeTypes = useMemo(() => new Set(
         matchingDownloadProfiles.flatMap((profile) => profile.episodeTypes)
@@ -176,39 +194,53 @@ export default function StreamProfileForm({
         })[0]
     }, [matchingDownloadProfiles, selectedEpisodeTypes])
 
-    const showMp4DownloadAdvisory = (
-        mode === 'rss'
-        && useDwStream
-        && preferredFormat !== 'format_audio_only'
-        && MP4_DW_VIDEO_METHODS.has(dwVideoMethod)
+    const showDownloadAdvisory = (
+        advisoryKind !== null
         && downloadProfileDefaults !== undefined
     )
 
     const createDownloadProfileHref = showSlug
-        ? `/add-download-profile?show=${encodeURIComponent(showSlug)}&downloadEpisodeCount=5`
+        ? `/add-download-profile?show=${encodeURIComponent(showSlug)}&downloadEpisodeCount=5${advisoryKind === 'hls' ? '&preferredFormat=format_hls' : ''}`
         : undefined
     const editDownloadProfileHref = bestMatchingDownloadProfile?.id && bestMatchingDownloadProfile.type
         ? `/edit-download-profile/${bestMatchingDownloadProfile.type}/${bestMatchingDownloadProfile.id}`
         : undefined
 
-    const mp4DownloadAdvisory = showMp4DownloadAdvisory ? (
+    const videoOutputAdvisory = showDownloadAdvisory ? (
         matchingDownloadProfiles.length === 0 ? (
             <div className="stream-download-advisory" role="status">
-                <div className="stream-download-advisory-title">Recommended: keep the latest 5 video episodes downloaded</div>
+                <div className="stream-download-advisory-title">
+                    Recommended: keep the latest 5 {advisoryKind === 'hls' ? 'HLS' : 'video'} episodes downloaded
+                </div>
                 <div>
-                    MP4 delivery is fastest when recent episodes already exist locally in WireLoft.
+                    {advisoryKind === 'hls'
+                        ? 'A local HLS download starts immediately and already contains 480p, 720p and 1080p renditions.'
+                        : 'A normal local video download lets WireLoft serve the MP4 immediately without preparing it when the podcast app asks for it.'}
                 </div>
                 <div className="help">
-                    <ReadMore summary={<span>Why downloading recent episodes is recommended</span>}>
-                        <p>
-                            When WireLoft has to serve an MP4 directly from Daily Wire, it must first prepare the complete file before a podcast app can receive it. For long episodes, that can create a noticeable wait before playback or an automatic download begins.
-                        </p>
-                        <p>
-                            Keeping only the latest 5 episodes downloaded gives recent episodes immediate, reliable MP4 delivery without retaining the full archive. Older episodes can still be prepared from Daily Wire when needed.
-                        </p>
+                    <ReadMore summary={<span>Why downloading the latest episodes is recommended</span>}>
+                        {advisoryKind === 'hls' ? (
+                            <>
+                                <p>
+                                    WireLoft never converts an MP4 into HLS when playback starts. If a local HLS download is unavailable and Daily Wire streaming is enabled, the stable HLS URL streams directly from The Daily Wire instead.
+                                </p>
+                                <p>
+                                    An HLS Local Media Profile stores 480p, 720p and 1080p together so the podcast app can adapt quality while streaming.
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <p>
+                                    If no normal video download exists, WireLoft has to prepare the complete MP4 when the podcast app first requests the stable MP4 URL. Long episodes can therefore take time before playback begins.
+                                </p>
+                                <p>
+                                    Keeping only the latest 5 episodes downloaded gives recent episodes immediate MP4 delivery while older episodes can still be prepared on demand when Daily Wire streaming is enabled.
+                                </p>
+                            </>
+                        )}
                         {!useDownloads && (
                             <p>
-                                Enable <strong>Use Downloads</strong> on this Stream Profile as well if you want it to serve those local files directly.
+                                Enable <strong>Use Downloads</strong> on this Stream Profile as well if you want it to use those local files.
                             </p>
                         )}
                     </ReadMore>
@@ -225,18 +257,17 @@ export default function StreamProfileForm({
             <div className="stream-download-advisory" role="status">
                 <div className="stream-download-advisory-title">Your matching download profile does not cover every streamed episode type</div>
                 <div>
-                    This Stream Profile can also stream {uncoveredEpisodeTypes.map((type) => EpisodeTypeReg.getLabelLoose(type)).join(', ')}. Those items may still need MP4 preparation on demand.
+                    This Stream Profile also includes {uncoveredEpisodeTypes.map((type) => EpisodeTypeReg.getLabelLoose(type)).join(', ')}.
                 </div>
                 <div className="help">
-                    <ReadMore summary={<span>How to improve local MP4 coverage</span>}>
+                    <ReadMore summary={<span>How to improve local video coverage</span>}>
                         <p>
-                            You can expand the existing Download Profile so it includes the same episode types as this Stream Profile.
+                            Expand the existing Download Profile so it includes the same episode types, or create another profile that keeps only the latest 5 episodes.
                         </p>
                         <p>
-                            Alternatively, keep the existing profile focused on the content you want to retain for longer and create another video Download Profile with broader episode-type coverage and a much shorter retention window, such as only the latest 5 episodes.
-                        </p>
-                        <p>
-                            Either approach lets WireLoft serve recent MP4 episodes immediately instead of preparing the complete file when the podcast app requests it.
+                            {advisoryKind === 'hls'
+                                ? 'The additional profile must use an HLS Local Media Profile.'
+                                : 'Any normal 720p, 1080p or 4K Local Media Profile can satisfy MP4 delivery.'}
                         </p>
                     </ReadMore>
                 </div>
@@ -353,8 +384,8 @@ export default function StreamProfileForm({
                             <Select
                                 inputId="sp-preferred-format"
                                 classNamePrefix="select"
-                                options={PreferredFormatReg.options}
-                                value={PreferredFormatReg.options.find(o => o.value === field.value) ?? null}
+                                options={STREAM_PREFERRED_FORMAT_OPTIONS}
+                                value={STREAM_PREFERRED_FORMAT_OPTIONS.find(o => o.value === field.value) ?? null}
                                 onChange={(opt) => field.onChange((opt as any)?.value ?? null)}
                                 onBlur={field.onBlur}
                                 aria-invalid={!!errors.preferredFormat}
@@ -453,7 +484,7 @@ export default function StreamProfileForm({
                 </div>
             </div>
 
-            {useDownloads && useDwStream && preferredFormat !== 'format_audio_only' && (
+            {useDownloads && useDwStream && STANDARD_VIDEO_FORMATS.has(preferredFormat) && (
                 <div className="form-row">
                     <label htmlFor="require-exact-match">Require Exact Match for Video Downloads</label>
                     <Controller
@@ -500,7 +531,7 @@ export default function StreamProfileForm({
                     isCreating={isCreating}
                     onRegenerateToken={onRegenerateToken}
                     regeneratingToken={regeneratingToken}
-                    videoMethodAdvisory={mp4DownloadAdvisory}
+                    videoOutputAdvisory={videoOutputAdvisory}
                 />
             ) : undefined}
         </>

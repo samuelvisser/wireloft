@@ -6,7 +6,8 @@ import type {LocalMediaProfileRead} from "./schemas/local_media_profile";
 export const PreferredFormatReg = createSelectRegistry("PreferredFormat", {
   'format_4k':   { label: "4k",   help: "Download a 4k video" },
   'format_1080p':   { label: "1080p",   help: "Download an 1080p video" },
-  'format_720p':   { label: "720p",   help: "Download an 720p video" },
+  'format_720p':   { label: "720p",   help: "Download a 720p video" },
+  'format_hls': { label: "HLS (480p / 720p / 1080p)", help: "Download an adaptive HLS video package with 480p, 720p and 1080p renditions" },
   'format_audio_only':   { label: "Audio Only",   help: "Download audio only" },
 });
 

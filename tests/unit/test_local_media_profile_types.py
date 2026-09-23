@@ -82,6 +82,20 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
             preferred_format="format_audio_only",
         )
 
+    hls_show = ShowLocalMediaProfileAPICreate(
+        name="Podcast HLS",
+        output_template="/downloads/podcasts/{{ show }}/{{ episode }}.ext",
+        preferred_format="format_hls",
+    )
+    assert hls_show.preferred_format == "format_hls"
+
+    with pytest.raises(ValidationError, match="normal video format"):
+        MovieLocalMediaProfileAPICreate(
+            name="Movie HLS",
+            output_template="/downloads/movies/{{ movie_slug }}/{{ title }}.ext",
+            preferred_format="format_hls",
+        )
+
     with pytest.raises(ValidationError, match="episode"):
         MovieLocalMediaProfileAPICreate(
             name="Wrong movie template",
@@ -203,6 +217,16 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
         ),
     )
     assert audio.preferred_format == "format_audio_only"
+
+    hls = create_show_local_media_profile(
+        session,
+        ShowLocalMediaProfileAPICreate(
+            name="Show adaptive HLS",
+            output_template=common["output_template"],
+            preferred_format="format_hls",
+        ),
+    )
+    assert hls.preferred_format == "format_hls"
 
     distinct = create_show_local_media_profile(
         session,

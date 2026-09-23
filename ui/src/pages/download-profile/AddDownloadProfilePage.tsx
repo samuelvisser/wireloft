@@ -14,7 +14,7 @@ import {
 } from '../../types/schemas/series_download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
-import {useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import {isShowLocalMediaProfileAvailableFor, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {SelectRegistry} from "../../utils/selectRegistry";
 import {buildShowSelectRegistry} from "../../types/show";
 import {useQueryClient} from "@tanstack/react-query";
@@ -62,7 +62,9 @@ export default function AddDownloadProfilePage() {
     const {formState: {errors}} = form
     const prefillApplied = useRef(false)
     const limitPrefillApplied = useRef(false)
+    const mediaProfilePrefillApplied = useRef(false)
     const requestedShowSlug = searchParams.get('show')
+    const requestedPreferredFormat = searchParams.get('preferredFormat')
     const requestedDownloadEpisodeCountRaw = searchParams.get('downloadEpisodeCount')
     const parsedDownloadEpisodeCount = Number(requestedDownloadEpisodeCountRaw)
     const requestedDownloadEpisodeCount = requestedDownloadEpisodeCountRaw !== null
@@ -94,6 +96,8 @@ export default function AddDownloadProfilePage() {
         })
         limitPrefillApplied.current = true
     }, [formPodcast, requestedDownloadEpisodeCount])
+
+
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
@@ -131,6 +135,38 @@ export default function AddDownloadProfilePage() {
         const sid = Number(showId)
         return shows.find(s => s.id === sid)
     }, [shows, showId])
+
+    useEffect(() => {
+        if (
+            mediaProfilePrefillApplied.current
+            || !requestedPreferredFormat
+            || !selectedShow
+            || !Array.isArray(mediaProfiles)
+        ) return
+
+        const matchingProfile = mediaProfiles.find((profile) => (
+            profile.type === 'show'
+            && profile.preferredFormat === requestedPreferredFormat
+            && isShowLocalMediaProfileAvailableFor(profile, selectedShow.type)
+        ))
+        if (!matchingProfile) return
+
+        formPodcast.setValue('localMediaProfileId', matchingProfile.id, {
+            shouldDirty: false,
+            shouldValidate: true,
+        })
+        formSeries.setValue('localMediaProfileId', matchingProfile.id, {
+            shouldDirty: false,
+            shouldValidate: true,
+        })
+        mediaProfilePrefillApplied.current = true
+    }, [
+        formPodcast,
+        formSeries,
+        mediaProfiles,
+        requestedPreferredFormat,
+        selectedShow,
+    ])
     const selectedShowSlug: string | undefined = selectedShow?.slug
 
     // Fetch seasons and existing download profiles for the selected show

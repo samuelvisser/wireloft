@@ -1,23 +1,22 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import parse_qs, urlsplit
-from xml.etree.ElementTree import Element, tostring
+from xml.etree.ElementTree import Element
 
 import pytest
 
 
-def _episode() -> SimpleNamespace:
+def _episode():
     return SimpleNamespace(
         uuid="episode-uuid",
-        slug="episode-slug",
-        title="Episode title",
+        slug="episode-1",
+        title="Episode 1",
         description="Description",
-        published_date=datetime(2026, 9, 1),
+        published_date=datetime(2026, 9, 1, tzinfo=timezone.utc),
         went_live_date=None,
-        created_at=datetime(2026, 9, 1),
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
         duration=1800.0,
         thumbnail_landscape_path=None,
         thumbnail_square_path=None,
@@ -25,111 +24,97 @@ def _episode() -> SimpleNamespace:
     )
 
 
-def test_direct_stream_uses_audio_enclosure_and_signed_hls_alternate():
+def _profile(mode: str):
+    return SimpleNamespace(
+        preferred_format="format_1080p",
+        video_output_mode=mode,
+    )
+
+
+def _children(parent: Element, tag: str) -> list[Element]:
+    return [child for child in parent if child.tag == tag]
+
+
+@pytest.mark.parametrize(
+    ("mode", "primary_type", "primary_suffix", "alternate_type", "alternate_suffix"),
+    [
+        ("audio_hls", "audio/mp4", "/audio.m4a", "application/x-mpegURL", "/video.m3u8"),
+        ("audio_mp4", "audio/mp4", "/audio.m4a", "video/mp4", "/video.mp4"),
+        ("mp4", "video/mp4", "/video.mp4", None, None),
+        ("mp4_hls", "video/mp4", "/video.mp4", "application/x-mpegURL", "/video.m3u8"),
+    ],
+)
+def test_rss_video_output_modes_use_stable_wireloft_urls(
+        mode,
+        primary_type,
+        primary_suffix,
+        alternate_type,
+        alternate_suffix,
+):
     from backend.api.endpoints.feeds.service import _append_item
 
     channel = Element("channel")
     _append_item(
         channel,
-        media_base_url="https://wireloft.test/feeds/rss/token",
+        media_base_url="https://wireloft.example/feeds/rss/token",
         episode=_episode(),
-        download=None,
-        preferred_format="format_1080p",
-        dw_video_method="stream_hls_download_m4a",
-        dw_video_url="https://stream.dailywire.test/master.m3u8?token=fresh",
+        profile=_profile(mode),
     )
 
-    xml = tostring(channel, encoding="unicode")
-    assert (
-        '<enclosure url="https://wireloft.test/feeds/rss/token/episodes/episode-slug/audio" '
-        'length="0" type="audio/mpeg"'
-    ) in xml
-    assert 'type="application/x-mpegURL"' in xml
-    assert 'uri="https://stream.dailywire.test/master.m3u8?token=fresh"' in xml.replace("&amp;", "&")
-    assert "episode-uuid:stream_hls_download_m4a" in xml
+    item = channel.find("item")
+    assert item is not None
+    enclosure = item.find("enclosure")
+    assert enclosure is not None
+    assert enclosure.attrib["type"] == primary_type
+    assert enclosure.attrib["url"].endswith(primary_suffix)
+    assert enclosure.attrib["length"] == "0"
+
+    alternates = _children(item, "podcast:alternateEnclosure")
+    if alternate_type is None:
+        assert alternates == []
+    else:
+        assert len(alternates) == 1
+        assert alternates[0].attrib["type"] == alternate_type
+        source = _children(alternates[0], "podcast:source")[0]
+        assert source.attrib["uri"].endswith(alternate_suffix)
+
+    assert item.find("guid").text == "episode-uuid"
 
 
-def test_cached_mp4_uses_video_enclosure_without_audio_fallback(monkeypatch):
-    import backend.api.endpoints.feeds.service as service
-
-    monkeypatch.setattr(service, "get_cached_mp4_size", lambda _uuid: 123456)
-    channel = Element("channel")
-    service._append_item(
-        channel,
-        media_base_url="https://wireloft.test/feeds/rss/token",
-        episode=_episode(),
-        download=None,
-        preferred_format="format_1080p",
-        dw_video_method="stream_download_mp4",
-    )
-
-    xml = tostring(channel, encoding="unicode")
-    assert (
-        '<enclosure url="https://wireloft.test/feeds/rss/token/episodes/episode-slug/video.mp4" '
-        'length="123456" type="video/mp4"'
-    ) in xml
-    assert "/audio" not in xml
-    assert "podcast:alternateEnclosure" not in xml
-    assert "episode-uuid:stream_download_mp4" in xml
-
-
-def test_downloaded_video_keeps_the_standard_download_enclosure(tmp_path):
+def test_audio_only_uses_stable_m4a_without_video_alternate():
     from backend.api.endpoints.feeds.service import _append_item
 
-    file_path = tmp_path / "episode.mp4"
-    file_path.write_bytes(b"video")
-    download = SimpleNamespace(
-        file_path=str(file_path),
-        downloaded_bytes=0,
-        local_media_profile=SimpleNamespace(preferred_format="format_1080p"),
+    profile = SimpleNamespace(
+        preferred_format="format_audio_only",
+        video_output_mode="audio_hls",
     )
     channel = Element("channel")
-
     _append_item(
         channel,
-        media_base_url="https://wireloft.test/feeds/rss/token",
+        media_base_url="https://wireloft.example/feeds/rss/token",
         episode=_episode(),
-        download=download,
-        preferred_format="format_1080p",
-        dw_video_method="stream_download_mp4",
+        profile=profile,
     )
 
-    xml = tostring(channel, encoding="unicode")
-    assert (
-        '<enclosure url="https://wireloft.test/feeds/rss/token/episodes/episode-slug" '
-        'length="5" type="video/mp4"'
-    ) in xml
-    assert "/video.mp4" not in xml
-    assert "podcast:alternateEnclosure" not in xml
-    assert "episode-uuid:stream_download_mp4" not in xml
-
-
-def test_feed_url_method_is_replaced_without_losing_other_query_parameters():
-    from backend.utils.feed_urls import set_rss_feed_dw_video_method
-
-    updated = set_rss_feed_dw_video_method(
-        "https://wireloft.test/feed.xml?custom=value&dwVideoMethod=stream_hls_download_m4a",
-        use_dw_stream=True,
-        dw_video_method="stream_download_mp4",
-    )
-
-    query = parse_qs(urlsplit(updated).query)
-    assert query == {
-        "custom": ["value"],
-        "dwVideoMethod": ["stream_download_mp4"],
+    enclosure = channel.find("item/enclosure")
+    assert enclosure is not None
+    assert enclosure.attrib == {
+        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1/audio.m4a",
+        "length": "0",
+        "type": "audio/mp4",
     }
+    assert not _children(channel.find("item"), "podcast:alternateEnclosure")
 
 
-def test_feed_url_method_is_removed_when_dailywire_streaming_is_disabled():
-    from backend.utils.feed_urls import set_rss_feed_dw_video_method
+def test_feed_url_does_not_encode_video_delivery_mode():
+    from backend.utils.feed_urls import build_rss_feed_url
 
-    updated = set_rss_feed_dw_video_method(
-        "https://wireloft.test/feed.xml?dwVideoMethod=stream_download_mp4&custom=value",
-        use_dw_stream=False,
-        dw_video_method="stream_download_mp4",
-    )
-
-    assert parse_qs(urlsplit(updated).query) == {"custom": ["value"]}
+    request = SimpleNamespace(base_url="https://wireloft.example/")
+    assert build_rss_feed_url(
+        request,
+        token="token",
+        show_slug="show",
+    ) == "https://wireloft.example/feeds/rss/token/show.xml"
 
 
 def test_cached_mp4_is_prepared_once_and_reused(monkeypatch, tmp_path):
@@ -159,7 +144,7 @@ def test_cached_mp4_is_prepared_once_and_reused(monkeypatch, tmp_path):
         episode_uuid="episode-uuid",
     )
     second = cached_video.prepare_cached_mp4(
-        "https://stream.dailywire.test/master.m3u8",
+        "https://stream.dailywire.test/new-master.m3u8",
         episode_uuid="episode-uuid",
     )
 
@@ -167,6 +152,7 @@ def test_cached_mp4_is_prepared_once_and_reused(monkeypatch, tmp_path):
     assert second == target
     assert target.read_bytes() == b"prepared-video"
     assert len(calls) == 1
+    assert "+faststart" in calls[0]
 
 
 def test_rss_head_response_has_matching_length_and_no_body():
@@ -182,7 +168,7 @@ def test_rss_head_response_has_matching_length_and_no_body():
     assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate"
 
 
-def test_uncached_mp4_head_does_not_claim_an_empty_file():
+def test_uncached_mp4_head_does_not_start_or_claim_download():
     from backend.api.endpoints.feeds.router import _cached_mp4_head_response
 
     response = _cached_mp4_head_response(None, filename="episode.mp4")
@@ -194,14 +180,16 @@ def test_uncached_mp4_head_does_not_claim_an_empty_file():
     assert "content-length" not in response.headers
 
 
-def test_feed_and_media_routes_accept_head_requests():
+def test_feed_and_stable_media_routes_accept_head_requests():
     from backend.api.endpoints.feeds.router import router
 
     expected_paths = {
         "/feeds/rss/{token}/{show_slug}.xml",
         "/feeds/rss/{token}/episodes/{episode_slug}",
-        "/feeds/rss/{token}/episodes/{episode_slug}/audio",
+        "/feeds/rss/{token}/episodes/{episode_slug}/audio.m4a",
         "/feeds/rss/{token}/episodes/{episode_slug}/video.mp4",
+        "/feeds/rss/{token}/episodes/{episode_slug}/video.m3u8",
+        "/feeds/rss/{token}/episodes/{episode_slug}/hls/{asset_path:path}",
     }
     routes = {route.path: route for route in router.routes if route.path in expected_paths}
 

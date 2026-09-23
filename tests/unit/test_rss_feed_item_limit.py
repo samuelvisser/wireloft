@@ -35,6 +35,8 @@ def _episode(index: int, published: datetime):
     return SimpleNamespace(
         id=index,
         show_id=1,
+        episode_type="ep",
+        publish_status="published_final",
         is_no_show_today=False,
         published_date=published,
         went_live_date=None,
@@ -49,6 +51,10 @@ def _profile(max_items: int):
         use_dw_stream=True,
         preferred_format="format_1080p",
         require_exact_match=False,
+        ep_id_type_list=["ep"],
+        video_output_mode="mp4",
+        stream_live_episodes=False,
+        live_episode_handoff_ids=[],
         max_items=max_items,
     )
 
