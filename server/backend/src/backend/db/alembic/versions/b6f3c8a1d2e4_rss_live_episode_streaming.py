@@ -1,7 +1,7 @@
 """Add RSS live episode streaming state.
 
 Revision ID: b6f3c8a1d2e4
-Revises: 7c2a9e5d4b10
+Revises: 4e6c9a1b7d2f
 """
 
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 revision = "b6f3c8a1d2e4"
-down_revision = "7c2a9e5d4b10"
+down_revision = "4e6c9a1b7d2f"
 branch_labels = None
 depends_on = None
 
