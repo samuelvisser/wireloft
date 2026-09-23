@@ -120,4 +120,4 @@ class EpisodeAPIReadView(_EpisodeIdentifierAPIOut):
     publish_status: Union[EpisodePublishStatus, str]
     title: str
     slug: str
-    thumbnail_portrait_path: Optional[str]
+    thumbnail_landscape_path: Optional[str]

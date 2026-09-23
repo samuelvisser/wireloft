@@ -13,8 +13,8 @@ const KEY_SHOWS = STORAGE_PREFIX + 'shows'
 const KEY_PROFILES = STORAGE_PREFIX + 'localMediaProfiles'
 const LEGACY_KEY_EPISODES_PREFIX = STORAGE_PREFIX + 'episodes:'
 
-const SHOW_CACHE_PREFIX = 'wl_show_cache_v2:'
-const SHOW_CACHE_VERSION = 2
+const SHOW_CACHE_PREFIX = 'wl_show_cache_v3:'
+const SHOW_CACHE_VERSION = 3
 const KEY_EPISODES_PREFIX = SHOW_CACHE_PREFIX + 'episodes:'
 const KEY_EPISODES_META_PREFIX = SHOW_CACHE_PREFIX + 'episodes-meta:'
 const KEY_SEASONS_PREFIX = SHOW_CACHE_PREFIX + 'seasons:'
@@ -127,7 +127,7 @@ function compactEpisodes(data: EpisodeReadView[]): EpisodeReadView[] {
     slug: episode.slug,
     title: episode.title,
     publishStatus: episode.publishStatus,
-    thumbnailPortraitPath: episode.thumbnailPortraitPath ?? null,
+    thumbnailLandscapePath: episode.thumbnailLandscapePath ?? null,
   }))
 }
 

@@ -63,7 +63,7 @@ def get_episode_views_by_show_list(
             Episode.publish_status.label("publish_status"),
             Episode.title.label("title"),
             Episode.slug.label("slug"),
-            Episode.thumbnail_portrait_path.label("thumbnail_portrait_path"),
+            Episode.thumbnail_landscape_path.label("thumbnail_landscape_path"),
         )
         .join(Show, Episode.show_id == Show.id)
         .where(Show.slug == show_slug)
