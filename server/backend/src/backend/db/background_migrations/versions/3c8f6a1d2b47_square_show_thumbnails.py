@@ -1,7 +1,7 @@
 """Populate show square thumbnails from The Daily Wire Watch page.
 
 Revision ID: 3c8f6a1d2b47
-Revises: 9d4b7e2c1a63
+Revises: f6a1c3d8b427
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from dailywire_authorisation import DeviceAuthClient
 
 
 revision = "3c8f6a1d2b47"
-down_revision = "9d4b7e2c1a63"
+down_revision = "f6a1c3d8b427"
 title = "Populate show square thumbnails from The Daily Wire"
 
 

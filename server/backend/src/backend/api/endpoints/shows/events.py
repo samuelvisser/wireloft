@@ -12,7 +12,5 @@ class ShowAdded(dict[str, object]):
             id=show.id,
             slug=show.slug,
             title=show.title,
-            # Match ShowIndexOperation.task_kwargs so the event-triggered run can
-            # satisfy the durable operation target.
             initial_index=True,
         )
