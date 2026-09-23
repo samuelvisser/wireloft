@@ -160,6 +160,15 @@ export default function StreamProfileForm({
         setValue('epIdTypeList', values, {shouldDirty: true, shouldValidate: true})
     }
 
+    const handleDownloadAdvisoryAction = () => {
+        if (!useDownloads) {
+            setValue('useDownloads', true, {
+                shouldDirty: true,
+                shouldValidate: true,
+            })
+        }
+    }
+
     const advisoryKind = mode === 'rss'
         && preferredFormat !== 'format_audio_only'
         ? videoOutputMode === 'audio_hls'
@@ -247,7 +256,13 @@ export default function StreamProfileForm({
                 </div>
                 {canOpenDownloadProfiles && createDownloadProfileHref && (
                     <div className="stream-download-advisory-actions">
-                        <Link className="btn btn-primary" to={createDownloadProfileHref} target="_blank" rel="noreferrer">
+                        <Link
+                            className="btn btn-primary"
+                            to={createDownloadProfileHref}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={handleDownloadAdvisoryAction}
+                        >
                             Create download profile
                         </Link>
                     </div>
@@ -274,12 +289,24 @@ export default function StreamProfileForm({
                 {canOpenDownloadProfiles && showSlug && (
                     <div className="stream-download-advisory-actions">
                         {editDownloadProfileHref && (
-                            <Link className="btn" to={editDownloadProfileHref} target="_blank" rel="noreferrer">
+                            <Link
+                                className="btn"
+                                to={editDownloadProfileHref}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={handleDownloadAdvisoryAction}
+                            >
                                 Edit download profile
                             </Link>
                         )}
                         {createDownloadProfileHref && (
-                            <Link className="btn btn-primary" to={createDownloadProfileHref} target="_blank" rel="noreferrer">
+                            <Link
+                                className="btn btn-primary"
+                                to={createDownloadProfileHref}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={handleDownloadAdvisoryAction}
+                            >
                                 Create another profile
                             </Link>
                         )}

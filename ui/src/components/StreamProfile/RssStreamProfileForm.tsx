@@ -4,7 +4,7 @@ import Select from 'react-select'
 import Switch from 'react-switch'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import ReadMore from '../../utils/ReadMore'
-import {RssHlsOutputModes, RssVideoOutputModeReg} from '../../types/stream_profile'
+import {RssHlsOutputModes, RssMp4OutputModes, RssVideoOutputModeReg} from '../../types/stream_profile'
 
 
 const VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p', 'format_hls'])
@@ -34,6 +34,7 @@ export default function RssStreamProfileForm({
     const streamLiveEpisodes: boolean = watch('streamLiveEpisodes')
     const usesVideo = VIDEO_FORMATS.has(preferredFormat ?? '')
     const usesHlsVideo = usesVideo && RssHlsOutputModes.has(videoOutputMode ?? '')
+    const usesMp4Video = usesVideo && RssMp4OutputModes.has(videoOutputMode ?? '')
 
     useEffect(() => {
         if (!usesHlsVideo && streamLiveEpisodes) {
@@ -123,6 +124,44 @@ export default function RssStreamProfileForm({
                                 The episode URLs in the RSS never change when a local download appears. The same WireLoft URL resolves to local media when available and to The Daily Wire only when the profile permits that fallback.
                             </p>
                         </ReadMore>
+                    </div>
+                </div>
+            )}
+
+            {usesMp4Video && useDwStream && (
+                <div className="stream-download-advisory" role="status">
+                    <div className="stream-download-advisory-title">
+                        Disable Daily Wire streaming for immediate MP4 playback
+                    </div>
+                    <div>
+                        The Daily Wire provides video as HLS, not as a ready-to-stream MP4. If a podcast app requests the stable MP4 URL before a local video download exists, WireLoft must first download and prepare the complete episode, which can make playback take several minutes to start.
+                    </div>
+                    <div className="help">
+                        <ReadMore summary={<span>Why MP4 behaves differently from HLS</span>}>
+                            <p>
+                                MP4 clients expect one complete seekable file. WireLoft cannot return the beginning of that MP4 while it is still building the rest of the file from The Daily Wire&apos;s HLS stream.
+                            </p>
+                            <p>
+                                Keep matching video episodes downloaded and use those local files for immediate MP4 playback. If you need direct fallback streaming from The Daily Wire, use an HLS-only video podcast output instead.
+                            </p>
+                            {videoOutputMode === 'mp4_hls' && (
+                                <p>
+                                    The HLS alternate enclosure in this mode can stream immediately, but the normal MP4 enclosure still has the full-download delay when no local MP4 exists.
+                                </p>
+                            )}
+                        </ReadMore>
+                    </div>
+                    <div className="stream-download-advisory-actions">
+                        <button
+                            type="button"
+                            className="btn"
+                            onClick={() => setValue('useDwStream', false, {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                            })}
+                        >
+                            Disable Daily Wire streaming
+                        </button>
                     </div>
                 </div>
             )}
