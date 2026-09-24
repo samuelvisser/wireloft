@@ -25,7 +25,7 @@ _CACHE_LOCKS_GUARD = threading.Lock()
 
 def _cache_path(episode_uuid: str) -> Path:
     digest = hashlib.sha256(episode_uuid.encode("utf-8")).hexdigest()
-    root = Path(get_settings().download_settings.rss_cache_root) / _VIDEO_CACHE_DIRECTORY
+    root = get_settings().download_settings.effective_rss_cache_root / _VIDEO_CACHE_DIRECTORY
     return root / f"{digest}.mp4"
 
 
