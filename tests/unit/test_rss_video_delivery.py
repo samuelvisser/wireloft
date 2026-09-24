@@ -124,7 +124,7 @@ def test_cached_mp4_path_uses_configured_rss_cache_root(monkeypatch, tmp_path):
         cached_video,
         "get_settings",
         lambda: SimpleNamespace(
-            download_settings=SimpleNamespace(rss_cache_root=tmp_path)
+            download_settings=SimpleNamespace(effective_rss_cache_root=tmp_path)
         ),
     )
 
