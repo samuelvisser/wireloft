@@ -2,27 +2,19 @@ import {useEffect, useMemo, useRef} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import Select from 'react-select'
-import {Link} from 'react-router-dom'
 import ReadMore from '../../utils/ReadMore'
 import {EpisodeTypeReg} from '../../types/episode'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import RssStreamProfileForm from './RssStreamProfileForm'
+import StreamProfileAdvisory, {type StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
 import {MediaTypeReg} from "../../types/stream_profile";
-import './StreamProfileAdvisory.css'
 
 export type StreamProfileMode = 'rss' | 'base'
 
-export type StreamDownloadProfileDefault = {
-    id?: number
-    type?: 'podcast' | 'series'
-    preferredFormat: string
-    episodeTypes: string[]
-    enabled?: boolean
-}
+export type {StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 
 type UIOption = { value: string; label: string }
-type DownloadMediaKind = 'audio' | 'video' | 'hls'
 
 const DEFAULT_STREAM_EPISODE_TYPES = ['ep', 'aux']
 const STANDARD_VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p'])
@@ -161,287 +153,27 @@ export default function StreamProfileForm({
         setValue('epIdTypeList', values, {shouldDirty: true, shouldValidate: true})
     }
 
-    const handleDownloadAdvisoryAction = () => {
-        if (!useDownloads) {
-            setValue('useDownloads', true, {
+    const streamProfileAdvisory = mode === 'rss' ? (
+        <StreamProfileAdvisory
+            mode={mode}
+            preferredFormat={preferredFormat}
+            videoOutputMode={videoOutputMode}
+            useDownloads={!!useDownloads}
+            useDwStream={!!useDwStream}
+            selectedEpisodeTypes={selectedEpisodeTypes}
+            downloadProfileDefaults={downloadProfileDefaults}
+            showSlug={showSlug}
+            canOpenDownloadProfiles={canOpenDownloadProfiles}
+            onEnableDownloads={() => setValue('useDownloads', true, {
                 shouldDirty: true,
                 shouldValidate: true,
-            })
-        }
-    }
-
-    const requiredDownloadKinds: DownloadMediaKind[] = mode !== 'rss'
-        ? []
-        : preferredFormat === 'format_audio_only'
-            ? ['audio']
-            : videoOutputMode === 'audio_hls'
-                ? ['audio', 'hls']
-                : videoOutputMode === 'audio_mp4'
-                    ? ['audio', 'video']
-                    : videoOutputMode === 'mp4_hls'
-                        ? ['video', 'hls']
-                        : ['video']
-
-    const matchingProfilesForKind = (kind: DownloadMediaKind) => {
-        if (!downloadProfileDefaults) return []
-        return downloadProfileDefaults.filter((profile) => {
-            if (profile.enabled === false) return false
-            if (kind === 'audio') return profile.preferredFormat === 'format_audio_only'
-            if (kind === 'hls') return profile.preferredFormat === 'format_hls'
-            return STANDARD_VIDEO_FORMATS.has(profile.preferredFormat)
-        })
-    }
-
-    const uncoveredEpisodeTypesForKind = (kind: DownloadMediaKind) => {
-        const coveredEpisodeTypes = new Set(
-            matchingProfilesForKind(kind).flatMap((profile) => profile.episodeTypes)
-        )
-        return selectedEpisodeTypes.filter(
-            (episodeType) => !coveredEpisodeTypes.has(episodeType)
-        )
-    }
-
-    const bestMatchingProfileForKind = (kind: DownloadMediaKind) => {
-        return [...matchingProfilesForKind(kind)].sort((a, b) => {
-            const aCoverage = selectedEpisodeTypes.filter((type) => a.episodeTypes.includes(type)).length
-            const bCoverage = selectedEpisodeTypes.filter((type) => b.episodeTypes.includes(type)).length
-            return bCoverage - aCoverage
-        })[0]
-    }
-
-    const createDownloadProfileHref = (
-        kind: DownloadMediaKind,
-        {latestFive = false}: {latestFive?: boolean} = {},
-    ) => {
-        if (!showSlug) return undefined
-
-        const targetFormat = kind === 'audio'
-            ? 'format_audio_only'
-            : kind === 'hls'
-                ? 'format_hls'
-                : STANDARD_VIDEO_FORMATS.has(preferredFormat)
-                    ? preferredFormat
-                    : 'format_1080p'
-        const params = new URLSearchParams({
-            show: showSlug,
-            preferredFormat: targetFormat,
-        })
-        if (latestFive) params.set('downloadEpisodeCount', '5')
-        return `/add-download-profile?${params.toString()}`
-    }
-
-    const downloadKindLabel = (kind: DownloadMediaKind) => (
-        kind === 'audio' ? 'audio' : kind === 'hls' ? 'HLS video' : 'MP4 video'
-    )
-
-    const downloadProfileAdvisory = (() => {
-        if (mode !== 'rss' || downloadProfileDefaults === undefined) return null
-
-        if (!useDwStream) {
-            const missingRequirements = requiredDownloadKinds
-                .map((kind) => ({
-                    kind,
-                    profiles: matchingProfilesForKind(kind),
-                    uncoveredEpisodeTypes: uncoveredEpisodeTypesForKind(kind),
-                }))
-                .filter(({uncoveredEpisodeTypes}) => uncoveredEpisodeTypes.length > 0)
-
-            if (missingRequirements.length === 0) return null
-
-            const bestExistingProfile = missingRequirements
-                .map(({kind}) => bestMatchingProfileForKind(kind))
-                .filter((profile): profile is StreamDownloadProfileDefault => profile !== undefined)
-                .sort((a, b) => {
-                    const aCoverage = selectedEpisodeTypes.filter((type) => a.episodeTypes.includes(type)).length
-                    const bCoverage = selectedEpisodeTypes.filter((type) => b.episodeTypes.includes(type)).length
-                    return bCoverage - aCoverage
-                })[0]
-            const editDownloadProfileHref = bestExistingProfile?.id && bestExistingProfile.type
-                ? `/edit-download-profile/${bestExistingProfile.type}/${bestExistingProfile.id}`
-                : undefined
-
-            return (
-                <div className="stream-download-advisory" role="status">
-                    <div className="stream-download-advisory-title">
-                        No matching download profile is setup
-                    </div>
-                    <div>
-                        Daily Wire streaming is disabled, so every episode in this Stream Profile must be backed by matching local downloads. Missing coverage: {missingRequirements.map(({kind}) => downloadKindLabel(kind)).join(', ')}.
-                    </div>
-                    <div className="help">
-                        <ReadMore summary={<span>What counts as a matching download profile</span>}>
-                            <p>
-                                A matching Download Profile must be enabled and cover every episode type selected by this Stream Profile.
-                            </p>
-                            {missingRequirements.some(({kind}) => kind === 'audio') && (
-                                <p>
-                                    Audio coverage requires a Download Profile using an Audio Only Local Media Profile.
-                                </p>
-                            )}
-                            {missingRequirements.some(({kind}) => kind === 'video') && (
-                                <p>
-                                    MP4 video coverage can use any normal 720p, 1080p or 4K Local Media Profile.
-                                </p>
-                            )}
-                            {missingRequirements.some(({kind}) => kind === 'hls') && (
-                                <p>
-                                    HLS video coverage requires a Download Profile using an HLS Local Media Profile.
-                                </p>
-                            )}
-                            <p>
-                                Without the required local coverage, episodes that do not have all media needed by this output mode are left out of the RSS feed.
-                            </p>
-                            {!useDownloads && (
-                                <p>
-                                    <strong>Use Downloads</strong> is currently disabled on this Stream Profile. Creating or editing a Download Profile from this warning will enable it automatically.
-                                </p>
-                            )}
-                        </ReadMore>
-                    </div>
-                    {canOpenDownloadProfiles && showSlug && (
-                        <div className="stream-download-advisory-actions">
-                            {editDownloadProfileHref && (
-                                <Link
-                                    className="btn"
-                                    to={editDownloadProfileHref}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    onClick={handleDownloadAdvisoryAction}
-                                >
-                                    Edit download profile
-                                </Link>
-                            )}
-                            {missingRequirements.map(({kind}) => {
-                                const href = createDownloadProfileHref(kind)
-                                if (!href) return null
-                                return (
-                                    <Link
-                                        className="btn btn-primary"
-                                        key={kind}
-                                        to={href}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        onClick={handleDownloadAdvisoryAction}
-                                    >
-                                        Create {downloadKindLabel(kind)} download profile
-                                    </Link>
-                                )
-                            })}
-                        </div>
-                    )}
-                </div>
-            )
-        }
-
-        if (
-            preferredFormat === 'format_audio_only'
-            || videoOutputMode !== 'mp4_hls'
-        ) {
-            return null
-        }
-
-        const matchingDownloadProfiles = matchingProfilesForKind('video')
-        const uncoveredEpisodeTypes = uncoveredEpisodeTypesForKind('video')
-        if (matchingDownloadProfiles.length > 0 && uncoveredEpisodeTypes.length === 0) {
-            return null
-        }
-
-        const bestMatchingDownloadProfile = bestMatchingProfileForKind('video')
-        const createHref = createDownloadProfileHref('video', {latestFive: true})
-        const editDownloadProfileHref = bestMatchingDownloadProfile?.id && bestMatchingDownloadProfile.type
-            ? `/edit-download-profile/${bestMatchingDownloadProfile.type}/${bestMatchingDownloadProfile.id}`
-            : undefined
-
-        return (
-            <div className="stream-download-advisory" role="status">
-                <div className="stream-download-advisory-title">
-                    Recommended: keep the latest 5 video episodes downloaded
-                </div>
-                {matchingDownloadProfiles.length === 0 ? (
-                    <>
-                        <div>
-                            A normal local video download lets WireLoft serve the MP4 fallback immediately without preparing it when the podcast app asks for it.
-                        </div>
-                        <div className="help">
-                            <ReadMore summary={<span>Why downloading the latest episodes is recommended</span>}>
-                                <p>
-                                    The HLS stream can start immediately from The Daily Wire, but the MP4 fallback still has to be prepared completely before playback if no normal video download exists.
-                                </p>
-                                <p>
-                                    Keeping only the latest 5 episodes downloaded gives recent episodes immediate MP4 fallback delivery while older episodes can still use The Daily Wire.
-                                </p>
-                                {!useDownloads && (
-                                    <p>
-                                        Enable <strong>Use Downloads</strong> on this Stream Profile as well if you want it to use those local files.
-                                    </p>
-                                )}
-                            </ReadMore>
-                        </div>
-                        {canOpenDownloadProfiles && createHref && (
-                            <div className="stream-download-advisory-actions">
-                                <Link
-                                    className="btn btn-primary"
-                                    to={createHref}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    onClick={handleDownloadAdvisoryAction}
-                                >
-                                    Create download profile
-                                </Link>
-                            </div>
-                        )}
-                    </>
-                ) : (
-                    <>
-                        <div>
-                            Your matching download profile does not cover every streamed episode type. This Stream Profile also includes {uncoveredEpisodeTypes.map((type) => EpisodeTypeReg.getLabelLoose(type)).join(', ')}.
-                        </div>
-                        <div className="help">
-                            <ReadMore summary={<span>How to improve local video coverage</span>}>
-                                <p>
-                                    Expand the existing Download Profile so it includes the same episode types, or create another profile that keeps only the latest 5 episodes.
-                                </p>
-                                <p>
-                                    Any normal 720p, 1080p or 4K Local Media Profile can satisfy MP4 delivery.
-                                </p>
-                                {!useDownloads && (
-                                    <p>
-                                        Enable <strong>Use Downloads</strong> on this Stream Profile as well if you want it to use those local files.
-                                    </p>
-                                )}
-                            </ReadMore>
-                        </div>
-                        {canOpenDownloadProfiles && showSlug && (
-                            <div className="stream-download-advisory-actions">
-                                {editDownloadProfileHref && (
-                                    <Link
-                                        className="btn"
-                                        to={editDownloadProfileHref}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        onClick={handleDownloadAdvisoryAction}
-                                    >
-                                        Edit download profile
-                                    </Link>
-                                )}
-                                {createHref && (
-                                    <Link
-                                        className="btn btn-primary"
-                                        to={createHref}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        onClick={handleDownloadAdvisoryAction}
-                                    >
-                                        Create another profile
-                                    </Link>
-                                )}
-                            </div>
-                        )}
-                    </>
-                )}
-            </div>
-        )
-    })()
+            })}
+            onDisableDwStream={() => setValue('useDwStream', false, {
+                shouldDirty: true,
+                shouldValidate: true,
+            })}
+        />
+    ) : null
 
     return (
         <>
@@ -685,7 +417,7 @@ export default function StreamProfileForm({
                     isCreating={isCreating}
                     onRegenerateToken={onRegenerateToken}
                     regeneratingToken={regeneratingToken}
-                    downloadProfileAdvisory={downloadProfileAdvisory}
+                    advisory={streamProfileAdvisory}
                 />
             ) : undefined}
         </>

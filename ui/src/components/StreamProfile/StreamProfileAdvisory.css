@@ -1,4 +1,4 @@
-.stream-download-advisory {
+.stream-profile-advisory {
   display: grid;
   gap: 8px;
   padding: 10px 12px;
@@ -8,30 +8,61 @@
   color: #78350f;
 }
 
-.stream-download-advisory-title {
+.stream-profile-advisory-title {
   font-weight: 700;
 }
 
-.stream-download-advisory p,
-.stream-download-advisory .help {
+.stream-profile-advisory p,
+.stream-profile-advisory .help {
   color: inherit;
 }
 
-.stream-download-advisory-actions {
+.stream-profile-advisory p {
+  margin: 0;
+}
+
+.stream-profile-advisory-requirements {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.stream-profile-advisory-requirement {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid rgba(120, 53, 15, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.36);
+}
+
+.stream-profile-advisory-requirement-text {
+  display: grid;
+  gap: 2px;
+}
+
+.stream-profile-advisory-requirement-actions,
+.stream-profile-advisory-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.stream-download-advisory-actions .btn {
+.stream-profile-advisory-requirement-actions .btn,
+.stream-profile-advisory-actions .btn {
   padding: 6px 10px;
   font-size: 12px;
 }
 
 @media (prefers-color-scheme: dark) {
-  .stream-download-advisory {
+  .stream-profile-advisory {
     border-color: rgba(245, 158, 11, 0.38);
     background: rgba(245, 158, 11, 0.10);
     color: #fde68a;
+  }
+
+  .stream-profile-advisory-requirement {
+    border-color: rgba(253, 230, 138, 0.18);
+    background: rgba(0, 0, 0, 0.12);
   }
 }
