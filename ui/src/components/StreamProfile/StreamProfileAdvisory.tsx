@@ -39,7 +39,10 @@ type AdvisoryCardProps = {
 type Coverage = {
     kind: DownloadMediaKind
     profiles: StreamDownloadProfileDefault[]
+    enabledProfiles: StreamDownloadProfileDefault[]
     uncoveredEpisodeTypes: string[]
+    disabledCoverageEpisodeTypes: string[]
+    createEpisodeTypes: string[]
     bestProfile?: StreamDownloadProfileDefault
 }
 
@@ -114,7 +117,6 @@ function matchingProfilesForKind(
     kind: DownloadMediaKind,
 ) {
     return profiles.filter((profile) => {
-        if (profile.enabled === false) return false
         if (kind === 'audio') return profile.preferredFormat === 'format_audio_only'
         if (kind === 'hls') return profile.preferredFormat === 'format_hls'
         return STANDARD_VIDEO_FORMATS.has(profile.preferredFormat)
@@ -127,23 +129,44 @@ function coverageForKind(
     kind: DownloadMediaKind,
 ): Coverage {
     const matchingProfiles = matchingProfilesForKind(profiles, kind)
-    const coveredEpisodeTypes = new Set(
-        matchingProfiles.flatMap((profile) => profile.episodeTypes)
+    const enabledProfiles = matchingProfiles.filter((profile) => profile.enabled !== false)
+    const disabledProfiles = matchingProfiles.filter((profile) => profile.enabled === false)
+
+    const enabledEpisodeTypes = new Set(
+        enabledProfiles.flatMap((profile) => profile.episodeTypes)
     )
     const uncoveredEpisodeTypes = selectedEpisodeTypes.filter(
-        (episodeType) => !coveredEpisodeTypes.has(episodeType)
+        (episodeType) => !enabledEpisodeTypes.has(episodeType)
     )
-    const bestProfile = [...matchingProfiles].sort((a, b) => {
-        const aCoverage = selectedEpisodeTypes.filter((type) => a.episodeTypes.includes(type)).length
-        const bCoverage = selectedEpisodeTypes.filter((type) => b.episodeTypes.includes(type)).length
-        return bCoverage - aCoverage
-    })[0]
+    const disabledCoverageEpisodeTypes = uncoveredEpisodeTypes.filter(
+        (episodeType) => disabledProfiles.some((profile) => profile.episodeTypes.includes(episodeType))
+    )
+    const createEpisodeTypes = uncoveredEpisodeTypes.filter(
+        (episodeType) => !matchingProfiles.some((profile) => profile.episodeTypes.includes(episodeType))
+    )
+
+    const coverageCount = (
+        profile: StreamDownloadProfileDefault,
+        episodeTypes: string[],
+    ) => episodeTypes.filter((type) => profile.episodeTypes.includes(type)).length
+
+    const bestDisabledProfile = [...disabledProfiles]
+        .filter((profile) => coverageCount(profile, uncoveredEpisodeTypes) > 0)
+        .sort((a, b) => (
+            coverageCount(b, uncoveredEpisodeTypes) - coverageCount(a, uncoveredEpisodeTypes)
+        ))[0]
+    const bestEnabledProfile = [...enabledProfiles].sort((a, b) => (
+        coverageCount(b, selectedEpisodeTypes) - coverageCount(a, selectedEpisodeTypes)
+    ))[0]
 
     return {
         kind,
         profiles: matchingProfiles,
+        enabledProfiles,
         uncoveredEpisodeTypes,
-        bestProfile,
+        disabledCoverageEpisodeTypes,
+        createEpisodeTypes,
+        bestProfile: bestDisabledProfile ?? bestEnabledProfile,
     }
 }
 
@@ -191,20 +214,31 @@ function CoverageRequirement({
     onEnableDownloads,
     latestFive = false,
 }: CoverageRequirementProps) {
-    const {kind, profiles, uncoveredEpisodeTypes, bestProfile} = coverage
+    const {
+        kind,
+        profiles,
+        enabledProfiles,
+        uncoveredEpisodeTypes,
+        disabledCoverageEpisodeTypes,
+        createEpisodeTypes,
+        bestProfile,
+    } = coverage
     const editHref = bestProfile?.id && bestProfile.type
         ? `/edit-download-profile/${bestProfile.type}/${bestProfile.id}`
         : undefined
-    const createHref = createDownloadProfileHref(
-        kind,
-        showSlug,
-        preferredFormat,
-        {
-            latestFive,
-            episodeTypes: uncoveredEpisodeTypes,
-        },
-    )
+    const createHref = createEpisodeTypes.length > 0
+        ? createDownloadProfileHref(
+            kind,
+            showSlug,
+            preferredFormat,
+            {
+                latestFive,
+                episodeTypes: createEpisodeTypes,
+            },
+        )
+        : undefined
     const hasExistingProfile = profiles.length > 0
+    const hasDisabledCoverage = disabledCoverageEpisodeTypes.length > 0
     const handleDownloadProfileAction = () => {
         if (!useDownloads) onEnableDownloads()
     }
@@ -214,9 +248,15 @@ function CoverageRequirement({
             <div className="stream-profile-advisory-requirement-text">
                 <strong>{kindLabel(kind)}</strong>
                 <span>
-                    {hasExistingProfile
-                        ? `Existing Download Profile coverage does not include ${episodeTypeLabels(uncoveredEpisodeTypes)}.`
-                        : `No enabled ${kindLabel(kind)} Download Profile exists.`}
+                    {hasDisabledCoverage
+                        ? disabledCoverageEpisodeTypes.length === uncoveredEpisodeTypes.length
+                            ? `Matching Download Profile coverage for ${episodeTypeLabels(uncoveredEpisodeTypes)} exists, but it is disabled.`
+                            : `Enabled Download Profile coverage is missing ${episodeTypeLabels(uncoveredEpisodeTypes)}. Disabled coverage already exists for ${episodeTypeLabels(disabledCoverageEpisodeTypes)}.`
+                        : enabledProfiles.length > 0
+                            ? `Existing enabled Download Profile coverage does not include ${episodeTypeLabels(uncoveredEpisodeTypes)}.`
+                            : hasExistingProfile
+                                ? `Existing Download Profiles do not cover ${episodeTypeLabels(uncoveredEpisodeTypes)}.`
+                                : `No enabled ${kindLabel(kind)} Download Profile exists.`}
                 </span>
             </div>
             {canOpenDownloadProfiles && showSlug ? (
