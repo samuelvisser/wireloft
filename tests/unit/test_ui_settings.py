@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 
 import pytest
 import yaml
@@ -95,6 +96,64 @@ def test_settings_service_only_writes_changed_fields_and_preserves_other_yaml(tm
     assert "downloadSettings.maxConcurrentDownloads" in result.configured_fields
     assert result.values.download_settings.max_concurrent_downloads == 9
     assert not (tmp_path / "ui-settings.yml").exists()
+
+
+def test_download_root_change_recomputes_unset_storage_defaults(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import get_ui_settings, save_ui_settings
+    from backend.api.models.settings import SettingsAPIUpdate
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        "downloadSettings:\n"
+        "  downloadRoot: /media-one\n",
+        encoding="utf-8",
+    )
+    _point_settings_at(config_path, monkeypatch)
+
+    current = get_ui_settings()
+    assert current.values.download_settings.temporary_download_root.as_posix() == "/media-one/.wireloft-temp"
+    assert current.values.download_settings.rss_cache_root.as_posix() == "/media-one/.wireloft-rss-cache"
+
+    values = current.values.model_copy(deep=True)
+    values.download_settings.download_root = Path("/media-two")
+    result = save_ui_settings(SettingsAPIUpdate(
+        values=values,
+        changed_fields=["downloadSettings.downloadRoot"],
+    ))
+
+    assert result.values.download_settings.temporary_download_root.as_posix() == "/media-two/.wireloft-temp"
+    assert result.values.download_settings.rss_cache_root.as_posix() == "/media-two/.wireloft-rss-cache"
+
+    document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert document["downloadSettings"]["downloadRoot"] == "/media-two"
+    assert "temporaryDownloadRoot" not in document["downloadSettings"]
+    assert "rssCacheRoot" not in document["downloadSettings"]
+
+
+def test_download_root_change_keeps_explicit_storage_paths(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import get_ui_settings, save_ui_settings
+    from backend.api.models.settings import SettingsAPIUpdate
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        "downloadSettings:\n"
+        "  downloadRoot: /media-one\n"
+        "  temporaryDownloadRoot: /staging\n"
+        "  rssCacheRoot: /rss-cache\n",
+        encoding="utf-8",
+    )
+    _point_settings_at(config_path, monkeypatch)
+
+    current = get_ui_settings()
+    values = current.values.model_copy(deep=True)
+    values.download_settings.download_root = Path("/media-two")
+    result = save_ui_settings(SettingsAPIUpdate(
+        values=values,
+        changed_fields=["downloadSettings.downloadRoot"],
+    ))
+
+    assert result.values.download_settings.temporary_download_root.as_posix() == "/staging"
+    assert result.values.download_settings.rss_cache_root.as_posix() == "/rss-cache"
 
 
 def test_settings_service_updates_existing_scalar_without_removing_inline_comment(tmp_path, monkeypatch):

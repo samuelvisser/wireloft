@@ -10,8 +10,14 @@ def test_system_download_storage_defaults_to_direct_mode():
 
     assert settings.download_settings.download_mode is DownloadMode.DIRECT
     assert settings.download_settings.thumbnail_mode is ThumbnailMode.EMBED
-    assert settings.download_settings.temporary_download_root.name == ".wireloft-temp"
-    assert settings.download_settings.rss_cache_root.as_posix() == "/downloads/.wireloft-rss-cache"
+    assert (
+        settings.download_settings.temporary_download_root
+        == settings.download_settings.download_root / ".wireloft-temp"
+    )
+    assert (
+        settings.download_settings.rss_cache_root
+        == settings.download_settings.download_root / ".wireloft-rss-cache"
+    )
 
     values = SettingsValues.from_app_settings(settings).model_dump(
         by_alias=True,
@@ -19,18 +25,33 @@ def test_system_download_storage_defaults_to_direct_mode():
     )
     assert values["downloadSettings"]["downloadMode"] == "direct"
     assert values["downloadSettings"]["thumbnailMode"] == "embed"
-    assert values["downloadSettings"]["temporaryDownloadRoot"]
-    assert values["downloadSettings"]["rssCacheRoot"] == "/downloads/.wireloft-rss-cache"
+    assert values["downloadSettings"]["temporaryDownloadRoot"] == str(
+        settings.download_settings.download_root / ".wireloft-temp"
+    )
+    assert values["downloadSettings"]["rssCacheRoot"] == str(
+        settings.download_settings.download_root / ".wireloft-rss-cache"
+    )
 
 
-def test_rss_cache_root_accepts_container_local_storage():
-    from config.settings.settings import AppSettings
+def test_download_storage_default_factories_follow_download_root():
     from config.settings.submodels import DownloadSettings
 
-    values = AppSettings().download_settings.model_dump()
-    values["rss_cache_root"] = "/tmp/wireloft-rss-cache"
-    settings = DownloadSettings.model_validate(values)
+    settings = DownloadSettings(download_root="/media")
 
+    assert settings.temporary_download_root.as_posix() == "/media/.wireloft-temp"
+    assert settings.rss_cache_root.as_posix() == "/media/.wireloft-rss-cache"
+
+
+def test_explicit_download_storage_paths_override_default_factories():
+    from config.settings.submodels import DownloadSettings
+
+    settings = DownloadSettings(
+        download_root="/media",
+        temporary_download_root="/tmp/wireloft-downloads",
+        rss_cache_root="/tmp/wireloft-rss-cache",
+    )
+
+    assert settings.temporary_download_root.as_posix() == "/tmp/wireloft-downloads"
     assert settings.rss_cache_root.as_posix() == "/tmp/wireloft-rss-cache"
 
 

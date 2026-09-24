@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 
+from config.config import PROJECT_ROOT
 from config.security.passwords import derive_admin_password_client_value, hash_password_scrypt
 from config.settings.base import SubmodelBase
 
@@ -311,23 +312,30 @@ class ThumbnailMode(StrEnum):
 
 
 class DownloadSettings(SubmodelBase):
-    verify_downloads_cron: str = Field(..., min_length=1, description="Cron schedule for verifying downloads")
+    verify_downloads_cron: str = Field(
+        default="0 */2 * * *",
+        min_length=1,
+        description="Cron schedule for verifying downloads",
+    )
     max_concurrent_downloads: int = Field(
-        ...,
+        default=5,
         ge=1,
         description="Maximum number of concurrent downloads",
     )
     max_download_attempts: int = Field(
-        ...,
+        default=3,
         ge=1,
         description="Maximum number of download attempts",
     )
     download_timeout_seconds: int = Field(
-        ...,
+        default=600,
         ge=1,
         description="Timeout in seconds for each download",
     )
-    download_root: Path = Field(..., description="Directory on disk that the '/downloads/' prefix of output templates maps to")
+    download_root: Path = Field(
+        default=PROJECT_ROOT / "downloads",
+        description="Directory on disk that the '/downloads/' prefix of output templates maps to",
+    )
     download_mode: DownloadMode = Field(
         default=DownloadMode.DIRECT,
         description="Whether downloads are written directly to their destination or staged in a temporary directory first",
@@ -337,11 +345,11 @@ class DownloadSettings(SubmodelBase):
         description="Whether downloaded media embeds its thumbnail, writes a sidecar image, does both, or stores no thumbnail",
     )
     temporary_download_root: Path = Field(
-        ...,
+        default_factory=lambda data: data["download_root"] / ".wireloft-temp",
         description="Directory used to stage complete downloads before publishing them to the download root",
     )
     rss_cache_root: Path = Field(
-        ...,
+        default_factory=lambda data: data["download_root"] / ".wireloft-rss-cache",
         description="Directory used as the root for media cached while fulfilling RSS requests",
     )
     filename_restriction_mode: FilenameRestrictionMode = Field(
@@ -349,7 +357,7 @@ class DownloadSettings(SubmodelBase):
         description="Filename compatibility mode: minimal restrictions, Windows-compatible, or restricted ASCII",
     )
     remux_video_to_mp4: bool = Field(
-        ...,
+        default=True,
         description="Repackage downloaded HLS video into an .mp4 file instead of leaving it as raw .ts. "
                     "This is a fast, lossless container change (no re-encoding) and requires ffmpeg to be "
                     "installed and on PATH.",

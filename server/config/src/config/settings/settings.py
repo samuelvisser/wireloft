@@ -118,20 +118,7 @@ class AppSettings(SettingsBase):
         dw_processing_max_minutes=60,
         no_usable_media_delete_after_minutes=4 * 60,
     ))
-    download_settings: DownloadSettings = Field(default=DownloadSettings(
-        verify_downloads_cron="0 */2 * * *",
-        max_concurrent_downloads=5,
-        max_download_attempts=3,
-        download_timeout_seconds=600,
-        download_root=PROJECT_ROOT / "downloads",
-        download_mode=DownloadMode.DIRECT,
-        thumbnail_mode=ThumbnailMode.EMBED,
-        temporary_download_root=PROJECT_ROOT / "downloads" / ".wireloft-temp",
-        rss_cache_root=Path("/downloads/.wireloft-rss-cache"),
-        filename_restriction_mode=FilenameRestrictionMode.WINDOWS,
-        remux_video_to_mp4=True,
-        ffmpeg_path="ffmpeg",
-    ))
+    download_settings: DownloadSettings = Field(default_factory=DownloadSettings)
     file_watcher: FileWatcherSettings = Field(default=FileWatcherSettings(
         enabled=True,
         scan_cron="*/10 * * * *",

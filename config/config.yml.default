@@ -23,9 +23,6 @@ downloadSettings:
   # Default behavior for downloads: direct or temporary.
   downloadMode: direct
 
-  # Root for media cached while fulfilling RSS requests.
-  rssCacheRoot: /downloads/.wireloft-rss-cache
-
   # Thumbnail handling: no_thumbnail, embed, sidecar, or embed_and_sidecar.
   thumbnailMode: embed
 

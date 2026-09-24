@@ -110,7 +110,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.temporaryDownloadRoot = value
                     })}
-                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. It does not need to be on the same filesystem as the download root."
+                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. Its default is .wireloft-temp inside the download root, but an explicit path can live elsewhere."
                     wide
                 />
                 <TextField
@@ -125,10 +125,10 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     help={
                         <ReadMore summary="Stores media WireLoft prepares or caches while fulfilling RSS requests.">
                             <p>
-                                The default Docker location is <code>/downloads/.wireloft-rss-cache</code>, inside the mounted downloads volume.
+                                By default, the cache lives in <code>.wireloft-rss-cache</code> inside the download root.
                             </p>
                             <p>
-                                You may place this cache anywhere WireLoft can write, including container-local storage such as <code>/tmp/wireloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the container is recreated.
+                                You may explicitly place it anywhere WireLoft can write, including container-local storage such as <code>/tmp/wireloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the container is recreated.
                             </p>
                         </ReadMore>
                     }
