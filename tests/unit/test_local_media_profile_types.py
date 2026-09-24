@@ -19,6 +19,25 @@ def _new_session() -> tuple[Session, object]:
     return Session(engine), engine
 
 
+@pytest.mark.parametrize(
+    ("preferred_format", "expected_extension"),
+    [
+        ("format_4k", "mp4"),
+        ("format_1080p", "mp4"),
+        ("format_720p", "mp4"),
+        ("format_hls", "m3u8"),
+        ("format_audio_only", "m4a"),
+    ],
+)
+def test_preferred_format_file_extension(
+    preferred_format: str,
+    expected_extension: str,
+) -> None:
+    from backend.types.local_media_profile_types import PreferredFormat
+
+    assert PreferredFormat(preferred_format).file_extension == expected_extension
+
+
 def test_local_media_profile_models_are_polymorphic_and_unique_by_type() -> None:
     from backend.db.models import (
         LocalMediaProfileBase,

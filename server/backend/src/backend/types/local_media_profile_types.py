@@ -35,3 +35,11 @@ class PreferredFormat(StrEnum):
     FORMAT_720P = 'format_720p'
     FORMAT_HLS = 'format_hls'
     FORMAT_AUDIO_ONLY = 'format_audio_only'
+
+    @property
+    def file_extension(self) -> str:
+        if self == PreferredFormat.FORMAT_AUDIO_ONLY:
+            return "m4a"
+        if self == PreferredFormat.FORMAT_HLS:
+            return "m3u8"
+        return "mp4"
