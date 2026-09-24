@@ -4,7 +4,7 @@ import Select from 'react-select'
 import Switch from 'react-switch'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import ReadMore from '../../utils/ReadMore'
-import {RssHlsOutputModes, RssMp4OutputModes, RssVideoOutputModeReg} from '../../types/stream_profile'
+import {RssHlsOutputModes, RssVideoOutputModeReg} from '../../types/stream_profile'
 
 
 const VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p', 'format_hls'])
@@ -34,7 +34,8 @@ export default function RssStreamProfileForm({
     const streamLiveEpisodes: boolean = watch('streamLiveEpisodes')
     const usesVideo = VIDEO_FORMATS.has(preferredFormat ?? '')
     const usesHlsVideo = usesVideo && RssHlsOutputModes.has(videoOutputMode ?? '')
-    const usesMp4Video = usesVideo && RssMp4OutputModes.has(videoOutputMode ?? '')
+    const usesDirectMp4Video = usesVideo
+        && (videoOutputMode === 'audio_mp4' || videoOutputMode === 'mp4')
 
     useEffect(() => {
         if (!usesHlsVideo && streamLiveEpisodes) {
@@ -135,7 +136,7 @@ export default function RssStreamProfileForm({
                 </div>
             )}
 
-            {usesMp4Video && useDwStream && (
+            {usesDirectMp4Video && useDwStream && (
                 <div className="stream-download-advisory" role="status">
                     <div className="stream-download-advisory-title">
                         Disable Daily Wire streaming for immediate MP4 playback
@@ -151,11 +152,6 @@ export default function RssStreamProfileForm({
                             <p>
                                 Keep matching video episodes downloaded and use those local files for immediate MP4 playback. If you need direct fallback streaming from The Daily Wire, use an HLS-only video podcast output instead.
                             </p>
-                            {videoOutputMode === 'mp4_hls' && (
-                                <p>
-                                    The HLS alternate enclosure in this mode can stream immediately, but the normal MP4 enclosure still has the full-download delay when no local MP4 exists.
-                                </p>
-                            )}
                         </ReadMore>
                     </div>
                     <div className="stream-download-advisory-actions">
