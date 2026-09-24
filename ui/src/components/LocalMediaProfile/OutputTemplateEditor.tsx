@@ -89,6 +89,12 @@ const jinjaStatements: JinjaStatement[] = [
 
 const jinjaFilterCompletionOptions: Completion[] = [
     {
+        label: 'strftime',
+        type: 'function',
+        detail: 'strftime(format)',
+        info: 'Format a WireLoft date or time value using Python strftime directives.',
+    },
+    {
         label: 'regex_replace',
         type: 'function',
         detail: 'regex_replace(pattern, replacement, count=0)',

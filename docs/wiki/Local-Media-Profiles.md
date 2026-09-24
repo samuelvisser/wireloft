@@ -88,6 +88,16 @@ Example:
 /downloads/{{ show_title }}/{{ episode_title }}{% if year %} ({{ year }}){% endif %}.ext
 ```
 
+### Custom date formatting
+
+The existing date variables keep their convenient preformatted values, such as `date` as `YYYY-MM-DD` and the separate `year`, `month`, and `day` values. When you need another representation, use the `strftime` filter instead of combining additional date variables:
+
+```jinja
+/downloads/{{ show_title }}/{{ date | strftime("%d %B %Y") }} - {{ episode_title }}.ext
+```
+
+For a date of September 24, 2026, that expression renders as `24 September 2026`. The filter uses Python `strftime` directives, so formats such as `%Y%m%d`, `%d-%m-%Y`, and `%H-%M` are also available. It works with WireLoft's date, time, and datetime template values; a missing value remains empty.
+
 ## Show template variable reference
 
 | Variable | Meaning |

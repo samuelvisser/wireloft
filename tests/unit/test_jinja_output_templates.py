@@ -107,6 +107,39 @@ def test_movie_variables_separate_parent_movie_from_current_media() -> None:
     assert extra_values["year"] == "2021"
 
 
+def test_strftime_filter_formats_existing_date_and_datetime_values():
+    from backend.utils.output_template import (
+        SHOW_OUTPUT_TEMPLATE_FIELDS,
+        render_output_template,
+    )
+
+    assert render_output_template(
+        '/downloads/{{ date | strftime("%d-%m-%Y") }}.ext',
+        {"date": "2026-09-24"},
+        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+    ) == "/downloads/24-09-2026.ext"
+
+    assert render_output_template(
+        '/downloads/{{ datetime | strftime("%Y%m%d-%H%M%S") }}.ext',
+        {"datetime": "2026-09-24 20:13:05"},
+        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+    ) == "/downloads/20260924-201305.ext"
+
+
+def test_strftime_filter_rejects_non_date_values():
+    from backend.utils.output_template import (
+        SHOW_OUTPUT_TEMPLATE_FIELDS,
+        render_output_template,
+    )
+
+    with pytest.raises(ValueError, match="strftime requires a WireLoft date/time value"):
+        render_output_template(
+            '/downloads/{{ date | strftime("%Y%m%d") }}.ext',
+            {"date": "not-a-date"},
+            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        )
+
+
 def test_jinja_validation_reports_syntax_and_unknown_variables():
     from backend.utils.output_template import (
         SHOW_OUTPUT_TEMPLATE_FIELDS,
