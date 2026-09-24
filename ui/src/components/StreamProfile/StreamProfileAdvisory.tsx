@@ -161,7 +161,13 @@ function createDownloadProfileHref(
     kind: DownloadMediaKind,
     showSlug?: string,
     preferredFormat?: string,
-    {latestFive = false}: {latestFive?: boolean} = {},
+    {
+        latestFive = false,
+        episodeTypes = [],
+    }: {
+        latestFive?: boolean
+        episodeTypes?: readonly string[]
+    } = {},
 ) {
     if (!showSlug) return undefined
 
@@ -170,6 +176,9 @@ function createDownloadProfileHref(
         preferredFormat: downloadFormatForKind(kind, preferredFormat),
     })
     if (latestFive) params.set('downloadEpisodeCount', '5')
+    for (const episodeType of episodeTypes) {
+        params.append('episodeType', episodeType)
+    }
     return `/add-download-profile?${params.toString()}`
 }
 
@@ -190,7 +199,10 @@ function CoverageRequirement({
         kind,
         showSlug,
         preferredFormat,
-        {latestFive},
+        {
+            latestFive,
+            episodeTypes: uncoveredEpisodeTypes,
+        },
     )
     const hasExistingProfile = profiles.length > 0
     const handleDownloadProfileAction = () => {

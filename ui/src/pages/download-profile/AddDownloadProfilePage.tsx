@@ -23,6 +23,7 @@ import ReadMore from "../../utils/ReadMore";
 import {ShowRead} from "../../types/schemas/show";
 import {SeasonItem} from "../../components/DownloadProfile/SeriesDownloadProfileForm";
 import {SeasonRead} from "../../types/schemas/season";
+import {EpisodeTypeReg} from "../../types/episode";
 
 type AnyOut = PodcastDownloadProfileCreateOut | SeriesDownloadProfileCreateOut
 type AnyForm = UseFormReturn<PodcastDownloadProfileCreateIn> | UseFormReturn<SeriesDownloadProfileCreateIn>
@@ -63,8 +64,13 @@ export default function AddDownloadProfilePage() {
     const prefillApplied = useRef(false)
     const limitPrefillApplied = useRef(false)
     const mediaProfilePrefillApplied = useRef(false)
+    const episodeTypesPrefillApplied = useRef(false)
     const requestedShowSlug = searchParams.get('show')
     const requestedPreferredFormat = searchParams.get('preferredFormat')
+    const requestedEpisodeTypeValues = searchParams.getAll('episodeType')
+    const requestedEpisodeTypes = EpisodeTypeReg.values.filter(
+        (value) => requestedEpisodeTypeValues.includes(value)
+    )
     const requestedDownloadEpisodeCountRaw = searchParams.get('downloadEpisodeCount')
     const parsedDownloadEpisodeCount = Number(requestedDownloadEpisodeCountRaw)
     const requestedDownloadEpisodeCount = requestedDownloadEpisodeCountRaw !== null
@@ -96,6 +102,22 @@ export default function AddDownloadProfilePage() {
         })
         limitPrefillApplied.current = true
     }, [formPodcast, requestedDownloadEpisodeCount])
+
+    useEffect(() => {
+        if (episodeTypesPrefillApplied.current || requestedEpisodeTypes.length === 0) return
+
+        const episodeTypes = [...requestedEpisodeTypes]
+        formPodcast.setValue('epIdTypeList', episodeTypes, {
+            shouldDirty: false,
+            shouldValidate: true,
+        })
+        formSeries.setValue('epIdTypeList', episodeTypes, {
+            shouldDirty: false,
+            shouldValidate: true,
+        })
+        episodeTypesPrefillApplied.current = true
+    }, [formPodcast, formSeries, requestedEpisodeTypes])
+
 
 
 
