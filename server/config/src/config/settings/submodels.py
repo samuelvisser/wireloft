@@ -336,13 +336,13 @@ class DownloadSettings(SubmodelBase):
         default=ThumbnailMode.EMBED,
         description="Whether downloaded media embeds its thumbnail, writes a sidecar image, does both, or stores no thumbnail",
     )
-    temporary_download_root: Path = Field(
-        ...,
-        description="Directory used to stage complete downloads before publishing them to the download root",
+    temporary_download_root: Path | None = Field(
+        default=None,
+        description="Optional override for the directory used to stage complete downloads before publishing them to the download root",
     )
-    rss_cache_root: Path = Field(
-        ...,
-        description="Directory used as the root for media cached while fulfilling RSS requests",
+    rss_cache_root: Path | None = Field(
+        default=None,
+        description="Optional override for the root directory used for media cached while fulfilling RSS requests",
     )
     filename_restriction_mode: FilenameRestrictionMode = Field(
         default=FilenameRestrictionMode.WINDOWS,
@@ -369,6 +369,14 @@ class DownloadSettings(SubmodelBase):
     _validate_rss_cache_root = field_validator(
         "rss_cache_root", mode="before"
     )(_validate_non_empty_path)
+
+    @property
+    def effective_temporary_download_root(self) -> Path:
+        return self.temporary_download_root or self.download_root / ".wireloft-temp"
+
+    @property
+    def effective_rss_cache_root(self) -> Path:
+        return self.rss_cache_root or self.download_root / ".wireloft-rss-cache"
 
 
 class FileWatcherSettings(SubmodelBase):
