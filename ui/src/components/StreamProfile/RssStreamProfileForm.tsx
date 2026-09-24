@@ -14,7 +14,7 @@ type Props = {
     isCreating?: boolean
     onRegenerateToken?: () => void | Promise<void>
     regeneratingToken?: boolean
-    videoOutputAdvisory?: ReactNode
+    downloadProfileAdvisory?: ReactNode
 }
 
 export default function RssStreamProfileForm({
@@ -22,7 +22,7 @@ export default function RssStreamProfileForm({
     isCreating,
     onRegenerateToken,
     regeneratingToken,
-    videoOutputAdvisory,
+    downloadProfileAdvisory,
 }: Props) {
     const {control, formState: {errors}, register, setValue, watch} = form
     const [copied, setCopied] = useState(false)
@@ -215,7 +215,7 @@ export default function RssStreamProfileForm({
                 </div>
             )}
 
-            {usesVideo ? videoOutputAdvisory : null}
+            {downloadProfileAdvisory}
 
             {!isCreating && (
                 <div className="form-row">
