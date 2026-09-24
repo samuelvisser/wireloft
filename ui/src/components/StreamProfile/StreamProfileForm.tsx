@@ -223,7 +223,7 @@ export default function StreamProfileForm({
                 </div>
                 <div>
                     {advisoryKind === 'hls'
-                        ? 'A local HLS download starts immediately and already contains 480p, 720p and 1080p renditions.'
+                        ? 'A local HLS download streams video from your own server instead of The Daily Wire, making it much faster and more stable.'
                         : 'A normal local video download lets WireLoft serve the MP4 immediately without preparing it when the podcast app asks for it.'}
                 </div>
                 <div className="help">

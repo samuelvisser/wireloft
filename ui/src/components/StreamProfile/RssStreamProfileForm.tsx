@@ -77,7 +77,14 @@ export default function RssStreamProfileForm({
                     </div>
                 )}
                 <div className="help" id="rss-max-items-help">
-                    Only the newest episodes are included. Set to 0 to expose the complete episode history.
+                    <ReadMore summary={<span>Include only the newest episodes. Keeping this low speeds up RSS experience.</span>}>
+                        <p>
+                            Capping the amount of included episodes usually greatly improves the performance of your RSS feed.
+                        </p>
+                        <p>
+                            Set to 0 to remove all limits.
+                        </p>
+                    </ReadMore>
                 </div>
             </div>
 
@@ -107,18 +114,18 @@ export default function RssStreamProfileForm({
                         </div>
                     )}
                     <div className="help" id="rss-video-output-mode-help">
-                        <ReadMore summary={<span>Choose the standard enclosure and optional Podcasting 2.0 video enclosure.</span>}>
+                        <ReadMore summary={<span>Choose how to serve video in your RSS feed depending on what your podcast player supports.</span>}>
                             <p>
-                                <strong>Audio with HLS video</strong> keeps a normal M4A podcast enclosure and adds adaptive HLS through Podcasting 2.0. WireLoft prefers a downloaded HLS package containing 480p, 720p and 1080p, and otherwise streams HLS from The Daily Wire when allowed.
+                                <strong>{RssVideoOutputModeReg.getLabel('audio_hls')}</strong> {RssVideoOutputModeReg.getHelp('audio_hls')}
                             </p>
                             <p>
-                                <strong>Audio with MP4 video</strong> keeps a normal M4A podcast enclosure and adds MP4 video through Podcasting 2.0. A downloaded normal video is served immediately. If none exists and Daily Wire streaming is enabled, WireLoft first prepares the MP4 when the podcast app requests it.
+                                <strong>{RssVideoOutputModeReg.getLabel('audio_mp4')}</strong> {RssVideoOutputModeReg.getHelp('audio_mp4')}
                             </p>
                             <p>
-                                <strong>MP4 video only</strong> uses a conventional MP4 enclosure and no alternate enclosure.
+                                <strong>{RssVideoOutputModeReg.getLabel('mp4')}</strong> {RssVideoOutputModeReg.getHelp('mp4')}
                             </p>
                             <p>
-                                <strong>MP4 video with HLS alternate</strong> combines a conventional MP4 enclosure with an adaptive HLS alternate enclosure.
+                                <strong>{RssVideoOutputModeReg.getLabel('mp4_hls')}</strong> {RssVideoOutputModeReg.getHelp('mp4_hls')}
                             </p>
                             <p>
                                 The episode URLs in the RSS never change when a local download appears. The same WireLoft URL resolves to local media when available and to The Daily Wire only when the profile permits that fallback.

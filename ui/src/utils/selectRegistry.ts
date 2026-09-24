@@ -51,6 +51,9 @@ export function createSelectRegistry<const T extends string>(name: string, spec:
         return x
     }
 
+    // Returns the help text for a given value, or throws if not found
+    const getHelp = (v: T) => spec[v].help;
+
     // Helpful string for debugging
     const describe = () => `${name}(${values.join(", ")})`;
 
@@ -66,6 +69,7 @@ export function createSelectRegistry<const T extends string>(name: string, spec:
         meta,
         getLabel,
         getLabelLoose,
+        getHelp,
         describe,
     };
 }

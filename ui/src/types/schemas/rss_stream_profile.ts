@@ -17,7 +17,7 @@ const RssStreamProfileBaseSchema = z.object({
     epIdTypeList: z.array(z.enum(EpisodeTypeReg.values)).default(['ep', 'aux']),
     videoOutputMode: z.enum(RssVideoOutputModeReg.values).default('audio_hls'),
     streamLiveEpisodes: z.boolean().default(false),
-    maxItems: z.int().nonnegative().default(0),
+    maxItems: z.int().nonnegative().default(100),
 })
 
 const validateLiveVideoOutput = (

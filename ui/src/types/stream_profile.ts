@@ -7,20 +7,20 @@ export const MediaTypeReg = createSelectRegistry("PreferredFormat", {
 
 export const RssVideoOutputModeReg = createSelectRegistry("RssVideoOutputMode", {
   'audio_hls': {
-    label: "Audio with HLS video",
-    help: "Normal M4A podcast enclosure with an adaptive HLS video alternate enclosure",
+    label: "HLS video stream with audio fallback (recommended)",
+    help: "Stream video directly using a stream- friendly protocol serving multiple quality levels depending on the connection speed. Provides an audio fallback for compatibility.",
   },
   'audio_mp4': {
-    label: "Audio with MP4 video",
-    help: "Normal M4A podcast enclosure with an MP4 video alternate enclosure",
+    label: "Serve as mp4 with audio fallback (full compatibility)",
+    help: "Stream as mp4 downloaded by WireLoft. Requires the mp4 to be downloaded by WireLoft before it can start streaming. Provides an audio fallback for compatibility.",
   },
   'mp4': {
-    label: "MP4 video only",
-    help: "Normal MP4 enclosure without a Podcasting 2.0 alternate enclosure",
+    label: "Serve mp4 video only",
+    help: "Normal mp4 enclosure without audio fallback. Not recommended if 'Use DailyWire stream' is enabled.",
   },
   'mp4_hls': {
-    label: "MP4 video with HLS alternate",
-    help: "Normal MP4 enclosure plus an adaptive HLS alternate enclosure",
+    label: "HLS video stream with mp4 fallback",
+    help: "Streams video using HLS, and provides mp4 as the fallback. This ensures the podcasting app will always play video if it supports video at all. Might be unexpectedly slow however because mp4 videos still need to be pre- downloaded by WireLoft.",
   },
 });
 
