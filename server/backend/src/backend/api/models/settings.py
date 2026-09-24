@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.triggers.cron import CronTrigger
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 from pydantic_core import PydanticCustomError
 
@@ -250,8 +250,20 @@ class DownloadSettingsValue(_SettingsValueModel):
     download_root: Path
     download_mode: DownloadMode
     thumbnail_mode: ThumbnailMode
-    temporary_download_root: Path
-    rss_cache_root: Path
+    temporary_download_root: Path = Field(
+        validation_alias=AliasChoices(
+            "effective_temporary_download_root",
+            "temporaryDownloadRoot",
+            "temporary_download_root",
+        )
+    )
+    rss_cache_root: Path = Field(
+        validation_alias=AliasChoices(
+            "effective_rss_cache_root",
+            "rssCacheRoot",
+            "rss_cache_root",
+        )
+    )
     filename_restriction_mode: FilenameRestrictionMode
     remux_video_to_mp4: bool
     ffmpeg_path: str = Field(min_length=1)
