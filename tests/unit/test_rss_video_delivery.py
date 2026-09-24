@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from xml.etree.ElementTree import Element
@@ -134,6 +135,34 @@ def test_cached_mp4_path_uses_configured_rss_cache_root(monkeypatch, tmp_path):
     assert path.suffix == ".mp4"
 
 
+def test_rss_cache_cleanup_uses_configured_sliding_retention(monkeypatch, tmp_path):
+    import backend.api.endpoints.feeds.cached_video as cached_video
+
+    video_root = tmp_path / "video"
+    video_root.mkdir()
+    expired = video_root / "expired.mp4"
+    current = video_root / "current.mp4"
+    expired.write_bytes(b"expired")
+    current.write_bytes(b"current")
+    os.utime(expired, (900, 900))
+    os.utime(current, (950, 950))
+
+    settings = SimpleNamespace(
+        download_settings=SimpleNamespace(
+            rss_cache_root=tmp_path,
+            rss_cache_retention_seconds=60,
+        )
+    )
+    monkeypatch.setattr(cached_video, "get_settings", lambda: settings)
+    monkeypatch.setattr(cached_video.time, "time", lambda: 1000)
+
+    assert cached_video._is_current(current)
+    assert not cached_video._is_current(expired)
+    assert cached_video.cleanup_expired_rss_cache() == 1
+    assert current.exists()
+    assert not expired.exists()
+
+
 def test_cached_mp4_is_prepared_once_and_reused(monkeypatch, tmp_path):
     import backend.api.endpoints.feeds.cached_video as cached_video
 
@@ -150,7 +179,10 @@ def test_cached_mp4_is_prepared_once_and_reused(monkeypatch, tmp_path):
         cached_video,
         "get_settings",
         lambda: SimpleNamespace(
-            download_settings=SimpleNamespace(ffmpeg_path="ffmpeg")
+            download_settings=SimpleNamespace(
+                ffmpeg_path="ffmpeg",
+                rss_cache_retention_seconds=7 * 24 * 60 * 60,
+            )
         ),
     )
     monkeypatch.setattr(cached_video.subprocess, "run", fake_run)

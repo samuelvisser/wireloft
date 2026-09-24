@@ -18,6 +18,7 @@ def test_system_download_storage_defaults_to_direct_mode():
         settings.download_settings.rss_cache_root
         == settings.download_settings.download_root / ".wireloft-rss-cache"
     )
+    assert settings.download_settings.rss_cache_retention_seconds == 7 * 24 * 60 * 60
 
     values = SettingsValues.from_app_settings(settings).model_dump(
         by_alias=True,
@@ -31,6 +32,7 @@ def test_system_download_storage_defaults_to_direct_mode():
     assert values["downloadSettings"]["rssCacheRoot"] == str(
         settings.download_settings.download_root / ".wireloft-rss-cache"
     )
+    assert values["downloadSettings"]["rssCacheRetentionSeconds"] == 7 * 24 * 60 * 60
 
 
 def test_download_storage_default_factories_follow_download_root():

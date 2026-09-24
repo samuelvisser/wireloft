@@ -39,6 +39,7 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
     own lease at the same time; normal work resumes only after the final lease is
     released.
     """
+    from backend.api.endpoints.feeds.cached_video import cleanup_expired_rss_cache
     from task_manager.tasks.helpers.downloads.download_paths import (
         cleanup_abandoned_download_path_reservations,
         cleanup_abandoned_temporary_downloads,
@@ -53,10 +54,12 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
             download_settings.temporary_download_root,
             download_settings.download_root,
         )
+        rss_cache_count = cleanup_expired_rss_cache()
         logger.info(
-            "Download filesystem recovery complete: cleaned %s stale path claim(s) and %s temporary workspace(s)",
+            "Download filesystem recovery complete: cleaned %s stale path claim(s), %s temporary workspace(s), and %s expired RSS cache file(s)",
             reservation_count,
             temporary_count,
+            rss_cache_count,
         )
     except Exception:
         # Filesystem recovery is best-effort crash cleanup. A transient mount or

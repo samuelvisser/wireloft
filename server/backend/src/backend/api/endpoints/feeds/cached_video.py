@@ -18,15 +18,21 @@ from config.network import NO_INTERNET_CONNECTION_MESSAGE, message_indicates_no_
 logger = logging.getLogger(__name__)
 
 _VIDEO_CACHE_DIRECTORY = "video"
-_CACHE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 _CACHE_LOCKS: dict[Path, threading.Lock] = {}
 _CACHE_LOCKS_GUARD = threading.Lock()
 
 
+def _video_cache_root() -> Path:
+    return Path(get_settings().download_settings.rss_cache_root) / _VIDEO_CACHE_DIRECTORY
+
+
+def _cache_retention_seconds() -> int:
+    return get_settings().download_settings.rss_cache_retention_seconds
+
+
 def _cache_path(episode_uuid: str) -> Path:
     digest = hashlib.sha256(episode_uuid.encode("utf-8")).hexdigest()
-    root = Path(get_settings().download_settings.rss_cache_root) / _VIDEO_CACHE_DIRECTORY
-    return root / f"{digest}.mp4"
+    return _video_cache_root() / f"{digest}.mp4"
 
 
 def _is_current(path: Path) -> bool:
@@ -34,7 +40,7 @@ def _is_current(path: Path) -> bool:
         stat = path.stat()
     except OSError:
         return False
-    return stat.st_size > 0 and time.time() - stat.st_mtime < _CACHE_MAX_AGE_SECONDS
+    return stat.st_size > 0 and time.time() - stat.st_mtime < _cache_retention_seconds()
 
 
 def get_cached_mp4_path(episode_uuid: str) -> Path | None:
@@ -57,19 +63,29 @@ def _lock_for(path: Path) -> threading.Lock:
         return _CACHE_LOCKS.setdefault(path, threading.Lock())
 
 
-def _cleanup_expired_files(root: Path) -> None:
-    cutoff = time.time() - _CACHE_MAX_AGE_SECONDS
+def _cleanup_expired_files(root: Path, *, retention_seconds: int) -> int:
+    cutoff = time.time() - retention_seconds
     try:
         paths = list(root.iterdir())
     except OSError:
-        return
+        return 0
 
+    removed = 0
     for path in paths:
         try:
-            if path.is_file() and path.stat().st_mtime < cutoff:
+            if path.is_file() and path.stat().st_mtime <= cutoff:
                 path.unlink()
+                removed += 1
         except OSError:
             continue
+    return removed
+
+
+def cleanup_expired_rss_cache() -> int:
+    return _cleanup_expired_files(
+        _video_cache_root(),
+        retention_seconds=_cache_retention_seconds(),
+    )
 
 
 def _ffmpeg_command(source_url: str, output_path: Path) -> list[str]:
@@ -110,7 +126,10 @@ def prepare_cached_mp4(source_url: str, *, episode_uuid: str) -> Path:
                 pass
             return target
 
-        _cleanup_expired_files(target.parent)
+        _cleanup_expired_files(
+            target.parent,
+            retention_seconds=_cache_retention_seconds(),
+        )
         temporary = target.with_name(f".{target.stem}.{uuid4().hex}.part")
         try:
             try:

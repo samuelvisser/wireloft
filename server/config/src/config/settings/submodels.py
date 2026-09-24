@@ -352,6 +352,11 @@ class DownloadSettings(SubmodelBase):
         default_factory=lambda data: data["download_root"] / ".wireloft-rss-cache",
         description="Directory used as the root for media cached while fulfilling RSS requests",
     )
+    rss_cache_retention_seconds: int = Field(
+        default=7 * 24 * 60 * 60,
+        ge=1,
+        description="Seconds an RSS cache entry remains valid since it was last served",
+    )
     filename_restriction_mode: FilenameRestrictionMode = Field(
         default=FilenameRestrictionMode.WINDOWS,
         description="Filename compatibility mode: minimal restrictions, Windows-compatible, or restricted ASCII",

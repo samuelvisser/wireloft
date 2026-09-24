@@ -161,6 +161,18 @@ export default function DownloadsSettingsTab({
                     }
                     wide
                 />
+                <DurationField
+                    id="settings-rss-cache-retention"
+                    label="RSS cache retention period"
+                    value={draft.downloadSettings.rssCacheRetentionSeconds}
+                    backendUnit="seconds"
+                    error={errorFor('downloadSettings.rssCacheRetentionSeconds')}
+                    environmentVariable={environmentVariableFor('downloadSettings.rssCacheRetentionSeconds')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.rssCacheRetentionSeconds = value
+                    })}
+                    help="Cached RSS media expires after this much time without being served. Serving a cached MP4 refreshes its retention period."
+                />
                 <SelectField
                     id="settings-filename-restriction-mode"
                     label="Filename restrictions"

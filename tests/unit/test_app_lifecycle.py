@@ -5,6 +5,7 @@ import subprocess
 import sys
 import threading
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 
@@ -33,6 +34,40 @@ assert 'refresh_movie_extras' in {definition.key for definition in all_definitio
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_path):
+    import backend.api.endpoints.feeds.cached_video as cached_video
+    import backend.app as backend_app
+    import task_manager.tasks.helpers.downloads.download_paths as download_paths
+
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        download_paths,
+        "cleanup_abandoned_download_path_reservations",
+        lambda _root: calls.append("reservations") or 1,
+    )
+    monkeypatch.setattr(
+        download_paths,
+        "cleanup_abandoned_temporary_downloads",
+        lambda _temporary, _downloads: calls.append("temporary") or 2,
+    )
+    monkeypatch.setattr(
+        cached_video,
+        "cleanup_expired_rss_cache",
+        lambda: calls.append("rss-cache") or 3,
+    )
+
+    pause = SimpleNamespace(release=lambda: calls.append("release"))
+    download_settings = SimpleNamespace(
+        download_root=tmp_path / "downloads",
+        temporary_download_root=tmp_path / "temporary",
+    )
+
+    backend_app._recover_download_filesystem(download_settings, pause)
+
+    assert calls == ["reservations", "temporary", "rss-cache", "release"]
 
 
 def test_app_factory_is_side_effect_free_and_lifespan_owns_controller(monkeypatch):
