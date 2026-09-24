@@ -85,6 +85,7 @@ These settings are available under **Settings → Downloads**.
 | `downloadSettings.downloadRoot` | `WL_DOWNLOAD_SETTINGS__DOWNLOAD_ROOT` | `<project>/downloads` | Root directory used for paths beginning with `/downloads/`. In the supplied Docker layout, set/use `/downloads` to target the mounted media volume. |
 | `downloadSettings.downloadMode` | `WL_DOWNLOAD_SETTINGS__DOWNLOAD_MODE` | `direct` | System default: `direct` or `temporary`. Local Media Profiles can inherit or override it. |
 | `downloadSettings.temporaryDownloadRoot` | `WL_DOWNLOAD_SETTINGS__TEMPORARY_DOWNLOAD_ROOT` | `<project>/downloads/.wireloft-temp` | Staging directory used by temporary download mode. It may be on different storage from the final library. |
+| `downloadSettings.rssCacheRoot` | `WL_DOWNLOAD_SETTINGS__RSS_CACHE_ROOT` | `/downloads/.wireloft-rss-cache` | Root for media cached while fulfilling RSS requests. It may point to mounted storage or container-local storage such as `/tmp/wireloft-rss-cache`. |
 | `downloadSettings.maxConcurrentDownloads` | `WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS` | `5` | Maximum downloads running at once. |
 | `downloadSettings.maxDownloadAttempts` | `WL_DOWNLOAD_SETTINGS__MAX_DOWNLOAD_ATTEMPTS` | `3` | Automatic attempts before a download is left failed. |
 | `downloadSettings.downloadTimeoutSeconds` | `WL_DOWNLOAD_SETTINGS__DOWNLOAD_TIMEOUT_SECONDS` | `600` | Timeout for one download attempt. |
@@ -250,6 +251,7 @@ downloadSettings:
   downloadRoot: /downloads
   downloadMode: temporary
   temporaryDownloadRoot: /tmp/wireloft-downloads
+  rssCacheRoot: /tmp/wireloft-rss-cache
   maxConcurrentDownloads: 3
   filenameRestrictionMode: windows
 

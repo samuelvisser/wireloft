@@ -76,6 +76,7 @@ const DownloadSettingsSchema = z.object({
     downloadMode: DownloadModeSchema,
     thumbnailMode: ThumbnailModeSchema,
     temporaryDownloadRoot: z.string(),
+    rssCacheRoot: z.string(),
     filenameRestrictionMode: FilenameRestrictionModeSchema,
     remuxVideoToMp4: z.boolean(),
     ffmpegPath: z.string(),
@@ -167,6 +168,7 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         downloadTimeoutSeconds: requiredNumber().int().min(1, 'Must be at least 1 second.'),
         downloadRoot: z.string().trim().min(1, 'A download root is required.'),
         temporaryDownloadRoot: z.string().trim().min(1, 'A temporary download folder is required.'),
+        rssCacheRoot: z.string().trim().min(1, 'An RSS cache folder is required.'),
     }),
     fileWatcher: FileWatcherSettingsSchema.extend({
         scanCron: cronExpression,
@@ -223,6 +225,7 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadSettings.downloadMode',
     'downloadSettings.thumbnailMode',
     'downloadSettings.temporaryDownloadRoot',
+    'downloadSettings.rssCacheRoot',
     'downloadSettings.filenameRestrictionMode',
     'downloadSettings.remuxVideoToMp4',
     'downloadSettings.ffmpegPath',

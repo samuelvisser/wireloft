@@ -17,7 +17,7 @@ from config.network import NO_INTERNET_CONNECTION_MESSAGE, message_indicates_no_
 
 logger = logging.getLogger(__name__)
 
-_CACHE_DIRECTORY = ".wireloft-rss-video-cache"
+_VIDEO_CACHE_DIRECTORY = "video"
 _CACHE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 _CACHE_LOCKS: dict[Path, threading.Lock] = {}
 _CACHE_LOCKS_GUARD = threading.Lock()
@@ -25,7 +25,7 @@ _CACHE_LOCKS_GUARD = threading.Lock()
 
 def _cache_path(episode_uuid: str) -> Path:
     digest = hashlib.sha256(episode_uuid.encode("utf-8")).hexdigest()
-    root = Path(get_settings().download_settings.download_root) / _CACHE_DIRECTORY
+    root = Path(get_settings().download_settings.rss_cache_root) / _VIDEO_CACHE_DIRECTORY
     return root / f"{digest}.mp4"
 
 

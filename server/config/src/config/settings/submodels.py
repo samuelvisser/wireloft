@@ -340,6 +340,10 @@ class DownloadSettings(SubmodelBase):
         ...,
         description="Directory used to stage complete downloads before publishing them to the download root",
     )
+    rss_cache_root: Path = Field(
+        ...,
+        description="Directory used as the root for media cached while fulfilling RSS requests",
+    )
     filename_restriction_mode: FilenameRestrictionMode = Field(
         default=FilenameRestrictionMode.WINDOWS,
         description="Filename compatibility mode: minimal restrictions, Windows-compatible, or restricted ASCII",
@@ -361,6 +365,9 @@ class DownloadSettings(SubmodelBase):
     )(_validate_non_empty_path)
     _validate_temporary_download_root = field_validator(
         "temporary_download_root", mode="before"
+    )(_validate_non_empty_path)
+    _validate_rss_cache_root = field_validator(
+        "rss_cache_root", mode="before"
     )(_validate_non_empty_path)
 
 

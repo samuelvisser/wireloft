@@ -117,6 +117,23 @@ def test_feed_url_does_not_encode_video_delivery_mode():
     ) == "https://wireloft.example/feeds/rss/token/show.xml"
 
 
+def test_cached_mp4_path_uses_configured_rss_cache_root(monkeypatch, tmp_path):
+    import backend.api.endpoints.feeds.cached_video as cached_video
+
+    monkeypatch.setattr(
+        cached_video,
+        "get_settings",
+        lambda: SimpleNamespace(
+            download_settings=SimpleNamespace(rss_cache_root=tmp_path)
+        ),
+    )
+
+    path = cached_video._cache_path("episode-uuid")
+
+    assert path.parent == tmp_path / "video"
+    assert path.suffix == ".mp4"
+
+
 def test_cached_mp4_is_prepared_once_and_reused(monkeypatch, tmp_path):
     import backend.api.endpoints.feeds.cached_video as cached_video
 

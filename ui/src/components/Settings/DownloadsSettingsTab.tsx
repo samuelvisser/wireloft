@@ -113,6 +113,27 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. It does not need to be on the same filesystem as the download root."
                     wide
                 />
+                <TextField
+                    id="settings-rss-cache-root"
+                    label="RSS cache folder"
+                    value={draft.downloadSettings.rssCacheRoot}
+                    error={errorFor('downloadSettings.rssCacheRoot')}
+                    environmentVariable={environmentVariableFor('downloadSettings.rssCacheRoot')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.rssCacheRoot = value
+                    })}
+                    help={
+                        <ReadMore summary="Stores media WireLoft prepares or caches while fulfilling RSS requests.">
+                            <p>
+                                The default Docker location is <code>/downloads/.wireloft-rss-cache</code>, inside the mounted downloads volume.
+                            </p>
+                            <p>
+                                You may place this cache anywhere WireLoft can write, including container-local storage such as <code>/tmp/wireloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the container is recreated.
+                            </p>
+                        </ReadMore>
+                    }
+                    wide
+                />
                 <SelectField
                     id="settings-filename-restriction-mode"
                     label="Filename restrictions"

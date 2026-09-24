@@ -11,6 +11,7 @@ def test_system_download_storage_defaults_to_direct_mode():
     assert settings.download_settings.download_mode is DownloadMode.DIRECT
     assert settings.download_settings.thumbnail_mode is ThumbnailMode.EMBED
     assert settings.download_settings.temporary_download_root.name == ".wireloft-temp"
+    assert settings.download_settings.rss_cache_root.as_posix() == "/downloads/.wireloft-rss-cache"
 
     values = SettingsValues.from_app_settings(settings).model_dump(
         by_alias=True,
@@ -19,6 +20,18 @@ def test_system_download_storage_defaults_to_direct_mode():
     assert values["downloadSettings"]["downloadMode"] == "direct"
     assert values["downloadSettings"]["thumbnailMode"] == "embed"
     assert values["downloadSettings"]["temporaryDownloadRoot"]
+    assert values["downloadSettings"]["rssCacheRoot"] == "/downloads/.wireloft-rss-cache"
+
+
+def test_rss_cache_root_accepts_container_local_storage():
+    from config.settings.settings import AppSettings
+    from config.settings.submodels import DownloadSettings
+
+    values = AppSettings().download_settings.model_dump()
+    values["rss_cache_root"] = "/tmp/wireloft-rss-cache"
+    settings = DownloadSettings.model_validate(values)
+
+    assert settings.rss_cache_root.as_posix() == "/tmp/wireloft-rss-cache"
 
 
 def test_local_media_profile_defaults_to_system_storage_and_thumbnail_modes():

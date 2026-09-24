@@ -127,6 +127,7 @@ class AppSettings(SettingsBase):
         download_mode=DownloadMode.DIRECT,
         thumbnail_mode=ThumbnailMode.EMBED,
         temporary_download_root=PROJECT_ROOT / "downloads" / ".wireloft-temp",
+        rss_cache_root=Path("/downloads/.wireloft-rss-cache"),
         filename_restriction_mode=FilenameRestrictionMode.WINDOWS,
         remux_video_to_mp4=True,
         ffmpeg_path="ffmpeg",
