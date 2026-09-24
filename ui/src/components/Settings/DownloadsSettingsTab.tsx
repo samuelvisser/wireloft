@@ -33,7 +33,34 @@ const THUMBNAIL_MODE_LABELS = {
     embed_and_sidecar: 'Both embed and download',
 } satisfies Record<ThumbnailMode, string>
 
-export default function DownloadsSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
+function childPath(root: string, name: string) {
+    const trimmedRoot = root.trim()
+    if (!trimmedRoot) return ''
+    const separator = trimmedRoot.includes('\\') && !trimmedRoot.includes('/') ? '\\' : '/'
+    return `${trimmedRoot.replace(/[\\/]+$/, '')}${separator}${name}`
+}
+
+export default function DownloadsSettingsTab({
+    draft,
+    updateDraft,
+    environmentVariableFor,
+    errorFor,
+    isFieldExplicit,
+    isFieldDirty,
+}: SettingsTabProps) {
+    const temporaryDownloadRoot = (
+        !isFieldExplicit('downloadSettings.temporaryDownloadRoot')
+        && !isFieldDirty('downloadSettings.temporaryDownloadRoot')
+    )
+        ? childPath(draft.downloadSettings.downloadRoot, '.wireloft-temp')
+        : draft.downloadSettings.temporaryDownloadRoot
+    const rssCacheRoot = (
+        !isFieldExplicit('downloadSettings.rssCacheRoot')
+        && !isFieldDirty('downloadSettings.rssCacheRoot')
+    )
+        ? childPath(draft.downloadSettings.downloadRoot, '.wireloft-rss-cache')
+        : draft.downloadSettings.rssCacheRoot
+
     return (
         <>
             <SettingsSection
@@ -104,19 +131,19 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                 <TextField
                     id="settings-temporary-download-root"
                     label="Temporary download folder"
-                    value={draft.downloadSettings.temporaryDownloadRoot}
+                    value={temporaryDownloadRoot}
                     error={errorFor('downloadSettings.temporaryDownloadRoot')}
                     environmentVariable={environmentVariableFor('downloadSettings.temporaryDownloadRoot')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.temporaryDownloadRoot = value
                     })}
-                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. It does not need to be on the same filesystem as the download root."
+                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. By default it follows the download root as .wireloft-temp; an explicitly configured path stays independent."
                     wide
                 />
                 <TextField
                     id="settings-rss-cache-root"
                     label="RSS cache folder"
-                    value={draft.downloadSettings.rssCacheRoot}
+                    value={rssCacheRoot}
                     error={errorFor('downloadSettings.rssCacheRoot')}
                     environmentVariable={environmentVariableFor('downloadSettings.rssCacheRoot')}
                     onChange={(value) => updateDraft((next) => {
@@ -125,10 +152,10 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                     help={
                         <ReadMore summary="Stores media WireLoft prepares or caches while fulfilling RSS requests.">
                             <p>
-                                The default Docker location is <code>/downloads/.wireloft-rss-cache</code>, inside the mounted downloads volume.
+                                By default this follows the download root as <code>.wireloft-rss-cache</code>. Changing the download root therefore also changes this default location.
                             </p>
                             <p>
-                                You may place this cache anywhere WireLoft can write, including container-local storage such as <code>/tmp/wireloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the container is recreated.
+                                An explicitly configured path stays independent. You may place the cache anywhere WireLoft can write, including container-local storage such as <code>/tmp/wireloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the container is recreated.
                             </p>
                         </ReadMore>
                     }
