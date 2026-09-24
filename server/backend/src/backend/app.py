@@ -50,7 +50,7 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
             download_settings.download_root
         )
         temporary_count = cleanup_abandoned_temporary_downloads(
-            download_settings.temporary_download_root,
+            download_settings.effective_temporary_download_root,
             download_settings.download_root,
         )
         logger.info(
