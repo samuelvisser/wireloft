@@ -262,7 +262,7 @@ def _attempt_download(
         source=source,
         requested_destination=requested_destination,
         download_mode=download_mode,
-        temporary_root=settings.temporary_download_root,
+        temporary_root=settings.effective_temporary_download_root,
         ffmpeg_path=settings.ffmpeg_path,
         thumbnail_url=thumbnail_url,
         thumbnail_mode=thumbnail_mode,
