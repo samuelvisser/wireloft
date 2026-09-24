@@ -287,7 +287,7 @@ export default function StreamProfileAdvisory({
                     <p>
                         {hasPartialCoverage
                             ? 'Daily Wire streaming is disabled, but the existing Download Profiles do not fully cover this Stream Profile.'
-                            : 'Daily Wire streaming is disabled and no enabled Download Profile matches the local media coverage this Stream Profile is missing.'}
+                            : 'Daily Wire streaming is disabled and no enabled Download Profile matches the media coverage this Stream Profile is setup to include.'}
                     </p>
                     <div className="stream-profile-advisory-requirements">
                         {missingRequirements.map((coverage) => renderCoverageRequirement(coverage))}
@@ -340,7 +340,8 @@ export default function StreamProfileAdvisory({
             )}
         >
             <p>
-                Normal video Download Profile coverage is incomplete for the MP4 fallback.
+                MP4 delivery is very slow for episodes that are not already downloaded locally, as those would first need
+                to be downloaded before they can be served.
             </p>
             <div className="stream-profile-advisory-requirements">
                 {renderCoverageRequirement(videoCoverage, {latestFive: true})}
