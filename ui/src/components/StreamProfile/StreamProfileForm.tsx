@@ -211,8 +211,7 @@ export default function StreamProfileForm({
 
     const createDownloadProfileHref = (
         kind: DownloadMediaKind,
-        *,
-        latestFive = false,
+        {latestFive = false}: {latestFive?: boolean} = {},
     ) => {
         if (!showSlug) return undefined
 
