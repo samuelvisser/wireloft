@@ -142,6 +142,15 @@ export default function SettingsPage() {
         return errorAtPath(errors, path)
     }, [errors])
 
+    const isFieldExplicit = useCallback((path: SettingsFieldPath): boolean => {
+        return settingsQuery.data?.configuredFields.includes(path) === true
+            || settingsQuery.data?.environmentOverrides[path] !== undefined
+    }, [settingsQuery.data?.configuredFields, settingsQuery.data?.environmentOverrides])
+
+    const isFieldDirty = useCallback((path: SettingsFieldPath): boolean => (
+        dirtyFields.includes(path)
+    ), [dirtyFields])
+
     const submit = buildServerAwareSubmit<SettingsValues, SettingsValues, SettingsRead>(
         form,
         (values) => saveSettingsRequest({values, changedFields: dirtyFields}),
@@ -186,7 +195,14 @@ export default function SettingsPage() {
     }
 
     const updatedAt = settingsQuery.data.updatedAt
-    const tabProps = {draft, updateDraft, environmentVariableFor, errorFor}
+    const tabProps = {
+        draft,
+        updateDraft,
+        environmentVariableFor,
+        errorFor,
+        isFieldExplicit,
+        isFieldDirty,
+    }
 
     return (
         <section className="view settings-page" aria-labelledby="settings-title">

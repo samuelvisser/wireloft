@@ -8,4 +8,6 @@ export type SettingsTabProps = {
     updateDraft: UpdateSettingsDraft
     environmentVariableFor: (path: SettingsFieldPath) => string | undefined
     errorFor: (path: SettingsFieldPath) => string | undefined
+    isFieldExplicit: (path: SettingsFieldPath) => boolean
+    isFieldDirty: (path: SettingsFieldPath) => boolean
 }

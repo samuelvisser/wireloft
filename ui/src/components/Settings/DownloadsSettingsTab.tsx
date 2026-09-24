@@ -33,7 +33,34 @@ const THUMBNAIL_MODE_LABELS = {
     embed_and_sidecar: 'Both embed and download',
 } satisfies Record<ThumbnailMode, string>
 
-export default function DownloadsSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
+function childPath(root: string, name: string) {
+    const trimmedRoot = root.trim()
+    if (!trimmedRoot) return ''
+    const separator = trimmedRoot.includes('\\') && !trimmedRoot.includes('/') ? '\\' : '/'
+    return `${trimmedRoot.replace(/[\\/]+$/, '')}${separator}${name}`
+}
+
+export default function DownloadsSettingsTab({
+    draft,
+    updateDraft,
+    environmentVariableFor,
+    errorFor,
+    isFieldExplicit,
+    isFieldDirty,
+}: SettingsTabProps) {
+    const temporaryDownloadRoot = (
+        !isFieldExplicit('downloadSettings.temporaryDownloadRoot')
+        && !isFieldDirty('downloadSettings.temporaryDownloadRoot')
+    )
+        ? childPath(draft.downloadSettings.downloadRoot, '.wireloft-temp')
+        : draft.downloadSettings.temporaryDownloadRoot
+    const rssCacheRoot = (
+        !isFieldExplicit('downloadSettings.rssCacheRoot')
+        && !isFieldDirty('downloadSettings.rssCacheRoot')
+    )
+        ? childPath(draft.downloadSettings.downloadRoot, '.wireloft-rss-cache')
+        : draft.downloadSettings.rssCacheRoot
+
     return (
         <>
             <SettingsSection
@@ -104,7 +131,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                 <TextField
                     id="settings-temporary-download-root"
                     label="Temporary download folder"
-                    value={draft.downloadSettings.temporaryDownloadRoot}
+                    value={temporaryDownloadRoot}
                     error={errorFor('downloadSettings.temporaryDownloadRoot')}
                     environmentVariable={environmentVariableFor('downloadSettings.temporaryDownloadRoot')}
                     onChange={(value) => updateDraft((next) => {
@@ -116,7 +143,7 @@ export default function DownloadsSettingsTab({draft, updateDraft, environmentVar
                 <TextField
                     id="settings-rss-cache-root"
                     label="RSS cache folder"
-                    value={draft.downloadSettings.rssCacheRoot}
+                    value={rssCacheRoot}
                     error={errorFor('downloadSettings.rssCacheRoot')}
                     environmentVariable={environmentVariableFor('downloadSettings.rssCacheRoot')}
                     onChange={(value) => updateDraft((next) => {
