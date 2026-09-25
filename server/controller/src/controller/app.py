@@ -45,6 +45,9 @@ def clear_interrupted_task_runs() -> int:
     from task_manager.scheduler.db import TaskOperationRun, TaskRun
     from task_manager.scheduler.operations import mark_interrupted_operations_for_recovery
     from task_manager.scheduler.types import TaskStatus
+    from task_manager.tasks.media_download_operations import (
+        record_interrupted_media_download_run_history,
+    )
 
     interrupted_statuses = (
         TaskStatus.SCHEDULED,
@@ -62,6 +65,12 @@ def clear_interrupted_task_runs() -> int:
             return 0
 
         finished_at = datetime.now(timezone.utc)
+        record_interrupted_media_download_run_history(
+            session,
+            interrupted_runs,
+            occurred_at=finished_at,
+        )
+
         interrupted_ids: list[int] = []
         for run in interrupted_runs:
             interrupted_ids.append(run.id)

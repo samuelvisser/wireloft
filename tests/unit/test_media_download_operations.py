@@ -194,6 +194,88 @@ def test_operation_history_dedupes_per_task_run_not_forever():
         engine.dispose()
 
 
+def test_running_download_interrupted_by_restart_is_recorded_in_history():
+    from backend.db.models.media_download import MediaDownloadHistory
+    from backend.services.media_download_history import record_media_download_history
+    from backend.types.media_download_history_types import MediaDownloadHistoryAction
+    from task_manager.scheduler.db import TaskDefinition, TaskOperationRun, TaskRun
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+    from task_manager.tasks.media_download_operations import (
+        create_media_download_operation,
+        record_interrupted_media_download_run_history,
+    )
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="restart-history")
+        operation = create_media_download_operation(session, download)
+        definition_id = session.scalar(
+            select(TaskDefinition.id).where(TaskDefinition.key == "download_episode")
+        )
+        assert definition_id is not None
+
+        started_at = datetime(2026, 9, 26, 0, 52, 44, tzinfo=timezone.utc)
+        run = TaskRun(
+            definition_id=definition_id,
+            resource_type=ResourceType.MEDIA_DOWNLOAD,
+            resource_id=download.id,
+            status=TaskStatus.RUNNING,
+            progress=26,
+            attempt_count=1,
+            max_retries=2,
+            started_at=started_at,
+            meta={"inputs": {"is_redownload": False}},
+        )
+        session.add(run)
+        session.flush()
+        session.add(TaskOperationRun(
+            operation_id=operation.id,
+            target_id=operation.targets[0].id,
+            task_run_id=run.id,
+        ))
+        record_media_download_history(
+            session,
+            download.id,
+            MediaDownloadHistoryAction.STARTED,
+            metadata={
+                "operation_ids": [operation.id],
+                "task_run_id": run.id,
+                "is_redownload": False,
+            },
+            occurred_at=started_at,
+        )
+        session.commit()
+
+        interrupted_at = started_at + timedelta(minutes=8, seconds=23)
+        assert record_interrupted_media_download_run_history(
+            session,
+            [run],
+            occurred_at=interrupted_at,
+        ) == 1
+        session.commit()
+
+        history = (
+            session.query(MediaDownloadHistory)
+            .filter_by(media_download_id=download.id)
+            .order_by(MediaDownloadHistory.id)
+            .all()
+        )
+        assert [entry.action for entry in history] == [
+            MediaDownloadHistoryAction.QUEUED,
+            MediaDownloadHistoryAction.STARTED,
+            MediaDownloadHistoryAction.INTERRUPTED,
+        ]
+        interruption = history[-1]
+        assert interruption.occurred_at == interrupted_at
+        assert interruption.event_metadata["task_run_id"] == run.id
+        assert interruption.event_metadata["operation_id"] == operation.id
+        assert interruption.event_metadata["duration_ms"] == 503_000
+        assert interruption.event_metadata["reason"] == "Canceled due to premature shutdown"
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_system_download_operation_uses_durable_completion_acknowledgement():
     from task_manager.scheduler.types import OperationSource
     from task_manager.tasks.media_download_operations import create_media_download_operation

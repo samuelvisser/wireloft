@@ -415,6 +415,77 @@ def restart_media_download_operation(operation_id: str):
     return snapshot
 
 
+def record_interrupted_media_download_run_history(
+    session: Session,
+    interrupted_runs: list[TaskRun],
+    *,
+    occurred_at: datetime,
+) -> int:
+    """Record download attempts that were still running when WireLoft stopped."""
+    download_definition_ids = set(
+        session.scalars(
+            select(TaskDefinition.id).where(TaskDefinition.key.in_(_DOWNLOAD_TASK_KEYS))
+        )
+    )
+    if not download_definition_ids:
+        return 0
+
+    running_runs = [
+        run
+        for run in interrupted_runs
+        if (
+            run.status == TaskStatus.RUNNING
+            and run.definition_id in download_definition_ids
+            and run.resource_type == ResourceType.MEDIA_DOWNLOAD
+            and run.resource_id is not None
+        )
+    ]
+    if not running_runs:
+        return 0
+
+    operation_ids_by_run: dict[int, list[str]] = {}
+    running_run_ids = [run.id for run in running_runs]
+    for task_run_id, operation_id in session.execute(
+        select(TaskOperationRun.task_run_id, TaskOperationRun.operation_id)
+        .join(TaskOperation, TaskOperation.id == TaskOperationRun.operation_id)
+        .where(
+            TaskOperationRun.task_run_id.in_(running_run_ids),
+            TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
+        )
+    ):
+        operation_ids_by_run.setdefault(int(task_run_id), []).append(str(operation_id))
+
+    recorded = 0
+    for run in running_runs:
+        inputs = run.meta.get("inputs") if isinstance(run.meta, dict) else None
+        metadata = {
+            "task_run_id": int(run.id),
+            "is_redownload": bool(
+                inputs.get("is_redownload")
+                if isinstance(inputs, dict)
+                else False
+            ),
+            "reason": "Canceled due to premature shutdown",
+        }
+        if run.started_at is not None:
+            metadata["duration_ms"] = max(
+                0,
+                int((occurred_at - run.started_at).total_seconds() * 1000),
+            )
+
+        if record_media_download_operation_history_once(
+            session,
+            int(run.resource_id),
+            MediaDownloadHistoryAction.INTERRUPTED,
+            operation_ids=tuple(operation_ids_by_run.get(run.id, ())),
+            metadata=metadata,
+            occurred_at=occurred_at,
+        ) is not None:
+            recorded += 1
+
+    return recorded
+
+
 def remaining_media_download_budget(session: Session) -> int:
     """Return free slots in the single download execution lane.
 
