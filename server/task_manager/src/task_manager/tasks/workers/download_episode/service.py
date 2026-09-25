@@ -52,6 +52,7 @@ async def run_download_episode(
     if episode is None:
         raise ValueError(f"Episode {download.media_item_id} for download {media_download_id} not found")
     show: Show = episode.show
+    attempt_publish_status = episode.publish_status
     profile = download.local_media_profile
     if profile.type != LocalMediaProfileType.SHOW.value:
         raise DownloadError("Episodes require a Show Local Media Profile")
@@ -102,8 +103,8 @@ async def run_download_episode(
         download.downloaded_at = datetime.now(timezone.utc)
 
         episode = s.get(Episode, download.media_item_id)
-        if episode is not None and hasattr(download, "downloaded_publish_status"):
-            download.downloaded_publish_status = episode.publish_status
+        if hasattr(download, "downloaded_publish_status"):
+            download.downloaded_publish_status = attempt_publish_status
 
         s.commit()
 
