@@ -64,7 +64,6 @@ def _make_download_profile(session: Session, show, local_media_profile, episode_
         enable_profile=True,
         ep_id_type_list=episode_types,
         download_with_countdown=False,
-        redownload_final=False,
         download_days_in_past=0,
         download_episode_count=0,
         delete_older_episodes=False,
