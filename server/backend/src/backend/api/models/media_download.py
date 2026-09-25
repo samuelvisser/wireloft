@@ -49,6 +49,7 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     downloaded_bytes: Optional[int]
     format_downloaded: Optional[str]
     downloaded_at: Optional[datetime]
+    redownload_when_final: Optional[bool] = None
 
 
 class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):
@@ -88,10 +89,6 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
     downloaded_publish_status: Optional[str] = Field(
         default=None,
         validation_alias=AliasPath("download", "downloaded_publish_status"),
-    )
-    redownload_when_final: Optional[bool] = Field(
-        default=None,
-        validation_alias=AliasPath("download", "redownload_when_final"),
     )
 
     queue_position: Optional[int] = None
