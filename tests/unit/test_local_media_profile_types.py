@@ -379,6 +379,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
                 enable_profile=True,
                 ep_id_type_list=[],
                 download_with_countdown=False,
+                redownload_final=False,
                 download_days_in_past=0,
                 delete_older_episodes=False,
             ),
