@@ -127,7 +127,11 @@ def create_show_bundle(s: Session, request: Request, payload: ShowAPICreateBundl
         stream_profile = create_database_fields(
             RssStreamProfile,
             payload.stream_profile,
-            exclude_fields={"show_id", "feed_url"},
+            exclude_fields={"show_id", "feed_url", "title"},
+        )
+        normalized_title = payload.stream_profile.title.strip()
+        stream_profile.overwrite_show_title = (
+            None if normalized_title == show.title else normalized_title
         )
         stream_profile.token = token
         stream_profile.feed_url = (

@@ -435,6 +435,7 @@ def test_create_stream_profile_generates_plain_stable_feed_url(db_session):
     show = _make_show(db_session)
     body = RssStreamProfileAPICreate(
         show_id=show.id,
+        title=show.title,
         enable_profile=True,
         use_downloads=True,
         use_dw_stream=True,
@@ -445,10 +446,74 @@ def test_create_stream_profile_generates_plain_stable_feed_url(db_session):
 
     created = create_stream_profile_rss(db_session, _FakeRequest(), body)
 
+    from backend.db.models import RssStreamProfile
+
+    stored = db_session.get(RssStreamProfile, created.id)
+    assert stored is not None
+    assert stored.overwrite_show_title is None
+    assert created.effective_title == show.title
     assert created.feed_url.startswith("https://wireloft.test/feeds/rss/")
     assert created.feed_url.endswith("/show.xml")
     assert "dwVideoMethod" not in created.feed_url
     assert "?" not in created.feed_url
+
+
+def test_stream_profile_custom_title_is_persisted_used_and_can_be_cleared(db_session):
+    from backend.api.endpoints.feeds.service import render_rss_feed
+    from backend.api.endpoints.rss_stream_profiles.service import (
+        create_stream_profile_rss,
+        update_stream_profile_rss,
+    )
+    from backend.api.models.rss_stream_profile import (
+        RssStreamProfileAPICreate,
+        RssStreamProfileAPIUpdate,
+    )
+    from backend.db.models import RssStreamProfile
+
+    show = _make_show(db_session)
+    custom_title = "My Custom Podcast"
+    created = create_stream_profile_rss(
+        db_session,
+        _FakeRequest(),
+        RssStreamProfileAPICreate(
+            show_id=show.id,
+            title=custom_title,
+            enable_profile=True,
+            use_downloads=True,
+            use_dw_stream=True,
+            preferred_format="format_1080p",
+            prefer_exact_match=False,
+            video_output_mode="audio_hls",
+        ),
+    )
+
+    stored = db_session.get(RssStreamProfile, created.id)
+    assert stored is not None
+    assert stored.overwrite_show_title == custom_title
+    assert created.effective_title == custom_title
+    assert f"<title>{custom_title}</title>" in render_rss_feed(
+        db_session,
+        _FakeRequest(),
+        stored,
+    ).decode()
+
+    updated = update_stream_profile_rss(
+        db_session,
+        created.id,
+        RssStreamProfileAPIUpdate(
+            title=show.title,
+            enable_profile=True,
+            use_downloads=True,
+            use_dw_stream=True,
+            preferred_format="format_1080p",
+            prefer_exact_match=False,
+            video_output_mode="audio_hls",
+            feed_url=created.feed_url,
+        ),
+    )
+
+    assert stored.overwrite_show_title is None
+    assert updated.effective_title == show.title
 
 
 def test_api_defaults_to_audio_hls_with_live_streaming_off():
@@ -456,6 +521,7 @@ def test_api_defaults_to_audio_hls_with_live_streaming_off():
 
     profile = RssStreamProfileAPICreate(
         show_id=1,
+        title="Test Show",
         enable_profile=True,
         use_downloads=True,
         use_dw_stream=True,
@@ -476,6 +542,7 @@ def test_stream_profile_rejects_local_hls_as_preferred_format():
     with pytest.raises(ValidationError, match="Local Media Profile download format"):
         RssStreamProfileAPICreate(
             show_id=1,
+            title="Test Show",
             enable_profile=True,
             use_downloads=True,
             use_dw_stream=True,
@@ -492,6 +559,7 @@ def test_live_streaming_requires_hls_video_output_mode():
     with pytest.raises(ValidationError, match="requires an HLS"):
         RssStreamProfileAPICreate(
             show_id=1,
+            title="Test Show",
             enable_profile=True,
             use_downloads=True,
             use_dw_stream=True,

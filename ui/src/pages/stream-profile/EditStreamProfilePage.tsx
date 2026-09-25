@@ -55,7 +55,10 @@ export default function EditStreamProfilePage() {
 
     useEffect(() => {
         if (!streamProfile) return
-        form.reset(RssStreamProfileUpdateSchema.parse(streamProfile.streamProfileImpl))
+        form.reset(RssStreamProfileUpdateSchema.parse({
+            ...streamProfile.streamProfileImpl,
+            title: streamProfile.streamProfileImpl.effectiveTitle,
+        }))
     }, [streamProfile, form])
 
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
@@ -155,6 +158,7 @@ export default function EditStreamProfilePage() {
                         regeneratingToken={regenerating}
                         downloadProfileDefaults={downloadProfileDefaults}
                         showSlug={streamProfile?.showSlug}
+                        showTitle={streamProfile?.showTitle}
                     />
 
                     <div className="actions">

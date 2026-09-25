@@ -9,6 +9,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
 
+from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import (
     DownloadProfileBase,
@@ -767,6 +768,7 @@ def render_rss_feed(
         profile: RssStreamProfile,
 ) -> bytes:
     show = profile.show
+    effective_title = RssStreamProfileAPIRead.model_validate(profile).effective_title
     items = get_feed_items(s, profile)
 
     base = str(request.base_url).rstrip("/")
@@ -782,12 +784,12 @@ def render_rss_feed(
         },
     )
     channel = SubElement(rss, "channel")
-    _sub_text(channel, "title", show.title)
+    _sub_text(channel, "title", effective_title)
     _sub_text(channel, "link", show.sharing_url)
     _sub_text(
         channel,
         "description",
-        _escape_bare_html_ampersands(show.description or show.title),
+        _escape_bare_html_ampersands(show.description or effective_title),
     )
     _sub_text(channel, "language", "en-us")
     _sub_text(channel, "generator", "WireLoft")
@@ -819,7 +821,7 @@ def render_rss_feed(
         SubElement(channel, "itunes:image", {"href": image_url})
         image = SubElement(channel, "image")
         _sub_text(image, "url", image_url)
-        _sub_text(image, "title", show.title)
+        _sub_text(image, "title", effective_title)
         _sub_text(image, "link", show.sharing_url)
 
     for episode, _download in items:

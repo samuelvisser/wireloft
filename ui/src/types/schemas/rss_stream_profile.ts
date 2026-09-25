@@ -6,6 +6,7 @@ import {ApiDateTimeSchema} from "./datetime";
 
 // ---------- Strict request (create/update) ----------
 const RssStreamProfileBaseSchema = z.object({
+    title: z.string().trim().min(1),
     enableProfile: z.boolean().default(true),
     useDownloads: z.boolean().default(true),
     useDwStream: z.boolean().default(true),
@@ -85,6 +86,7 @@ export const RssStreamProfileReadSchema = z.looseObject({
     streamLiveEpisodes: z.boolean(),
     maxItems: z.number(),
     feedUrl: z.string(),
+    effectiveTitle: z.string(),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })

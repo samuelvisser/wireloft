@@ -37,6 +37,7 @@ type Props = {
     episodeTypesManuallyChanged?: boolean
     onEpisodeTypesManuallyChanged?: () => void
     showSlug?: string
+    showTitle?: string
     canOpenDownloadProfiles?: boolean
 }
 
@@ -51,9 +52,10 @@ export default function StreamProfileForm({
     episodeTypesManuallyChanged,
     onEpisodeTypesManuallyChanged,
     showSlug,
+    showTitle,
     canOpenDownloadProfiles = true,
 }: Props) {
-    const {control, formState: {errors}, getValues, setValue, watch} = form
+    const {control, formState: {errors}, getValues, register, setValue, watch} = form
     showRoot ??= true
 
     const useDownloads = watch('useDownloads')
@@ -63,6 +65,21 @@ export default function StreamProfileForm({
     const selectedEpisodeTypes: string[] = watch('epIdTypeList') || []
     const internalEpisodeTypesManuallyChanged = useRef(false)
     const episodeTypeDefaultsInitialized = useRef(false)
+    const lastSuggestedTitle = useRef<string | undefined>(undefined)
+
+    useEffect(() => {
+        if (!showTitle) return
+
+        const currentTitle = (getValues('title') || '') as string
+        const previousSuggestedTitle = lastSuggestedTitle.current
+        if (!currentTitle || currentTitle === previousSuggestedTitle) {
+            setValue('title', showTitle, {
+                shouldDirty: false,
+                shouldValidate: true,
+            })
+        }
+        lastSuggestedTitle.current = showTitle
+    }, [getValues, setValue, showTitle])
 
     const selectedSources = [
         ...(useDownloads ? ['downloads'] as const : []),
@@ -182,6 +199,23 @@ export default function StreamProfileForm({
                     {String(errors.root.message)}
                 </div>
             )}
+
+            <div className="form-row">
+                <label htmlFor="stream-profile-title">Title</label>
+                <input
+                    id="stream-profile-title"
+                    className="input"
+                    type="text"
+                    {...register('title')}
+                    aria-invalid={!!errors.title}
+                    aria-describedby={errors.title ? 'stream-profile-title-error' : undefined}
+                />
+                {errors.title && (
+                    <div id="stream-profile-title-error" className="error" role="alert" aria-live="polite">
+                        {String(errors.title.message)}
+                    </div>
+                )}
+            </div>
 
             <div className="form-row">
                 <label id="stream-sources-label">Streaming sources</label>
