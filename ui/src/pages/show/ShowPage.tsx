@@ -162,6 +162,11 @@ export default function ShowPage() {
   useEffect(() => {
     const node = sentinelRef.current
     if (!node) return
+
+    // IntersectionObserver only reports when the intersection state changes. If revealing a
+    // page leaves the sentinel inside the preload margin, there is no second transition to report
+    // and the list can stall. Re-observing after each reveal makes the current state observable
+    // again, so another page is revealed immediately when the sentinel is still near the viewport.
     const observer = new IntersectionObserver(
         (entries) => {
           if (entries[0]?.isIntersecting) {
@@ -172,7 +177,7 @@ export default function ShowPage() {
     )
     observer.observe(node)
     return () => observer.disconnect()
-  }, [displayedEpisodes.length])
+  }, [displayedEpisodes.length, visibleCount])
 
   if (!id) {
     return (
