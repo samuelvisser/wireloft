@@ -42,7 +42,7 @@ class StreamProfileBase(Base):
     use_dw_stream: Mapped[bool] = mapped_column(default=False, comment="Use direct DW stream endpoints for stream")
     preferred_format: Mapped[str] = mapped_column(comment="Preferred format for stream, used when choosing the correct downloaded file "
                                                           "or whether to stream audio or video from DW")
-    require_exact_match: Mapped[bool] = mapped_column(comment="When allowing downloads, only allow exact matches for preferred format")
+    prefer_exact_match: Mapped[bool] = mapped_column(comment="Prefer an exact local video format over alternate downloaded resolutions")
     ep_id_type_list: Mapped[list[str]] = mapped_column(
         MutableList.as_mutable(JSON),
         default=_default_episode_types,
