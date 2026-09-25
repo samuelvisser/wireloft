@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Iterable, Mapping, Protocol
-
-from backend.utils.custom_metadata import is_valid_custom_metadata_key
 
 
 INDEX_DEFINITION_PREFIX = "custom_index.definition."
 INDEX_ASSIGNMENT_PREFIX = "custom_index."
+INDEXING_VALUE_KEY_MAX_LENGTH = 64
+INDEXING_VALUE_KEY_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]*$")
+
+
+def is_valid_custom_index_key(key: str) -> bool:
+    return (
+        0 < len(key) <= INDEXING_VALUE_KEY_MAX_LENGTH
+        and INDEXING_VALUE_KEY_PATTERN.fullmatch(key) is not None
+    )
+
 
 
 class _MetadataItem(Protocol):
@@ -41,9 +50,9 @@ class CustomIndexNotReadyError(RuntimeError):
 
 
 def _validate_definition(key: str, name: str) -> IndexingValueDefinition:
-    if not is_valid_custom_metadata_key(key):
+    if not is_valid_custom_index_key(key):
         raise ValueError(
-            "Indexing Value keys must use lowercase letters, numbers, and underscores, "
+            "Indexing Value keys must use lowercase letters, numbers, underscores, and dashes, "
             "and must start with a letter or underscore"
         )
     clean_name = name.strip()
@@ -55,7 +64,7 @@ def _validate_definition(key: str, name: str) -> IndexingValueDefinition:
 
 
 def index_definition_storage_key(key: str) -> str:
-    if not is_valid_custom_metadata_key(key):
+    if not is_valid_custom_index_key(key):
         raise ValueError(f"Invalid Indexing Value key: {key}")
     return f"{INDEX_DEFINITION_PREFIX}{key}"
 
@@ -66,7 +75,7 @@ def get_indexing_value_definitions(resource: _MetadataResource) -> list[Indexing
         if not item.key.startswith(INDEX_DEFINITION_PREFIX):
             continue
         key = item.key[len(INDEX_DEFINITION_PREFIX):]
-        if not is_valid_custom_metadata_key(key):
+        if not is_valid_custom_index_key(key):
             continue
         definitions.append(IndexingValueDefinition(key=key, name=item.value))
     return sorted(definitions, key=lambda item: item.key)
@@ -120,7 +129,7 @@ def replace_indexing_value_definitions(
 
 
 def index_assignment_storage_key(local_media_profile_id: int, key: str) -> str:
-    if not is_valid_custom_metadata_key(key):
+    if not is_valid_custom_index_key(key):
         raise ValueError(f"Invalid Indexing Value key: {key}")
     if local_media_profile_id < 1:
         raise ValueError("A saved Local Media Profile is required")
@@ -134,7 +143,7 @@ def get_episode_index_assignments(episode: _MetadataResource, local_media_profil
         if not item.key.startswith(prefix):
             continue
         key = item.key[len(prefix):]
-        if not is_valid_custom_metadata_key(key):
+        if not is_valid_custom_index_key(key):
             continue
         try:
             assignments[key] = int(item.value)

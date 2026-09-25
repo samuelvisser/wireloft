@@ -121,8 +121,8 @@ def output_template_custom_index_keys(output_template: str) -> frozenset[str]:
                 "{{ 'featurettes' | custom_index }}"
             )
         key = source.value
-        from .custom_metadata import is_valid_custom_metadata_key
-        if not is_valid_custom_metadata_key(key):
+        from .custom_index import is_valid_custom_index_key
+        if not is_valid_custom_index_key(key):
             raise ValueError(f"Invalid custom index key: {key}")
         keys.add(key)
     return frozenset(keys)

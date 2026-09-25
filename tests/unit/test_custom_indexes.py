@@ -139,6 +139,25 @@ def test_definitions_belong_to_lmp_and_serialize(db_session):
     assert [(value.key, value.name) for value in ShowLocalMediaProfileAPIRead.model_validate(profile).indexing_values] == [("featurettes", "Featurettes")]
 
 
+def test_custom_index_keys_allow_dashes_end_to_end(db_session):
+    from backend.api.models.custom_metadata import IndexingValueDefinitionAPI
+    from backend.utils.custom_index import get_indexing_value_definitions
+    from backend.utils.output_template import output_template_custom_index_keys
+
+    definition = IndexingValueDefinitionAPI(
+        key="behind-the-scenes",
+        name="Behind the scenes",
+    )
+    template = "/downloads/{{ 'behind-the-scenes' | custom_index }}.ext"
+    profile = _make_profile(db_session, template=template)
+    _define(profile, (definition.key, definition.name))
+
+    assert [(value.key, value.name) for value in get_indexing_value_definitions(profile)] == [
+        ("behind-the-scenes", "Behind the scenes"),
+    ]
+    assert output_template_custom_index_keys(template) == {"behind-the-scenes"}
+
+
 def test_custom_index_requires_literal_key():
     from backend.utils.output_template import output_template_custom_index_keys
     assert output_template_custom_index_keys("/downloads/{{ 'featurettes' | custom_index }}.ext") == {"featurettes"}

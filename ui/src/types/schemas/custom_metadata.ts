@@ -1,6 +1,7 @@
 import {z} from 'zod'
 
 export const CUSTOM_METADATA_KEY_PATTERN = /^[a-z_][a-z0-9_]*$/
+export const INDEXING_VALUE_KEY_PATTERN = /^[a-z_][a-z0-9_-]*$/
 export const CUSTOM_METADATA_KEY_MAX_LENGTH = 64
 export const CUSTOM_METADATA_VALUE_MAX_LENGTH = 4096
 export const CUSTOM_METADATA_MAX_ITEMS = 100
@@ -21,8 +22,16 @@ export const CustomMetadataEntrySchema = z.object({
     ),
 })
 
+const IndexingValueKeySchema = z.string()
+    .min(1, 'Key is required')
+    .max(CUSTOM_METADATA_KEY_MAX_LENGTH, `Key may be at most ${CUSTOM_METADATA_KEY_MAX_LENGTH} characters`)
+    .regex(
+        INDEXING_VALUE_KEY_PATTERN,
+        'Use lowercase letters, numbers, underscores, and dashes; start with a letter or underscore',
+    )
+
 export const IndexingValueEntrySchema = z.object({
-    key: MetadataKeySchema,
+    key: IndexingValueKeySchema,
     name: z.string().trim().min(1, 'Name is required').max(120, 'Name may be at most 120 characters'),
 })
 
