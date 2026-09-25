@@ -79,6 +79,51 @@ export default function DownloadsSettingsTab({
                     help="Local Media Profile output paths are resolved from this storage location where applicable."
                     wide
                 />
+                <TextField
+                    id="settings-temporary-download-root"
+                    label="Temporary download folder"
+                    value={temporaryDownloadRoot}
+                    error={errorFor('downloadSettings.temporaryDownloadRoot')}
+                    environmentVariable={environmentVariableFor('downloadSettings.temporaryDownloadRoot')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.temporaryDownloadRoot = value
+                    })}
+                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. Its default is .wireloft-temp inside the download root, but an explicit path can live elsewhere."
+                    wide
+                />
+                <TextField
+                    id="settings-rss-cache-root"
+                    label="RSS cache folder"
+                    value={rssCacheRoot}
+                    error={errorFor('downloadSettings.rssCacheRoot')}
+                    environmentVariable={environmentVariableFor('downloadSettings.rssCacheRoot')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.rssCacheRoot = value
+                    })}
+                    help={
+                        <ReadMore summary="Stores media WireLoft prepares or caches while fulfilling RSS requests.">
+                            <p>
+                                By default, the cache lives in <code>.wireloft-rss-cache</code> inside the download root.
+                            </p>
+                            <p>
+                                You may explicitly place it anywhere WireLoft can write, including container-local storage such as <code>/tmp/wireloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the container is recreated.
+                            </p>
+                        </ReadMore>
+                    }
+
+                />
+                <DurationField
+                    id="settings-rss-cache-retention"
+                    label="RSS cache retention period"
+                    value={draft.downloadSettings.rssCacheRetentionSeconds}
+                    backendUnit="seconds"
+                    error={errorFor('downloadSettings.rssCacheRetentionSeconds')}
+                    environmentVariable={environmentVariableFor('downloadSettings.rssCacheRetentionSeconds')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.rssCacheRetentionSeconds = value
+                    })}
+                    help="Cached RSS media expires after this much time without being served. Serving a cached MP4 refreshes its retention period."
+                />
                 <SelectField
                     id="settings-download-mode"
                     label="Default download behavior"
@@ -127,51 +172,6 @@ export default function DownloadsSettingsTab({
                             <p>Local Media Profiles default to System and can override this setting individually.</p>
                         </ReadMore>
                     }
-                />
-                <TextField
-                    id="settings-temporary-download-root"
-                    label="Temporary download folder"
-                    value={temporaryDownloadRoot}
-                    error={errorFor('downloadSettings.temporaryDownloadRoot')}
-                    environmentVariable={environmentVariableFor('downloadSettings.temporaryDownloadRoot')}
-                    onChange={(value) => updateDraft((next) => {
-                        next.downloadSettings.temporaryDownloadRoot = value
-                    })}
-                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. Its default is .wireloft-temp inside the download root, but an explicit path can live elsewhere."
-                    wide
-                />
-                <TextField
-                    id="settings-rss-cache-root"
-                    label="RSS cache folder"
-                    value={rssCacheRoot}
-                    error={errorFor('downloadSettings.rssCacheRoot')}
-                    environmentVariable={environmentVariableFor('downloadSettings.rssCacheRoot')}
-                    onChange={(value) => updateDraft((next) => {
-                        next.downloadSettings.rssCacheRoot = value
-                    })}
-                    help={
-                        <ReadMore summary="Stores media WireLoft prepares or caches while fulfilling RSS requests.">
-                            <p>
-                                By default, the cache lives in <code>.wireloft-rss-cache</code> inside the download root.
-                            </p>
-                            <p>
-                                You may explicitly place it anywhere WireLoft can write, including container-local storage such as <code>/tmp/wireloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the container is recreated.
-                            </p>
-                        </ReadMore>
-                    }
-                    wide
-                />
-                <DurationField
-                    id="settings-rss-cache-retention"
-                    label="RSS cache retention period"
-                    value={draft.downloadSettings.rssCacheRetentionSeconds}
-                    backendUnit="seconds"
-                    error={errorFor('downloadSettings.rssCacheRetentionSeconds')}
-                    environmentVariable={environmentVariableFor('downloadSettings.rssCacheRetentionSeconds')}
-                    onChange={(value) => updateDraft((next) => {
-                        next.downloadSettings.rssCacheRetentionSeconds = value
-                    })}
-                    help="Cached RSS media expires after this much time without being served. Serving a cached MP4 refreshes its retention period."
                 />
                 <SelectField
                     id="settings-filename-restriction-mode"
