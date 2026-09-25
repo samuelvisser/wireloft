@@ -61,6 +61,15 @@ async def run_finalize_countdown_downloads(
             continue
 
         active = get_active_media_download_operation(s, download.id)
+        if (
+            active is not None
+            and isinstance(active.context, dict)
+            and active.context.get("episode_publish_status")
+            == EpisodePublishStatus.PUBLISHED_FINAL.value
+        ):
+            queue_final_episode_redownload_if_ready(s, download_id)
+            s.commit()
+            continue
         active_operation_id = active.id if active is not None else None
 
         # cancel_operation owns its own transaction. End this session's read
