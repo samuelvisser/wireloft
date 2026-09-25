@@ -89,7 +89,7 @@ def wait_for_events() -> None:
 def shutdown_event_emitter(*, wait: bool = True) -> None:
     """Shut down and reset the event executor for the current app lifecycle.
 
-    Tests and explicit drains can keep the historical blocking behavior. ASGI
+    Tests and explicit drains can wait for tasks to finish. ASGI
     shutdown uses wait=False so a slow or stuck event callback cannot keep
     Uvicorn in application shutdown indefinitely.
     """

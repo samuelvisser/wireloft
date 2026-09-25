@@ -343,11 +343,6 @@ def stop_controller() -> None:
         # next startup reconciles anything that did not finish before process exit.
         WireloftEventLinker.remove_all()
         shutdown_event_emitter(wait=False)
-
-        # APScheduler's wait=True blocks until every worker-thread job returns.
-        # WireLoft jobs can legitimately spend a long time downloading or waiting
-        # on an external service, so tying ASGI lifespan shutdown to job completion
-        # can leave Uvicorn stuck at "Waiting for application shutdown."
         shutdown_scheduler(wait=False)
         _controller_started = False
 
