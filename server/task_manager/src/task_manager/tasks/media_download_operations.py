@@ -257,6 +257,22 @@ def _reserve_target_dispatch(
     if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
         return False
 
+    # A canceled media.download operation can still have a RUNNING worker that
+    # is cooperatively shutting down. Never reserve a replacement for the same
+    # MediaDownload until that TaskRun is actually terminal, even when another
+    # global download slot is free.
+    existing_run_id = session.scalar(
+        select(TaskRun.id)
+        .where(
+            TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD,
+            TaskRun.resource_id == target.resource_id,
+            TaskRun.status.in_(_ACTIVE_RUN_STATUSES),
+        )
+        .limit(1)
+    )
+    if existing_run_id is not None:
+        return False
+
     definition_id = session.scalar(
         select(TaskDefinition.id).where(TaskDefinition.key == target.task_key)
     )
