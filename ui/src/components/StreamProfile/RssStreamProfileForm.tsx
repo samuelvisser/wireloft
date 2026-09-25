@@ -181,19 +181,29 @@ export default function RssStreamProfileForm({
                     <div className="help" id="rss-stream-live-episodes-help">
                         <ReadMore summary={<span>Include matching episodes while they are live.</span>}>
                             <p>
-                                Live episodes still have to match this Stream Profile&apos;s episode-type filter.
+                                With this setting enabled, you can view even episodes that are currently live at DW straight in your podcast player!
                             </p>
                             <p>
-                                If normal Daily Wire streaming is disabled, WireLoft only exposes a live episode when an enabled matching Download Profile will create an HLS download for that episode type.
+                                Live episodes still have to match this Stream Profile&apos;s episode-type filter in order to show up in the feed.
                             </p>
-                            <p>
-                                Once a podcast app has actually opened that live HLS stream, WireLoft keeps the same URL backed by The Daily Wire after the live event ends until the final local HLS download is ready. It then switches that same URL to the local HLS package.
-                            </p>
-                            {useDwStream && (
-                                <p>
-                                    Because Daily Wire streaming is enabled for this profile, non-live episodes can also fall back to The Daily Wire whenever the requested local media is unavailable.
-                                </p>
+                            {!useDwStream && (
+                                <>
+                                    <p>
+                                        Even though streaming from Daily Wire is disabled for this stream profile, streaming live episodes from DW
+                                        still works. WireLoft even provides a clean handoff to the downloaded HLS file after the episode is no longer
+                                        live: it waits for the download to finish first, and only then switches to streaming from your local file.
+                                        Your podcasting app should not even notice this switch!
+                                    </p>
+                                    <p>
+                                        NOTE: The profile does check whether the episode in question, when no longer live, will be
+                                        downloaded by your download profiles as HLS. If not, the episode is not considered part of this
+                                        downloads- only feed and will also not be included as a live episode.
+                                    </p>
+                                </>
                             )}
+                            <p>
+                                NOTE: live video only works if your podcast player supports playing HLS video.
+                            </p>
                         </ReadMore>
                     </div>
                 </div>
