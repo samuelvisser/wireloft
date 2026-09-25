@@ -1,10 +1,8 @@
-import pytest
-from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def test_delete_movie_with_download_history_is_rejected_without_deleting_files(tmp_path):
+def test_delete_movie_cascades_download_records_without_deleting_files(tmp_path):
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.movies.service import delete_movie
     from backend.db import Base
@@ -94,13 +92,13 @@ def test_delete_movie_with_download_history_is_rejected_without_deleting_files(t
         ])
         session.commit()
 
-        with pytest.raises(HTTPException) as exc_info:
-            delete_movie(session, movie.slug)
+        payload = delete_movie(session, movie.slug)
+        session.commit()
 
-        assert exc_info.value.status_code == 409
-        assert session.query(Movie).count() == 1
-        assert session.query(MovieExtra).count() == 1
-        assert session.query(MediaDownloadBase).count() == 3
+        assert payload.slug == "movie-to-delete"
+        assert session.query(Movie).count() == 0
+        assert session.query(MovieExtra).count() == 0
+        assert session.query(MediaDownloadBase).count() == 0
         assert all(artifact.exists() for artifact in active_artifacts)
         assert completed_path.exists()
     finally:

@@ -9,7 +9,6 @@ from backend.api.endpoints.movie_extras.service import create_movie_extra
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.movie import *
 from backend.db.models.media_item import Movie
-from backend.db.models.media_download import MediaDownloadBase
 from backend.integrations.tmdb import lookup_movie_release_metadata
 from backend.types.media_types import MediaType
 from backend.services.movies import (
@@ -134,19 +133,6 @@ def delete_movie(s: Session, movie_slug: str) -> MovieAPIRead:
     item = s.query(Movie).filter(Movie.slug == movie_slug).one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Movie not found")
-
-    media_item_ids = [item.id, *(extra.id for extra in item.movie_extras)]
-    has_download_history = (
-        s.query(MediaDownloadBase.id)
-        .filter(MediaDownloadBase.media_item_id.in_(media_item_ids))
-        .first()
-        is not None
-    )
-    if has_download_history:
-        raise HTTPException(
-            status_code=409,
-            detail="This movie owns persistent download history and cannot be deleted",
-        )
 
     payload = MovieAPIRead.model_validate(item)
     s.delete(item)
