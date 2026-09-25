@@ -39,6 +39,7 @@ export const MediaDownloadReadSchema = z.looseObject({
     downloadedBytes: z.int().nullable(),
     formatDownloaded: z.string().nullable(),
     downloadedAt: ApiDateTimeSchema.nullable(),
+    redownloadWhenFinal: z.boolean().nullable().optional(),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })
