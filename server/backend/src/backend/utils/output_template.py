@@ -17,7 +17,7 @@ from .custom_metadata import (
 )
 from .custom_index import (
     CustomIndexNotReadyError,
-    get_media_download_index_assignments,
+    get_episode_index_assignments,
     indexing_value_definition_keys,
 )
 from .episode import EpisodeIdentifierInfo
@@ -96,7 +96,13 @@ def _parse_output_template(output_template: str) -> nodes.Template:
 def output_template_fields(output_template: str) -> frozenset[str]:
     """Return all context variables referenced by a Jinja path template."""
     parsed = _parse_output_template(output_template)
-    return frozenset(meta.find_undeclared_variables(parsed))
+    # Jinja reports names assigned only inside conditional branches as
+    # undeclared, even when the template sets them in every branch.
+    assigned = {
+        node.target.name for node in parsed.find_all(nodes.Assign)
+        if isinstance(node.target, nodes.Name)
+    }
+    return frozenset(meta.find_undeclared_variables(parsed) - assigned)
 
 
 def output_template_custom_index_keys(output_template: str) -> frozenset[str]:
@@ -141,6 +147,28 @@ def _statement_may_emit_output(statement: nodes.Stmt) -> bool:
     return True
 
 
+def _path_boundary_in_branches(
+    statements: list[nodes.Stmt], *, start: bool,
+) -> bool:
+    """Check a literal path boundary on every conditional output branch."""
+    ordered = statements if start else list(reversed(statements))
+    for statement in ordered:
+        if not _statement_may_emit_output(statement):
+            continue
+        if isinstance(statement, nodes.Output):
+            node = statement.nodes[0 if start else -1] if statement.nodes else None
+            return isinstance(node, nodes.TemplateData) and (
+                node.data.startswith(_DOWNLOADS_PREFIX) if start else node.data.endswith(".ext")
+            )
+        if isinstance(statement, nodes.If):
+            branches = [statement.body, *(branch.body for branch in statement.elif_), statement.else_]
+            return bool(statement.else_) and all(
+                _path_boundary_in_branches(branch, start=start) for branch in branches
+            )
+        return False
+    return False
+
+
 def validate_output_template_path_requirements(
     output_template: str,
     *,
@@ -154,9 +182,6 @@ def validate_output_template_path_requirements(
     The raw template still has to end in ``.ext`` so the resulting filename keeps
     WireLoft's extension marker.
     """
-    if not output_template.endswith(".ext"):
-        raise ValueError("Output template must end with '.ext'")
-
     validate_output_template_fields(
         output_template,
         allowed_fields=allowed_fields,
@@ -164,19 +189,11 @@ def validate_output_template_path_requirements(
     )
     parsed = _parse_output_template(output_template)
 
-    for statement in parsed.body:
-        if isinstance(statement, nodes.Output):
-            first = statement.nodes[0] if statement.nodes else None
-            if (
-                isinstance(first, nodes.TemplateData)
-                and first.data.startswith(_DOWNLOADS_PREFIX)
-            ):
-                return output_template
-            raise ValueError("Output template must start with '/downloads/'")
-        if _statement_may_emit_output(statement):
-            raise ValueError("Output template must start with '/downloads/'")
-
-    raise ValueError("Output template must start with '/downloads/'")
+    if not _path_boundary_in_branches(parsed.body, start=True):
+        raise ValueError("Output template must start with '/downloads/'")
+    if not _path_boundary_in_branches(parsed.body, start=False):
+        raise ValueError("Output template must end with '.ext'")
+    return output_template
 
 
 def _to_ascii(value: str) -> str:
@@ -472,18 +489,31 @@ def resolve_episode_output_path(
         )
         return _finish_output_path(rendered, extension=extension)
 
-    if media_download is None:
+    if local_media_profile is None:
         raise CustomIndexNotReadyError(
-            "This output template uses custom indexes and requires a MediaDownload assignment"
+            "This output template uses custom indexes and requires a Local Media Profile"
         )
 
-    return resolve_episode_output_path_with_index_values(
-        output_template,
-        episode=episode,
-        index_definitions=indexing_value_definition_keys(episode.show),
-        index_values=get_media_download_index_assignments(media_download),
-        extension=extension,
-    )
+    from sqlalchemy.orm import object_session
+    from backend.services.custom_indexes import ensure_episode_custom_indexes_ready
+    session = object_session(episode)
+    if session is None:
+        raise CustomIndexNotReadyError("An attached Episode is required for custom index readiness")
+    ensure_episode_custom_indexes_ready(session, episode=episode, profile=local_media_profile)
+
+    try:
+        return resolve_episode_output_path_with_index_values(
+            output_template,
+            episode=episode,
+            index_definitions=indexing_value_definition_keys(local_media_profile),
+            index_values=get_episode_index_assignments(episode, local_media_profile.id),
+            extension=extension,
+        )
+    except CustomIndexNotReadyError as exc:
+        raise CustomIndexNotReadyError(
+            str(exc), repair_show_id=episode.show_id,
+            repair_profile_id=local_media_profile.id,
+        ) from exc
 
 
 def resolve_movie_output_path(

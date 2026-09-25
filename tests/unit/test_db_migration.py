@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "b7e3c1a94d20"
+HEAD_REVISION = "c80e4d9a6b21"
 PREVIOUS_DEVELOPMENT_REVISION = "e5f1a2c7d903"
 HISTORICAL_EPISODE_SCHEMA_REVISION = "e4c91a7b2d30"
 OUTPUT_TEMPLATE_SPACING_REVISION = "9b1f4e7c2d6a"
@@ -228,7 +228,7 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == "3f7b6a2c9d10"
+    assert script.get_revision(HEAD_REVISION).down_revision == "b7e3c1a94d20"
     assert (
         script.get_revision(PREVIOUS_DEVELOPMENT_REVISION).down_revision
         == HISTORICAL_EPISODE_SCHEMA_REVISION
@@ -256,6 +256,9 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
     assert "task_operations" in tables
     assert "movie_extra_sources" in tables
     assert "custom_index_states" in tables
+    assert {"requested_generation", "completed_generation"} <= {
+        column["name"] for column in inspector.get_columns("custom_index_states")
+    }
     assert "media_download_attempts" not in tables
     assert "alembic_version" not in tables
 
@@ -367,11 +370,11 @@ def test_episode_indexing_migration_resumes_after_interrupted_column_adds(migrat
 
     command.upgrade(
         get_alembic_config(allow_version_storage_migration=True),
-        PREVIOUS_DEVELOPMENT_REVISION,
+        OUTPUT_TEMPLATE_SPACING_REVISION,
     )
 
     # SQLite can retain these additive DDL changes when a later statement in the
-    # revision fails. Reproduce that state while leaving Alembic at e5f1a2c7d903.
+    # revision fails. Reproduce that state while leaving Alembic before e4c91a7b2d30.
     with engine.begin() as connection:
         connection.exec_driver_sql(
             "ALTER TABLE seasons ADD COLUMN season_type VARCHAR DEFAULT 'normal' NOT NULL"
@@ -384,7 +387,7 @@ def test_episode_indexing_migration_resumes_after_interrupted_column_adds(migrat
         )
 
     current, _head = get_database_status()
-    assert current == (PREVIOUS_DEVELOPMENT_REVISION,)
+    assert current == (OUTPUT_TEMPLATE_SPACING_REVISION,)
 
     upgrade_database()
 

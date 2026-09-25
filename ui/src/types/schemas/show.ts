@@ -2,7 +2,6 @@ import {z} from "zod";
 import {EpisodeIdentifierReg, ShowTypeReg} from "../show";
 import {DwMembershipLevelReg} from "../dailywire_user_info";
 import {ApiDateTimeSchema} from "./datetime";
-import {IndexingValueEntrySchema} from "./custom_metadata";
 
 
 /** Ensure https:// if a scheme is missing */
@@ -131,7 +130,6 @@ export const ShowReadSchema = z.looseObject({
     thumbnailPortraitPath: z.string().nullable().optional(),
     thumbnailSquarePath: z.string().nullable().optional(),
     customMetadata: z.record(z.string(), z.string()).default({}),
-    indexingValues: z.array(IndexingValueEntrySchema).default([]),
 
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,

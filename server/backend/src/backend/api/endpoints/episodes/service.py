@@ -1,6 +1,7 @@
 from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
+from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from sqlalchemy import select
 
 from fastapi import HTTPException
@@ -217,6 +218,7 @@ def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:
         "show_id": episode.show_id,
         "status": episode.publish_status
     })
+    request_show_custom_index_reconciliation(s, episode.show_id)
 
     return EpisodeAPIRead.model_validate(episode)
 
@@ -253,10 +255,7 @@ def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> Epi
         elif body.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
             queue_event(s, "episode.published_with_countdown", event_data)
 
-    queue_event(s, "show.custom_indexes_requested", {
-        "resource_id": episode.show_id,
-        "id": episode.show_id,
-    })
+    request_show_custom_index_reconciliation(s, episode.show_id)
     return EpisodeAPIRead.model_validate(episode)
 
 
@@ -289,10 +288,7 @@ def delete_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
         "slug": episode.slug,
         "show_id": episode.show_id
     })
-    queue_event(s, "show.custom_indexes_requested", {
-        "resource_id": episode.show_id,
-        "id": episode.show_id,
-    })
+    request_show_custom_index_reconciliation(s, episode.show_id)
 
     s.delete(episode)
     s.flush()

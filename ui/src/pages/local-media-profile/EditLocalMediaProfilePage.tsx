@@ -165,7 +165,10 @@ export default function EditLocalMediaProfilePage() {
             profile.type === 'show'
             && form.getValues('outputTemplate') !== profile.outputTemplate
         )
-        if (outputTemplateChanged && renameDecisionRef.current === null) {
+        const indexKeysChanged = profile.type === 'show' &&
+            JSON.stringify((form.getValues('indexingValues') ?? []).map((value: {key: string}) => value.key).sort()) !==
+            JSON.stringify(profile.indexingValues.map(({key}) => key).sort())
+        if ((outputTemplateChanged || indexKeysChanged) && renameDecisionRef.current === null) {
             void form.handleSubmit(() => setRenameTemplateConfirm(true))(event)
             return
         }
@@ -219,7 +222,7 @@ export default function EditLocalMediaProfilePage() {
                 }}
             >
                 <p>
-                    The output path rules changed. WireLoft can allocate any newly required persistent custom index values first, then rename every existing episode file that uses this Local Media Profile so its path matches the new result.
+                    The output path rules changed. WireLoft will reconcile Episode indexes before renaming existing files that use this Local Media Profile.
                 </p>
                 <p>
                     Close this dialog to keep editing, or save without moving existing files and run File Rename later from a show's Actions menu.

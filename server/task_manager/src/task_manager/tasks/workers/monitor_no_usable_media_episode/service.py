@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, EpisodeMediaDownload, Show
+from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from config.network import NoInternetConnectionError, is_no_internet_error
@@ -55,10 +56,7 @@ def _delete_episode(s: Session, episode: Episode) -> bool:
         return False
 
     queue_event(s, "episode.deleted", episode_event_payload(episode=episode, show=episode.show))
-    queue_event(s, "show.custom_indexes_requested", {
-        "resource_id": episode.show_id,
-        "id": episode.show_id,
-    })
+    request_show_custom_index_reconciliation(s, episode.show_id)
     s.delete(episode)
     s.commit()
     return True

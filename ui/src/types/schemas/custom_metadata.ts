@@ -31,11 +31,7 @@ export const CustomMetadataFormSchema = z.object({
         CUSTOM_METADATA_MAX_ITEMS,
         `At most ${CUSTOM_METADATA_MAX_ITEMS} metadata fields are allowed`,
     ),
-    indexingValues: z.array(IndexingValueEntrySchema).max(
-        CUSTOM_METADATA_MAX_ITEMS,
-        `At most ${CUSTOM_METADATA_MAX_ITEMS} Indexing Values are allowed`,
-    ),
-}).superRefine(({entries, indexingValues}, ctx) => {
+}).superRefine(({entries}, ctx) => {
     const seenFields = new Set<string>()
     entries.forEach((entry, index) => {
         if (seenFields.has(entry.key)) {
@@ -48,17 +44,6 @@ export const CustomMetadataFormSchema = z.object({
         seenFields.add(entry.key)
     })
 
-    const seenIndexes = new Set<string>()
-    indexingValues.forEach((entry, index) => {
-        if (seenIndexes.has(entry.key)) {
-            ctx.addIssue({
-                code: 'custom',
-                path: ['indexingValues', index, 'key'],
-                message: 'Indexing Value keys must be unique',
-            })
-        }
-        seenIndexes.add(entry.key)
-    })
 })
 
 export type CustomMetadataFormValues = z.infer<typeof CustomMetadataFormSchema>

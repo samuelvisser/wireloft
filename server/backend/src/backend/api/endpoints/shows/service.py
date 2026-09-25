@@ -9,6 +9,7 @@ from backend.api.models.show import *
 from fastapi import HTTPException
 
 from backend.db.models import Episode, Show
+from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.episode_download_scope import EpisodeDownloadScope
 from task_manager.events.transactional import queue_event
@@ -140,6 +141,7 @@ def update_show(s: Session, show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
 
     update_database_fields(show, body)
     s.flush()
+    request_show_custom_index_reconciliation(s, show.id)
 
     queue_event(s, "show.updated", {
         "resource_id": show.id,
@@ -335,4 +337,3 @@ def request_show_file_rename(
         "local_media_profiles_queued": len(profile_ids),
         "operation_id": operation.id,
     }
-

@@ -410,6 +410,8 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
     const showScope = useWatch({control, name: 'showScope'}) ?? 'both'
+    const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
+    const indexingValuesKey = JSON.stringify(indexingValues)
     const rawLocalMediaProfileId = useWatch({control, name: 'id'})
     const localMediaProfileId = typeof rawLocalMediaProfileId === 'number'
         ? rawLocalMediaProfileId
@@ -684,6 +686,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                             values: testValues,
                             sourceId: selectedSource.id,
                             localMediaProfileId: mode === 'show' ? localMediaProfileId : null,
+                            indexingValues: mode === 'show' ? indexingValues : null,
                         }),
                     },
                 )
@@ -716,7 +719,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             window.clearTimeout(timer)
             controller.abort()
         }
-    }, [localMediaProfileId, mode, preferredFormat, previewValuesKey, selectedSource, template])
+    }, [indexingValuesKey, localMediaProfileId, mode, preferredFormat, previewValuesKey, selectedSource, template])
 
     function chooseSource(source: LocalMediaProfileTemplateSource) {
         setSelectedSource(source)
@@ -779,7 +782,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                                 {index > 0 ? ', ' : ''}<code>{name}</code>
                             </span>
                         ))}
-                        {missingIndexingValueNames.length === 1 ? ' is' : ' are'} not defined for the selected show and will render as empty.
+                        {missingIndexingValueNames.length === 1 ? ' is' : ' are'} not defined by this Local Media Profile and will render as empty.
                     </div>
                 )}
                 {provisionalIndexingValueNames.length > 0 && (
@@ -790,7 +793,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                                 {index > 0 ? ', ' : ''}<code>{name}</code>
                             </span>
                         ))}
-                        {provisionalIndexingValueNames.length === 1 ? ' is' : ' are'} showing the current next value provisionally. Previewing does not reserve a number.
+                        {provisionalIndexingValueNames.length === 1 ? ' is' : ' are'} simulated from the current draft. Previewing does not save an assignment.
                     </div>
                 )}
                 {pathHasLeadingSpace && (

@@ -7,7 +7,7 @@ from backend.utils.custom_metadata import is_valid_custom_metadata_key
 
 
 INDEX_DEFINITION_PREFIX = "custom_index.definition."
-INDEX_ASSIGNMENT_PREFIX = "custom_index.assignment."
+INDEX_ASSIGNMENT_PREFIX = "custom_index."
 
 
 class _MetadataItem(Protocol):
@@ -30,6 +30,14 @@ class IndexingValueDefinition:
 
 class CustomIndexNotReadyError(RuntimeError):
     """Raised when an artifact needs a defined index that has not been assigned yet."""
+
+    def __init__(
+        self, message: str, *, repair_show_id: int | None = None,
+        repair_profile_id: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.repair_show_id = repair_show_id
+        self.repair_profile_id = repair_profile_id
 
 
 def _validate_definition(key: str, name: str) -> IndexingValueDefinition:
@@ -111,18 +119,21 @@ def replace_indexing_value_definitions(
             existing.value = name
 
 
-def index_assignment_storage_key(key: str) -> str:
+def index_assignment_storage_key(local_media_profile_id: int, key: str) -> str:
     if not is_valid_custom_metadata_key(key):
         raise ValueError(f"Invalid Indexing Value key: {key}")
-    return f"{INDEX_ASSIGNMENT_PREFIX}{key}"
+    if local_media_profile_id < 1:
+        raise ValueError("A saved Local Media Profile is required")
+    return f"{INDEX_ASSIGNMENT_PREFIX}{local_media_profile_id}.{key}"
 
 
-def get_media_download_index_assignments(download: _MetadataResource) -> dict[str, int]:
+def get_episode_index_assignments(episode: _MetadataResource, local_media_profile_id: int) -> dict[str, int]:
     assignments: dict[str, int] = {}
-    for item in download.meta_items:
-        if not item.key.startswith(INDEX_ASSIGNMENT_PREFIX):
+    prefix = f"{INDEX_ASSIGNMENT_PREFIX}{local_media_profile_id}."
+    for item in episode.meta_items:
+        if not item.key.startswith(prefix):
             continue
-        key = item.key[len(INDEX_ASSIGNMENT_PREFIX):]
+        key = item.key[len(prefix):]
         if not is_valid_custom_metadata_key(key):
             continue
         try:
@@ -132,31 +143,34 @@ def get_media_download_index_assignments(download: _MetadataResource) -> dict[st
     return assignments
 
 
-def set_media_download_index_assignment(
-    download: _MetadataResource,
+def set_episode_index_assignment(
+    episode: _MetadataResource,
+    local_media_profile_id: int,
     key: str,
     value: int,
 ) -> None:
     if value < 1:
         raise ValueError("Custom index assignments must be positive integers")
-    download.set_meta(index_assignment_storage_key(key), str(value))
+    episode.set_meta(index_assignment_storage_key(local_media_profile_id, key), str(value))
 
 
-def remove_media_download_index_assignments(
-    download: _MetadataResource,
+def remove_episode_index_assignments(
+    episode: _MetadataResource,
+    local_media_profile_id: int,
     *,
     keys: set[str] | frozenset[str] | None = None,
 ) -> None:
     exact = (
-        {index_assignment_storage_key(key) for key in keys}
+        {index_assignment_storage_key(local_media_profile_id, key) for key in keys}
         if keys is not None
         else None
     )
-    download.meta_items[:] = [
+    prefix = f"{INDEX_ASSIGNMENT_PREFIX}{local_media_profile_id}."
+    episode.meta_items[:] = [
         item
-        for item in download.meta_items
+        for item in episode.meta_items
         if not (
-            item.key.startswith(INDEX_ASSIGNMENT_PREFIX)
+            item.key.startswith(prefix)
             and (exact is None or item.key in exact)
         )
     ]

@@ -393,6 +393,8 @@ async def _fetch_show(
         )
 
     _queue_monitor_requests(s, monitor_requests.values())
+    from backend.services.custom_indexes import request_show_custom_index_reconciliation
+    request_show_custom_index_reconciliation(s, show.id)
     _queue_show_indexed(s, show=show, indexed_count=total)
     s.commit()
     update_progress(progress, 100, _completion_message(total, len(monitor_requests)))

@@ -10,19 +10,15 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
 )
-from backend.db.models import Episode, Movie, MovieExtra, MovieExtraSource, Season, Show
-from backend.db.models.media_download import EpisodeMediaDownload
-from backend.services.custom_indexes import peek_next_custom_index
+from backend.db.models import Episode, Movie, MovieExtra, MovieExtraSource, Season, Show, ShowLocalMediaProfile
+from backend.services.custom_indexes import simulate_episode_indexes
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
     PreferredFormat,
     ShowLocalMediaProfileScope,
 )
 from backend.types.show_types import ShowType
-from backend.utils.custom_index import (
-    get_media_download_index_assignments,
-    indexing_value_definition_keys,
-)
+from backend.utils.custom_index import indexing_value_definition_keys
 from backend.utils.custom_metadata import (
     CustomMetadataScope,
     custom_metadata_template_variable,
@@ -404,49 +400,34 @@ def _render_show_preview(
         except ValueError:
             episode = None
 
+    profile = (
+        session.get(ShowLocalMediaProfile, body.local_media_profile_id)
+        if session is not None and body.local_media_profile_id is not None else None
+    )
     definitions = (
-        indexing_value_definition_keys(episode.show)
-        if episode is not None
-        else frozenset()
+        frozenset(item.key for item in body.indexing_values)
+        if body.indexing_values is not None
+        else indexing_value_definition_keys(profile) if profile is not None else frozenset()
     )
     assignments: dict[str, int] = {}
-    if (
-        session is not None
-        and episode is not None
-        and body.local_media_profile_id is not None
-    ):
-        download = session.scalar(
-            select(EpisodeMediaDownload).where(
-                EpisodeMediaDownload.media_item_id == episode.id,
-                EpisodeMediaDownload.local_media_profile_id == body.local_media_profile_id,
-            )
-        )
-        if download is not None:
-            assignments = get_media_download_index_assignments(download)
+    if session is not None and episode is not None:
+        episodes = list(session.scalars(select(Episode).where(
+            Episode.show_id == episode.show_id, Episode.index <= episode.index,
+        ).order_by(Episode.index.asc())))
+        assignments = simulate_episode_indexes(
+            episodes, template=body.output_template, definitions=definitions,
+            values_overrides={episode.id: body.values},
+        )[episode.id]
 
     provisional: dict[str, int] = {}
 
     def resolve_index(key: str) -> object:
         if key not in definitions:
             return ""
-        if key in assignments:
-            return assignments[key]
         if key not in provisional:
-            provisional[key] = (
-                peek_next_custom_index(
-                    session,
-                    show_id=episode.show_id,
-                    local_media_profile_id=body.local_media_profile_id,
-                    key=key,
-                )
-                if (
-                    session is not None
-                    and episode is not None
-                    and body.local_media_profile_id is not None
-                )
-                else 1
-            )
-        return provisional[key]
+            if key not in assignments:
+                provisional[key] = 1
+        return assignments.get(key, 1)
 
     output_path = render_output_template(
         body.output_template,

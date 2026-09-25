@@ -6,7 +6,7 @@ from datetime import datetime
 from pydantic import AliasChoices, AliasPath, computed_field, Field
 
 from backend.api.models.base import RequestBase, response_model_config
-from backend.api.models.custom_metadata import CustomMetadataResponseBase, IndexingValueDefinitionAPI
+from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.show_types import ShowType, EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
@@ -75,7 +75,6 @@ class _ShowAPIBaseOut(CustomMetadataResponseBase):
 
     model_config = response_model_config(nested_source="show")
 
-    indexing_values: list[IndexingValueDefinitionAPI] = Field(default_factory=list)
     custom_metadata: dict[str, str] = Field(
         default_factory=dict,
         validation_alias=AliasChoices(

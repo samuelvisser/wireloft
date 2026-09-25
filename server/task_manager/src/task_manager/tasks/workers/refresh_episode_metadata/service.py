@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
+from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
@@ -87,10 +88,7 @@ async def run_refresh_episode_metadata(
 
         custom_index_show_id = episode.show_id
         refreshed_normally = _refresh_episode_from_dailywire(s, episode, detail)
-        queue_event(s, "show.custom_indexes_requested", {
-            "resource_id": custom_index_show_id,
-            "id": custom_index_show_id,
-        })
+        request_show_custom_index_reconciliation(s, custom_index_show_id)
         if not refreshed_normally:
             episode.metadata_is_final = False
             s.commit()

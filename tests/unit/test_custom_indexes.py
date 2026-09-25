@@ -107,312 +107,242 @@ def _make_download(session, episode, profile, *, file_path=""):
     return download
 
 
-def _define(show, *definitions: tuple[str, str]):
+def _define(profile, *definitions: tuple[str, str]):
     from backend.utils.custom_index import IndexingValueDefinition, replace_indexing_value_definitions
 
     replace_indexing_value_definitions(
-        show,
+        profile,
         [IndexingValueDefinition(key=key, name=name) for key, name in definitions],
     )
 
 
-def test_indexing_value_definitions_accept_api_models_and_serialize(db_session):
-    from backend.api.models.custom_metadata import IndexingValueDefinitionAPI
-    from backend.api.models.show import ShowAPIRead
-    from backend.utils.custom_index import (
-        get_indexing_value_definitions,
-        replace_indexing_value_definitions,
-    )
+def _request(session, show, profile):
+    from backend.db.models import CustomIndexState
+    state = session.query(CustomIndexState).filter_by(show_id=show.id, local_media_profile_id=profile.id).one_or_none()
+    if state is None:
+        state = CustomIndexState(show_id=show.id, local_media_profile_id=profile.id)
+        session.add(state)
+    else:
+        state.requested_generation += 1
+    session.flush()
+    return state
 
+
+def test_definitions_belong_to_lmp_and_serialize(db_session):
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPIRead
+    from backend.utils.custom_index import get_indexing_value_definitions
     show = _make_show(db_session)
-    replace_indexing_value_definitions(
-        show,
-        [IndexingValueDefinitionAPI(key="featurettes", name="Featurettes")],
-    )
+    profile = _make_profile(db_session, template="/downloads/{{ episode }}.ext")
+    _define(profile, ("featurettes", "Featurettes"))
     db_session.flush()
-
-    assert get_indexing_value_definitions(show)[0].key == "featurettes"
-    payload = ShowAPIRead.model_validate(show)
-    assert [(item.key, item.name) for item in payload.indexing_values] == [
-        ("featurettes", "Featurettes"),
-    ]
+    assert get_indexing_value_definitions(show) == []
+    assert [(value.key, value.name) for value in ShowLocalMediaProfileAPIRead.model_validate(profile).indexing_values] == [("featurettes", "Featurettes")]
 
 
 def test_custom_index_requires_literal_key():
     from backend.utils.output_template import output_template_custom_index_keys
-
-    assert output_template_custom_index_keys(
-        "/downloads/{{ 'featurettes' | custom_index }}/{{ episode }}.ext"
-    ) == {"featurettes"}
-
+    assert output_template_custom_index_keys("/downloads/{{ 'featurettes' | custom_index }}.ext") == {"featurettes"}
     with pytest.raises(ValueError, match="literal key"):
-        output_template_custom_index_keys(
-            "/downloads/{{ episode_type | custom_index }}/{{ episode }}.ext"
-        )
+        output_template_custom_index_keys("/downloads/{{ episode_type | custom_index }}.ext")
 
 
-def test_custom_indexes_are_persistent_monotonic_media_download_assignments(db_session):
-    from backend.services.custom_indexes import ensure_media_download_custom_indexes
-    from backend.utils.custom_index import get_media_download_index_assignments
+def test_conditional_paths_can_select_distinct_index_directories():
+    from backend.utils.output_template import (
+        SHOW_OUTPUT_TEMPLATE_FIELDS, SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        validate_output_template_path_requirements,
+    )
 
+    template = ("{% if episode_type == 'trailer' %}"
+                "{% set number = 'extras' | custom_index %}"
+                "/downloads/Extras/{{ number }}.ext"
+                "{% else %}"
+                "{% set number = 'featurettes' | custom_index %}"
+                "/downloads/Featurettes/{{ number }}.ext"
+                "{% endif %}")
+    assert validate_output_template_path_requirements(
+        template, allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+    ) == template
+
+
+def test_reconciliation_uses_every_episode_and_reorders_historical_discovery(db_session):
+    from backend.services.custom_indexes import reconcile_show_profile_custom_indexes
+    from backend.utils.custom_index import get_episode_index_assignments
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-    profile = _make_profile(
-        db_session,
-        template="/downloads/{{ show }}/{{ 'extras' | custom_index }}-{{ episode }}.ext",
-    )
-    _define(show, ("extras", "Extras"))
+    profile = _make_profile(db_session, template="/downloads/{{ 'featurettes' | custom_index }}-{{ episode }}.ext")
+    _define(profile, ("featurettes", "Featurettes"))
+    first = _make_episode(db_session, show, season, index=100, slug="first", identifier="ep.1")
+    last = _make_episode(db_session, show, season, index=300, slug="last", identifier="ep.3")
+    download = _make_download(db_session, last, profile)
+    state = _request(db_session, show, profile)
+    result = reconcile_show_profile_custom_indexes(db_session, show_id=show.id, local_media_profile_id=profile.id)
+    db_session.flush()
+    assert result.episodes_considered == 2
+    assert get_episode_index_assignments(first, profile.id) == {"featurettes": 1}
+    assert get_episode_index_assignments(last, profile.id) == {"featurettes": 2}
+    assert not any(item.key.startswith("custom_index.") for item in download.meta_items)
+    assert state.completed_generation == state.requested_generation
 
-    episode_100 = _make_episode(db_session, show, season, index=100, slug="episode-100", identifier="ep.100")
-    episode_300 = _make_episode(db_session, show, season, index=300, slug="episode-300", identifier="ep.300")
-    first = _make_download(db_session, episode_100, profile)
-    second = _make_download(db_session, episode_300, profile)
-
-    ensure_media_download_custom_indexes(db_session, download=first, profile=profile, episode=episode_100)
-    ensure_media_download_custom_indexes(db_session, download=second, profile=profile, episode=episode_300)
-    db_session.commit()
-
-    assert get_media_download_index_assignments(first) == {"extras": 1}
-    assert get_media_download_index_assignments(second) == {"extras": 2}
-
-    # Discovering an older episode later never re-ranks existing assignments.
-    episode_200 = _make_episode(db_session, show, season, index=200, slug="episode-200", identifier="ep.200")
-    third = _make_download(db_session, episode_200, profile)
-    ensure_media_download_custom_indexes(db_session, download=third, profile=profile, episode=episode_200)
-    db_session.commit()
-
-    assert get_media_download_index_assignments(first) == {"extras": 1}
-    assert get_media_download_index_assignments(second) == {"extras": 2}
-    assert get_media_download_index_assignments(third) == {"extras": 3}
-
-    # A template that stops using the sequence does not delete old assignments.
-    profile.output_template = "/downloads/{{ show }}/{{ episode }}.ext"
-    ensure_media_download_custom_indexes(db_session, download=first, profile=profile, episode=episode_100)
-    assert get_media_download_index_assignments(first) == {"extras": 1}
+    middle = _make_episode(db_session, show, season, index=200, slug="middle", identifier="ep.2")
+    _request(db_session, show, profile)
+    reconcile_show_profile_custom_indexes(db_session, show_id=show.id, local_media_profile_id=profile.id)
+    assert get_episode_index_assignments(middle, profile.id) == {"featurettes": 2}
+    assert get_episode_index_assignments(last, profile.id) == {"featurettes": 3}
+    again = reconcile_show_profile_custom_indexes(db_session, show_id=show.id, local_media_profile_id=profile.id)
+    assert again.assignments_changed == 0
 
 
-def test_custom_index_allocates_only_the_runtime_jinja_branch(db_session):
-    from backend.services.custom_indexes import ensure_media_download_custom_indexes
-    from backend.utils.custom_index import get_media_download_index_assignments
-
+def test_branches_repeated_calls_and_undefined_key(db_session):
+    from backend.services.custom_indexes import reconcile_show_profile_custom_indexes
+    from backend.utils.custom_index import get_episode_index_assignments
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-    profile = _make_profile(
-        db_session,
-        template=(
-            "{% if episode_type == 'trailer' %}"
-            "/downloads/{{ show }}/{{ 'trailers' | custom_index }}-{{ episode }}.ext"
-            "{% else %}"
-            "/downloads/{{ show }}/{{ 'episodes' | custom_index }}-{{ episode }}.ext"
-            "{% endif %}"
-        ),
-    )
-    _define(show, ("trailers", "Trailers"), ("episodes", "Episodes"))
-
-    trailer = _make_episode(db_session, show, season, index=1, slug="trailer-1", identifier="trailer.1")
-    episode = _make_episode(db_session, show, season, index=2, slug="episode-1", identifier="ep.1")
-    trailer_download = _make_download(db_session, trailer, profile)
-    episode_download = _make_download(db_session, episode, profile)
-
-    ensure_media_download_custom_indexes(
-        db_session,
-        download=trailer_download,
-        profile=profile,
-        episode=trailer,
-    )
-    ensure_media_download_custom_indexes(
-        db_session,
-        download=episode_download,
-        profile=profile,
-        episode=episode,
-    )
-
-    assert get_media_download_index_assignments(trailer_download) == {"trailers": 1}
-    assert get_media_download_index_assignments(episode_download) == {"episodes": 1}
+    template = """{% if episode_type == 'trailer' %}{% set a = 'featurettes' | custom_index %}{% set b = 'featurettes' | custom_index %}/downloads/{{ a }}-{{ episode }}.ext{% else %}{% set a = 'extras' | custom_index %}{% set missing = 'unknown' | custom_index %}/downloads/{{ a }}-{{ episode }}.ext{% endif %}"""
+    profile = _make_profile(db_session, template=template)
+    _define(profile, ("featurettes", "Featurettes"), ("extras", "Extras"))
+    trailer = _make_episode(db_session, show, season, index=100, slug="trailer", identifier="aux.1")
+    featurette = _make_episode(db_session, show, season, index=200, slug="featurette", identifier="trailer.1")
+    _request(db_session, show, profile)
+    reconcile_show_profile_custom_indexes(db_session, show_id=show.id, local_media_profile_id=profile.id)
+    assert get_episode_index_assignments(trailer, profile.id) == {"extras": 1}
+    assert get_episode_index_assignments(featurette, profile.id) == {"featurettes": 1}
 
 
-def test_undefined_custom_index_renders_empty_and_creates_nothing(db_session):
-    from backend.services.custom_indexes import ensure_media_download_custom_indexes
-    from backend.utils.custom_index import get_media_download_index_assignments
+def test_removed_definition_and_scope_clean_all_assignments(db_session):
+    from backend.services.custom_indexes import reconcile_show_profile_custom_indexes
+    from backend.utils.custom_index import get_episode_index_assignments
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    profile = _make_profile(db_session, template="/downloads/{{ 'extras' | custom_index }}.ext")
+    _define(profile, ("extras", "Extras"))
+    _request(db_session, show, profile)
+    reconcile_show_profile_custom_indexes(db_session, show_id=show.id, local_media_profile_id=profile.id)
+    assert get_episode_index_assignments(episode, profile.id) == {"extras": 1}
+    _define(profile)
+    _request(db_session, show, profile)
+    reconcile_show_profile_custom_indexes(db_session, show_id=show.id, local_media_profile_id=profile.id)
+    assert get_episode_index_assignments(episode, profile.id) == {}
+    _define(profile, ("extras", "Extras"))
+    profile.show_scope = "series"
+    _request(db_session, show, profile)
+    reconcile_show_profile_custom_indexes(db_session, show_id=show.id, local_media_profile_id=profile.id)
+    assert get_episode_index_assignments(episode, profile.id) == {}
+
+
+def test_normal_render_requires_current_generation_and_never_allocates(db_session):
+    from backend.services.custom_indexes import reconcile_show_profile_custom_indexes
+    from backend.utils.custom_index import CustomIndexNotReadyError, get_episode_index_assignments
+    from backend.utils.output_template import resolve_episode_output_path
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    profile = _make_profile(db_session, template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext")
+    _define(profile, ("extras", "Extras"))
+    state = _request(db_session, show, profile)
+    with pytest.raises(CustomIndexNotReadyError):
+        resolve_episode_output_path(profile.output_template, episode=episode, local_media_profile=profile)
+    reconcile_show_profile_custom_indexes(db_session, show_id=show.id, local_media_profile_id=profile.id)
+    before = get_episode_index_assignments(episode, profile.id)
+    assert str(resolve_episode_output_path(profile.output_template, episode=episode, local_media_profile=profile)).endswith("1-first.ext")
+    assert get_episode_index_assignments(episode, profile.id) == before
+    state.requested_generation += 1
+    db_session.flush()
+    with pytest.raises(CustomIndexNotReadyError):
+        resolve_episode_output_path(profile.output_template, episode=episode, local_media_profile=profile)
+
+
+def test_undefined_index_renders_empty_without_sequence_state(db_session):
+    from backend.db.models import CustomIndexState
     from backend.utils.output_template import resolve_episode_output_path
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-    profile = _make_profile(
-        db_session,
-        template="/downloads/{{ 'missing' | custom_index }}-{{ episode }}.ext",
-    )
-    episode = _make_episode(db_session, show, season, index=1, slug="episode-1", identifier="ep.1")
-    download = _make_download(db_session, episode, profile)
-
-    ensure_media_download_custom_indexes(db_session, download=download, profile=profile, episode=episode)
-    db_session.commit()
-
-    assert get_media_download_index_assignments(download) == {}
-    path = resolve_episode_output_path(
-        profile.output_template,
-        episode=episode,
-        local_media_profile=profile,
-        media_download=download,
-        extension="mp4",
-    )
-    assert path.name == "-episode-1.mp4"
+    episode = _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    profile = _make_profile(db_session, template="/downloads/{{ 'undefined' | custom_index }}-{{ episode }}.ext")
+    assert str(resolve_episode_output_path(
+        profile.output_template, episode=episode, local_media_profile=profile,
+    )).endswith("-first.ext")
+    assert db_session.query(CustomIndexState).count() == 0
+    assert episode.meta_items == []
 
 
-def test_defined_custom_index_requires_assignment_before_render(db_session):
-    from backend.utils.custom_index import CustomIndexNotReadyError
-    from backend.utils.output_template import resolve_episode_output_path
+def test_profile_save_queues_index_work_before_optional_rename(db_session):
+    from backend.api.endpoints.show_local_media_profiles.service import update_show_local_media_profile
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPIUpdate
+    from backend.db.models import CustomIndexState
+    from task_manager.scheduler.db import TaskOperation
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-    profile = _make_profile(
-        db_session,
-        template="/downloads/{{ 'all' | custom_index }}-{{ episode }}.ext",
+    _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    profile = _make_profile(db_session, template="/downloads/{{ episode }}.ext")
+    body = ShowLocalMediaProfileAPIUpdate(
+        name=profile.name, preferred_format=profile.preferred_format,
+        output_template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext",
+        show_scope="both", indexing_values=[{"key": "extras", "name": "Extras"}],
     )
-    _define(show, ("all", "All episodes"))
-    episode = _make_episode(db_session, show, season, index=1, slug="episode-1", identifier="ep.1")
-    download = _make_download(db_session, episode, profile)
+    update_show_local_media_profile(db_session, profile.slug, body, rename_files=True)
 
-    with pytest.raises(CustomIndexNotReadyError, match="not ready"):
-        resolve_episode_output_path(
-            profile.output_template,
-            episode=episode,
-            local_media_profile=profile,
-            media_download=download,
-            extension="mp4",
-        )
+    operations = list(db_session.query(TaskOperation).all())
+    assert [operation.kind for operation in operations] == ["local_media_profile.manage_custom_indexes"]
+    assert operations[0].targets[0].task_kwargs["rename_after"] is True
+    state = db_session.query(CustomIndexState).one()
+    assert (state.show_id, state.local_media_profile_id) == (show.id, profile.id)
+    assert state.completed_generation < state.requested_generation
 
 
-def test_preview_uses_next_value_provisionally_without_reserving_it(db_session):
+def test_draft_preview_simulates_without_persisting(db_session):
     from backend.api.endpoints.local_media_profiles.output_template import get_output_template_preview
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
-    from backend.db.models import CustomIndexState
-    from backend.services.custom_indexes import ensure_media_download_custom_indexes
+    from backend.utils.custom_index import get_episode_index_assignments
     from backend.utils.output_template import episode_output_template_values
-
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-    profile = _make_profile(
-        db_session,
-        template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext",
-    )
-    _define(show, ("extras", "Extras"))
-    episode = _make_episode(db_session, show, season, index=1, slug="episode-1", identifier="ep.1")
-
-    body = LocalMediaProfileTemplatePreview(
-        type="show",
-        output_template=profile.output_template,
-        preferred_format=profile.preferred_format,
-        values=episode_output_template_values(episode),
-        source_id=f"episode:{episode.id}",
-        local_media_profile_id=profile.id,
-    )
+    first = _make_episode(db_session, show, season, index=100, slug="first", identifier="ep.1")
+    second = _make_episode(db_session, show, season, index=200, slug="second", identifier="ep.2")
+    profile = _make_profile(db_session, template="/downloads/{{ episode }}.ext")
+    body = LocalMediaProfileTemplatePreview(type="show", output_template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext", preferred_format="format_1080p", values=episode_output_template_values(second), source_id=f"episode:{second.id}", local_media_profile_id=profile.id, indexing_values=[{"key": "extras", "name": "Extras"}])
     preview = get_output_template_preview(db_session, body)
-
-    assert preview.output_path.endswith("/1-episode-1.mp4")
-    assert preview.provisional_indexing_values == ["extras"]
-    assert db_session.scalar(select(CustomIndexState).limit(1)) is None
-
-    download = _make_download(db_session, episode, profile)
-    ensure_media_download_custom_indexes(db_session, download=download, profile=profile, episode=episode)
-    db_session.commit()
-
-    preview = get_output_template_preview(db_session, body)
-    assert preview.output_path.endswith("/1-episode-1.mp4")
-    assert preview.provisional_indexing_values == []
+    assert preview.output_path.endswith("2-second.mp4")
+    assert get_episode_index_assignments(first, profile.id) == {}
+    assert get_episode_index_assignments(second, profile.id) == {}
 
 
-def test_reconcile_existing_downloads_is_deterministic_and_never_reindexes(db_session):
+@pytest.mark.parametrize("was_synchronized", [True, False])
+def test_historical_episode_only_queues_rename_for_synchronized_file(db_session, was_synchronized):
     from backend.services.custom_indexes import reconcile_show_profile_custom_indexes
-    from backend.utils.custom_index import get_media_download_index_assignments
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from backend.utils.output_template import resolve_episode_output_path
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-    profile = _make_profile(
-        db_session,
-        template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext",
+    profile = _make_profile(db_session, template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext")
+    _define(profile, ("extras", "Extras"))
+    _make_episode(db_session, show, season, index=100, slug="first", identifier="ep.1")
+    last = _make_episode(db_session, show, season, index=300, slug="last", identifier="ep.3")
+    _request(db_session, show, profile)
+    reconcile_show_profile_custom_indexes(db_session, show_id=show.id, local_media_profile_id=profile.id)
+    expected = resolve_episode_output_path(
+        profile.output_template, episode=last, local_media_profile=profile, extension="mp4",
     )
-    _define(show, ("extras", "Extras"))
+    source = expected if was_synchronized else expected.with_name("kept-by-user.mp4")
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(b"video")
+    download = _make_download(db_session, last, profile, file_path=str(source))
+    download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+    db_session.flush()
 
-    later = _make_episode(db_session, show, season, index=20, slug="later", identifier="ep.20")
-    earlier = _make_episode(db_session, show, season, index=10, slug="earlier", identifier="ep.10")
-    later_download = _make_download(db_session, later, profile)
-    earlier_download = _make_download(db_session, earlier, profile)
-
+    _make_episode(db_session, show, season, index=200, slug="middle", identifier="ep.2")
+    _request(db_session, show, profile)
     result = reconcile_show_profile_custom_indexes(
-        db_session,
-        show_id=show.id,
-        local_media_profile_id=profile.id,
+        db_session, show_id=show.id, local_media_profile_id=profile.id,
     )
-    db_session.commit()
-
-    assert result.assignments_created == 2
-    assert get_media_download_index_assignments(earlier_download) == {"extras": 1}
-    assert get_media_download_index_assignments(later_download) == {"extras": 2}
-
-    rerun = reconcile_show_profile_custom_indexes(
-        db_session,
-        show_id=show.id,
-        local_media_profile_id=profile.id,
+    assert result.synced_source_paths == (
+        ((last.id, str(expected)),) if was_synchronized else ()
     )
-    assert rerun.assignments_created == 0
-    assert get_media_download_index_assignments(earlier_download) == {"extras": 1}
-    assert get_media_download_index_assignments(later_download) == {"extras": 2}
-
-
-def test_removing_definition_deletes_assignments_and_resets_that_sequence(db_session):
-    from backend.db.models import CustomIndexState
-    from backend.services.custom_indexes import (
-        ensure_media_download_custom_indexes,
-        remove_show_indexing_value_assignments,
-    )
-    from backend.utils.custom_index import (
-        get_media_download_index_assignments,
-        replace_indexing_value_definitions,
-    )
-
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
-    profile = _make_profile(
-        db_session,
-        template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext",
-    )
-    _define(show, ("extras", "Extras"))
-    first_episode = _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
-    first_download = _make_download(db_session, first_episode, profile)
-    ensure_media_download_custom_indexes(
-        db_session,
-        download=first_download,
-        profile=profile,
-        episode=first_episode,
-    )
-    db_session.commit()
-    assert get_media_download_index_assignments(first_download) == {"extras": 1}
-
-    replace_indexing_value_definitions(show, [])
-    remove_show_indexing_value_assignments(
-        db_session,
-        show_id=show.id,
-        keys={"extras"},
-    )
-    db_session.commit()
-
-    assert get_media_download_index_assignments(first_download) == {}
-    assert db_session.scalar(
-        select(CustomIndexState).where(
-            CustomIndexState.show_id == show.id,
-            CustomIndexState.key == "extras",
-        )
-    ) is None
-
-    _define(show, ("extras", "Extras again"))
-    ensure_media_download_custom_indexes(
-        db_session,
-        download=first_download,
-        profile=profile,
-        episode=first_episode,
-    )
-    assert get_media_download_index_assignments(first_download) == {"extras": 1}
+    assert source.read_bytes() == b"video"
 
 
 def test_batch_file_rename_rollback_restores_cycle_without_overwrite(db_session, monkeypatch):

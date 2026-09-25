@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.services.custom_indexes import ensure_media_download_custom_indexes
 from backend.utils.output_template import resolve_episode_output_path
 from task_manager.scheduler.db import TaskOperation
 from task_manager.scheduler.operation_control import cancel_operation
@@ -51,12 +50,6 @@ def _prepare_redownloads(
     for download in downloads:
         episode = download.media
         local_media_profile = download.local_media_profile
-        ensure_media_download_custom_indexes(
-            s,
-            download=download,
-            profile=local_media_profile,
-            episode=episode,
-        )
         target_path = str(resolve_episode_output_path(
             local_media_profile.output_template,
             episode=episode,

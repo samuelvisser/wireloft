@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
     from backend.db.models import Season, PodcastDownloadProfile, SeriesDownloadProfile
+    from backend.db.models import CustomIndexState
 
 
 class Show(Base, HasMetadataMixin, HasTaskResourcesMixin):
@@ -58,11 +59,9 @@ class Show(Base, HasMetadataMixin, HasTaskResourcesMixin):
     stream_profiles: Mapped[list["StreamProfileBase"]] = relationship(
         back_populates="show", cascade="all, delete-orphan"
     )
-
-    @property
-    def indexing_values(self):
-        from backend.utils.custom_index import get_indexing_value_definitions
-        return get_indexing_value_definitions(self)
+    custom_index_states: Mapped[list["CustomIndexState"]] = relationship(
+        back_populates="show", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

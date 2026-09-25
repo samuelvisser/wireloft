@@ -6,7 +6,6 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.services.custom_indexes import ensure_media_download_custom_indexes
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.episode_download_scope import EpisodeDownloadScope
@@ -104,12 +103,6 @@ async def run_rename_file_worker(
                 raise ValueError(f"Media download {download.id} has no current file path")
 
             output_template = download.local_media_profile.output_template
-            ensure_media_download_custom_indexes(
-                s,
-                download=download,
-                profile=download.local_media_profile,
-                episode=episode,
-            )
             s.commit()
             resolved_source = resolve_media_download_file(
                 s,

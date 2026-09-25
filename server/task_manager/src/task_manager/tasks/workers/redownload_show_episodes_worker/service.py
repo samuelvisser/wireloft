@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import AsyncExitStack
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -8,6 +9,9 @@ from sqlalchemy.orm import Session
 from backend.utils.episode_download_scope import EpisodeDownloadScope
 from dailywire_downloader import DownloadCancelled
 from task_manager.tasks.helpers.progress import update_progress
+from task_manager.tasks.helpers.custom_index_readiness import (
+    custom_index_pair_lock, pair_is_ready, wait_for_custom_index_pair,
+)
 from ._helpers import (
     _POLL_INTERVAL_SECONDS,
     _cancel_targets,
@@ -30,15 +34,29 @@ async def run_redownload_show_episodes_worker(
         show_id=show_id,
         episode_id=episode_id,
     ).select(local_media_profile_id=local_media_profile_id)
-    base_result = scope.result_data()
-    downloads = list(scope.downloads)
+    pairs = {(download.media.show_id, download.local_media_profile_id) for download in scope.downloads}
+    s.rollback()
+    while True:
+        for pair in sorted(pairs):
+            await wait_for_custom_index_pair(*pair)
+        async with AsyncExitStack() as locks:
+            for pair in sorted(pairs):
+                await locks.enter_async_context(custom_index_pair_lock(*pair))
+            if not all(pair_is_ready(*pair) for pair in pairs):
+                continue
+            scope = EpisodeDownloadScope.resolve(
+                s, show_id=show_id, episode_id=episode_id,
+            ).select(local_media_profile_id=local_media_profile_id)
+            base_result = scope.result_data()
+            downloads = list(scope.downloads)
 
-    if not downloads:
-        update_progress(progress, 100, "No downloaded episodes match this request")
-        return {**base_result, "episode_files": 0}
+            if not downloads:
+                update_progress(progress, 100, "No downloaded episodes match this request")
+                return {**base_result, "episode_files": 0}
 
-    update_progress(progress, 1, f"Preparing {len(downloads)} episode download(s)")
-    targets = _prepare_redownloads(s, downloads)
+            update_progress(progress, 1, f"Preparing {len(downloads)} episode download(s)")
+            targets = _prepare_redownloads(s, downloads)
+            break
     total = len(targets)
 
     try:

@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
 from backend.db.models.media_download import MediaDownloadBase
-from backend.services.custom_indexes import ensure_media_download_custom_indexes
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.artifact_identity import inspect_artifact
@@ -56,14 +55,6 @@ async def run_download_episode(
     profile = download.local_media_profile
     if profile.type != LocalMediaProfileType.SHOW.value:
         raise DownloadError("Episodes require a Show Local Media Profile")
-
-    ensure_media_download_custom_indexes(
-        s,
-        download=download,
-        profile=profile,
-        episode=episode,
-    )
-    s.commit()
 
     print(f"Starting download_episode for {episode.slug} ({profile.name})")
     if progress is not None:

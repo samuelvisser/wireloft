@@ -1,4 +1,5 @@
 import {z} from 'zod'
+import {IndexingValueEntrySchema} from './custom_metadata'
 
 import {PreferredFormatReg, ShowLocalMediaProfileScopeReg} from '../local_media_profile'
 import {
@@ -18,15 +19,22 @@ const ShowLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
         '/downloads/shows/{{ show }}/{{ episode_title }}.ext',
     ),
     preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
+    indexingValues: z.array(IndexingValueEntrySchema).max(100).default([]),
+}).superRefine(({indexingValues}, ctx) => {
+    const seen = new Set<string>()
+    indexingValues.forEach(({key}, index) => {
+        if (seen.has(key)) ctx.addIssue({code: 'custom', path: ['indexingValues', index, 'key'], message: 'Keys must be unique'})
+        seen.add(key)
+    })
 })
 
-export const ShowLocalMediaProfileCreateSchema = ShowLocalMediaProfileBaseSchema.extend(
+export const ShowLocalMediaProfileCreateSchema = ShowLocalMediaProfileBaseSchema.safeExtend(
     LocalMediaProfileCreateBaseSchema.shape,
 )
 export type ShowLocalMediaProfileCreateIn = z.input<typeof ShowLocalMediaProfileCreateSchema>
 export type ShowLocalMediaProfileCreateOut = z.output<typeof ShowLocalMediaProfileCreateSchema>
 
-export const ShowLocalMediaProfileUpdateSchema = ShowLocalMediaProfileBaseSchema.extend(
+export const ShowLocalMediaProfileUpdateSchema = ShowLocalMediaProfileBaseSchema.safeExtend(
     LocalMediaProfileUpdateBaseSchema.shape,
 )
 export type ShowLocalMediaProfileUpdateIn = z.input<typeof ShowLocalMediaProfileUpdateSchema>
@@ -40,5 +48,6 @@ export const ShowLocalMediaProfileReadSchema = LocalMediaProfileSchemaResponse.s
         .nullable()
         .optional()
         .transform((value) => value ?? 'both'),
+    indexingValues: z.array(IndexingValueEntrySchema).default([]),
 })
 export type ShowLocalMediaProfileRead = z.infer<typeof ShowLocalMediaProfileReadSchema>

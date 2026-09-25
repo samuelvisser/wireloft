@@ -181,7 +181,6 @@ export default function EditShowPage() {
         title="Show metadata"
         scope="show"
         metadata={show?.customMetadata ?? {}}
-        indexingValues={show?.indexingValues ?? []}
         endpoint={`/shows/${encodeURIComponent(id)}/metadata`}
         invalidateQueryKeys={[
           ['show', id],

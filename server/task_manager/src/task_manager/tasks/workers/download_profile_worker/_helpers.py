@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import DownloadProfileBase, Episode, PodcastDownloadProfile, SeriesDownloadProfile
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.services.custom_indexes import ensure_media_download_custom_indexes
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
@@ -199,12 +198,6 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         )
         s.add(download)
         s.flush()
-        ensure_media_download_custom_indexes(
-            s,
-            download=download,
-            profile=profile.local_media_profile,
-            episode=episode,
-        )
         download.file_path = str(resolve_episode_output_path(
             profile.local_media_profile.output_template,
             episode=episode,
@@ -214,12 +207,6 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         s.flush()
         return DownloadAction(download.id, True)
 
-    ensure_media_download_custom_indexes(
-        s,
-        download=existing,
-        profile=profile.local_media_profile,
-        episode=episode,
-    )
     target_path = str(resolve_episode_output_path(
         profile.local_media_profile.output_template,
         episode=episode,

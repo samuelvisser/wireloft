@@ -59,7 +59,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
 
     const snapshotRef = useRef<Pick<
         LocalMediaProfileCreateUnionIn,
-        'name' | 'showScope' | 'outputTemplate' | 'preferredFormat'
+        'name' | 'showScope' | 'outputTemplate' | 'preferredFormat' | 'indexingValues'
     > | null>(null)
 
     const watchedOp = watch('op')
@@ -82,6 +82,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                 showScope: watch('showScope'),
                 outputTemplate: watch('outputTemplate'),
                 preferredFormat: watch('preferredFormat'),
+                indexingValues: watch('indexingValues'),
             }
         }
 
@@ -93,6 +94,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
             showScope: profile.showScope,
             outputTemplate: profile.outputTemplate,
             preferredFormat: profile.preferredFormat,
+            indexingValues: profile.indexingValues,
         } as LocalMediaProfileUpsertIn)
     }
 

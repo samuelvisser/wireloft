@@ -19,7 +19,6 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
-from backend.services.custom_indexes import ensure_media_download_custom_indexes
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
 from task_manager.scheduler.db import TaskDefinition, TaskRun
@@ -41,12 +40,6 @@ def _resolve_episode_download_path(
     episode: Episode,
     download: EpisodeMediaDownload,
 ) -> str:
-    ensure_media_download_custom_indexes(
-        s,
-        download=download,
-        profile=profile,
-        episode=episode,
-    )
     return str(resolve_episode_output_path(
         profile.output_template,
         episode=episode,

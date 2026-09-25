@@ -55,7 +55,6 @@ class CustomMetadataAPIUpdate(RequestBase):
 
     custom_metadata: dict[str, str] = Field(default_factory=dict)
     removed_fields: list[str] = Field(default_factory=list)
-    indexing_values: list[IndexingValueDefinitionAPI] | None = Field(default=None, max_length=100)
 
     @field_validator("custom_metadata")
     @classmethod
@@ -81,15 +80,6 @@ class CustomMetadataAPIUpdate(RequestBase):
         for key in value:
             cls._validate_key(key)
         return value
-
-    @model_validator(mode="after")
-    def _validate_indexing_values(self):
-        if self.indexing_values is None:
-            return self
-        keys = [value.key for value in self.indexing_values]
-        if len(keys) != len(set(keys)):
-            raise ValueError("Indexing Value keys must be unique")
-        return self
 
     @model_validator(mode="after")
     def _validate_no_removed_field_is_readded(self):

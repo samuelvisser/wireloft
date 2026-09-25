@@ -8,9 +8,9 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from backend.db.models import Episode, ShowLocalMediaProfile
+from backend.db.models import Episode, Show, ShowLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.services.custom_indexes import ensure_media_download_custom_indexes
+from backend.services.custom_indexes import ensure_episode_custom_indexes_ready, profile_applies_to_show
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.output_template import resolve_episode_output_path
@@ -125,11 +125,16 @@ def run_rename_show_profile_files(
     show_id: int,
     local_media_profile_id: int,
     episode_ids: list[int] | tuple[int, ...] | None = None,
+    expected_sources: dict[str, str] | None = None,
     progress=None,
 ) -> TaskResult:
     profile = session.get(ShowLocalMediaProfile, local_media_profile_id)
     if profile is None:
         return TaskResult(summary="Local Media Profile no longer exists")
+
+    show = session.get(Show, show_id)
+    if show is None or not profile_applies_to_show(profile, show):
+        return TaskResult(summary="Local Media Profile does not apply to this show")
 
     stmt = (
         select(EpisodeMediaDownload)
@@ -164,6 +169,9 @@ def run_rename_show_profile_files(
             raise FileNotFoundError(
                 f"Cannot rename media download {download.id}: '{download.file_path}' does not exist"
             )
+        if expected_sources is not None and str(source) != expected_sources.get(str(download.media_item_id)):
+            unchanged += 1
+            continue
         extension = source.suffix.removeprefix(".")
         if not extension:
             raise ValueError(f"Cannot determine extension for media download {download.id}")
@@ -171,12 +179,7 @@ def run_rename_show_profile_files(
         if episode is None:
             raise ValueError(f"Episode for media download {download.id} no longer exists")
 
-        ensure_media_download_custom_indexes(
-            session,
-            download=download,
-            profile=profile,
-            episode=episode,
-        )
+        ensure_episode_custom_indexes_ready(session, episode=episode, profile=profile)
         destination = resolve_episode_output_path(
             profile.output_template,
             episode=episode,
@@ -207,22 +210,22 @@ def run_rename_show_profile_files(
             },
         )
 
-    destinations = [move.destination for move in moves]
-    if len(destinations) != len(set(destinations)):
-        raise FileExistsError("Multiple episode files resolve to the same destination")
-
-    thumbnail_destinations = [
-        move.thumbnail_destination
-        for move in moves
-        if move.thumbnail_destination is not None
+    destinations = [
+        path for move in moves
+        for path in (move.destination, move.thumbnail_destination)
+        if path is not None
     ]
-    if len(thumbnail_destinations) != len(set(thumbnail_destinations)):
-        raise FileExistsError("Multiple thumbnail sidecars resolve to the same destination")
+    if len(destinations) != len(set(destinations)):
+        raise FileExistsError("Multiple managed artifacts resolve to the same destination")
 
-    source_paths = {move.source for move in moves}
-    thumbnail_source_paths = {
-        move.thumbnail_source for move in moves if move.thumbnail_source is not None
-    }
+    source_list = [
+        path for move in moves
+        for path in (move.source, move.thumbnail_source)
+        if path is not None and path.exists()
+    ]
+    if len(source_list) != len(set(source_list)):
+        raise FileExistsError("Multiple MediaDownloads claim the same source artifact")
+    source_paths = set(source_list)
     for move in moves:
         if move.destination.exists() and move.destination not in source_paths:
             raise FileExistsError(
@@ -231,7 +234,7 @@ def run_rename_show_profile_files(
         if (
             move.thumbnail_destination is not None
             and move.thumbnail_destination.exists()
-            and move.thumbnail_destination not in thumbnail_source_paths
+            and move.thumbnail_destination not in source_paths
         ):
             raise FileExistsError(
                 f"Cannot rename thumbnail to '{move.thumbnail_destination}': destination already exists"
