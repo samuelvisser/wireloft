@@ -188,6 +188,62 @@ def test_monitor_deletes_only_expired_episode_that_still_404s(db_session, monkey
     assert db_session.get(Episode, episode_id) is None
 
 
+def test_monitor_releases_database_transaction_before_external_requests(db_session, monkeypatch):
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
+
+    show = _make_show(db_session)
+    episode = _make_episode(db_session, show)
+    _mark_missing(db_session, episode, hours_ago=5)
+
+    detail = SimpleNamespace(
+        slug=episode.slug,
+        title=episode.title,
+        duration=5.0,
+        video_url=None,
+        audio_url=None,
+        publish_status="PUBLISHED",
+        is_downloadable=True,
+    )
+
+    class FakeAuthClient:
+        def get_token(self):
+            assert db_session.in_transaction() is False
+            return None
+
+    class FakeClient:
+        def __init__(self, access_token=None):
+            assert access_token is None
+
+        def get_episode_details(self, slug, *, require_member_exclusive):
+            assert db_session.in_transaction() is False
+            return detail
+
+    def observe_without_database_connection(_detail, *, inspect_static_media):
+        assert inspect_static_media is True
+        assert db_session.in_transaction() is False
+        return SimpleNamespace(
+            status=EpisodePublishStatus.PUBLISHED_FINAL,
+            has_usable_media=False,
+        )
+
+    monkeypatch.setattr(service, "DeviceAuthClient", FakeAuthClient)
+    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+    monkeypatch.setattr(service, "observe_episode_detail", observe_without_database_connection)
+    monkeypatch.setattr(
+        service,
+        "resolve_episode_status",
+        lambda _detail, *, snapshot: SimpleNamespace(status=EpisodePublishStatus.NO_USABLE_MEDIA),
+    )
+
+    asyncio.run(
+        service.run_monitor_no_usable_media_episode(
+            db_session,
+            delete_after_minutes=240,
+        )
+    )
+
+
 def test_monitor_keeps_expired_episode_when_daily_wire_still_returns_it(db_session, monkeypatch):
     from backend.db.models import Episode
     from task_manager.tasks.helpers.episodes.unusable_media import episode_no_usable_media_reason, NoUsableMediaReason

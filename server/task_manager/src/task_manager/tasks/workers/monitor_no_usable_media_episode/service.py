@@ -77,13 +77,15 @@ def _membership(show: Show) -> bool:
     }
 
 
-def _recover_episode(s: Session, episode: Episode, detail) -> bool:
-    """Recover a quarantined row only when settled media is currently usable."""
-    # Quarantine recovery always applies the same media gate, including when
-    # Daily Wire currently reports an otherwise-authoritative pending status.
-    # The resulting snapshot is reused by the transition policy so HLS is never
-    # fetched twice during one verification pass.
-    observed = observe_episode_detail(detail, inspect_static_media=True)
+def _recover_episode(
+    s: Session,
+    episode: Episode,
+    detail,
+    *,
+    observed,
+    resolved,
+) -> bool:
+    """Recover a quarantined row from a remote snapshot resolved outside the DB transaction."""
     if is_no_show_today_slug(detail.slug) or not observed.has_usable_media:
         mark_episode_no_usable_media(
             s,
@@ -92,9 +94,6 @@ def _recover_episode(s: Session, episode: Episode, detail) -> bool:
         )
         return False
 
-    # Resolve all remote/timer state before mutating the quarantined identifier so
-    # transient HLS failures leave the row completely unchanged.
-    resolved = resolve_episode_status(detail, snapshot=observed)
     if resolved.status is EpisodePublishStatus.NO_USABLE_MEDIA:
         mark_episode_no_usable_media(
             s,
@@ -216,6 +215,13 @@ async def run_monitor_no_usable_media_episode(
             data={"verified": 0, "recovered": 0, "removed": 0},
         )
 
+    candidate_ids = [episode.id for episode in candidates]
+    target_slug: str | None = candidates[0].slug if episode_id is not None else None
+
+    # Candidate discovery starts an implicit transaction. Authentication and each
+    # Daily Wire/HLS inspection may block for seconds, so never keep that read
+    # transaction checked out while waiting on external I/O.
+    s.rollback()
     tokens = DeviceAuthClient().get_token()
     access_token = tokens.access_token if tokens else None
     client = MiddlewareClient(access_token=access_token)
@@ -223,20 +229,26 @@ async def run_monitor_no_usable_media_episode(
     removed = recovered = verified = 0
     target_outcome: str | None = None
     target_recovered_status: EpisodePublishStatus | None = None
-    target_slug: str | None = candidates[0].slug if episode_id is not None else None
 
-    for index, episode in enumerate(candidates, start=1):
+    for index, candidate_id in enumerate(candidate_ids, start=1):
+        episode = s.get(Episode, candidate_id)
+        if episode is None:
+            continue
+
         is_target = episode_id == episode.id
+        episode_slug = episode.slug
         require_member_exclusive = _membership(episode.show)
+        s.rollback()
+
         if require_member_exclusive and access_token is None:
-            logger.warning("Cannot verify premium episode %s without a valid token", episode.slug)
+            logger.warning("Cannot verify premium episode %s without a valid token", episode_slug)
             if is_target:
                 target_outcome = "unverified"
             continue
 
         try:
             detail = client.get_episode_details(
-                episode.slug,
+                episode_slug,
                 require_member_exclusive=require_member_exclusive,
             )
         except MiddlewareAPIError as exc:
@@ -246,9 +258,12 @@ async def run_monitor_no_usable_media_episode(
                 s.rollback()
                 raise NoInternetConnectionError() from exc
             if exc.status_code != 404:
-                logger.warning("Could not verify no-usable-media episode %s: %s", episode.slug, exc)
+                logger.warning("Could not verify no-usable-media episode %s: %s", episode_slug, exc)
                 if is_target:
                     target_outcome = "unverified"
+                continue
+            episode = s.get(Episode, candidate_id)
+            if episode is None:
                 continue
             verified += 1
             mark_episode_no_usable_media(
@@ -276,9 +291,23 @@ async def run_monitor_no_usable_media_episode(
             elif is_target:
                 target_outcome = "retained"
         else:
+            # Media inspection can fetch HLS manifests. Resolve it before
+            # reacquiring the ORM row so the connection stays available to API
+            # traffic during that external request.
+            observed = observe_episode_detail(detail, inspect_static_media=True)
+            resolved = resolve_episode_status(detail, snapshot=observed)
+            episode = s.get(Episode, candidate_id)
+            if episode is None:
+                continue
             verified += 1
             try:
-                if _recover_episode(s, episode, detail):
+                if _recover_episode(
+                    s,
+                    episode,
+                    detail,
+                    observed=observed,
+                    resolved=resolved,
+                ):
                     recovered += 1
                     if is_target:
                         target_outcome = "recovered"
@@ -302,12 +331,12 @@ async def run_monitor_no_usable_media_episode(
 
         update_progress(
             progress,
-            int(index / len(candidates) * 100),
-            f"Verified {index}/{len(candidates)} no-usable-media episode(s); recovered {recovered}, removed {removed}",
+            int(index / len(candidate_ids) * 100),
+            f"Verified {index}/{len(candidate_ids)} no-usable-media episode(s); recovered {recovered}, removed {removed}",
         )
 
     message = (
-        f"Verified {len(candidates)} no-usable-media episode(s); "
+        f"Verified {len(candidate_ids)} no-usable-media episode(s); "
         f"recovered {recovered}, removed {removed}"
     )
     update_progress(progress, 100, message)

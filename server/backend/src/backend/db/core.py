@@ -12,6 +12,7 @@ from sqlalchemy import MetaData, create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from config import get_settings
 
@@ -87,6 +88,11 @@ def configure_db() -> None:
         return
 
     os.makedirs(path.parent, exist_ok=True)
+    # A bounded QueuePool is a poor fit for WireLoft's threaded SQLite workload.
+    # The scheduler may run as many workers as the old default pool could serve,
+    # leaving no connection headroom for API requests. SQLite connections are
+    # cheap, and the busy timeout/WAL settings below already govern the actual
+    # database contention, so open them on demand and close them with each Session.
     engine = create_engine(
         get_settings().database_url,
         connect_args={
@@ -95,6 +101,7 @@ def configure_db() -> None:
             # legitimately overlap, so give short writer bursts time to serialize.
             "timeout": _SQLITE_BUSY_TIMEOUT_SECONDS,
         },
+        poolclass=NullPool,
     )
     event.listen(engine, "connect", _configure_sqlite_connection)
     _enable_sqlite_wal(engine)
