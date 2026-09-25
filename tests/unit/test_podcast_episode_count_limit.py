@@ -85,6 +85,7 @@ def _make_podcast_profile(session, show, local_media_profile, *, count: int, del
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value],
         download_with_countdown=False,
+        redownload_final=False,
         download_days_in_past=0,
         download_episode_count=count,
         delete_older_episodes=delete_older,
