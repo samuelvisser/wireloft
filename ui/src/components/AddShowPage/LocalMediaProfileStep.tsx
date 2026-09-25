@@ -2,7 +2,9 @@ import {useEffect, useRef} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import DailywireShowCard from './DailywireShowCard'
-import LocalMediaProfileForm from '../LocalMediaProfile/LocalMediaProfileForm'
+import LocalMediaProfileCommonFields from '../LocalMediaProfile/LocalMediaProfileCommonFields'
+import ShowLocalMediaProfileFields from '../LocalMediaProfile/ShowLocalMediaProfileFields'
+import ShowLocalMediaProfileOutputTemplate from '../LocalMediaProfile/ShowLocalMediaProfileOutputTemplate'
 import {useLocalMediaProfiles} from '../../lib/queries'
 import {ShowLocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {
@@ -135,7 +137,8 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                         {watchedOp === 'update_by_slug' ? 'Update current profile' : 'Or create a new profile'}
                     </div>
 
-                    <LocalMediaProfileForm form={form} mode="show" section="fields"/>
+                    <LocalMediaProfileCommonFields form={form}/>
+                    <ShowLocalMediaProfileFields form={form}/>
                 </div>
 
                 {showSlug ? (
@@ -145,7 +148,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                 ) : null}
             </div>
 
-            <LocalMediaProfileForm form={form} mode="show" section="template"/>
+            <ShowLocalMediaProfileOutputTemplate form={form}/>
 
             <div className="actions">
                 <button type="button" className="btn" onClick={onBack}>Back</button>
