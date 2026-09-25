@@ -2,8 +2,14 @@ import {UseFormReturn} from 'react-hook-form'
 
 import {MoviePreferredFormatReg} from '../../types/local_media_profile'
 import LocalMediaProfileTypeFields from './LocalMediaProfileTypeFields'
+import type {LocalMediaProfileFormSection} from './LocalMediaProfileForm'
 
-export default function MovieLocalMediaProfileForm({form}: { form: UseFormReturn<any> }) {
+type Props = {
+    form: UseFormReturn<any>
+    section?: LocalMediaProfileFormSection
+}
+
+export default function MovieLocalMediaProfileForm({form, section = 'all'}: Props) {
     return (
         <LocalMediaProfileTypeFields
             form={form}
@@ -43,6 +49,7 @@ export default function MovieLocalMediaProfileForm({form}: { form: UseFormReturn
                     </p>
                 </>
             )}
+            section={section}
         />
     )
 }

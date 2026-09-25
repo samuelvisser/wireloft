@@ -715,17 +715,20 @@ a.btn,
   margin-bottom: 8px;
 }
 /* Wizard layout with right sidebar (ProfileStep) */
-.wizard-with-aside {
+.wizard-with-aside,
+.wizard-sticky-region {
   display: grid;
   grid-template-columns: 1fr;
   gap: 16px;
   align-items: start;
 }
+.wizard-sticky-region { padding-bottom: 24px; }
 .wizard-main { min-width: 0; }
 .form-fluid { max-width: none; }
 .wizard-aside { position: sticky; top: 8px; }
 @media (min-width: 1060px) {
-  .wizard-with-aside { grid-template-columns: minmax(450px, 1fr) minmax(0, 700px); }
+  .wizard-with-aside,
+  .wizard-sticky-region { grid-template-columns: minmax(450px, 1fr) minmax(0, 700px); }
 }
 @media (prefers-color-scheme: dark) {
   .card { background: #0b1220; color: var(--text); border-color: rgba(255, 255, 255, 0.12); }

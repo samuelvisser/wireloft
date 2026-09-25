@@ -104,9 +104,9 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
     })
 
     return (
-        <div className="wizard-with-aside">
-            <div className="wizard-main">
-                <form className="form form-fluid" onSubmit={onSubmit} noValidate>
+        <form className="form form-fluid" onSubmit={onSubmit} noValidate>
+            <div className="wizard-sticky-region">
+                <div className="wizard-main">
                     <div className="form-row">
                         <label>Choose a media profile</label>
                         <div className="card-grid" role="list">
@@ -135,21 +135,23 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                         {watchedOp === 'update_by_slug' ? 'Update current profile' : 'Or create a new profile'}
                     </div>
 
-                    <LocalMediaProfileForm form={form} mode="show"/>
+                    <LocalMediaProfileForm form={form} mode="show" section="fields"/>
+                </div>
 
-                    <div className="actions">
-                        <button type="button" className="btn" onClick={onBack}>Back</button>
-                        <input type="submit" className="btn btn-primary" value="Continue" disabled={isSubmitting}/>
-                        <button type="button" className="btn" onClick={onCancel}>Cancel</button>
-                    </div>
-                </form>
+                {showSlug ? (
+                    <aside className="wizard-aside" aria-label="Selected show details">
+                        <DailywireShowCard showSlug={showSlug}/>
+                    </aside>
+                ) : null}
             </div>
 
-            {showSlug ? (
-                <aside className="wizard-aside" aria-label="Selected show details">
-                    <DailywireShowCard showSlug={showSlug}/>
-                </aside>
-            ) : null}
-        </div>
+            <LocalMediaProfileForm form={form} mode="show" section="template"/>
+
+            <div className="actions">
+                <button type="button" className="btn" onClick={onBack}>Back</button>
+                <input type="submit" className="btn btn-primary" value="Continue" disabled={isSubmitting}/>
+                <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+            </div>
+        </form>
     )
 }

@@ -9,9 +9,11 @@ import ShowLocalMediaProfileForm from './ShowLocalMediaProfileForm'
 type Props = {
     mode: LocalMediaProfileMode
     form: UseFormReturn<any>
+    section?: LocalMediaProfileFormSection
 }
 
 export type LocalMediaProfileMode = 'show' | 'movie'
+export type LocalMediaProfileFormSection = 'all' | 'fields' | 'template'
 
 export function buildLocalMediaProfileOnSubmit<TIn extends FieldValues, TOut extends FieldValues = TIn>(
     form: UseFormReturn<TIn>,
@@ -35,7 +37,7 @@ const THUMBNAIL_MODE_LABELS = {
     embed_and_sidecar: 'Both embed and download',
 } as const
 
-export default function LocalMediaProfileForm({form, mode}: Props) {
+export default function LocalMediaProfileForm({form, mode, section = 'all'}: Props) {
     const {control, register, formState: {errors}} = form
     const {data: settings} = useSettings()
     const systemDownloadModeLabel = !settings
@@ -49,6 +51,8 @@ export default function LocalMediaProfileForm({form, mode}: Props) {
 
     return (
         <>
+            {section !== 'template' && (
+                <>
             {errors.root && (
                 <div className="form-error-card" role="alert" aria-live="polite">
                     {String(errors.root.message)}
@@ -163,9 +167,11 @@ export default function LocalMediaProfileForm({form, mode}: Props) {
                 </div>
             </div>
 
+                </>
+            )}
             {mode === 'movie'
-                ? <MovieLocalMediaProfileForm form={form}/>
-                : <ShowLocalMediaProfileForm form={form}/>
+                ? <MovieLocalMediaProfileForm form={form} section={section}/>
+                : <ShowLocalMediaProfileForm form={form} section={section}/>
             }
         </>
     )
