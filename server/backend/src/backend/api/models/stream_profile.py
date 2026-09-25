@@ -26,7 +26,7 @@ class StreamProfileAPIRead(ResponseBase):
     use_downloads: bool
     use_dw_stream: bool
     preferred_format: str
-    require_exact_match: bool
+    prefer_exact_match: bool
     ep_id_type_list: list[str]
     type: StreamProfileType
 
