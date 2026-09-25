@@ -36,8 +36,7 @@ def ensure_local_media_profile_can_be_deleted(
     )
     if has_downloads:
         _raise_profile_in_use(
-            "This Local Media Profile cannot be deleted because downloads are still attached to it. "
-            "Delete those downloads before deleting the profile."
+            "This Local Media Profile cannot be deleted because persistent download history is attached to it."
         )
 
     has_download_profiles = (

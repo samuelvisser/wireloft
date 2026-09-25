@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import IntegrityError
 
 from backend.api.errors import integrity_error_handler
+from backend.utils.custom_index import CustomIndexNotReadyError
 from backend.db import get_session
 from backend.security.auth import is_authenticated
 from config import get_settings
@@ -155,6 +156,18 @@ def create_app() -> FastAPI:
     # Exception handlers
     app.add_exception_handler(IntegrityError, integrity_error_handler)
     app.add_exception_handler(StarletteHTTPException, _network_aware_http_exception_handler)
+
+    @app.exception_handler(CustomIndexNotReadyError)
+    async def _custom_index_waiting(_request: Request, error: CustomIndexNotReadyError):
+        if error.repair_show_id is not None and error.repair_profile_id is not None:
+            from backend.services.custom_indexes import request_custom_index_reconciliation
+            with db_session() as session:
+                request_custom_index_reconciliation(
+                    session, show_id=error.repair_show_id,
+                    local_media_profile_id=error.repair_profile_id,
+                )
+                session.commit()
+        return JSONResponse({"detail": str(error)}, status_code=409)
 
     # Auth middleware to protect all API endpoints except /api/auth/*
     @app.middleware("http")

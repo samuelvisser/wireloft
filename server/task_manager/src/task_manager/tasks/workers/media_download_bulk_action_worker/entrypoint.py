@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from backend.api.endpoints.media_downloads.actions import (
     cancel_media_download_action,
-    delete_media_download_action,
     retry_media_download_action,
 )
 from task_manager.scheduler.registry import task
@@ -26,7 +25,7 @@ async def media_download_bulk_action_worker(
         progress=None,
 ) -> TaskResult:
     """Execute one target of a filter-scoped bulk download action."""
-    del resource_id  # Targets intentionally do not own the MediaDownload row they may delete.
+    del resource_id  # Bulk targets coordinate work but do not own the MediaDownload row.
     if progress is not None:
         progress.raise_if_cancelled()
 
@@ -53,13 +52,6 @@ async def media_download_bulk_action_worker(
         )
         return TaskResult(
             summary=f"Canceled download {media_download_id}",
-            data={"action": action, "media_download_id": media_download_id},
-        )
-
-    if action == "delete":
-        delete_media_download_action(media_download_id, missing_ok=True)
-        return TaskResult(
-            summary=f"Deleted download {media_download_id}",
             data={"action": action, "media_download_id": media_download_id},
         )
 

@@ -13,6 +13,7 @@ from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
     MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
     movie_template_has_media_item_field,
+    output_template_custom_index_keys,
     validate_output_template_path_requirements,
 )
 
@@ -41,6 +42,8 @@ class _MovieLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
             allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
             allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
         )
+        if output_template_custom_index_keys(value):
+            raise ValueError("custom_index is only available to Show Local Media Profiles")
         if not movie_template_has_media_item_field(value):
             raise ValueError(_MOVIE_EXTRA_COLLISION_MESSAGE)
         return value

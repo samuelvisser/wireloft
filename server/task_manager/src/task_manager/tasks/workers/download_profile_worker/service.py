@@ -4,10 +4,11 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, PodcastDownloadProfile
+from backend.db.models import DownloadProfileBase, Episode, PodcastDownloadProfile
 from backend.db.models.media_download import MediaDownloadBase
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.helpers.download_profiles import lock_enabled_download_profile
+from task_manager.tasks.helpers.custom_index_readiness import wait_for_custom_index_pair
 from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.media_download_operations import (
     create_media_download_operation,
@@ -51,6 +52,11 @@ async def run_download_profile_worker(
     total = len(profile_ids)
 
     for index, profile_id in enumerate(profile_ids):
+        pending_profile = s.get(DownloadProfileBase, profile_id)
+        pair = (pending_profile.show_id, pending_profile.local_media_profile_id) if pending_profile is not None else None
+        s.rollback()
+        if pair is not None:
+            await wait_for_custom_index_pair(*pair)
         profile = lock_enabled_download_profile(s, profile_id)
         if profile is None:
             # Release the lock acquired while confirming the profile is disabled.

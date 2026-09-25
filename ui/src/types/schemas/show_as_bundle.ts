@@ -45,14 +45,14 @@ export type DownloadProfileUnifiedCreateIn = z.input<typeof DownloadProfileUnifi
 export type DownloadProfileUnifiedCreateOut = z.output<typeof DownloadProfileUnifiedCreateSchema>
 
 
-export const LocalMediaProfileCreateUnionSchema = ShowLocalMediaProfileCreateSchema.extend({
+export const LocalMediaProfileCreateUnionSchema = ShowLocalMediaProfileCreateSchema.safeExtend({
     op: z.literal('create_new').default('create_new'),
 })
 export type LocalMediaProfileCreateUnionIn = z.input<typeof LocalMediaProfileCreateUnionSchema>
 export type LocalMediaProfileCreateUnionOut = z.output<typeof LocalMediaProfileCreateUnionSchema>
 
 
-export const LocalMediaProfileUpdateUnionSchema = ShowLocalMediaProfileUpdateSchema.extend({
+export const LocalMediaProfileUpdateUnionSchema = ShowLocalMediaProfileUpdateSchema.safeExtend({
     op: z.literal('update_by_slug').default('update_by_slug'),
 })
 export type LocalMediaProfileUpdateUnionIn = z.input<typeof LocalMediaProfileUpdateUnionSchema>

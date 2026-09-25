@@ -3,13 +3,11 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.api.endpoints.movie_extras.service import create_movie_extra
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.movie import *
-from backend.db.models.media_download import MediaDownloadBase
 from backend.db.models.media_item import Movie
 from backend.integrations.tmdb import lookup_movie_release_metadata
 from backend.types.media_types import MediaType
@@ -137,14 +135,6 @@ def delete_movie(s: Session, movie_slug: str) -> MovieAPIRead:
         raise HTTPException(status_code=404, detail="Movie not found")
 
     payload = MovieAPIRead.model_validate(item)
-    media_item_ids = [item.id, *(extra.id for extra in item.movie_extras)]
-    download_ids = list(s.scalars(
-        select(MediaDownloadBase.id).where(MediaDownloadBase.media_item_id.in_(media_item_ids))
-    ))
-    from backend.api.endpoints.media_downloads.service import delete_media_download
-    for download_id in download_ids:
-        delete_media_download(s, download_id)
-
     s.delete(item)
     s.flush()
     return payload

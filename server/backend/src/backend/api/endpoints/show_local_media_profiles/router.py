@@ -80,6 +80,7 @@ def show_local_media_profiles_detail(local_media_profile_slug: str):
 def show_local_media_profiles_update(
     local_media_profile_slug: str,
     body: ShowLocalMediaProfileAPIUpdate,
+    rename_files: bool = False,
 ):
     with db_session() as s:
         try:
@@ -87,6 +88,7 @@ def show_local_media_profiles_update(
                 s,
                 local_media_profile_slug,
                 body,
+                rename_files=rename_files,
             )
             s.commit()
             return result

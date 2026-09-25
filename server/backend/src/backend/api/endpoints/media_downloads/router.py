@@ -4,14 +4,12 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from .actions import (
     cancel_media_download_action,
-    delete_media_download_action,
     queue_bulk_media_download_operation,
     retry_media_download_action,
 )
 from .history import get_media_download_history
 from .operations import (
     BulkCancelMediaDownloadsOperation,
-    BulkDeleteMediaDownloadsOperation,
     BulkRetryMediaDownloadsOperation,
 )
 from .service import *
@@ -85,18 +83,6 @@ def media_downloads_bulk_cancel(body: MediaDownloadBulkActionAPIRequest):
     """Cancel the exact active rows selected by the Downloads page."""
     return _queue_bulk_operation(
         BulkCancelMediaDownloadsOperation(body.media_download_ids)
-    )
-
-
-@router.post(
-    "/bulk/delete",
-    response_model=MediaDownloadBulkOperationAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-def media_downloads_bulk_delete(body: MediaDownloadBulkActionAPIRequest):
-    """Delete the exact rows selected by the Downloads page."""
-    return _queue_bulk_operation(
-        BulkDeleteMediaDownloadsOperation(body.media_download_ids)
     )
 
 
@@ -189,7 +175,3 @@ def media_downloads_update(media_download_id: int, body: MediaDownloadAPIUpdate)
             raise
 
 
-@router.delete("/{media_download_id}", response_model=MediaDownloadAPIRead)
-def media_downloads_delete(media_download_id: int):
-    """Delete the domain artifact record and all scheduler work it owns."""
-    return delete_media_download_action(media_download_id)

@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def test_delete_movie_removes_nonexistent_artifact_work_and_preserves_available_files(tmp_path):
+def test_delete_movie_cascades_download_records_without_deleting_files(tmp_path):
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.movies.service import delete_movie
     from backend.db import Base
@@ -99,7 +99,7 @@ def test_delete_movie_removes_nonexistent_artifact_work_and_preserves_available_
         assert session.query(Movie).count() == 0
         assert session.query(MovieExtra).count() == 0
         assert session.query(MediaDownloadBase).count() == 0
-        assert all(not artifact.exists() for artifact in active_artifacts)
+        assert all(artifact.exists() for artifact in active_artifacts)
         assert completed_path.exists()
     finally:
         session.close()

@@ -1,11 +1,11 @@
 import {type FormEvent, useCallback, useEffect, useRef, useState} from 'react'
 import {useNavigate, useParams} from 'react-router-dom'
 import LocalMediaProfileForm from '../../components/LocalMediaProfile/LocalMediaProfileForm'
+import IndexingValuesEditorButton from '../../components/LocalMediaProfile/IndexingValuesEditorButton'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {useForm, UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {toast} from 'react-hot-toast'
 import {
     LocalMediaProfileRead,
     LocalMediaProfileUpdateIn,
@@ -22,7 +22,6 @@ import {
 import {WithRoot} from '../../types/form'
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import {LocalMediaProfileTypeReg} from '../../types/local_media_profile'
-import {useStartOperation} from '../../lib/operations'
 import {
     clearLocalMediaProfileDraft,
     editLocalMediaProfileDraftKey,
@@ -34,7 +33,6 @@ export default function EditLocalMediaProfilePage() {
     const navigate = useNavigate()
     const {slug} = useParams<{ slug: string }>()
     const qc = useQueryClient()
-    const startOperation = useStartOperation()
     const initializedSlug = useRef<string | undefined>(undefined)
     const renameDecisionRef = useRef<boolean | null>(null)
     const [draftReady, setDraftReady] = useState(false)
@@ -135,7 +133,8 @@ export default function EditLocalMediaProfilePage() {
             const endpoint = profile.type === 'movie'
                 ? 'movie-local-media-profiles'
                 : 'show-local-media-profiles'
-            const response = await fetch(`${(window as any).appConfig.API_URL}/${endpoint}/${data.slug}`, {
+            const renameQuery = renameDecisionRef.current ? '?rename_files=true' : ''
+            const response = await fetch(`${(window as any).appConfig.API_URL}/${endpoint}/${data.slug}${renameQuery}`, {
                 method: 'PATCH',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',
@@ -150,19 +149,6 @@ export default function EditLocalMediaProfilePage() {
     }
 
     const onSuccess = async () => {
-        if (renameDecisionRef.current) {
-            try {
-                const base = (window as any).appConfig?.API_URL || '/api'
-                await startOperation(
-                    `${base}/show-local-media-profiles/${encodeURIComponent(slug)}/rename-files`,
-                    {method: 'POST'},
-                )
-            } catch (renameError) {
-                const detail = renameError instanceof Error ? `: ${renameError.message}` : ''
-                toast.error(`Profile saved, but File Rename could not be started${detail}`)
-            }
-        }
-
         renameDecisionRef.current = null
         await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
         await qc.invalidateQueries({queryKey: ['localMediaProfile', slug]})
@@ -180,7 +166,10 @@ export default function EditLocalMediaProfilePage() {
             profile.type === 'show'
             && form.getValues('outputTemplate') !== profile.outputTemplate
         )
-        if (outputTemplateChanged && renameDecisionRef.current === null) {
+        const indexKeysChanged = profile.type === 'show' &&
+            JSON.stringify((form.getValues('indexingValues') ?? []).map((value: {key: string}) => value.key).sort()) !==
+            JSON.stringify(profile.indexingValues.map(({key}) => key).sort())
+        if ((outputTemplateChanged || indexKeysChanged) && renameDecisionRef.current === null) {
             void form.handleSubmit(() => setRenameTemplateConfirm(true))(event)
             return
         }
@@ -199,6 +188,7 @@ export default function EditLocalMediaProfilePage() {
         <section className="view" aria-labelledby="edit-media-profile-title">
             <div className="view-header">
                 <h1 id="edit-media-profile-title">Edit local media profile</h1>
+                {profile.type === 'show' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
             <form className="form" onSubmit={onFormSubmit} noValidate>
@@ -234,7 +224,7 @@ export default function EditLocalMediaProfilePage() {
                 }}
             >
                 <p>
-                    The output template changed. WireLoft can rename every existing episode file that uses this Local Media Profile so its path matches the new template.
+                    The output path rules changed. WireLoft will reconcile Episode indexes before renaming existing files that use this Local Media Profile.
                 </p>
                 <p>
                     Close this dialog to keep editing, or save without moving existing files and run File Rename later from a show's Actions menu.

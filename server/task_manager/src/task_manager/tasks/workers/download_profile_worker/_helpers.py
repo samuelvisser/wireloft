@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Optional, Sequence
 from zoneinfo import ZoneInfo
 
@@ -14,7 +13,6 @@ from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
-from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
 from task_manager.tasks.media_download_operations import (
@@ -189,11 +187,6 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         .one_or_none()
     )
 
-    target_path = str(resolve_episode_output_path(
-        profile.local_media_profile.output_template,
-        episode=episode,
-    ))
-
     if existing is None:
         download = EpisodeMediaDownload(
             type=MediaType.EPISODE.value,
@@ -201,11 +194,25 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
             local_media_profile_id=profile.local_media_profile_id,
             download_profile_id=profile.id,
             artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
-            file_path=target_path,
+            file_path="",
         )
         s.add(download)
         s.flush()
+        download.file_path = str(resolve_episode_output_path(
+            profile.local_media_profile.output_template,
+            episode=episode,
+            local_media_profile=profile.local_media_profile,
+            media_download=download,
+        ))
+        s.flush()
         return DownloadAction(download.id, True)
+
+    target_path = str(resolve_episode_output_path(
+        profile.local_media_profile.output_template,
+        episode=episode,
+        local_media_profile=profile.local_media_profile,
+        media_download=existing,
+    ))
 
     if get_active_media_download_operation(s, existing.id) is not None:
         if existing.download_profile_id != profile.id:
@@ -259,7 +266,7 @@ def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) 
 
 
 def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
-    """Remove artifact rows/operations that have fallen outside a podcast limit."""
+    """Reconcile artifacts that have fallen outside a podcast retention limit."""
     if profile.download_episode_count > 0:
         kept_episode_ids = {episode.id for episode in get_download_profile_episodes(s, profile)}
         stmt = select(EpisodeMediaDownload).where(
@@ -292,18 +299,13 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
     else:
         return 0
 
-    resolved_paths: dict[int, Path | None] = {}
     for row in rows:
-        if row.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
-            resolved_paths[row.id] = resolve_media_download_file(s, row)
+        if profile.delete_older_episodes:
+            # Retention removes only the current artifact. MediaDownload identity
+            # and historical facts remain durable after the first successful file.
+            prepare_media_download_artifact(s, row)
+        row.download_profile_id = None
 
-    for row in rows:
-        resolved_path = resolved_paths.get(row.id)
-        remove_download_artifacts(
-            str(resolved_path) if resolved_path is not None else row.file_path,
-            row.thumbnail_path,
-        )
-        s.delete(row)
     if rows:
         s.flush()
     return len(rows)

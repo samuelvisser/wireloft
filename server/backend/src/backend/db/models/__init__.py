@@ -13,6 +13,7 @@ from .Season import Season
 from .Settings import Settings
 from .Show import Show
 from .Metadata import Metadata
+from .CustomIndexState import CustomIndexState
 
 from .download_profile import DownloadProfileBase
 from .media_download import MediaDownloadBase

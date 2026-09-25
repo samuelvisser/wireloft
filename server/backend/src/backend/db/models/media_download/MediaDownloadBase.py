@@ -7,6 +7,7 @@ from sqlalchemy.sql.schema import ForeignKey
 
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
+from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_types import MediaType
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
     from backend.db.models import LocalMediaProfileBase
 
 
-class MediaDownloadBase(HasTaskResourcesMixin, Base):
+class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
     """Persistent representation of a downloaded (or desired) media artifact.
 
     This row deliberately contains no worker lifecycle state. Queued/running/
@@ -26,6 +27,7 @@ class MediaDownloadBase(HasTaskResourcesMixin, Base):
     """
 
     __tablename__ = "media_downloads"
+    __metadata_parent_table__ = "media_downloads"
     __task_resource_types__ = ("media_download",)
     __mapper_args__ = {
         "polymorphic_on": "type",
@@ -76,7 +78,6 @@ class MediaDownloadBase(HasTaskResourcesMixin, Base):
     downloaded_bytes: Mapped[Optional[int]]
     format_downloaded: Mapped[Optional[str]]
     downloaded_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
-
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
     )

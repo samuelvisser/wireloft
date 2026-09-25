@@ -72,11 +72,17 @@ export default function CustomMetadataEditor({
 
     const form = useForm<CustomMetadataFormValues>({
         resolver: zodResolver(CustomMetadataFormSchema),
-        defaultValues: {entries: customMetadataToEntries(metadata, metadataFields)},
+        defaultValues: {
+            entries: customMetadataToEntries(metadata, metadataFields),
+        },
         mode: 'onBlur',
         shouldFocusError: true,
     })
-    const {fields, append, remove} = useFieldArray({control: form.control, name: 'entries'})
+    const {
+        fields,
+        append,
+        remove,
+    } = useFieldArray({control: form.control, name: 'entries'})
     const {errors, isDirty, isSubmitting} = form.formState
     const wasOpen = useRef(false)
 
@@ -88,7 +94,9 @@ export default function CustomMetadataEditor({
             setConfirmRemoval(null)
         }
         if (!open || (!justOpened && isDirty)) return
-        form.reset({entries: customMetadataToEntries(metadata, metadataFields)})
+        form.reset({
+            entries: customMetadataToEntries(metadata, metadataFields),
+        })
     }, [form, isDirty, metadata, metadataFields, open])
 
     const submit = buildServerAwareSubmit<CustomMetadataFormValues>(
@@ -110,14 +118,14 @@ export default function CustomMetadataEditor({
         },
         {
             successStatuses: [200],
-            genericMessage: 'Could not save custom metadata',
+            genericMessage: 'Could not save metadata',
             onSuccess: async () => {
                 await Promise.all([
                     ...invalidateQueryKeys.map((queryKey) => queryClient.invalidateQueries({queryKey})),
                     queryClient.invalidateQueries({queryKey: ['customMetadataFields']}),
                     queryClient.invalidateQueries({queryKey: ['localMediaProfileTemplateSources']}),
                 ])
-                toast.success('Custom metadata saved')
+                toast.success('Metadata saved')
                 onDismiss()
             },
         },
@@ -158,7 +166,7 @@ export default function CustomMetadataEditor({
                                 Add custom metadata fields to a {scopeLabel.singular} here.
                             </p>
                             <p id={descriptionId} className="custom-metadata-description">
-                                Metadata fields can be used in output templates as <code>{`{{\u00A0${variablePrefix}field_name\u00A0}}`}</code>.
+                                Metadata fields can be used in output templates as <code>{`{{ ${variablePrefix}field_name }}`}</code>.
                                 This can therefore be a very powerful way to add any arbitrary metadata to the output path of downloaded files for this {scopeLabel.singular}.
                             </p>
                             <p className="custom-metadata-note">
@@ -171,7 +179,7 @@ export default function CustomMetadataEditor({
                                 </div>
                             )}
                             {fieldsFailed && (
-                                <div className="form-error-card" role="alert" aria-live="polite">
+                                <div className="form-error-card" role="alert">
                                     WireLoft could not load metadata fields used by other {scopeLabel.plural}. Existing values can still be edited.
                                 </div>
                             )}
@@ -232,7 +240,7 @@ export default function CustomMetadataEditor({
                                                     Remove
                                                 </button>
                                                 <code className="custom-metadata-variable">
-                                                    {`{{\u00A0${variablePrefix}${key || '<field>'}\u00A0}}`}
+                                                    {`{{ ${variablePrefix}${key || '<field>'} }}`}
                                                 </code>
                                             </div>
                                         )
@@ -248,6 +256,7 @@ export default function CustomMetadataEditor({
                             >
                                 Add field
                             </button>
+
                         </div>
 
                         <div className="modal-actions">
@@ -276,6 +285,7 @@ export default function CustomMetadataEditor({
                     <strong>{confirmRemoval?.key}</strong> is a shared metadata field for all {scopeLabel.plural}. Removing it will remove the field and its saved value from every {scopeLabel.singular}. Are you sure?
                 </p>
             </ConfirmDialog>
+
         </>
     )
 }

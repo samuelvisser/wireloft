@@ -10,13 +10,15 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
 )
-from backend.db.models import Episode, Movie, MovieExtra, MovieExtraSource, Season, Show
+from backend.db.models import Episode, Movie, MovieExtra, MovieExtraSource, Season, Show, ShowLocalMediaProfile
+from backend.services.custom_indexes import simulate_episode_indexes
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
     PreferredFormat,
     ShowLocalMediaProfileScope,
 )
 from backend.types.show_types import ShowType
+from backend.utils.custom_index import indexing_value_definition_keys
 from backend.utils.custom_metadata import (
     CustomMetadataScope,
     custom_metadata_template_variable,
@@ -28,6 +30,7 @@ from backend.utils.output_template import (
     SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
     episode_output_template_values,
     movie_output_template_values,
+    output_template_custom_index_keys,
     output_template_fields,
     replace_output_extension,
     render_output_template,
@@ -383,24 +386,84 @@ def get_output_template_source_page(
     )
 
 
-def get_output_template_preview(
+def _render_show_preview(
+    session: Session | None,
     body: LocalMediaProfileTemplatePreview,
-) -> LocalMediaProfileTemplatePreviewResult:
-    if body.type == LocalMediaProfileType.SHOW:
-        allowed_fields = SHOW_OUTPUT_TEMPLATE_FIELDS
-        allowed_metadata_scopes = SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES
-    elif body.type == LocalMediaProfileType.MOVIE:
-        allowed_fields = MOVIE_OUTPUT_TEMPLATE_FIELDS
-        allowed_metadata_scopes = MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES
-    else:
-        raise ValueError("Template previews are only available for Show and Movie profiles")
+    *,
+    index_keys: frozenset[str],
+) -> tuple[str, frozenset[str], frozenset[str]]:
+    source_id = body.source_id or ""
+    episode: Episode | None = None
+    if session is not None and source_id.startswith("episode:"):
+        try:
+            episode = session.get(Episode, int(source_id.split(":", 1)[1]))
+        except ValueError:
+            episode = None
+
+    profile = (
+        session.get(ShowLocalMediaProfile, body.local_media_profile_id)
+        if session is not None and body.local_media_profile_id is not None else None
+    )
+    definitions = (
+        frozenset(item.key for item in body.indexing_values)
+        if body.indexing_values is not None
+        else indexing_value_definition_keys(profile) if profile is not None else frozenset()
+    )
+    assignments: dict[str, int] = {}
+    if session is not None and episode is not None:
+        episodes = list(session.scalars(select(Episode).where(
+            Episode.show_id == episode.show_id, Episode.index <= episode.index,
+        ).order_by(Episode.index.asc())))
+        assignments = simulate_episode_indexes(
+            episodes, template=body.output_template, definitions=definitions,
+            values_overrides={episode.id: body.values},
+        )[episode.id]
+
+    provisional: dict[str, int] = {}
+
+    def resolve_index(key: str) -> object:
+        if key not in definitions:
+            return ""
+        if key not in provisional:
+            if key not in assignments:
+                provisional[key] = 1
+        return assignments.get(key, 1)
 
     output_path = render_output_template(
         body.output_template,
         body.values,
-        allowed_fields=allowed_fields,
-        allowed_metadata_scopes=allowed_metadata_scopes,
+        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        custom_index_resolver=resolve_index if index_keys else None,
     )
+    return output_path, definitions, frozenset(provisional)
+
+
+def get_output_template_preview(
+    session: Session | None,
+    body: LocalMediaProfileTemplatePreview,
+) -> LocalMediaProfileTemplatePreviewResult:
+    index_keys = output_template_custom_index_keys(body.output_template)
+    definition_keys: frozenset[str] = frozenset()
+    provisional_keys: frozenset[str] = frozenset()
+    if body.type == LocalMediaProfileType.SHOW:
+        output_path, definition_keys, provisional_keys = _render_show_preview(
+            session,
+            body,
+            index_keys=index_keys,
+        )
+    elif body.type == LocalMediaProfileType.MOVIE:
+        if index_keys:
+            raise ValueError("custom_index is only available to Show Local Media Profiles")
+        output_path = render_output_template(
+            body.output_template,
+            body.values,
+            allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
+            allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        )
+    else:
+        raise ValueError("Template previews are only available for Show and Movie profiles")
+
     if body.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY:
         extension = "m4a"
     elif body.preferred_format == PreferredFormat.FORMAT_HLS:
@@ -410,4 +473,7 @@ def get_output_template_preview(
     return LocalMediaProfileTemplatePreviewResult(
         output_path=replace_output_extension(output_path, extension),
         used_variables=sorted(output_template_fields(body.output_template)),
+        used_indexing_values=sorted(index_keys),
+        missing_indexing_values=sorted(index_keys - definition_keys),
+        provisional_indexing_values=sorted(provisional_keys),
     )

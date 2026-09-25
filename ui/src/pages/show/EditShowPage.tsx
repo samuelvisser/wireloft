@@ -124,7 +124,7 @@ export default function EditShowPage() {
         <h1 id="edit-show-title">Edit show</h1>
         {show && (
           <button type="button" className="btn" onClick={() => setMetadataOpen(true)}>
-            Custom metadata
+            Metadata
           </button>
         )}
       </div>
@@ -178,7 +178,7 @@ export default function EditShowPage() {
 
       <CustomMetadataEditor
         open={metadataOpen}
-        title="Show custom metadata"
+        title="Show metadata"
         scope="show"
         metadata={show?.customMetadata ?? {}}
         endpoint={`/shows/${encodeURIComponent(id)}/metadata`}

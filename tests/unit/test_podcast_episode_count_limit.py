@@ -116,7 +116,7 @@ def test_podcast_profile_selects_only_latest_episode_count(db_session):
     show = _make_show(db_session)
     season = _make_season(db_session, show)
     local_media_profile = _make_local_media_profile(db_session)
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(timezone.utc)
     episodes = [
         _make_episode(db_session, show, season, index=index, published_at=now - timedelta(days=4 - index))
         for index in range(1, 5)
@@ -133,7 +133,7 @@ def test_episode_scoped_run_still_checks_global_latest_set(db_session):
     show = _make_show(db_session)
     season = _make_season(db_session, show)
     local_media_profile = _make_local_media_profile(db_session)
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(timezone.utc)
     old_episode = _make_episode(db_session, show, season, index=1, published_at=now - timedelta(days=10))
     newest_episode = _make_episode(db_session, show, season, index=2, published_at=now)
     profile = _make_podcast_profile(db_session, show, local_media_profile, count=1)
@@ -151,7 +151,7 @@ def test_episode_count_cleanup_removes_available_and_absent_artifacts_outside_li
     show = _make_show(db_session)
     season = _make_season(db_session, show)
     local_media_profile = _make_local_media_profile(db_session)
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(timezone.utc)
     episodes = [
         _make_episode(db_session, show, season, index=index, published_at=now - timedelta(days=4 - index))
         for index in range(1, 5)
@@ -192,8 +192,16 @@ def test_episode_count_cleanup_removes_available_and_absent_artifacts_outside_li
 
     assert removed == 2
     assert not completed_file.exists()
-    remaining_episode_ids = {row.media_item_id for row in db_session.query(EpisodeMediaDownload).all()}
-    assert remaining_episode_ids == {episodes[2].id}
+    rows = {
+        row.media_item_id: row
+        for row in db_session.query(EpisodeMediaDownload).all()
+    }
+    assert set(rows) == {episodes[0].id, episodes[1].id, episodes[2].id}
+    assert rows[episodes[0].id].artifact_status == MediaDownloadArtifactStatus.ABSENT.value
+    assert rows[episodes[0].id].download_profile_id is None
+    assert rows[episodes[1].id].artifact_status == MediaDownloadArtifactStatus.ABSENT.value
+    assert rows[episodes[1].id].download_profile_id is None
+    assert rows[episodes[2].id].download_profile_id == profile.id
 
 
 def test_episode_count_cleanup_keeps_available_files_when_delete_older_is_off(db_session, tmp_path):
@@ -205,7 +213,7 @@ def test_episode_count_cleanup_keeps_available_files_when_delete_older_is_off(db
     show = _make_show(db_session)
     season = _make_season(db_session, show)
     local_media_profile = _make_local_media_profile(db_session)
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(timezone.utc)
     completed_episode = _make_episode(db_session, show, season, index=1, published_at=now - timedelta(days=2))
     absent_episode = _make_episode(db_session, show, season, index=2, published_at=now - timedelta(days=1))
     _make_episode(db_session, show, season, index=3, published_at=now)
@@ -237,7 +245,12 @@ def test_episode_count_cleanup_keeps_available_files_when_delete_older_is_off(db
 
     assert removed == 1
     assert completed_file.exists()
-    rows = db_session.query(EpisodeMediaDownload).all()
-    assert len(rows) == 1
-    assert rows[0].media_item_id == completed_episode.id
-    assert rows[0].artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+    rows = {
+        row.media_item_id: row
+        for row in db_session.query(EpisodeMediaDownload).all()
+    }
+    assert set(rows) == {completed_episode.id, absent_episode.id}
+    assert rows[completed_episode.id].artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+    assert rows[completed_episode.id].download_profile_id == profile.id
+    assert rows[absent_episode.id].artifact_status == MediaDownloadArtifactStatus.ABSENT.value
+    assert rows[absent_episode.id].download_profile_id is None

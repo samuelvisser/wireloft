@@ -480,6 +480,8 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         downloadedBytes: null,
         formatDownloaded: null,
         downloadedAt: null,
+        firstSuccessfulDownloadAt: null,
+        canDelete: true,
         createdAt,
         updatedAt: operationDate(operation.updatedAt) || createdAt,
         mediaSlug: contextString(operation, 'media_slug'),

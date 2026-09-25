@@ -4,6 +4,7 @@ import {zodResolver} from '@hookform/resolvers/zod'
 import DailywireShowCard from './DailywireShowCard'
 import LocalMediaProfileCommonFields from '../LocalMediaProfile/LocalMediaProfileCommonFields'
 import ShowLocalMediaProfileFields from '../LocalMediaProfile/ShowLocalMediaProfileFields'
+import IndexingValuesEditorButton from '../LocalMediaProfile/IndexingValuesEditorButton'
 import ShowLocalMediaProfileOutputTemplate from '../LocalMediaProfile/ShowLocalMediaProfileOutputTemplate'
 import {useLocalMediaProfiles} from '../../lib/queries'
 import {ShowLocalMediaProfileRead} from '../../types/schemas/local_media_profile'
@@ -59,7 +60,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
 
     const snapshotRef = useRef<Pick<
         LocalMediaProfileCreateUnionIn,
-        'name' | 'showScope' | 'outputTemplate' | 'preferredFormat'
+        'name' | 'showScope' | 'outputTemplate' | 'preferredFormat' | 'indexingValues'
     > | null>(null)
 
     const watchedOp = watch('op')
@@ -82,6 +83,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                 showScope: watch('showScope'),
                 outputTemplate: watch('outputTemplate'),
                 preferredFormat: watch('preferredFormat'),
+                indexingValues: watch('indexingValues'),
             }
         }
 
@@ -93,6 +95,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
             showScope: profile.showScope,
             outputTemplate: profile.outputTemplate,
             preferredFormat: profile.preferredFormat,
+            indexingValues: profile.indexingValues,
         } as LocalMediaProfileUpsertIn)
     }
 
@@ -139,6 +142,13 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
 
                     <LocalMediaProfileCommonFields form={form}/>
                     <ShowLocalMediaProfileFields form={form}/>
+                    <div className="form-row">
+                        <label>Indexing values</label>
+                        <IndexingValuesEditorButton form={form}/>
+                        <div className="help">
+                            Configure optional named number sequences for use with <code>custom_index</code> in the output template.
+                        </div>
+                    </div>
                 </div>
 
                 {showSlug ? (

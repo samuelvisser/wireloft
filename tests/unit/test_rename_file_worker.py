@@ -211,9 +211,9 @@ def test_show_file_rename_operation_targets_selected_local_media_profile(tmp_pat
         assert result["episodes_queued"] == 1
         assert result["local_media_profiles_queued"] == 1
         target = session.query(TaskOperationTarget).filter_by(operation_id=result["operation_id"]).one()
-        assert target.task_key == "rename_file_worker"
-        assert target.resource_type == "episode"
-        assert target.resource_id == episode.id
+        assert target.task_key == "rename_show_profile_files"
+        assert target.resource_type == "show"
+        assert target.resource_id == show.id
         assert target.task_kwargs == {"local_media_profile_id": local_profile.id}
 
         unused_profile = LocalMediaProfile(
@@ -238,15 +238,16 @@ def test_local_media_profile_rename_operation_targets_affected_episodes(tmp_path
 
     session, engine = _session()
     try:
-        _show, episode, local_profile, _download, _old_path = _library(session, tmp_path)
+        show, _episode, local_profile, _download, _old_path = _library(session, tmp_path)
 
         result = file_rename.request_show_local_media_profile_file_rename(session, local_profile.slug)
 
         assert result["queued"] is True
         assert result["episodes_queued"] == 1
         target = session.query(TaskOperationTarget).filter_by(operation_id=result["operation_id"]).one()
-        assert target.task_key == "rename_file_worker"
-        assert target.resource_id == episode.id
+        assert target.task_key == "rename_show_profile_files"
+        assert target.resource_type == "show"
+        assert target.resource_id == show.id
         assert target.task_kwargs == {"local_media_profile_id": local_profile.id}
     finally:
         session.close()

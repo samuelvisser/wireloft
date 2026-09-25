@@ -103,6 +103,7 @@ async def run_rename_file_worker(
                 raise ValueError(f"Media download {download.id} has no current file path")
 
             output_template = download.local_media_profile.output_template
+            s.commit()
             resolved_source = resolve_media_download_file(
                 s,
                 download,
@@ -116,6 +117,8 @@ async def run_rename_file_worker(
             destination = resolve_episode_output_path(
                 output_template,
                 episode=episode,
+                local_media_profile=download.local_media_profile,
+                media_download=download,
                 extension=extension,
             )
 

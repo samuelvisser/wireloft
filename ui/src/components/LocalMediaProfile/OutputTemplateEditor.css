@@ -492,6 +492,17 @@
         color: #ffffff;
     }
 
+    .output-template-code-editor .cm-tooltip.cm-completionInfo {
+        border: 1px solid #43516a;
+        background: #172235 !important;
+        color: #eef4ff !important;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    .output-template-code-editor .cm-tooltip.cm-completionInfo * {
+        color: inherit !important;
+    }
+
     .template-workbench-divider {
         background: #34445c;
     }

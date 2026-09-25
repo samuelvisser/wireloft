@@ -1,6 +1,7 @@
 from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
+from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from sqlalchemy import select
 
 from fastapi import HTTPException
@@ -9,6 +10,7 @@ from backend.db.model_mapping import create_database_fields, update_database_fie
 from backend.api.models.episode import *
 from backend.db.models import Show
 from backend.db.models.media_item import Episode
+from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operations import (
@@ -216,6 +218,7 @@ def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:
         "show_id": episode.show_id,
         "status": episode.publish_status
     })
+    request_show_custom_index_reconciliation(s, episode.show_id)
 
     return EpisodeAPIRead.model_validate(episode)
 
@@ -252,6 +255,7 @@ def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> Epi
         elif body.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
             queue_event(s, "episode.published_with_countdown", event_data)
 
+    request_show_custom_index_reconciliation(s, episode.show_id)
     return EpisodeAPIRead.model_validate(episode)
 
 
@@ -266,12 +270,24 @@ def delete_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
 
     payload = EpisodeAPIRead.model_validate(episode)
 
+    media_download = s.scalar(
+        select(EpisodeMediaDownload.id).where(
+            EpisodeMediaDownload.media_item_id == episode.id,
+        ).limit(1)
+    )
+    if media_download is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="This episode owns persistent download history and can only be removed with its show",
+        )
+
     queue_event(s, "episode.deleted", {
         "resource_id": episode.id,
         "id": episode.id,
         "slug": episode.slug,
         "show_id": episode.show_id
     })
+    request_show_custom_index_reconciliation(s, episode.show_id)
 
     s.delete(episode)
     s.flush()

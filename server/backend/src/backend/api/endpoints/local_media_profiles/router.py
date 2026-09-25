@@ -70,7 +70,8 @@ def local_media_profile_template_sources(
 def local_media_profile_template_preview(body: LocalMediaProfileTemplatePreview):
     """Render an unsaved output path template against editable example values."""
     try:
-        return get_output_template_preview(body)
+        with db_session() as s:
+            return get_output_template_preview(s, body)
     except (ValueError, TemplateAssertionError) as exc:
         message = exc.message if isinstance(exc, TemplateAssertionError) else str(exc)
         raise HTTPException(
