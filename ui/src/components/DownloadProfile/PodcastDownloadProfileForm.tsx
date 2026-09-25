@@ -12,6 +12,9 @@ type LimitMode = 'none' | 'date' | 'episodes'
 export default function PodcastDownloadProfileForm({form}: Props) {
     const {control, register, watch, setValue, formState: {errors}} = form
 
+    // If countdown is disabled, redownload final becomes irrelevant and is hidden
+    const withCountdown = watch('downloadWithCountdown')
+
     const watchedDaysRaw = watch('downloadDaysInPast') ?? 0
     const watchedEpisodeCountRaw = watch('downloadEpisodeCount') ?? 0
     const watchedDays = Number.isFinite(watchedDaysRaw) ? watchedDaysRaw : 0
@@ -86,11 +89,40 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                 <div className="help" id="with-countdown-help">
                     <ReadMore summary={<span>Download with the countdown meant for live shows</span>}>
                         Some DailyWire podcast episodes appear with a countdown timer before the final media is available. Enabling
-                        this option downloads the episode while that countdown is still present. WireLoft will automatically
-                        replace that countdown download after the final episode media becomes available.
+                        this option will download the episode while the countdown is still present. If enabled, you may also choose
+                        to re-download the final version after the countdown disappears (usually in about 1,5 to 2 hours after
+                        the episode was published).
                     </ReadMore>
                 </div>
             </div>
+
+            {withCountdown && (
+                <div className="form-row">
+                    <label htmlFor="redownload-final">Redownload final version</label>
+                    <Controller
+                        control={control}
+                        name="redownloadFinal"
+                        render={({field}) => (
+                            <Switch
+                                id="redownload-final"
+                                checked={!!field.value}
+                                onChange={(checked) => field.onChange(checked)}
+                                onColor="#0ea5e9"
+                                offColor="#d1d5db"
+                                uncheckedIcon={false}
+                                checkedIcon={false}
+                                aria-invalid={!!errors.redownloadFinal}
+                                aria-describedby={errors.redownloadFinal ? 'redownload-final-errors' : undefined}
+                            />
+                        )}
+                    />
+                    {errors.redownloadFinal && (
+                        <div id="redownload-final-errors" className="error" role="alert" aria-live="polite">
+                            {errors.redownloadFinal.message as string}
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="form-row">
                 <label htmlFor="download-limit-mode">Limit by</label>
