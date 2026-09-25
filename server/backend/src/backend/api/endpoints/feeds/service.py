@@ -84,7 +84,7 @@ def _candidate_downloads(
         *,
         kind: Literal["audio", "mp4", "hls"],
         preferred_format: str,
-        require_exact_match: bool,
+        prefer_exact_match: bool,
 ) -> list[EpisodeMediaDownload]:
     candidates = [download for download in downloads if _download_kind(download) == kind]
     if not candidates:
@@ -110,7 +110,7 @@ def _candidate_downloads(
             reverse=True,
         ) + remaining
 
-    if require_exact_match and preferred_format in _VIDEO_HEIGHTS:
+    if prefer_exact_match and preferred_format in _VIDEO_HEIGHTS:
         return []
 
     desired_height = _VIDEO_HEIGHTS.get(
@@ -141,13 +141,13 @@ def _select_resolvable_download(
         *,
         kind: Literal["audio", "mp4", "hls"],
         preferred_format: str,
-        require_exact_match: bool,
+        prefer_exact_match: bool,
 ) -> Optional[EpisodeMediaDownload]:
     for candidate in _candidate_downloads(
         downloads,
         kind=kind,
         preferred_format=preferred_format,
-        require_exact_match=require_exact_match,
+        prefer_exact_match=prefer_exact_match,
     ):
         path = resolve_media_download_file(
             s,
@@ -194,7 +194,7 @@ def get_local_download_for_episode(
         _episode_downloads(s, profile, episode.id),
         kind=kind,
         preferred_format=profile.preferred_format,
-        require_exact_match=profile.require_exact_match,
+        prefer_exact_match=profile.prefer_exact_match,
     )
 
 
@@ -212,21 +212,21 @@ def _mode_downloads(
         downloads,
         kind="audio",
         preferred_format=profile.preferred_format,
-        require_exact_match=False,
+        prefer_exact_match=False,
     )
     mp4 = _select_resolvable_download(
         s,
         downloads,
         kind="mp4",
         preferred_format=profile.preferred_format,
-        require_exact_match=profile.require_exact_match,
+        prefer_exact_match=profile.prefer_exact_match,
     )
     hls = _select_resolvable_download(
         s,
         downloads,
         kind="hls",
         preferred_format=profile.preferred_format,
-        require_exact_match=False,
+        prefer_exact_match=False,
     )
     return audio, mp4, hls
 
