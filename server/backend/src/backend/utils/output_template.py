@@ -197,12 +197,7 @@ def sanitize_path_component(
 
 
 def _sanitize_emitted_output_value(value: object) -> str:
-    """Keep emitted Jinja values from creating path structure.
-
-    Template context values themselves remain untouched so assignments,
-    comparisons, filters, and conditionals operate on the real semantic value.
-    This finalizer only runs when a Jinja expression is converted to output text.
-    """
+    """Keep emitted Jinja values from creating path structure."""
     text = "" if value is None else str(value)
     text = text.replace("/", "_").replace("\\", "_").replace("\x00", "")
     return "".join(char for char in text if char == "\t" or ord(char) >= 32)
@@ -476,7 +471,7 @@ def replace_output_extension(resolved: str, extension: Optional[str]) -> str:
 
 
 def finalize_output_path(resolved: str, extension: Optional[str]) -> str:
-    """Apply filename restrictions only once the concrete filename is known."""
+    """Apply filename restrictions once the concrete filename is known."""
     resolved = replace_output_extension(resolved, extension)
     if extension is None:
         return resolved
