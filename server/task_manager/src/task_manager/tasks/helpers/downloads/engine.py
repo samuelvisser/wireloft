@@ -34,6 +34,7 @@ from .download_paths import (
     publish_temporary_download,
     reserve_unique_download_path,
 )
+from .phases import DOWNLOAD_PHASE_META_KEY, LOCAL_PROCESSING_PHASE
 from .thumbnails import prepare_thumbnail, wants_thumbnail_embed, wants_thumbnail_sidecar
 
 FORMAT_HEIGHTS: dict[str, int] = {
@@ -100,6 +101,15 @@ class TaskProgressWriter:
         self._task_progress.set(
             max(0, self._last_pct),
             meta={"selected_format": selected_format},
+        )
+
+    def set_local_processing(self) -> None:
+        if self._task_progress is None:
+            return
+        self._task_progress.set(
+            100,
+            "Processing downloaded media locally",
+            meta={DOWNLOAD_PHASE_META_KEY: LOCAL_PROCESSING_PHASE},
         )
 
     def __call__(self, progress: DownloadProgress) -> None:
@@ -219,22 +229,36 @@ def execute_download_plan(
     task_progress: TaskProgressWriter,
     cancellation=None,
     on_direct_destination_reserved: Callable[[str], None] | None = None,
+    on_media_transfer_complete: Callable[[], None] | None = None,
 ) -> DownloadExecution:
     """Execute one resolved download using the selected storage and thumbnail modes."""
     task_progress.set_selected_format(plan.source.format_downloaded)
     ensure_not_cancelled(cancellation)
+
+    local_processing_started = False
+
+    def begin_local_processing() -> None:
+        nonlocal local_processing_started
+        if local_processing_started:
+            return
+        local_processing_started = True
+        task_progress.set_local_processing()
+        if on_media_transfer_complete is not None:
+            on_media_transfer_complete()
 
     if plan.download_mode is DownloadMode.TEMPORARY:
         return _execute_temporary_plan(
             plan,
             task_progress=task_progress,
             cancellation=cancellation,
+            on_media_transfer_complete=begin_local_processing,
         )
     return _execute_direct_plan(
         plan,
         task_progress=task_progress,
         cancellation=cancellation,
         on_destination_reserved=on_direct_destination_reserved,
+        on_media_transfer_complete=begin_local_processing,
     )
 
 
@@ -243,6 +267,7 @@ def _execute_temporary_plan(
     *,
     task_progress: TaskProgressWriter,
     cancellation,
+    on_media_transfer_complete: Callable[[], None],
 ) -> DownloadExecution:
     workspace = create_temporary_download_workspace(
         plan.temporary_root,
@@ -258,6 +283,7 @@ def _execute_temporary_plan(
             ffmpeg_path=plan.ffmpeg_path,
             task_progress=task_progress,
             cancellation=cancellation,
+            on_media_transfer_complete=on_media_transfer_complete,
         )
         thumbnail_source = prepare_thumbnail(
             plan,
@@ -314,6 +340,7 @@ def _execute_direct_plan(
     task_progress: TaskProgressWriter,
     cancellation,
     on_destination_reserved: Callable[[str], None] | None,
+    on_media_transfer_complete: Callable[[], None],
 ) -> DownloadExecution:
     reservation = reserve_unique_download_path(plan.requested_destination)
     destination = str(reservation.path)
@@ -327,6 +354,7 @@ def _execute_direct_plan(
             ffmpeg_path=plan.ffmpeg_path,
             task_progress=task_progress,
             cancellation=cancellation,
+            on_media_transfer_complete=on_media_transfer_complete,
         )
         with tempfile.TemporaryDirectory() as thumbnail_workspace:
             thumbnail_source = prepare_thumbnail(
@@ -429,14 +457,17 @@ def _perform_download(
     ffmpeg_path: str,
     task_progress: TaskProgressWriter,
     cancellation,
+    on_media_transfer_complete: Callable[[], None],
 ) -> DownloadResult:
     if source.hls_bundle:
-        return download_hls_bundle(
+        result = download_hls_bundle(
             source.url,
             destination,
             progress=task_progress,
             should_cancel=cancellation,
         )
+        on_media_transfer_complete()
+        return result
     if source.remux_to_mp4:
         return _download_and_remux_to_mp4(
             source.url,
@@ -444,20 +475,25 @@ def _perform_download(
             ffmpeg_path=ffmpeg_path,
             task_progress=task_progress,
             cancellation=cancellation,
+            on_media_transfer_complete=on_media_transfer_complete,
         )
     if source.use_hls:
-        return download_hls(
+        result = download_hls(
             source.url,
             destination,
             progress=task_progress,
             should_cancel=cancellation,
         )
-    return download_file(
+        on_media_transfer_complete()
+        return result
+    result = download_file(
         source.url,
         destination,
         progress=task_progress,
         should_cancel=cancellation,
     )
+    on_media_transfer_complete()
+    return result
 
 
 def _download_and_remux_to_mp4(
@@ -467,6 +503,7 @@ def _download_and_remux_to_mp4(
     ffmpeg_path: str,
     task_progress: TaskProgressWriter,
     cancellation,
+    on_media_transfer_complete: Callable[[], None],
 ) -> DownloadResult:
     raw_path = destination + ".rawts"
     try:
@@ -476,6 +513,7 @@ def _download_and_remux_to_mp4(
             progress=task_progress,
             should_cancel=cancellation,
         )
+        on_media_transfer_complete()
         ensure_not_cancelled(cancellation)
         remux_to_mp4(
             raw_path,

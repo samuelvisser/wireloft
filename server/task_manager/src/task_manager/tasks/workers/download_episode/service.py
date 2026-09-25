@@ -24,6 +24,10 @@ from config.network import is_no_internet_error
 from dailywire_downloader import DownloadCancelled, DownloadError, MediaUnavailableError
 from task_manager.scheduler.operation_context import current_operation_ids
 from task_manager.scheduler.results import TaskResult
+from task_manager.tasks.media_download_operations import (
+    on_media_download_transfer_complete,
+    wait_for_media_download_transfer_capacity,
+)
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 from task_manager.tasks.helpers.downloads.download_modes import (
     effective_download_mode,
@@ -93,6 +97,7 @@ async def run_download_episode(
 
     try:
         ensure_not_cancelled(progress)
+        await wait_for_media_download_transfer_capacity(s, progress)
         execution = _download_with_url_refresh(
             s,
             download=download,
@@ -360,4 +365,5 @@ def _attempt_download(
         task_progress=task_progress,
         cancellation=cancellation,
         on_direct_destination_reserved=persist_direct_destination,
+        on_media_transfer_complete=on_media_download_transfer_complete,
     )

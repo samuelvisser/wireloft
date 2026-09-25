@@ -88,7 +88,7 @@ function MovieDownloadControl({
             : status === 'pending'
                 ? 'Queued…'
                 : status === 'local_processing'
-                    ? 'Processing…'
+                    ? 'Local processing…'
                     : `${progress}%`
     const downloadedDetails = download && downloaded
         ? [

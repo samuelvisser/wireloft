@@ -457,3 +457,133 @@ def test_episode_with_any_media_download_can_only_be_removed_with_show():
     finally:
         session.close()
         engine.dispose()
+
+
+def test_local_processing_run_does_not_consume_remote_download_slot(monkeypatch):
+    from config import get_settings
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.operations import TASK_RUN_PROGRESS_META_KEY
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+    from task_manager.tasks.helpers.downloads.phases import (
+        DOWNLOAD_PHASE_META_KEY,
+        LOCAL_PROCESSING_PHASE,
+    )
+    from task_manager.tasks.media_download_operations import remaining_media_download_budget
+
+    session, engine = _session()
+    try:
+        monkeypatch.setattr(
+            get_settings().download_settings,
+            "max_concurrent_downloads",
+            1,
+        )
+        definition_id = session.scalar(
+            select(TaskDefinition.id).where(TaskDefinition.key == "download_episode")
+        )
+        assert definition_id is not None
+
+        run = TaskRun(
+            definition_id=definition_id,
+            resource_type=ResourceType.MEDIA_DOWNLOAD,
+            resource_id=1,
+            status=TaskStatus.RUNNING,
+            progress=99,
+            attempt_count=1,
+            max_retries=2,
+            meta={
+                TASK_RUN_PROGRESS_META_KEY: {
+                    DOWNLOAD_PHASE_META_KEY: LOCAL_PROCESSING_PHASE,
+                },
+            },
+        )
+        session.add(run)
+        session.commit()
+
+        assert remaining_media_download_budget(session) == 1
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_downloading_run_still_consumes_remote_download_slot(monkeypatch):
+    from config import get_settings
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+    from task_manager.tasks.media_download_operations import remaining_media_download_budget
+
+    session, engine = _session()
+    try:
+        monkeypatch.setattr(
+            get_settings().download_settings,
+            "max_concurrent_downloads",
+            1,
+        )
+        definition_id = session.scalar(
+            select(TaskDefinition.id).where(TaskDefinition.key == "download_episode")
+        )
+        assert definition_id is not None
+
+        run = TaskRun(
+            definition_id=definition_id,
+            resource_type=ResourceType.MEDIA_DOWNLOAD,
+            resource_id=1,
+            status=TaskStatus.RUNNING,
+            progress=99,
+            attempt_count=1,
+            max_retries=2,
+        )
+        session.add(run)
+        session.commit()
+
+        assert remaining_media_download_budget(session) == 0
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_retry_overcommit_is_detected_before_remote_transfer(monkeypatch):
+    from config import get_settings
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+    from task_manager.tasks.media_download_operations import (
+        media_download_transfer_capacity_overcommitted,
+    )
+
+    session, engine = _session()
+    try:
+        monkeypatch.setattr(
+            get_settings().download_settings,
+            "max_concurrent_downloads",
+            1,
+        )
+        definition_id = session.scalar(
+            select(TaskDefinition.id).where(TaskDefinition.key == "download_episode")
+        )
+        assert definition_id is not None
+
+        session.add_all([
+            TaskRun(
+                definition_id=definition_id,
+                resource_type=ResourceType.MEDIA_DOWNLOAD,
+                resource_id=1,
+                status=TaskStatus.RUNNING,
+                progress=50,
+                attempt_count=1,
+                max_retries=2,
+            ),
+            TaskRun(
+                definition_id=definition_id,
+                resource_type=ResourceType.MEDIA_DOWNLOAD,
+                resource_id=2,
+                status=TaskStatus.RUNNING,
+                progress=0,
+                attempt_count=2,
+                max_retries=2,
+            ),
+        ])
+        session.commit()
+
+        assert media_download_transfer_capacity_overcommitted(session) is True
+    finally:
+        session.close()
+        engine.dispose()

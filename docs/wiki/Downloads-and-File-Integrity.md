@@ -10,7 +10,7 @@ WireLoft can show downloads as:
 
 - **Queued** — waiting for a download slot;
 - **Downloading** — media is currently being transferred;
-- **Processing** — the download finished but local work such as MP4 remuxing is still happening;
+- **Local processing** — the primary media transfer finished, but local work such as MP4 remuxing, thumbnail handling, or final publication is still happening;
 - **Downloaded** — the local file completed successfully;
 - **Cancelled** — the download was stopped;
 - **Error** — the attempt failed;

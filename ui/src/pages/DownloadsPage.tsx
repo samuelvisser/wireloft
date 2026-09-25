@@ -33,7 +33,7 @@ const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
     {value: 'pending', label: 'Queued', statuses: ['pending']},
     {value: 'downloading', label: 'Downloading', statuses: ['downloading']},
     {value: 'downloaded', label: 'Downloaded', statuses: ['downloaded', 'redownloaded']},
-    {value: 'local_processing', label: 'Processing', statuses: ['local_processing']},
+    {value: 'local_processing', label: 'Local processing', statuses: ['local_processing']},
     {value: 'cancelled', label: 'Cancelled', statuses: ['cancelled']},
     {value: 'error', label: 'Error', statuses: ['error']},
     {value: 'missing', label: 'Missing', statuses: ['missing']},

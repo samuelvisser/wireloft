@@ -80,7 +80,7 @@ export default function HomePage() {
                         <button className="operation-download" type="button" key={download.id} onClick={() => openDownload(download)}>
                             <span className="operation-icon"><FontAwesomeIcon icon={['fas', download.movieSlug ? 'clapperboard' : 'podcast']}/></span>
                             <span className="operation-download-copy"><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small><ProgressBar value={download.progress} ariaLabel={`Progress for ${mediaTitle(download)}`}/></span>
-                            <span>{download.downloadStatus === 'pending' ? 'Queued' : download.downloadStatus === 'local_processing' ? 'Processing' : `${download.progress}%`}</span>
+                            <span>{download.downloadStatus === 'pending' ? 'Queued' : download.downloadStatus === 'local_processing' ? 'Local processing' : `${download.progress}%`}</span>
                         </button>
                     )) : <div className="operation-empty"><FontAwesomeIcon icon={['fas', 'check']}/><span>No active downloads</span></div>}
                 </section>

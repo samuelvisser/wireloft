@@ -19,7 +19,7 @@ export const MediaDownloadStatusReg = createSelectRegistry('MediaDownloadStatus'
     'downloading': {label: 'Downloading', help: 'Download in progress'},
     'downloaded': {label: 'Downloaded', help: 'Download completed'},
     'redownloaded': {label: 'Redownloaded', help: 'Episode was downloaded again'},
-    'local_processing': {label: 'Processing', help: 'Processing the downloaded file locally'},
+    'local_processing': {label: 'Local processing', help: 'Processing the downloaded file locally'},
     'cancelled': {label: 'Cancelled', help: 'Stopped by the user; no replacement is queued'},
     'error': {label: 'Error', help: 'The download failed'},
     'missing': {label: 'Missing', help: 'The file watcher could not find the downloaded file on disk'},

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 
 def test_download_progress_writer_reports_selected_format_as_standard_progress_metadata():
-    from task_manager.tasks.workers.download_episode._helpers import TaskProgressWriter
+    from task_manager.tasks.helpers.downloads.engine import TaskProgressWriter
 
     calls: list[tuple[int, str | None, dict | None]] = []
 
@@ -70,3 +70,24 @@ def test_task_operation_exposes_progress_metadata_only_for_active_single_target(
 
     multi = _operation_snapshot(_operation(status="RUNNING", targets=[target, target]))
     assert multi.progress_meta is None
+
+
+def test_download_progress_writer_reports_local_processing_phase():
+    from task_manager.tasks.helpers.downloads.engine import TaskProgressWriter
+
+    calls: list[tuple[int, str | None, dict | None]] = []
+
+    class Progress:
+        def set(self, percent: int, message: str | None = None, meta: dict | None = None) -> None:
+            calls.append((percent, message, meta))
+
+    writer = TaskProgressWriter(Progress())
+    writer.set_local_processing()
+
+    assert calls == [
+        (
+            100,
+            "Processing downloaded media locally",
+            {"download_phase": "local_processing"},
+        ),
+    ]

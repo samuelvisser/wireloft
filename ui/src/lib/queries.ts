@@ -408,6 +408,10 @@ function presentationStatus(
     operation?: TaskOperationRead,
 ): string {
     if (operation?.status === 'QUEUED') return 'pending'
+    if (
+        (operation?.status === 'RUNNING' || operation?.status === 'WAITING')
+        && progressMetaString(operation, 'download_phase') === 'local_processing'
+    ) return 'local_processing'
     if (operation?.status === 'RUNNING' || operation?.status === 'WAITING') return 'downloading'
     if (operation?.status === 'FAILED' || operation?.status === 'PARTIAL') return 'error'
     if (operation?.status === 'CANCELED') return 'cancelled'
@@ -439,11 +443,13 @@ function presentDownload(
         ...download,
         formatDownloaded: progressMetaString(operation, 'selected_format') ?? download.formatDownloaded,
         downloadStatus: status,
-        progress: operation && ACTIVE_OPERATION_STATUSES.has(operation.status)
-            ? Math.max(0, Math.min(100, operation.progress ?? 0))
-            : status === 'downloaded' || status === 'redownloaded'
-                ? 100
-                : 0,
+        progress: status === 'local_processing'
+            ? 100
+            : operation && ACTIVE_OPERATION_STATUSES.has(operation.status)
+                ? Math.max(0, Math.min(100, operation.progress ?? 0))
+                : status === 'downloaded' || status === 'redownloaded'
+                    ? 100
+                    : 0,
         errorMessage: operationError || download.artifactError || download.latestTaskError,
         startedAt: operationDate(operation?.startedAt) || download.latestTaskStartedAt,
         finishedAt: operationDate(operation?.finishedAt) || download.downloadedAt || download.latestTaskFinishedAt,

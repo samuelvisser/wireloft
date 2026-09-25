@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -18,13 +19,19 @@ from backend.services.media_download_history import (
     record_media_download_operation_history_once,
 )
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
+from task_manager.tasks.helpers.downloads.phases import (
+    DOWNLOAD_PHASE_META_KEY,
+    LOCAL_PROCESSING_PHASE,
+)
 from config import get_settings
+from dailywire_downloader import DownloadCancelled
 from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskOperationRun, TaskRun
 from task_manager.scheduler.operation_control import (
     cancel_operation as cancel_task_operation,
     restart_operation as restart_task_operation,
 )
 from task_manager.scheduler.operations import (
+    TASK_RUN_PROGRESS_META_KEY,
     OperationTargetSpec,
     create_operation,
     link_run_to_operations,
@@ -415,24 +422,87 @@ def restart_media_download_operation(operation_id: str):
     return snapshot
 
 
-def remaining_media_download_budget(session: Session) -> int:
-    """Return free slots in the single download execution lane.
+def _run_occupies_download_slot(run: TaskRun) -> bool:
+    """Return whether an active media-download run still owns a remote transfer slot."""
+    if run.status not in _ACTIVE_RUN_STATUSES:
+        return False
+    if not isinstance(run.meta, dict):
+        return True
+    progress_meta = run.meta.get(TASK_RUN_PROGRESS_META_KEY)
+    return not (
+        isinstance(progress_meta, dict)
+        and progress_meta.get(DOWNLOAD_PHASE_META_KEY) == LOCAL_PROCESSING_PHASE
+    )
 
-    SCHEDULED TaskRuns count as reservations. The dispatcher creates those rows
-    transactionally before APScheduler receives the jobs, so committed dispatches
-    cannot be mistaken for free capacity merely because a worker has not started.
-    """
-    max_concurrent = get_settings().download_settings.max_concurrent_downloads
-    in_flight = session.scalar(
-        select(func.count())
-        .select_from(TaskRun)
+
+def _active_media_download_slot_count(session: Session) -> int:
+    active_runs = session.scalars(
+        select(TaskRun)
         .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
         .where(
             TaskDefinition.key.in_(_DOWNLOAD_TASK_KEYS),
             TaskRun.status.in_(_ACTIVE_RUN_STATUSES),
         )
-    ) or 0
-    return max(0, int(max_concurrent) - int(in_flight))
+    )
+    return sum(1 for run in active_runs if _run_occupies_download_slot(run))
+
+
+def remaining_media_download_budget(session: Session) -> int:
+    """Return free remote-transfer slots in the media download lane.
+
+    SCHEDULED TaskRuns count as reservations. A RUNNING task stops consuming a
+    transfer slot as soon as its primary media transfer completes and it enters
+    local processing, allowing sidecar work and FFmpeg processing to overlap the
+    next remote downloads.
+    """
+    max_concurrent = get_settings().download_settings.max_concurrent_downloads
+    in_flight = _active_media_download_slot_count(session)
+    return max(0, int(max_concurrent) - in_flight)
+
+
+def media_download_transfer_capacity_overcommitted(session: Session) -> bool:
+    """Return whether active transfer reservations currently exceed the configured limit.
+
+    This can happen only when a task that had released its slot for local
+    processing later starts a full automatic retry. The retry itself becomes a
+    reservation before worker code runs, so it waits until the overcommit clears.
+    """
+    max_concurrent = int(get_settings().download_settings.max_concurrent_downloads)
+    return _active_media_download_slot_count(session) > max_concurrent
+
+
+async def wait_for_media_download_transfer_capacity(
+    session: Session,
+    progress=None,
+) -> None:
+    """Gate automatic retries that need to reacquire a remote-transfer slot."""
+    waiting = False
+    try:
+        while True:
+            try:
+                overcommitted = media_download_transfer_capacity_overcommitted(session)
+            finally:
+                # Do not retain a database transaction while waiting. Rollback
+                # also expires TaskRun rows so the next loop sees concurrent
+                # transfer completions and newly released slots.
+                session.rollback()
+
+            if not overcommitted:
+                return
+
+            if progress is not None and callable(progress) and progress():
+                raise DownloadCancelled("Download was canceled while waiting for a download slot")
+
+            if progress is not None and not waiting:
+                progress.set_wait_state(
+                    "download_slot_capacity",
+                    "Waiting for a download slot",
+                )
+                waiting = True
+            await asyncio.sleep(0.25)
+    finally:
+        if waiting and progress is not None:
+            progress.set_wait_state(None)
 
 
 def _reserve_target_dispatch(
@@ -571,14 +641,23 @@ def dispatch_queued_media_download_operations(
     return dispatched
 
 
-def on_media_download_task_terminal(**_) -> None:
-    """Fill newly freed download slots after a download TaskRun becomes terminal."""
+def _dispatch_next_queued_media_downloads(*, reason: str) -> None:
     session = get_session()
     try:
         dispatch_queued_media_download_operations(session)
         session.commit()
     except Exception:
         session.rollback()
-        logger.exception("Failed to dispatch the next queued media download operation")
+        logger.exception("Failed to dispatch queued media downloads after %s", reason)
     finally:
         session.close()
+
+
+def on_media_download_transfer_complete() -> None:
+    """Fill remote-transfer slots as soon as a task moves into local processing."""
+    _dispatch_next_queued_media_downloads(reason="media transfer completion")
+
+
+def on_media_download_task_terminal(**_) -> None:
+    """Fill any remaining free slots after a download TaskRun becomes terminal."""
+    _dispatch_next_queued_media_downloads(reason="download task completion")

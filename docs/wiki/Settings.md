@@ -87,7 +87,7 @@ These settings are available under **Settings → Downloads**.
 | `downloadSettings.temporaryDownloadRoot` | `WL_DOWNLOAD_SETTINGS__TEMPORARY_DOWNLOAD_ROOT` | `<download root>/.wireloft-temp` | Staging directory used by temporary download mode. When omitted, its default follows the download root; an explicit value stays independent. |
 | `downloadSettings.rssCacheRoot` | `WL_DOWNLOAD_SETTINGS__RSS_CACHE_ROOT` | `<download root>/.wireloft-rss-cache` | Root for media cached while fulfilling RSS requests. When omitted, its default follows the download root; an explicit value stays independent. |
 | `downloadSettings.rssCacheRetentionSeconds` | `WL_DOWNLOAD_SETTINGS__RSS_CACHE_RETENTION_SECONDS` | `604800` (7 days) | Retains cached RSS media for this long since it was last served. Expired files are cleaned at startup and while new cache entries are prepared. |
-| `downloadSettings.maxConcurrentDownloads` | `WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS` | `5` | Maximum downloads running at once. |
+| `downloadSettings.maxConcurrentDownloads` | `WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS` | `5` | Maximum primary media transfers running at once. Local post-processing does not consume a download slot. |
 | `downloadSettings.maxDownloadAttempts` | `WL_DOWNLOAD_SETTINGS__MAX_DOWNLOAD_ATTEMPTS` | `3` | Automatic attempts before a download is left failed. |
 | `downloadSettings.downloadTimeoutSeconds` | `WL_DOWNLOAD_SETTINGS__DOWNLOAD_TIMEOUT_SECONDS` | `600` | Timeout for one download attempt. |
 | `downloadSettings.filenameRestrictionMode` | `WL_DOWNLOAD_SETTINGS__FILENAME_RESTRICTION_MODE` | `windows` | Filename compatibility: `unrestricted`, `windows`, or `restricted`. |
