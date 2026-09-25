@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 
 PREVIOUS_REVISION = "b6f3c8a1d2e4"
-HEAD_REVISION = "5a9c2e7d4b10"
+HEAD_REVISION = "3f7b6a2c9d10"
 
 
 def test_rss_output_mode_migration_rewrites_methods_and_stabilizes_feed_urls(
@@ -84,7 +84,7 @@ def test_rss_output_mode_migration_rewrites_methods_and_stabilizes_feed_urls(
 
         with engine.connect() as connection:
             rows = connection.execute(text(
-                "SELECT base.token, rss.video_output_mode, rss.feed_url "
+                "SELECT base.token, base.prefer_exact_match, rss.video_output_mode, rss.feed_url "
                 "FROM stream_profiles_rss AS rss "
                 "JOIN stream_profiles AS base ON base.id = rss.id "
                 "ORDER BY base.token"
@@ -97,9 +97,17 @@ def test_rss_output_mode_migration_rewrites_methods_and_stabilizes_feed_urls(
         )
         assert video_output_column["nullable"] is True
 
+        stream_profile_columns = {
+            column["name"]
+            for column in inspect(engine).get_columns("stream_profiles")
+        }
+        assert "prefer_exact_match" in stream_profile_columns
+        assert "require_exact_match" not in stream_profile_columns
+
         by_token = {row["token"]: row for row in rows}
         for index, (_old_method, new_mode, _preferred_format) in enumerate(cases):
             row = by_token[f"profile-{index}"]
+            assert row["prefer_exact_match"] is False
             assert row["video_output_mode"] == new_mode
             parts = urlsplit(row["feed_url"])
             assert parse_qs(parts.query) == {"custom": ["value"]}
