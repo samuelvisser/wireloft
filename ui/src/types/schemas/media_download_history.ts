@@ -1,23 +1,18 @@
 import {z} from 'zod'
 import {ApiDateTimeStringSchema} from './datetime'
-import {TaskLedgerEntryReadSchema} from './task'
 
-export const MediaDownloadTaskHistoryEntryReadSchema = TaskLedgerEntryReadSchema.extend({
-  source: z.literal('task'),
+export const MediaDownloadHistoryEntryReadSchema = z.looseObject({
+  id: z.int(),
+  mediaDownloadId: z.int(),
+  action: z.string(),
+  label: z.string(),
+  status: z.string(),
+  occurredAt: ApiDateTimeStringSchema,
+  durationMs: z.int().nullable(),
+  duration: z.string().nullable(),
+  detail: z.string().nullable(),
+  metadata: z.record(z.string(), z.unknown()),
 })
-
-export const MediaDownloadArtifactHistoryEntryReadSchema = z.looseObject({
-  source: z.literal('artifact'),
-  artifactStatus: z.enum(['absent', 'available', 'missing', 'corrupted']),
-  artifactError: z.string().nullable(),
-  filePath: z.string(),
-  observedAt: ApiDateTimeStringSchema,
-})
-
-export const MediaDownloadHistoryEntryReadSchema = z.discriminatedUnion('source', [
-  MediaDownloadTaskHistoryEntryReadSchema,
-  MediaDownloadArtifactHistoryEntryReadSchema,
-])
 
 export const MediaDownloadHistoryPageReadSchema = z.looseObject({
   items: z.array(MediaDownloadHistoryEntryReadSchema),

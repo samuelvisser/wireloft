@@ -8,6 +8,8 @@ from backend.api.models.media_download import MediaDownloadAPIRead
 from backend.app import db_session
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.media_download_history_types import MediaDownloadHistoryAction
+from backend.services.media_download_history import record_media_download_history
 from task_manager.scheduler.operation_control import cancel_operation
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
@@ -40,6 +42,16 @@ def retry_media_download_action(
             if reuse_matching_active and active.source == source:
                 return active.id
             active_operation_id = active.id
+            record_media_download_history(
+                s,
+                media_download_id,
+                MediaDownloadHistoryAction.CANCEL_REQUESTED,
+                metadata={
+                    "operation_id": active.id,
+                    "reason": "Replaced by retry",
+                },
+            )
+            s.commit()
         is_redownload = (
             download.downloaded_at is not None
             or download.artifact_status in {"available", "missing", "corrupted"}
@@ -90,6 +102,16 @@ def cancel_media_download_action(
                 raise HTTPException(status_code=409, detail="This download is not currently in progress")
         else:
             operation_id = operation.id
+            record_media_download_history(
+                s,
+                media_download_id,
+                MediaDownloadHistoryAction.CANCEL_REQUESTED,
+                metadata={
+                    "operation_id": operation.id,
+                    "reason": "Canceled by user",
+                },
+            )
+            s.commit()
 
     if operation_id is not None:
         try:

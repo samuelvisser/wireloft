@@ -12,6 +12,8 @@ from sqlalchemy.orm.attributes import set_committed_value
 
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.media_download_history_types import MediaDownloadHistoryAction
+from backend.services.media_download_history import record_media_download_history
 from backend.utils.artifact_identity import ArtifactIdentity, inspect_artifact
 from config import get_settings
 from dailywire_downloader import hls_asset_marker, hls_asset_root, missing_hls_bundle_files
@@ -480,6 +482,7 @@ def _apply_reconciliation(
         return False
 
     _log_applied_change(original, values)
+    _record_applied_change(s, original, values)
     for field, value in values.items():
         set_committed_value(original, field, value)
     return True
@@ -519,6 +522,62 @@ def _result_value(
     if field in values:
         return values[field]
     return getattr(original, field)
+
+
+def _record_applied_change(
+    s: Session,
+    original: MediaDownloadBase,
+    values: _ArtifactUpdates,
+) -> None:
+    file_path = _result_value(original, values, "file_path")
+    artifact_status = _result_value(original, values, "artifact_status")
+    artifact_error = _result_value(original, values, "artifact_error")
+
+    if original.file_path != file_path:
+        record_media_download_history(
+            s,
+            original.id,
+            MediaDownloadHistoryAction.ARTIFACT_RENAMED,
+            metadata={
+                "old_path": original.file_path,
+                "new_path": file_path,
+            },
+        )
+
+    status_changed = (
+        original.artifact_status != artifact_status
+        or original.artifact_error != artifact_error
+    )
+    if artifact_status == MediaDownloadArtifactStatus.MISSING.value and status_changed:
+        record_media_download_history(
+            s,
+            original.id,
+            MediaDownloadHistoryAction.ARTIFACT_MISSING,
+            metadata={
+                "file_path": file_path,
+                "error": artifact_error,
+            },
+        )
+    elif artifact_status == MediaDownloadArtifactStatus.CORRUPTED.value and status_changed:
+        record_media_download_history(
+            s,
+            original.id,
+            MediaDownloadHistoryAction.ARTIFACT_CORRUPTED,
+            metadata={
+                "file_path": file_path,
+                "error": artifact_error,
+            },
+        )
+    elif (
+        original.artifact_status in _PROBLEM_STATUSES
+        and artifact_status == _HEALTHY_STATUS
+    ):
+        record_media_download_history(
+            s,
+            original.id,
+            MediaDownloadHistoryAction.ARTIFACT_RESTORED,
+            metadata={"file_path": file_path},
+        )
 
 
 def _log_applied_change(

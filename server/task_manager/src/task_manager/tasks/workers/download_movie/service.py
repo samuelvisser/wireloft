@@ -10,8 +10,14 @@ from backend.api.endpoints.movie_extras.service import update_movie_extra_source
 from backend.db.models import Movie, MovieExtra
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.types.media_types import MediaType
+from backend.services.media_download_history import (
+    download_attempt_metadata,
+    record_media_download_history,
+    record_media_download_history_if_exists,
+)
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.output_template import resolve_movie_output_path
 from config import get_settings
@@ -19,6 +25,7 @@ from dailywire_api.dw_api.movie import MovieMiddlewareClient
 from dailywire_api.records import DwMovieExtraRecord
 from dailywire_authorisation import DeviceAuthClient
 from dailywire_downloader import DownloadCancelled, DownloadError, MediaUnavailableError
+from task_manager.scheduler.operation_context import current_operation_ids
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 from task_manager.tasks.helpers.downloads.download_modes import (
@@ -84,6 +91,20 @@ async def run_download_movie(
         progress.set(0, f"Starting download for {media.title}")
     task_progress = TaskProgressWriter(progress)
     execution: DownloadExecution | None = None
+    attempt_started_at = datetime.now(timezone.utc)
+    operation_ids = current_operation_ids()
+    operation_metadata = {"operation_ids": list(operation_ids)} if operation_ids else {}
+    record_media_download_history(
+        session,
+        media_download_id,
+        MediaDownloadHistoryAction.STARTED,
+        metadata={
+            "is_redownload": bool(is_redownload),
+            **operation_metadata,
+        },
+        occurred_at=attempt_started_at,
+    )
+    session.commit()
 
     try:
         ensure_not_cancelled(progress)
@@ -117,11 +138,28 @@ async def run_download_movie(
         download.automatic_retry_suppressed = False
         download.downloaded_bytes = execution.result.bytes_downloaded
         download.format_downloaded = execution.format_downloaded
-        download.downloaded_at = datetime.now(timezone.utc)
+        finished_at = datetime.now(timezone.utc)
+        download.downloaded_at = finished_at
 
         media = session.get(
             MovieExtra if download.type == MediaType.MOVIE_EXTRA.value else Movie,
             download.media_item_id,
+        )
+        record_media_download_history(
+            session,
+            media_download_id,
+            MediaDownloadHistoryAction.COMPLETED,
+            metadata=download_attempt_metadata(
+                started_at=attempt_started_at,
+                finished_at=finished_at,
+                is_redownload=is_redownload,
+                **operation_metadata,
+                downloaded_bytes=execution.result.bytes_downloaded,
+                format_downloaded=execution.format_downloaded,
+                file_path=execution.result.path,
+                thumbnail_path=execution.thumbnail_path,
+            ),
+            occurred_at=finished_at,
         )
         session.commit()
 
@@ -136,15 +174,45 @@ async def run_download_movie(
                 "is_redownload": is_redownload,
             },
         )
-    except DownloadCancelled:
+    except DownloadCancelled as exc:
         session.rollback()
         if execution is not None:
             remove_download_artifacts(execution.result.path, execution.thumbnail_path)
+        finished_at = datetime.now(timezone.utc)
+        if record_media_download_history_if_exists(
+            session,
+            media_download_id,
+            MediaDownloadHistoryAction.CANCELLED,
+            metadata=download_attempt_metadata(
+                started_at=attempt_started_at,
+                finished_at=finished_at,
+                is_redownload=is_redownload,
+                **operation_metadata,
+                reason=str(exc) or "Canceled",
+            ),
+            occurred_at=finished_at,
+        ) is not None:
+            session.commit()
         raise
-    except Exception:
+    except Exception as exc:
         session.rollback()
         if execution is not None:
             remove_download_artifacts(execution.result.path, execution.thumbnail_path)
+        finished_at = datetime.now(timezone.utc)
+        if record_media_download_history_if_exists(
+            session,
+            media_download_id,
+            MediaDownloadHistoryAction.FAILED,
+            metadata=download_attempt_metadata(
+                started_at=attempt_started_at,
+                finished_at=finished_at,
+                is_redownload=is_redownload,
+                **operation_metadata,
+                error=exc,
+            ),
+            occurred_at=finished_at,
+        ) is not None:
+            session.commit()
         raise
     finally:
         if execution is not None:

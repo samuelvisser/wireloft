@@ -9,12 +9,19 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode, Show
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
+from backend.services.media_download_history import (
+    download_attempt_metadata,
+    record_media_download_history,
+    record_media_download_history_if_exists,
+)
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
 from config.network import is_no_internet_error
 from dailywire_downloader import DownloadCancelled, DownloadError, MediaUnavailableError
+from task_manager.scheduler.operation_context import current_operation_ids
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 from task_manager.tasks.helpers.downloads.download_modes import (
@@ -61,8 +68,24 @@ async def run_download_episode(
         progress.set(0, f"Starting download for {episode.title}")
 
     want_audio = profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
+    attempt_publish_status = episode.publish_status
     task_progress = TaskProgressWriter(progress)
     execution: DownloadExecution | None = None
+    attempt_started_at = datetime.now(timezone.utc)
+    operation_ids = current_operation_ids()
+    operation_metadata = {"operation_ids": list(operation_ids)} if operation_ids else {}
+    record_media_download_history(
+        s,
+        media_download_id,
+        MediaDownloadHistoryAction.STARTED,
+        metadata={
+            "is_redownload": bool(is_redownload),
+            **operation_metadata,
+            "started_publish_status": attempt_publish_status,
+        },
+        occurred_at=attempt_started_at,
+    )
+    s.commit()
 
     try:
         ensure_not_cancelled(progress)
@@ -99,12 +122,33 @@ async def run_download_episode(
         download.automatic_retry_suppressed = False
         download.downloaded_bytes = execution.result.bytes_downloaded
         download.format_downloaded = execution.format_downloaded
-        download.downloaded_at = datetime.now(timezone.utc)
+        finished_at = datetime.now(timezone.utc)
+        download.downloaded_at = finished_at
 
         episode = s.get(Episode, download.media_item_id)
+        downloaded_publish_status = None
         if episode is not None and hasattr(download, "downloaded_publish_status"):
             download.downloaded_publish_status = episode.publish_status
+            downloaded_publish_status = episode.publish_status
 
+        record_media_download_history(
+            s,
+            media_download_id,
+            MediaDownloadHistoryAction.COMPLETED,
+            metadata=download_attempt_metadata(
+                started_at=attempt_started_at,
+                finished_at=finished_at,
+                is_redownload=is_redownload,
+                **operation_metadata,
+                downloaded_bytes=execution.result.bytes_downloaded,
+                format_downloaded=execution.format_downloaded,
+                file_path=execution.result.path,
+                thumbnail_path=execution.thumbnail_path,
+                started_publish_status=attempt_publish_status,
+                downloaded_publish_status=downloaded_publish_status,
+            ),
+            occurred_at=finished_at,
+        )
         s.commit()
 
         # The executor owns the final 100% transition. Avoid a second progress
@@ -126,15 +170,47 @@ async def run_download_episode(
                 "is_redownload": is_redownload,
             },
         )
-    except DownloadCancelled:
+    except DownloadCancelled as exc:
         s.rollback()
         if execution is not None:
             remove_download_artifacts(execution.result.path, execution.thumbnail_path)
+        finished_at = datetime.now(timezone.utc)
+        if record_media_download_history_if_exists(
+            s,
+            media_download_id,
+            MediaDownloadHistoryAction.CANCELLED,
+            metadata=download_attempt_metadata(
+                started_at=attempt_started_at,
+                finished_at=finished_at,
+                is_redownload=is_redownload,
+                **operation_metadata,
+                reason=str(exc) or "Canceled",
+                started_publish_status=attempt_publish_status,
+            ),
+            occurred_at=finished_at,
+        ) is not None:
+            s.commit()
         raise
-    except Exception:
+    except Exception as exc:
         s.rollback()
         if execution is not None:
             remove_download_artifacts(execution.result.path, execution.thumbnail_path)
+        finished_at = datetime.now(timezone.utc)
+        if record_media_download_history_if_exists(
+            s,
+            media_download_id,
+            MediaDownloadHistoryAction.FAILED,
+            metadata=download_attempt_metadata(
+                started_at=attempt_started_at,
+                finished_at=finished_at,
+                is_redownload=is_redownload,
+                **operation_metadata,
+                error=exc,
+                started_publish_status=attempt_publish_status,
+            ),
+            occurred_at=finished_at,
+        ) is not None:
+            s.commit()
         raise
     finally:
         # Temporary-mode publication keeps its recovery record until the database

@@ -17,6 +17,7 @@ from .CustomIndexState import CustomIndexState
 
 from .download_profile import DownloadProfileBase
 from .media_download import MediaDownloadBase
+from .media_download import MediaDownloadHistory
 from .media_item import MediaItemBase
 from .stream_profile import StreamProfileBase
 

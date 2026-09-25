@@ -9,7 +9,9 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "d4a7c2e91b63"
+HEAD_REVISION = "6d4a8c1f2b90"
+PRE_HISTORY_HEAD_REVISION = "6d1e8f2a4c73"
+PRE_HISTORY_PARENT_REVISION = "d4a7c2e91b63"
 PREVIOUS_DEVELOPMENT_REVISION = "e5f1a2c7d903"
 HISTORICAL_EPISODE_SCHEMA_REVISION = "e4c91a7b2d30"
 OUTPUT_TEMPLATE_SPACING_REVISION = "9b1f4e7c2d6a"
@@ -228,7 +230,12 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == "c80e4d9a6b21"
+    assert script.get_revision(HEAD_REVISION).down_revision == PRE_HISTORY_HEAD_REVISION
+    assert (
+        script.get_revision(PRE_HISTORY_HEAD_REVISION).down_revision
+        == PRE_HISTORY_PARENT_REVISION
+    )
+    assert script.get_revision(PRE_HISTORY_PARENT_REVISION).down_revision == "c80e4d9a6b21"
     assert (
         script.get_revision(PREVIOUS_DEVELOPMENT_REVISION).down_revision
         == HISTORICAL_EPISODE_SCHEMA_REVISION
@@ -260,6 +267,7 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
         column["name"] for column in inspector.get_columns("custom_index_states")
     }
     assert "media_download_attempts" not in tables
+    assert "media_download_history" in tables
     assert "alembic_version" not in tables
 
     settings_columns = {

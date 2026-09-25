@@ -15,10 +15,12 @@ from backend.db.models.media_download import (
     MovieMediaDownload,
 )
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
+from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
 from task_manager.scheduler.db import TaskDefinition, TaskRun
@@ -226,6 +228,15 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
     s.flush()
     download.file_path = _resolve_episode_download_path(s, profile, episode, download)
     s.flush()
+    record_media_download_history(
+        s,
+        download.id,
+        MediaDownloadHistoryAction.CREATED,
+        metadata={
+            "file_path": download.file_path,
+            "local_media_profile_id": profile.id,
+        },
+    )
     return download
 
 
@@ -266,6 +277,15 @@ def create_movie_download(
     )
     s.add(download)
     s.flush()
+    record_media_download_history(
+        s,
+        download.id,
+        MediaDownloadHistoryAction.CREATED,
+        metadata={
+            "file_path": download.file_path,
+            "local_media_profile_id": profile.id,
+        },
+    )
     return download
 
 
@@ -317,6 +337,15 @@ def create_movie_extra_download(
     )
     s.add(download)
     s.flush()
+    record_media_download_history(
+        s,
+        download.id,
+        MediaDownloadHistoryAction.CREATED,
+        metadata={
+            "file_path": download.file_path,
+            "local_media_profile_id": profile.id,
+        },
+    )
     return download
 
 

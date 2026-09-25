@@ -15,15 +15,17 @@ from backend.types.media_types import MediaType
 if TYPE_CHECKING:
     from backend.db.models.media_item import MediaItemBase
     from backend.db.models import LocalMediaProfileBase
+    from .MediaDownloadHistory import MediaDownloadHistory
 
 
 class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
     """Persistent representation of a downloaded (or desired) media artifact.
 
-    This row deliberately contains no worker lifecycle state. Queued/running/
-    failed/canceled attempts, progress, retries and timing are TaskRun and
-    TaskOperation concerns. The MediaDownload only records the media/profile
-    relationship and the file state that survives after execution.
+    This row deliberately contains no live worker lifecycle state. TaskRun and
+    TaskOperation remain authoritative for current execution, while the related
+    MediaDownloadHistory rows form an append-only domain audit trail. The
+    MediaDownload itself records the media/profile relationship and the file
+    state that survives after execution.
     """
 
     __tablename__ = "media_downloads"
@@ -88,6 +90,12 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
     # Relationships
     media: Mapped["MediaItemBase"] = relationship(back_populates="downloads")
     local_media_profile: Mapped["LocalMediaProfileBase"] = relationship(back_populates="media_downloads")
+    history: Mapped[list["MediaDownloadHistory"]] = relationship(
+        back_populates="media_download",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="MediaDownloadHistory.occurred_at.desc(), MediaDownloadHistory.id.desc()",
+    )
 
     def __repr__(self) -> str:
         return (

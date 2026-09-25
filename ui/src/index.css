@@ -1161,6 +1161,15 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
 .log-attempt-status-downloaded, .log-attempt-status-redownloaded { background: #dcfce7; color: #15803d; }
 .log-attempt-type { color: var(--muted, #777); }
 .log-attempt-time { margin-left: auto; color: var(--muted, #777); }
+.log-attempt-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 8px;
+  color: var(--muted, #777);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
 
 @media (prefers-color-scheme: dark) {
   .log-attempt { border-color: rgba(255,255,255,0.14); }

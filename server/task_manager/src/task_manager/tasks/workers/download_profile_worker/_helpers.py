@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 from backend.db.models import DownloadProfileBase, Episode, PodcastDownloadProfile, SeriesDownloadProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
+from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
 from task_manager.tasks.media_download_operations import (
@@ -205,6 +207,16 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
             media_download=download,
         ))
         s.flush()
+        record_media_download_history(
+            s,
+            download.id,
+            MediaDownloadHistoryAction.CREATED,
+            metadata={
+                "file_path": download.file_path,
+                "local_media_profile_id": profile.local_media_profile_id,
+                "download_profile_id": profile.id,
+            },
+        )
         return DownloadAction(download.id, True)
 
     target_path = str(resolve_episode_output_path(

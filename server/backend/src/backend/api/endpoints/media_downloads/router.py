@@ -147,7 +147,7 @@ def media_downloads_history(
         offset: int = Query(default=0, ge=0),
         limit: int = Query(default=50, ge=1, le=200),
 ):
-    """Return download TaskRun history enriched with the current artifact problem."""
+    """Return the persistent action history for this media download."""
     with db_session() as s:
         return get_media_download_history(
             s,

@@ -11,7 +11,9 @@ from backend.db.core import get_session
 from backend.db.models import Episode, Movie, MovieExtra
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.media_types import MediaType
+from backend.services.media_download_history import record_media_download_history
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 from config import get_settings
 from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskRun
@@ -53,10 +55,19 @@ def prepare_media_download_artifact(
         resolved_path = None
         if download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
             resolved_path = resolve_media_download_file(session, download)
-        remove_download_artifacts(
-            str(resolved_path) if resolved_path is not None else download.file_path,
-            download.thumbnail_path,
-        )
+        artifact_status_before_removal = download.artifact_status
+        removed_path = str(resolved_path) if resolved_path is not None else download.file_path
+        remove_download_artifacts(removed_path, download.thumbnail_path)
+        if resolved_path is not None:
+            record_media_download_history(
+                session,
+                download.id,
+                MediaDownloadHistoryAction.ARTIFACT_REMOVED,
+                metadata={
+                    "file_path": removed_path,
+                    "previous_artifact_status": artifact_status_before_removal,
+                },
+            )
 
     download.artifact_status = MediaDownloadArtifactStatus.ABSENT.value
     download.artifact_error = None
@@ -142,6 +153,14 @@ def _prioritize_queued_operation(
         return operation
 
     operation.prioritized_at = datetime.now(timezone.utc)
+    if operation.resource_id is not None:
+        record_media_download_history(
+            session,
+            int(operation.resource_id),
+            MediaDownloadHistoryAction.PRIORITIZED,
+            metadata={"operation_id": operation.id},
+            occurred_at=operation.prioritized_at,
+        )
     session.flush()
     return operation
 
@@ -208,6 +227,16 @@ def create_media_download_operation(
         title=getattr(download.media, "title", None) or f"Media download {download.id}",
         targets=[target],
         context=_operation_context(download, is_redownload=is_redownload),
+    )
+    record_media_download_history(
+        session,
+        download.id,
+        MediaDownloadHistoryAction.QUEUED,
+        metadata={
+            "operation_id": operation.id,
+            "source": source,
+            "is_redownload": bool(is_redownload),
+        },
     )
     if (
         source == OperationSource.UI.value
