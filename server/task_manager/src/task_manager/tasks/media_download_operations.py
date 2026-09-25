@@ -11,6 +11,7 @@ from backend.db.core import get_session
 from backend.db.models import Episode, Movie, MovieExtra
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 from config import get_settings
@@ -239,6 +240,62 @@ def remaining_media_download_budget(session: Session) -> int:
     return max(0, int(max_concurrent) - int(in_flight))
 
 
+def _has_active_media_download_run(
+    session: Session,
+    media_download_id: int,
+) -> bool:
+    return session.scalar(
+        select(TaskRun.id)
+        .where(
+            TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD,
+            TaskRun.resource_id == media_download_id,
+            TaskRun.status.in_(_ACTIVE_RUN_STATUSES),
+        )
+        .limit(1)
+    ) is not None
+
+
+def queue_final_episode_redownload_if_ready(
+    session: Session,
+    media_download_id: int,
+) -> bool:
+    """Consume final-replacement intent only after the prior attempt is terminal."""
+    download = session.get(EpisodeMediaDownload, media_download_id)
+    if download is None or not download.redownload_when_final:
+        return False
+
+    episode = session.get(Episode, download.media_item_id)
+    if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
+        return False
+
+    active_operation = get_active_media_download_operation(session, download.id)
+    if active_operation is not None:
+        if (
+            isinstance(active_operation.context, dict)
+            and active_operation.context.get("episode_publish_status")
+            == EpisodePublishStatus.PUBLISHED_FINAL.value
+        ):
+            # A manual/fresh attempt created after final publication already
+            # satisfies the durable replacement intent.
+            download.redownload_when_final = False
+            session.flush()
+        return False
+
+    if _has_active_media_download_run(session, download.id):
+        return False
+
+    prepare_media_download_artifact(session, download)
+    download.redownload_when_final = False
+    create_media_download_operation(
+        session,
+        download,
+        source=OperationSource.SYSTEM.value,
+        is_redownload=True,
+    )
+    session.flush()
+    return True
+
+
 def _reserve_target_dispatch(
     session: Session,
     operation: TaskOperation,
@@ -261,16 +318,7 @@ def _reserve_target_dispatch(
     # is cooperatively shutting down. Never reserve a replacement for the same
     # MediaDownload until that TaskRun is actually terminal, even when another
     # global download slot is free.
-    existing_run_id = session.scalar(
-        select(TaskRun.id)
-        .where(
-            TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD,
-            TaskRun.resource_id == target.resource_id,
-            TaskRun.status.in_(_ACTIVE_RUN_STATUSES),
-        )
-        .limit(1)
-    )
-    if existing_run_id is not None:
+    if _has_active_media_download_run(session, target.resource_id):
         return False
 
     definition_id = session.scalar(
@@ -391,10 +439,17 @@ def dispatch_queued_media_download_operations(
     return dispatched
 
 
-def on_media_download_task_terminal(**_) -> None:
-    """Fill newly freed download slots after a download TaskRun becomes terminal."""
+def on_media_download_task_terminal(
+    *,
+    resource_type: str | None = None,
+    resource_id: int | None = None,
+    **_,
+) -> None:
+    """Finalize pending episode replacements, then fill newly freed download slots."""
     session = get_session()
     try:
+        if resource_type == ResourceType.MEDIA_DOWNLOAD.value and resource_id is not None:
+            queue_final_episode_redownload_if_ready(session, resource_id)
         dispatch_queued_media_download_operations(session)
         session.commit()
     except Exception:
