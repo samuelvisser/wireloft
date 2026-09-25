@@ -10,6 +10,7 @@ import {
     ShowLocalMediaProfileIndexingValuesSchema,
 } from '../../types/schemas/show_local_media_profile'
 import '../CustomMetadataEditor/CustomMetadataEditor.css'
+import ReadMore from "../../utils/ReadMore";
 
 
 const IndexingValuesDialogSchema = z.object({
@@ -24,9 +25,9 @@ function cloneIndexingValues(values: IndexingValueEntry[] | undefined): Indexing
 
 
 export default function IndexingValuesEditorButton({
-    form,
-    className = 'btn',
-}: {
+                                                       form,
+                                                       className = 'btn',
+                                                   }: {
     form: UseFormReturn<any>
     className?: string
 }) {
@@ -84,11 +85,27 @@ export default function IndexingValuesEditorButton({
 
                 <form onSubmit={onEditorSubmit} noValidate>
                     <div className="custom-metadata-content">
-                        <p id={descriptionId} className="custom-metadata-description">
-                            Define named number sequences for this Local Media Profile. Each Show gets its own
-                            Episode ordering. Use <code>{"{{ 'featurettes' | custom_index }}"}</code> in the
-                            output template.
+                        <p className="custom-metadata-intro">
+                            Add custom indexes here.
                         </p>
+                        <ReadMore className="custom-metadata-description" summary={<>
+                            Custom indexes can be used in output templates as <code>{"{{ 'any-index-key' | custom_index }}"}</code>.
+                            They provide a powerful way to define ranged custom variables for usage in your output path.
+                        </>}>
+                            <p>
+                                Custom indexes define a custom numbered range for episodes. By using this range in the
+                                output template, range values get assigned to specific episodes. These can then be
+                                used to name your output path.
+                            </p>
+                            <p>
+                                For example, create a <code>'featurettes'</code> custom index. Add it to the output template
+                                in this profile. As soon as you save, every episode known to WireLoft that could be downloaded
+                                using this profile gets a numbered index based on the conditions in the output template.
+                            </p>
+                            <p>
+                                You can now create episode files like <code>[name]-featurette5</code> fully dynamically.
+                            </p>
+                        </ReadMore>
                         <p className="custom-metadata-note">
                             Applying changes here only updates the Local Media Profile form. Nothing is saved to
                             WireLoft until the Local Media Profile itself is saved.
