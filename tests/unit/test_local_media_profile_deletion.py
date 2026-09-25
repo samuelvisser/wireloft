@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine, event
@@ -25,7 +27,12 @@ def _new_session(*, enforce_foreign_keys: bool = False) -> tuple[Session, object
     return Session(engine), engine
 
 
-def _add_movie_download(session: Session):
+def _add_movie_download(
+    session: Session,
+    *,
+    file_path: str = "/downloads/movies/movie.mp4",
+    artifact_status: str = "absent",
+):
     from backend.db.models import Movie, MovieLocalMediaProfile, MovieMediaDownload
     from backend.types.media_types import MediaType
 
@@ -49,33 +56,115 @@ def _add_movie_download(session: Session):
     download = MovieMediaDownload(
         media=movie,
         local_media_profile=profile,
-        file_path="/downloads/movies/movie.mp4",
+        file_path=file_path,
+        artifact_status=artifact_status,
     )
     session.add(download)
     session.commit()
     return profile, download
 
 
-def test_delete_local_media_profile_rejects_attached_downloads() -> None:
-    from backend.api.endpoints.local_media_profiles.service import delete_local_media_profile
-    from backend.db.models import MovieLocalMediaProfile
+def test_delete_local_media_profile_removes_attached_download_without_file() -> None:
+    from backend.api.endpoints.movie_local_media_profiles.service import (
+        delete_movie_local_media_profile,
+    )
+    from backend.db.models import MovieLocalMediaProfile, MovieMediaDownload
+    from backend.db.models.media_download import MediaDownloadHistory
+
+    session, engine = _new_session(enforce_foreign_keys=True)
+    try:
+        profile, download = _add_movie_download(session)
+        profile_id = profile.id
+        download_id = download.id
+        session.add(MediaDownloadHistory(
+            media_download_id=download.id,
+            action="created",
+            event_metadata={},
+        ))
+        session.commit()
+
+        delete_movie_local_media_profile(session, profile.slug)
+        session.commit()
+
+        assert session.get(MovieLocalMediaProfile, profile_id) is None
+        assert session.get(MovieMediaDownload, download_id) is None
+        assert (
+            session.query(MediaDownloadHistory)
+            .filter_by(media_download_id=download_id)
+            .count()
+            == 0
+        )
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_delete_local_media_profile_rejects_physical_file_even_when_status_is_absent(
+    tmp_path: Path,
+) -> None:
+    from backend.api.endpoints.movie_local_media_profiles.service import (
+        delete_movie_local_media_profile,
+    )
+    from backend.db.models import MovieLocalMediaProfile, MovieMediaDownload
+
+    media_file = tmp_path / "movie.mp4"
+    media_file.write_bytes(b"movie")
 
     session, engine = _new_session()
-    profile, _ = _add_movie_download(session)
-    profile_id = profile.id
+    try:
+        profile, download = _add_movie_download(
+            session,
+            file_path=str(media_file),
+            artifact_status="absent",
+        )
+        profile_id = profile.id
+        download_id = download.id
 
-    with pytest.raises(HTTPException) as exc_info:
-        delete_local_media_profile(session, profile.slug)
+        with pytest.raises(HTTPException) as exc_info:
+            delete_movie_local_media_profile(session, profile.slug)
 
-    assert exc_info.value.status_code == 409
-    detail = exc_info.value.detail[0]
-    assert detail["type"] == "resource_in_use"
-    assert "downloads are still attached" in detail["msg"]
-    assert "Delete those downloads" in detail["msg"]
-    assert session.get(MovieLocalMediaProfile, profile_id) is not None
+        assert exc_info.value.status_code == 409
+        detail = exc_info.value.detail[0]
+        assert detail["type"] == "resource_in_use"
+        assert "physical file" in detail["msg"]
+        assert "Delete all downloads" in detail["msg"]
+        assert session.get(MovieLocalMediaProfile, profile_id) is not None
+        assert session.get(MovieMediaDownload, download_id) is not None
+        assert media_file.is_file()
+    finally:
+        session.rollback()
+        session.close()
+        engine.dispose()
 
-    session.close()
-    engine.dispose()
+
+def test_delete_local_media_profile_allows_stale_available_row_when_file_is_gone(
+    tmp_path: Path,
+) -> None:
+    from backend.api.endpoints.movie_local_media_profiles.service import (
+        delete_movie_local_media_profile,
+    )
+    from backend.db.models import MovieLocalMediaProfile, MovieMediaDownload
+
+    missing_file = tmp_path / "missing.mp4"
+
+    session, engine = _new_session()
+    try:
+        profile, download = _add_movie_download(
+            session,
+            file_path=str(missing_file),
+            artifact_status="available",
+        )
+        profile_id = profile.id
+        download_id = download.id
+
+        delete_movie_local_media_profile(session, profile.slug)
+        session.commit()
+
+        assert session.get(MovieLocalMediaProfile, profile_id) is None
+        assert session.get(MovieMediaDownload, download_id) is None
+    finally:
+        session.close()
+        engine.dispose()
 
 
 def test_direct_profile_delete_never_nulls_required_download_foreign_key() -> None:
@@ -86,9 +175,6 @@ def test_direct_profile_delete_never_nulls_required_download_foreign_key() -> No
     profile_id = profile.id
     download_id = download.id
 
-    # Exercise the loaded-relationship case as well: passive_deletes="all" must
-    # still leave the child foreign key untouched and let SQLite reject the
-    # parent DELETE through the existing foreign-key constraint.
     assert download in profile.media_downloads
 
     statements: list[str] = []

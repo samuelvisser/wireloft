@@ -32,6 +32,16 @@ class LocalMediaProfileFileRenameOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
 
 
+class LocalMediaProfileMaintenanceOperationAccepted(TaskOperationAccepted):
+    downloads_queued: int
+
+
+class LocalMediaProfileDeleteDownloadsOperationAccepted(
+    LocalMediaProfileMaintenanceOperationAccepted
+):
+    download_profiles_disabled: int
+
+
 class _ShowDownloadMaintenanceOperationAccepted(TaskOperationAccepted):
     local_media_profiles_queued: int
 

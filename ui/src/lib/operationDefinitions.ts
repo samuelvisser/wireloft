@@ -35,6 +35,11 @@ function contextString(operation: TaskOperationRead, key: string): string | unde
   return typeof value === 'string' && value ? value : undefined
 }
 
+function contextNumber(operation: TaskOperationRead, key: string): number | undefined {
+  const value = operation.context?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
 function resultString(operation: TaskOperationRead, key: string): string | undefined {
   const value = operation.result?.data?.[key]
   return typeof value === 'string' && value ? value : undefined
@@ -159,6 +164,20 @@ function invalidateLocalMediaProfileFiles(
     queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
     queryClient.invalidateQueries({queryKey: ['localMediaProfiles']}),
     queryClient.invalidateQueries({queryKey: ['localMediaProfile']}),
+    queryClient.invalidateQueries({queryKey: ['localMediaProfileView']}),
+  )
+}
+
+function invalidateLocalMediaProfileDownloadDeletion(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateLocalMediaProfileFiles(queryClient, operation, invalidations)
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['downloadProfilesView']}),
+    queryClient.invalidateQueries({queryKey: ['podcastDownloadProfiles']}),
+    queryClient.invalidateQueries({queryKey: ['seriesDownloadProfiles']}),
   )
 }
 
@@ -301,6 +320,21 @@ export const frontendOperationDefinitions = {
     success: (operation) => {
       const profileName = contextString(operation, 'local_media_profile_name') || operation.title
       return fileRenameSuccessMessage(operation, profileName)
+    },
+  },
+  'local_media_profile.delete_downloads': {
+    kind: 'local_media_profile.delete_downloads',
+    resourceType: 'local_media_profile',
+    label: 'Delete downloads',
+    invalidate: invalidateLocalMediaProfileDownloadDeletion,
+    success: (operation) => {
+      const profileName = contextString(operation, 'local_media_profile_name') || operation.title
+      const files = resultNumber(operation, 'files_deleted') ?? operation.progressTotal
+      const disabledProfiles = contextNumber(operation, 'download_profiles_disabled') ?? 0
+      const disabledDetail = disabledProfiles > 0
+        ? `; ${disabledProfiles} ${plural(disabledProfiles, 'Download Profile')} disabled`
+        : ''
+      return `Deleted downloads for ${profileName}: ${files} ${plural(files, 'file')} removed${disabledDetail}`
     },
   },
   'show.delete_downloads': {

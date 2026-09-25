@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from backend.api.endpoints.media_downloads.actions import (
     cancel_media_download_action,
+    delete_media_download_artifact_action,
     retry_media_download_action,
 )
 from task_manager.scheduler.registry import task
@@ -53,6 +54,24 @@ async def media_download_bulk_action_worker(
         return TaskResult(
             summary=f"Canceled download {media_download_id}",
             data={"action": action, "media_download_id": media_download_id},
+        )
+
+    if action == "delete_artifact":
+        deleted = delete_media_download_artifact_action(
+            media_download_id,
+            missing_ok=True,
+        )
+        return TaskResult(
+            summary=(
+                f"Deleted artifact for download {media_download_id}"
+                if deleted
+                else f"Download {media_download_id} no longer exists"
+            ),
+            data={
+                "action": action,
+                "media_download_id": media_download_id,
+                "files_deleted": 1 if deleted else 0,
+            },
         )
 
     raise ValueError(f"Unsupported bulk media download action: {action}")

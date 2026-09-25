@@ -13,6 +13,7 @@ import SettingsPage from './pages/SettingsPage'
 import AddShowPage from './pages/show/AddShowPage'
 import AddLocalMediaProfilePage from './pages/local-media-profile/AddLocalMediaProfilePage'
 import EditLocalMediaProfilePage from './pages/local-media-profile/EditLocalMediaProfilePage'
+import LocalMediaProfilePage from './pages/local-media-profile/LocalMediaProfilePage'
 import ShowPage from './pages/show/ShowPage'
 import EditShow from './pages/show/EditShowPage'
 import EpisodePage from './pages/episode/EpisodePage'
@@ -54,6 +55,7 @@ export const router = createBrowserRouter(
       <Route path="settings" element={<SettingsPage />} />
       <Route path="add-show" element={<AddShowRoute />} />
       <Route path="add-local-media-profile" element={<AddLocalMediaProfilePage />} />
+      <Route path="local-media-profile/:slug" element={<LocalMediaProfilePage />} />
       <Route path="edit-local-media-profile/:slug" element={<EditLocalMediaProfilePage />} />
       <Route path="download-profiles" element={<DownloadProfilesPage />} />
       <Route path="add-download-profile" element={<AddDownloadProfilePage />} />

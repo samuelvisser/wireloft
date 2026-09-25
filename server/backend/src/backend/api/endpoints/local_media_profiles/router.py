@@ -7,7 +7,14 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
 )
-from backend.api.models.local_media_profile_view import LocalMediaProfileAPIRead
+from backend.api.models.local_media_profile_view import (
+    LocalMediaProfileAPIRead,
+    LocalMediaProfileViewAPIRead,
+)
+from backend.api.models.operations import (
+    LocalMediaProfileDeleteDownloadsOperationAccepted,
+    LocalMediaProfileFileRenameOperationAccepted,
+)
 from backend.app import db_session
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
@@ -19,7 +26,13 @@ from .output_template import (
     get_output_template_source_page,
     get_output_template_variables,
 )
-from .service import get_local_media_profile, get_local_media_profiles_list
+from .file_rename import request_local_media_profile_file_rename
+from .maintenance import request_local_media_profile_download_delete
+from .service import (
+    get_local_media_profile,
+    get_local_media_profile_view,
+    get_local_media_profiles_list,
+)
 
 router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles (base)"])
 
@@ -82,6 +95,54 @@ def local_media_profile_template_preview(body: LocalMediaProfileTemplatePreview)
                 "type": "value_error",
             }],
         ) from exc
+
+
+@router.get(
+    "/{local_media_profile_slug}/view",
+    response_model=LocalMediaProfileViewAPIRead,
+)
+def local_media_profiles_view(local_media_profile_slug: str):
+    """Retrieve one Local Media Profile together with management statistics."""
+    with db_session() as s:
+        return get_local_media_profile_view(s, local_media_profile_slug)
+
+
+@router.post(
+    "/{local_media_profile_slug}/rename-files",
+    response_model=LocalMediaProfileFileRenameOperationAccepted,
+    status_code=202,
+)
+def local_media_profiles_rename_files(local_media_profile_slug: str):
+    with db_session() as s:
+        try:
+            result = request_local_media_profile_file_rename(
+                s,
+                local_media_profile_slug,
+            )
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post(
+    "/{local_media_profile_slug}/delete-downloads",
+    response_model=LocalMediaProfileDeleteDownloadsOperationAccepted,
+    status_code=202,
+)
+def local_media_profiles_delete_downloads(local_media_profile_slug: str):
+    with db_session() as s:
+        try:
+            result = request_local_media_profile_download_delete(
+                s,
+                local_media_profile_slug,
+            )
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
 
 
 @router.get("/{local_media_profile_slug}", response_model=LocalMediaProfileAPIRead)

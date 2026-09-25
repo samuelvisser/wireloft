@@ -106,7 +106,7 @@ export default function LocalMediaProfilesPage() {
                             </span>
                         </>
                     )}
-                    onRowClick={(p) => navigate(`/edit-local-media-profile/${p.slug}`, { state: { ...p, outputPathTemplate: p.outputTemplate } })}
+                    onRowClick={(p) => navigate(`/local-media-profile/${p.slug}`)}
                     actions={(p) => [
                         {
                             onClick: () => navigate(`/edit-local-media-profile/${p.slug}`, { state: p }),

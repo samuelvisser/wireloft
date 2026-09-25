@@ -20,6 +20,7 @@ _WORKER_EXPORTS = {
     "refresh_episode_metadata": ".workers.refresh_episode_metadata",
     "rename_file_worker": ".workers.rename_file_worker",
     "rename_show_profile_files": ".workers.rename_show_profile_files",
+    "rename_movie_profile_files": ".workers.rename_movie_profile_files",
     "redownload_show_episodes_worker": ".workers.redownload_show_episodes_worker",
     "delete_show_downloads_worker": ".workers.delete_show_downloads_worker",
     "media_download_bulk_action_worker": ".workers.media_download_bulk_action_worker",

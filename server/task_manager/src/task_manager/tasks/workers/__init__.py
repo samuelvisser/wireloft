@@ -24,6 +24,7 @@ _WORKER_EXPORTS = {
     "refresh_episode_metadata": ".refresh_episode_metadata",
     "manage_custom_indexes": ".manage_custom_indexes",
     "rename_show_profile_files": ".rename_show_profile_files",
+    "rename_movie_profile_files": ".rename_movie_profile_files",
 }
 
 
