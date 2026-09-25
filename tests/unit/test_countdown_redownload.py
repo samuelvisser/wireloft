@@ -172,3 +172,47 @@ def test_final_publication_keeps_already_final_attempt(final_download, monkeypat
     canceled.assert_not_called()
     prepared.assert_not_called()
     created.assert_not_called()
+
+
+
+def test_download_records_publish_status_from_attempt_start(final_download, monkeypatch, tmp_path):
+    from dailywire_downloader import DownloadResult
+    from task_manager.tasks.helpers.downloads.engine import DownloadExecution, ResolvedDownloadSource
+    from task_manager.tasks.workers.download_episode import service
+
+    session, episode, download = final_download
+    episode.publish_status = "published_with_countdown"
+    session.commit()
+
+    destination = tmp_path / "captured-countdown.m4a"
+
+    def fake_download(*args, **kwargs):
+        # Simulate the exact race this feature must preserve correctly: the
+        # episode becomes final while bytes from the countdown attempt are still
+        # being transferred.
+        episode.publish_status = "published_final"
+        session.commit()
+        destination.write_bytes(b"downloaded countdown bytes")
+        return DownloadExecution(
+            result=DownloadResult(
+                path=str(destination),
+                bytes_downloaded=26,
+            ),
+            source=ResolvedDownloadSource(
+                url="https://example.test/audio.m4a",
+                format_downloaded="audio",
+                use_hls=False,
+                remux_to_mp4=False,
+                extension="m4a",
+                audio_only=True,
+            ),
+        )
+
+    monkeypatch.setattr(service, "_download_with_url_refresh", fake_download)
+
+    asyncio.run(service.run_download_episode(session, media_download_id=download.id))
+    session.refresh(download)
+    session.refresh(episode)
+
+    assert episode.publish_status == "published_final"
+    assert download.downloaded_publish_status == "published_with_countdown"
