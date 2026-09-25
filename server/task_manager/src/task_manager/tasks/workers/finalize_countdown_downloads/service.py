@@ -8,12 +8,10 @@ from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
 from task_manager.scheduler.operation_control import cancel_operation
 from task_manager.scheduler.results import TaskResult
-from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.media_download_operations import (
-    create_media_download_operation,
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
-    prepare_media_download_artifact,
+    queue_final_episode_redownload_if_ready,
 )
 
 
@@ -63,16 +61,6 @@ async def run_finalize_countdown_downloads(
             continue
 
         active = get_active_media_download_operation(s, download.id)
-        if (
-            active is not None
-            and isinstance(active.context, dict)
-            and active.context.get("episode_publish_status") == EpisodePublishStatus.PUBLISHED_FINAL.value
-        ):
-            # A fresh attempt created after final publication already satisfies
-            # the replacement intent; do not cancel it as if it were countdown work.
-            download.redownload_when_final = False
-            s.commit()
-            continue
         active_operation_id = active.id if active is not None else None
 
         # cancel_operation owns its own transaction. End this session's read
@@ -87,43 +75,20 @@ async def run_finalize_countdown_downloads(
                 )
                 canceled += 1
             except ValueError:
-                # The attempt may have become terminal between discovery and the
-                # cancellation call. Reconciliation below handles that state.
+                # The operation may have reached terminal state between discovery
+                # and cancellation. Durable intent below still closes that race.
                 pass
 
-        download = s.get(EpisodeMediaDownload, download_id)
-        if download is None or not download.redownload_when_final:
-            s.rollback()
-            continue
-
-        episode = s.get(Episode, download.media_item_id)
-        if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
-            s.rollback()
-            continue
-
-        # A concurrent explicit retry after final publication already satisfies
-        # the intent. Do not replace that fresh operation with another one.
-        replacement = get_active_media_download_operation(s, download.id)
-        if replacement is not None:
-            download.redownload_when_final = False
-            s.commit()
-            continue
-
-        prepare_media_download_artifact(s, download)
-        download.redownload_when_final = False
-        create_media_download_operation(
-            s,
-            download,
-            source=OperationSource.SYSTEM.value,
-            is_redownload=True,
-        )
+        # For a queued/scheduled cancellation, the old run may already be
+        # terminal now. For a RUNNING worker this deliberately remains a no-op
+        # until its terminal callback consumes the same persistent intent.
+        if queue_final_episode_redownload_if_ready(s, download_id):
+            queued += 1
         s.commit()
-        queued += 1
 
-    # A canceled RUNNING task continues holding its concurrency slot until it
-    # reaches a cooperative cancellation checkpoint. The replacement remains
-    # durably queued and this dispatcher starts it immediately when a slot is
-    # already free; the ordinary terminal callback fills the lane otherwise.
+    # Replacements whose prior attempt is already terminal can start now. A
+    # canceled RUNNING attempt keeps the intent pending; its ordinary terminal
+    # callback creates and dispatches the replacement after shutdown completes.
     dispatched = dispatch_queued_media_download_operations(s)
     s.commit()
 
