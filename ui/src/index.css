@@ -728,7 +728,7 @@ a.btn,
 .wizard-aside { position: sticky; top: 8px; }
 @media (min-width: 1060px) {
   .wizard-with-aside,
-  .wizard-sticky-region { grid-template-columns: minmax(450px, 1fr) minmax(0, 700px); }
+  .wizard-sticky-region { grid-template-columns: minmax(450px, 1fr) minmax(0, 400px); }
 }
 @media (prefers-color-scheme: dark) {
   .card { background: #0b1220; color: var(--text); border-color: rgba(255, 255, 255, 0.12); }
