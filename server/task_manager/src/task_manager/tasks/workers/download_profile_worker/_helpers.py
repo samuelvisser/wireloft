@@ -193,6 +193,11 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         profile.local_media_profile.output_template,
         episode=episode,
     ))
+    redownload_when_final = (
+        isinstance(profile, PodcastDownloadProfile)
+        and profile.download_with_countdown
+        and episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value
+    )
 
     if existing is None:
         download = EpisodeMediaDownload(
@@ -202,10 +207,14 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
             download_profile_id=profile.id,
             artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
             file_path=target_path,
+            redownload_when_final=redownload_when_final,
         )
         s.add(download)
         s.flush()
         return DownloadAction(download.id, True)
+
+    if redownload_when_final:
+        existing.redownload_when_final = True
 
     if get_active_media_download_operation(s, existing.id) is not None:
         if existing.download_profile_id != profile.id:
@@ -224,28 +233,14 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         return DownloadAction(existing.id, False)
 
     if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
-        if not _wants_redownload(profile, episode, existing):
-            s.flush()
-            return DownloadAction(existing.id, False)
-        prepare_media_download_artifact(s, existing)
-        existing.file_path = target_path
         s.flush()
-        return DownloadAction(existing.id, True, is_redownload=True)
+        return DownloadAction(existing.id, False)
 
     prepare_media_download_artifact(s, existing)
     existing.file_path = target_path
     s.flush()
     return DownloadAction(existing.id, True)
 
-
-def _wants_redownload(profile: DownloadProfileBase, episode: Episode, existing: EpisodeMediaDownload) -> bool:
-    return (
-        isinstance(profile, PodcastDownloadProfile)
-        and profile.download_with_countdown
-        and profile.redownload_final
-        and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
-        and existing.downloaded_publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value
-    )
 
 
 def remaining_download_budget(s: Session) -> int:
