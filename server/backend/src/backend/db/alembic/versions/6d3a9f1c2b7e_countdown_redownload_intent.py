@@ -30,9 +30,18 @@ def upgrade() -> None:
         sa.text(
             "UPDATE media_downloads_episode "
             "SET redownload_when_final = :enabled "
-            "WHERE downloaded_publish_status = :countdown_status "
+            "WHERE ("
+            "downloaded_publish_status = :countdown_status "
+            "OR id IN ("
+            "SELECT md.id FROM media_downloads AS md "
+            "JOIN episodes AS e ON e.id = md.media_item_id "
+            "WHERE e.publish_status = :countdown_status"
+            ")"
+            ") "
             "AND download_profile_id IN ("
-            "SELECT id FROM download_profiles_podcast WHERE redownload_final = :enabled"
+            "SELECT id FROM download_profiles_podcast "
+            "WHERE download_with_countdown = :enabled "
+            "AND redownload_final = :enabled"
             ")"
         ),
         {
