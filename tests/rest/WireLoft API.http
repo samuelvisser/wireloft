@@ -175,6 +175,7 @@ POST http://localhost:5001/api/shows/as-bundle
   "downloadProfile": {
     "enableProfile": true,
     "downloadWithCountdown": false,
+    "redownloadFinal": true,
     "downloadDaysInPast": 180,
     "deleteOlderEpisodes": true,
     "op": "podcast"
