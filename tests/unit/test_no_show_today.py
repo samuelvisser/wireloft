@@ -307,6 +307,7 @@ def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value, EpIdType.AUX.value],
         download_with_countdown=False,
+        redownload_final=False,
         download_days_in_past=0,
         delete_older_episodes=False,
     )
