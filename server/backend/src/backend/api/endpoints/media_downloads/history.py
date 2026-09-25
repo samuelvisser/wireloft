@@ -56,31 +56,31 @@ def _presentation(entry: MediaDownloadHistory) -> tuple[str, str, str | None]:
     metadata = entry.event_metadata or {}
     action = entry.action
 
-    if action == MediaDownloadHistoryAction.CREATED.value:
+    if action == MediaDownloadHistoryAction.CREATED:
         return "Download created", "pending", None
-    if action == MediaDownloadHistoryAction.QUEUED.value:
+    if action == MediaDownloadHistoryAction.QUEUED:
         return (
             "Redownload queued" if metadata.get("is_redownload") else "Download queued",
             "pending",
             None,
         )
-    if action == MediaDownloadHistoryAction.PRIORITIZED.value:
+    if action == MediaDownloadHistoryAction.PRIORITIZED:
         return "Download prioritized", "pending", None
-    if action == MediaDownloadHistoryAction.RETRY_REQUESTED.value:
+    if action == MediaDownloadHistoryAction.RETRY_REQUESTED:
         return "Retry requested", "pending", None
-    if action == MediaDownloadHistoryAction.RESTARTED.value:
+    if action == MediaDownloadHistoryAction.RESTARTED:
         return (
             "Redownload restarted" if metadata.get("is_redownload") else "Download restarted",
             "pending",
             None,
         )
-    if action == MediaDownloadHistoryAction.STARTED.value:
+    if action == MediaDownloadHistoryAction.STARTED:
         return (
             "Redownload started" if metadata.get("is_redownload") else "Download started",
             "downloading",
             _format_publish_status(metadata.get("started_publish_status")),
         )
-    if action == MediaDownloadHistoryAction.COMPLETED.value:
+    if action == MediaDownloadHistoryAction.COMPLETED:
         detail_parts = [
             value
             for value in (
@@ -95,30 +95,30 @@ def _presentation(entry: MediaDownloadHistory) -> tuple[str, str, str | None]:
             "redownloaded" if metadata.get("is_redownload") else "downloaded",
             " · ".join(detail_parts) or None,
         )
-    if action == MediaDownloadHistoryAction.FAILED.value:
+    if action == MediaDownloadHistoryAction.FAILED:
         return (
             "Redownload failed" if metadata.get("is_redownload") else "Download failed",
             "error",
             str(metadata.get("error")) if metadata.get("error") else None,
         )
-    if action == MediaDownloadHistoryAction.CANCEL_REQUESTED.value:
+    if action == MediaDownloadHistoryAction.CANCEL_REQUESTED:
         reason = metadata.get("reason")
         return "Cancellation requested", "cancelled", str(reason) if reason else None
-    if action == MediaDownloadHistoryAction.CANCELLED.value:
+    if action == MediaDownloadHistoryAction.CANCELLED:
         reason = metadata.get("reason")
         return "Download cancelled", "cancelled", str(reason) if reason else None
-    if action == MediaDownloadHistoryAction.ARTIFACT_REMOVED.value:
+    if action == MediaDownloadHistoryAction.ARTIFACT_REMOVED:
         path = metadata.get("file_path")
         return "Previous file removed", "not_downloaded", str(path) if path else None
-    if action == MediaDownloadHistoryAction.ARTIFACT_MISSING.value:
+    if action == MediaDownloadHistoryAction.ARTIFACT_MISSING:
         error = metadata.get("error")
         return "File missing", "missing", str(error) if error else None
-    if action == MediaDownloadHistoryAction.ARTIFACT_CORRUPTED.value:
+    if action == MediaDownloadHistoryAction.ARTIFACT_CORRUPTED:
         error = metadata.get("error")
         return "File corrupted", "corrupted", str(error) if error else None
-    if action == MediaDownloadHistoryAction.ARTIFACT_RESTORED.value:
+    if action == MediaDownloadHistoryAction.ARTIFACT_RESTORED:
         return "File available again", "downloaded", None
-    if action == MediaDownloadHistoryAction.ARTIFACT_RENAMED.value:
+    if action == MediaDownloadHistoryAction.ARTIFACT_RENAMED:
         old_path = metadata.get("old_path")
         new_path = metadata.get("new_path")
         detail = f"{old_path} → {new_path}" if old_path and new_path else None

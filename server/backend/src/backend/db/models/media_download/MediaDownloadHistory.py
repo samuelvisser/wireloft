@@ -35,6 +35,5 @@ class MediaDownloadHistory(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<MediaDownloadHistory(id={self.id}, media_download_id={self.media_download_id}, "
-            f"action={self.action!r}, occurred_at={self.occurred_at})>"
+            f"<MediaDownloadHistory(id={self.id}, media_download_id={self.media_download_id}, action={self.action!r}, occurred_at={self.occurred_at})>"
         )

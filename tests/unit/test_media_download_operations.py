@@ -187,7 +187,7 @@ def test_operation_history_dedupes_per_task_run_not_forever():
         assert second_attempt.id != first.id
         assert session.query(MediaDownloadHistory).filter_by(
             media_download_id=download.id,
-            action=MediaDownloadHistoryAction.CANCELLED.value,
+            action=MediaDownloadHistoryAction.CANCELLED,
         ).count() == 2
     finally:
         session.close()

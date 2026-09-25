@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class MediaDownloadHistoryAction(str, Enum):
+class MediaDownloadHistoryAction(StrEnum):
     """Durable user-meaningful events in one MediaDownload's lifetime."""
 
     CREATED = "created"
