@@ -41,34 +41,7 @@ def upgrade() -> None:
         },
     )
 
-    with op.batch_alter_table("download_profiles_podcast") as batch_op:
-        batch_op.drop_column("redownload_final")
-
 
 def downgrade() -> None:
-    with op.batch_alter_table("download_profiles_podcast") as batch_op:
-        batch_op.add_column(
-            sa.Column(
-                "redownload_final",
-                sa.Boolean(),
-                nullable=False,
-                server_default=sa.false(),
-            )
-        )
-
-    connection = op.get_bind()
-    connection.execute(
-        sa.text(
-            "UPDATE download_profiles_podcast "
-            "SET redownload_final = :enabled "
-            "WHERE id IN ("
-            "SELECT download_profile_id FROM media_downloads_episode "
-            "WHERE redownload_when_final = :enabled "
-            "AND download_profile_id IS NOT NULL"
-            ")"
-        ),
-        {"enabled": True},
-    )
-
     with op.batch_alter_table("media_downloads_episode") as batch_op:
         batch_op.drop_column("redownload_when_final")
