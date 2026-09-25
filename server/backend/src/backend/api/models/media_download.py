@@ -12,6 +12,7 @@ class EpisodeDownloadAPICreate(RequestBase):
     """Request body for starting an episode download for a Local Media Profile."""
 
     local_media_profile_id: int
+    redownload_when_final: bool = False
 
 
 class MovieDownloadAPICreate(RequestBase):
@@ -87,6 +88,10 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
     downloaded_publish_status: Optional[str] = Field(
         default=None,
         validation_alias=AliasPath("download", "downloaded_publish_status"),
+    )
+    redownload_when_final: Optional[bool] = Field(
+        default=None,
+        validation_alias=AliasPath("download", "redownload_when_final"),
     )
 
     queue_position: Optional[int] = None
