@@ -398,8 +398,8 @@ export default function StreamProfileForm({
                                 formats from your downloaded files if they are the only ones available locally.
                             </p>
                             <p>
-                                No matter what this setting is set to, as long as your Preferred Format is any video type WireLoft will always ignore
-                                audio downloads for the stream.
+                                Obviously, no matter what this setting is set to, WireLoft will only consider video downloads when trying to match local
+                                files to your video streaming request. Audio will never be send in the place of video merely because you had it downloaded.
                             </p>
                             <p>
                                 <strong>Note:</strong> WireLoft cannot control what DW provides. This preference only controls whether WireLoft accepts
