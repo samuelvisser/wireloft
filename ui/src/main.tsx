@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useLayoutEffect, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, useLocation, useNavigationType } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import App from './App'
@@ -22,6 +22,58 @@ import {
 } from './lib/showDataCacheWarmer'
 import { loadAppConfig } from './general_utils.js'
 import { loadPublicConfig } from './lib/publicConfig'
+
+type ScrollPosition = {
+  left: number
+  top: number
+}
+
+function RouterScrollRestoration() {
+  const location = useLocation()
+  const navigationType = useNavigationType()
+  const scrollPositions = useRef(new Map<string, ScrollPosition>())
+  const previousPathname = useRef(location.pathname)
+  const initialRender = useRef(true)
+
+  useLayoutEffect(() => {
+    const previousScrollRestoration = window.history.scrollRestoration
+    window.history.scrollRestoration = 'manual'
+
+    return () => {
+      window.history.scrollRestoration = previousScrollRestoration
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    const locationKey = location.key
+    const previousPath = previousPathname.current
+    previousPathname.current = location.pathname
+
+    if (initialRender.current) {
+      // Keep the browser's initial page-load position intact. From this point on,
+      // route changes are managed here so BrowserRouter behaves like document navigation.
+      initialRender.current = false
+    } else if (navigationType === 'POP') {
+      const position = scrollPositions.current.get(locationKey)
+      if (position) {
+        window.scrollTo({...position, behavior: 'auto'})
+      }
+    } else if (location.pathname !== previousPath) {
+      // Search/hash changes are state changes within the current page. Only a
+      // different pathname represents a new page that should start at the top.
+      window.scrollTo({left: 0, top: 0, behavior: 'auto'})
+    }
+
+    return () => {
+      scrollPositions.current.set(locationKey, {
+        left: window.scrollX,
+        top: window.scrollY,
+      })
+    }
+  }, [location.key, location.pathname, navigationType])
+
+  return null
+}
 
 async function bootstrap() {
   // Load app config before anything renders
@@ -67,6 +119,7 @@ async function bootstrap() {
         <FrontendPuller>
           <OperationNotifier definitions={operationNotificationDefinitions}>
             <BrowserRouter>
+              <RouterScrollRestoration />
               <App />
             </BrowserRouter>
           </OperationNotifier>
