@@ -78,9 +78,6 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
     downloaded_bytes: Mapped[Optional[int]]
     format_downloaded: Mapped[Optional[str]]
     downloaded_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
-    # Permanent historical fact: once set, artifact cleanup and redownloads never clear it.
-    first_successful_download_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
-
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
     )
@@ -91,11 +88,6 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
     # Relationships
     media: Mapped["MediaItemBase"] = relationship(back_populates="downloads")
     local_media_profile: Mapped["LocalMediaProfileBase"] = relationship(back_populates="media_downloads")
-
-    @property
-    def can_delete(self) -> bool:
-        """Only never-successful records may be removed independently."""
-        return self.first_successful_download_at is None
 
     def __repr__(self) -> str:
         return (

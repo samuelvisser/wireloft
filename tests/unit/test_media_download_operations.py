@@ -282,7 +282,7 @@ def test_prioritized_downloads_dispatch_first_in_click_order(monkeypatch):
         engine.dispose()
 
 
-def test_deleting_media_download_cascades_its_operation_graph():
+def test_deleting_parent_show_cascades_download_and_operation_graph():
     from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
     from task_manager.scheduler.types import OperationSource
     from task_manager.tasks.media_download_operations import create_media_download_operation
@@ -296,14 +296,17 @@ def test_deleting_media_download_cascades_its_operation_graph():
             source=OperationSource.UI.value,
         )
         operation_id = operation.id
+        download_id = download.id
+        show = download.media.show
         session.commit()
 
         assert session.get(TaskOperation, operation_id) is not None
         assert session.query(TaskOperationTarget).filter_by(operation_id=operation_id).count() == 1
 
-        session.delete(download)
+        session.delete(show)
         session.commit()
 
+        assert session.get(type(download), download_id) is None
         assert session.get(TaskOperation, operation_id) is None
         assert session.query(TaskOperationTarget).filter_by(operation_id=operation_id).count() == 0
     finally:
@@ -311,7 +314,7 @@ def test_deleting_media_download_cascades_its_operation_graph():
         engine.dispose()
 
 
-def test_deleting_reserved_download_releases_its_queue_slot(monkeypatch):
+def test_deleting_parent_show_releases_reserved_download_queue_slot(monkeypatch):
     import task_manager.tasks  # noqa: F401 - register download task metadata
     from task_manager.scheduler.db import TaskDefinition, TaskOperationRun, TaskRun
     from task_manager.scheduler.registry import get_task
@@ -358,7 +361,7 @@ def test_deleting_reserved_download_releases_its_queue_slot(monkeypatch):
         original_callback = task_meta.terminal_callback
         task_meta.terminal_callback = lambda **_: callbacks.append(True)
         try:
-            session.delete(download)
+            session.delete(download.media.show)
             session.commit()
             assert callbacks == [True]
         finally:
@@ -368,51 +371,29 @@ def test_deleting_reserved_download_releases_its_queue_slot(monkeypatch):
         engine.dispose()
 
 
+def test_episode_with_any_media_download_can_only_be_removed_with_show():
+    import pytest
+    from fastapi import HTTPException
 
-def test_never_successful_media_download_can_be_deleted():
-    from backend.api.endpoints.media_downloads.service import delete_media_download
+    from backend.api.endpoints.episodes.service import delete_episode
     from backend.db.models.media_download import MediaDownloadBase
 
     session, engine = _session()
     try:
-        download = _make_download(session, slug="never-successful")
+        download = _make_download(session, slug="persistent-history")
         download_id = download.id
+        episode_slug = download.media.slug
+        show = download.media.show
         session.commit()
-
-        payload = delete_media_download(session, download_id)
-        session.commit()
-
-        assert payload.id == download_id
-        assert session.get(MediaDownloadBase, download_id) is None
-    finally:
-        session.close()
-        engine.dispose()
-
-
-def test_successful_media_download_is_permanent_history():
-    import pytest
-    from fastapi import HTTPException
-
-    from backend.api.endpoints.media_downloads.service import delete_media_download
-    from task_manager.tasks.media_download_operations import prepare_media_download_artifact
-
-    session, engine = _session()
-    try:
-        download = _make_download(session, slug="successful-history")
-        first_success = datetime.now(timezone.utc)
-        download.first_successful_download_at = first_success
-        download.downloaded_at = first_success
-        session.commit()
-
-        prepare_media_download_artifact(session, download, remove_existing_artifacts=False)
-        session.commit()
-        assert download.downloaded_at is None
-        assert download.first_successful_download_at == first_success
 
         with pytest.raises(HTTPException) as exc_info:
-            delete_media_download(session, download.id)
+            delete_episode(session, episode_slug)
         assert exc_info.value.status_code == 409
-        assert "permanent history" in str(exc_info.value.detail)
+        assert session.get(MediaDownloadBase, download_id) is not None
+
+        session.delete(show)
+        session.commit()
+        assert session.get(MediaDownloadBase, download_id) is None
     finally:
         session.close()
         engine.dispose()

@@ -375,22 +375,6 @@ export const frontendOperationDefinitions = {
       `Cancel all stopped after ${completedCount(operation)} of ${operation.progressTotal} downloads`
     ),
   },
-  'media_download.bulk_delete': {
-    kind: 'media_download.bulk_delete',
-    resourceType: 'media_download',
-    label: 'Delete downloads',
-    invalidate: invalidateMediaDownloadCollection,
-    success: (operation) => {
-      const count = operation.progressTotal
-      return `Deleted ${count} download ${plural(count, 'record')}`
-    },
-    partial: (operation) => (
-      `Deleted ${completedCount(operation)} of ${operation.progressTotal} download records`
-    ),
-    canceled: (operation) => (
-      `Delete all stopped after ${completedCount(operation)} of ${operation.progressTotal} download records`
-    ),
-  },
   'media.download': {
     kind: 'media.download',
     resourceType: 'media_download',

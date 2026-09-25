@@ -34,6 +34,7 @@ def test_deleting_one_movie_preserves_shared_source_other_placement_and_download
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieExtraSource, MovieLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
+    from backend.services.movies import index_dailywire_movie
     from config import get_settings
     from dailywire_api.records import DwMovieExtraRecord
 
@@ -63,7 +64,7 @@ def test_deleting_one_movie_preserves_shared_source_other_placement_and_download
         movie_b = _movie_record("movie-b", "Movie B", shared)
         body = MovieDownloadAPICreate(local_media_profile_id=profile.id)
 
-        download_a = create_movie_extra_download(session, movie_a, shared.slug, body)
+        index_dailywire_movie(session, movie_a)
         download_b = create_movie_extra_download(session, movie_b, shared.slug, body)
         session.commit()
 
@@ -88,7 +89,6 @@ def test_deleting_one_movie_preserves_shared_source_other_placement_and_download
         remaining_download = session.query(MovieExtraMediaDownload).one()
         assert remaining_download.id == movie_b_download_id
         assert remaining_download.media_item_id == remaining_extra.id
-        assert download_a.id != remaining_download.id
     finally:
         session.close()
         engine.dispose()

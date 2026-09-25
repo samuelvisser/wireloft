@@ -270,13 +270,12 @@ def delete_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
 
     payload = EpisodeAPIRead.model_validate(episode)
 
-    historical_download = s.scalar(
+    media_download = s.scalar(
         select(EpisodeMediaDownload.id).where(
             EpisodeMediaDownload.media_item_id == episode.id,
-            EpisodeMediaDownload.first_successful_download_at.is_not(None),
         ).limit(1)
     )
-    if historical_download is not None:
+    if media_download is not None:
         raise HTTPException(
             status_code=409,
             detail="This episode owns persistent download history and can only be removed with its show",

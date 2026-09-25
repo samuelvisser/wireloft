@@ -19,7 +19,7 @@ from task_manager.tasks.media_download_operations import (
 )
 
 from .operations import _BulkMediaDownloadOperation
-from .service import delete_media_download, retry_media_download
+from .service import retry_media_download
 
 
 def retry_media_download_action(
@@ -135,24 +135,6 @@ def cancel_media_download_action(
     return payload
 
 
-def delete_media_download_action(
-        media_download_id: int,
-        *,
-        missing_ok: bool = False,
-) -> MediaDownloadAPIRead | None:
-    """Delete one download record using the ordinary domain deletion path."""
-    with db_session() as s:
-        try:
-            if missing_ok and s.get(MediaDownloadBase, media_download_id) is None:
-                return None
-            result = delete_media_download(s, media_download_id)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
-
-
 def queue_bulk_media_download_operation(
         s: Session,
         operation: _BulkMediaDownloadOperation,
@@ -171,19 +153,6 @@ def queue_bulk_media_download_operation(
             status_code=404,
             detail=f"Media download {missing_ids[0]} not found",
         )
-
-    if operation.action == "delete":
-        protected = list(s.scalars(
-            select(MediaDownloadBase.id).where(
-                MediaDownloadBase.id.in_(ids),
-                MediaDownloadBase.first_successful_download_at.is_not(None),
-            )
-        ))
-        if protected:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Media download {protected[0]} has successful download history and cannot be deleted",
-            )
 
     queued_operation = create_operation(s, operation)
     for media_download_id in ids:

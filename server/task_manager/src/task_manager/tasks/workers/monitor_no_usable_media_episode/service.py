@@ -43,15 +43,14 @@ def _incident_expired(episode: Episode, *, now: datetime, minutes: int) -> bool:
 
 
 def _delete_episode(s: Session, episode: Episode) -> bool:
-    historical_download = s.scalar(
+    media_download = s.scalar(
         select(EpisodeMediaDownload.id).where(
             EpisodeMediaDownload.media_item_id == episode.id,
-            EpisodeMediaDownload.first_successful_download_at.is_not(None),
         ).limit(1)
     )
-    if historical_download is not None:
-        # The quarantined Episode becomes the durable owner of download history.
-        # It remains hidden by its NO_USABLE_MEDIA state until the Show is deleted.
+    if media_download is not None:
+        # The quarantined Episode remains the durable owner of its download history.
+        # It stays hidden by its NO_USABLE_MEDIA state until the Show is deleted.
         s.commit()
         return False
 

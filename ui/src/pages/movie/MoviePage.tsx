@@ -185,6 +185,7 @@ export default function MoviePage() {
     )
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads} = useMovieDownloads(slug)
+    const hasDownloadHistory = (downloads?.length ?? 0) > 0
     const refreshExtrasOperation = useActiveOperation(
         'movie.refresh_extras',
         'movie',
@@ -512,7 +513,13 @@ export default function MoviePage() {
                     </button>
                 )}
                 {localMovie && (
-                    <button type="button" className="btn btn-danger" onClick={() => setConfirmDelete(true)}>
+                    <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={() => setConfirmDelete(true)}
+                        disabled={hasDownloadHistory}
+                        title={hasDownloadHistory ? 'Movies with download history cannot be deleted' : undefined}
+                    >
                         <FontAwesomeIcon icon={['fas', 'trash']}/> Delete
                     </button>
                 )}
@@ -680,10 +687,8 @@ export default function MoviePage() {
                 }}
             >
                 <p>
-                    Are you sure you want to delete "{movie.title}" from WireLoft? This removes the movie, its
-                    indexed extras, and their download history from the WireLoft database. Completed files
-                    already on disk will not be changed. Any download still in progress will be cancelled and
-                    its partial files removed.
+                    Are you sure you want to delete "{movie.title}" from WireLoft? This removes the movie and
+                    its indexed extras from the WireLoft database.
                 </p>
             </ConfirmDialog>
         </section>

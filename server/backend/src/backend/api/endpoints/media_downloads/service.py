@@ -366,28 +366,3 @@ def update_media_download(s: Session, media_download_id: int, body: MediaDownloa
     update_database_fields(item, body)
     s.flush()
     return MediaDownloadAPIRead.model_validate(item)
-
-
-def delete_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRead:
-    item = s.query(MediaDownloadBase).filter_by(id=media_download_id).one_or_none()
-    if item is None:
-        raise HTTPException(status_code=404, detail="Media download not found")
-    if item.first_successful_download_at is not None:
-        raise HTTPException(
-            status_code=409,
-            detail="A MediaDownload that has successfully downloaded a file is permanent history and cannot be deleted",
-        )
-    _assert_no_active_attempt(s, item)
-
-    resolved_path = None
-    if item.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
-        resolved_path = resolve_media_download_file(s, item)
-
-    payload = MediaDownloadAPIRead.model_validate(item)
-    remove_download_artifacts(
-        str(resolved_path) if resolved_path is not None else item.file_path,
-        item.thumbnail_path,
-    )
-    s.delete(item)
-    s.flush()
-    return payload

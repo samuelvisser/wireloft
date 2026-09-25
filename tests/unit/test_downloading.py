@@ -517,39 +517,6 @@ def test_cancel_active_download_records_attempt_and_removes_every_artifact(tmp_p
     engine.dispose()
 
 
-def test_delete_active_download_cancels_worker_and_removes_every_artifact(tmp_path):
-    from backend.api.endpoints.media_downloads.service import delete_media_download
-    from backend.types.download_profile_types import MediaDownloadStatus
-
-    session, engine, _episode, download = _db_with_episode_and_download(
-        video_local_media_profile=False,
-    )
-    destination = tmp_path / "episode.m4a"
-    artifacts = [
-        destination,
-        tmp_path / "episode.m4a.part",
-        tmp_path / "episode.m4a.rawts",
-        tmp_path / "episode.m4a.rawts.part",
-    ]
-    for artifact in artifacts:
-        artifact.write_bytes(b"partial")
-
-    download_id = download.id
-    download.file_path = str(destination)
-    download.download_status = MediaDownloadStatus.LOCAL_PROCESSING.value
-    session.commit()
-
-    deleted = delete_media_download(session, download_id)
-    session.commit()
-
-    assert deleted.id == download_id
-    assert session.get(type(download), download_id) is None
-    assert all(not artifact.exists() for artifact in artifacts)
-
-    session.close()
-    engine.dispose()
-
-
 def test_replaced_episode_worker_cancels_without_overwriting_fresh_state(tmp_path, monkeypatch):
     from sqlalchemy.orm import sessionmaker
 

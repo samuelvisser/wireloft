@@ -1,4 +1,4 @@
-"""Add persistent custom indexing and successful download history.
+"""Add persistent custom indexing.
 
 Revision ID: b7e3c1a94d20
 Revises: 3f7b6a2c9d10
@@ -15,54 +15,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    with op.batch_alter_table("media_downloads") as batch_op:
-        batch_op.add_column(
-            sa.Column(
-                "first_successful_download_at",
-                sa.DateTime(timezone=True),
-                nullable=True,
-            )
-        )
-
-    op.execute(
-        sa.text(
-            "UPDATE media_downloads "
-            "SET first_successful_download_at = downloaded_at "
-            "WHERE downloaded_at IS NOT NULL"
-        )
-    )
-    op.execute(sa.text("""
-        UPDATE media_downloads
-        SET first_successful_download_at = (
-            SELECT MIN(COALESCE(task_runs.finished_at, task_runs.created_at))
-            FROM task_runs
-            JOIN task_definitions
-              ON task_definitions.id = task_runs.definition_id
-            WHERE task_runs.resource_id = media_downloads.id
-              AND task_runs.resource_type IN ('MEDIA_DOWNLOAD', 'media_download')
-              AND task_runs.status IN ('SUCCEEDED', 'succeeded')
-              AND task_definitions.key IN ('download_episode', 'download_movie')
-        )
-        WHERE first_successful_download_at IS NULL
-          AND EXISTS (
-            SELECT 1
-            FROM task_runs
-            JOIN task_definitions
-              ON task_definitions.id = task_runs.definition_id
-            WHERE task_runs.resource_id = media_downloads.id
-              AND task_runs.resource_type IN ('MEDIA_DOWNLOAD', 'media_download')
-              AND task_runs.status IN ('SUCCEEDED', 'succeeded')
-              AND task_definitions.key IN ('download_episode', 'download_movie')
-          )
-    """))
-
-    op.execute(sa.text(
-        "UPDATE media_downloads "
-        "SET first_successful_download_at = COALESCE(downloaded_at, updated_at, created_at, CURRENT_TIMESTAMP) "
-        "WHERE first_successful_download_at IS NULL "
-        "AND artifact_status = 'available'"
-    ))
-
     op.create_table(
         "custom_index_states",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -114,6 +66,3 @@ def downgrade() -> None:
         table_name="custom_index_states",
     )
     op.drop_table("custom_index_states")
-
-    with op.batch_alter_table("media_downloads") as batch_op:
-        batch_op.drop_column("first_successful_download_at")

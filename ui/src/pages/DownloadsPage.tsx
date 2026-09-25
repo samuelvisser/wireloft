@@ -5,8 +5,6 @@ import toast from 'react-hot-toast'
 import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {Column, DataTable, DataTableAction} from '../components/DataTable/DataTable'
-import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
-import ConfirmDialog from '../components/ConfirmDialog/ConfirmDialog'
 import DownloadLogDialog from '../components/MediaDownload/DownloadLogDialog'
 import {useActiveOperation} from '../components/OperationNotifier/OperationNotifier'
 import PageSubtitle from '../components/common/PageSubtitle'
@@ -28,7 +26,7 @@ type StatusFilterOption = {
     statuses: readonly string[]
 }
 
-type BulkAction = 'retry' | 'cancel' | 'delete'
+type BulkAction = 'retry' | 'cancel'
 
 const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
     {value: 'not_downloaded', label: 'Not downloaded', statuses: ['not_downloaded']},
@@ -199,17 +197,14 @@ export default function DownloadsPage() {
     const startOperation = useStartOperation()
     const controlOperation = useControlOperation()
     const {data: downloads, isLoading, error} = useMediaDownloadsView()
-    const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
     const lastFilterPressRef = useRef<{value: string; timestamp: number} | null>(null)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
     const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(DEFAULT_STATUS_FILTER))
     const [bulkActionStarting, setBulkActionStarting] = useState<BulkAction | null>(null)
     const [bulkControlBusy, setBulkControlBusy] = useState<string | null>(null)
-    const [bulkDeleteRows, setBulkDeleteRows] = useState<MediaDownloadViewRead[] | null>(null)
 
     const retryAllOperation = useActiveOperation('media_download.bulk_retry', 'media_download')
     const cancelAllOperation = useActiveOperation('media_download.bulk_cancel', 'media_download')
-    const deleteAllOperation = useActiveOperation('media_download.bulk_delete', 'media_download')
 
     const toggleStatusFilter = (option: StatusFilterOption) => {
         setStatusFilter((prev) => {
@@ -255,24 +250,17 @@ export default function DownloadsPage() {
         () => filteredDownloads.filter(isCancellableDownload),
         [filteredDownloads],
     )
-    const deletableDownloads = useMemo(
-        () => filteredDownloads.filter((row) => row.canDelete && !isCancellableDownload(row)),
-        [filteredDownloads],
-    )
 
     const bulkOperationActive = Boolean(
         retryAllOperation
         || cancelAllOperation
-        || deleteAllOperation
         || bulkActionStarting,
     )
     const showActionRow = Boolean(
         retryableDownloads.length
         || cancellableDownloads.length
-        || deletableDownloads.length
         || retryAllOperation
-        || cancelAllOperation
-        || deleteAllOperation,
+        || cancelAllOperation,
     )
 
     const prioritize = async (row: MediaDownloadViewRead) => {
@@ -350,9 +338,7 @@ export default function DownloadsPage() {
         } catch (actionError) {
             const fallback = action === 'retry'
                 ? 'Could not retry the selected downloads'
-                : action === 'cancel'
-                    ? 'Could not cancel the selected downloads'
-                    : 'Could not delete the selected downloads'
+                : 'Could not cancel the selected downloads'
             toast.error(actionError instanceof Error && actionError.message ? actionError.message : fallback)
         } finally {
             setBulkActionStarting(null)
@@ -436,7 +422,7 @@ export default function DownloadsPage() {
                         Every episode and movie download shows up here, one row per Local Media Profile.
                         Running downloads report live progress; failed ones show the error and can be retried.
                         Records without a file or active queue item are marked Not downloaded and can also be retried.
-                        Records that have ever downloaded successfully are permanent history. Only never-successful, inactive records can be deleted.
+                        Download records are persistent history and cannot be deleted individually.
                     </p>
                 </PageSubtitle>
             </div>
@@ -501,25 +487,6 @@ export default function DownloadsPage() {
                             onCancel={cancelAllOperation ? () => void cancelBulkOperation(cancelAllOperation) : undefined}
                             cancelDisabled={bulkControlBusy === cancelAllOperation?.id}
                             cancelLabel="Stop cancel all"
-                        />
-                    )}
-                    {(deletableDownloads.length > 0 || deleteAllOperation || bulkActionStarting === 'delete') && (
-                        <ProgressButton
-                            definition={frontendOperationDefinitions['media_download.bulk_delete']}
-                            label="Delete all"
-                            icon={['fas', 'trash']}
-                            onClick={() => setBulkDeleteRows([...deletableDownloads])}
-                            disabled={bulkOperationActive && !deleteAllOperation && bulkActionStarting !== 'delete'}
-                            primary={false}
-                            className="downloads-action-danger"
-                            starting={bulkActionStarting === 'delete'}
-                            active={deleteAllOperation !== undefined}
-                            progress={deleteAllOperation?.progress ?? 0}
-                            activeLabel={bulkOperationLabel(deleteAllOperation, bulkActionStarting === 'delete')}
-                            ariaLabel={`Delete ${deletableDownloads.length} visible never-successful download records`}
-                            onCancel={deleteAllOperation ? () => void cancelBulkOperation(deleteAllOperation) : undefined}
-                            cancelDisabled={bulkControlBusy === deleteAllOperation?.id}
-                            cancelLabel="Stop delete all"
                         />
                     )}
                 </div>
@@ -602,54 +569,10 @@ export default function DownloadsPage() {
                                 classes: 'btn',
                             })
                         }
-                        if (row.canDelete && !isCancellableDownload(row)) {
-                            actions.push({
-                                onClick: () => confirmRef.current?.open(row),
-                                icon: ['fas', 'trash'],
-                                text: 'Delete',
-                                classes: 'btn btn-danger',
-                            })
-                        }
                         return actions
                     }}
                 />
             </div>
-            <ConfirmDeleteDialog
-                ref={confirmRef}
-                title="Delete download record"
-                subjectProp={(row: MediaDownloadViewRead) => `${rowTitle(row)} (${row.localMediaProfileName})`}
-                deleteRequest={(row: MediaDownloadViewRead) =>
-                    fetch(`${(window as any).appConfig.API_URL}/media-downloads/${row.id}`, {
-                        method: 'DELETE',
-                        credentials: 'include',
-                    })
-                }
-                invalidateQueries={[['mediaDownloadsView'], ['episodeDownloads'], ['movieDownloads'], ['movies']]}
-            />
-            <ConfirmDialog
-                open={bulkDeleteRows !== null}
-                title="Delete visible download records"
-                onDismiss={() => setBulkDeleteRows(null)}
-                icon={['fas', 'trash']}
-                iconTone="danger"
-                confirmButton={{
-                    label: 'Delete all',
-                    className: 'btn btn-danger',
-                    onClick: async () => {
-                        const rows = bulkDeleteRows ?? []
-                        setBulkDeleteRows(null)
-                        await startBulkAction('delete', rows)
-                    },
-                }}
-            >
-                <p>
-                    Delete {bulkDeleteRows?.length ?? 0} download {(bulkDeleteRows?.length ?? 0) === 1 ? 'record' : 'records'} currently visible with the selected filters?
-                    This cannot be undone.
-                </p>
-                <p>
-                    Only records that have never successfully downloaded a file are included. Incomplete artifacts may be cleaned up with their records.
-                </p>
-            </ConfirmDialog>
             <DownloadLogDialog row={logRow} onClose={() => setLogRow(null)}/>
         </section>
     )

@@ -99,10 +99,7 @@ async def run_download_episode(
         download.automatic_retry_suppressed = False
         download.downloaded_bytes = execution.result.bytes_downloaded
         download.format_downloaded = execution.format_downloaded
-        completed_at = datetime.now(timezone.utc)
-        download.downloaded_at = completed_at
-        if download.first_successful_download_at is None:
-            download.first_successful_download_at = completed_at
+        download.downloaded_at = datetime.now(timezone.utc)
 
         episode = s.get(Episode, download.media_item_id)
         if episode is not None and hasattr(download, "downloaded_publish_status"):
