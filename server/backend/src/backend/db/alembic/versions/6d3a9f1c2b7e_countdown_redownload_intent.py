@@ -1,4 +1,4 @@
-"""Move final-redownload intent from podcast profiles onto episode downloads.
+"""Persist final-redownload intent on episode downloads.
 
 Revision ID: 6d3a9f1c2b7e
 Revises: 3f7b6a2c9d10
