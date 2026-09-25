@@ -49,14 +49,14 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
         shouldFocusError: true,
         defaultValues: {...createDefaults, ...value},
     })
-    const {watch, formState: {isSubmitting}} = form
+    const {watch, getValues, formState: {isSubmitting}} = form
 
     useEffect(() => {
-        const subscription = watch((values) => {
-            onChange(values)
+        const subscription = watch(() => {
+            onChange(getValues())
         })
         return () => subscription.unsubscribe()
-    }, [watch, onChange])
+    }, [watch, getValues, onChange])
 
     const snapshotRef = useRef<Pick<
         LocalMediaProfileCreateUnionIn,
