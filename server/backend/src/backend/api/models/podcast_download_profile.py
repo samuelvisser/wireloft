@@ -15,7 +15,6 @@ class _PodcastDownloadProfileAPIBaseIn(DownloadProfileAPIBaseIn):
     """Fields for requests: validate here (constraints allowed)."""
 
     download_with_countdown: bool
-    redownload_final: bool
     download_days_in_past: int = Field(ge=0)
     download_episode_count: int = Field(default=0, ge=0)
     download_starting_from: date | None = None
@@ -54,7 +53,6 @@ class _PodcastDownloadProfileAPIBaseOut(DownloadProfileAPIBaseOut):
     type: Literal["podcast"] = Field(default=DownloadProfileType.PODCAST.value, validation_alias="type")
 
     download_with_countdown: bool
-    redownload_final: bool
     download_days_in_past: int
     download_episode_count: int
     download_starting_from: date | None
