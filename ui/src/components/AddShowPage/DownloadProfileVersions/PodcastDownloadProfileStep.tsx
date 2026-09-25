@@ -26,7 +26,7 @@ export default function PodcastDownloadProfileStep({value, onChange, onSubmit: o
         defaultValues: value,
     })
 
-    const {watch, setValue} = form
+    const {watch} = form
 
     // Subscribe to ALL changes
     useEffect(() => {
@@ -35,15 +35,6 @@ export default function PodcastDownloadProfileStep({value, onChange, onSubmit: o
         });
         return () => subscription.unsubscribe();
     }, [watch, onChange]);
-
-    // If countdown is disabled, redownload final becomes irrelevant and is hidden
-    const withCountdown = watch('downloadWithCountdown')
-    useEffect(() => {
-        if (!withCountdown) {
-            setValue('redownloadFinal', true, {shouldDirty: true, shouldValidate: false})
-        }
-    }, [withCountdown, setValue])
-
 
     const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfileUnifiedCreateOut) => {
         onSubmitParent(dataOut)
