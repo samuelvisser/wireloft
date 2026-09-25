@@ -101,6 +101,7 @@ def _operation_context(download: MediaDownloadBase, *, is_redownload: bool) -> d
         "episode_slug": episode.slug if episode else None,
         "episode_title": episode.title if episode else None,
         "episode_identifier": episode.episode_identifier if episode else None,
+        "episode_publish_status": episode.publish_status if episode else None,
         "show_slug": show.slug if show else None,
         "show_title": show.title if show else None,
         "movie_slug": movie.slug if movie else None,
