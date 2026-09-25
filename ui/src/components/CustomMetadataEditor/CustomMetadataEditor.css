@@ -76,6 +76,12 @@
     justify-self: start;
 }
 
+.custom-metadata-divider {
+    height: 1px;
+    margin: 2px 0;
+    background: rgba(148, 163, 184, 0.28);
+}
+
 @media (max-width: 720px) {
     .custom-metadata-row {
         grid-template-columns: 1fr;

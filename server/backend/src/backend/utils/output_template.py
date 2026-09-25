@@ -15,6 +15,11 @@ from .custom_metadata import (
     get_custom_metadata,
     is_allowed_custom_metadata_template_variable,
 )
+from .custom_index import (
+    CustomIndexNotReadyError,
+    get_media_download_index_assignments,
+    indexing_value_definition_keys,
+)
 from .episode import EpisodeIdentifierInfo
 from .output_template_jinja import create_output_template_environment
 from config import get_settings
@@ -22,6 +27,7 @@ from config.settings.submodels import FilenameRestrictionMode
 
 if TYPE_CHECKING:
     from backend.db.models import Episode, Movie, MovieExtra
+    from backend.db.models.media_download import MediaDownloadBase
 
 _DOWNLOADS_PREFIX = "/downloads/"
 _MAX_RENDERED_PATH_LENGTH = 4096
@@ -91,6 +97,29 @@ def output_template_fields(output_template: str) -> frozenset[str]:
     """Return all context variables referenced by a Jinja path template."""
     parsed = _parse_output_template(output_template)
     return frozenset(meta.find_undeclared_variables(parsed))
+
+
+def output_template_custom_index_keys(output_template: str) -> frozenset[str]:
+    """Return literal custom-index keys referenced by one output template."""
+    parsed = _parse_output_template(output_template)
+    keys: set[str] = set()
+    for filter_node in parsed.find_all(nodes.Filter):
+        if filter_node.name != "custom_index":
+            continue
+        if filter_node.args or filter_node.kwargs or filter_node.dyn_args or filter_node.dyn_kwargs:
+            raise ValueError("custom_index does not accept arguments")
+        source = filter_node.node
+        if not isinstance(source, nodes.Const) or not isinstance(source.value, str):
+            raise ValueError(
+                "custom_index must be applied to a literal key, for example "
+                "{{ 'featurettes' | custom_index }}"
+            )
+        key = source.value
+        from .custom_metadata import is_valid_custom_metadata_key
+        if not is_valid_custom_metadata_key(key):
+            raise ValueError(f"Invalid custom index key: {key}")
+        keys.add(key)
+    return frozenset(keys)
 
 
 def _statement_may_emit_output(statement: nodes.Stmt) -> bool:
@@ -227,6 +256,7 @@ def validate_output_template_fields(
     allowed_metadata_scopes: frozenset[CustomMetadataScope] = frozenset(),
 ) -> str:
     """Validate Jinja syntax and reject variables unavailable for this media type."""
+    output_template_custom_index_keys(output_template)
     unsupported = sorted(
         field
         for field in output_template_fields(output_template)
@@ -355,6 +385,7 @@ def render_output_template(
     *,
     allowed_fields: frozenset[str],
     allowed_metadata_scopes: frozenset[CustomMetadataScope] = frozenset(),
+    custom_index_resolver=None,
 ) -> str:
     """Render a path template with raw semantic values in the Jinja context."""
     normalized = validate_output_template_fields(
@@ -375,7 +406,7 @@ def render_output_template(
         field: values.get(field, "")
         for field in allowed_fields | dynamic_fields
     }
-    environment = create_output_template_environment()
+    environment = create_output_template_environment(custom_index_resolver=custom_index_resolver)
     environment.finalize = _sanitize_emitted_output_value
     try:
         rendered = environment.from_string(normalized).render(context)
@@ -396,19 +427,63 @@ def render_output_template(
     return rendered
 
 
-def resolve_episode_output_path(
+def resolve_episode_output_path_with_index_values(
     output_template: str,
     *,
     episode: "Episode",
+    index_definitions: frozenset[str],
+    index_values: dict[str, int],
     extension: Optional[str] = None,
 ) -> Path:
+    def resolver(key: str) -> object:
+        if key not in index_definitions:
+            return ""
+        if key not in index_values:
+            raise CustomIndexNotReadyError(
+                f"Custom index '{key}' is not ready for episode '{episode.slug}'"
+            )
+        return index_values[key]
+
     rendered = render_output_template(
         output_template,
         episode_output_template_values(episode),
         allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
         allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        custom_index_resolver=resolver,
     )
     return _finish_output_path(rendered, extension=extension)
+
+
+def resolve_episode_output_path(
+    output_template: str,
+    *,
+    episode: "Episode",
+    local_media_profile=None,
+    media_download: "MediaDownloadBase | None" = None,
+    extension: Optional[str] = None,
+) -> Path:
+    index_keys = output_template_custom_index_keys(output_template)
+    if not index_keys:
+        rendered = render_output_template(
+            output_template,
+            episode_output_template_values(episode),
+            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+            allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        )
+        return _finish_output_path(rendered, extension=extension)
+
+    if media_download is None:
+        raise CustomIndexNotReadyError(
+            "This output template uses custom indexes and requires a MediaDownload assignment"
+        )
+
+    return resolve_episode_output_path_with_index_values(
+        output_template,
+        episode=episode,
+        index_definitions=indexing_value_definition_keys(episode.show),
+        index_values=get_media_download_index_assignments(media_download),
+        extension=extension,
+    )
 
 
 def resolve_movie_output_path(
@@ -424,6 +499,8 @@ def resolve_movie_output_path(
     The deprecated ``append_media_type_to_filename`` argument remains for API
     compatibility. New profiles express that behavior directly in Jinja.
     """
+    if output_template_custom_index_keys(output_template):
+        raise ValueError("custom_index is only available to Show Local Media Profiles")
     values = movie_output_template_values(movie, media_item)
     rendered = render_output_template(
         output_template,

@@ -9,7 +9,7 @@ from task_manager.scheduler.operations import OperationTargetSpec
 
 _FETCH_EPISODES_TASK_KEY = "fetch_new_episodes"
 _REFRESH_METADATA_TASK_KEY = "refresh_episode_metadata"
-_RENAME_FILE_TASK_KEY = "rename_file_worker"
+_RENAME_FILE_TASK_KEY = "rename_show_profile_files"
 _REDOWNLOAD_TASK_KEY = "redownload_show_episodes_worker"
 _DELETE_DOWNLOADS_TASK_KEY = "delete_show_downloads_worker"
 
@@ -69,33 +69,30 @@ class ShowFileRenameOperation(_ShowOperation):
     def __init__(
         self,
         show: Show,
-        episodes: Sequence[Episode],
         *,
-        local_media_profile_id: int | None,
-        selected_profile_count: int,
+        local_media_profile_ids: Sequence[int],
     ) -> None:
         super().__init__(show)
-        self.episodes = tuple(episodes)
-        self.local_media_profile_id = local_media_profile_id
-        self.selected_profile_count = selected_profile_count
+        self.local_media_profile_ids = tuple(
+            dict.fromkeys(int(profile_id) for profile_id in local_media_profile_ids)
+        )
 
     def targets(self) -> tuple[OperationTargetSpec, ...]:
         return tuple(
             OperationTargetSpec(
                 task_key=_RENAME_FILE_TASK_KEY,
-                resource_type="episode",
-                resource_id=episode.id,
-                task_kwargs={"local_media_profile_id": self.local_media_profile_id},
-                slot_key=f"episode:{episode.id}",
+                resource_type="show",
+                resource_id=self.resource.id,
+                task_kwargs={"local_media_profile_id": profile_id},
+                slot_key=f"profile:{profile_id}",
             )
-            for episode in self.episodes
+            for profile_id in self.local_media_profile_ids
         )
 
     def context(self) -> dict[str, object]:
         return {
             **super().context(),
-            "episodes_requested": len(self.episodes),
-            "local_media_profiles_requested": self.selected_profile_count,
+            "local_media_profiles_requested": len(self.local_media_profile_ids),
         }
 
 

@@ -7,10 +7,17 @@ from backend.api.models.show import ShowAPIRead
 from backend.app import db_session
 from backend.db.models import Show
 from backend.db.models.media_item import Movie
+from backend.services.custom_indexes import remove_show_indexing_value_assignments
+from backend.utils.custom_index import (
+    get_indexing_value_definitions,
+    replace_indexing_value_definitions,
+)
 from backend.utils.custom_metadata import (
     CustomMetadataScope,
     replace_custom_metadata,
 )
+
+from task_manager.events.transactional import queue_event
 
 from .service import (
     get_custom_metadata_fields,
@@ -38,6 +45,10 @@ def show_custom_metadata_update(show_slug: str, body: CustomMetadataAPIUpdate) -
         if show is None:
             raise HTTPException(status_code=404, detail="Show not found")
         try:
+            previous_index_keys = {
+                definition.key
+                for definition in get_indexing_value_definitions(show)
+            }
             remove_shared_custom_metadata_fields(
                 session,
                 show,
@@ -45,6 +56,22 @@ def show_custom_metadata_update(show_slug: str, body: CustomMetadataAPIUpdate) -
                 fields=body.removed_fields,
             )
             replace_custom_metadata(show, body.custom_metadata)
+            if body.indexing_values is not None:
+                replace_indexing_value_definitions(show, body.indexing_values)
+                current_index_keys = {
+                    definition.key
+                    for definition in get_indexing_value_definitions(show)
+                }
+                removed_index_keys = previous_index_keys - current_index_keys
+                remove_show_indexing_value_assignments(
+                    session,
+                    show_id=show.id,
+                    keys=removed_index_keys,
+                )
+            queue_event(session, "show.custom_indexes_requested", {
+                "resource_id": show.id,
+                "id": show.id,
+            })
             session.flush()
             result = ShowAPIRead.model_validate(show)
             session.commit()

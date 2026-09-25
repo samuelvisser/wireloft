@@ -59,5 +59,10 @@ class Show(Base, HasMetadataMixin, HasTaskResourcesMixin):
         back_populates="show", cascade="all, delete-orphan"
     )
 
+    @property
+    def indexing_values(self):
+        from backend.utils.custom_index import get_indexing_value_definitions
+        return get_indexing_value_definitions(self)
+
     def __repr__(self) -> str:
         return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

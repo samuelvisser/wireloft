@@ -21,7 +21,7 @@ def _make_download(session: Session, *, slug: str = "episode-1"):
         slug=f"{slug}-show",
         title="Operation Show",
         description=None,
-        sharing_url="https://example.test/show",
+        sharing_url=f"https://example.test/show/{slug}",
         membership_level="FREE",
         type=ShowType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
@@ -40,12 +40,12 @@ def _make_download(session: Session, *, slug: str = "episode-1"):
         title="Operation Episode",
         duration=100.0,
         publish_status="published_final",
-        sharing_url="https://example.test/episode",
+        sharing_url=f"https://example.test/episode/{slug}",
     )
     profile = LocalMediaProfile(
         slug=f"{slug}-audio",
-        name="Audio",
-        output_template="/downloads/{show}/{episode}.ext",
+        name=f"Audio {slug}",
+        output_template=f"/downloads/{slug}/{{ show }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
     session.add_all([show, season, episode, profile])
@@ -363,6 +363,56 @@ def test_deleting_reserved_download_releases_its_queue_slot(monkeypatch):
             assert callbacks == [True]
         finally:
             task_meta.terminal_callback = original_callback
+    finally:
+        session.close()
+        engine.dispose()
+
+
+
+def test_never_successful_media_download_can_be_deleted():
+    from backend.api.endpoints.media_downloads.service import delete_media_download
+    from backend.db.models.media_download import MediaDownloadBase
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="never-successful")
+        download_id = download.id
+        session.commit()
+
+        payload = delete_media_download(session, download_id)
+        session.commit()
+
+        assert payload.id == download_id
+        assert session.get(MediaDownloadBase, download_id) is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_successful_media_download_is_permanent_history():
+    import pytest
+    from fastapi import HTTPException
+
+    from backend.api.endpoints.media_downloads.service import delete_media_download
+    from task_manager.tasks.media_download_operations import prepare_media_download_artifact
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="successful-history")
+        first_success = datetime.now(timezone.utc)
+        download.first_successful_download_at = first_success
+        download.downloaded_at = first_success
+        session.commit()
+
+        prepare_media_download_artifact(session, download, remove_existing_artifacts=False)
+        session.commit()
+        assert download.downloaded_at is None
+        assert download.first_successful_download_at == first_success
+
+        with pytest.raises(HTTPException) as exc_info:
+            delete_media_download(session, download.id)
+        assert exc_info.value.status_code == 409
+        assert "permanent history" in str(exc_info.value.detail)
     finally:
         session.close()
         engine.dispose()

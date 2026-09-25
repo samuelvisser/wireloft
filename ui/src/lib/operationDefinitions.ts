@@ -283,6 +283,16 @@ export const frontendOperationDefinitions = {
       return fileRenameSuccessMessage(operation, showTitle)
     },
   },
+  'local_media_profile.manage_custom_indexes': {
+    kind: 'local_media_profile.manage_custom_indexes',
+    resourceType: 'local_media_profile',
+    label: 'Custom indexing',
+    invalidate: invalidateLocalMediaProfileFiles,
+    success: (operation) => {
+      const profileName = contextString(operation, 'local_media_profile_name') || operation.title
+      return `Custom indexing updated for ${profileName}`
+    },
+  },
   'local_media_profile.rename_files': {
     kind: 'local_media_profile.rename_files',
     resourceType: 'local_media_profile',

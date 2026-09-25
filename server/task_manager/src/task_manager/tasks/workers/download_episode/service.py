@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
 from backend.db.models.media_download import MediaDownloadBase
+from backend.services.custom_indexes import ensure_media_download_custom_indexes
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.artifact_identity import inspect_artifact
@@ -56,6 +57,14 @@ async def run_download_episode(
     if profile.type != LocalMediaProfileType.SHOW.value:
         raise DownloadError("Episodes require a Show Local Media Profile")
 
+    ensure_media_download_custom_indexes(
+        s,
+        download=download,
+        profile=profile,
+        episode=episode,
+    )
+    s.commit()
+
     print(f"Starting download_episode for {episode.slug} ({profile.name})")
     if progress is not None:
         progress.set(0, f"Starting download for {episode.title}")
@@ -99,7 +108,10 @@ async def run_download_episode(
         download.automatic_retry_suppressed = False
         download.downloaded_bytes = execution.result.bytes_downloaded
         download.format_downloaded = execution.format_downloaded
-        download.downloaded_at = datetime.now(timezone.utc)
+        completed_at = datetime.now(timezone.utc)
+        download.downloaded_at = completed_at
+        if download.first_successful_download_at is None:
+            download.first_successful_download_at = completed_at
 
         episode = s.get(Episode, download.media_item_id)
         if episode is not None and hasattr(download, "downloaded_publish_status"):
@@ -251,6 +263,8 @@ def _attempt_download(
     requested_destination = resolve_episode_output_path(
         output_template,
         episode=episode,
+        local_media_profile=profile,
+        media_download=download,
         extension=source.extension,
     )
 

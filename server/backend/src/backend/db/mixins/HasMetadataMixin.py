@@ -11,11 +11,12 @@ class HasMetadataMixin:
         from sqlalchemy import and_, literal
         from sqlalchemy.orm import relationship, foreign
 
+        parent_table = getattr(cls, "__metadata_parent_table__", cls.__tablename__)
         return relationship(
             Metadata,
             primaryjoin=lambda: and_(
                 foreign(Metadata.parent_id) == cls.id,
-                Metadata.parent_table == literal(cls.__tablename__),
+                Metadata.parent_table == literal(parent_table),
             ),
             cascade="all, delete-orphan",
             lazy="selectin",
@@ -38,7 +39,11 @@ class HasMetadataMixin:
         return None
 
 def _on_append(parent, meta, initiator):
-    meta.parent_table = parent.__class__.__tablename__
+    meta.parent_table = getattr(
+        parent,
+        "__metadata_parent_table__",
+        parent.__class__.__tablename__,
+    )
 
     # If the parent already has a DB identity (it already exists in the db), set it now:
     if getattr(parent, "id", None) is not None:

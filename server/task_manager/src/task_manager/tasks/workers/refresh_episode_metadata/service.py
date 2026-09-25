@@ -85,7 +85,13 @@ async def run_refresh_episode_metadata(
         if episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
             return False
 
-        if not _refresh_episode_from_dailywire(s, episode, detail):
+        custom_index_show_id = episode.show_id
+        refreshed_normally = _refresh_episode_from_dailywire(s, episode, detail)
+        queue_event(s, "show.custom_indexes_requested", {
+            "resource_id": custom_index_show_id,
+            "id": custom_index_show_id,
+        })
+        if not refreshed_normally:
             episode.metadata_is_final = False
             s.commit()
             remove_episode_metadata_jobs(episode.id)

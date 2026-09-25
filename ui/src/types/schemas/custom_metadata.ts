@@ -5,18 +5,25 @@ export const CUSTOM_METADATA_KEY_MAX_LENGTH = 64
 export const CUSTOM_METADATA_VALUE_MAX_LENGTH = 4096
 export const CUSTOM_METADATA_MAX_ITEMS = 100
 
+const MetadataKeySchema = z.string()
+    .min(1, 'Field name is required')
+    .max(CUSTOM_METADATA_KEY_MAX_LENGTH, `Field name may be at most ${CUSTOM_METADATA_KEY_MAX_LENGTH} characters`)
+    .regex(
+        CUSTOM_METADATA_KEY_PATTERN,
+        'Use lowercase letters, numbers, and underscores; start with a letter or underscore',
+    )
+
 export const CustomMetadataEntrySchema = z.object({
-    key: z.string()
-        .min(1, 'Field name is required')
-        .max(CUSTOM_METADATA_KEY_MAX_LENGTH, `Field name may be at most ${CUSTOM_METADATA_KEY_MAX_LENGTH} characters`)
-        .regex(
-            CUSTOM_METADATA_KEY_PATTERN,
-            'Use lowercase letters, numbers, and underscores; start with a letter or underscore',
-        ),
+    key: MetadataKeySchema,
     value: z.string().max(
         CUSTOM_METADATA_VALUE_MAX_LENGTH,
         `Value may be at most ${CUSTOM_METADATA_VALUE_MAX_LENGTH} characters`,
     ),
+})
+
+export const IndexingValueEntrySchema = z.object({
+    key: MetadataKeySchema,
+    name: z.string().trim().min(1, 'Name is required').max(120, 'Name may be at most 120 characters'),
 })
 
 export const CustomMetadataFormSchema = z.object({
@@ -24,21 +31,38 @@ export const CustomMetadataFormSchema = z.object({
         CUSTOM_METADATA_MAX_ITEMS,
         `At most ${CUSTOM_METADATA_MAX_ITEMS} metadata fields are allowed`,
     ),
-}).superRefine(({entries}, ctx) => {
-    const seen = new Set<string>()
+    indexingValues: z.array(IndexingValueEntrySchema).max(
+        CUSTOM_METADATA_MAX_ITEMS,
+        `At most ${CUSTOM_METADATA_MAX_ITEMS} Indexing Values are allowed`,
+    ),
+}).superRefine(({entries, indexingValues}, ctx) => {
+    const seenFields = new Set<string>()
     entries.forEach((entry, index) => {
-        if (seen.has(entry.key)) {
+        if (seenFields.has(entry.key)) {
             ctx.addIssue({
                 code: 'custom',
                 path: ['entries', index, 'key'],
                 message: 'Metadata field names must be unique',
             })
         }
-        seen.add(entry.key)
+        seenFields.add(entry.key)
+    })
+
+    const seenIndexes = new Set<string>()
+    indexingValues.forEach((entry, index) => {
+        if (seenIndexes.has(entry.key)) {
+            ctx.addIssue({
+                code: 'custom',
+                path: ['indexingValues', index, 'key'],
+                message: 'Indexing Value keys must be unique',
+            })
+        }
+        seenIndexes.add(entry.key)
     })
 })
 
 export type CustomMetadataFormValues = z.infer<typeof CustomMetadataFormSchema>
+export type IndexingValueEntry = z.infer<typeof IndexingValueEntrySchema>
 
 export function customMetadataToEntries(
     metadata: Record<string, string>,

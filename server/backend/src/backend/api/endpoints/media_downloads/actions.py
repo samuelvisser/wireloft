@@ -172,6 +172,19 @@ def queue_bulk_media_download_operation(
             detail=f"Media download {missing_ids[0]} not found",
         )
 
+    if operation.action == "delete":
+        protected = list(s.scalars(
+            select(MediaDownloadBase.id).where(
+                MediaDownloadBase.id.in_(ids),
+                MediaDownloadBase.first_successful_download_at.is_not(None),
+            )
+        ))
+        if protected:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Media download {protected[0]} has successful download history and cannot be deleted",
+            )
+
     queued_operation = create_operation(s, operation)
     for media_download_id in ids:
         queue_operation_target_dispatch(

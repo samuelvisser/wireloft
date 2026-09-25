@@ -9,6 +9,7 @@ from backend.db.model_mapping import create_database_fields, update_database_fie
 from backend.api.models.episode import *
 from backend.db.models import Show
 from backend.db.models.media_item import Episode
+from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operations import (
@@ -252,6 +253,10 @@ def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> Epi
         elif body.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
             queue_event(s, "episode.published_with_countdown", event_data)
 
+    queue_event(s, "show.custom_indexes_requested", {
+        "resource_id": episode.show_id,
+        "id": episode.show_id,
+    })
     return EpisodeAPIRead.model_validate(episode)
 
 
@@ -266,11 +271,27 @@ def delete_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
 
     payload = EpisodeAPIRead.model_validate(episode)
 
+    historical_download = s.scalar(
+        select(EpisodeMediaDownload.id).where(
+            EpisodeMediaDownload.media_item_id == episode.id,
+            EpisodeMediaDownload.first_successful_download_at.is_not(None),
+        ).limit(1)
+    )
+    if historical_download is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="This episode owns persistent download history and can only be removed with its show",
+        )
+
     queue_event(s, "episode.deleted", {
         "resource_id": episode.id,
         "id": episode.id,
         "slug": episode.slug,
         "show_id": episode.show_id
+    })
+    queue_event(s, "show.custom_indexes_requested", {
+        "resource_id": episode.show_id,
+        "id": episode.show_id,
     })
 
     s.delete(episode)

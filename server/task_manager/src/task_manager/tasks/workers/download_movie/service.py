@@ -117,7 +117,10 @@ async def run_download_movie(
         download.automatic_retry_suppressed = False
         download.downloaded_bytes = execution.result.bytes_downloaded
         download.format_downloaded = execution.format_downloaded
-        download.downloaded_at = datetime.now(timezone.utc)
+        completed_at = datetime.now(timezone.utc)
+        download.downloaded_at = completed_at
+        if download.first_successful_download_at is None:
+            download.first_successful_download_at = completed_at
 
         media = session.get(
             MovieExtra if download.type == MediaType.MOVIE_EXTRA.value else Movie,

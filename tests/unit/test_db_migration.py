@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "5a9c2e7d4b10"
+HEAD_REVISION = "b7e3c1a94d20"
 PREVIOUS_DEVELOPMENT_REVISION = "e5f1a2c7d903"
 HISTORICAL_EPISODE_SCHEMA_REVISION = "e4c91a7b2d30"
 OUTPUT_TEMPLATE_SPACING_REVISION = "9b1f4e7c2d6a"
@@ -228,7 +228,7 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == "c1a7e4d9b203"
+    assert script.get_revision(HEAD_REVISION).down_revision == "3f7b6a2c9d10"
     assert (
         script.get_revision(PREVIOUS_DEVELOPMENT_REVISION).down_revision
         == HISTORICAL_EPISODE_SCHEMA_REVISION
@@ -255,6 +255,7 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
     tables = set(inspector.get_table_names())
     assert "task_operations" in tables
     assert "movie_extra_sources" in tables
+    assert "custom_index_states" in tables
     assert "media_download_attempts" not in tables
     assert "alembic_version" not in tables
 
@@ -262,6 +263,11 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
         column["name"] for column in inspector.get_columns("settings")
     }
     assert "background_migration_version" in settings_columns
+
+    media_download_columns = {
+        column["name"] for column in inspector.get_columns("media_downloads")
+    }
+    assert "first_successful_download_at" in media_download_columns
 
     profile_columns = {
         column["name"] for column in inspector.get_columns("local_media_profiles")

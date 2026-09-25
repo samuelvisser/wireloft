@@ -131,6 +131,8 @@ def test_media_download_view_maps_composed_sources_without_manual_serialization(
         downloaded_bytes=123,
         format_downloaded="1080p",
         downloaded_at=NOW,
+        first_successful_download_at=NOW,
+        can_delete=False,
         created_at=NOW,
         updated_at=NOW,
         downloaded_publish_status="published_final",

@@ -30,11 +30,32 @@ class CustomMetadataResponseBase(ResponseBase):
         return custom_metadata_from_items(value)
 
 
+class IndexingValueDefinitionAPI(RequestBase):
+    key: str = Field(min_length=1, max_length=CUSTOM_METADATA_KEY_MAX_LENGTH)
+    name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _normalize_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("key")
+    @classmethod
+    def _validate_key(cls, value: str) -> str:
+        if not is_valid_custom_metadata_key(value):
+            raise ValueError(
+                "Indexing Value keys must use lowercase letters, numbers, and underscores, "
+                "and start with a letter or underscore"
+            )
+        return value
+
+
 class CustomMetadataAPIUpdate(RequestBase):
     """Replace one item's values and optionally remove shared fields for its media type."""
 
     custom_metadata: dict[str, str] = Field(default_factory=dict)
     removed_fields: list[str] = Field(default_factory=list)
+    indexing_values: list[IndexingValueDefinitionAPI] | None = Field(default=None, max_length=100)
 
     @field_validator("custom_metadata")
     @classmethod
@@ -60,6 +81,15 @@ class CustomMetadataAPIUpdate(RequestBase):
         for key in value:
             cls._validate_key(key)
         return value
+
+    @model_validator(mode="after")
+    def _validate_indexing_values(self):
+        if self.indexing_values is None:
+            return self
+        keys = [value.key for value in self.indexing_values]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Indexing Value keys must be unique")
+        return self
 
     @model_validator(mode="after")
     def _validate_no_removed_field_is_readded(self):

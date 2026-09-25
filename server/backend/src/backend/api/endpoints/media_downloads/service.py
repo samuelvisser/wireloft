@@ -19,6 +19,7 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
+from backend.services.custom_indexes import ensure_media_download_custom_indexes
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
 from task_manager.scheduler.db import TaskDefinition, TaskRun
@@ -32,6 +33,26 @@ from task_manager.tasks.workers.file_watcher.service import resolve_media_downlo
 
 
 _DOWNLOAD_TASK_KEYS = ("download_episode", "download_movie")
+
+
+def _resolve_episode_download_path(
+    s: Session,
+    profile,
+    episode: Episode,
+    download: EpisodeMediaDownload,
+) -> str:
+    ensure_media_download_custom_indexes(
+        s,
+        download=download,
+        profile=profile,
+        episode=episode,
+    )
+    return str(resolve_episode_output_path(
+        profile.output_template,
+        episode=episode,
+        local_media_profile=profile,
+        media_download=download,
+    ))
 
 
 def get_media_downloads_list(s: Session) -> list[MediaDownloadAPIRead]:
@@ -197,7 +218,7 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
             raise HTTPException(status_code=409, detail=f"Episode already has a downloaded file for profile '{profile.name}'")
         prepare_media_download_artifact(s, existing)
-        existing.file_path = str(resolve_episode_output_path(profile.output_template, episode=episode))
+        existing.file_path = _resolve_episode_download_path(s, profile, episode, existing)
         s.flush()
         return existing
 
@@ -206,9 +227,11 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         media_item_id=episode.id,
         local_media_profile_id=profile.id,
         artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
-        file_path=str(resolve_episode_output_path(profile.output_template, episode=episode)),
+        file_path="",
     )
     s.add(download)
+    s.flush()
+    download.file_path = _resolve_episode_download_path(s, profile, episode, download)
     s.flush()
     return download
 
@@ -356,17 +379,22 @@ def delete_media_download(s: Session, media_download_id: int) -> MediaDownloadAP
     item = s.query(MediaDownloadBase).filter_by(id=media_download_id).one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Media download not found")
+    if item.first_successful_download_at is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="A MediaDownload that has successfully downloaded a file is permanent history and cannot be deleted",
+        )
+    _assert_no_active_attempt(s, item)
 
     resolved_path = None
     if item.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
         resolved_path = resolve_media_download_file(s, item)
 
     payload = MediaDownloadAPIRead.model_validate(item)
-    if item.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value:
-        remove_download_artifacts(
-            str(resolved_path) if resolved_path is not None else item.file_path,
-            item.thumbnail_path,
-        )
+    remove_download_artifacts(
+        str(resolved_path) if resolved_path is not None else item.file_path,
+        item.thumbnail_path,
+    )
     s.delete(item)
     s.flush()
     return payload

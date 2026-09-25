@@ -255,6 +255,10 @@ export default function DownloadsPage() {
         () => filteredDownloads.filter(isCancellableDownload),
         [filteredDownloads],
     )
+    const deletableDownloads = useMemo(
+        () => filteredDownloads.filter((row) => row.canDelete && !isCancellableDownload(row)),
+        [filteredDownloads],
+    )
 
     const bulkOperationActive = Boolean(
         retryAllOperation
@@ -265,7 +269,7 @@ export default function DownloadsPage() {
     const showActionRow = Boolean(
         retryableDownloads.length
         || cancellableDownloads.length
-        || filteredDownloads.length
+        || deletableDownloads.length
         || retryAllOperation
         || cancelAllOperation
         || deleteAllOperation,
@@ -432,7 +436,7 @@ export default function DownloadsPage() {
                         Every episode and movie download shows up here, one row per Local Media Profile.
                         Running downloads report live progress; failed ones show the error and can be retried.
                         Records without a file or active queue item are marked Not downloaded and can also be retried.
-                        Deleting a row only removes the record, never the downloaded file unless the download had never fully finished.
+                        Records that have ever downloaded successfully are permanent history. Only never-successful, inactive records can be deleted.
                     </p>
                 </PageSubtitle>
             </div>
@@ -499,12 +503,12 @@ export default function DownloadsPage() {
                             cancelLabel="Stop cancel all"
                         />
                     )}
-                    {(filteredDownloads.length > 0 || deleteAllOperation || bulkActionStarting === 'delete') && (
+                    {(deletableDownloads.length > 0 || deleteAllOperation || bulkActionStarting === 'delete') && (
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_delete']}
                             label="Delete all"
                             icon={['fas', 'trash']}
-                            onClick={() => setBulkDeleteRows([...filteredDownloads])}
+                            onClick={() => setBulkDeleteRows([...deletableDownloads])}
                             disabled={bulkOperationActive && !deleteAllOperation && bulkActionStarting !== 'delete'}
                             primary={false}
                             className="downloads-action-danger"
@@ -512,7 +516,7 @@ export default function DownloadsPage() {
                             active={deleteAllOperation !== undefined}
                             progress={deleteAllOperation?.progress ?? 0}
                             activeLabel={bulkOperationLabel(deleteAllOperation, bulkActionStarting === 'delete')}
-                            ariaLabel={`Delete ${filteredDownloads.length} visible download records`}
+                            ariaLabel={`Delete ${deletableDownloads.length} visible never-successful download records`}
                             onCancel={deleteAllOperation ? () => void cancelBulkOperation(deleteAllOperation) : undefined}
                             cancelDisabled={bulkControlBusy === deleteAllOperation?.id}
                             cancelLabel="Stop delete all"
@@ -598,12 +602,14 @@ export default function DownloadsPage() {
                                 classes: 'btn',
                             })
                         }
-                        actions.push({
-                            onClick: () => confirmRef.current?.open(row),
-                            icon: ['fas', 'trash'],
-                            text: 'Delete',
-                            classes: 'btn btn-danger',
-                        })
+                        if (row.canDelete && !isCancellableDownload(row)) {
+                            actions.push({
+                                onClick: () => confirmRef.current?.open(row),
+                                icon: ['fas', 'trash'],
+                                text: 'Delete',
+                                classes: 'btn btn-danger',
+                            })
+                        }
                         return actions
                     }}
                 />
@@ -641,7 +647,7 @@ export default function DownloadsPage() {
                     This cannot be undone.
                 </p>
                 <p>
-                    Successfully downloaded files are left on disk; incomplete artifacts may be cleaned up with their records.
+                    Only records that have never successfully downloaded a file are included. Incomplete artifacts may be cleaned up with their records.
                 </p>
             </ConfirmDialog>
             <DownloadLogDialog row={logRow} onClose={() => setLogRow(null)}/>

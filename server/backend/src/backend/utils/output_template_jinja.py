@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
-from jinja2 import StrictUndefined
+from jinja2 import StrictUndefined, pass_context
 from jinja2.exceptions import TemplateRuntimeError
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 
@@ -36,7 +37,10 @@ def regex_search(value: object, pattern: object) -> bool:
     return _compile_regex(pattern).search(str(value)) is not None
 
 
-def create_output_template_environment() -> ImmutableSandboxedEnvironment:
+def create_output_template_environment(
+    *,
+    custom_index_resolver: Callable[[str], object] | None = None,
+) -> ImmutableSandboxedEnvironment:
     """Create WireLoft's isolated sandbox for Local Media Profile path templates."""
     environment = ImmutableSandboxedEnvironment(
         autoescape=False,
@@ -46,8 +50,19 @@ def create_output_template_environment() -> ImmutableSandboxedEnvironment:
     # Path templates only need explicitly supplied media values. Removing globals
     # also keeps helpers such as range() unavailable to user templates.
     environment.globals.clear()
+    @pass_context
+    def custom_index(_context, value: object) -> object:
+        # custom_index is deliberately context-dependent. Marking it this way
+        # prevents Jinja from constant-folding literal filter calls while
+        # compiling the template, which would otherwise evaluate dead branches
+        # and allocate indexes that the rendered path never reaches.
+        if custom_index_resolver is None:
+            return ""
+        return custom_index_resolver(str(value))
+
     environment.filters.update({
         "regex_replace": regex_replace,
         "regex_search": regex_search,
+        "custom_index": custom_index,
     })
     return environment

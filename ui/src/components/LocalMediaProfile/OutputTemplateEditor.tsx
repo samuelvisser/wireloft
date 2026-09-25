@@ -38,6 +38,9 @@ import './OutputTemplateEditorIde.css'
 type TemplatePreviewResponse = {
     outputPath: string
     usedVariables: string[]
+    usedIndexingValues: string[]
+    missingIndexingValues: string[]
+    provisionalIndexingValues: string[]
 }
 
 type Props = {
@@ -99,6 +102,12 @@ const jinjaFilterCompletionOptions: Completion[] = [
         type: 'function',
         detail: 'regex_search(pattern)',
         info: 'Return true when the regex matches anywhere in the value.',
+    },
+    {
+        label: 'custom_index',
+        type: 'function',
+        detail: "'key' | custom_index",
+        info: 'Use the current episode number from a defined Indexing Value.',
     },
 ]
 
@@ -401,6 +410,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
     const showScope = useWatch({control, name: 'showScope'}) ?? 'both'
+    const rawLocalMediaProfileId = useWatch({control, name: 'id'})
+    const localMediaProfileId = typeof rawLocalMediaProfileId === 'number'
+        ? rawLocalMediaProfileId
+        : null
     const canonicalTemplate = useMemo(
         () => renderCompactOutputTemplate(parseOutputTemplate(template, 'compact')),
         [template],
@@ -431,6 +444,8 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         [customVariables, mode],
     )
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
+    const [missingIndexingValueNames, setMissingIndexingValueNames] = useState<string[]>([])
+    const [provisionalIndexingValueNames, setProvisionalIndexingValueNames] = useState<string[]>([])
     const usedVariables = useMemo(
         () => {
             const used = new Set(usedVariableNames)
@@ -503,7 +518,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             const currentWord = filterMatch[1] ?? ''
             return {
                 from: context.pos - currentWord.length,
-                options: jinjaFilterCompletionOptions,
+                options: jinjaFilterCompletionOptions.filter(
+                    (option) => mode === 'show' || option.label !== 'custom_index',
+                ),
                 validFor: /^(?:[A-Za-z_][A-Za-z0-9_]*)?$/,
             }
         }
@@ -599,7 +616,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 '.cm-content': {fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'},
             }),
         ]
-    }, [printVariableCompletionOptions, statementCompletionOptions, variableCompletionOptions])
+    }, [mode, printVariableCompletionOptions, statementCompletionOptions, variableCompletionOptions])
 
     const sources = useMemo(
         () => sourceQuery.data?.pages.flatMap((page) => page.items) ?? [],
@@ -642,6 +659,8 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     useEffect(() => {
         if (!template) {
             setUsedVariableNames([])
+            setMissingIndexingValueNames([])
+            setProvisionalIndexingValueNames([])
             setPreviewPath('')
             setPreviewError('')
             return
@@ -663,22 +682,30 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                             outputTemplate: template,
                             preferredFormat,
                             values: testValues,
+                            sourceId: selectedSource.id,
+                            localMediaProfileId: mode === 'show' ? localMediaProfileId : null,
                         }),
                     },
                 )
                 const payload = await response.json()
                 if (!response.ok) {
                     setUsedVariableNames([])
+                    setMissingIndexingValueNames([])
+                    setProvisionalIndexingValueNames([])
                     setPreviewError(responseErrorMessage(payload))
                     return
                 }
                 const result = payload as TemplatePreviewResponse
                 setPreviewPath(result.outputPath)
                 setUsedVariableNames(result.usedVariables)
+                setMissingIndexingValueNames(result.missingIndexingValues ?? [])
+                setProvisionalIndexingValueNames(result.provisionalIndexingValues ?? [])
                 setPreviewError('')
             } catch (error) {
                 if ((error as Error).name !== 'AbortError') {
                     setUsedVariableNames([])
+                    setMissingIndexingValueNames([])
+                    setProvisionalIndexingValueNames([])
                     setPreviewError('The preview is temporarily unavailable.')
                 }
             } finally {
@@ -689,7 +716,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             window.clearTimeout(timer)
             controller.abort()
         }
-    }, [mode, preferredFormat, previewValuesKey, selectedSource, template])
+    }, [localMediaProfileId, mode, preferredFormat, previewValuesKey, selectedSource, template])
 
     function chooseSource(source: LocalMediaProfileTemplateSource) {
         setSelectedSource(source)
@@ -742,6 +769,28 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                             </span>
                         ))}
                         {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
+                    </div>
+                )}
+                {missingIndexingValueNames.length > 0 && (
+                    <div className="template-metadata-warning" role="status">
+                        {missingIndexingValueNames.length === 1 ? 'Indexing Value ' : 'Indexing Values '}
+                        {missingIndexingValueNames.map((name, index) => (
+                            <span key={name}>
+                                {index > 0 ? ', ' : ''}<code>{name}</code>
+                            </span>
+                        ))}
+                        {missingIndexingValueNames.length === 1 ? ' is' : ' are'} not defined for the selected show and will render as empty.
+                    </div>
+                )}
+                {provisionalIndexingValueNames.length > 0 && (
+                    <div className="template-preview-status" role="status">
+                        {provisionalIndexingValueNames.length === 1 ? 'Indexing Value ' : 'Indexing Values '}
+                        {provisionalIndexingValueNames.map((name, index) => (
+                            <span key={name}>
+                                {index > 0 ? ', ' : ''}<code>{name}</code>
+                            </span>
+                        ))}
+                        {provisionalIndexingValueNames.length === 1 ? ' is' : ' are'} showing the current next value provisionally. Previewing does not reserve a number.
                     </div>
                 )}
                 {pathHasLeadingSpace && (

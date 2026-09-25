@@ -289,7 +289,7 @@ def request_show_file_rename(
         show_slug: str,
         local_media_profile_id: int | None,
 ) -> dict[str, bool | int | str]:
-    """Rename existing show artifacts for one or every Local Media Profile in use."""
+    """Rename existing show artifacts using collision-safe profile-wide plans."""
     show = (
         s.query(Show)
         .filter_by(slug=show_slug)
@@ -303,26 +303,16 @@ def request_show_file_rename(
         local_media_profile_id=local_media_profile_id,
     )
     rename_scope = selected_scope.select(artifact_statuses=_PHYSICAL_ARTIFACT_STATUSES)
-    episode_ids = rename_scope.episode_ids
-    episodes = (
-        s.query(Episode)
-        .filter(Episode.id.in_(episode_ids))
-        .order_by(Episode.id.asc())
-        .all()
-        if episode_ids
-        else []
-    )
+    profile_ids = rename_scope.local_media_profile_ids
 
     operation = create_operation(
         s,
         ShowFileRenameOperation(
             show,
-            episodes,
-            local_media_profile_id=local_media_profile_id,
-            selected_profile_count=selected_scope.local_media_profile_count,
+            local_media_profile_ids=profile_ids,
         ),
     )
-    if not episodes:
+    if not profile_ids:
         complete_operation(
             s,
             operation.id,
@@ -335,13 +325,14 @@ def request_show_file_rename(
             },
         )
     else:
-        for episode in episodes:
-            queue_operation_target_dispatch(s, operation.id, f"episode:{episode.id}")
+        for profile_id in profile_ids:
+            queue_operation_target_dispatch(s, operation.id, f"profile:{profile_id}")
 
     s.flush()
     return {
-        "queued": bool(episodes),
-        "episodes_queued": len(episodes),
-        "local_media_profiles_queued": selected_scope.local_media_profile_count,
+        "queued": bool(profile_ids),
+        "episodes_queued": len(rename_scope.episode_ids),
+        "local_media_profiles_queued": len(profile_ids),
         "operation_id": operation.id,
     }
+

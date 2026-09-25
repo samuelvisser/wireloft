@@ -48,6 +48,8 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     downloaded_bytes: Optional[int]
     format_downloaded: Optional[str]
     downloaded_at: Optional[datetime]
+    first_successful_download_at: Optional[datetime] = None
+    can_delete: bool
 
 
 class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):

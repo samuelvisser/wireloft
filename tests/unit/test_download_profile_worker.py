@@ -136,7 +136,7 @@ def db_session(monkeypatch, tmp_path):
 
 
 def _now():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(timezone.utc)
 
 
 def _completed_download(db_session, episode, lmp, profile, *, publish_status="published_final"):
@@ -348,7 +348,7 @@ def test_ensure_episode_download_rearms_unhealthy_artifact(db_session, artifact_
 
 # ---------- cleanup ----------
 
-def test_cleanup_older_episodes_deletes_domain_row_and_file(db_session, tmp_path):
+def test_cleanup_older_episodes_preserves_domain_history_and_removes_file(db_session, tmp_path):
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
@@ -384,7 +384,15 @@ def test_cleanup_older_episodes_deletes_domain_row_and_file(db_session, tmp_path
     db_session.commit()
     assert not old_file.exists()
     assert recent_file.exists()
-    assert [row.media_item_id for row in db_session.query(EpisodeMediaDownload).all()] == [recent_episode.id]
+    remaining = {
+        row.media_item_id: row
+        for row in db_session.query(EpisodeMediaDownload).all()
+    }
+    assert set(remaining) == {old_episode.id, recent_episode.id}
+    assert remaining[old_episode.id].artifact_status == MediaDownloadArtifactStatus.ABSENT.value
+    assert remaining[old_episode.id].download_profile_id is None
+    assert remaining[recent_episode.id].artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+    assert remaining[recent_episode.id].download_profile_id == profile.id
 
 
 # ---------- worker integration with universal operations ----------

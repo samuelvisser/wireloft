@@ -159,7 +159,7 @@ def test_preview_uses_edited_values_and_returns_referenced_variables():
     from backend.api.endpoints.local_media_profiles.output_template import get_output_template_preview
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
 
-    result = get_output_template_preview(LocalMediaProfileTemplatePreview(
+    result = get_output_template_preview(None, LocalMediaProfileTemplatePreview(
         type="movie",
         preferred_format="format_1080p",
         output_template=(
@@ -187,16 +187,16 @@ def test_preview_prefix_error_includes_actual_rendered_output():
 
     with pytest.raises(
         ValueError,
-        match=r"Actual output: 'Example Show/downloads/Episode One\\.ext'",
+        match=r"Actual output: 'Example Show/downloads/Episode One\.ext'",
     ):
-        get_output_template_preview(preview)
+        get_output_template_preview(None, preview)
 
 
 def test_preview_resolves_audio_extension_in_backend():
     from backend.api.endpoints.local_media_profiles.output_template import get_output_template_preview
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
 
-    result = get_output_template_preview(LocalMediaProfileTemplatePreview(
+    result = get_output_template_preview(None, LocalMediaProfileTemplatePreview(
         type="show",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ show_title }}/{{ episode_title }}.ext",
