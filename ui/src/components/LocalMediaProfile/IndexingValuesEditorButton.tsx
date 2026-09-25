@@ -1,7 +1,7 @@
 import {type FormEvent, useId, useState} from 'react'
 import {createPortal} from 'react-dom'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {useFieldArray, useForm, type UseFormReturn} from 'react-hook-form'
+import {useFieldArray, useForm, useFormState, type UseFormReturn} from 'react-hook-form'
 import {z} from 'zod'
 
 import type {IndexingValueEntry} from '../../types/schemas/custom_metadata'
@@ -45,6 +45,7 @@ export default function IndexingValuesEditorButton({
         control: editorForm.control,
         name: 'indexingValues',
     })
+    const {errors} = useFormState({control: editorForm.control})
 
     const openEditor = () => {
         editorForm.reset({
@@ -119,8 +120,8 @@ export default function IndexingValuesEditorButton({
                             {fields.map((field, index) => {
                                 const namePath = `indexingValues.${index}.name` as const
                                 const keyPath = `indexingValues.${index}.key` as const
-                                const nameError = editorForm.getFieldState(namePath).error
-                                const keyError = editorForm.getFieldState(keyPath).error
+                                const nameError = errors.indexingValues?.[index]?.name
+                                const keyError = errors.indexingValues?.[index]?.key
                                 const key = editorForm.watch(keyPath)
 
                                 return (
