@@ -309,7 +309,6 @@ def _profile_keeps_live_handoff(profile: RssStreamProfile) -> bool:
 
 def _has_hls_download_profile_for_episode(
         s: Session,
-        profile: RssStreamProfile,
         episode: Episode,
 ) -> bool:
     episode_type = _episode_type_prefix(episode)
@@ -362,7 +361,7 @@ def _can_stream_live_episode(
         return True
     return (
         profile.use_downloads
-        and _has_hls_download_profile_for_episode(s, profile, episode)
+        and _has_hls_download_profile_for_episode(s, episode)
     )
 
 

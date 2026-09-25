@@ -29,14 +29,14 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     preferred_format: str = Field(min_length=1)
     require_exact_match: bool
     ep_id_type_list: list[EpIdType] = Field(default_factory=_default_episode_types)
-    video_output_mode: RssVideoOutputMode = RssVideoOutputMode.AUDIO_HLS.value
+    video_output_mode: RssVideoOutputMode = RssVideoOutputMode.AUDIO_HLS
     stream_live_episodes: bool = False
     max_items: int = Field(default=0, ge=0)
 
     @field_validator("preferred_format")
     @classmethod
     def _stream_preferred_format_must_be_playback_media(cls, value: str) -> str:
-        if value == PreferredFormat.FORMAT_HLS.value:
+        if value == PreferredFormat.FORMAT_HLS:
             raise ValueError(
                 "HLS is a Local Media Profile download format, not a Stream Profile preferred format"
             )
@@ -46,7 +46,7 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     def _live_streaming_requires_hls_output(self):
         if (
             self.stream_live_episodes
-            and self.video_output_mode.value not in RSS_HLS_OUTPUT_MODES
+            and self.video_output_mode not in RSS_HLS_OUTPUT_MODES
         ):
             raise ValueError(
                 "Live episode streaming requires an HLS video podcast output mode"
