@@ -213,7 +213,7 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         s.flush()
         return DownloadAction(download.id, True)
 
-    if redownload_when_final:
+    if redownload_when_final and not existing.automatic_retry_suppressed:
         existing.redownload_when_final = True
 
     if get_active_media_download_operation(s, existing.id) is not None:
