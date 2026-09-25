@@ -5,7 +5,7 @@ paste it into your podcast app and go. The URL can be freely edited afterwards (
 through a different hostname than the one WireLoft guessed), and can be regenerated at any time from the
 profile's edit page, which immediately invalidates the old URL.
 
-The feed can serve matching downloaded files (per the profile's preferred format and "require exact match"
+The feed can serve matching downloaded files (per the profile's preferred format and "prefer exact match"
 setting), stream episodes directly from Daily Wire, or use both sources. When both are enabled, a matching
 download is preferred and Daily Wire is used as the fallback.
 
