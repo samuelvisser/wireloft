@@ -30,8 +30,8 @@ body {
 
 .app {
   display: flex;
-  height: 100vh;
-  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
 }
 
@@ -91,9 +91,17 @@ body {
 .content {
   flex: 1;
   min-width: 0;
-  overflow: auto;
   background: var(--bg);
   padding: 24px;
+}
+
+@media (min-width: 901px) {
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    height: 100dvh;
+  }
 }
 
 /* Responsive layout for small screens */
