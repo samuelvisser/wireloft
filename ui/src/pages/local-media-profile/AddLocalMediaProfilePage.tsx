@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useMemo, useState} from 'react'
 import LocalMediaProfileForm, {LocalMediaProfileMode} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
+import IndexingValuesEditorButton from '../../components/LocalMediaProfile/IndexingValuesEditorButton'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {
@@ -117,6 +118,7 @@ export default function AddLocalMediaProfilePage() {
         <section className="view" aria-labelledby="add-media-profile-title">
             <div className="view-header">
                 <h1 id="add-media-profile-title">Add local media profile</h1>
+                {mode === 'show' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
             <form className="form" onSubmit={onCreate} noValidate>

@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from pydantic import AliasChoices, Field, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.utils.custom_index import INDEXING_VALUE_KEY_MAX_LENGTH, is_valid_custom_index_key
 from backend.utils.custom_metadata import (
     CUSTOM_METADATA_KEY_MAX_LENGTH,
     CUSTOM_METADATA_MAX_ITEMS,
@@ -28,6 +29,26 @@ class CustomMetadataResponseBase(ResponseBase):
         if isinstance(value, Mapping):
             return dict(value)
         return custom_metadata_from_items(value)
+
+
+class IndexingValueDefinitionAPI(RequestBase):
+    key: str = Field(min_length=1, max_length=INDEXING_VALUE_KEY_MAX_LENGTH)
+    name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _normalize_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("key")
+    @classmethod
+    def _validate_key(cls, value: str) -> str:
+        if not is_valid_custom_index_key(value):
+            raise ValueError(
+                "Indexing Value keys must use lowercase letters, numbers, underscores, and dashes, "
+                "and start with a letter or underscore"
+            )
+        return value
 
 
 class CustomMetadataAPIUpdate(RequestBase):

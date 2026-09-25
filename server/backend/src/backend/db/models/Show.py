@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
     from backend.db.models import Season, PodcastDownloadProfile, SeriesDownloadProfile
+    from backend.db.models import CustomIndexState
 
 
 class Show(Base, HasMetadataMixin, HasTaskResourcesMixin):
@@ -56,6 +57,9 @@ class Show(Base, HasMetadataMixin, HasTaskResourcesMixin):
         back_populates="show", cascade="all, delete-orphan"
     )
     stream_profiles: Mapped[list["StreamProfileBase"]] = relationship(
+        back_populates="show", cascade="all, delete-orphan"
+    )
+    custom_index_states: Mapped[list["CustomIndexState"]] = relationship(
         back_populates="show", cascade="all, delete-orphan"
     )
 

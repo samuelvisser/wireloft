@@ -31,7 +31,10 @@ export const LocalMediaProfileUpdateBaseSchema = LocalMediaProfileSchemaRequest.
 const SINGLE_BRACE_OUTPUT_TEMPLATE_VARIABLE = /(^|[^{])\{\s*[A-Za-z_][A-Za-z0-9_]*\s*\}(?!\})/
 
 export const LocalMediaProfileOutputTemplateSchema = z.string()
-    .regex(/\.ext$/, "Output template must end with '.ext'")
+    .refine(
+        (value) => /\.ext$/.test(value) || /\.ext\s*{%[-]?\s*endif\s*[-]?%}$/.test(value),
+        {message: "Each output path must end with '.ext'"},
+    )
     .refine(
         (value) => !SINGLE_BRACE_OUTPUT_TEMPLATE_VARIABLE.test(value),
         {message: "Output template variables must use Jinja syntax such as '{{ show }}'; single-brace variables are not supported"},

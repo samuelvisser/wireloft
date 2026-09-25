@@ -37,3 +37,4 @@ class ResourceType(str, Enum):
     MEDIA_DOWNLOAD = "media_download"
     DOWNLOAD_PROFILE = "download_profile"
     DOWNLOAD_PROFILE_SERIES = "download_profile_series"
+    LOCAL_MEDIA_PROFILE = "local_media_profile"

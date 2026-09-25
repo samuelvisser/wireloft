@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import func, ForeignKey, JSON
 from sqlalchemy.ext.mutable import MutableList
@@ -29,6 +29,7 @@ class StreamProfileBase(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     type: Mapped[str]
     show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"))
+    overwrite_show_title: Mapped[Optional[str]] = mapped_column(nullable=True, default=None)
     enable_profile: Mapped[bool] = mapped_column(default=True)
     # Secret path segment identifying this profile's feed/media routes. Stays
     # constant across edits to the (user-editable, purely informational)

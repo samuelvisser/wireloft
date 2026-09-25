@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasPath, Field, computed_field, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.types.download_profile_types import EpIdType
@@ -23,6 +23,7 @@ def _default_episode_types() -> list[EpIdType]:
 class _RssStreamProfileAPIBaseIn(RequestBase):
     """Fields for requests: validate here (constraints allowed)."""
 
+    title: str = Field(min_length=1)
     enable_profile: bool
     use_downloads: bool
     use_dw_stream: bool
@@ -38,6 +39,14 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     )
     stream_live_episodes: bool = False
     max_items: int = Field(default=0, ge=0)
+
+    @field_validator("title")
+    @classmethod
+    def _title_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Title cannot be blank")
+        return value
 
     @field_validator("preferred_format")
     @classmethod
@@ -101,6 +110,8 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
 
     id: int
     show_id: int
+    overwrite_show_title: Optional[str] = Field(exclude=True)
+    show_title: str = Field(validation_alias=AliasPath("show", "title"), exclude=True)
     enable_profile: bool
     use_downloads: bool
     use_dw_stream: bool
@@ -111,6 +122,11 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
     stream_live_episodes: bool
     max_items: int
     feed_url: str
+
+    @computed_field
+    @property
+    def effective_title(self) -> str:
+        return self.overwrite_show_title or self.show_title
 
 
 class RssStreamProfileAPIRead(_RssStreamProfileAPIBaseOut):

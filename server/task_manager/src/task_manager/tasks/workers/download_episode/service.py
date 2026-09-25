@@ -251,6 +251,8 @@ def _attempt_download(
     requested_destination = resolve_episode_output_path(
         output_template,
         episode=episode,
+        local_media_profile=profile,
+        media_download=download,
         extension=source.extension,
     )
 

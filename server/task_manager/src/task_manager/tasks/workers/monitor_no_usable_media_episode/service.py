@@ -7,7 +7,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, Show
+from backend.db.models import Episode, EpisodeMediaDownload, Show
+from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from config.network import NoInternetConnectionError, is_no_internet_error
@@ -41,10 +42,23 @@ def _incident_expired(episode: Episode, *, now: datetime, minutes: int) -> bool:
     return since is not None and now - since >= timedelta(minutes=max(0, minutes))
 
 
-def _delete_episode(s: Session, episode: Episode) -> None:
+def _delete_episode(s: Session, episode: Episode) -> bool:
+    media_download = s.scalar(
+        select(EpisodeMediaDownload.id).where(
+            EpisodeMediaDownload.media_item_id == episode.id,
+        ).limit(1)
+    )
+    if media_download is not None:
+        # The quarantined Episode remains the durable owner of its download history.
+        # It stays hidden by its NO_USABLE_MEDIA state until the Show is deleted.
+        s.commit()
+        return False
+
     queue_event(s, "episode.deleted", episode_event_payload(episode=episode, show=episode.show))
+    request_show_custom_index_reconciliation(s, episode.show_id)
     s.delete(episode)
     s.commit()
+    return True
 
 
 def _replacement_for_quarantined_episode(s: Session, episode: Episode) -> Episode | None:
@@ -282,10 +296,15 @@ async def run_monitor_no_usable_media_episode(
                 )
                 replacement_slug = replacement.slug if replacement is not None else None
                 logger.info("Deleting confirmed-404 episode %s", episode.slug)
-                _delete_episode(s, episode)
-                removed += 1
+                was_deleted = _delete_episode(s, episode)
+                if was_deleted:
+                    removed += 1
                 if is_target:
-                    target_outcome = "replaced" if replacement is not None else "deleted"
+                    target_outcome = (
+                        ("replaced" if replacement is not None else "deleted")
+                        if was_deleted
+                        else "retained"
+                    )
                     target_recovered_status = replacement_status
                     target_slug = replacement_slug
             elif is_target:

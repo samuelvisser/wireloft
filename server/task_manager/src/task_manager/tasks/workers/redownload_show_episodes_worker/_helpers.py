@@ -53,6 +53,8 @@ def _prepare_redownloads(
         target_path = str(resolve_episode_output_path(
             local_media_profile.output_template,
             episode=episode,
+            local_media_profile=local_media_profile,
+            media_download=download,
         ))
 
         delete_episode_download_artifact(s, download)

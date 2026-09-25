@@ -3,6 +3,13 @@ from __future__ import annotations
 from typing import Optional
 
 from controller.db_utils import db_session
+from backend.db.models.media_download import EpisodeMediaDownload
+from backend.db.models import Episode
+from task_manager.tasks.helpers.custom_index_readiness import (
+    custom_index_pair_lock, pair_is_ready, request_missing_index_repair,
+    wait_for_custom_index_pair,
+)
+from backend.utils.custom_index import CustomIndexNotReadyError
 from task_manager.scheduler.registry import task
 from task_manager.tasks.media_download_operations import on_media_download_task_terminal
 from task_manager.tasks.workers.download_attempt import serialize_download_attempt
@@ -34,11 +41,28 @@ async def download_episode(
     if resource_id is None:
         raise ValueError("A MediaDownload resource ID is required")
 
-    with serialize_download_attempt(resource_id):
-        with db_session() as session:
-            return await run_download_episode(
-                session,
-                media_download_id=resource_id,
-                is_redownload=is_redownload,
-                progress=progress,
-            )
+    with db_session() as session:
+        download = session.get(EpisodeMediaDownload, resource_id)
+        episode = session.get(Episode, download.media_item_id) if download is not None else None
+        pair = (episode.show_id, download.local_media_profile_id) if episode is not None else None
+    try:
+        with serialize_download_attempt(resource_id):
+            while True:
+                if pair is not None:
+                    await wait_for_custom_index_pair(*pair)
+                    async with custom_index_pair_lock(*pair):
+                        if not pair_is_ready(*pair):
+                            continue
+                        with db_session() as session:
+                            return await run_download_episode(
+                                session, media_download_id=resource_id,
+                                is_redownload=is_redownload, progress=progress,
+                            )
+                with db_session() as session:
+                    return await run_download_episode(
+                        session, media_download_id=resource_id,
+                        is_redownload=is_redownload, progress=progress,
+                    )
+    except CustomIndexNotReadyError as exc:
+        request_missing_index_repair(exc)
+        raise

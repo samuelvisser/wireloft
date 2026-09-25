@@ -155,6 +155,7 @@ export default function AddStreamProfilePage() {
                     isCreating
                     downloadProfileDefaults={downloadProfileDefaults}
                     showSlug={selectedShow?.slug}
+                    showTitle={selectedShow?.title}
                 />
 
                 <div className="actions">

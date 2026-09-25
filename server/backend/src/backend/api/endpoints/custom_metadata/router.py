@@ -7,10 +7,13 @@ from backend.api.models.show import ShowAPIRead
 from backend.app import db_session
 from backend.db.models import Show
 from backend.db.models.media_item import Movie
+from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from backend.utils.custom_metadata import (
     CustomMetadataScope,
     replace_custom_metadata,
 )
+
+from task_manager.events.transactional import queue_event
 
 from .service import (
     get_custom_metadata_fields,
@@ -45,6 +48,7 @@ def show_custom_metadata_update(show_slug: str, body: CustomMetadataAPIUpdate) -
                 fields=body.removed_fields,
             )
             replace_custom_metadata(show, body.custom_metadata)
+            request_show_custom_index_reconciliation(session, show.id)
             session.flush()
             result = ShowAPIRead.model_validate(show)
             session.commit()

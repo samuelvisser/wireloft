@@ -22,7 +22,11 @@ export default function StreamProfilesPage() {
 
     const setProfileEnabled = useCallback(async (profile: StreamProfileReadView, enableProfile: boolean) => {
         try {
-            const body = RssStreamProfileUpdateSchema.parse({...profile.streamProfileImpl, enableProfile})
+            const body = RssStreamProfileUpdateSchema.parse({
+                ...profile.streamProfileImpl,
+                title: profile.streamProfileImpl.effectiveTitle,
+                enableProfile,
+            })
             const response = await fetch(`${(window as any).appConfig.API_URL}/rss-stream-profiles/${profile.id}`, {
                 method: 'PATCH',
                 headers: {'Content-Type': 'application/json'},
@@ -51,8 +55,8 @@ export default function StreamProfilesPage() {
 
     const columns: Column<StreamProfileReadView>[] = [
         {
-            header: 'Show Title',
-            accessor: (p) => p.showTitle,
+            header: 'Title',
+            accessor: (p) => p.streamProfileImpl.effectiveTitle,
             mobileHidden: true,
         },
         {
@@ -78,7 +82,7 @@ export default function StreamProfilesPage() {
             cell: (p) => (
                 <ProfileEnabledSwitch
                     checked={p.enableProfile}
-                    ariaLabel={`Stream profile for ${p.showTitle}`}
+                    ariaLabel={`Stream profile for ${p.streamProfileImpl.effectiveTitle}`}
                     onChange={(checked) => setProfileEnabled(p, checked)}
                 />
             ),
@@ -108,10 +112,10 @@ export default function StreamProfilesPage() {
                     loading={isLoading}
                     error={error}
                     rowKey={(p) => `${p.type}-${p.id}`}
-                    rowAriaLabel={(p) => `${p.type} ${p.showTitle}`}
+                    rowAriaLabel={(p) => `${p.type} ${p.streamProfileImpl.effectiveTitle}`}
                     mobileSummary={(p) => (
                         <>
-                            <span className="mobile-summary-title">{p.showTitle}</span>
+                            <span className="mobile-summary-title">{p.streamProfileImpl.effectiveTitle}</span>
                             <span className="mobile-summary-meta">
                                 <span>{PreferredFormatReg.getLabelLoose(p.preferredFormat)}</span>
                                 <span aria-hidden="true">•</span>

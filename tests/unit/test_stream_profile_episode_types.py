@@ -14,6 +14,7 @@ def test_rss_stream_profile_defaults_to_episode_and_auxiliary():
 
     profile = RssStreamProfileAPICreate(
         show_id=1,
+        title="Test Show",
         enable_profile=True,
         use_downloads=False,
         use_dw_stream=True,
@@ -29,6 +30,7 @@ def test_audio_only_rss_stream_profile_defaults_video_output_mode_to_null():
 
     profile = RssStreamProfileAPICreate(
         show_id=1,
+        title="Test Show",
         enable_profile=True,
         use_downloads=False,
         use_dw_stream=True,
@@ -45,6 +47,7 @@ def test_video_rss_stream_profile_defaults_video_output_mode_to_audio_hls():
 
     profile = RssStreamProfileAPICreate(
         show_id=1,
+        title="Test Show",
         enable_profile=True,
         use_downloads=False,
         use_dw_stream=True,
@@ -61,6 +64,7 @@ def test_audio_only_rss_stream_profile_rejects_video_output_mode():
     with pytest.raises(ValidationError, match="Audio-only Stream Profiles cannot have a video output mode"):
         RssStreamProfileAPICreate(
             show_id=1,
+            title="Test Show",
             enable_profile=True,
             use_downloads=False,
             use_dw_stream=True,
@@ -76,6 +80,7 @@ def test_video_rss_stream_profile_requires_video_output_mode():
     with pytest.raises(ValidationError, match="Video Stream Profiles require a video output mode"):
         RssStreamProfileAPICreate(
             show_id=1,
+            title="Test Show",
             enable_profile=True,
             use_downloads=False,
             use_dw_stream=True,

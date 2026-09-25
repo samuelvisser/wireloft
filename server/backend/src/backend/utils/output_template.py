@@ -15,6 +15,11 @@ from .custom_metadata import (
     get_custom_metadata,
     is_allowed_custom_metadata_template_variable,
 )
+from .custom_index import (
+    CustomIndexNotReadyError,
+    get_episode_index_assignments,
+    indexing_value_definition_keys,
+)
 from .episode import EpisodeIdentifierInfo
 from .output_template_jinja import create_output_template_environment
 from config import get_settings
@@ -22,6 +27,7 @@ from config.settings.submodels import FilenameRestrictionMode
 
 if TYPE_CHECKING:
     from backend.db.models import Episode, Movie, MovieExtra
+    from backend.db.models.media_download import MediaDownloadBase
 
 _DOWNLOADS_PREFIX = "/downloads/"
 _MAX_RENDERED_PATH_LENGTH = 4096
@@ -90,7 +96,36 @@ def _parse_output_template(output_template: str) -> nodes.Template:
 def output_template_fields(output_template: str) -> frozenset[str]:
     """Return all context variables referenced by a Jinja path template."""
     parsed = _parse_output_template(output_template)
-    return frozenset(meta.find_undeclared_variables(parsed))
+    # Jinja reports names assigned only inside conditional branches as
+    # undeclared, even when the template sets them in every branch.
+    assigned = {
+        node.target.name for node in parsed.find_all(nodes.Assign)
+        if isinstance(node.target, nodes.Name)
+    }
+    return frozenset(meta.find_undeclared_variables(parsed) - assigned)
+
+
+def output_template_custom_index_keys(output_template: str) -> frozenset[str]:
+    """Return literal custom-index keys referenced by one output template."""
+    parsed = _parse_output_template(output_template)
+    keys: set[str] = set()
+    for filter_node in parsed.find_all(nodes.Filter):
+        if filter_node.name != "custom_index":
+            continue
+        if filter_node.args or filter_node.kwargs or filter_node.dyn_args or filter_node.dyn_kwargs:
+            raise ValueError("custom_index does not accept arguments")
+        source = filter_node.node
+        if not isinstance(source, nodes.Const) or not isinstance(source.value, str):
+            raise ValueError(
+                "custom_index must be applied to a literal key, for example "
+                "{{ 'featurettes' | custom_index }}"
+            )
+        key = source.value
+        from .custom_index import is_valid_custom_index_key
+        if not is_valid_custom_index_key(key):
+            raise ValueError(f"Invalid custom index key: {key}")
+        keys.add(key)
+    return frozenset(keys)
 
 
 def _statement_may_emit_output(statement: nodes.Stmt) -> bool:
@@ -112,6 +147,28 @@ def _statement_may_emit_output(statement: nodes.Stmt) -> bool:
     return True
 
 
+def _path_boundary_in_branches(
+    statements: list[nodes.Stmt], *, start: bool,
+) -> bool:
+    """Check a literal path boundary on every conditional output branch."""
+    ordered = statements if start else list(reversed(statements))
+    for statement in ordered:
+        if not _statement_may_emit_output(statement):
+            continue
+        if isinstance(statement, nodes.Output):
+            node = statement.nodes[0 if start else -1] if statement.nodes else None
+            return isinstance(node, nodes.TemplateData) and (
+                node.data.startswith(_DOWNLOADS_PREFIX) if start else node.data.endswith(".ext")
+            )
+        if isinstance(statement, nodes.If):
+            branches = [statement.body, *(branch.body for branch in statement.elif_), statement.else_]
+            return bool(statement.else_) and all(
+                _path_boundary_in_branches(branch, start=start) for branch in branches
+            )
+        return False
+    return False
+
+
 def validate_output_template_path_requirements(
     output_template: str,
     *,
@@ -125,9 +182,6 @@ def validate_output_template_path_requirements(
     The raw template still has to end in ``.ext`` so the resulting filename keeps
     WireLoft's extension marker.
     """
-    if not output_template.endswith(".ext"):
-        raise ValueError("Output template must end with '.ext'")
-
     validate_output_template_fields(
         output_template,
         allowed_fields=allowed_fields,
@@ -135,19 +189,11 @@ def validate_output_template_path_requirements(
     )
     parsed = _parse_output_template(output_template)
 
-    for statement in parsed.body:
-        if isinstance(statement, nodes.Output):
-            first = statement.nodes[0] if statement.nodes else None
-            if (
-                isinstance(first, nodes.TemplateData)
-                and first.data.startswith(_DOWNLOADS_PREFIX)
-            ):
-                return output_template
-            raise ValueError("Output template must start with '/downloads/'")
-        if _statement_may_emit_output(statement):
-            raise ValueError("Output template must start with '/downloads/'")
-
-    raise ValueError("Output template must start with '/downloads/'")
+    if not _path_boundary_in_branches(parsed.body, start=True):
+        raise ValueError("Output template must start with '/downloads/'")
+    if not _path_boundary_in_branches(parsed.body, start=False):
+        raise ValueError("Output template must end with '.ext'")
+    return output_template
 
 
 def _to_ascii(value: str) -> str:
@@ -196,21 +242,27 @@ def sanitize_path_component(
     return cleaned
 
 
-def _sanitize_template_value(value: object, *, mode: FilenameRestrictionMode) -> str:
-    # Empty values must stay falsey so Jinja conditionals can omit their
-    # surrounding punctuation. A completely empty path component is handled
-    # after rendering instead.
-    text = str(value) if value is not None else ""
-    if not text:
-        return ""
-    return sanitize_path_component(text, mode=mode)
+def _sanitize_emitted_output_value(value: object) -> str:
+    """Keep emitted Jinja values from creating path structure."""
+    text = "" if value is None else str(value)
+    text = text.replace("/", "_").replace("\\", "_").replace("\x00", "")
+    return "".join(char for char in text if char == "\t" or ord(char) >= 32)
 
 
-def _sanitize_rendered_path(rendered: str, *, mode: FilenameRestrictionMode) -> str:
-    """Apply the filename mode to template literals as well as substitutions."""
+def _sanitize_rendered_path(
+    rendered: str,
+    *,
+    mode: FilenameRestrictionMode,
+) -> str:
+    """Apply filename restrictions after the complete output path is known."""
     relative = rendered[len(_DOWNLOADS_PREFIX):]
     parts = relative.split("/")
-    sanitized = [sanitize_path_component(part, mode=mode) if part else "" for part in parts]
+    sanitized = [
+        sanitize_path_component(part, mode=mode)
+        if part
+        else ""
+        for part in parts
+    ]
     return _DOWNLOADS_PREFIX + "/".join(sanitized)
 
 
@@ -221,6 +273,7 @@ def validate_output_template_fields(
     allowed_metadata_scopes: frozenset[CustomMetadataScope] = frozenset(),
 ) -> str:
     """Validate Jinja syntax and reject variables unavailable for this media type."""
+    output_template_custom_index_keys(output_template)
     unsupported = sorted(
         field
         for field in output_template_fields(output_template)
@@ -349,8 +402,9 @@ def render_output_template(
     *,
     allowed_fields: frozenset[str],
     allowed_metadata_scopes: frozenset[CustomMetadataScope] = frozenset(),
+    custom_index_resolver=None,
 ) -> str:
-    """Render a path template using the same sandbox and sanitization as downloads."""
+    """Render a path template with raw semantic values in the Jinja context."""
     normalized = validate_output_template_fields(
         output_template,
         allowed_fields=allowed_fields,
@@ -365,12 +419,12 @@ def render_output_template(
             scopes=allowed_metadata_scopes,
         )
     )
-    mode = get_settings().download_settings.filename_restriction_mode
     context = {
-        field: _sanitize_template_value(values.get(field, ""), mode=mode)
+        field: values.get(field, "")
         for field in allowed_fields | dynamic_fields
     }
-    environment = create_output_template_environment()
+    environment = create_output_template_environment(custom_index_resolver=custom_index_resolver)
+    environment.finalize = _sanitize_emitted_output_value
     try:
         rendered = environment.from_string(normalized).render(context)
     except (SecurityError, UndefinedError, TemplateError) as exc:
@@ -387,22 +441,79 @@ def render_output_template(
         )
     if not rendered.endswith(".ext"):
         raise ValueError("Rendered output path must end with '.ext'")
-    return _sanitize_rendered_path(rendered, mode=mode)
+    return rendered
+
+
+def resolve_episode_output_path_with_index_values(
+    output_template: str,
+    *,
+    episode: "Episode",
+    index_definitions: frozenset[str],
+    index_values: dict[str, int],
+    extension: Optional[str] = None,
+) -> Path:
+    def resolver(key: str) -> object:
+        if key not in index_definitions:
+            return ""
+        if key not in index_values:
+            raise CustomIndexNotReadyError(
+                f"Custom index '{key}' is not ready for episode '{episode.slug}'"
+            )
+        return index_values[key]
+
+    rendered = render_output_template(
+        output_template,
+        episode_output_template_values(episode),
+        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        custom_index_resolver=resolver,
+    )
+    return _finish_output_path(rendered, extension=extension)
 
 
 def resolve_episode_output_path(
     output_template: str,
     *,
     episode: "Episode",
+    local_media_profile=None,
+    media_download: "MediaDownloadBase | None" = None,
     extension: Optional[str] = None,
 ) -> Path:
-    rendered = render_output_template(
-        output_template,
-        episode_output_template_values(episode),
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-        allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
-    )
-    return _finish_output_path(rendered, extension=extension)
+    index_keys = output_template_custom_index_keys(output_template)
+    if not index_keys:
+        rendered = render_output_template(
+            output_template,
+            episode_output_template_values(episode),
+            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+            allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        )
+        return _finish_output_path(rendered, extension=extension)
+
+    if local_media_profile is None:
+        raise CustomIndexNotReadyError(
+            "This output template uses custom indexes and requires a Local Media Profile"
+        )
+
+    from sqlalchemy.orm import object_session
+    from backend.services.custom_indexes import ensure_episode_custom_indexes_ready
+    session = object_session(episode)
+    if session is None:
+        raise CustomIndexNotReadyError("An attached Episode is required for custom index readiness")
+    ensure_episode_custom_indexes_ready(session, episode=episode, profile=local_media_profile)
+
+    try:
+        return resolve_episode_output_path_with_index_values(
+            output_template,
+            episode=episode,
+            index_definitions=indexing_value_definition_keys(local_media_profile),
+            index_values=get_episode_index_assignments(episode, local_media_profile.id),
+            extension=extension,
+        )
+    except CustomIndexNotReadyError as exc:
+        raise CustomIndexNotReadyError(
+            str(exc), repair_show_id=episode.show_id,
+            repair_profile_id=local_media_profile.id,
+        ) from exc
 
 
 def resolve_movie_output_path(
@@ -418,6 +529,8 @@ def resolve_movie_output_path(
     The deprecated ``append_media_type_to_filename`` argument remains for API
     compatibility. New profiles express that behavior directly in Jinja.
     """
+    if output_template_custom_index_keys(output_template):
+        raise ValueError("custom_index is only available to Show Local Media Profiles")
     values = movie_output_template_values(movie, media_item)
     rendered = render_output_template(
         output_template,
@@ -464,8 +577,18 @@ def replace_output_extension(resolved: str, extension: Optional[str]) -> str:
     return resolved
 
 
-def _finish_output_path(resolved: str, *, extension: Optional[str]) -> Path:
+def finalize_output_path(resolved: str, extension: Optional[str]) -> str:
+    """Apply filename restrictions once the concrete filename is known."""
     resolved = replace_output_extension(resolved, extension)
+    if extension is None:
+        return resolved
+
+    mode = get_settings().download_settings.filename_restriction_mode
+    return _sanitize_rendered_path(resolved, mode=mode)
+
+
+def _finish_output_path(resolved: str, *, extension: Optional[str]) -> Path:
+    resolved = finalize_output_path(resolved, extension)
     if resolved.startswith(_DOWNLOADS_PREFIX):
         resolved = resolved[len(_DOWNLOADS_PREFIX):]
     resolved = resolved.lstrip("/")

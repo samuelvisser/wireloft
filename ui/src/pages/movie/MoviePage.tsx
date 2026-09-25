@@ -681,9 +681,8 @@ export default function MoviePage() {
             >
                 <p>
                     Are you sure you want to delete "{movie.title}" from WireLoft? This removes the movie, its
-                    indexed extras, and their download history from the WireLoft database. Completed files
-                    already on disk will not be changed. Any download still in progress will be cancelled and
-                    its partial files removed.
+                    indexed extras, and their download history from the WireLoft database. Downloaded files
+                    already on disk are not removed.
                 </p>
             </ConfirmDialog>
         </section>

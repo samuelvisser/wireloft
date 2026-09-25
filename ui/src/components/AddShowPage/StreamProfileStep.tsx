@@ -18,6 +18,7 @@ type Props = {
     onFinish: () => void
     onCancel: () => void
     showSlug?: string
+    showTitle?: string
     downloadProfileDefaults?: StreamDownloadProfileDefault[]
     episodeTypesManuallyChanged?: boolean
     onEpisodeTypesManuallyChanged?: () => void
@@ -31,6 +32,7 @@ export default function StreamProfileStep({
     onFinish,
     onCancel,
     showSlug,
+    showTitle,
     downloadProfileDefaults,
     episodeTypesManuallyChanged,
     onEpisodeTypesManuallyChanged,
@@ -69,6 +71,7 @@ export default function StreamProfileStep({
                         episodeTypesManuallyChanged={episodeTypesManuallyChanged}
                         onEpisodeTypesManuallyChanged={onEpisodeTypesManuallyChanged}
                         showSlug={showSlug}
+                        showTitle={showTitle}
                         canOpenDownloadProfiles={false}
                     />
                     <div className="actions">

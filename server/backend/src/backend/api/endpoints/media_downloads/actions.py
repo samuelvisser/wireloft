@@ -19,7 +19,7 @@ from task_manager.tasks.media_download_operations import (
 )
 
 from .operations import _BulkMediaDownloadOperation
-from .service import delete_media_download, retry_media_download
+from .service import retry_media_download
 
 
 def retry_media_download_action(
@@ -133,24 +133,6 @@ def cancel_media_download_action(
             pass
 
     return payload
-
-
-def delete_media_download_action(
-        media_download_id: int,
-        *,
-        missing_ok: bool = False,
-) -> MediaDownloadAPIRead | None:
-    """Delete one download record using the ordinary domain deletion path."""
-    with db_session() as s:
-        try:
-            if missing_ok and s.get(MediaDownloadBase, media_download_id) is None:
-                return None
-            result = delete_media_download(s, media_download_id)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
 
 
 def queue_bulk_media_download_operation(

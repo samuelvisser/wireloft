@@ -373,6 +373,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                     onFinish={() => handleFinish('stream')}
                     onCancel={handleCancel}
                     showSlug={showSubmit?.slug}
+                    showTitle={showSubmit?.title}
                     downloadProfileDefaults={[]}
                     episodeTypesManuallyChanged={streamEpisodeTypesManuallyChanged}
                     onEpisodeTypesManuallyChanged={() => setStreamEpisodeTypesManuallyChanged(true)}

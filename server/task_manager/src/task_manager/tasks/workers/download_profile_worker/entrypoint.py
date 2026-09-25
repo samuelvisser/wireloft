@@ -4,6 +4,8 @@ from typing import Optional
 
 from config import get_settings
 from controller.db_utils import db_session
+from backend.utils.custom_index import CustomIndexNotReadyError
+from task_manager.tasks.helpers.custom_index_readiness import request_missing_index_repair
 from task_manager.scheduler.registry import on_cron, on_event, task
 from task_manager.tasks.media_download_operations import on_media_download_task_terminal
 from ..fetch_new_episodes.service import SHOW_INDEXED_EVENT
@@ -69,10 +71,14 @@ async def download_profile_worker(
     shared download dispatcher a chance to start it regardless of the profile's
     current enabled state.
     """
-    with db_session() as s:
-        await run_download_profile_worker(
-            s,
-            resource_id=resource_id,
-            resource_type=resource_type,
-            progress=progress,
-        )
+    try:
+        with db_session() as s:
+            await run_download_profile_worker(
+                s,
+                resource_id=resource_id,
+                resource_type=resource_type,
+                progress=progress,
+            )
+    except CustomIndexNotReadyError as exc:
+        request_missing_index_repair(exc)
+        raise

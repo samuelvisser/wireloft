@@ -6,6 +6,7 @@ from typing import Union
 from pydantic import Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.api.models.custom_metadata import IndexingValueDefinitionAPI
 from backend.api.models.pagination import OffsetPageRead
 from backend.types.local_media_profile_types import (
     LocalMediaProfileStorageMode,
@@ -76,8 +77,14 @@ class LocalMediaProfileTemplatePreview(RequestBase):
     output_template: str = Field(min_length=1, max_length=4096)
     preferred_format: PreferredFormat
     values: dict[str, str] = Field(default_factory=dict)
+    source_id: str | None = None
+    local_media_profile_id: int | None = None
+    indexing_values: list[IndexingValueDefinitionAPI] | None = None
 
 
 class LocalMediaProfileTemplatePreviewResult(ResponseBase):
     output_path: str
     used_variables: list[str]
+    used_indexing_values: list[str] = Field(default_factory=list)
+    missing_indexing_values: list[str] = Field(default_factory=list)
+    provisional_indexing_values: list[str] = Field(default_factory=list)

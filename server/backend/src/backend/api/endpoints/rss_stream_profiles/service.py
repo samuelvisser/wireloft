@@ -19,6 +19,11 @@ from backend.utils.feed_urls import build_rss_feed_url
 from backend.utils.helpers import generate_stream_profile_token
 
 
+def _title_override(title: str, show_title: str) -> Optional[str]:
+    normalized = title.strip()
+    return None if normalized == show_title else normalized
+
+
 def _keeps_live_episode_handoff(profile: RssStreamProfile) -> bool:
     return (
         profile.stream_live_episodes
@@ -71,8 +76,10 @@ def create_stream_profile_rss(
     item = create_database_fields(
         RssStreamProfile,
         body,
-        exclude_fields={"feed_url"},
+        exclude_fields={"feed_url", "title"},
     )
+    item.overwrite_show_title = _title_override(body.title, show.title)
+    item.show = show
     item.token = token
     item.feed_url = feed_url
     s.add(item)
@@ -94,7 +101,8 @@ def update_stream_profile_rss(
         raise HTTPException(status_code=404, detail="Stream profile not found")
 
     feed_url = body.feed_url.strip()
-    update_database_fields(item, body, exclude_fields={"feed_url"})
+    update_database_fields(item, body, exclude_fields={"feed_url", "title"})
+    item.overwrite_show_title = _title_override(body.title, item.show.title)
     if not _keeps_live_episode_handoff(item):
         item.live_episode_handoff_ids = []
     item.feed_url = feed_url
