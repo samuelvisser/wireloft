@@ -202,3 +202,65 @@ def test_controller_cancels_task_runs_interrupted_by_restart(task_database, monk
             controller_app.stop_controller()
 
     asyncio.run(run_controller())
+
+
+def test_controller_shutdown_does_not_wait_for_background_executors(monkeypatch):
+    import controller.app as controller_app
+    import task_manager.events.registry as event_registry
+    import task_manager.scheduler.scheduler as scheduler_module
+
+    calls = []
+
+    monkeypatch.setattr(controller_app, "_controller_started", True)
+    monkeypatch.setattr(
+        event_registry.WireloftEventLinker,
+        "remove_all",
+        lambda: calls.append(("events.remove_all", None)),
+    )
+    monkeypatch.setattr(
+        event_registry,
+        "shutdown_event_emitter",
+        lambda *, wait=True: calls.append(("events.shutdown", wait)),
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "shutdown_scheduler",
+        lambda wait=True: calls.append(("scheduler.shutdown", wait)),
+    )
+
+    controller_app.stop_controller()
+
+    assert calls == [
+        ("events.remove_all", None),
+        ("events.shutdown", False),
+        ("scheduler.shutdown", False),
+    ]
+    assert controller_app._controller_started is False
+
+
+def test_event_emitter_nonblocking_shutdown_skips_drain(monkeypatch):
+    import task_manager.events.registry as event_registry
+
+    class FakeProcessor:
+        def __init__(self):
+            self.wait_calls = 0
+            self.shutdown_calls = []
+
+        def wait_for_tasks(self):
+            self.wait_calls += 1
+
+        def shutdown(self, *, wait, cancel_futures):
+            self.shutdown_calls.append((wait, cancel_futures))
+
+    processor = FakeProcessor()
+    monkeypatch.setattr(event_registry, "_processor", processor)
+    monkeypatch.setattr(event_registry, "_executor", object())
+    monkeypatch.setattr(event_registry, "_emitter", object())
+
+    event_registry.shutdown_event_emitter(wait=False)
+
+    assert processor.wait_calls == 0
+    assert processor.shutdown_calls == [(False, True)]
+    assert event_registry._processor is None
+    assert event_registry._executor is None
+    assert event_registry._emitter is None

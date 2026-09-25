@@ -335,14 +335,15 @@ def stop_controller() -> None:
         from task_manager.events.registry import (
             WireloftEventLinker,
             shutdown_event_emitter,
-            wait_for_events,
         )
         from task_manager.scheduler.scheduler import shutdown_scheduler
 
+        # Stop new event callbacks first, then tear down both background executors
+        # without waiting for arbitrary worker code. TaskRuns are durable and the
+        # next startup reconciles anything that did not finish before process exit.
         WireloftEventLinker.remove_all()
-        wait_for_events()
-        shutdown_scheduler(wait=True)
-        shutdown_event_emitter()
+        shutdown_event_emitter(wait=False)
+        shutdown_scheduler(wait=False)
         _controller_started = False
 
 
