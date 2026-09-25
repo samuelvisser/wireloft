@@ -230,3 +230,29 @@ def test_terminal_reconciliation_consumes_pending_final_intent(final_download, m
     created.assert_called_once()
     assert created.call_args.kwargs["source"] == "SYSTEM"
     assert created.call_args.kwargs["is_redownload"] is True
+
+
+
+def test_manual_countdown_request_persists_final_redownload_choice(final_download):
+    from backend.api.endpoints.media_downloads.service import create_episode_download
+    from backend.api.models.media_download import EpisodeDownloadAPICreate
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, episode, download = final_download
+    episode.publish_status = "published_with_countdown"
+    download.artifact_status = MediaDownloadArtifactStatus.ABSENT.value
+    download.redownload_when_final = False
+    session.commit()
+
+    restarted = create_episode_download(
+        session,
+        episode.slug,
+        EpisodeDownloadAPICreate(
+            local_media_profile_id=download.local_media_profile_id,
+            redownload_when_final=True,
+        ),
+    )
+    session.flush()
+
+    assert restarted.id == download.id
+    assert restarted.redownload_when_final is True
