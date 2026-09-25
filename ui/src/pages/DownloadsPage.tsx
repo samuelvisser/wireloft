@@ -516,8 +516,17 @@ export default function DownloadsPage() {
                                 : status === 'error' || status === 'missing' || status === 'corrupted'
                                     ? 'is-error'
                                     : ''
+                        const showProgress = status === 'downloading' || status === 'local_processing'
+                        const progress = Math.max(0, Math.min(100, Math.round(row.progress)))
                         return (
                             <>
+                                {showProgress && (
+                                    <span
+                                        className="downloads-mobile-progress"
+                                        style={{width: `${progress}%`}}
+                                        aria-hidden="true"
+                                    />
+                                )}
                                 <span className="mobile-summary-title">{rowTitle(row)}</span>
                                 <span className="mobile-summary-subtitle">{rowContext(row)}</span>
                                 <span className="mobile-summary-meta">

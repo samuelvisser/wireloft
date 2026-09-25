@@ -87,4 +87,34 @@
     .downloads-action-row .progress-button-root {
         flex: 1 1 auto;
     }
+
+    /* Match ActionMenu's operation progress treatment: the completed portion
+       softly fills the whole compact download card behind its existing content. */
+    .downloads-table-wrapper .mobile-data-summary {
+        position: relative;
+        isolation: isolate;
+        overflow: hidden;
+    }
+
+    .downloads-mobile-progress {
+        position: absolute;
+        z-index: 0;
+        inset: 0 auto 0 0;
+        width: 0;
+        background: rgba(59, 130, 246, 0.18);
+        pointer-events: none;
+        transition: width 220ms ease;
+    }
+
+    .downloads-table-wrapper .mobile-data-summary-content,
+    .downloads-table-wrapper .mobile-data-chevron {
+        position: relative;
+        z-index: 1;
+    }
+}
+
+@media (max-width: 640px) and (prefers-color-scheme: dark) {
+    .downloads-mobile-progress {
+        background: rgba(96, 165, 250, 0.22);
+    }
 }
