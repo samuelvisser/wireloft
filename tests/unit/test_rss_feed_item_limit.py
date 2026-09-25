@@ -50,7 +50,7 @@ def _profile(max_items: int):
         use_downloads=False,
         use_dw_stream=True,
         preferred_format="format_1080p",
-        require_exact_match=False,
+        prefer_exact_match=False,
         ep_id_type_list=["ep"],
         video_output_mode="mp4",
         stream_live_episodes=False,
