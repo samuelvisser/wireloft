@@ -31,6 +31,7 @@ body {
 .app {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   width: 100%;
 }
 
@@ -97,7 +98,12 @@ body {
 
 /* Responsive layout for small screens */
 @media (max-width: 900px) {
-  .app { flex-direction: column; height: auto; min-height: 100vh; }
+  .app {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
   .sidebar { width: 100%; min-width: 0; position: sticky; top: 0; z-index: 20; }
   .sidebar-inner { padding: 8px 12px; }
   .content { padding: 16px; }
