@@ -1,6 +1,7 @@
 import {type FormEvent, useCallback, useEffect, useRef, useState} from 'react'
 import {useNavigate, useParams} from 'react-router-dom'
 import LocalMediaProfileForm from '../../components/LocalMediaProfile/LocalMediaProfileForm'
+import IndexingValuesEditorButton from '../../components/LocalMediaProfile/IndexingValuesEditorButton'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {useForm, UseFormReturn} from 'react-hook-form'
@@ -187,6 +188,7 @@ export default function EditLocalMediaProfilePage() {
         <section className="view" aria-labelledby="edit-media-profile-title">
             <div className="view-header">
                 <h1 id="edit-media-profile-title">Edit local media profile</h1>
+                {profile.type === 'show' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
             <form className="form" onSubmit={onFormSubmit} noValidate>

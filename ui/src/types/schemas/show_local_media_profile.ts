@@ -11,6 +11,28 @@ import {
 } from './local_media_profile_base'
 
 
+export const SHOW_LOCAL_MEDIA_PROFILE_INDEXING_VALUES_MAX_ITEMS = 100
+
+export const ShowLocalMediaProfileIndexingValuesSchema = z.array(IndexingValueEntrySchema)
+    .max(
+        SHOW_LOCAL_MEDIA_PROFILE_INDEXING_VALUES_MAX_ITEMS,
+        `At most ${SHOW_LOCAL_MEDIA_PROFILE_INDEXING_VALUES_MAX_ITEMS} Indexing Values are allowed`,
+    )
+    .superRefine((indexingValues, ctx) => {
+        const seen = new Set<string>()
+        indexingValues.forEach(({key}, index) => {
+            if (seen.has(key)) {
+                ctx.addIssue({
+                    code: 'custom',
+                    path: [index, 'key'],
+                    message: 'Keys must be unique',
+                })
+            }
+            seen.add(key)
+        })
+    })
+
+
 // ---------- Strict request (create/update) ----------
 const ShowLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
     type: z.literal('show').default('show'),
@@ -19,13 +41,7 @@ const ShowLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
         '/downloads/shows/{{ show }}/{{ episode_title }}.ext',
     ),
     preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
-    indexingValues: z.array(IndexingValueEntrySchema).max(100).default([]),
-}).superRefine(({indexingValues}, ctx) => {
-    const seen = new Set<string>()
-    indexingValues.forEach(({key}, index) => {
-        if (seen.has(key)) ctx.addIssue({code: 'custom', path: ['indexingValues', index, 'key'], message: 'Keys must be unique'})
-        seen.add(key)
-    })
+    indexingValues: ShowLocalMediaProfileIndexingValuesSchema.default([]),
 })
 
 export const ShowLocalMediaProfileCreateSchema = ShowLocalMediaProfileBaseSchema.safeExtend(
