@@ -41,6 +41,7 @@ function ProfileDownloadRow({
     const [busy, setBusy] = useState(false)
     const [showLog, setShowLog] = useState(false)
     const [countdownConfirm, setCountdownConfirm] = useState(false)
+    const [redownloadWhenFinal, setRedownloadWhenFinal] = useState(true)
 
     const invalidate = () =>
         Promise.all([
@@ -64,19 +65,20 @@ function ProfileDownloadRow({
         }
     }
 
-    const startDownload = () =>
+    const startDownload = (redownloadFinal = false) =>
         request(
             `${(window as any).appConfig.API_URL}/episodes/${encodeURIComponent(episodeSlug)}/downloads`,
             {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({localMediaProfileId: profile.id}),
+                body: JSON.stringify({localMediaProfileId: profile.id, redownloadWhenFinal: redownloadFinal}),
             },
             'Could not start the download',
         )
 
     const requestDownload = () => {
         if (confirmCountdownDownload) {
+            setRedownloadWhenFinal(true)
             setCountdownConfirm(true)
             return
         }
@@ -168,7 +170,7 @@ function ProfileDownloadRow({
                 confirmButton={{
                     label: busy ? 'Starting…' : 'Yes, download',
                     onClick: async () => {
-                        await startDownload()
+                        await startDownload(redownloadWhenFinal)
                         setCountdownConfirm(false)
                     },
                     icon: ['fas', 'download'],
