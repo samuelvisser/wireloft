@@ -366,3 +366,42 @@ def test_deleting_reserved_download_releases_its_queue_slot(monkeypatch):
     finally:
         session.close()
         engine.dispose()
+
+
+
+def test_replacement_waits_for_previous_worker_to_be_terminal(monkeypatch):
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+    from task_manager.tasks import media_download_operations
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="replacement-waits")
+        replacement = media_download_operations.create_media_download_operation(session, download)
+        definition_id = session.scalar(
+            select(TaskDefinition.id).where(TaskDefinition.key == "download_episode")
+        )
+        assert definition_id is not None
+
+        previous_run = TaskRun(
+            definition_id=definition_id,
+            resource_type=ResourceType.MEDIA_DOWNLOAD,
+            resource_id=download.id,
+            status=TaskStatus.RUNNING,
+            progress=42,
+            attempt_count=1,
+            max_retries=0,
+        )
+        session.add(previous_run)
+        session.commit()
+
+        assert media_download_operations._reserve_target_dispatch(session, replacement) is False
+
+        previous_run.status = TaskStatus.CANCELED
+        session.commit()
+        monkeypatch.setattr(media_download_operations, "queue_task_after_commit", lambda *args, **kwargs: None)
+
+        assert media_download_operations._reserve_target_dispatch(session, replacement) is True
+    finally:
+        session.close()
+        engine.dispose()
