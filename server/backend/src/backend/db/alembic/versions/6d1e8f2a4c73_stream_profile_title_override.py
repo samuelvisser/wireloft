@@ -1,7 +1,7 @@
 """Add optional Stream Profile show-title override.
 
 Revision ID: 6d1e8f2a4c73
-Revises: 3f7b6a2c9d10
+Revises: d4a7c2e91b63
 """
 
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 revision = "6d1e8f2a4c73"
-down_revision = "3f7b6a2c9d10"
+down_revision = "d4a7c2e91b63"
 branch_labels = None
 depends_on = None
 
