@@ -86,14 +86,20 @@ def wait_for_events() -> None:
         processor.wait_for_tasks()
 
 
-def shutdown_event_emitter() -> None:
-    """Drain and reset the event executor so another app lifecycle can start cleanly."""
+def shutdown_event_emitter(*, wait: bool = True) -> None:
+    """Shut down and reset the event executor for the current app lifecycle.
+
+    Tests and explicit drains can keep the historical blocking behavior. ASGI
+    shutdown uses wait=False so a slow or stuck event callback cannot keep
+    Uvicorn in application shutdown indefinitely.
+    """
     global _executor, _processor, _emitter
     with _state_lock:
         processor = _processor
     if processor is not None:
-        processor.wait_for_tasks()
-        processor.shutdown(wait=True, cancel_futures=False)
+        if wait:
+            processor.wait_for_tasks()
+        processor.shutdown(wait=wait, cancel_futures=not wait)
     with _state_lock:
         _executor = None
         _processor = None
