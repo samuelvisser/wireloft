@@ -50,9 +50,6 @@ async def download_episode(
             while True:
                 if pair is not None:
                     await wait_for_custom_index_pair(*pair)
-                    # Downloads only need to keep index/rename maintenance out. Other
-                    # downloads for this same Show/Profile pair are safe to run alongside
-                    # one another and must not collapse maxConcurrentDownloads to one.
                     async with custom_index_pair_lock(*pair, shared=True):
                         if not pair_is_ready(*pair):
                             continue
