@@ -93,29 +93,22 @@ def test_finalizer_listens_for_final_publication_and_startup():
 def test_final_publication_queues_replacement(final_download, monkeypatch):
     from task_manager.tasks.workers.finalize_countdown_downloads import service
 
-    session, episode, download = final_download
-    prepared = Mock()
-    created = Mock(return_value=SimpleNamespace(id="replacement"))
+    session, episode, _download = final_download
+    queued = Mock(return_value=True)
     dispatched = Mock(return_value=1)
 
     monkeypatch.setattr(service, "get_active_media_download_operation", Mock(return_value=None))
-    monkeypatch.setattr(service, "prepare_media_download_artifact", prepared)
-    monkeypatch.setattr(service, "create_media_download_operation", created)
+    monkeypatch.setattr(service, "queue_final_episode_redownload_if_ready", queued)
     monkeypatch.setattr(service, "dispatch_queued_media_download_operations", dispatched)
 
     result = asyncio.run(service.run_finalize_countdown_downloads(session, episode_id=episode.id))
-    session.refresh(download)
 
-    assert download.redownload_when_final is False
-    prepared.assert_called_once_with(session, download)
-    created.assert_called_once()
-    assert created.call_args.kwargs["source"] == "SYSTEM"
-    assert created.call_args.kwargs["is_redownload"] is True
+    queued.assert_called_once()
     dispatched.assert_called_once_with(session)
     assert result.data["redownloads_queued"] == 1
 
 
-def test_final_publication_cancels_countdown_attempt_before_replacement(final_download, monkeypatch):
+def test_final_publication_cancels_countdown_attempt_and_waits_for_terminal(final_download, monkeypatch):
     from task_manager.tasks.workers.finalize_countdown_downloads import service
 
     session, episode, download = final_download
@@ -123,18 +116,15 @@ def test_final_publication_cancels_countdown_attempt_before_replacement(final_do
         id="countdown-operation",
         context={"episode_publish_status": "published_with_countdown"},
     )
-    active = Mock(side_effect=[countdown_operation, None])
     canceled = Mock()
-    prepared = Mock()
-    created = Mock(return_value=SimpleNamespace(id="replacement"))
+    queued = Mock(return_value=False)
 
-    monkeypatch.setattr(service, "get_active_media_download_operation", active)
+    monkeypatch.setattr(service, "get_active_media_download_operation", Mock(return_value=countdown_operation))
     monkeypatch.setattr(service, "cancel_operation", canceled)
-    monkeypatch.setattr(service, "prepare_media_download_artifact", prepared)
-    monkeypatch.setattr(service, "create_media_download_operation", created)
+    monkeypatch.setattr(service, "queue_final_episode_redownload_if_ready", queued)
     monkeypatch.setattr(service, "dispatch_queued_media_download_operations", Mock(return_value=0))
 
-    asyncio.run(service.run_finalize_countdown_downloads(session, episode_id=episode.id))
+    result = asyncio.run(service.run_finalize_countdown_downloads(session, episode_id=episode.id))
     session.refresh(download)
 
     canceled.assert_called_once_with(
@@ -142,9 +132,9 @@ def test_final_publication_cancels_countdown_attempt_before_replacement(final_do
         reason="Final episode media became available",
         acknowledge=True,
     )
-    prepared.assert_called_once()
-    created.assert_called_once()
-    assert download.redownload_when_final is False
+    queued.assert_called_once_with(session, download.id)
+    assert download.redownload_when_final is True
+    assert result.data["redownloads_queued"] == 0
 
 
 def test_final_publication_keeps_already_final_attempt(final_download, monkeypatch):
@@ -156,13 +146,15 @@ def test_final_publication_keeps_already_final_attempt(final_download, monkeypat
         context={"episode_publish_status": "published_final"},
     )
     canceled = Mock()
-    prepared = Mock()
-    created = Mock()
 
+    def consume_intent(_session, _download_id):
+        download.redownload_when_final = False
+        return False
+
+    queued = Mock(side_effect=consume_intent)
     monkeypatch.setattr(service, "get_active_media_download_operation", Mock(return_value=final_operation))
     monkeypatch.setattr(service, "cancel_operation", canceled)
-    monkeypatch.setattr(service, "prepare_media_download_artifact", prepared)
-    monkeypatch.setattr(service, "create_media_download_operation", created)
+    monkeypatch.setattr(service, "queue_final_episode_redownload_if_ready", queued)
     monkeypatch.setattr(service, "dispatch_queued_media_download_operations", Mock(return_value=0))
 
     asyncio.run(service.run_finalize_countdown_downloads(session, episode_id=episode.id))
@@ -170,8 +162,7 @@ def test_final_publication_keeps_already_final_attempt(final_download, monkeypat
 
     assert download.redownload_when_final is False
     canceled.assert_not_called()
-    prepared.assert_not_called()
-    created.assert_not_called()
+    queued.assert_called_once_with(session, download.id)
 
 
 
