@@ -42,7 +42,7 @@ class StreamProfileBase(Base):
     use_dw_stream: Mapped[bool] = mapped_column(default=False, comment="Use direct DW stream endpoints for stream")
     preferred_format: Mapped[str] = mapped_column(comment="Preferred format for stream, used when choosing the correct downloaded file "
                                                           "or whether to stream audio or video from DW")
-    prefer_exact_match: Mapped[bool] = mapped_column(comment="Prefer an exact local video format over alternate downloaded resolutions")
+    prefer_exact_match: Mapped[bool] = mapped_column(comment="Stream from Daily Wire if the exact resolution the stream profile prefers is not available locally (even if another resolution is)")
     ep_id_type_list: Mapped[list[str]] = mapped_column(
         MutableList.as_mutable(JSON),
         default=_default_episode_types,

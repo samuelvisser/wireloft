@@ -390,7 +390,7 @@ export default function StreamProfileForm({
                         )}
                     />
                     <div className="help">
-                        <ReadMore summary={<span>Prefer exact downloaded matches over alternate local video formats.</span>}>
+                        <ReadMore summary={<span>Match downloaded episodes using strict rules.</span>}>
                             <p>
                                 When this setting is <strong>enabled</strong>, if say, you have a 720p version downloaded but your preferred format is
                                 1080p, instead of using the 720p version, WireLoft will stream from DW directly (in whatever format it happens to provide).<br/>
