@@ -15,7 +15,6 @@ class PodcastDownloadProfile(DownloadProfileBase):
     # Columns
     id: Mapped[int] = mapped_column(ForeignKey("download_profiles.id", ondelete="CASCADE"), primary_key=True)
     download_with_countdown: Mapped[bool] = mapped_column(default=False)
-    redownload_final: Mapped[bool] = mapped_column(default=False)
     download_days_in_past: Mapped[int] = mapped_column(default=0)
     download_episode_count: Mapped[int] = mapped_column(default=0)
     download_starting_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
