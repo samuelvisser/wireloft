@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -126,6 +129,64 @@ def _request(session, show, profile):
         state.requested_generation += 1
     session.flush()
     return state
+
+
+def test_episode_downloads_for_same_show_profile_run_concurrently(tmp_path, monkeypatch):
+    from config import get_settings
+    from task_manager.scheduler.results import TaskResult
+    from task_manager.tasks.workers.download_episode import entrypoint
+
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    class FakeSession:
+        def get(self, model, resource_id):
+            if model is entrypoint.EpisodeMediaDownload:
+                return SimpleNamespace(media_item_id=100, local_media_profile_id=200)
+            if model is entrypoint.Episode:
+                return SimpleNamespace(show_id=300)
+            raise AssertionError(f"Unexpected model lookup: {model}")
+
+    @contextmanager
+    def fake_db_session():
+        yield FakeSession()
+
+    async def ready(*_args):
+        return None
+
+    monkeypatch.setattr(entrypoint, "db_session", fake_db_session)
+    monkeypatch.setattr(entrypoint, "wait_for_custom_index_pair", ready)
+    monkeypatch.setattr(entrypoint, "pair_is_ready", lambda *_args: True)
+
+    async def exercise():
+        both_started = asyncio.Event()
+        release = asyncio.Event()
+        started = 0
+
+        async def fake_run_download_episode(
+            _session,
+            *,
+            media_download_id,
+            is_redownload=False,
+            progress=None,
+        ):
+            nonlocal started
+            started += 1
+            if started == 2:
+                both_started.set()
+            await release.wait()
+            return TaskResult(summary=f"Downloaded {media_download_id}")
+
+        monkeypatch.setattr(entrypoint, "run_download_episode", fake_run_download_episode)
+
+        first = asyncio.create_task(entrypoint.download_episode(resource_id=1))
+        second = asyncio.create_task(entrypoint.download_episode(resource_id=2))
+        try:
+            await asyncio.wait_for(both_started.wait(), timeout=1.0)
+        finally:
+            release.set()
+        await asyncio.gather(first, second)
+
+    asyncio.run(exercise())
 
 
 def test_definitions_belong_to_lmp_and_serialize(db_session):

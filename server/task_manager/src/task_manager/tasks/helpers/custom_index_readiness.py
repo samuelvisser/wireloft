@@ -18,15 +18,28 @@ from config import get_settings
 
 
 @asynccontextmanager
-async def custom_index_pair_lock(show_id: int, local_media_profile_id: int):
-    """Serialize filesystem moves and index commits for this pair across workers."""
+async def custom_index_pair_lock(
+    show_id: int,
+    local_media_profile_id: int,
+    *,
+    shared: bool = False,
+):
+    """Coordinate filesystem/index work for one Show/Profile pair across workers.
+
+    Maintenance jobs take the default exclusive lock because they mutate index
+    assignments or move existing files. Downloads only need a stable generation
+    while they resolve and publish their own artifact, so they take a shared lock.
+    That keeps maintenance out while still allowing separate downloads for the
+    same Show/Profile pair to use the configured global concurrency.
+    """
     root = Path(get_settings().download_settings.download_root) / ".wireloft-index-locks"
     root.mkdir(parents=True, exist_ok=True)
     lock_file = (root / f"{show_id}-{local_media_profile_id}.lock").open("a+b")
+    lock_mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
     try:
         while True:
             try:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(lock_file.fileno(), lock_mode | fcntl.LOCK_NB)
                 break
             except BlockingIOError:
                 await asyncio.sleep(0.25)
