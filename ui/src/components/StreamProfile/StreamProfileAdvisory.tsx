@@ -17,7 +17,7 @@ type DownloadMediaKind = 'audio' | 'video' | 'hls'
 type Props = {
     mode: 'rss' | 'base'
     preferredFormat?: string
-    videoOutputMode?: string
+    videoOutputMode?: string | null
     useDownloads: boolean
     useDwStream: boolean
     selectedEpisodeTypes: string[]
@@ -103,7 +103,7 @@ function episodeTypeLabels(values: string[]) {
 
 function requiredDownloadKinds(
     preferredFormat?: string,
-    videoOutputMode?: string,
+    videoOutputMode?: string | null,
 ): DownloadMediaKind[] {
     if (preferredFormat === 'format_audio_only') return ['audio']
     if (videoOutputMode === 'audio_hls') return ['audio', 'hls']

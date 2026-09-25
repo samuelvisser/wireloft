@@ -15,28 +15,46 @@ const RssStreamProfileBaseSchema = z.object({
     ),
     requireExactMatch: z.boolean().default(false),
     epIdTypeList: z.array(z.enum(EpisodeTypeReg.values)).default(['ep', 'aux']),
-    videoOutputMode: z.enum(RssVideoOutputModeReg.values).default('audio_hls'),
+    videoOutputMode: z.enum(RssVideoOutputModeReg.values).nullable().default(null),
     streamLiveEpisodes: z.boolean().default(false),
     maxItems: z.int().nonnegative().default(100),
 })
 
-const validateLiveVideoOutput = (
-    value: {preferredFormat: string; videoOutputMode: string; streamLiveEpisodes: boolean},
+const validateVideoOutput = (
+    value: {preferredFormat: string; videoOutputMode: string | null; streamLiveEpisodes: boolean},
     ctx: z.RefinementCtx,
 ) => {
-    if (!value.streamLiveEpisodes) return
-    if (!['audio_hls', 'mp4_hls'].includes(value.videoOutputMode)) {
+    const audioOnly = value.preferredFormat === 'format_audio_only'
+
+    if (audioOnly && value.videoOutputMode !== null) {
         ctx.addIssue({
             code: 'custom',
-            path: ['streamLiveEpisodes'],
-            message: 'Live episode streaming requires an HLS video output mode',
+            path: ['videoOutputMode'],
+            message: 'Audio-only Stream Profiles cannot have a video output mode',
         })
     }
-    if (value.preferredFormat === 'format_audio_only') {
+    if (!audioOnly && value.videoOutputMode === null) {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['videoOutputMode'],
+            message: 'Video Stream Profiles require a video output mode',
+        })
+    }
+
+    if (!value.streamLiveEpisodes) return
+    if (audioOnly) {
         ctx.addIssue({
             code: 'custom',
             path: ['streamLiveEpisodes'],
             message: 'Live episode streaming requires a video preferred format',
+        })
+        return
+    }
+    if (value.videoOutputMode === null || !['audio_hls', 'mp4_hls'].includes(value.videoOutputMode)) {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['streamLiveEpisodes'],
+            message: 'Live episode streaming requires an HLS video output mode',
         })
     }
 }
@@ -44,13 +62,13 @@ const validateLiveVideoOutput = (
 export const RssStreamProfileCreateSchema = RssStreamProfileBaseSchema.extend({
     showId: z.int(),
     feedUrl: z.string().optional(),
-}).superRefine(validateLiveVideoOutput)
+}).superRefine(validateVideoOutput)
 export type RssStreamProfileCreateIn = z.input<typeof RssStreamProfileCreateSchema>
 export type RssStreamProfileCreateOut = z.output<typeof RssStreamProfileCreateSchema>
 
 export const RssStreamProfileUpdateSchema = RssStreamProfileBaseSchema.extend({
     feedUrl: z.string().min(1),
-}).superRefine(validateLiveVideoOutput)
+}).superRefine(validateVideoOutput)
 export type RssStreamProfileUpdateIn = z.input<typeof RssStreamProfileUpdateSchema>
 export type RssStreamProfileUpdateOut = z.output<typeof RssStreamProfileUpdateSchema>
 
@@ -63,7 +81,7 @@ export const RssStreamProfileReadSchema = z.looseObject({
     preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
     requireExactMatch: z.boolean(),
     epIdTypeList: z.array(z.union([z.enum(EpisodeTypeReg.values), z.string()])),
-    videoOutputMode: z.union([z.enum(RssVideoOutputModeReg.values), z.string()]),
+    videoOutputMode: z.union([z.enum(RssVideoOutputModeReg.values), z.string()]).nullable(),
     streamLiveEpisodes: z.boolean(),
     maxItems: z.number(),
     feedUrl: z.string(),

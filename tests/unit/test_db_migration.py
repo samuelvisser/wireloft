@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "4e6c9a1b7d2f"
+HEAD_REVISION = "5a9c2e7d4b10"
 PREVIOUS_DEVELOPMENT_REVISION = "e5f1a2c7d903"
 HISTORICAL_EPISODE_SCHEMA_REVISION = "e4c91a7b2d30"
 OUTPUT_TEMPLATE_SPACING_REVISION = "9b1f4e7c2d6a"
@@ -228,7 +228,7 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == "7c2a9e5d4b10"
+    assert script.get_revision(HEAD_REVISION).down_revision == "c1a7e4d9b203"
     assert (
         script.get_revision(PREVIOUS_DEVELOPMENT_REVISION).down_revision
         == HISTORICAL_EPISODE_SCHEMA_REVISION

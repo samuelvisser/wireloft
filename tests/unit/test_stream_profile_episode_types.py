@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -21,6 +22,73 @@ def test_rss_stream_profile_defaults_to_episode_and_auxiliary():
     )
 
     assert profile.ep_id_type_list == ["ep", "aux"]
+
+
+def test_audio_only_rss_stream_profile_defaults_video_output_mode_to_null():
+    from backend.api.models.rss_stream_profile import RssStreamProfileAPICreate
+
+    profile = RssStreamProfileAPICreate(
+        show_id=1,
+        enable_profile=True,
+        use_downloads=False,
+        use_dw_stream=True,
+        preferred_format="format_audio_only",
+        require_exact_match=False,
+    )
+
+    assert profile.video_output_mode is None
+
+
+def test_video_rss_stream_profile_defaults_video_output_mode_to_audio_hls():
+    from backend.api.models.rss_stream_profile import RssStreamProfileAPICreate
+    from backend.types.stream_profile_types import RssVideoOutputMode
+
+    profile = RssStreamProfileAPICreate(
+        show_id=1,
+        enable_profile=True,
+        use_downloads=False,
+        use_dw_stream=True,
+        preferred_format="format_1080p",
+        require_exact_match=False,
+    )
+
+    assert profile.video_output_mode is RssVideoOutputMode.AUDIO_HLS
+
+
+def test_audio_only_rss_stream_profile_rejects_video_output_mode():
+    from backend.api.models.rss_stream_profile import RssStreamProfileAPICreate
+
+    with pytest.raises(ValidationError, match="Audio-only Stream Profiles cannot have a video output mode"):
+        RssStreamProfileAPICreate(
+            show_id=1,
+            enable_profile=True,
+            use_downloads=False,
+            use_dw_stream=True,
+            preferred_format="format_audio_only",
+            require_exact_match=False,
+            video_output_mode="audio_hls",
+        )
+
+
+def test_video_rss_stream_profile_requires_video_output_mode():
+    from backend.api.models.rss_stream_profile import RssStreamProfileAPICreate
+
+    with pytest.raises(ValidationError, match="Video Stream Profiles require a video output mode"):
+        RssStreamProfileAPICreate(
+            show_id=1,
+            enable_profile=True,
+            use_downloads=False,
+            use_dw_stream=True,
+            preferred_format="format_1080p",
+            require_exact_match=False,
+            video_output_mode=None,
+        )
+
+
+def test_rss_stream_profile_database_video_output_mode_is_nullable():
+    from backend.db.models import RssStreamProfile
+
+    assert RssStreamProfile.__table__.c.video_output_mode.nullable is True
 
 
 @pytest.fixture

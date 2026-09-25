@@ -22,7 +22,6 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import (
-    DEFAULT_RSS_VIDEO_OUTPUT_MODE,
     RSS_AUDIO_PRIMARY_OUTPUT_MODES,
     RSS_HLS_OUTPUT_MODES,
     RssVideoOutputMode,
@@ -57,10 +56,6 @@ _HLS_MIME_TYPE = "application/x-mpegURL"
 _BARE_HTML_AMPERSAND_RE = re.compile(
     r"&(?!(?:#\d+|#x[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);)"
 )
-
-
-def _video_output_mode(profile: RssStreamProfile) -> str:
-    return profile.video_output_mode or DEFAULT_RSS_VIDEO_OUTPUT_MODE
 
 
 def get_rss_stream_profile_by_token(s: Session, token: str) -> RssStreamProfile:
@@ -246,7 +241,7 @@ def _relevant_local_download(
     if profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value:
         return audio
 
-    mode = _video_output_mode(profile)
+    mode = profile.video_output_mode
     if mode == RssVideoOutputMode.AUDIO_HLS.value:
         return audio or hls
     if mode == RssVideoOutputMode.AUDIO_MP4.value:
@@ -273,7 +268,7 @@ def _has_required_local_media(
     if profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value:
         return audio is not None
 
-    mode = _video_output_mode(profile)
+    mode = profile.video_output_mode
     if mode == RssVideoOutputMode.AUDIO_HLS.value:
         return audio is not None and hls is not None
     if mode == RssVideoOutputMode.AUDIO_MP4.value:
@@ -295,7 +290,7 @@ def _profile_streams_live_hls(profile: RssStreamProfile) -> bool:
     return (
         bool(profile.stream_live_episodes)
         and profile.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value
-        and _video_output_mode(profile) in RSS_HLS_OUTPUT_MODES
+        and profile.video_output_mode in RSS_HLS_OUTPUT_MODES
     )
 
 
@@ -716,7 +711,7 @@ def _append_item(
     if profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value:
         enclosure_url = audio_url
         enclosure_type = "audio/mp4"
-    elif _video_output_mode(profile) in RSS_AUDIO_PRIMARY_OUTPUT_MODES:
+    elif profile.video_output_mode in RSS_AUDIO_PRIMARY_OUTPUT_MODES:
         enclosure_url = audio_url
         enclosure_type = "audio/mp4"
     else:
@@ -735,7 +730,7 @@ def _append_item(
     _sub_text(item, "link", media_url)
 
     if profile.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value:
-        mode = _video_output_mode(profile)
+        mode = profile.video_output_mode
         if mode == RssVideoOutputMode.AUDIO_MP4.value:
             _append_alternate_enclosure(
                 item,

@@ -29,7 +29,13 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     preferred_format: str = Field(min_length=1)
     require_exact_match: bool
     ep_id_type_list: list[EpIdType] = Field(default_factory=_default_episode_types)
-    video_output_mode: RssVideoOutputMode = RssVideoOutputMode.AUDIO_HLS
+    video_output_mode: Optional[RssVideoOutputMode] = Field(
+        default_factory=lambda data: (
+            None
+            if data.get("preferred_format") == PreferredFormat.FORMAT_AUDIO_ONLY.value
+            else RssVideoOutputMode.AUDIO_HLS
+        )
+    )
     stream_live_episodes: bool = False
     max_items: int = Field(default=0, ge=0)
 
@@ -43,20 +49,28 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
         return value
 
     @model_validator(mode="after")
-    def _live_streaming_requires_hls_output(self):
+    def _validate_video_output(self):
+        audio_only = self.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
+
+        if audio_only and self.video_output_mode is not None:
+            raise ValueError(
+                "Audio-only Stream Profiles cannot have a video output mode"
+            )
+        if not audio_only and self.video_output_mode is None:
+            raise ValueError(
+                "Video Stream Profiles require a video output mode"
+            )
+
+        if self.stream_live_episodes and audio_only:
+            raise ValueError(
+                "Live episode streaming requires a video preferred format"
+            )
         if (
             self.stream_live_episodes
             and self.video_output_mode not in RSS_HLS_OUTPUT_MODES
         ):
             raise ValueError(
                 "Live episode streaming requires an HLS video podcast output mode"
-            )
-        if (
-            self.stream_live_episodes
-            and self.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
-        ):
-            raise ValueError(
-                "Live episode streaming requires a video preferred format"
             )
         return self
 
@@ -93,7 +107,7 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
     preferred_format: str
     require_exact_match: bool
     ep_id_type_list: list[str]
-    video_output_mode: str
+    video_output_mode: Optional[str]
     stream_live_episodes: bool
     max_items: int
     feed_url: str

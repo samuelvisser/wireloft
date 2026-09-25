@@ -4,12 +4,12 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from alembic import command
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
 PREVIOUS_REVISION = "b6f3c8a1d2e4"
-HEAD_REVISION = "c1a7e4d9b203"
+HEAD_REVISION = "5a9c2e7d4b10"
 
 
 def test_rss_output_mode_migration_rewrites_methods_and_stabilizes_feed_urls(
@@ -34,12 +34,14 @@ def test_rss_output_mode_migration_rewrites_methods_and_stabilizes_feed_urls(
     command.upgrade(config, PREVIOUS_REVISION)
 
     cases = [
-        ("stream_hls_download_m4a", "audio_hls"),
-        ("stream_download_mp4", "mp4"),
-        ("stream_hls_download_mp4", "mp4_hls"),
+        ("stream_hls_download_m4a", "audio_hls", "format_1080p"),
+        ("stream_download_mp4", "mp4", "format_1080p"),
+        ("stream_hls_download_mp4", "mp4_hls", "format_1080p"),
         # All former experiment-only values intentionally collapse back to the
         # supported default instead of becoming permanent runtime aliases.
-        ("experiment_hls_local_mp4_or_dw", "audio_hls"),
+        ("experiment_hls_local_mp4_or_dw", "audio_hls", "format_1080p"),
+        # Audio-only profiles do not have a meaningful video output mode.
+        ("stream_hls_download_m4a", None, "format_audio_only"),
     ]
 
     try:
@@ -53,15 +55,16 @@ def test_rss_output_mode_migration_rewrites_methods_and_stabilizes_feed_urls(
                 "'podcast', 'numbered', 'Host', 'host')"
             )).lastrowid
 
-            for index, (old_method, _new_mode) in enumerate(cases):
+            for index, (old_method, _new_mode, preferred_format) in enumerate(cases):
                 profile_id = connection.execute(text(
                     "INSERT INTO stream_profiles "
                     "(type, show_id, enable_profile, token, use_downloads, "
                     "use_dw_stream, preferred_format, require_exact_match, ep_id_type_list) VALUES "
-                    "('rss', :show_id, 1, :token, 1, 1, 'format_1080p', 0, '[]')"
+                    "('rss', :show_id, 1, :token, 1, 1, :preferred_format, 0, '[]')"
                 ), {
                     "show_id": show_id,
                     "token": f"profile-{index}",
+                    "preferred_format": preferred_format,
                 }).lastrowid
                 connection.execute(text(
                     "INSERT INTO stream_profiles_rss "
@@ -87,8 +90,15 @@ def test_rss_output_mode_migration_rewrites_methods_and_stabilizes_feed_urls(
                 "ORDER BY base.token"
             )).mappings().all()
 
+        video_output_column = next(
+            column
+            for column in inspect(engine).get_columns("stream_profiles_rss")
+            if column["name"] == "video_output_mode"
+        )
+        assert video_output_column["nullable"] is True
+
         by_token = {row["token"]: row for row in rows}
-        for index, (_old_method, new_mode) in enumerate(cases):
+        for index, (_old_method, new_mode, _preferred_format) in enumerate(cases):
             row = by_token[f"profile-{index}"]
             assert row["video_output_mode"] == new_mode
             parts = urlsplit(row["feed_url"])

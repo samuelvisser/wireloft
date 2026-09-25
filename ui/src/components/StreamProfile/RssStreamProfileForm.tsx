@@ -30,10 +30,29 @@ export default function RssStreamProfileForm({
     const feedUrl: string | undefined = watch('feedUrl')
     const useDwStream: boolean = watch('useDwStream')
     const preferredFormat: string | undefined = watch('preferredFormat')
-    const videoOutputMode: string | undefined = watch('videoOutputMode')
+    const videoOutputMode: string | null | undefined = watch('videoOutputMode')
     const streamLiveEpisodes: boolean = watch('streamLiveEpisodes')
     const usesVideo = VIDEO_FORMATS.has(preferredFormat ?? '')
     const usesHlsVideo = usesVideo && RssHlsOutputModes.has(videoOutputMode ?? '')
+
+    useEffect(() => {
+        if (preferredFormat === 'format_audio_only') {
+            if (videoOutputMode !== null) {
+                setValue('videoOutputMode', null, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                })
+            }
+            return
+        }
+
+        if (usesVideo && videoOutputMode == null) {
+            setValue('videoOutputMode', 'audio_hls', {
+                shouldDirty: true,
+                shouldValidate: true,
+            })
+        }
+    }, [preferredFormat, setValue, usesVideo, videoOutputMode])
 
     useEffect(() => {
         if (!usesHlsVideo && streamLiveEpisodes) {

@@ -3,10 +3,7 @@ from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .StreamProfileBase import StreamProfileBase
-from backend.types.stream_profile_types import (
-    DEFAULT_RSS_VIDEO_OUTPUT_MODE,
-    StreamProfileType,
-)
+from backend.types.stream_profile_types import StreamProfileType
 
 
 class RssStreamProfile(StreamProfileBase):
@@ -18,11 +15,7 @@ class RssStreamProfile(StreamProfileBase):
         primary_key=True,
     )
     feed_url: Mapped[str]
-    video_output_mode: Mapped[str] = mapped_column(
-        default=DEFAULT_RSS_VIDEO_OUTPUT_MODE,
-        server_default=DEFAULT_RSS_VIDEO_OUTPUT_MODE,
-        nullable=False,
-    )
+    video_output_mode: Mapped[str | None] = mapped_column(nullable=True)
     max_items: Mapped[int] = mapped_column(default=0)
     stream_live_episodes: Mapped[bool] = mapped_column(
         default=False,

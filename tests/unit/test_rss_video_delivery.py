@@ -87,7 +87,7 @@ def test_audio_only_uses_stable_m4a_without_video_alternate():
 
     profile = SimpleNamespace(
         preferred_format="format_audio_only",
-        video_output_mode="audio_hls",
+        video_output_mode=None,
     )
     channel = Element("channel")
     _append_item(
