@@ -50,10 +50,10 @@ Choose the audio or video format you want the feed to prefer.
 
 When **Use Downloads** is enabled, WireLoft looks for completed local files that match the requested media type.
 
-### Require exact match
+### Prefer exact match
 
-- Enabled: only a local file with the exact preferred format is accepted.
-- Disabled: WireLoft can use another suitable resolution of the same media type when the exact video quality is unavailable.
+- Enabled: WireLoft prefers an exact downloaded video format. If only a different local video resolution exists, WireLoft falls back to Daily Wire instead.
+- Disabled: WireLoft can use another suitable downloaded video resolution before falling back to Daily Wire.
 
 WireLoft never treats audio as a substitute for a local video file or vice versa.
 
@@ -185,7 +185,7 @@ Check:
 
 - selected episode types;
 - preferred format;
-- **Require exact match**;
+- **Prefer exact match**;
 - **Use Downloads** / **Use DailyWire stream**;
 - **Maximum episodes in RSS feed**.
 
