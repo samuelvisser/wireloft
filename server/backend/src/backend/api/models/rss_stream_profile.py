@@ -27,7 +27,7 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     use_downloads: bool
     use_dw_stream: bool
     preferred_format: str = Field(min_length=1)
-    require_exact_match: bool
+    prefer_exact_match: bool
     ep_id_type_list: list[EpIdType] = Field(default_factory=_default_episode_types)
     video_output_mode: Optional[RssVideoOutputMode] = Field(
         default_factory=lambda data: (
@@ -105,7 +105,7 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
     use_downloads: bool
     use_dw_stream: bool
     preferred_format: str
-    require_exact_match: bool
+    prefer_exact_match: bool
     ep_id_type_list: list[str]
     video_output_mode: Optional[str]
     stream_live_episodes: bool
