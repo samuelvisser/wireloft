@@ -108,7 +108,7 @@ const defaultStreamProfile = (action?: ShowAction): Partial<RssStreamProfileBund
     useDownloads: true,
     useDwStream: action === 'stream',
     preferredFormat: 'format_1080p',
-    requireExactMatch: false,
+    preferExactMatch: false,
     epIdTypeList: ['ep', 'aux'],
 })
 
