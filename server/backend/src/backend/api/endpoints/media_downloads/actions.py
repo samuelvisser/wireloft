@@ -10,11 +10,11 @@ from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.services.media_download_history import record_media_download_history
-from task_manager.scheduler.operation_control import cancel_operation
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.media_download_operations import (
+    cancel_media_download_operation,
     create_media_download_operation,
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
@@ -37,28 +37,25 @@ def retry_media_download_action(
         download = s.get(MediaDownloadBase, media_download_id)
         if download is None:
             raise HTTPException(status_code=404, detail="Media download not found")
+        record_media_download_history(
+            s,
+            media_download_id,
+            MediaDownloadHistoryAction.RETRY_REQUESTED,
+            metadata={"source": source},
+        )
+        s.commit()
         active = get_active_media_download_operation(s, media_download_id)
         if active is not None:
             if reuse_matching_active and active.source == source:
                 return active.id
             active_operation_id = active.id
-            record_media_download_history(
-                s,
-                media_download_id,
-                MediaDownloadHistoryAction.CANCEL_REQUESTED,
-                metadata={
-                    "operation_id": active.id,
-                    "reason": "Replaced by retry",
-                },
-            )
-            s.commit()
         is_redownload = (
             download.downloaded_at is not None
             or download.artifact_status in {"available", "missing", "corrupted"}
         )
 
     if active_operation_id is not None:
-        cancel_operation(
+        cancel_media_download_operation(
             active_operation_id,
             reason="Replaced by retry",
             acknowledge=True,
@@ -102,20 +99,10 @@ def cancel_media_download_action(
                 raise HTTPException(status_code=409, detail="This download is not currently in progress")
         else:
             operation_id = operation.id
-            record_media_download_history(
-                s,
-                media_download_id,
-                MediaDownloadHistoryAction.CANCEL_REQUESTED,
-                metadata={
-                    "operation_id": operation.id,
-                    "reason": "Canceled by user",
-                },
-            )
-            s.commit()
 
     if operation_id is not None:
         try:
-            cancel_operation(operation_id, reason="Canceled by user", acknowledge=True)
+            cancel_media_download_operation(operation_id, reason="Canceled by user", acknowledge=True)
         except ValueError as exc:
             if not allow_inactive:
                 raise HTTPException(status_code=409, detail="This download is not currently in progress") from exc
@@ -150,7 +137,7 @@ def cancel_media_download_action(
 
     if replacement_id is not None:
         try:
-            cancel_operation(replacement_id, reason="Canceled by user", acknowledge=True)
+            cancel_media_download_operation(replacement_id, reason="Canceled by user", acknowledge=True)
         except ValueError:
             pass
 

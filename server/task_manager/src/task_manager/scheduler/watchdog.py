@@ -165,11 +165,24 @@ def monitor_stalled_work(
     operations_canceled = 0
     for operation_id in operation_ids:
         try:
-            if cancel_operation(
-                operation_id,
-                reason=reason,
-                acknowledge=False,
-            ) is not None:
+            from task_manager.scheduler.operations import get_operation
+            operation = get_operation(operation_id)
+            if operation is not None and operation.kind == "media.download":
+                from task_manager.tasks.media_download_operations import (
+                    cancel_media_download_operation,
+                )
+                canceled = cancel_media_download_operation(
+                    operation_id,
+                    reason=reason,
+                    acknowledge=False,
+                )
+            else:
+                canceled = cancel_operation(
+                    operation_id,
+                    reason=reason,
+                    acknowledge=False,
+                )
+            if canceled is not None:
                 operations_canceled += 1
         except ValueError:
             continue

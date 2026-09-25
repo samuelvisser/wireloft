@@ -6,7 +6,9 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from backend.db.models.media_download import EpisodeMediaDownload
+from backend.services.media_download_history import record_media_download_history
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.episode_download_scope import EpisodeDownloadScope
 from backend.utils.output_template import output_template_fields, resolve_episode_output_path
@@ -151,6 +153,17 @@ async def run_rename_file_worker(
                     raise
 
                 _record_artifact_location(download, destination)
+                record_media_download_history(
+                    s,
+                    download.id,
+                    MediaDownloadHistoryAction.ARTIFACT_RENAMED,
+                    metadata={
+                        "old_path": str(source),
+                        "new_path": str(destination),
+                        "reason": "output_template_rename",
+                        "recovered": False,
+                    },
+                )
                 s.commit()
                 renamed += 1
             elif destination.exists():
@@ -161,6 +174,17 @@ async def run_rename_file_worker(
                 _move_hls_assets_if_present(source, destination)
                 _move_thumbnail_if_present(download, thumbnail_destination)
                 _record_artifact_location(download, destination)
+                record_media_download_history(
+                    s,
+                    download.id,
+                    MediaDownloadHistoryAction.ARTIFACT_RENAMED,
+                    metadata={
+                        "old_path": str(source),
+                        "new_path": str(destination),
+                        "reason": "output_template_rename",
+                        "recovered": True,
+                    },
+                )
                 s.commit()
                 recovered += 1
             else:

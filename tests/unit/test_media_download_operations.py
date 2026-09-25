@@ -90,6 +90,7 @@ def _session():
 
 
 def test_media_download_operation_is_the_live_execution_owner():
+    from backend.db.models.media_download import MediaDownloadHistory
     from task_manager.scheduler.types import OperationSource
     from task_manager.tasks.media_download_operations import create_media_download_operation
 
@@ -118,6 +119,16 @@ def test_media_download_operation_is_the_live_execution_owner():
         assert target.resource_id == download.id
         assert target.recover_on_restart is False
 
+        history = (
+            session.query(MediaDownloadHistory)
+            .filter_by(media_download_id=download.id)
+            .order_by(MediaDownloadHistory.id)
+            .all()
+        )
+        assert [entry.action for entry in history] == ["queued", "prioritized"]
+        assert history[0].event_metadata["operation_id"] == operation.id
+        assert history[1].event_metadata["operation_id"] == operation.id
+
         # MediaDownload is pure domain/artifact state; none of the worker
         # lifecycle fields that TaskRun owns remain on the mapped model.
         for legacy_field in (
@@ -129,6 +140,55 @@ def test_media_download_operation_is_the_live_execution_owner():
             "attempt_generation",
         ):
             assert not hasattr(download, legacy_field)
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_operation_history_dedupes_per_task_run_not_forever():
+    from backend.db.models.media_download import MediaDownloadHistory
+    from backend.services.media_download_history import (
+        record_media_download_operation_history_once,
+    )
+    from backend.types.media_download_history_types import MediaDownloadHistoryAction
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="history-dedupe")
+        session.commit()
+
+        first = record_media_download_operation_history_once(
+            session,
+            download.id,
+            MediaDownloadHistoryAction.CANCELLED,
+            operation_ids=("operation-1",),
+            metadata={"operation_id": "operation-1", "task_run_id": 10},
+        )
+        duplicate = record_media_download_operation_history_once(
+            session,
+            download.id,
+            MediaDownloadHistoryAction.CANCELLED,
+            operation_ids=("operation-1",),
+            metadata={"operation_id": "operation-1", "task_run_id": 10},
+        )
+        second_attempt = record_media_download_operation_history_once(
+            session,
+            download.id,
+            MediaDownloadHistoryAction.CANCELLED,
+            operation_ids=("operation-1",),
+            metadata={"operation_id": "operation-1", "task_run_id": 11},
+        )
+        session.commit()
+
+        assert first is not None
+        assert duplicate is not None
+        assert second_attempt is not None
+        assert duplicate.id == first.id
+        assert second_attempt.id != first.id
+        assert session.query(MediaDownloadHistory).filter_by(
+            media_download_id=download.id,
+            action=MediaDownloadHistoryAction.CANCELLED.value,
+        ).count() == 2
     finally:
         session.close()
         engine.dispose()

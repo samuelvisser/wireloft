@@ -66,6 +66,14 @@ def _presentation(entry: MediaDownloadHistory) -> tuple[str, str, str | None]:
         )
     if action == MediaDownloadHistoryAction.PRIORITIZED.value:
         return "Download prioritized", "pending", None
+    if action == MediaDownloadHistoryAction.RETRY_REQUESTED.value:
+        return "Retry requested", "pending", None
+    if action == MediaDownloadHistoryAction.RESTARTED.value:
+        return (
+            "Redownload restarted" if metadata.get("is_redownload") else "Download restarted",
+            "pending",
+            None,
+        )
     if action == MediaDownloadHistoryAction.STARTED.value:
         return (
             "Redownload started" if metadata.get("is_redownload") else "Download started",

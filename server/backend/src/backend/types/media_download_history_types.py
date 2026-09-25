@@ -7,6 +7,8 @@ class MediaDownloadHistoryAction(str, Enum):
     CREATED = "created"
     QUEUED = "queued"
     PRIORITIZED = "prioritized"
+    RETRY_REQUESTED = "retry_requested"
+    RESTARTED = "restarted"
     STARTED = "started"
     COMPLETED = "completed"
     FAILED = "failed"

@@ -108,6 +108,15 @@ def test_rename_file_worker_moves_manual_artifact_and_updates_path(monkeypatch, 
         assert download.download_profile_id is None
         assert expected.read_bytes() == b"media"
         assert not old_path.exists()
+
+        from backend.db.models.media_download import MediaDownloadHistory
+        [rename_event] = session.query(MediaDownloadHistory).filter_by(
+            media_download_id=download.id,
+            action="artifact_renamed",
+        ).all()
+        assert rename_event.event_metadata["old_path"] == str(old_path)
+        assert rename_event.event_metadata["new_path"] == str(expected)
+        assert rename_event.event_metadata["reason"] == "output_template_rename"
     finally:
         session.close()
         engine.dispose()

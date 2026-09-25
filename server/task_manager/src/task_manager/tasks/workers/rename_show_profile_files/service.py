@@ -10,8 +10,10 @@ from sqlalchemy.orm import Session, joinedload
 
 from backend.db.models import Episode, Show, ShowLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
+from backend.services.media_download_history import record_media_download_history
 from backend.services.custom_indexes import ensure_episode_custom_indexes_ready, profile_applies_to_show
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.output_template import resolve_episode_output_path
 from task_manager.scheduler.results import TaskResult
@@ -300,6 +302,17 @@ def run_rename_show_profile_files(
                 download,
                 item.move.destination,
                 item.move.thumbnail_destination,
+            )
+            record_media_download_history(
+                session,
+                download.id,
+                MediaDownloadHistoryAction.ARTIFACT_RENAMED,
+                metadata={
+                    "old_path": str(item.move.source),
+                    "new_path": str(item.move.destination),
+                    "reason": "output_template_rename",
+                    "recovered": False,
+                },
             )
         session.commit()
     except BaseException:

@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from task_manager.scheduler.operation_control import cancel_operation
 from task_manager.tasks.media_download_operations import (
+    cancel_media_download_operation,
     get_active_media_download_operation,
     prepare_media_download_artifact,
 )
@@ -32,7 +32,7 @@ def cancel_active_download_attempts(
     s.rollback()
     for operation_id in operation_ids:
         try:
-            cancel_operation(operation_id, reason=reason, acknowledge=True)
+            cancel_media_download_operation(operation_id, reason=reason, acknowledge=True)
         except ValueError:
             pass
     s.expire_all()

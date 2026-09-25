@@ -7,13 +7,13 @@ from sqlalchemy.orm import Session
 
 from backend.utils.output_template import resolve_episode_output_path
 from task_manager.scheduler.db import TaskOperation
-from task_manager.scheduler.operation_control import cancel_operation
 from task_manager.scheduler.types import OperationSource, OperationStatus
 from task_manager.tasks.helpers.downloads.show_episode_downloads import (
     cancel_active_download_attempts,
     delete_episode_download_artifact,
 )
 from task_manager.tasks.media_download_operations import (
+    cancel_media_download_operation,
     create_media_download_operation,
     dispatch_queued_media_download_operations,
 )
@@ -121,6 +121,6 @@ def _check_targets(
 def _cancel_targets(targets: list[RedownloadTarget], *, reason: str) -> None:
     for target in targets:
         try:
-            cancel_operation(target.operation_id, reason=reason, acknowledge=True)
+            cancel_media_download_operation(target.operation_id, reason=reason, acknowledge=True)
         except ValueError:
             pass

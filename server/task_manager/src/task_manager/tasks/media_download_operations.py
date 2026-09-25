@@ -13,10 +13,17 @@ from backend.db.models.media_download import EpisodeMediaDownload, MediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.media_types import MediaType
-from backend.services.media_download_history import record_media_download_history
+from backend.services.media_download_history import (
+    record_media_download_history,
+    record_media_download_operation_history_once,
+)
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 from config import get_settings
-from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskRun
+from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskOperationRun, TaskRun
+from task_manager.scheduler.operation_control import (
+    cancel_operation as cancel_task_operation,
+    restart_operation as restart_task_operation,
+)
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
     create_operation,
@@ -245,6 +252,167 @@ def create_media_download_operation(
         _prioritize_queued_operation(session, operation)
     session.flush()
     return operation
+
+
+def _get_media_download_operation(
+    session: Session,
+    operation_id: str,
+) -> TaskOperation | None:
+    operation = session.get(TaskOperation, operation_id)
+    if operation is None:
+        return None
+    if (
+        operation.kind != MEDIA_DOWNLOAD_OPERATION_KIND
+        or operation.resource_type != "media_download"
+        or operation.resource_id is None
+    ):
+        raise ValueError("Operation is not a media download")
+    return operation
+
+
+def _history_metadata_for_operation(
+    session: Session,
+    operation: TaskOperation,
+) -> dict:
+    context = operation.context if isinstance(operation.context, dict) else {}
+    task_run_id = session.scalar(
+        select(func.max(TaskOperationRun.task_run_id))
+        .where(TaskOperationRun.operation_id == operation.id)
+    )
+    metadata = {
+        "operation_id": operation.id,
+        "source": operation.source,
+        "is_redownload": bool(context.get("is_redownload")),
+    }
+    if task_run_id is not None:
+        metadata["task_run_id"] = int(task_run_id)
+    return metadata
+
+
+def cancel_media_download_operation(
+    operation_id: str,
+    *,
+    reason: str = "Canceled by user",
+    acknowledge: bool = True,
+):
+    """Cancel any media.download operation and durably mirror that action to history."""
+    session = get_session()
+    try:
+        operation = _get_media_download_operation(session, operation_id)
+        if operation is None:
+            return None
+        media_download_id = int(operation.resource_id)
+        metadata = {
+            **_history_metadata_for_operation(session, operation),
+            "reason": reason,
+        }
+        record_media_download_operation_history_once(
+            session,
+            media_download_id,
+            MediaDownloadHistoryAction.CANCEL_REQUESTED,
+            operation_ids=(operation.id,),
+            metadata=metadata,
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    snapshot = cancel_task_operation(
+        operation_id,
+        reason=reason,
+        acknowledge=acknowledge,
+    )
+    if snapshot is None:
+        return None
+
+    session = get_session()
+    try:
+        metadata = {
+            **metadata,
+            "operation_id": snapshot.id,
+            "source": snapshot.source,
+            "is_redownload": bool(
+                snapshot.context.get("is_redownload")
+                if isinstance(snapshot.context, dict)
+                else False
+            ),
+            "reason": reason,
+        }
+        if snapshot.started_at is not None and snapshot.finished_at is not None:
+            metadata["duration_ms"] = max(
+                0,
+                int((snapshot.finished_at - snapshot.started_at).total_seconds() * 1000),
+            )
+        record_media_download_operation_history_once(
+            session,
+            media_download_id,
+            MediaDownloadHistoryAction.CANCELLED,
+            operation_ids=(snapshot.id,),
+            metadata=metadata,
+            occurred_at=snapshot.finished_at,
+        )
+        session.commit()
+    finally:
+        session.close()
+    return snapshot
+
+
+def restart_media_download_operation(operation_id: str):
+    """Restart a media.download operation while retaining the restart in domain history."""
+    session = get_session()
+    try:
+        operation = _get_media_download_operation(session, operation_id)
+        if operation is None:
+            return None
+        media_download_id = int(operation.resource_id)
+        was_active = operation.status in _ACTIVE_OPERATION_STATUSES
+        metadata = _history_metadata_for_operation(session, operation)
+    finally:
+        session.close()
+
+    snapshot = restart_task_operation(operation_id)
+    if snapshot is None:
+        return None
+
+    session = get_session()
+    try:
+        if was_active:
+            reason = "Replaced by restarted operation"
+            cancel_metadata = {**metadata, "reason": reason}
+            record_media_download_operation_history_once(
+                session,
+                media_download_id,
+                MediaDownloadHistoryAction.CANCEL_REQUESTED,
+                operation_ids=(operation_id,),
+                metadata=cancel_metadata,
+            )
+            record_media_download_operation_history_once(
+                session,
+                media_download_id,
+                MediaDownloadHistoryAction.CANCELLED,
+                operation_ids=(operation_id,),
+                metadata=cancel_metadata,
+            )
+
+        record_media_download_history(
+            session,
+            media_download_id,
+            MediaDownloadHistoryAction.RESTARTED,
+            metadata={
+                "operation_id": snapshot.id,
+                "source": snapshot.source,
+                "is_redownload": bool(
+                    snapshot.context.get("is_redownload")
+                    if isinstance(snapshot.context, dict)
+                    else False
+                ),
+            },
+            occurred_at=snapshot.updated_at,
+        )
+        session.commit()
+    finally:
+        session.close()
+    return snapshot
 
 
 def remaining_media_download_budget(session: Session) -> int:

@@ -17,6 +17,7 @@ from backend.services.media_download_history import (
     download_attempt_metadata,
     record_media_download_history,
     record_media_download_history_if_exists,
+    record_media_download_operation_history_once,
 )
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.output_template import resolve_movie_output_path
@@ -94,6 +95,9 @@ async def run_download_movie(
     attempt_started_at = datetime.now(timezone.utc)
     operation_ids = current_operation_ids()
     operation_metadata = {"operation_ids": list(operation_ids)} if operation_ids else {}
+    task_run_id = getattr(progress, "run_id", None)
+    if task_run_id is not None:
+        operation_metadata["task_run_id"] = int(task_run_id)
     record_media_download_history(
         session,
         media_download_id,
@@ -179,10 +183,11 @@ async def run_download_movie(
         if execution is not None:
             remove_download_artifacts(execution.result.path, execution.thumbnail_path)
         finished_at = datetime.now(timezone.utc)
-        if record_media_download_history_if_exists(
+        if record_media_download_operation_history_once(
             session,
             media_download_id,
             MediaDownloadHistoryAction.CANCELLED,
+            operation_ids=operation_ids,
             metadata=download_attempt_metadata(
                 started_at=attempt_started_at,
                 finished_at=finished_at,
