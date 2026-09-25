@@ -372,25 +372,25 @@ export default function StreamProfileForm({
 
             {useDownloads && useDwStream && STANDARD_VIDEO_FORMATS.has(preferredFormat) && (
                 <div className="form-row">
-                    <label htmlFor="require-exact-match">Require Exact Match for Video Downloads</label>
+                    <label htmlFor="prefer-exact-match">Prefer Exact Match for Video Downloads</label>
                     <Controller
                         control={control}
-                        name="requireExactMatch"
+                        name="preferExactMatch"
                         render={({field}) => (
                             <Switch
-                                id="require-exact-match"
+                                id="prefer-exact-match"
                                 checked={!!field.value}
                                 onChange={(checked) => field.onChange(checked)}
                                 onColor="#0ea5e9"
                                 offColor="#d1d5db"
                                 uncheckedIcon={false}
                                 checkedIcon={false}
-                                aria-invalid={!!errors.requireExactMatch}
+                                aria-invalid={!!errors.preferExactMatch}
                             />
                         )}
                     />
                     <div className="help">
-                        <ReadMore summary={<span>Match downloaded episodes using strict rules.</span>}>
+                        <ReadMore summary={<span>Prefer exact downloaded matches over alternate local video formats.</span>}>
                             <p>
                                 When this setting is <strong>enabled</strong>, if say, you have a 720p version downloaded but your preferred format is
                                 1080p, instead of using the 720p version, WireLoft will stream from DW directly (in whatever format it happens to provide).<br/>
@@ -402,9 +402,9 @@ export default function StreamProfileForm({
                                 audio downloads for the stream.
                             </p>
                             <p>
-                                <strong>Note:</strong> WireLoft cannot control what DW provides. Enabling this setting therefore in no way guarantees
-                                the stream will be in the exact format you want. This setting is meant more for cases where you downloaded a lower
-                                quality version of the show but want to stream the higher quality version that DW provides.
+                                <strong>Note:</strong> WireLoft cannot control what DW provides. This preference only controls whether WireLoft accepts
+                                a non-exact local video format before falling back to DW. It does not guarantee that the stream DW provides will be
+                                in the exact format you prefer.
                             </p>
                         </ReadMore>
                     </div>
