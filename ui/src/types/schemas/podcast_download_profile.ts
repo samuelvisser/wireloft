@@ -10,7 +10,6 @@ import {
 // ---------- Strict request (create/update) ----------
 const PodcastDownloadProfileBaseSchema = DownloadProfileSchemaRequest.extend({
     downloadWithCountdown: z.boolean().default(false),
-    redownloadFinal: z.boolean().default(true),
     downloadDaysInPast: z.int().min(0).default(180),
     downloadEpisodeCount: z.int().min(0).default(0),
     downloadStartingFrom: z.iso.date().nullable().default(null),
@@ -65,7 +64,6 @@ export type PodcastDownloadProfileUpdateOut = z.output<typeof PodcastDownloadPro
 export const PodcastDownloadProfileReadSchema = DownloadProfileSchemaResponse.safeExtend({
     type: z.literal('podcast'),
     downloadWithCountdown: z.boolean(),
-    redownloadFinal: z.boolean(),
     downloadDaysInPast: z.int(),
     downloadEpisodeCount: z.int(),
     downloadStartingFrom: z.iso.date().nullable(),
