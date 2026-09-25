@@ -88,6 +88,7 @@ def _make_podcast_profile(session, show, lmp, **overrides):
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value],
         download_with_countdown=False,
+        redownload_final=False,
         download_days_in_past=0,
         download_episode_count=0,
         delete_older_episodes=False,
@@ -341,7 +342,13 @@ def test_ensure_episode_download_marks_automatic_countdown_for_final_replacement
         published_at=_now(),
         index=1,
     )
-    profile = _make_podcast_profile(db_session, show, lmp, download_with_countdown=True)
+    profile = _make_podcast_profile(
+        db_session,
+        show,
+        lmp,
+        download_with_countdown=True,
+        redownload_final=True,
+    )
 
     action = ensure_episode_download(db_session, profile, episode)
     db_session.commit()
@@ -349,6 +356,39 @@ def test_ensure_episode_download_marks_automatic_countdown_for_final_replacement
     row = db_session.get(EpisodeMediaDownload, action.media_download_id)
     assert action.needs_operation is True
     assert row.redownload_when_final is True
+
+
+def test_ensure_episode_download_respects_profile_redownload_policy(db_session):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="countdown-no-replace",
+        ep_id="ep.2",
+        status="published_with_countdown",
+        published_at=_now(),
+        index=2,
+    )
+    profile = _make_podcast_profile(
+        db_session,
+        show,
+        lmp,
+        download_with_countdown=True,
+        redownload_final=False,
+    )
+
+    action = ensure_episode_download(db_session, profile, episode)
+    db_session.commit()
+
+    row = db_session.get(EpisodeMediaDownload, action.media_download_id)
+    assert action.needs_operation is True
+    assert row.redownload_when_final is False
 
 
 @pytest.mark.parametrize("artifact_status", ["missing", "corrupted"])
