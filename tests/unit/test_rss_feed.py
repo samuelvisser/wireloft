@@ -164,7 +164,7 @@ def _make_rss_profile(
         use_downloads=use_downloads,
         use_dw_stream=use_dw_stream,
         preferred_format=preferred_format,
-        require_exact_match=False,
+        prefer_exact_match=False,
         ep_id_type_list=["ep"],
         feed_url="https://wireloft.test/feeds/rss/token/show.xml",
         video_output_mode=mode,
@@ -439,7 +439,7 @@ def test_create_stream_profile_generates_plain_stable_feed_url(db_session):
         use_downloads=True,
         use_dw_stream=True,
         preferred_format="format_1080p",
-        require_exact_match=False,
+        prefer_exact_match=False,
         video_output_mode="audio_hls",
     )
 
@@ -460,7 +460,7 @@ def test_api_defaults_to_audio_hls_with_live_streaming_off():
         use_downloads=True,
         use_dw_stream=True,
         preferred_format="format_1080p",
-        require_exact_match=False,
+        prefer_exact_match=False,
     )
 
     assert profile.video_output_mode.value == "audio_hls"
@@ -480,7 +480,7 @@ def test_stream_profile_rejects_local_hls_as_preferred_format():
             use_downloads=True,
             use_dw_stream=True,
             preferred_format="format_hls",
-            require_exact_match=False,
+            prefer_exact_match=False,
         )
 
 
@@ -496,7 +496,7 @@ def test_live_streaming_requires_hls_video_output_mode():
             use_downloads=True,
             use_dw_stream=True,
             preferred_format="format_1080p",
-            require_exact_match=False,
+            prefer_exact_match=False,
             video_output_mode="audio_mp4",
             stream_live_episodes=True,
         )
