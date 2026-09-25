@@ -14,6 +14,18 @@ def _entry(action: str, metadata: dict):
     )
 
 
+def test_created_download_history_is_not_presented_as_queued():
+    from backend.api.endpoints.media_downloads.history import _MediaDownloadHistoryViewSource
+    from backend.api.models.media_download_history import MediaDownloadHistoryEntryRead
+
+    entry = MediaDownloadHistoryEntryRead.model_validate(
+        _MediaDownloadHistoryViewSource(_entry("created", {}))
+    )
+
+    assert entry.label == "Download created"
+    assert entry.status == "not_downloaded"
+
+
 def test_completed_download_history_is_formatted_by_backend():
     from backend.api.endpoints.media_downloads.history import _MediaDownloadHistoryViewSource
     from backend.api.models.media_download_history import MediaDownloadHistoryEntryRead

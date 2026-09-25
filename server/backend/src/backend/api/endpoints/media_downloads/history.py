@@ -57,7 +57,10 @@ def _presentation(entry: MediaDownloadHistory) -> tuple[str, str, str | None]:
     action = entry.action
 
     if action == MediaDownloadHistoryAction.CREATED:
-        return "Download created", "pending", None
+        # Creating the persistent MediaDownload row is not a queue event. Keep it
+        # visually distinct from the subsequent media.download operation so one
+        # newly-created download is not presented as having been queued twice.
+        return "Download created", "not_downloaded", None
     if action == MediaDownloadHistoryAction.QUEUED:
         return (
             "Redownload queued" if metadata.get("is_redownload") else "Download queued",
