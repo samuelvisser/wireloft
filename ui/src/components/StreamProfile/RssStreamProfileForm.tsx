@@ -195,9 +195,9 @@ export default function RssStreamProfileForm({
                                         Your podcasting app should not even notice this switch!
                                     </p>
                                     <p>
-                                        NOTE: The profile does check though whether the episode in question, when no longer live, will be
-                                        downloaded by your download profiles as HLS. If not, the episode is not considered part of this feed
-                                        and will also not be included as a live episode.
+                                        NOTE: The profile does check whether the episode in question, when no longer live, will be
+                                        downloaded by your download profiles as HLS. If not, the episode is not considered part of this
+                                        downloads- only feed and will also not be included as a live episode.
                                     </p>
                                 </>
                             )}
