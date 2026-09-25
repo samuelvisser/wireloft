@@ -18,7 +18,7 @@ def test_rss_stream_profile_defaults_to_episode_and_auxiliary():
         use_downloads=False,
         use_dw_stream=True,
         preferred_format="format_1080p",
-        require_exact_match=False,
+        prefer_exact_match=False,
     )
 
     assert profile.ep_id_type_list == ["ep", "aux"]
@@ -33,7 +33,7 @@ def test_audio_only_rss_stream_profile_defaults_video_output_mode_to_null():
         use_downloads=False,
         use_dw_stream=True,
         preferred_format="format_audio_only",
-        require_exact_match=False,
+        prefer_exact_match=False,
     )
 
     assert profile.video_output_mode is None
@@ -49,7 +49,7 @@ def test_video_rss_stream_profile_defaults_video_output_mode_to_audio_hls():
         use_downloads=False,
         use_dw_stream=True,
         preferred_format="format_1080p",
-        require_exact_match=False,
+        prefer_exact_match=False,
     )
 
     assert profile.video_output_mode is RssVideoOutputMode.AUDIO_HLS
@@ -65,7 +65,7 @@ def test_audio_only_rss_stream_profile_rejects_video_output_mode():
             use_downloads=False,
             use_dw_stream=True,
             preferred_format="format_audio_only",
-            require_exact_match=False,
+            prefer_exact_match=False,
             video_output_mode="audio_hls",
         )
 
@@ -80,7 +80,7 @@ def test_video_rss_stream_profile_requires_video_output_mode():
             use_downloads=False,
             use_dw_stream=True,
             preferred_format="format_1080p",
-            require_exact_match=False,
+            prefer_exact_match=False,
             video_output_mode=None,
         )
 
@@ -161,7 +161,7 @@ def test_feed_items_respect_stream_profile_episode_types(db_session):
         use_downloads=False,
         use_dw_stream=True,
         preferred_format="format_audio_only",
-        require_exact_match=False,
+        prefer_exact_match=False,
         ep_id_type_list=["ep"],
         feed_url="https://wireloft.test/feed.xml",
     )
