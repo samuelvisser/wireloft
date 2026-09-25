@@ -183,6 +183,15 @@ function ProfileDownloadRow({
                 <p>
                     If you continue, WireLoft will download the current media as-is, including that countdown.
                 </p>
+                <label className="confirm-dialog-option">
+                    <input
+                        type="checkbox"
+                        checked={redownloadWhenFinal}
+                        onChange={(event) => setRedownloadWhenFinal(event.target.checked)}
+                        disabled={busy}
+                    />
+                    <span>Re-download automatically when the countdown is gone</span>
+                </label>
             </ConfirmDialog>
             <DownloadLogDialog row={showLog ? (download ?? null) : null} onClose={() => setShowLog(false)}/>
         </div>
@@ -527,6 +536,8 @@ export default function EpisodePage() {
         .download-row-error { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .download-state-ok { color: #2fa84f; }
         .download-state-error { color: var(--error, #d64545); }
+        .confirm-dialog-option { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; cursor: pointer; }
+        .confirm-dialog-option input { margin-top: 3px; flex: 0 0 auto; }
         @media (max-width: 720px) {
           .episode-details { width: 100%; }
           .episode-breadcrumb { margin-bottom: 12px; font-size: 0.82rem; }
