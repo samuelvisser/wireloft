@@ -1,0 +1,29 @@
+name: Custom index design audit
+on:
+  push:
+    branches: [codex/custom-indexing-values]
+permissions:
+  contents: read
+concurrency:
+  group: codex-custom-index-audit
+  cancel-in-progress: true
+jobs:
+  workspace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Export audit snapshots
+        run: |
+          mkdir -p audit
+          git archive --format=tar 8a405230b9ab4e88afdba919819f83e5d5851e98 > audit/current.tar
+          git archive --format=tar 7552ef7d06467694975e149c1dffbaeecf3d0211 > audit/develop.tar
+          git fetch origin a402cda4910d8baac59e640e5c788e4e478be072
+          git archive --format=tar a402cda4910d8baac59e640e5c788e4e478be072 > audit/checkpoint.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: index-audit-snapshots
+          path: audit/*.tar
+          retention-days: 1
