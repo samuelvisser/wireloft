@@ -88,7 +88,6 @@ def _make_podcast_profile(session, show, lmp, **overrides):
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value],
         download_with_countdown=False,
-        redownload_final=False,
         download_days_in_past=0,
         download_episode_count=0,
         delete_older_episodes=False,
