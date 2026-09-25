@@ -196,6 +196,7 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
     redownload_when_final = (
         isinstance(profile, PodcastDownloadProfile)
         and profile.download_with_countdown
+        and profile.redownload_final
         and episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value
     )
 
