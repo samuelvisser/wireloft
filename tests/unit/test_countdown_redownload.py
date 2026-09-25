@@ -207,3 +207,26 @@ def test_download_records_publish_status_from_attempt_start(final_download, monk
 
     assert episode.publish_status == "published_final"
     assert download.downloaded_publish_status == "published_with_countdown"
+
+
+
+def test_terminal_reconciliation_consumes_pending_final_intent(final_download, monkeypatch):
+    from task_manager.tasks import media_download_operations
+
+    session, _episode, download = final_download
+    prepared = Mock()
+    created = Mock(return_value=SimpleNamespace(id="replacement"))
+
+    monkeypatch.setattr(media_download_operations, "get_active_media_download_operation", Mock(return_value=None))
+    monkeypatch.setattr(media_download_operations, "_has_active_media_download_run", Mock(return_value=False))
+    monkeypatch.setattr(media_download_operations, "prepare_media_download_artifact", prepared)
+    monkeypatch.setattr(media_download_operations, "create_media_download_operation", created)
+
+    assert media_download_operations.queue_final_episode_redownload_if_ready(session, download.id) is True
+    session.flush()
+
+    assert download.redownload_when_final is False
+    prepared.assert_called_once_with(session, download)
+    created.assert_called_once()
+    assert created.call_args.kwargs["source"] == "SYSTEM"
+    assert created.call_args.kwargs["is_redownload"] is True
