@@ -176,7 +176,7 @@ Check:
 - at least one of **Use Downloads** or **Use DailyWire stream** is enabled;
 - selected episode types;
 - preferred format;
-- **Require exact match**;
+- **Prefer exact match**;
 - **Maximum episodes in RSS feed**.
 
 A downloads-only feed cannot expose media for an episode when no acceptable completed local download exists.
