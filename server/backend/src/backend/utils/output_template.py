@@ -427,6 +427,11 @@ def render_output_template(
     environment.finalize = _sanitize_emitted_output_value
     try:
         rendered = environment.from_string(normalized).render(context)
+    except TypeError as exc:
+        # Jinja does not wrap Python call-signature errors raised while invoking
+        # filters. These are still user-template errors and must follow the same
+        # validation path as other invalid in-progress editor input.
+        raise ValueError(str(exc)) from exc
     except (SecurityError, UndefinedError, TemplateError) as exc:
         raise ValueError(f"Could not render Jinja template: {exc}") from exc
 

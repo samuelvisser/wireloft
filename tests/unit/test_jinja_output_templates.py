@@ -206,6 +206,25 @@ def test_preview_resolves_audio_extension_in_backend():
     assert result.output_path == "/downloads/Example Show/Episode One.m4a"
 
 
+def test_preview_reports_filter_argument_errors_as_validation_errors():
+    from backend.api.endpoints.local_media_profiles.output_template import get_output_template_preview
+    from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
+
+    preview = LocalMediaProfileTemplatePreview(
+        type="show",
+        preferred_format="format_audio_only",
+        output_template="/downloads/{{ episode_title | regex_replace('Episode') }}.ext",
+        values={"episode_title": "Episode One"},
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        get_output_template_preview(None, preview)
+
+    assert str(exc_info.value) == (
+        "regex_replace() missing 1 required positional argument: 'replacement'"
+    )
+
+
 def test_jinja_logic_uses_raw_unsanitized_values(monkeypatch) -> None:
     from backend.utils.output_template import SHOW_OUTPUT_TEMPLATE_FIELDS, render_output_template
     from config import get_settings
