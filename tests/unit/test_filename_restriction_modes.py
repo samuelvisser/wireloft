@@ -72,3 +72,44 @@ def test_restricted_mode_uses_conservative_ascii_names(tmp_path, monkeypatch):
     relative = _resolve(tmp_path, monkeypatch, FilenameRestrictionMode.RESTRICTED)
     assert relative == "Films_Collection/Amelie_Test.mp4"
     assert relative.isascii()
+
+
+def test_windows_reserved_name_is_only_changed_for_concrete_download_filename(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings.download_settings, "download_root", tmp_path)
+    monkeypatch.setattr(
+        settings.download_settings,
+        "filename_restriction_mode",
+        FilenameRestrictionMode.WINDOWS,
+    )
+
+    provisional = resolve_movie_output_path(
+        "/downloads/{{ title }}.ext",
+        movie=_movie("AUX"),
+    )
+    concrete = resolve_movie_output_path(
+        "/downloads/{{ title }}.ext",
+        movie=_movie("AUX"),
+        extension="mp4",
+    )
+
+    assert provisional.relative_to(tmp_path.resolve()).as_posix() == "AUX.ext"
+    assert concrete.relative_to(tmp_path.resolve()).as_posix() == "_AUX.mp4"
+
+
+def test_windows_reserved_word_inside_filename_is_not_rewritten(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings.download_settings, "download_root", tmp_path)
+    monkeypatch.setattr(
+        settings.download_settings,
+        "filename_restriction_mode",
+        FilenameRestrictionMode.WINDOWS,
+    )
+
+    path = resolve_movie_output_path(
+        "/downloads/Episode - {{ title }}.ext",
+        movie=_movie("AUX"),
+        extension="mp4",
+    )
+
+    assert path.relative_to(tmp_path.resolve()).as_posix() == "Episode - AUX.mp4"

@@ -196,21 +196,32 @@ def sanitize_path_component(
     return cleaned
 
 
-def _sanitize_template_value(value: object, *, mode: FilenameRestrictionMode) -> str:
-    # Empty values must stay falsey so Jinja conditionals can omit their
-    # surrounding punctuation. A completely empty path component is handled
-    # after rendering instead.
-    text = str(value) if value is not None else ""
-    if not text:
-        return ""
-    return sanitize_path_component(text, mode=mode)
+def _sanitize_emitted_output_value(value: object) -> str:
+    """Keep emitted Jinja values from creating path structure.
+
+    Template context values themselves remain untouched so assignments,
+    comparisons, filters, and conditionals operate on the real semantic value.
+    This finalizer only runs when a Jinja expression is converted to output text.
+    """
+    text = "" if value is None else str(value)
+    text = text.replace("/", "_").replace("\\", "_").replace("\x00", "")
+    return "".join(char for char in text if char == "\t" or ord(char) >= 32)
 
 
-def _sanitize_rendered_path(rendered: str, *, mode: FilenameRestrictionMode) -> str:
-    """Apply the filename mode to template literals as well as substitutions."""
+def _sanitize_rendered_path(
+    rendered: str,
+    *,
+    mode: FilenameRestrictionMode,
+) -> str:
+    """Apply filename restrictions after the complete output path is known."""
     relative = rendered[len(_DOWNLOADS_PREFIX):]
     parts = relative.split("/")
-    sanitized = [sanitize_path_component(part, mode=mode) if part else "" for part in parts]
+    sanitized = [
+        sanitize_path_component(part, mode=mode)
+        if part
+        else ""
+        for part in parts
+    ]
     return _DOWNLOADS_PREFIX + "/".join(sanitized)
 
 
@@ -350,7 +361,7 @@ def render_output_template(
     allowed_fields: frozenset[str],
     allowed_metadata_scopes: frozenset[CustomMetadataScope] = frozenset(),
 ) -> str:
-    """Render a path template using the same sandbox and sanitization as downloads."""
+    """Render a path template with raw semantic values in the Jinja context."""
     normalized = validate_output_template_fields(
         output_template,
         allowed_fields=allowed_fields,
@@ -365,12 +376,12 @@ def render_output_template(
             scopes=allowed_metadata_scopes,
         )
     )
-    mode = get_settings().download_settings.filename_restriction_mode
     context = {
-        field: _sanitize_template_value(values.get(field, ""), mode=mode)
+        field: values.get(field, "")
         for field in allowed_fields | dynamic_fields
     }
     environment = create_output_template_environment()
+    environment.finalize = _sanitize_emitted_output_value
     try:
         rendered = environment.from_string(normalized).render(context)
     except (SecurityError, UndefinedError, TemplateError) as exc:
@@ -387,7 +398,7 @@ def render_output_template(
         )
     if not rendered.endswith(".ext"):
         raise ValueError("Rendered output path must end with '.ext'")
-    return _sanitize_rendered_path(rendered, mode=mode)
+    return rendered
 
 
 def resolve_episode_output_path(
@@ -464,8 +475,18 @@ def replace_output_extension(resolved: str, extension: Optional[str]) -> str:
     return resolved
 
 
-def _finish_output_path(resolved: str, *, extension: Optional[str]) -> Path:
+def finalize_output_path(resolved: str, extension: Optional[str]) -> str:
+    """Apply filename restrictions only once the concrete filename is known."""
     resolved = replace_output_extension(resolved, extension)
+    if extension is None:
+        return resolved
+
+    mode = get_settings().download_settings.filename_restriction_mode
+    return _sanitize_rendered_path(resolved, mode=mode)
+
+
+def _finish_output_path(resolved: str, *, extension: Optional[str]) -> Path:
+    resolved = finalize_output_path(resolved, extension)
     if resolved.startswith(_DOWNLOADS_PREFIX):
         resolved = resolved[len(_DOWNLOADS_PREFIX):]
     resolved = resolved.lstrip("/")
