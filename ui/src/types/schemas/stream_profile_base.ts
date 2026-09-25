@@ -10,7 +10,7 @@ export const StreamProfileReadSchema = z.looseObject({
     useDownloads: z.boolean(),
     useDwStream: z.boolean(),
     preferredFormat: z.string(),
-    requireExactMatch: z.boolean(),
+    preferExactMatch: z.boolean(),
     epIdTypeList: z.array(z.union([z.enum(EpisodeTypeReg.values), z.string()])),
     type: z.enum(['rss']),
     createdAt: ApiDateTimeSchema,
