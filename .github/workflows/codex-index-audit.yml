@@ -10,20 +10,27 @@ concurrency:
 jobs:
   workspace:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          fetch-depth: 0
-      - name: Export audit snapshots
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked dependencies
+        run: |
+          python -m pip install uv
+          uv sync --frozen
+          npm ci --prefix ui
+      - name: Export dependency workspace
         run: |
           mkdir -p audit
-          git archive --format=tar 8a405230b9ab4e88afdba919819f83e5d5851e98 > audit/current.tar
-          git archive --format=tar 7552ef7d06467694975e149c1dffbaeecf3d0211 > audit/develop.tar
-          git fetch origin a402cda4910d8baac59e640e5c788e4e478be072
-          git archive --format=tar a402cda4910d8baac59e640e5c788e4e478be072 > audit/checkpoint.tar
+          tar -czf audit/python-dependencies.tar.gz -C .venv/lib/python3.13/site-packages .
+          tar -czf audit/ui-dependencies.tar.gz -C ui node_modules
       - uses: actions/upload-artifact@v4
         with:
-          name: index-audit-snapshots
-          path: audit/*.tar
+          name: index-audit-dependencies
+          path: audit/*.tar.gz
           retention-days: 1
