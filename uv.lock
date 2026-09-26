@@ -72,7 +72,7 @@ wheels = [
 
 [[package]]
 name = "backend"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "server/backend" }
 dependencies = [
     { name = "alembic" },
@@ -186,7 +186,7 @@ wheels = [
 
 [[package]]
 name = "config"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "server/config" }
 dependencies = [
     { name = "dailywire-api" },
@@ -205,7 +205,7 @@ requires-dist = [
 
 [[package]]
 name = "controller"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "server/controller" }
 dependencies = [
     { name = "backend" },
@@ -263,7 +263,7 @@ wheels = [
 
 [[package]]
 name = "dailywire-api"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "server/dailywire_api" }
 dependencies = [
     { name = "config" },
@@ -299,7 +299,7 @@ requires-dist = [
 
 [[package]]
 name = "dailywire-downloader"
-version = "1.0.0"
+version = "1.0.1"
 source = { editable = "server/dailywire_downloader" }
 
 [[package]]
@@ -749,7 +749,7 @@ wheels = [
 
 [[package]]
 name = "task-manager"
-version = "1.0.0"
+version = "1.1.0"
 source = { editable = "server/task_manager" }
 dependencies = [
     { name = "apscheduler" },
@@ -842,7 +842,7 @@ wheels = [
 
 [[package]]
 name = "wireloft"
-version = "1.1.0"
+version = "1.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "backend" },
