@@ -19,9 +19,10 @@ from backend.db.models import (
 )
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.dailywire_user_info import WlDwMembershipLevel
-from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from backend.types.episode_types import EpisodePublishStatus
+from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
+from backend.types.episode_types import EpisodeExtraType, EpisodePublishStatus
 from backend.types.local_media_profile_types import PreferredFormat
+from backend.types.show_types import EpisodeIdentifier
 from backend.types.stream_profile_types import (
     RSS_AUDIO_PRIMARY_OUTPUT_MODES,
     RSS_HLS_OUTPUT_MODES,
@@ -655,6 +656,61 @@ def _escape_bare_html_ampersands(text: Optional[str]) -> Optional[str]:
     return _BARE_HTML_AMPERSAND_RE.sub("&amp;", text)
 
 
+def _append_seasonal_item_metadata(item: Element, episode: Episode) -> None:
+    info = episode.episode_identifier_info
+
+    if (
+        info.type == EpIdType.TRAILER
+        or (
+            info.type == EpIdType.EP_EXTRA
+            and info.extra_type == EpisodeExtraType.TRAILER
+        )
+    ):
+        episode_type = "trailer"
+    elif info.type in {EpIdType.AUX, EpIdType.EP_EXTRA}:
+        episode_type = "bonus"
+    else:
+        episode_type = "full"
+    _sub_text(item, "itunes:episodeType", episode_type)
+
+    season = episode.season
+    if season is None or season.season_number < 1:
+        return
+
+    season_number = int(season.season_number)
+    _sub_text(item, "itunes:season", str(season_number))
+
+    podcast_season = SubElement(
+        item,
+        "podcast:season",
+        {"name": season.name},
+    )
+    podcast_season.text = str(season_number)
+
+    # Only source-backed seasonal identifiers have a real episode number.
+    # Standalone auxiliary/trailer counters are show-global WireLoft identifiers
+    # and must not be exposed as season episode numbers.
+    if (
+        info.season_number != season_number
+        or info.episode_number is None
+        or not info.episode_number.isdigit()
+    ):
+        return
+
+    episode_number = int(info.episode_number)
+    if episode_number < 1:
+        return
+
+    _sub_text(item, "itunes:episode", str(episode_number))
+
+    podcast_episode_number = str(episode_number)
+    if info.sub_episode_number and info.sub_episode_number.isdigit():
+        sub_episode_number = int(info.sub_episode_number)
+        if sub_episode_number > 0:
+            podcast_episode_number = f"{episode_number}.{sub_episode_number}"
+    _sub_text(item, "podcast:episode", podcast_episode_number)
+
+
 def _append_alternate_enclosure(
         item: Element,
         *,
@@ -730,6 +786,9 @@ def _append_item(
     )
     _sub_text(item, "link", media_url)
 
+    if profile.show.episode_identifier == EpisodeIdentifier.SEASONAL.value:
+        _append_seasonal_item_metadata(item, episode)
+
     if profile.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value:
         mode = profile.video_output_mode
         if mode == RssVideoOutputMode.AUDIO_MP4.value:
@@ -795,6 +854,8 @@ def render_rss_feed(
     _sub_text(channel, "generator", "WireLoft")
     _sub_text(channel, "itunes:author", show.author_name)
     _sub_text(channel, "itunes:explicit", "false")
+    if show.episode_identifier == EpisodeIdentifier.SEASONAL.value:
+        _sub_text(channel, "itunes:type", "serial")
     SubElement(
         channel,
         "atom:link",
