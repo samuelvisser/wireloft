@@ -656,7 +656,35 @@ def _escape_bare_html_ampersands(text: Optional[str]) -> Optional[str]:
     return _BARE_HTML_AMPERSAND_RE.sub("&amp;", text)
 
 
-def _append_seasonal_item_metadata(item: Element, episode: Episode) -> None:
+def _append_episode_number_metadata(item: Element, episode: Episode) -> None:
+    info = episode.episode_identifier_info
+    if (
+        info.type not in {EpIdType.EP, EpIdType.EP_EXTRA}
+        or info.episode_number is None
+        or not info.episode_number.isdigit()
+    ):
+        return
+
+    episode_number = int(info.episode_number)
+    if episode_number < 1:
+        return
+
+    _sub_text(item, "itunes:episode", str(episode_number))
+
+    podcast_episode_number = str(episode_number)
+    if info.sub_episode_number and info.sub_episode_number.isdigit():
+        sub_episode_number = int(info.sub_episode_number)
+        if sub_episode_number > 0:
+            podcast_episode_number = f"{episode_number}.{sub_episode_number}"
+    _sub_text(item, "podcast:episode", podcast_episode_number)
+
+
+def _append_podcast_item_metadata(
+        item: Element,
+        episode: Episode,
+        *,
+        identifier_type: str,
+) -> None:
     info = episode.episode_identifier_info
 
     if (
@@ -672,6 +700,18 @@ def _append_seasonal_item_metadata(item: Element, episode: Episode) -> None:
     else:
         episode_type = "full"
     _sub_text(item, "itunes:episodeType", episode_type)
+
+    if identifier_type == EpisodeIdentifier.NUMBERED.value:
+        # Numbered identifiers represent a real show-global episode number.
+        # Standalone AUX/TRAILER counters are intentionally excluded above.
+        if info.season_number is None:
+            _append_episode_number_metadata(item, episode)
+        return
+
+    if identifier_type != EpisodeIdentifier.SEASONAL.value:
+        # Date-based shows are episodic, but their canonical identifier is not
+        # an episode number and must not be exposed as one.
+        return
 
     season = episode.season
     if season is None or season.season_number < 1:
@@ -690,25 +730,10 @@ def _append_seasonal_item_metadata(item: Element, episode: Episode) -> None:
     # Only source-backed seasonal identifiers have a real episode number.
     # Standalone auxiliary/trailer counters are show-global WireLoft identifiers
     # and must not be exposed as season episode numbers.
-    if (
-        info.season_number != season_number
-        or info.episode_number is None
-        or not info.episode_number.isdigit()
-    ):
+    if info.season_number != season_number:
         return
 
-    episode_number = int(info.episode_number)
-    if episode_number < 1:
-        return
-
-    _sub_text(item, "itunes:episode", str(episode_number))
-
-    podcast_episode_number = str(episode_number)
-    if info.sub_episode_number and info.sub_episode_number.isdigit():
-        sub_episode_number = int(info.sub_episode_number)
-        if sub_episode_number > 0:
-            podcast_episode_number = f"{episode_number}.{sub_episode_number}"
-    _sub_text(item, "podcast:episode", podcast_episode_number)
+    _append_episode_number_metadata(item, episode)
 
 
 def _append_alternate_enclosure(
@@ -786,8 +811,11 @@ def _append_item(
     )
     _sub_text(item, "link", media_url)
 
-    if profile.show.episode_identifier == EpisodeIdentifier.SEASONAL.value:
-        _append_seasonal_item_metadata(item, episode)
+    _append_podcast_item_metadata(
+        item,
+        episode,
+        identifier_type=profile.show.episode_identifier,
+    )
 
     if profile.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value:
         mode = profile.video_output_mode
@@ -854,8 +882,15 @@ def render_rss_feed(
     _sub_text(channel, "generator", "WireLoft")
     _sub_text(channel, "itunes:author", show.author_name)
     _sub_text(channel, "itunes:explicit", "false")
-    if show.episode_identifier == EpisodeIdentifier.SEASONAL.value:
-        _sub_text(channel, "itunes:type", "serial")
+    _sub_text(
+        channel,
+        "itunes:type",
+        (
+            "serial"
+            if show.episode_identifier == EpisodeIdentifier.SEASONAL.value
+            else "episodic"
+        ),
+    )
     SubElement(
         channel,
         "atom:link",

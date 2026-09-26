@@ -487,12 +487,18 @@ def test_seasonal_attached_extra_keeps_parent_episode_number(db_session):
     assert "<podcast:episode>12.1</podcast:episode>" in xml
 
 
-def test_nonseasonal_feed_does_not_emit_seasonal_podcast_tags(db_session):
+def test_numbered_episodic_feed_emits_episode_metadata(db_session):
     from backend.api.endpoints.feeds.service import render_rss_feed
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
-    _make_episode(db_session, show, season, index=1)
+    _make_episode(
+        db_session,
+        show,
+        season,
+        index=27,
+        episode_identifier="ep.27",
+    )
     profile = _make_rss_profile(
         db_session,
         show,
@@ -503,12 +509,75 @@ def test_nonseasonal_feed_does_not_emit_seasonal_podcast_tags(db_session):
 
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
 
-    assert "<itunes:type>serial</itunes:type>" not in xml
+    assert "<itunes:type>episodic</itunes:type>" in xml
+    assert "<itunes:episode>27</itunes:episode>" in xml
+    assert "<itunes:episodeType>full</itunes:episodeType>" in xml
+    assert "<podcast:episode>27</podcast:episode>" in xml
     assert "<itunes:season>" not in xml
-    assert "<itunes:episode>" not in xml
-    assert "<itunes:episodeType>" not in xml
     assert "<podcast:season" not in xml
+
+
+def test_numbered_episodic_bonus_uses_parent_episode_number(db_session):
+    from backend.api.endpoints.feeds.service import render_rss_feed
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(
+        db_session,
+        show,
+        season,
+        index=1,
+        episode_identifier="ep-extra.other.27.2",
+    )
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        mode="mp4",
+        use_downloads=False,
+        use_dw_stream=True,
+    )
+    profile.ep_id_type_list = ["ep-extra"]
+
+    xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
+
+    assert "<itunes:type>episodic</itunes:type>" in xml
+    assert "<itunes:episode>27</itunes:episode>" in xml
+    assert "<itunes:episodeType>bonus</itunes:episodeType>" in xml
+    assert "<podcast:episode>27.2</podcast:episode>" in xml
+
+
+def test_date_based_episodic_feed_does_not_invent_episode_number(db_session):
+    from backend.api.endpoints.feeds.service import render_rss_feed
+    from backend.types.show_types import EpisodeIdentifier
+
+    show = _make_show(
+        db_session,
+        episode_identifier=EpisodeIdentifier.DATE_BASED.value,
+    )
+    season = _make_season(db_session, show)
+    _make_episode(
+        db_session,
+        show,
+        season,
+        index=1,
+        episode_identifier="ep.20260926",
+    )
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        mode="mp4",
+        use_downloads=False,
+        use_dw_stream=True,
+    )
+
+    xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
+
+    assert "<itunes:type>episodic</itunes:type>" in xml
+    assert "<itunes:episodeType>full</itunes:episodeType>" in xml
+    assert "<itunes:episode>" not in xml
     assert "<podcast:episode>" not in xml
+    assert "<itunes:season>" not in xml
+    assert "<podcast:season" not in xml
 
 
 def test_get_dailywire_stream_url_selects_requested_media(
