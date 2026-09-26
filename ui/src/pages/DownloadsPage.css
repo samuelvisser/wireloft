@@ -106,7 +106,16 @@
         transition: width 220ms ease;
     }
 
-    .downloads-table-wrapper .mobile-data-summary-content,
+    /* mobileSummary renders inside the padded summary-content span. Keep that
+       span from becoming the progress fill's containing block so the fill is
+       sized against the entire compact card instead of only its text area. */
+    .downloads-table-wrapper .mobile-data-summary-content {
+        position: static;
+    }
+
+    .downloads-table-wrapper .mobile-summary-title,
+    .downloads-table-wrapper .mobile-summary-subtitle,
+    .downloads-table-wrapper .mobile-summary-meta,
     .downloads-table-wrapper .mobile-data-chevron {
         position: relative;
         z-index: 1;
