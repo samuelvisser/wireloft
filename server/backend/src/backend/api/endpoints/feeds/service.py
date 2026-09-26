@@ -22,7 +22,7 @@ from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodeExtraType, EpisodePublishStatus
 from backend.types.local_media_profile_types import PreferredFormat
-from backend.types.show_types import EpisodeIdentifier
+from backend.types.show_types import EpisodeIdentifier, ShowType
 from backend.types.stream_profile_types import (
     RSS_AUDIO_PRIMARY_OUTPUT_MODES,
     RSS_HLS_OUTPUT_MODES,
@@ -656,7 +656,23 @@ def _escape_bare_html_ampersands(text: Optional[str]) -> Optional[str]:
     return _BARE_HTML_AMPERSAND_RE.sub("&amp;", text)
 
 
-def _append_episode_number_metadata(item: Element, episode: Episode) -> None:
+def _append_episode_number_values(
+    item: Element,
+    *,
+    episode_number: int,
+    podcast_episode_number: str | None = None,
+) -> None:
+    if episode_number < 1:
+        return
+    _sub_text(item, "itunes:episode", str(episode_number))
+    _sub_text(
+        item,
+        "podcast:episode",
+        podcast_episode_number or str(episode_number),
+    )
+
+
+def _append_identifier_episode_number(item: Element, episode: Episode) -> None:
     info = episode.episode_identifier_info
     if (
         info.type not in {EpIdType.EP, EpIdType.EP_EXTRA}
@@ -666,17 +682,17 @@ def _append_episode_number_metadata(item: Element, episode: Episode) -> None:
         return
 
     episode_number = int(info.episode_number)
-    if episode_number < 1:
-        return
-
-    _sub_text(item, "itunes:episode", str(episode_number))
-
     podcast_episode_number = str(episode_number)
     if info.sub_episode_number and info.sub_episode_number.isdigit():
         sub_episode_number = int(info.sub_episode_number)
         if sub_episode_number > 0:
             podcast_episode_number = f"{episode_number}.{sub_episode_number}"
-    _sub_text(item, "podcast:episode", podcast_episode_number)
+
+    _append_episode_number_values(
+        item,
+        episode_number=episode_number,
+        podcast_episode_number=podcast_episode_number,
+    )
 
 
 def _append_podcast_item_metadata(
@@ -705,12 +721,10 @@ def _append_podcast_item_metadata(
         # Numbered identifiers represent a real show-global episode number.
         # Standalone AUX/TRAILER counters are intentionally excluded above.
         if info.season_number is None:
-            _append_episode_number_metadata(item, episode)
+            _append_identifier_episode_number(item, episode)
         return
 
     if identifier_type != EpisodeIdentifier.SEASONAL.value:
-        # Date-based shows are episodic, but their canonical identifier is not
-        # an episode number and must not be exposed as one.
         return
 
     season = episode.season
@@ -733,7 +747,7 @@ def _append_podcast_item_metadata(
     if info.season_number != season_number:
         return
 
-    _append_episode_number_metadata(item, episode)
+    _append_identifier_episode_number(item, episode)
 
 
 def _append_alternate_enclosure(
@@ -886,9 +900,9 @@ def render_rss_feed(
         channel,
         "itunes:type",
         (
-            "serial"
-            if show.episode_identifier == EpisodeIdentifier.SEASONAL.value
-            else "episodic"
+            "episodic"
+            if show.type == ShowType.PODCAST.value
+            else "serial"
         ),
     )
     SubElement(

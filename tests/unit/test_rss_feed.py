@@ -41,6 +41,7 @@ def _make_show(
     *,
     slug: str = "show",
     episode_identifier: str | None = None,
+    show_type: str | None = None,
 ):
     from backend.db.models import Show
     from backend.types.show_types import EpisodeIdentifier, ShowType
@@ -52,7 +53,7 @@ def _make_show(
         description="Description",
         sharing_url=f"https://example.test/{slug}",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=show_type or ShowType.PODCAST.value,
         episode_identifier=(
             episode_identifier or EpisodeIdentifier.NUMBERED.value
         ),
@@ -95,6 +96,7 @@ def _make_episode(
     status: str = "published_final",
     when: datetime | None = None,
     episode_identifier: str | None = None,
+    dw_episode_number: str | None = None,
 ):
     from backend.db.models import Episode
 
@@ -106,6 +108,7 @@ def _make_episode(
         season=season,
         index=index,
         episode_identifier=episode_identifier or f"ep.{index}",
+        dw_episode_number=dw_episode_number,
         slug=f"episode-{index}",
         title=f"Episode {index}",
         description="Description",
@@ -440,12 +443,51 @@ def test_seasonal_feed_emits_apple_and_podcasting20_numbering(db_session):
 
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
 
-    assert "<itunes:type>serial</itunes:type>" in xml
+    assert "<itunes:type>episodic</itunes:type>" in xml
     assert "<itunes:season>2</itunes:season>" in xml
     assert "<itunes:episode>7</itunes:episode>" in xml
     assert "<itunes:episodeType>full</itunes:episodeType>" in xml
     assert '<podcast:season name="Second Season">2</podcast:season>' in xml
     assert "<podcast:episode>7</podcast:episode>" in xml
+
+
+def test_series_feed_is_serial_even_with_seasonal_identifiers(db_session):
+    from backend.api.endpoints.feeds.service import render_rss_feed
+    from backend.types.show_types import EpisodeIdentifier, ShowType
+
+    show = _make_show(
+        db_session,
+        episode_identifier=EpisodeIdentifier.SEASONAL.value,
+        show_type=ShowType.SERIES.value,
+    )
+    season = _make_season(
+        db_session,
+        show,
+        season_number=1,
+        name="Season 1",
+    )
+    _make_episode(
+        db_session,
+        show,
+        season,
+        index=1,
+        episode_identifier="ep.S01E01",
+    )
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        mode="mp4",
+        use_downloads=False,
+        use_dw_stream=True,
+    )
+
+    xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
+
+    assert "<itunes:type>serial</itunes:type>" in xml
+    assert "<itunes:season>1</itunes:season>" in xml
+    assert "<itunes:episode>1</itunes:episode>" in xml
+    assert '<podcast:season name="Season 1">1</podcast:season>' in xml
+    assert "<podcast:episode>1</podcast:episode>" in xml
 
 
 def test_seasonal_attached_extra_keeps_parent_episode_number(db_session):
@@ -546,7 +588,7 @@ def test_numbered_episodic_bonus_uses_parent_episode_number(db_session):
     assert "<podcast:episode>27.2</podcast:episode>" in xml
 
 
-def test_date_based_episodic_feed_does_not_invent_episode_number(db_session):
+def test_date_based_podcast_omits_episode_numbers(db_session):
     from backend.api.endpoints.feeds.service import render_rss_feed
     from backend.types.show_types import EpisodeIdentifier
 
@@ -559,8 +601,9 @@ def test_date_based_episodic_feed_does_not_invent_episode_number(db_session):
         db_session,
         show,
         season,
-        index=1,
-        episode_identifier="ep.20260926",
+        index=91,
+        episode_identifier="ep.2026-09-26T09:00:00.000000",
+        dw_episode_number="2497.10",
     )
     profile = _make_rss_profile(
         db_session,
