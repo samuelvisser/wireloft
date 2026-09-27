@@ -6,6 +6,9 @@ import Footer from './components/Sidebar/Footer'
 import OnboardingFlow from './components/Onboarding/OnboardingFlow'
 import BackgroundMigrationBanner from './components/BackgroundMigrationBanner/BackgroundMigrationBanner'
 import LoginPage from './pages/LoginPage'
+import OperationNotifier from './components/OperationNotifier/OperationNotifier'
+import {operationNotificationDefinitions} from './components/OperationNotifier/OperationNotificationDefinitions'
+import FrontendPuller from './lib/puller'
 
 type OnboardingStatus = {
   completed: boolean
@@ -96,14 +99,18 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <Sidebar />
-      <main className="content" role="main">
-        {/* Deliberately mounted only after onboarding so first-run setup never shows this banner. */}
-        <BackgroundMigrationBanner />
-        <Outlet />
-      </main>
-      <Footer wrapperClass="page-footer" />
-    </div>
+    <FrontendPuller onUnauthorized={() => setAuthState('no')}>
+      <OperationNotifier definitions={operationNotificationDefinitions}>
+        <div className="app">
+          <Sidebar />
+          <main className="content" role="main">
+            {/* Deliberately mounted only after onboarding so first-run setup never shows this banner. */}
+            <BackgroundMigrationBanner />
+            <Outlet />
+          </main>
+          <Footer wrapperClass="page-footer" />
+        </div>
+      </OperationNotifier>
+    </FrontendPuller>
   )
 }

@@ -3,15 +3,12 @@ import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
-import OperationNotifier from './components/OperationNotifier/OperationNotifier'
-import {operationNotificationDefinitions} from './components/OperationNotifier/OperationNotificationDefinitions'
 import './index.css'
 import './reactSelectMultiselect.css'
 import './mobileHeaderScroll.css'
 import './icons/fontAwesome'
 import { queryClient } from './lib/queryClient'
 import { prefetchCoreData } from './lib/queries'
-import FrontendPuller from './lib/puller'
 import { loadShowsFromStorage, loadProfilesFromStorage } from './lib/cache'
 import {
   hydrateCachedSeasonQueries,
@@ -64,11 +61,7 @@ async function bootstrap() {
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
         <Toaster position="top-right" />
-        <FrontendPuller>
-          <OperationNotifier definitions={operationNotificationDefinitions}>
-            <RouterProvider router={router} />
-          </OperationNotifier>
-        </FrontendPuller>
+        <RouterProvider router={router} />
       </QueryClientProvider>
     </React.StrictMode>,
   )
