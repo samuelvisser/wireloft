@@ -24,7 +24,10 @@ def test_recurring_pending_monitor_disables_task_retries(monkeypatch):
     monkeypatch.setattr(
         scheduling, "get_settings",
         lambda: SimpleNamespace(
-            new_episode_schedule=SimpleNamespace(monitor_pending_episode_cron="*/1 * * * *"),
+            new_episode_schedule=SimpleNamespace(
+                monitor_pending_episode_cron_enabled=True,
+                monitor_pending_episode_cron="*/1 * * * *",
+            ),
             timezone="Europe/Amsterdam",
         ),
     )
@@ -34,6 +37,29 @@ def test_recurring_pending_monitor_disables_task_retries(monkeypatch):
     assert scheduler.job["kwargs"]["max_retries"] == 0
     assert scheduler.job["max_instances"] == 1
     assert scheduler.job["coalesce"] is True
+
+
+def test_recurring_pending_monitor_can_be_disabled(monkeypatch):
+    from task_manager.tasks.workers.monitor_pending_episode import scheduling
+
+    monkeypatch.setattr(
+        scheduling,
+        "get_settings",
+        lambda: SimpleNamespace(
+            new_episode_schedule=SimpleNamespace(
+                monitor_pending_episode_cron_enabled=False,
+                monitor_pending_episode_cron="*/1 * * * *",
+            ),
+            timezone="Europe/Amsterdam",
+        ),
+    )
+    monkeypatch.setattr(
+        scheduling,
+        "start_scheduler",
+        lambda: pytest.fail("disabled pending monitor should not start the scheduler"),
+    )
+
+    assert scheduling.schedule_episode_monitor(resource_id=501) is None
 
 
 def _episode_record(slug: str):

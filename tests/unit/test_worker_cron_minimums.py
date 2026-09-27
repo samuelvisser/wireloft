@@ -39,6 +39,16 @@ def test_all_worker_crons_reject_intervals_shorter_than_slow_delay(path):
         _validate_with_cron(path, "* * * * *")
 
 
+def test_disabled_worker_cron_skips_minimum_interval_validation():
+    values = _settings_document()
+    values["new_episode_schedule"]["find_episodes_cron_enabled"] = False
+    values["new_episode_schedule"]["find_episodes_cron"] = "* * * * *"
+
+    settings = AppSettings.model_validate(values)
+
+    assert settings.new_episode_schedule.find_episodes_cron_enabled is False
+
+
 def test_worker_cron_accepts_interval_equal_to_slow_delay():
     settings = _validate_with_cron(
         ("new_episode_schedule", "monitor_episode_cron"),

@@ -12,6 +12,7 @@ LocalMediaProfile = ShowLocalMediaProfile
 from .Season import Season
 from .Settings import Settings
 from .Show import Show
+from .ShowLocalAsset import ShowLocalAsset
 from .Metadata import Metadata
 from .CustomIndexState import CustomIndexState
 

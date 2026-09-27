@@ -252,11 +252,23 @@ class RepeatingTaskSettings(SubmodelBase):
 
 
 class TrackNewEpisodeSchedule(SubmodelBase):
+    find_episodes_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the cron schedule for finding new episodes",
+    )
     find_episodes_cron: str = Field(..., min_length=1, description="Cron schedule string for finding new episodes")
+    monitor_pending_episode_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the cron schedule for monitoring pending episodes",
+    )
     monitor_pending_episode_cron: str = Field(
         ...,
         min_length=1,
         description="Cron schedule string for monitoring an episode that exists but is not yet fully published",
+    )
+    monitor_no_usable_media_episode_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the cron schedule for rechecking episodes quarantined without usable media",
     )
     monitor_no_usable_media_episode_cron: str = Field(
         ...,
@@ -312,6 +324,10 @@ class ThumbnailMode(StrEnum):
 
 
 class DownloadSettings(SubmodelBase):
+    verify_downloads_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the cron schedule for verifying downloads",
+    )
     verify_downloads_cron: str = Field(
         default="0 */2 * * *",
         min_length=1,
@@ -343,6 +359,10 @@ class DownloadSettings(SubmodelBase):
     thumbnail_mode: ThumbnailMode = Field(
         default=ThumbnailMode.EMBED,
         description="Whether downloaded media embeds its thumbnail, writes a sidecar image, does both, or stores no thumbnail",
+    )
+    download_show_assets: bool = Field(
+        default=True,
+        description="Download show posters, backgrounds and square artwork to the shared show directory; Local Media Profiles can override this default",
     )
     temporary_download_root: Path = Field(
         default_factory=lambda data: data["download_root"] / ".wireloft-temp",
@@ -386,5 +406,9 @@ class DownloadSettings(SubmodelBase):
 
 class FileWatcherSettings(SubmodelBase):
     enabled: bool = Field(..., description="Enable the file watcher that keeps downloaded episode files in sync with the database")
+    scan_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the cron schedule for the periodic file watcher scan",
+    )
     scan_cron: str = Field(..., min_length=1, description="Cron schedule for the periodic file watcher scan")
     verify_file_size: bool = Field(..., description="Flag a download as corrupted when its file is empty or smaller than the size recorded when it finished downloading")

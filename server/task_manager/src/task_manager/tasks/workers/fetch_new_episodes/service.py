@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Season, Show
+from backend.services.show_assets import update_show_artwork_metadata
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.show_types import EpisodeIdentifier
@@ -233,6 +234,8 @@ async def _fetch_show(
     show = s.get(Show, show_id)
     if show is None:
         raise ValueError(f"Show {show_id} was removed while it was being indexed")
+    if not dry_run:
+        update_show_artwork_metadata(show, dw_show)
     if initial_index and not dry_run:
         show.thumbnail_square_path = square_thumbnail_path
     for remote_season in all_dw_seasons:

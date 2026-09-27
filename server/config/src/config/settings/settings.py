@@ -108,8 +108,11 @@ class AppSettings(SettingsBase):
         retry_backoff_seconds=5.0,
     ))
     new_episode_schedule: TrackNewEpisodeSchedule = Field(default=TrackNewEpisodeSchedule(
+        find_episodes_cron_enabled=True,
         find_episodes_cron="*/30 * * * *",
+        monitor_pending_episode_cron_enabled=True,
         monitor_pending_episode_cron="*/2 * * * *",
+        monitor_no_usable_media_episode_cron_enabled=True,
         monitor_no_usable_media_episode_cron="*/20 * * * *",
         metadata_refresh_intervals="15m,30m,1h,3h,6h,24h,3d",
     ))
@@ -121,6 +124,7 @@ class AppSettings(SettingsBase):
     download_settings: DownloadSettings = Field(default_factory=DownloadSettings)
     file_watcher: FileWatcherSettings = Field(default=FileWatcherSettings(
         enabled=True,
+        scan_cron_enabled=True,
         scan_cron="*/10 * * * *",
         verify_file_size=True,
     ))
@@ -146,10 +150,15 @@ class AppSettings(SettingsBase):
     def _validate_worker_cron_minimums(self):
         validate_worker_cron_settings(
             min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
+            find_episodes_cron_enabled=self.new_episode_schedule.find_episodes_cron_enabled,
             find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
+            monitor_pending_episode_cron_enabled=self.new_episode_schedule.monitor_pending_episode_cron_enabled,
             monitor_pending_episode_cron=self.new_episode_schedule.monitor_pending_episode_cron,
+            monitor_no_usable_media_episode_cron_enabled=self.new_episode_schedule.monitor_no_usable_media_episode_cron_enabled,
             monitor_no_usable_media_episode_cron=self.new_episode_schedule.monitor_no_usable_media_episode_cron,
+            verify_downloads_cron_enabled=self.download_settings.verify_downloads_cron_enabled,
             verify_downloads_cron=self.download_settings.verify_downloads_cron,
+            file_watcher_scan_cron_enabled=self.file_watcher.scan_cron_enabled,
             file_watcher_scan_cron=self.file_watcher.scan_cron,
         )
         return self

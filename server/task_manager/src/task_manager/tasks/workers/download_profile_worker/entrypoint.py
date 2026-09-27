@@ -38,6 +38,7 @@ from .service import run_download_profile_worker
 )
 @on_cron(
     cron=get_settings().download_settings.verify_downloads_cron,
+    enabled=get_settings().download_settings.verify_downloads_cron_enabled,
     resource_type="download_profile",
     resource_id=0,
     coalesce=True,

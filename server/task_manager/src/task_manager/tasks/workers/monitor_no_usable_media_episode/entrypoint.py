@@ -12,6 +12,7 @@ from .service import run_monitor_no_usable_media_episode
 @on_event(event_name="app.startup", resource_type="show")
 @on_cron(
     cron=get_settings().new_episode_schedule.monitor_no_usable_media_episode_cron,
+    enabled=get_settings().new_episode_schedule.monitor_no_usable_media_episode_cron_enabled,
     resource_type="show",
     resource_id=0,
     coalesce=True,

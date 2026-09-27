@@ -27,12 +27,17 @@ def monitor_job_id(resource_id: int) -> str:
     return f"auto-monitor-episode-{resource_id}"
 
 
-def schedule_episode_monitor(*, resource_id: int) -> str:
+def schedule_episode_monitor(*, resource_id: int) -> str | None:
+    settings = get_settings()
+    if not settings.new_episode_schedule.monitor_pending_episode_cron_enabled:
+        logger.info("Pending episode monitor cron is disabled; not scheduling episode %s", resource_id)
+        return None
+
     scheduler = start_scheduler()
     job_id = monitor_job_id(resource_id)
     trigger = CronTrigger.from_crontab(
-        get_settings().new_episode_schedule.monitor_pending_episode_cron,
-        timezone=get_settings().timezone,
+        settings.new_episode_schedule.monitor_pending_episode_cron,
+        timezone=settings.timezone,
     )
     scheduler.add_job(
         execute_task,

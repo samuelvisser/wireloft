@@ -1,6 +1,7 @@
 import {UseFormReturn} from 'react-hook-form'
 
 import OutputTemplateEditor from './OutputTemplateEditor'
+import ShowAssetsField from './ShowAssetsField'
 
 export default function ShowLocalMediaProfileOutputTemplate({form}: { form: UseFormReturn<any> }) {
     return (
@@ -8,6 +9,7 @@ export default function ShowLocalMediaProfileOutputTemplate({form}: { form: UseF
             form={form}
             mode="show"
             placeholder={'/downloads/shows/{{ show }}/{{ episode_title }}.ext'}
+            renderPreviewFields={(preview) => <ShowAssetsField form={form} preview={preview}/>}
             help={(
                 <>
                     <p>

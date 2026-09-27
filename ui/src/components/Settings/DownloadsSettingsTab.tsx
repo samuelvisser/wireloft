@@ -173,6 +173,17 @@ export default function DownloadsSettingsTab({
                         </ReadMore>
                     }
                 />
+                <ToggleField
+                    id="settings-show-assets"
+                    label="Download show assets"
+                    checked={draft.downloadSettings.downloadShowAssets}
+                    environmentVariable={environmentVariableFor('downloadSettings.downloadShowAssets')}
+                    onChange={(checked) => updateDraft((next) => {
+                        next.downloadSettings.downloadShowAssets = checked
+                    })}
+                    help="Save poster.jpg, fanart.jpg and square.jpg in each show's inferred shared folder. Local Media Profiles can inherit or override this setting. Existing custom artwork is preserved."
+                    wide
+                />
                 <SelectField
                     id="settings-filename-restriction-mode"
                     label="Filename restrictions"
@@ -280,10 +291,15 @@ export default function DownloadsSettingsTab({
                     id="settings-verify-downloads-cron"
                     label="Verify downloads schedule"
                     value={draft.downloadSettings.verifyDownloadsCron}
+                    enabled={draft.downloadSettings.verifyDownloadsCronEnabled}
                     error={errorFor('downloadSettings.verifyDownloadsCron')}
                     environmentVariable={environmentVariableFor('downloadSettings.verifyDownloadsCron')}
+                    enabledEnvironmentVariable={environmentVariableFor('downloadSettings.verifyDownloadsCronEnabled')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.verifyDownloadsCron = value
+                    })}
+                    onEnabledChange={(enabled) => updateDraft((next) => {
+                        next.downloadSettings.verifyDownloadsCronEnabled = enabled
                     })}
                 />
                 <ToggleField
@@ -300,10 +316,15 @@ export default function DownloadsSettingsTab({
                     id="settings-file-watcher-cron"
                     label="File watcher schedule"
                     value={draft.fileWatcher.scanCron}
+                    enabled={draft.fileWatcher.scanCronEnabled}
                     error={errorFor('fileWatcher.scanCron')}
                     environmentVariable={environmentVariableFor('fileWatcher.scanCron')}
+                    enabledEnvironmentVariable={environmentVariableFor('fileWatcher.scanCronEnabled')}
                     onChange={(value) => updateDraft((next) => {
                         next.fileWatcher.scanCron = value
+                    })}
+                    onEnabledChange={(enabled) => updateDraft((next) => {
+                        next.fileWatcher.scanCronEnabled = enabled
                     })}
                 />
                 <ToggleField

@@ -1,13 +1,18 @@
 from fastapi import APIRouter, HTTPException, Query
-from jinja2.exceptions import TemplateAssertionError
 
 from backend.api.models.local_media_profile import (
-    LocalMediaProfileTemplatePreview,
-    LocalMediaProfileTemplatePreviewResult,
+    LocalMediaProfileTemplateSource,
     LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
 )
-from backend.api.models.local_media_profile_view import LocalMediaProfileAPIRead
+from backend.api.models.local_media_profile_view import (
+    LocalMediaProfileAPIRead,
+    LocalMediaProfileViewAPIRead,
+)
+from backend.api.models.operations import (
+    LocalMediaProfileDeleteDownloadsOperationAccepted,
+    LocalMediaProfileFileRenameOperationAccepted,
+)
 from backend.app import db_session
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
@@ -15,13 +20,21 @@ from backend.types.local_media_profile_types import (
 )
 
 from .output_template import (
-    get_output_template_preview,
     get_output_template_source_page,
+    get_random_show_template_source,
     get_output_template_variables,
 )
-from .service import get_local_media_profile, get_local_media_profiles_list
+from .file_rename import request_local_media_profile_file_rename
+from .maintenance import request_local_media_profile_download_delete
+from .preview import router as preview_router
+from .service import (
+    get_local_media_profile,
+    get_local_media_profile_view,
+    get_local_media_profiles_list,
+)
 
 router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles (base)"])
+router.include_router(preview_router)
 
 
 @router.get("", response_model=list[LocalMediaProfileAPIRead])
@@ -66,22 +79,64 @@ def local_media_profile_template_sources(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.post("/template/preview", response_model=LocalMediaProfileTemplatePreviewResult)
-def local_media_profile_template_preview(body: LocalMediaProfileTemplatePreview):
-    """Render an unsaved output path template against editable example values."""
-    try:
-        with db_session() as s:
-            return get_output_template_preview(s, body)
-    except (ValueError, TemplateAssertionError) as exc:
-        message = exc.message if isinstance(exc, TemplateAssertionError) else str(exc)
-        raise HTTPException(
-            status_code=422,
-            detail=[{
-                "loc": ["body", "outputTemplate"],
-                "msg": message,
-                "type": "value_error",
-            }],
-        ) from exc
+@router.get(
+    "/template/sources/random-show-episode",
+    response_model=LocalMediaProfileTemplateSource | None,
+)
+def local_media_profile_random_show_template_source(
+    show_scope: ShowLocalMediaProfileScope = Query(ShowLocalMediaProfileScope.BOTH),
+):
+    """Choose a fresh initial episode without weighting Shows by episode count."""
+    with db_session() as s:
+        return get_random_show_template_source(s, show_scope)
+
+
+@router.get(
+    "/{local_media_profile_slug}/view",
+    response_model=LocalMediaProfileViewAPIRead,
+)
+def local_media_profiles_view(local_media_profile_slug: str):
+    """Retrieve one Local Media Profile together with management statistics."""
+    with db_session() as s:
+        return get_local_media_profile_view(s, local_media_profile_slug)
+
+
+@router.post(
+    "/{local_media_profile_slug}/rename-files",
+    response_model=LocalMediaProfileFileRenameOperationAccepted,
+    status_code=202,
+)
+def local_media_profiles_rename_files(local_media_profile_slug: str):
+    with db_session() as s:
+        try:
+            result = request_local_media_profile_file_rename(
+                s,
+                local_media_profile_slug,
+            )
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post(
+    "/{local_media_profile_slug}/delete-downloads",
+    response_model=LocalMediaProfileDeleteDownloadsOperationAccepted,
+    status_code=202,
+)
+def local_media_profiles_delete_downloads(local_media_profile_slug: str):
+    with db_session() as s:
+        try:
+            result = request_local_media_profile_download_delete(
+                s,
+                local_media_profile_slug,
+            )
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
 
 
 @router.get("/{local_media_profile_slug}", response_model=LocalMediaProfileAPIRead)

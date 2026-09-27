@@ -1,3 +1,4 @@
+import {useState} from 'react'
 import {useInfiniteQuery, useQuery} from '@tanstack/react-query'
 
 import type {ShowLocalMediaProfileScope} from '../types/local_media_profile'
@@ -30,10 +31,14 @@ type LocalMediaProfileTemplateSourceOptions = {
     pageSize?: number
 }
 
-async function fetchTemplateJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function fetchTemplateJson<T>(
+    path: string,
+    signal?: AbortSignal,
+    cache?: RequestCache,
+): Promise<T> {
     const response = await fetch(
         `${(window as any).appConfig.API_URL}/local-media-profiles/template/${path}`,
-        {signal, credentials: 'include'},
+        {signal, credentials: 'include', cache},
     )
     if (!response.ok) throw new Error(`Failed to load template data (${response.status})`)
     return response.json() as Promise<T>
@@ -84,5 +89,25 @@ export function useLocalMediaProfileTemplateSources(
             ? lastPage.offset + lastPage.items.length
             : undefined,
         staleTime: 30_000,
+    })
+}
+
+
+export function useRandomShowTemplateSource(
+    showScope: ShowLocalMediaProfileScope = 'both',
+    enabled = true,
+) {
+    // A per-mount key makes reopening the form request a fresh example instead
+    // of reusing React Query's cache from the previous page visit.
+    const [requestKey] = useState(() => Math.random())
+    return useQuery<LocalMediaProfileTemplateSource | null>({
+        queryKey: ['randomShowTemplateSource', showScope, requestKey],
+        enabled,
+        queryFn: ({signal}) => fetchTemplateJson(
+            `sources/random-show-episode?show_scope=${encodeURIComponent(showScope)}`,
+            signal,
+            'no-store',
+        ),
+        staleTime: Infinity,
     })
 }

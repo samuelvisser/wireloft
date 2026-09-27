@@ -8,7 +8,12 @@ import {
     showQueryOptions,
     showsQueryOptions,
 } from './showQueryOptions'
-import {LocalMediaProfileRead, LocalMediaProfileReadSchema} from "../types/schemas/local_media_profile";
+import {
+    LocalMediaProfileRead,
+    LocalMediaProfileReadSchema,
+    LocalMediaProfileViewRead,
+    LocalMediaProfileViewReadSchema,
+} from "../types/schemas/local_media_profile";
 import {PodcastDownloadProfileRead, PodcastDownloadProfileReadSchema} from "../types/schemas/podcast_download_profile";
 import {SeriesDownloadProfileRead, SeriesDownloadProfileReadSchema} from "../types/schemas/series_download_profile";
 import {DownloadProfileRead, DownloadProfileReadSchema} from "../types/schemas/download_profile_base";
@@ -65,6 +70,19 @@ export function useLocalMediaProfiles() {
         if (result.data) saveProfilesToStorage(result.data)
     }, [result.data])
     return result
+}
+
+export function useLocalMediaProfileView(slug?: string) {
+    return useQuery<LocalMediaProfileViewRead, Error, LocalMediaProfileViewRead, readonly ['localMediaProfileView', string | undefined]>({
+        queryKey: ['localMediaProfileView', slug] as const,
+        enabled: !!slug,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/local-media-profiles/${encodeURIComponent(slug!)}/view`,
+            LocalMediaProfileViewReadSchema,
+            signal,
+        ),
+        refetchOnMount: 'always',
+    })
 }
 
 export function usePodcastDownloadProfiles() {

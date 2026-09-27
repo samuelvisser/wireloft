@@ -1,6 +1,7 @@
 import {useEffect, useMemo, useState} from 'react'
 import type {ReactNode} from 'react'
 import Select from 'react-select'
+import Switch from 'react-switch'
 
 import './CronEditor.css'
 
@@ -10,7 +11,10 @@ type CronEditorProps = {
     label: string
     value: string
     onChange: (value: string) => void
+    enabled: boolean
+    onEnabledChange: (enabled: boolean) => void
     environmentVariable?: string
+    enabledEnvironmentVariable?: string
     help?: ReactNode
     error?: string
 }
@@ -233,7 +237,10 @@ export default function CronEditor({
     label,
     value,
     onChange,
+    enabled,
+    onEnabledChange,
     environmentVariable,
+    enabledEnvironmentVariable,
     help = 'Schedules use WireLoft’s configured timezone.',
     error,
 }: CronEditorProps) {
@@ -241,7 +248,9 @@ export default function CronEditor({
     const parsed = useMemo(() => parseCron(value), [value])
     const weekdayValues = useMemo(() => selectedWeekdays(parsed?.dayOfWeek), [parsed?.dayOfWeek])
     const disabled = Boolean(environmentVariable)
+    const enabledDisabled = Boolean(enabledEnvironmentVariable)
     const errorId = `${id}-errors`
+    const enabledLabelId = `${id}-enabled-label`
 
     useEffect(() => {
         setMode(inferMode(value))
@@ -271,8 +280,27 @@ export default function CronEditor({
         : `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 
     return (
-        <div className={`settings-field settings-field--wide cron-editor${disabled ? ' is-environment-managed' : ''}`}>
-            <label htmlFor={`${id}-expression`}>{label}</label>
+        <div className="settings-field settings-field--wide cron-editor">
+            <div className="cron-editor__heading">
+                <label htmlFor={`${id}-expression`}>{label}</label>
+                <div className="cron-editor__enabled">
+                    <span id={enabledLabelId}>Enabled</span>
+                    <Switch
+                        id={`${id}-enabled`}
+                        checked={enabled}
+                        disabled={enabledDisabled}
+                        onChange={onEnabledChange}
+                        onColor="#0ea5e9"
+                        offColor="#94a3b8"
+                        uncheckedIcon={false}
+                        checkedIcon={false}
+                        height={18}
+                        width={34}
+                        handleDiameter={14}
+                        aria-labelledby={enabledLabelId}
+                    />
+                </div>
+            </div>
             <div className="cron-editor__card">
                 <div className="cron-editor__presets" role="group" aria-label={`${label} schedule type`}>
                     {MODES.map((option) => (
@@ -431,9 +459,14 @@ export default function CronEditor({
                     <div className="settings-field__help">{help}</div>
                 </div>
             </div>
+            {enabledEnvironmentVariable ? (
+                <div className="settings-field__environment-note">
+                    The enable setting is managed by environment variable <code>{enabledEnvironmentVariable}</code>. Change or remove that environment override and restart WireLoft to edit it here.
+                </div>
+            ) : null}
             {environmentVariable ? (
                 <div className="settings-field__environment-note">
-                    Managed by environment variable <code>{environmentVariable}</code>. Change or remove that environment override and restart WireLoft to edit this setting here.
+                    The cron expression is managed by environment variable <code>{environmentVariable}</code>. Change or remove that environment override and restart WireLoft to edit it here.
                 </div>
             ) : null}
         </div>

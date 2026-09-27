@@ -16,7 +16,7 @@ For most installations, the defaults are a good balance between keeping content 
 | Tracked files on disk | Every 10 minutes |
 | Stalled task timeout | 20 minutes without progress |
 
-All of these can be adjusted from **Settings**, but there is usually no need to make them more aggressive.
+All of these can be adjusted from **Settings**, but there is usually no need to make them more aggressive. Each cron-based schedule can also be disabled independently from its cron editor without removing its configured expression.
 
 ## Finding new episodes
 
@@ -115,9 +115,9 @@ Examples:
 0 8 * * 1,3     # Monday and Wednesday at 08:00
 ```
 
-Schedules use WireLoft's configured timezone (`TZ`).
+Schedules use WireLoft's configured timezone (`TZ`). Each cron editor has a compact **Enabled** switch; the enable flag and cron expression are stored as separate settings.
 
-WireLoft validates worker schedules against its Daily Wire request-pacing settings, so schedules that are unreasonably frequent may be rejected rather than creating constant upstream traffic.
+WireLoft validates enabled worker schedules against its Daily Wire request-pacing settings, so schedules that are unreasonably frequent may be rejected rather than creating constant upstream traffic.
 
 ## Tuning advice
 
