@@ -22,6 +22,9 @@ class ShowLocalMediaProfile(LocalMediaProfileBase, HasMetadataMixin):
         nullable=False,
     )
 
+    # None inherits the system default; explicit booleans override it.
+    download_show_assets: Mapped[bool | None] = mapped_column(nullable=True)
+
     @property
     def indexing_values(self):
         from backend.utils.custom_index import get_indexing_value_definitions

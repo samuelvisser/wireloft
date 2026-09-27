@@ -173,6 +173,17 @@ export default function DownloadsSettingsTab({
                         </ReadMore>
                     }
                 />
+                <ToggleField
+                    id="settings-show-assets"
+                    label="Download show assets"
+                    checked={draft.downloadSettings.downloadShowAssets}
+                    environmentVariable={environmentVariableFor('downloadSettings.downloadShowAssets')}
+                    onChange={(checked) => updateDraft((next) => {
+                        next.downloadSettings.downloadShowAssets = checked
+                    })}
+                    help="Save poster.jpg, fanart.jpg and square.jpg in each show's inferred shared folder. Local Media Profiles can inherit or override this setting. Existing custom artwork is preserved."
+                    wide
+                />
                 <SelectField
                     id="settings-filename-restriction-mode"
                     label="Filename restrictions"

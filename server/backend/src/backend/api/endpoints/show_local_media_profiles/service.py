@@ -16,6 +16,7 @@ from backend.api.models.show_local_media_profile import (
 )
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.db.models import CustomIndexState, Show, ShowLocalMediaProfile
+from backend.services.show_assets import request_profile_show_assets
 from backend.services.custom_indexes import (
     profile_applies_to_show, profile_uses_custom_indexes, remove_profile_custom_index_state,
     request_custom_index_reconciliation,
@@ -112,6 +113,7 @@ def create_show_local_media_profile(
     replace_indexing_value_definitions(item, body.indexing_values)
     if profile_uses_custom_indexes(item):
         _queue_custom_index_management(s, item)
+    request_profile_show_assets(s, item.id)
     return ShowLocalMediaProfileAPIRead.model_validate(item)
 
 
@@ -173,6 +175,7 @@ def update_show_local_media_profile(
         )
         request_show_local_media_profile_file_rename(s, item.slug)
 
+    request_profile_show_assets(s, item.id)
     return ShowLocalMediaProfileAPIRead.model_validate(item)
 
 

@@ -61,6 +61,7 @@ SettingFieldPath = Literal[
     "downloadSettings.downloadRoot",
     "downloadSettings.downloadMode",
     "downloadSettings.thumbnailMode",
+    "downloadSettings.downloadShowAssets",
     "downloadSettings.temporaryDownloadRoot",
     "downloadSettings.rssCacheRoot",
     "downloadSettings.rssCacheRetentionSeconds",
@@ -111,6 +112,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.downloadRoot",
     "downloadSettings.downloadMode",
     "downloadSettings.thumbnailMode",
+    "downloadSettings.downloadShowAssets",
     "downloadSettings.temporaryDownloadRoot",
     "downloadSettings.rssCacheRoot",
     "downloadSettings.rssCacheRetentionSeconds",
@@ -252,6 +254,7 @@ class DownloadSettingsValue(_SettingsValueModel):
     download_root: Path
     download_mode: DownloadMode
     thumbnail_mode: ThumbnailMode
+    download_show_assets: bool
     temporary_download_root: Path
     rss_cache_root: Path
     rss_cache_retention_seconds: int = Field(ge=1)

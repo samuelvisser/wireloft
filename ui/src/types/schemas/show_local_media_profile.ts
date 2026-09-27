@@ -41,6 +41,7 @@ const ShowLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
         '/downloads/shows/{{ show }}/{{ episode_title }}.ext',
     ),
     preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
+    downloadShowAssets: z.boolean().nullable().default(null),
     indexingValues: ShowLocalMediaProfileIndexingValuesSchema.default([]),
 })
 
@@ -64,6 +65,7 @@ export const ShowLocalMediaProfileReadSchema = LocalMediaProfileSchemaResponse.s
         .nullable()
         .optional()
         .transform((value) => value ?? 'both'),
+    downloadShowAssets: z.boolean().nullable().default(null),
     indexingValues: z.array(IndexingValueEntrySchema).default([]),
 })
 export type ShowLocalMediaProfileRead = z.infer<typeof ShowLocalMediaProfileReadSchema>

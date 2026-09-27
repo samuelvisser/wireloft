@@ -15,7 +15,7 @@ _WORKER_EXPORTS = {
     "download_movie": ".workers.download_movie",
     "refresh_movie_extras": ".workers.refresh_movie_extras",
     "download_profile_worker": ".workers.download_profile_worker",
-    "download_series_thumbnail": ".workers.download_series_thumbnail",
+    "reconcile_show_assets": ".workers.reconcile_show_assets",
     "monitor_pending_episode": ".workers.monitor_pending_episode",
     "refresh_episode_metadata": ".workers.refresh_episode_metadata",
     "rename_file_worker": ".workers.rename_file_worker",

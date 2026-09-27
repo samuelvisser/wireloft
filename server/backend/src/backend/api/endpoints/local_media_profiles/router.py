@@ -28,6 +28,7 @@ from .output_template import (
 )
 from .file_rename import request_local_media_profile_file_rename
 from .maintenance import request_local_media_profile_download_delete
+from .show_assets import router as show_assets_router
 from .service import (
     get_local_media_profile,
     get_local_media_profile_view,
@@ -35,6 +36,7 @@ from .service import (
 )
 
 router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles (base)"])
+router.include_router(show_assets_router)
 
 
 @router.get("", response_model=list[LocalMediaProfileAPIRead])
