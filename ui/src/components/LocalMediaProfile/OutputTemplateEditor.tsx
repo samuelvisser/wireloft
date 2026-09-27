@@ -14,10 +14,12 @@ import {tags} from '@lezer/highlight'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import ReadMore from '../../utils/ReadMore'
+import {useLocalMediaProfilePreview, type LocalMediaProfilePreviewState} from '../../lib/localMediaProfilePreview'
 import {
     type LocalMediaProfileTemplateSource,
     useLocalMediaProfileTemplateSources,
     useLocalMediaProfileTemplateVariables,
+    useRandomShowTemplateSource,
 } from '../../lib/localMediaProfileTemplateSources'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import TemplateSourceSelect from './TemplateSourceSelect'
@@ -35,19 +37,12 @@ import {getOutputTemplateVariables, type OutputTemplateVariable} from './outputT
 import './OutputTemplateEditor.css'
 import './OutputTemplateEditorIde.css'
 
-type TemplatePreviewResponse = {
-    outputPath: string
-    usedVariables: string[]
-    usedIndexingValues: string[]
-    missingIndexingValues: string[]
-    provisionalIndexingValues: string[]
-}
-
 type Props = {
     form: UseFormReturn<any>
     mode: LocalMediaProfileMode
     placeholder: string
     help: ReactNode
+    renderPreviewFields?: (preview: LocalMediaProfilePreviewState) => ReactNode
 }
 
 type TemplateCodeEditorProps = {
@@ -130,13 +125,6 @@ const jinjaHighlightStyle = HighlightStyle.define([
     {tag: tags.comment, class: 'cm-jinja-comment'},
     {tag: tags.blockComment, class: 'cm-jinja-comment'},
 ])
-
-function responseErrorMessage(payload: any): string {
-    const detail = payload?.detail
-    if (Array.isArray(detail) && detail.length) return detail[0]?.msg ?? 'The template could not be rendered.'
-    if (typeof detail === 'string') return detail
-    return 'The template could not be rendered.'
-}
 
 function statementVariableExpression(statement: string): string | null {
     const keywordMatch = /^\s*([A-Za-z_][A-Za-z0-9_]*)\b/.exec(statement)
@@ -405,13 +393,12 @@ function PreviewPath({path}: {path: string}) {
     )
 }
 
-export default function OutputTemplateEditor({form, mode, placeholder, help}: Props) {
+export default function OutputTemplateEditor({form, mode, placeholder, help, renderPreviewFields}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
     const showScope = useWatch({control, name: 'showScope'}) ?? 'both'
     const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
-    const indexingValuesKey = JSON.stringify(indexingValues)
     const rawLocalMediaProfileId = useWatch({control, name: 'id'})
     const localMediaProfileId = typeof rawLocalMediaProfileId === 'number'
         ? rawLocalMediaProfileId
@@ -439,6 +426,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         showScope,
         search: sourceSearch,
     })
+    const randomShowSourceQuery = useRandomShowTemplateSource(showScope, mode === 'show')
     const variableQuery = useLocalMediaProfileTemplateVariables(mode)
     const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]
     const variables = useMemo(
@@ -635,10 +623,32 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     }, [mode, showScope])
 
     useEffect(() => {
-        if (selectedSource || !sources.length) return
+        if (selectedSource) return
+        if (mode === 'show') {
+            if (randomShowSourceQuery.isLoading) return
+            if (randomShowSourceQuery.data) {
+                setSelectedSource(randomShowSourceQuery.data)
+                setTestValues({...randomShowSourceQuery.data.values})
+                return
+            }
+        }
+        if (!sources.length) return
         setSelectedSource(sources[0])
         setTestValues({...sources[0].values})
-    }, [selectedSource, sources])
+    }, [
+        mode,
+        randomShowSourceQuery.data,
+        randomShowSourceQuery.isLoading,
+        selectedSource,
+        sources,
+    ])
+
+    const selectableSources = useMemo(
+        () => selectedSource && !sources.some(({id}) => id === selectedSource.id)
+            ? [selectedSource, ...sources]
+            : sources,
+        [selectedSource, sources],
+    )
 
     useEffect(() => {
         setTestValues((current) => {
@@ -654,72 +664,27 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         })
     }, [selectedSource, usedVariablesKey])
 
-    const [previewPath, setPreviewPath] = useState('')
-    const [previewError, setPreviewError] = useState('')
-    const [previewLoading, setPreviewLoading] = useState(false)
-    const previewValuesKey = JSON.stringify(testValues)
+    const preview = useLocalMediaProfilePreview(template && selectedSource ? {
+        type: mode,
+        outputTemplate: template,
+        preferredFormat,
+        values: testValues,
+        sourceId: selectedSource.id,
+        localMediaProfileId: mode === 'show' ? localMediaProfileId : null,
+        indexingValues: mode === 'show' ? indexingValues : null,
+    } : null)
+    const previewPath = preview.result?.output.outputPath ?? ''
+    const previewError = preview.error || preview.result?.output.error || ''
+    const previewLoading = preview.loading
+
     useEffect(() => {
-        if (!template) {
-            setUsedVariableNames([])
-            setMissingIndexingValueNames([])
-            setProvisionalIndexingValueNames([])
-            setPreviewPath('')
-            setPreviewError('')
-            return
-        }
-        if (!selectedSource) return
-        const controller = new AbortController()
-        const timer = window.setTimeout(async () => {
-            setPreviewLoading(true)
-            try {
-                const response = await fetch(
-                    `${(window as any).appConfig.API_URL}/local-media-profiles/template/preview`,
-                    {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        credentials: 'include',
-                        signal: controller.signal,
-                        body: JSON.stringify({
-                            type: mode,
-                            outputTemplate: template,
-                            preferredFormat,
-                            values: testValues,
-                            sourceId: selectedSource.id,
-                            localMediaProfileId: mode === 'show' ? localMediaProfileId : null,
-                            indexingValues: mode === 'show' ? indexingValues : null,
-                        }),
-                    },
-                )
-                const payload = await response.json()
-                if (!response.ok) {
-                    setUsedVariableNames([])
-                    setMissingIndexingValueNames([])
-                    setProvisionalIndexingValueNames([])
-                    setPreviewError(responseErrorMessage(payload))
-                    return
-                }
-                const result = payload as TemplatePreviewResponse
-                setPreviewPath(result.outputPath)
-                setUsedVariableNames(result.usedVariables)
-                setMissingIndexingValueNames(result.missingIndexingValues ?? [])
-                setProvisionalIndexingValueNames(result.provisionalIndexingValues ?? [])
-                setPreviewError('')
-            } catch (error) {
-                if ((error as Error).name !== 'AbortError') {
-                    setUsedVariableNames([])
-                    setMissingIndexingValueNames([])
-                    setProvisionalIndexingValueNames([])
-                    setPreviewError('The preview is temporarily unavailable.')
-                }
-            } finally {
-                if (!controller.signal.aborted) setPreviewLoading(false)
-            }
-        }, 300)
-        return () => {
-            window.clearTimeout(timer)
-            controller.abort()
-        }
-    }, [indexingValuesKey, localMediaProfileId, mode, preferredFormat, previewValuesKey, selectedSource, template])
+        // Keep editable controls mounted while the shared request is pending.
+        if (preview.loading) return
+        const output = preview.result?.output
+        setUsedVariableNames(output?.usedVariables ?? [])
+        setMissingIndexingValueNames(output?.missingIndexingValues ?? [])
+        setProvisionalIndexingValueNames(output?.provisionalIndexingValues ?? [])
+    }, [preview.loading, preview.result])
 
     function chooseSource(source: LocalMediaProfileTemplateSource) {
         setSelectedSource(source)
@@ -727,6 +692,8 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     }
 
     return (
+        <>
+        {renderPreviewFields?.(preview)}
         <div className="form-row output-template-field">
             <section className="template-workbench" aria-labelledby="template-editor-heading">
                 <div className="template-editor-heading">
@@ -813,9 +780,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                             <span>Example source</span>
                             <TemplateSourceSelect
                                 mode={mode}
-                                sources={sources}
+                                sources={selectableSources}
                                 selectedSource={selectedSource}
-                                isLoading={sourceQuery.isLoading || sourceQuery.isFetchingNextPage}
+                                isLoading={
+                                    sourceQuery.isLoading
+                                    || sourceQuery.isFetchingNextPage
+                                    || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)
+                                }
                                 hasMore={sourceQuery.hasNextPage ?? false}
                                 onChange={chooseSource}
                                 onSearchChange={setSourceSearch}
@@ -824,7 +795,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                         </label>
                     </div>
 
-                    {sourceQuery.isLoading && <p className="template-preview-status">Loading an example…</p>}
+                    {(sourceQuery.isLoading || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)) && (
+                        <p className="template-preview-status">Loading an example…</p>
+                    )}
                     {sourceQuery.isError && (
                         <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
                     )}
@@ -936,5 +909,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                 </ReadMore>
             </div>
         </div>
+        </>
     )
 }

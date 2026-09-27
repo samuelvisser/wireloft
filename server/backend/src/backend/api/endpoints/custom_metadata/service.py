@@ -67,4 +67,8 @@ def remove_shared_custom_metadata_fields(
     # resource before replacing its remaining values so globally deleted rows
     # cannot be reintroduced from a stale relationship collection.
     session.expire(resource, ["meta_items"])
+    if parent_table == Show.__tablename__:
+        # Removing a shared field can change every show's output directory.
+        from backend.services.show_assets import request_show_asset_reconciliation
+        request_show_asset_reconciliation(session)
 

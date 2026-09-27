@@ -1,114 +1,18 @@
 from __future__ import annotations
 
-from copy import deepcopy
+import logging
 
 from fastapi import HTTPException
-from jinja2 import nodes
-from jinja2.visitor import NodeTransformer
 from sqlalchemy.orm import Session
 
 from backend.api.models.local_media_profile import LocalMediaProfileAPIBaseIn
 from backend.db.models import LocalMediaProfileBase
-from backend.types.local_media_profile_types import PreferredFormat
-from backend.utils.output_template import _parse_output_template, replace_output_extension
+from backend.utils.jinja_analysis.comparison import OutputOverlap
+from backend.utils.output_template import _sanitize_emitted_output_value, finalize_output_path
+from backend.utils.output_template_analysis import analyze_profile_outputs, compare_profile_outputs
+from backend.utils.output_template_jinja import create_output_template_environment
 
-
-class _NonComparableTemplate(Exception):
-    pass
-
-
-def _normalize_expression(node: nodes.Expr, environment: dict[str, nodes.Expr]) -> nodes.Expr:
-    class NormalizeNames(NodeTransformer):
-        def visit_Name(self, name: nodes.Name, *args, **kwargs):
-            replacement = environment.get(name.name)
-            return deepcopy(replacement) if name.ctx == "load" and replacement is not None else name
-
-    return NormalizeNames().visit(deepcopy(node))
-
-
-def _canonical_expression(node: nodes.Expr, environment: dict[str, nodes.Expr]) -> str:
-    node = _normalize_expression(node, environment)
-    if isinstance(node, nodes.TemplateData):
-        return node.data
-    if isinstance(node, nodes.Name):
-        return f"{{{node.name}}}"
-    if isinstance(node, nodes.Const):
-        return str(node.value)
-    return repr(node)
-
-
-def _canonical_body(
-    statements: list[nodes.Stmt],
-    states: list[tuple[str, dict[str, nodes.Expr]]],
-) -> list[tuple[str, dict[str, nodes.Expr]]]:
-    for statement in statements:
-        next_states = []
-        for text, environment in states:
-            if isinstance(statement, nodes.Output):
-                next_states.append((
-                    text + "".join(
-                        _canonical_expression(node, environment)
-                        for node in statement.nodes
-                    ),
-                    environment,
-                ))
-            elif isinstance(statement, nodes.Assign):
-                if not isinstance(statement.target, nodes.Name):
-                    raise _NonComparableTemplate
-                updated = dict(environment)
-                updated[statement.target.name] = _normalize_expression(
-                    statement.node,
-                    environment,
-                )
-                next_states.append((text, updated))
-            elif isinstance(statement, nodes.AssignBlock):
-                if not isinstance(statement.target, nodes.Name) or statement.filter is not None:
-                    raise _NonComparableTemplate
-                for captured, _captured_environment in _canonical_body(
-                    statement.body,
-                    [("", dict(environment))],
-                ):
-                    updated = dict(environment)
-                    updated[statement.target.name] = nodes.Const(captured)
-                    next_states.append((text, updated))
-            elif isinstance(statement, nodes.If):
-                for branch in [
-                    statement.body,
-                    *[elif_node.body for elif_node in statement.elif_],
-                    statement.else_,
-                ]:
-                    next_states.extend(
-                        _canonical_body(branch, [(text, dict(environment))])
-                    )
-            else:
-                raise _NonComparableTemplate
-        states = next_states
-    return states
-
-
-def _canonical_template_patterns(output_template: str) -> frozenset[str] | None:
-    """Return possible symbolic outputs after removing non-output-affecting Jinja."""
-    try:
-        states = _canonical_body(_parse_output_template(output_template).body, [("", {})])
-    except (ValueError, _NonComparableTemplate):
-        return None
-    return frozenset(output for output, _environment in states)
-
-
-def _profile_output_patterns(
-    output_template: str,
-    preferred_format: PreferredFormat | str,
-) -> frozenset[str] | None:
-    patterns = _canonical_template_patterns(output_template)
-    if patterns is None:
-        return None
-    if preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY:
-        extension = "m4a"
-    elif preferred_format == PreferredFormat.FORMAT_HLS:
-        extension = "m3u8"
-    else:
-        extension = "mp4"
-    return frozenset(replace_output_extension(pattern, extension) for pattern in patterns)
+logger = logging.getLogger(__name__)
 
 
 def ensure_unique_profile_settings(
@@ -122,9 +26,11 @@ def ensure_unique_profile_settings(
     if exclude_id is not None:
         query = query.filter(LocalMediaProfileBase.id != exclude_id)
 
-    candidate_patterns = _profile_output_patterns(
-        body.output_template,
-        body.preferred_format,
+    environment = create_output_template_environment()
+    environment.finalize = _sanitize_emitted_output_value
+    candidate = analyze_profile_outputs(
+        body.output_template, body.type, body.preferred_format,
+        environment=environment, namespace="candidate",
     )
     for existing in query.all():
         if (
@@ -140,15 +46,14 @@ def ensure_unique_profile_settings(
                 }],
             )
 
-        existing_patterns = _profile_output_patterns(
-            existing.output_template,
-            existing.preferred_format,
+        previous = analyze_profile_outputs(
+            existing.output_template, existing.type, existing.preferred_format,
+            environment=environment, namespace=f"profile:{existing.id}",
         )
-        if (
-            candidate_patterns is not None
-            and existing_patterns is not None
-            and candidate_patterns & existing_patterns
-        ):
+        comparison = compare_profile_outputs(
+            candidate, previous, environment=environment, finalize_path=finalize_output_path,
+        )
+        if comparison.status == OutputOverlap.OVERLAP:
             raise HTTPException(
                 status_code=409,
                 detail=[{
@@ -160,3 +65,9 @@ def ensure_unique_profile_settings(
                     "type": "output_path_collision",
                 }],
             )
+        if comparison.status == OutputOverlap.UNKNOWN:
+            # Static validation is not a filesystem reservation. Do not reject
+            # valid advanced templates merely because their expressions are not
+            # comparable; actual download/rename collision guards remain final.
+            logger.debug("Output comparison with Local Media Profile %s is inconclusive: %s",
+                         existing.id, comparison.reason)

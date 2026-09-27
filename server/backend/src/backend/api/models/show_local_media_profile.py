@@ -23,6 +23,7 @@ from backend.utils.output_template import (
 class _ShowLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
     type: Literal["show"] = LocalMediaProfileType.SHOW.value
     show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH
+    download_show_assets: bool | None = None
     indexing_values: list[IndexingValueDefinitionAPI] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
@@ -56,4 +57,5 @@ class ShowLocalMediaProfileAPIRead(LocalMediaProfileAPIBaseOut):
 
     type: Literal["show"] = LocalMediaProfileType.SHOW.value
     show_scope: Union[ShowLocalMediaProfileScope, str] = ShowLocalMediaProfileScope.BOTH
+    download_show_assets: bool | None = None
     indexing_values: list[IndexingValueDefinitionAPI] = Field(default_factory=list)

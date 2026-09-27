@@ -71,3 +71,18 @@ export const LocalMediaProfileReadSchema = z.discriminatedUnion('type', [
     MovieLocalMediaProfileReadSchema,
 ])
 export type LocalMediaProfileRead = z.infer<typeof LocalMediaProfileReadSchema>
+
+
+export const LocalMediaProfileStatisticsReadSchema = z.object({
+    managedMediaCount: z.int().nonnegative(),
+    downloadedMediaCount: z.int().nonnegative(),
+    storageSizeBytes: z.number().int().nonnegative(),
+    downloadProfileCount: z.int().nonnegative(),
+})
+export type LocalMediaProfileStatisticsRead = z.infer<typeof LocalMediaProfileStatisticsReadSchema>
+
+export const LocalMediaProfileViewReadSchema = z.object({
+    profile: LocalMediaProfileReadSchema,
+    statistics: LocalMediaProfileStatisticsReadSchema,
+})
+export type LocalMediaProfileViewRead = z.infer<typeof LocalMediaProfileViewReadSchema>

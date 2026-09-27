@@ -18,6 +18,7 @@ from task_manager.tasks.media_download_operations import (
     create_media_download_operation,
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
+    prepare_media_download_artifact,
 )
 
 from .operations import _BulkMediaDownloadOperation
@@ -142,6 +143,40 @@ def cancel_media_download_action(
             pass
 
     return payload
+
+
+
+def delete_media_download_artifact_action(
+        media_download_id: int,
+        *,
+        missing_ok: bool = False,
+) -> bool:
+    """Cancel active work and remove one managed artifact without deleting its MediaDownload row."""
+    cancel_media_download_action(
+        media_download_id,
+        allow_inactive=True,
+        missing_ok=missing_ok,
+    )
+
+    with db_session() as s:
+        try:
+            download = s.get(MediaDownloadBase, media_download_id)
+            if download is None:
+                if missing_ok:
+                    return False
+                raise HTTPException(status_code=404, detail="Media download not found")
+
+            prepare_media_download_artifact(s, download)
+            # A profile-wide delete is explicit user intent. Keep automatic
+            # reconciliation from immediately replacing this artifact even if a
+            # stale worker or profile sweep observes the row before its parent
+            # Download Profile disable becomes visible.
+            download.automatic_retry_suppressed = True
+            s.commit()
+            return True
+        except Exception:
+            s.rollback()
+            raise
 
 
 def queue_bulk_media_download_operation(

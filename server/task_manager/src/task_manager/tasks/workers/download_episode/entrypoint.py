@@ -5,6 +5,7 @@ from typing import Optional
 from controller.db_utils import db_session
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.db.models import Episode
+from backend.services.show_assets import request_show_asset_reconciliation
 from task_manager.tasks.helpers.custom_index_readiness import (
     custom_index_pair_lock, pair_is_ready, request_missing_index_repair,
     wait_for_custom_index_pair,
@@ -54,10 +55,13 @@ async def download_episode(
                         if not pair_is_ready(*pair):
                             continue
                         with db_session() as session:
-                            return await run_download_episode(
+                            result = await run_download_episode(
                                 session, media_download_id=resource_id,
                                 is_redownload=is_redownload, progress=progress,
                             )
+                            request_show_asset_reconciliation(session, pair[0])
+                            session.commit()
+                            return result
                 with db_session() as session:
                     return await run_download_episode(
                         session, media_download_id=resource_id,

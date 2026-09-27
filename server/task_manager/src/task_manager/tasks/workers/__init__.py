@@ -17,13 +17,14 @@ _WORKER_EXPORTS = {
     "download_movie": ".download_movie",
     "refresh_movie_extras": ".refresh_movie_extras",
     "download_profile_worker": ".download_profile_worker",
-    "download_series_thumbnail": ".download_series_thumbnail",
+    "reconcile_show_assets": ".reconcile_show_assets",
     "monitor_pending_episode": ".monitor_pending_episode",
     "fetch_new_episodes": ".fetch_new_episodes",
     "monitor_no_usable_media_episode": ".monitor_no_usable_media_episode",
     "refresh_episode_metadata": ".refresh_episode_metadata",
     "manage_custom_indexes": ".manage_custom_indexes",
     "rename_show_profile_files": ".rename_show_profile_files",
+    "rename_movie_profile_files": ".rename_movie_profile_files",
 }
 
 

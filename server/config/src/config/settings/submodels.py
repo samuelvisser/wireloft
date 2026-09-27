@@ -360,6 +360,10 @@ class DownloadSettings(SubmodelBase):
         default=ThumbnailMode.EMBED,
         description="Whether downloaded media embeds its thumbnail, writes a sidecar image, does both, or stores no thumbnail",
     )
+    download_show_assets: bool = Field(
+        default=True,
+        description="Download show posters, backgrounds and square artwork to the shared show directory; Local Media Profiles can override this default",
+    )
     temporary_download_root: Path = Field(
         default_factory=lambda data: data["download_root"] / ".wireloft-temp",
         description="Directory used to stage complete downloads before publishing them to the download root",

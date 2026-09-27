@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from controller.db_utils import db_session
+from backend.services.show_assets import request_show_asset_reconciliation
 from task_manager.tasks.helpers.custom_index_readiness import (
     custom_index_pair_lock, pair_is_ready, request_missing_index_repair,
     wait_for_custom_index_pair,
@@ -37,7 +38,7 @@ async def rename_show_profile_files(
                 if not pair_is_ready(resource_id, local_media_profile_id):
                     continue
                 with db_session() as session:
-                    return run_rename_show_profile_files(
+                    result = run_rename_show_profile_files(
                         session,
                         show_id=resource_id,
                         local_media_profile_id=local_media_profile_id,
@@ -45,6 +46,9 @@ async def rename_show_profile_files(
                         expected_sources=expected_sources,
                         progress=progress,
                     )
+                    request_show_asset_reconciliation(session, resource_id)
+                    session.commit()
+                    return result
     except CustomIndexNotReadyError as exc:
         request_missing_index_repair(exc)
         raise
