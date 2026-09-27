@@ -615,7 +615,7 @@ def get_dailywire_stream_url(
         WlDwMembershipLevel.WL_ANY.value,
     }
     try:
-        detail = (client or MiddlewareClient()).get_episode_details(
+        detail = (client or MiddlewareClient(pace_requests=False)).get_episode_details(
             episode.slug,
             require_member_exclusive=require_member_exclusive,
         )
