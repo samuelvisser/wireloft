@@ -48,8 +48,11 @@ const SchedulerSettingsSchema = z.object({
 })
 
 const TrackNewEpisodeScheduleSchema = z.object({
+    findEpisodesCronEnabled: z.boolean(),
     findEpisodesCron: z.string(),
+    monitorPendingEpisodeCronEnabled: z.boolean(),
     monitorPendingEpisodeCron: z.string(),
+    monitorNoUsableMediaEpisodeCronEnabled: z.boolean(),
     monitorNoUsableMediaEpisodeCron: z.string(),
     metadataRefreshIntervals: z.string(),
 })
@@ -68,6 +71,7 @@ export const ThumbnailModeSchema = z.enum(['no_thumbnail', 'embed', 'sidecar', '
 export type ThumbnailMode = z.infer<typeof ThumbnailModeSchema>
 
 const DownloadSettingsSchema = z.object({
+    verifyDownloadsCronEnabled: z.boolean(),
     verifyDownloadsCron: z.string(),
     maxConcurrentDownloads: z.number(),
     maxDownloadAttempts: z.number(),
@@ -85,6 +89,7 @@ const DownloadSettingsSchema = z.object({
 
 const FileWatcherSettingsSchema = z.object({
     enabled: z.boolean(),
+    scanCronEnabled: z.boolean(),
     scanCron: z.string(),
     verifyFileSize: z.boolean(),
 })
@@ -212,13 +217,17 @@ export const SETTINGS_FIELD_PATHS = [
     'scheduler.stalledTaskTimeoutMinutes',
     'scheduler.defaultMaxRetries',
     'scheduler.retryBackoffSeconds',
+    'newEpisodeSchedule.findEpisodesCronEnabled',
     'newEpisodeSchedule.findEpisodesCron',
+    'newEpisodeSchedule.monitorPendingEpisodeCronEnabled',
     'newEpisodeSchedule.monitorPendingEpisodeCron',
+    'newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled',
     'newEpisodeSchedule.monitorNoUsableMediaEpisodeCron',
     'newEpisodeSchedule.metadataRefreshIntervals',
     'episodeStatusTiming.publishedFinalAfterMinutes',
     'episodeStatusTiming.dwProcessingMaxMinutes',
     'episodeStatusTiming.noUsableMediaDeleteAfterMinutes',
+    'downloadSettings.verifyDownloadsCronEnabled',
     'downloadSettings.verifyDownloadsCron',
     'downloadSettings.maxConcurrentDownloads',
     'downloadSettings.maxDownloadAttempts',
@@ -233,6 +242,7 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadSettings.remuxVideoToMp4',
     'downloadSettings.ffmpegPath',
     'fileWatcher.enabled',
+    'fileWatcher.scanCronEnabled',
     'fileWatcher.scanCron',
     'fileWatcher.verifyFileSize',
 ] as const

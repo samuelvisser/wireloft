@@ -123,6 +123,8 @@ def setup_triggers_from_registry() -> None:
     for task_key, triggers in all_triggers().items():
         for index, trigger in enumerate(triggers):
             if trigger.trigger_type == "cron":
+                if not trigger.enabled:
+                    continue
                 cron_trigger = CronTrigger.from_crontab(
                     trigger.cron,
                     timezone=get_settings().timezone,

@@ -81,39 +81,51 @@ def validate_worker_cron_interval(
 def validate_worker_cron_settings(
     *,
     min_slow_request_ms: int,
+    find_episodes_cron_enabled: bool,
     find_episodes_cron: str,
+    monitor_pending_episode_cron_enabled: bool,
     monitor_pending_episode_cron: str,
+    monitor_no_usable_media_episode_cron_enabled: bool,
     monitor_no_usable_media_episode_cron: str,
+    verify_downloads_cron_enabled: bool,
     verify_downloads_cron: str,
+    file_watcher_scan_cron_enabled: bool,
     file_watcher_scan_cron: str,
 ) -> None:
-    for setting_name, field_path, expression in (
+    for enabled, setting_name, field_path, expression in (
         (
+            find_episodes_cron_enabled,
             "Find episodes",
             ("new_episode_schedule", "find_episodes_cron"),
             find_episodes_cron,
         ),
         (
+            monitor_pending_episode_cron_enabled,
             "Monitor pending episodes",
             ("new_episode_schedule", "monitor_pending_episode_cron"),
             monitor_pending_episode_cron,
         ),
         (
+            monitor_no_usable_media_episode_cron_enabled,
             "Monitor no-usable-media episodes",
             ("new_episode_schedule", "monitor_no_usable_media_episode_cron"),
             monitor_no_usable_media_episode_cron,
         ),
         (
+            verify_downloads_cron_enabled,
             "Verify downloads",
             ("download_settings", "verify_downloads_cron"),
             verify_downloads_cron,
         ),
         (
+            file_watcher_scan_cron_enabled,
             "File watcher scan",
             ("file_watcher", "scan_cron"),
             file_watcher_scan_cron,
         ),
     ):
+        if not enabled:
+            continue
         validate_worker_cron_interval(
             expression,
             min_interval_ms=min_slow_request_ms,

@@ -47,13 +47,17 @@ SettingFieldPath = Literal[
     "scheduler.stalledTaskTimeoutMinutes",
     "scheduler.defaultMaxRetries",
     "scheduler.retryBackoffSeconds",
+    "newEpisodeSchedule.findEpisodesCronEnabled",
     "newEpisodeSchedule.findEpisodesCron",
+    "newEpisodeSchedule.monitorPendingEpisodeCronEnabled",
     "newEpisodeSchedule.monitorPendingEpisodeCron",
+    "newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled",
     "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "episodeStatusTiming.dwProcessingMaxMinutes",
     "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
+    "downloadSettings.verifyDownloadsCronEnabled",
     "downloadSettings.verifyDownloadsCron",
     "downloadSettings.maxConcurrentDownloads",
     "downloadSettings.maxDownloadAttempts",
@@ -68,6 +72,7 @@ SettingFieldPath = Literal[
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
     "fileWatcher.enabled",
+    "fileWatcher.scanCronEnabled",
     "fileWatcher.scanCron",
     "fileWatcher.verifyFileSize",
 ]
@@ -97,13 +102,17 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "scheduler.stalledTaskTimeoutMinutes",
     "scheduler.defaultMaxRetries",
     "scheduler.retryBackoffSeconds",
+    "newEpisodeSchedule.findEpisodesCronEnabled",
     "newEpisodeSchedule.findEpisodesCron",
+    "newEpisodeSchedule.monitorPendingEpisodeCronEnabled",
     "newEpisodeSchedule.monitorPendingEpisodeCron",
+    "newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled",
     "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "episodeStatusTiming.dwProcessingMaxMinutes",
     "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
+    "downloadSettings.verifyDownloadsCronEnabled",
     "downloadSettings.verifyDownloadsCron",
     "downloadSettings.maxConcurrentDownloads",
     "downloadSettings.maxDownloadAttempts",
@@ -118,6 +127,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
     "fileWatcher.enabled",
+    "fileWatcher.scanCronEnabled",
     "fileWatcher.scanCron",
     "fileWatcher.verifyFileSize",
 )
@@ -223,8 +233,11 @@ class SchedulerSettingsValue(_SettingsValueModel):
 
 
 class TrackNewEpisodeScheduleValue(_SettingsValueModel):
+    find_episodes_cron_enabled: bool
     find_episodes_cron: str = Field(min_length=1)
+    monitor_pending_episode_cron_enabled: bool
     monitor_pending_episode_cron: str = Field(min_length=1)
+    monitor_no_usable_media_episode_cron_enabled: bool
     monitor_no_usable_media_episode_cron: str = Field(min_length=1)
     metadata_refresh_intervals: str = Field(min_length=1)
 
@@ -245,6 +258,7 @@ class EpisodeStatusTimingValue(_SettingsValueModel):
 
 
 class DownloadSettingsValue(_SettingsValueModel):
+    verify_downloads_cron_enabled: bool
     verify_downloads_cron: str = Field(min_length=1)
     max_concurrent_downloads: int = Field(ge=1)
     max_download_attempts: int = Field(ge=1)
@@ -273,6 +287,7 @@ class DownloadSettingsValue(_SettingsValueModel):
 
 class FileWatcherSettingsValue(_SettingsValueModel):
     enabled: bool
+    scan_cron_enabled: bool
     scan_cron: str = Field(min_length=1)
     verify_file_size: bool
 
@@ -320,10 +335,15 @@ class SettingsValues(_SettingsValueModel):
         try:
             validate_worker_cron_settings(
                 min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
+                find_episodes_cron_enabled=self.new_episode_schedule.find_episodes_cron_enabled,
                 find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
+                monitor_pending_episode_cron_enabled=self.new_episode_schedule.monitor_pending_episode_cron_enabled,
                 monitor_pending_episode_cron=self.new_episode_schedule.monitor_pending_episode_cron,
+                monitor_no_usable_media_episode_cron_enabled=self.new_episode_schedule.monitor_no_usable_media_episode_cron_enabled,
                 monitor_no_usable_media_episode_cron=self.new_episode_schedule.monitor_no_usable_media_episode_cron,
+                verify_downloads_cron_enabled=self.download_settings.verify_downloads_cron_enabled,
                 verify_downloads_cron=self.download_settings.verify_downloads_cron,
+                file_watcher_scan_cron_enabled=self.file_watcher.scan_cron_enabled,
                 file_watcher_scan_cron=self.file_watcher.scan_cron,
             )
         except WorkerCronIntervalError as exc:

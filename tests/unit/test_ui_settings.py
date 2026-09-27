@@ -98,6 +98,33 @@ def test_settings_service_only_writes_changed_fields_and_preserves_other_yaml(tm
     assert not (tmp_path / "ui-settings.yml").exists()
 
 
+def test_cron_enable_setting_is_written_as_its_own_yaml_field(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import get_ui_settings, save_ui_settings
+    from backend.api.models.settings import SettingsAPIUpdate
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        "newEpisodeSchedule:\n"
+        "  findEpisodesCron: \"*/30 * * * *\"\n",
+        encoding="utf-8",
+    )
+    _point_settings_at(config_path, monkeypatch)
+
+    current = get_ui_settings()
+    values = current.values.model_copy(deep=True)
+    values.new_episode_schedule.find_episodes_cron_enabled = False
+    save_ui_settings(SettingsAPIUpdate(
+        values=values,
+        changed_fields=["newEpisodeSchedule.findEpisodesCronEnabled"],
+    ))
+
+    text = config_path.read_text(encoding="utf-8")
+    document = yaml.safe_load(text)
+    assert "findEpisodesCronEnabled: false" in text
+    assert document["newEpisodeSchedule"]["findEpisodesCronEnabled"] is False
+    assert document["newEpisodeSchedule"]["findEpisodesCron"] == "*/30 * * * *"
+
+
 def test_download_root_change_recomputes_unset_storage_defaults(tmp_path, monkeypatch):
     from backend.api.endpoints.settings.service import get_ui_settings, save_ui_settings
     from backend.api.models.settings import SettingsAPIUpdate

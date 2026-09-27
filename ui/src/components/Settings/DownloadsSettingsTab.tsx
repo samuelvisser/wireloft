@@ -280,10 +280,15 @@ export default function DownloadsSettingsTab({
                     id="settings-verify-downloads-cron"
                     label="Verify downloads schedule"
                     value={draft.downloadSettings.verifyDownloadsCron}
+                    enabled={draft.downloadSettings.verifyDownloadsCronEnabled}
                     error={errorFor('downloadSettings.verifyDownloadsCron')}
                     environmentVariable={environmentVariableFor('downloadSettings.verifyDownloadsCron')}
+                    enabledEnvironmentVariable={environmentVariableFor('downloadSettings.verifyDownloadsCronEnabled')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.verifyDownloadsCron = value
+                    })}
+                    onEnabledChange={(enabled) => updateDraft((next) => {
+                        next.downloadSettings.verifyDownloadsCronEnabled = enabled
                     })}
                 />
                 <ToggleField
@@ -300,10 +305,15 @@ export default function DownloadsSettingsTab({
                     id="settings-file-watcher-cron"
                     label="File watcher schedule"
                     value={draft.fileWatcher.scanCron}
+                    enabled={draft.fileWatcher.scanCronEnabled}
                     error={errorFor('fileWatcher.scanCron')}
                     environmentVariable={environmentVariableFor('fileWatcher.scanCron')}
+                    enabledEnvironmentVariable={environmentVariableFor('fileWatcher.scanCronEnabled')}
                     onChange={(value) => updateDraft((next) => {
                         next.fileWatcher.scanCron = value
+                    })}
+                    onEnabledChange={(enabled) => updateDraft((next) => {
+                        next.fileWatcher.scanCronEnabled = enabled
                     })}
                 />
                 <ToggleField

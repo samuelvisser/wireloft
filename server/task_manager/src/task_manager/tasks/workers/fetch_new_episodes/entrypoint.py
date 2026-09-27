@@ -19,6 +19,7 @@ from .service import run_fetch_new_episodes
 )
 @on_cron(
     cron=get_settings().new_episode_schedule.find_episodes_cron,
+    enabled=get_settings().new_episode_schedule.find_episodes_cron_enabled,
     resource_type="show",
     resource_id=0,
     coalesce=True,

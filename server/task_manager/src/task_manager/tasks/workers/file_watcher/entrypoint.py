@@ -14,6 +14,7 @@ from .service import run_file_watcher
 )
 @on_cron(
     cron=get_settings().file_watcher.scan_cron,
+    enabled=get_settings().file_watcher.scan_cron_enabled,
     resource_type="show",
     resource_id=0,
     coalesce=True,

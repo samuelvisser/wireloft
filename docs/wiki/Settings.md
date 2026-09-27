@@ -93,6 +93,7 @@ These settings are available under **Settings → Downloads**.
 | `downloadSettings.filenameRestrictionMode` | `WL_DOWNLOAD_SETTINGS__FILENAME_RESTRICTION_MODE` | `windows` | Filename compatibility: `unrestricted`, `windows`, or `restricted`. |
 | `downloadSettings.remuxVideoToMp4` | `WL_DOWNLOAD_SETTINGS__REMUX_VIDEO_TO_MP4` | `true` | Repackage compatible downloaded video into MP4 without re-encoding. |
 | `downloadSettings.ffmpegPath` | `WL_DOWNLOAD_SETTINGS__FFMPEG_PATH` | `ffmpeg` | FFmpeg executable used for MP4 remuxing. |
+| `downloadSettings.verifyDownloadsCronEnabled` | `WL_DOWNLOAD_SETTINGS__VERIFY_DOWNLOADS_CRON_ENABLED` | `true` | Enables the periodic download-verification cron schedule. |
 | `downloadSettings.verifyDownloadsCron` | `WL_DOWNLOAD_SETTINGS__VERIFY_DOWNLOADS_CRON` | `0 */2 * * *` | Schedule for periodic download verification; every two hours by default. |
 
 ### Direct versus temporary mode
@@ -113,7 +114,8 @@ Temporary mode is useful when a media server watches the destination and should 
 
 | Setting | Environment variable | Default | What it does |
 | --- | --- | --- | --- |
-| `fileWatcher.enabled` | `WL_FILE_WATCHER__ENABLED` | `true` | Periodically checks tracked completed files. |
+| `fileWatcher.enabled` | `WL_FILE_WATCHER__ENABLED` | `true` | Enables file-watcher behavior, including non-cron triggers. |
+| `fileWatcher.scanCronEnabled` | `WL_FILE_WATCHER__SCAN_CRON_ENABLED` | `true` | Enables the periodic file-watcher cron schedule. |
 | `fileWatcher.scanCron` | `WL_FILE_WATCHER__SCAN_CRON` | `*/10 * * * *` | File watcher schedule; every ten minutes by default. |
 | `fileWatcher.verifyFileSize` | `WL_FILE_WATCHER__VERIFY_FILE_SIZE` | `true` | Marks an empty or unexpectedly smaller completed file as corrupted. |
 
@@ -139,8 +141,11 @@ These settings are available under **Settings → Automation**.
 
 | Setting | Environment variable | Default | What it does |
 | --- | --- | --- | --- |
+| `newEpisodeSchedule.findEpisodesCronEnabled` | `WL_NEW_EPISODE_SCHEDULE__FIND_EPISODES_CRON_ENABLED` | `true` | Enables the recurring new-episode discovery schedule. |
 | `newEpisodeSchedule.findEpisodesCron` | `WL_NEW_EPISODE_SCHEDULE__FIND_EPISODES_CRON` | `*/30 * * * *` | Checks managed shows for new episodes every 30 minutes. |
+| `newEpisodeSchedule.monitorPendingEpisodeCronEnabled` | `WL_NEW_EPISODE_SCHEDULE__MONITOR_PENDING_EPISODE_CRON_ENABLED` | `true` | Enables recurring monitoring for episodes that are not final yet. |
 | `newEpisodeSchedule.monitorPendingEpisodeCron` | `WL_NEW_EPISODE_SCHEDULE__MONITOR_PENDING_EPISODE_CRON` | `*/2 * * * *` | Rechecks known episodes that are scheduled, live, processing, or otherwise not final. |
+| `newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled` | `WL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON_ENABLED` | `true` | Enables recurring checks for episodes without usable media. |
 | `newEpisodeSchedule.monitorNoUsableMediaEpisodeCron` | `WL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON` | `*/20 * * * *` | Rechecks episodes that temporarily have no usable Daily Wire media. |
 | `newEpisodeSchedule.metadataRefreshIntervals` | `WL_NEW_EPISODE_SCHEDULE__METADATA_REFRESH_INTERVALS` | `15m,30m,1h,3h,6h,24h,3d` | Follow-up metadata refreshes after publication. |
 
@@ -239,7 +244,7 @@ Examples:
 0 8 * * 1,3     # Monday and Wednesday at 08:00
 ```
 
-Schedules use the `TZ` timezone.
+Schedules use the `TZ` timezone. Every configurable cron editor also has its own compact **Enabled** switch. Its boolean is stored as a separate YAML field next to the cron expression, so disabling a schedule does not discard its configured expression.
 
 ## Example `config.yml`
 
