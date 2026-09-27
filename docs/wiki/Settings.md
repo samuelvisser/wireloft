@@ -244,7 +244,7 @@ Examples:
 0 8 * * 1,3     # Monday and Wednesday at 08:00
 ```
 
-Schedules use the `TZ` timezone. Every configurable cron editor also has its own compact **Enabled** switch. Its boolean is stored as a separate YAML field next to the cron expression, so disabling a schedule does not discard its configured expression.
+Schedules use the `TZ` timezone.
 
 ## Example `config.yml`
 
