@@ -77,8 +77,8 @@ export default function ShowAssetsField({form, preview}: {
                         show you what WireLoft resolved as your show root, without changing any files or saving anything yet.
                     </p>
                     <p>
-                        If the show root WireLoft found is not correct, this is likely due to an ambitious path in your output
-                        template. Please review it
+                        If the show root WireLoft found is not correct, this is likely due to an ambiguous path in your output
+                        template. Please review it below.
                     </p>
                 </ReadMore>
             </div>
