@@ -65,36 +65,6 @@ _CURRENT_FILENAME_SETTING = re.compile(
     r"^(?P<indent>\s*)(?:filenameRestrictionMode|filename_restriction_mode)\s*:"
 )
 
-_STARTER_PROFILES = (
-    {
-        "type": "show",
-        "slug": "wireloft-shows-video",
-        "name": "WireLoft Shows (Video)",
-        "output_template": "/downloads/shows/{show_title}/{season_name}/{episode_title}.ext",
-        "preferred_format": "format_1080p",
-        "append_media_type_to_filename": True,
-        "detail_table": "local_media_profiles_show",
-    },
-    {
-        "type": "show",
-        "slug": "wireloft-shows-audio",
-        "name": "WireLoft Shows (Audio)",
-        "output_template": "/downloads/podcasts/{show_title}/{episode_published_date} - {episode_title}.ext",
-        "preferred_format": "format_audio_only",
-        "append_media_type_to_filename": True,
-        "detail_table": "local_media_profiles_show",
-    },
-    {
-        "type": "movie",
-        "slug": "wireloft-movies",
-        "name": "WireLoft Movies",
-        "output_template": "{% set output_year = ' (' ~ movie_year ~ ')' if movie_year %}/downloads/movies/{{ movie_title }}{{ output_year }}/{{ movie_title }}{{ output_year }}{% if media_type != 'movie' %}-{{ media_type }} [{{ title }}]{% endif %}.ext",
-        "preferred_format": "format_1080p",
-        "append_media_type_to_filename": True,
-        "detail_table": "local_media_profiles_movie",
-    },
-)
-
 
 def upgrade() -> None:
     # The first develop migration rejected duplicate legacy profile settings
@@ -394,42 +364,6 @@ def _table_has_rows(bind: sa.Connection, table_name: str) -> bool:
     return bind.execute(sa.text(f"SELECT 1 FROM {table_name} LIMIT 1")).first() is not None
 
 
-def _insert_starter_profile(bind: sa.Connection, profile: dict[str, object]) -> None:
-    conflict = bind.execute(
-        sa.text(
-            "SELECT id FROM local_media_profiles "
-            "WHERE slug = :slug OR name = :name "
-            "OR (type = :type AND output_template = :output_template "
-            "AND preferred_format = :preferred_format) "
-            "LIMIT 1"
-        ),
-        profile,
-    ).first()
-    if conflict is not None:
-        return
-
-    result = bind.execute(
-        sa.text(
-            "INSERT INTO local_media_profiles "
-            "(type, slug, name, output_template, preferred_format, append_media_type_to_filename) "
-            "VALUES (:type, :slug, :name, :output_template, :preferred_format, "
-            ":append_media_type_to_filename)"
-        ),
-        profile,
-    )
-    profile_id = result.lastrowid
-    if profile_id is None:
-        profile_id = bind.execute(
-            sa.text("SELECT id FROM local_media_profiles WHERE slug = :slug"),
-            {"slug": profile["slug"]},
-        ).scalar_one()
-
-    detail_table = str(profile["detail_table"])
-    bind.execute(
-        sa.text(f"INSERT INTO {detail_table} (id) VALUES (:id)"),
-        {"id": profile_id},
-    )
-
 
 def _upgrade_onboarding() -> None:
     bind = op.get_bind()
@@ -446,6 +380,9 @@ def _upgrade_onboarding() -> None:
             nullable=False,
         ))
 
+    # This row is migration infrastructure, not application seed data. WireLoft
+    # 1.1 moves Alembic's version storage into settings, so the row must exist
+    # before that later migration runs.
     settings_exists = _table_has_rows(bind, "settings")
     if not settings_exists:
         bind.execute(
@@ -458,13 +395,8 @@ def _upgrade_onboarding() -> None:
             {"completed": True},
         )
 
-    for profile in _STARTER_PROFILES:
-        _insert_starter_profile(bind, profile)
-
 
 def _downgrade_onboarding() -> None:
-    # Keep starter profiles, matching the original migration. They are valid
-    # user-editable rows and may already be referenced when downgrading.
     with op.batch_alter_table("settings", schema=None) as batch_op:
         batch_op.drop_column("onboarding_completed")
 

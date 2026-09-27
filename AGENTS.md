@@ -35,6 +35,15 @@ such as API calls or the filesystem if needed. They are designed specifically fo
 expected to take longer and therefore do not interrupt the WireLoft startup process.
 Background migrations do, however, pause all scheduled work while they are running.
 
+### Initial database seed
+Data that every brand-new WireLoft installation should start with belongs in
+`server/backend/src/backend/db/initial_seed.py`. The initial seed runs only after a fresh database has
+been migrated to the current schema. Add new first-install defaults there instead of putting them in
+Alembic migrations. Database migrations may still transform or backfill data when an existing
+installation needs a change to remain valid after a schema/application update.
+
+Development/demo fixture data is separate and remains under `backend.db.fake_data` / `backend-api db seed`.
+
 ### Database migrations
 If you need to do any database migrations to implement a feature, please follow these guidelines:
 - Create a new alembic migration script in server/backend/src/backend/db/alembic/versions/

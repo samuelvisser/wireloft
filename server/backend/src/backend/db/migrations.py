@@ -153,7 +153,9 @@ def initialize_database() -> None:
 
 
 def upgrade_database() -> None:
-    """Upgrade old or current WireLoft databases to the current Alembic head."""
+    """Upgrade the schema and initialize application data for a fresh database."""
+    is_initial_install = not (_database_tables() - _UNMANAGED_TABLES)
+
     try:
         # The one migration that moved version storage into Settings owns the
         # compatibility required to enter the chain from older databases.
@@ -165,6 +167,11 @@ def upgrade_database() -> None:
         raise DatabaseMigrationError(str(exc)) from exc
 
     require_database_current()
+
+    if is_initial_install:
+        from .initial_seed import seed_initial_database
+
+        seed_initial_database()
 
 
 def _is_relative_downgrade(revision: str) -> bool:
