@@ -90,26 +90,117 @@ const jinjaStatements: JinjaStatement[] = [
     {label: 'endautoescape', detail: 'End an autoescape block'},
 ]
 
-const jinjaFilterCompletionOptions: Completion[] = [
-    {
-        label: 'regex_replace',
-        type: 'function',
-        detail: 'regex_replace(pattern, replacement, count=0)',
-        info: 'Replace regex matches. count=0 replaces all matches.',
-    },
-    {
-        label: 'regex_search',
-        type: 'function',
-        detail: 'regex_search(pattern)',
-        info: 'Return true when the regex matches anywhere in the value.',
-    },
-    {
-        label: 'custom_index',
-        type: 'function',
-        detail: "'key' | custom_index",
-        info: 'Use the current episode number from a defined Indexing Value.',
-    },
+function filterCompletion(label: string, detail: string, info: string): Completion {
+    return {label, type: 'function', detail, info}
+}
+
+const wireloftFilterCompletionOptions: Completion[] = [
+    filterCompletion(
+        'regex_replace',
+        'regex_replace(pattern, replacement, count=0)',
+        'Replace regex matches. count=0 replaces all matches.',
+    ),
+    filterCompletion(
+        'regex_search',
+        'regex_search(pattern)',
+        'Return true when the regex matches anywhere in the value.',
+    ),
+    filterCompletion(
+        'custom_index',
+        "'key' | custom_index",
+        'Use the current episode number from a defined Indexing Value.',
+    ),
 ]
+
+const jinjaNativeFilterCompletionOptions: Completion[] = [
+    filterCompletion('abs', 'abs', 'Return the absolute value of a number.'),
+    filterCompletion('attr', 'attr(name)', 'Get an attribute from an object.'),
+    filterCompletion('batch', 'batch(linecount, fill_with=None)', 'Group items into rows with up to linecount items each.'),
+    filterCompletion('capitalize', 'capitalize', 'Capitalize the first character and lowercase the rest.'),
+    filterCompletion('center', 'center(width=80)', 'Center text in a field of the given width.'),
+    filterCompletion('count', 'count', 'Return the number of items in a value.'),
+    filterCompletion('d', "d(default_value='', boolean=False)", 'Alias for the default filter.'),
+    filterCompletion('default', "default(default_value='', boolean=False)", 'Use a fallback when the value is undefined, or optionally false-like.'),
+    filterCompletion('dictsort', "dictsort(case_sensitive=False, by='key', reverse=False)", 'Sort a dictionary and return key/value pairs.'),
+    filterCompletion('e', 'e', 'Alias for the escape filter.'),
+    filterCompletion('escape', 'escape', 'Escape HTML-special characters.'),
+    filterCompletion('filesizeformat', 'filesizeformat(binary=False)', 'Format a number as a human-readable file size.'),
+    filterCompletion('first', 'first', 'Return the first item in a sequence.'),
+    filterCompletion('float', 'float(default=0.0)', 'Convert a value to a floating-point number.'),
+    filterCompletion('forceescape', 'forceescape', 'Apply HTML escaping even to values already marked safe.'),
+    filterCompletion('format', 'format(*args, **kwargs)', 'Apply printf-style formatting to a string.'),
+    filterCompletion('groupby', 'groupby(attribute, default=None, case_sensitive=False)', 'Group items by an attribute.'),
+    filterCompletion('indent', 'indent(width=4, first=False, blank=False)', 'Indent lines in a string.'),
+    filterCompletion('int', 'int(default=0, base=10)', 'Convert a value to an integer.'),
+    filterCompletion('items', 'items', 'Iterate over the key/value pairs in a mapping.'),
+    filterCompletion('join', "join(d='', attribute=None)", 'Join items into a string, optionally using an attribute from each item.'),
+    filterCompletion('last', 'last', 'Return the last item in a sequence.'),
+    filterCompletion('length', 'length', 'Return the number of items in a value.'),
+    filterCompletion('list', 'list', 'Convert a value to a list.'),
+    filterCompletion('lower', 'lower', 'Convert text to lowercase.'),
+    filterCompletion('map', 'map(*args, **kwargs)', 'Transform a sequence by applying a filter or reading an attribute.'),
+    filterCompletion('max', 'max(case_sensitive=False, attribute=None)', 'Return the largest item in a sequence.'),
+    filterCompletion('min', 'min(case_sensitive=False, attribute=None)', 'Return the smallest item in a sequence.'),
+    filterCompletion('pprint', 'pprint', 'Format a value for debugging.'),
+    filterCompletion('random', 'random', 'Return a random item from a sequence.'),
+    filterCompletion('reject', 'reject(*args, **kwargs)', 'Keep sequence items that fail a Jinja test.'),
+    filterCompletion('rejectattr', 'rejectattr(*args, **kwargs)', 'Keep items whose selected attribute fails a Jinja test.'),
+    filterCompletion('replace', 'replace(old, new, count=None)', 'Replace occurrences of a substring.'),
+    filterCompletion('reverse', 'reverse', 'Reverse text or iterate over a sequence in reverse.'),
+    filterCompletion('round', "round(precision=0, method='common')", 'Round a number to the requested precision.'),
+    filterCompletion('safe', 'safe', 'Mark a string as safe from HTML escaping.'),
+    filterCompletion('select', 'select(*args, **kwargs)', 'Keep sequence items that pass a Jinja test.'),
+    filterCompletion('selectattr', 'selectattr(*args, **kwargs)', 'Keep items whose selected attribute passes a Jinja test.'),
+    filterCompletion('slice', 'slice(slices, fill_with=None)', 'Split a sequence into the requested number of slices.'),
+    filterCompletion('sort', 'sort(reverse=False, case_sensitive=False, attribute=None)', 'Sort a sequence.'),
+    filterCompletion('string', 'string', 'Convert a value to a string.'),
+    filterCompletion('striptags', 'striptags', 'Remove SGML or XML tags and normalize adjacent whitespace.'),
+    filterCompletion('sum', 'sum(attribute=None, start=0)', 'Add the values in a sequence.'),
+    filterCompletion('title', 'title', 'Convert text to title case.'),
+    filterCompletion('tojson', 'tojson(indent=None)', 'Serialize a value as JSON.'),
+    filterCompletion('trim', 'trim(chars=None)', 'Remove leading and trailing characters, or whitespace by default.'),
+    filterCompletion('truncate', "truncate(length=255, killwords=False, end='...', leeway=None)", 'Shorten text to a maximum length.'),
+    filterCompletion('unique', 'unique(case_sensitive=False, attribute=None)', 'Return unique items from a sequence.'),
+    filterCompletion('upper', 'upper', 'Convert text to uppercase.'),
+    filterCompletion('urlencode', 'urlencode', 'Encode a value for use in a URL path or query.'),
+    filterCompletion('urlize', 'urlize(trim_url_limit=None, nofollow=False, target=None, rel=None, extra_schemes=None)', 'Convert URLs in text to HTML links.'),
+    filterCompletion('wordcount', 'wordcount', 'Count words in a string.'),
+    filterCompletion('wordwrap', 'wordwrap(width=79, break_long_words=True, wrapstring=None, break_on_hyphens=True)', 'Wrap text to the requested width.'),
+    filterCompletion('xmlattr', 'xmlattr(autospace=True)', 'Build an SGML/XML attribute string from a mapping.'),
+]
+
+type CompletionInfoRect = {
+    top: number
+    right: number
+    bottom: number
+    left: number
+}
+
+function positionCompletionInfo(list: CompletionInfoRect, info: CompletionInfoRect, space: CompletionInfoRect) {
+    const gap = 4
+    const infoWidth = info.right - info.left
+    const infoHeight = info.bottom - info.top
+    const rightSpace = space.right - list.right
+    const leftSpace = list.left - space.left
+    const canPlaceRight = rightSpace >= infoWidth + gap
+    const canPlaceLeft = leftSpace >= infoWidth + gap
+
+    if (canPlaceRight || canPlaceLeft) {
+        const placeRight = canPlaceRight && (!canPlaceLeft || rightSpace >= leftSpace)
+        return {
+            style: `${placeRight ? 'left' : 'right'}: calc(100% + ${gap}px); top: 0`,
+        }
+    }
+
+    const belowSpace = space.bottom - list.bottom
+    const aboveSpace = list.top - space.top
+    const placeBelow = belowSpace >= infoHeight + gap || belowSpace >= aboveSpace
+    const maxWidth = Math.max(0, space.right - list.left)
+
+    return {
+        style: `${placeBelow ? 'top' : 'bottom'}: calc(100% + ${gap}px); left: 0; max-width: ${maxWidth}px`,
+    }
+}
 
 const jinjaHighlightStyle = HighlightStyle.define([
     {tag: tags.brace, class: 'cm-jinja-brace'},
@@ -520,9 +611,12 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             const currentWord = filterMatch[1] ?? ''
             return {
                 from: context.pos - currentWord.length,
-                options: jinjaFilterCompletionOptions.filter(
-                    (option) => mode === 'show' || option.label !== 'custom_index',
-                ),
+                options: [
+                    ...wireloftFilterCompletionOptions
+                        .filter((option) => mode === 'show' || option.label !== 'custom_index')
+                        .map((option) => currentWord ? option : {...option, boost: 99}),
+                    ...jinjaNativeFilterCompletionOptions,
+                ],
                 validFor: /^(?:[A-Za-z_][A-Za-z0-9_]*)?$/,
             }
         }
@@ -607,7 +701,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         return [
             jinja(),
             indentUnit.of('\t'),
-            autocompletion({override: [filterCompletionSource, variableCompletionSource, statementCompletionSource]}),
+            autocompletion({
+                override: [filterCompletionSource, variableCompletionSource, statementCompletionSource],
+                positionInfo: (_view, list, _option, info, space) => positionCompletionInfo(list, info, space),
+            }),
             syntaxHighlighting(jinjaHighlightStyle),
             EditorView.lineWrapping,
             openCompletionsAfterJinjaDelimiter,
