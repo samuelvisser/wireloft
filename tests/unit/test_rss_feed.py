@@ -404,6 +404,9 @@ def test_get_dailywire_stream_url_selects_requested_media(
     )
 
     class FakeClient:
+        def __init__(self, *, pace_requests=True):
+            assert pace_requests is False
+
         def get_episode_details(self, slug, *, require_member_exclusive):
             assert slug == episode.slug
             assert require_member_exclusive is False
