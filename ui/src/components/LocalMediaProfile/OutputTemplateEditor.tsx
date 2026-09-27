@@ -693,6 +693,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
 
     return (
         <>
+        {renderPreviewFields?.(preview)}
         <div className="form-row output-template-field">
             <section className="template-workbench" aria-labelledby="template-editor-heading">
                 <div className="template-editor-heading">
@@ -908,7 +909,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                 </ReadMore>
             </div>
         </div>
-        {renderPreviewFields?.(preview)}
         </>
     )
 }

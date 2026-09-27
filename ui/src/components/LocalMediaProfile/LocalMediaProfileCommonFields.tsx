@@ -100,7 +100,7 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
             </div>
 
             <div className="form-row">
-                <label htmlFor="local-media-thumbnail-mode">Thumbnail behavior</label>
+                <label htmlFor="local-media-thumbnail-mode">Episode thumbnail behavior</label>
                 <Controller
                     control={control}
                     name="thumbnailMode"
