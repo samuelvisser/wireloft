@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.local_media_profile import (
+    LocalMediaProfileTemplateSource,
     LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
 )
@@ -20,6 +21,7 @@ from backend.types.local_media_profile_types import (
 
 from .output_template import (
     get_output_template_source_page,
+    get_random_show_template_source,
     get_output_template_variables,
 )
 from .file_rename import request_local_media_profile_file_rename
@@ -75,6 +77,18 @@ def local_media_profile_template_sources(
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get(
+    "/template/sources/random-show-episode",
+    response_model=LocalMediaProfileTemplateSource | None,
+)
+def local_media_profile_random_show_template_source(
+    show_scope: ShowLocalMediaProfileScope = Query(ShowLocalMediaProfileScope.BOTH),
+):
+    """Choose a fresh initial episode without weighting Shows by episode count."""
+    with db_session() as s:
+        return get_random_show_template_source(s, show_scope)
 
 
 @router.get(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from random import choice
+
 from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.orm import Session, contains_eager, joinedload
 
@@ -141,6 +143,14 @@ def _show_type_values(show_scope: ShowLocalMediaProfileScope) -> tuple[str, ...]
     raise ValueError(f"Unsupported show template source scope: {show_scope}")
 
 
+def _show_template_source(episode: Episode) -> LocalMediaProfileTemplateSource:
+    return LocalMediaProfileTemplateSource(
+        id=f"episode:{episode.id}",
+        label=f"{episode.show.title} — {episode.title}",
+        values=episode_output_template_values(episode),
+    )
+
+
 def _show_source_page(
     session: Session,
     show_scope: ShowLocalMediaProfileScope,
@@ -193,14 +203,37 @@ def _show_source_page(
     episodes = list(session.scalars(query).unique().all())
     has_more = len(episodes) > limit
     episodes = episodes[:limit]
-    return [
-        LocalMediaProfileTemplateSource(
-            id=f"episode:{episode.id}",
-            label=f"{episode.show.title} — {episode.title}",
-            values=episode_output_template_values(episode),
-        )
-        for episode in episodes
-    ], has_more
+    return [_show_template_source(episode) for episode in episodes], has_more
+
+
+def get_random_show_template_source(
+    session: Session,
+    show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH,
+) -> LocalMediaProfileTemplateSource | None:
+    """Choose an example uniformly by Show, then uniformly within that Show."""
+    show_ids = list(session.scalars(
+        select(Episode.show_id)
+        .join(Episode.show)
+        .join(Episode.season)
+        .where(Show.type.in_(_show_type_values(show_scope)))
+        .distinct()
+        .order_by(Episode.show_id)
+    ).all())
+    if not show_ids:
+        return None
+
+    show_id = choice(show_ids)
+    episode_ids = list(session.scalars(
+        select(Episode.id)
+        .join(Episode.season)
+        .where(Episode.show_id == show_id)
+        .order_by(Episode.id)
+    ).all())
+    if not episode_ids:
+        return None
+
+    episode = session.get(Episode, choice(episode_ids))
+    return _show_template_source(episode) if episode is not None else None
 
 
 def _movie_source_page(

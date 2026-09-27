@@ -19,6 +19,7 @@ import {
     type LocalMediaProfileTemplateSource,
     useLocalMediaProfileTemplateSources,
     useLocalMediaProfileTemplateVariables,
+    useRandomShowTemplateSource,
 } from '../../lib/localMediaProfileTemplateSources'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import TemplateSourceSelect from './TemplateSourceSelect'
@@ -425,6 +426,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         showScope,
         search: sourceSearch,
     })
+    const randomShowSourceQuery = useRandomShowTemplateSource(showScope, mode === 'show')
     const variableQuery = useLocalMediaProfileTemplateVariables(mode)
     const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]
     const variables = useMemo(
@@ -621,10 +623,32 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     }, [mode, showScope])
 
     useEffect(() => {
-        if (selectedSource || !sources.length) return
+        if (selectedSource) return
+        if (mode === 'show') {
+            if (randomShowSourceQuery.isLoading) return
+            if (randomShowSourceQuery.data) {
+                setSelectedSource(randomShowSourceQuery.data)
+                setTestValues({...randomShowSourceQuery.data.values})
+                return
+            }
+        }
+        if (!sources.length) return
         setSelectedSource(sources[0])
         setTestValues({...sources[0].values})
-    }, [selectedSource, sources])
+    }, [
+        mode,
+        randomShowSourceQuery.data,
+        randomShowSourceQuery.isLoading,
+        selectedSource,
+        sources,
+    ])
+
+    const selectableSources = useMemo(
+        () => selectedSource && !sources.some(({id}) => id === selectedSource.id)
+            ? [selectedSource, ...sources]
+            : sources,
+        [selectedSource, sources],
+    )
 
     useEffect(() => {
         setTestValues((current) => {
@@ -755,9 +779,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             <span>Example source</span>
                             <TemplateSourceSelect
                                 mode={mode}
-                                sources={sources}
+                                sources={selectableSources}
                                 selectedSource={selectedSource}
-                                isLoading={sourceQuery.isLoading || sourceQuery.isFetchingNextPage}
+                                isLoading={
+                                    sourceQuery.isLoading
+                                    || sourceQuery.isFetchingNextPage
+                                    || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)
+                                }
                                 hasMore={sourceQuery.hasNextPage ?? false}
                                 onChange={chooseSource}
                                 onSearchChange={setSourceSearch}
@@ -766,7 +794,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                         </label>
                     </div>
 
-                    {sourceQuery.isLoading && <p className="template-preview-status">Loading an example…</p>}
+                    {(sourceQuery.isLoading || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)) && (
+                        <p className="template-preview-status">Loading an example…</p>
+                    )}
                     {sourceQuery.isError && (
                         <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
                     )}
