@@ -1,9 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
-from jinja2.exceptions import TemplateAssertionError
 
 from backend.api.models.local_media_profile import (
-    LocalMediaProfileTemplatePreview,
-    LocalMediaProfileTemplatePreviewResult,
     LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
 )
@@ -22,13 +19,12 @@ from backend.types.local_media_profile_types import (
 )
 
 from .output_template import (
-    get_output_template_preview,
     get_output_template_source_page,
     get_output_template_variables,
 )
 from .file_rename import request_local_media_profile_file_rename
 from .maintenance import request_local_media_profile_download_delete
-from .show_assets import router as show_assets_router
+from .preview import router as preview_router
 from .service import (
     get_local_media_profile,
     get_local_media_profile_view,
@@ -36,7 +32,7 @@ from .service import (
 )
 
 router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles (base)"])
-router.include_router(show_assets_router)
+router.include_router(preview_router)
 
 
 @router.get("", response_model=list[LocalMediaProfileAPIRead])
@@ -79,24 +75,6 @@ def local_media_profile_template_sources(
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-
-@router.post("/template/preview", response_model=LocalMediaProfileTemplatePreviewResult)
-def local_media_profile_template_preview(body: LocalMediaProfileTemplatePreview):
-    """Render an unsaved output path template against editable example values."""
-    try:
-        with db_session() as s:
-            return get_output_template_preview(s, body)
-    except (ValueError, TemplateAssertionError) as exc:
-        message = exc.message if isinstance(exc, TemplateAssertionError) else str(exc)
-        raise HTTPException(
-            status_code=422,
-            detail=[{
-                "loc": ["body", "outputTemplate"],
-                "msg": message,
-                "type": "value_error",
-            }],
-        ) from exc
 
 
 @router.get(

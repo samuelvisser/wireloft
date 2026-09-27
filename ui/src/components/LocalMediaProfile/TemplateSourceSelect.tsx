@@ -1,4 +1,4 @@
-import {useContext, useEffect, useMemo} from 'react'
+import {useMemo} from 'react'
 
 import LazySearchSelect, {
     type LazySearchSelectOption,
@@ -7,7 +7,6 @@ import type {
     LocalMediaProfileTemplateSource,
     LocalMediaProfileTemplateSourceMode,
 } from '../../lib/localMediaProfileTemplateSources'
-import {TemplateSourceSelectionContext} from './TemplateSourceSelectionContext'
 import './TemplateSourceSelect.css'
 
 type Props = {
@@ -69,12 +68,6 @@ export default function TemplateSourceSelect({
     onSearchChange,
     onLoadMore,
 }: Props) {
-    const onSourceSelected = useContext(TemplateSourceSelectionContext)
-    const sourceId = selectedSource?.id ?? null
-    useEffect(() => {
-        onSourceSelected?.(sourceId)
-    }, [onSourceSelected, sourceId])
-
     const options = useMemo(
         () => sources.map((source) => optionForSource(source, mode)),
         [mode, sources],

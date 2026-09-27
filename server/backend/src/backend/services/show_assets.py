@@ -1,6 +1,7 @@
 """Shared show-directory resolution and artwork reconciliation requests."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from os.path import normcase
@@ -50,11 +51,14 @@ def managed_show_profile_pairs(session: Session) -> set[tuple[int, int]]:
     return {(show_id, profile_id) for show_id, profile_id in pairs if show_id is not None and profile_id is not None}
 
 
-def resolve_show_media_directory(show: Show, output_template: str) -> ShowMediaDirectory:
-    """Resolve against real show metadata, including the production path policy.
+def resolve_show_media_directory(
+    show: Show | None, output_template: str, *, values_overrides: Mapping[str, str] | None = None,
+) -> ShowMediaDirectory:
+    """Resolve with the production path policy and optional read-only preview edits.
 
-    Episode values need not be invented: the semantic resolver marks them as
-    variable and explores their structural branches without assigning indexes.
+    Overrides replace values in a separate context, never on ORM records. The
+    semantic resolver still treats episode/season fields as variable, so editing
+    a season cannot accidentally turn it into the shared show directory.
     """
     validate_output_template_path_requirements(
         output_template,
@@ -62,16 +66,19 @@ def resolve_show_media_directory(show: Show, output_template: str) -> ShowMediaD
         allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
     )
     values = {field: "" for field in SHOW_OUTPUT_TEMPLATE_FIELDS | output_template_fields(output_template)}
-    values.update(show=show.slug, show_title=show.title)
-    values.update(custom_metadata_template_values("show", get_custom_metadata(show)))
+    if show is not None:
+        values.update(show=show.slug, show_title=show.title)
+        values.update(custom_metadata_template_values("show", get_custom_metadata(show)))
+    values.update(values_overrides or {})
     environment = create_output_template_environment(custom_index_resolver=lambda _key: "")
     environment.finalize = _sanitize_emitted_output_value
     settings = get_settings().download_settings
     names = tuple(
-        str(value) for season in show.seasons
+        str(value) for season in (show.seasons if show is not None else ())
         for value in (season.slug, season.name, season.index, season.season_number)
         if value is not None
     )
+    names += tuple(values[field] for field in ("season", "season_name", "season_index", "season_number") if values.get(field))
     resolution = infer_show_media_directory(
         output_template, values, environment=environment,
         sanitize_component=lambda part: sanitize_path_component(part, mode=settings.filename_restriction_mode),
@@ -132,20 +139,24 @@ def shared_root_conflict(roots: dict[tuple[int, int], ShowMediaDirectory], show_
 
 def get_show_asset_root_preview(
     session: Session, *, source_id: str | None, output_template: str, local_media_profile_id: int | None,
+    values_overrides: Mapping[str, str] | None = None,
 ) -> ShowAssetRootPreview:
     enabled = get_settings().download_settings.download_show_assets
-    if not source_id or not source_id.startswith("episode:") or not source_id[8:].isdigit():
-        return ShowAssetRootPreview(None, "Select an indexed episode in the Jinja editor to resolve its show's root.", None, enabled)
-    episode = session.get(Episode, int(source_id[8:]))
-    if episode is None:
-        return ShowAssetRootPreview(None, "The selected episode no longer exists.", None, enabled)
-    show = episode.show
-    result = resolve_show_media_directory(show, output_template)
+    show = None
+    if source_id and source_id.startswith("episode:") and source_id[8:].isascii() and source_id[8:].isdigit():
+        episode = session.get(Episode, int(source_id[8:]))
+        if episode is None:
+            return ShowAssetRootPreview(None, "The selected episode no longer exists.", None, enabled)
+        show = episode.show
+    elif source_id not in {None, "example:show"} or values_overrides is None:
+        return ShowAssetRootPreview(None, "Select an episode in the Jinja editor to resolve its show's root.", None, enabled)
+    result = resolve_show_media_directory(show, output_template, values_overrides=values_overrides)
     if result.path:
         roots = show_profile_roots(session, draft_profile_id=local_media_profile_id, draft_template=output_template)
-        if shared_root_conflict(roots, show.id, result.path):
+        if shared_root_conflict(roots, show.id if show is not None else -1, result.path):
             result = ShowMediaDirectory(None, "This directory is also used by another show. Shared artwork would collide.")
-    return ShowAssetRootPreview(result.path, result.reason, show.title, enabled)
+    title = (values_overrides or {}).get("show_title", show.title if show is not None else None)
+    return ShowAssetRootPreview(result.path, result.reason, title, enabled)
 
 
 def show_asset_sources(show: Show) -> tuple[tuple[str, str], ...]:

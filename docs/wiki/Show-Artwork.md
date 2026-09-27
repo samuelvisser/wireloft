@@ -13,7 +13,7 @@ downloadSettings:
   downloadShowAssets: true
 ```
 
-The help underneath the profile setting shows the resolved show root for the episode currently selected in the Jinja editor. It updates with unsaved template edits. This preview uses that episode's real show metadata, not the editable test values, and does not download files or save custom indexes.
+The help underneath the profile setting shows the resolved show root for the episode currently selected in the Jinja editor. It updates with unsaved template edits and the same editable test values as the episode path. Clearing a test value also clears it for the show-root preview. Both paths use the configured download root and filename restrictions. Previewing does not change saved show metadata, download artwork, or save custom indexes. When no episodes have been indexed, the built-in example can also preview both paths.
 
 ## Files and sources
 

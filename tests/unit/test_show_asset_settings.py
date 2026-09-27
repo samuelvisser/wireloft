@@ -54,7 +54,7 @@ def test_preview_uses_selected_episodes_show_and_unsaved_template(monkeypatch):
     ))
     received = []
 
-    def resolve(actual_show, template):
+    def resolve(actual_show, template, *, values_overrides=None):
         received.append((actual_show, template))
         return ShowMediaDirectory('/library/Actual show')
 
@@ -80,7 +80,7 @@ def test_preview_rejects_another_shows_root_but_allows_same_show_profiles(monkey
         download_settings=SimpleNamespace(download_show_assets=False),
     ))
     session = SimpleNamespace(get=lambda *_args: SimpleNamespace(show=SimpleNamespace(id=1, title='First')))
-    monkeypatch.setattr(assets, 'resolve_show_media_directory', lambda *_args: ShowMediaDirectory('/library/shared'))
+    monkeypatch.setattr(assets, 'resolve_show_media_directory', lambda *_args, **_kwargs: ShowMediaDirectory('/library/shared'))
     roots = {(1, 2): ShowMediaDirectory('/library/shared')}
     monkeypatch.setattr(assets, 'show_profile_roots', lambda *_args, **_kwargs: roots)
     arguments = dict(source_id='episode:42', output_template='draft', local_media_profile_id=2)
