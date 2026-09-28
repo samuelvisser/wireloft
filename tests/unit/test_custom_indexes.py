@@ -621,6 +621,59 @@ def test_preview_skips_simulation_when_referenced_index_is_undefined(db_session,
     assert preview.missing_indexing_values == ["extras"]
 
 
+def test_preview_reuses_saved_assignment_for_identical_template_without_analysis(db_session, monkeypatch):
+    from backend.api.endpoints.local_media_profiles import output_template as preview_service
+    from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
+    from backend.services import custom_index_preview
+    from backend.services.custom_indexes import reconcile_show_profile_custom_indexes
+    from backend.utils.output_template import episode_output_template_values
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    template = (
+        "{% set n = 'extra' | custom_index %}"
+        "{% set unrelated = (' (' ~ episode ~ ')') if episode %}"
+        "/downloads/{{ n }}-{{ episode }}.ext"
+    )
+    profile = _make_profile(db_session, template=template)
+    _define(profile, ("extra", "Extras"))
+    _request(db_session, show, profile)
+    reconcile_show_profile_custom_indexes(
+        db_session,
+        show_id=show.id,
+        local_media_profile_id=profile.id,
+    )
+
+    monkeypatch.setattr(
+        custom_index_preview,
+        "compare_custom_index_reachability",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("identical templates should not require static analysis")
+        ),
+    )
+    monkeypatch.setattr(
+        preview_service,
+        "simulate_episode_indexes",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("saved assignment should be reused")
+        ),
+    )
+    preview = preview_service.get_output_template_preview(
+        db_session,
+        LocalMediaProfileTemplatePreview(
+            type="show",
+            output_template=template,
+            preferred_format="format_1080p",
+            values=episode_output_template_values(episode),
+            source_id=f"episode:{episode.id}",
+            local_media_profile_id=profile.id,
+            indexing_values=[{"key": "extra", "name": "Extras"}],
+        ),
+    )
+    assert preview.output_path.endswith("/1-first.mp4")
+
+
 def test_preview_reuses_saved_assignment_when_index_reachability_is_unchanged(db_session, monkeypatch):
     from backend.api.endpoints.local_media_profiles import output_template as preview_service
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
@@ -810,6 +863,44 @@ def test_profile_save_skips_index_management_when_assignment_reachability_is_unc
     db_session.refresh(state)
     assert state.requested_generation == generation
     assert state.completed_generation == generation
+
+
+def test_profile_save_ignores_unrelated_unsupported_jinja_for_index_management(db_session):
+    from backend.api.endpoints.show_local_media_profiles.service import update_show_local_media_profile
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPIUpdate
+    from task_manager.scheduler.db import TaskOperation
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    saved = (
+        "{% set n = 'extra' | custom_index %}"
+        "{% set unrelated = (' (' ~ episode ~ ')') if episode %}"
+        "/downloads/{{ n }}-{{ episode }}.ext"
+    )
+    profile = _make_profile(db_session, template=saved)
+    _define(profile, ("extra", "Extras"))
+
+    changed = saved.replace(
+        "(' (' ~ episode ~ ')')",
+        "(' [' ~ episode ~ ']')",
+    )
+    body = ShowLocalMediaProfileAPIUpdate(
+        name=profile.name,
+        preferred_format=profile.preferred_format,
+        output_template=changed,
+        show_scope="both",
+        indexing_values=[{"key": "extra", "name": "Extras"}],
+    )
+    update_show_local_media_profile(
+        db_session,
+        profile.slug,
+        body,
+        rename_files=True,
+    )
+
+    operations = list(db_session.query(TaskOperation).order_by(TaskOperation.id))
+    assert [operation.kind for operation in operations] == ["local_media_profile.rename_files"]
 
 
 def test_profile_save_queues_index_management_when_assignment_reachability_changes(db_session):

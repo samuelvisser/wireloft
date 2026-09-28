@@ -97,21 +97,142 @@ def _keys_evaluated_by(node: nodes.Node, requested: frozenset[str]) -> tuple[str
     return tuple(keys)
 
 
-def _instrument_body(body: list[nodes.Stmt], requested: frozenset[str]) -> list[nodes.Stmt]:
-    """Insert marker output where a Custom Index filter is definitely evaluated.
+def _target_names(target: nodes.Expr) -> frozenset[str]:
+    if isinstance(target, (nodes.Name, nodes.NSRef)):
+        return frozenset({target.name})
+    if isinstance(target, nodes.Tuple):
+        return frozenset(
+            name
+            for item in target.items
+            for name in _target_names(item)
+        )
+    return frozenset()
 
-    Control-flow expansion remains the responsibility of the existing Jinja
-    analyzer. This pass only exposes Custom Index evaluation as observable
-    output, allowing the shared analyzer to derive the guarded execution paths.
+
+def _loaded_names(node: nodes.Node) -> frozenset[str]:
+    return frozenset(
+        candidate.name
+        for candidate in (node, *node.find_all(nodes.Name))
+        if isinstance(candidate, nodes.Name) and candidate.ctx == "load"
+    )
+
+
+def _stored_names(node: nodes.Node) -> frozenset[str]:
+    return frozenset(
+        candidate.name
+        for candidate in (node, *node.find_all(nodes.Name))
+        if isinstance(candidate, nodes.Name) and candidate.ctx == "store"
+    )
+
+
+def _contains_requested_custom_index(node: nodes.Node, requested: frozenset[str]) -> bool:
+    for filter_node in _custom_index_filters(node):
+        source = filter_node.node
+        if not isinstance(source, nodes.Const) or not isinstance(source.value, str):
+            return True
+        if source.value in requested:
+            return True
+    return False
+
+
+def _reachability_names(tree: nodes.Template, requested: frozenset[str]) -> frozenset[str]:
+    """Return local/input names that can affect whether a requested index executes.
+
+    This is a conservative backwards slice. It deliberately follows assignments
+    feeding relevant branch conditions, but excludes unrelated output/template
+    calculations so unsupported Jinja elsewhere cannot poison index analysis.
+    """
+    needed: set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+
+        for statement in tree.find_all(nodes.If):
+            relevant = (
+                _contains_requested_custom_index(statement, requested)
+                or bool(_stored_names(statement) & needed)
+            )
+            if not relevant:
+                continue
+            tests = [statement.test, *(branch.test for branch in statement.elif_)]
+            names = set().union(*(_loaded_names(test) for test in tests))
+            if not names <= needed:
+                needed.update(names)
+                changed = True
+
+        for statement in tree.find_all(nodes.For):
+            relevant = (
+                _contains_requested_custom_index(statement, requested)
+                or bool(_stored_names(statement) & needed)
+            )
+            if not relevant:
+                continue
+            names = set(_loaded_names(statement.iter))
+            if statement.test is not None:
+                names.update(_loaded_names(statement.test))
+            if not names <= needed:
+                needed.update(names)
+                changed = True
+
+        for statement in tree.find_all(nodes.Assign):
+            if not (_target_names(statement.target) & needed):
+                continue
+            names = set(_loaded_names(statement.node))
+            if not names <= needed:
+                needed.update(names)
+                changed = True
+
+        for statement in tree.find_all(nodes.AssignBlock):
+            if not (_target_names(statement.target) & needed):
+                continue
+            names = set(_loaded_names(statement))
+            if not names <= needed:
+                needed.update(names)
+                changed = True
+
+        for statement in tree.find_all(nodes.With):
+            for target, value in zip(statement.targets, statement.values, strict=True):
+                if not (_target_names(target) & needed):
+                    continue
+                names = set(_loaded_names(value))
+                if not names <= needed:
+                    needed.update(names)
+                    changed = True
+
+        for statement in tree.find_all(nodes.Macro):
+            if statement.name not in needed:
+                continue
+            parameter_names = {argument.name for argument in statement.args}
+            local_names = _stored_names(statement)
+            names = set(_loaded_names(statement)) - parameter_names - local_names
+            if not names <= needed:
+                needed.update(names)
+                changed = True
+
+    return frozenset(needed)
+
+
+def _instrument_body(
+    body: list[nodes.Stmt],
+    requested: frozenset[str],
+    reachability_names: frozenset[str],
+) -> list[nodes.Stmt]:
+    """Reduce a template to only statements affecting Custom Index reachability.
+
+    Marker output makes a Custom Index call observable to the shared path
+    analyzer. Ordinary rendered output and assignments unrelated to index
+    reachability are removed entirely, so unsupported filename/path expressions
+    cannot force the Custom Index comparison to UNKNOWN.
     """
     result: list[nodes.Stmt] = []
     for statement in body:
         if isinstance(statement, nodes.Macro):
-            if _custom_index_filters(statement):
+            if _contains_requested_custom_index(statement, requested):
                 raise _IncompleteAnalysis(
                     "Custom Index inside a macro cannot yet be proven statically"
                 )
-            result.append(statement)
+            if statement.name in reachability_names:
+                result.append(statement)
             continue
 
         if isinstance(statement, nodes.If):
@@ -119,15 +240,22 @@ def _instrument_body(body: list[nodes.Stmt], requested: frozenset[str]) -> list[
                 raise _IncompleteAnalysis(
                     "Custom Index values used as branch conditions cannot be proven statically"
                 )
-            statement.body = _instrument_body(statement.body, requested)
+            statement.body = _instrument_body(
+                statement.body, requested, reachability_names,
+            )
             for branch in statement.elif_:
                 if _custom_index_filters(branch.test):
                     raise _IncompleteAnalysis(
                         "Custom Index values used as branch conditions cannot be proven statically"
                     )
-                branch.body = _instrument_body(branch.body, requested)
-            statement.else_ = _instrument_body(statement.else_, requested)
-            result.append(statement)
+                branch.body = _instrument_body(
+                    branch.body, requested, reachability_names,
+                )
+            statement.else_ = _instrument_body(
+                statement.else_, requested, reachability_names,
+            )
+            if statement.body or any(branch.body for branch in statement.elif_) or statement.else_:
+                result.append(statement)
             continue
 
         if isinstance(statement, nodes.For):
@@ -137,42 +265,66 @@ def _instrument_body(body: list[nodes.Stmt], requested: frozenset[str]) -> list[
                 raise _IncompleteAnalysis(
                     "Custom Index controlling a loop cannot be proven statically"
                 )
-            statement.body = _instrument_body(statement.body, requested)
-            statement.else_ = _instrument_body(statement.else_, requested)
-            result.append(statement)
+            statement.body = _instrument_body(
+                statement.body, requested, reachability_names,
+            )
+            statement.else_ = _instrument_body(
+                statement.else_, requested, reachability_names,
+            )
+            if statement.body or statement.else_:
+                result.append(statement)
             continue
 
         if isinstance(statement, nodes.With):
             keys: list[str] = []
-            for value in statement.values:
+            retained_targets: list[nodes.Expr] = []
+            retained_values: list[nodes.Expr] = []
+            for target, value in zip(statement.targets, statement.values, strict=True):
                 for key in _keys_evaluated_by(value, requested):
                     if key not in keys:
                         keys.append(key)
+                if _target_names(target) & reachability_names:
+                    retained_targets.append(target)
+                    retained_values.append(value)
             result.extend(_marker_statement(key, statement.lineno) for key in keys)
-            statement.body = _instrument_body(statement.body, requested)
-            result.append(statement)
+            statement.targets = retained_targets
+            statement.values = retained_values
+            statement.body = _instrument_body(
+                statement.body, requested, reachability_names,
+            )
+            if statement.body:
+                result.append(statement)
             continue
 
         if isinstance(statement, nodes.AssignBlock):
-            if statement.filter is not None and _custom_index_filters(statement.filter):
+            if _contains_requested_custom_index(statement, requested):
                 raise _IncompleteAnalysis(
-                    "Custom Index as an assignment-block filter cannot be proven statically"
+                    "Custom Index inside an assignment block cannot yet be proven statically"
                 )
-            statement.body = _instrument_body(statement.body, requested)
-            result.append(statement)
+            if _target_names(statement.target) & reachability_names:
+                # The captured text is part of a later reachability condition,
+                # so preserve it exactly rather than slicing ordinary output.
+                result.append(statement)
             continue
 
-        if isinstance(statement, (nodes.Assign, nodes.Output)):
+        if isinstance(statement, nodes.Assign):
             keys = _keys_evaluated_by(statement, requested)
             result.extend(_marker_statement(key, statement.lineno) for key in keys)
-            result.append(statement)
+            if _target_names(statement.target) & reachability_names:
+                result.append(statement)
             continue
 
-        if _custom_index_filters(statement):
+        if isinstance(statement, nodes.Output):
+            keys = _keys_evaluated_by(statement, requested)
+            result.extend(_marker_statement(key, statement.lineno) for key in keys)
+            continue
+
+        if _contains_requested_custom_index(statement, requested):
             raise _IncompleteAnalysis(
                 f"Custom Index inside {type(statement).__name__} cannot be proven statically"
             )
-        result.append(statement)
+        if _stored_names(statement) & reachability_names:
+            result.append(statement)
     return result
 
 
@@ -204,7 +356,8 @@ def analyze_custom_index_usage(
             raise _IncompleteAnalysis("Template contains an internal Custom Index analysis marker")
         tree = environment.parse(template)
         tree = deepcopy(tree)
-        tree.body = _instrument_body(tree.body, requested)
+        reachability_names = _reachability_names(tree, requested)
+        tree.body = _instrument_body(tree.body, requested, reachability_names)
         analysis = analyze_template(
             tree,
             environment=environment,

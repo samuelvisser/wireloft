@@ -58,7 +58,8 @@ def plan_custom_index_preview(
 ) -> CustomIndexPreviewPlan:
     """Choose the cheapest safe source for Custom Index values in a draft preview.
 
-    Persisted assignments are reused only when the analyzer proves that every
+    Persisted assignments are reused immediately when the saved template and
+    example values are unchanged. Otherwise the analyzer must prove that every
     active draft key has the same episode-reachability predicate as the saved
     template and none of those predicates depends on an edited example value.
     Any unprovable case deliberately falls back to historical simulation.
@@ -105,6 +106,20 @@ def plan_custom_index_preview(
             "Saved Custom Index assignments are not current",
         )
 
+    original_values = episode_output_template_values(episode)
+    values_unchanged = all(
+        draft_values.get(key, "") == original_values.get(key, "")
+        for key in set(draft_values) | set(original_values)
+    )
+    if profile.output_template == draft_template and values_unchanged:
+        return CustomIndexPreviewPlan(
+            CustomIndexPreviewMode.USE_PERSISTED,
+            referenced,
+            active,
+            missing,
+            get_episode_index_assignments(episode, profile.id),
+        )
+
     environment = create_output_template_environment()
     comparison = compare_custom_index_reachability(
         profile.output_template,
@@ -118,7 +133,6 @@ def plan_custom_index_preview(
             comparison.reason or "Custom Index assignment conditions changed",
         )
 
-    original_values = episode_output_template_values(episode)
     if any(
         draft_values.get(dependency, original_values.get(dependency, ""))
         != original_values.get(dependency, "")

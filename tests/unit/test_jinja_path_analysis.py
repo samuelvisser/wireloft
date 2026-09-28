@@ -254,3 +254,76 @@ def test_custom_index_reachability_is_unknown_for_short_circuit_effects(environm
         keys={"extras"},
     )
     assert result.status == CustomIndexReachabilityStatus.UNKNOWN
+
+
+def test_custom_index_reachability_ignores_unrelated_unsupported_assignments(environment):
+    from backend.utils.jinja_analysis import (
+        CustomIndexReachabilityStatus,
+        compare_custom_index_reachability,
+    )
+
+    saved = (
+        "{% set plex_year = (' (' ~ meta_show_year ~ ')') if meta_show_year %}"
+        "{% set n = 'extra' | custom_index %}"
+        "/downloads/{{ plex_year }}/{{ n }}-{{ title }}.ext"
+    )
+    draft = saved.replace(
+        "(' (' ~ meta_show_year ~ ')')",
+        "(' [' ~ meta_show_year ~ ']')",
+    )
+    result = compare_custom_index_reachability(
+        saved,
+        draft,
+        environment=environment,
+        keys={"extra"},
+    )
+    assert result.status == CustomIndexReachabilityStatus.UNCHANGED
+    assert result.dependencies == set()
+
+
+def test_custom_index_reachability_keeps_unsupported_assignments_that_control_index(environment):
+    from backend.utils.jinja_analysis import (
+        CustomIndexReachabilityStatus,
+        compare_custom_index_reachability,
+    )
+
+    template = (
+        "{% set is_extra = 'yes' if episode_type == 'aux' %}"
+        "{% if is_extra %}{% set n = 'extra' | custom_index %}{% endif %}"
+        "/downloads/{{ n }}-{{ title }}.ext"
+    )
+    result = compare_custom_index_reachability(
+        template,
+        template,
+        environment=environment,
+        keys={"extra"},
+    )
+    assert result.status == CustomIndexReachabilityStatus.UNKNOWN
+
+
+def test_custom_index_reachability_ignores_unrelated_production_path_logic(environment):
+    from backend.utils.jinja_analysis import (
+        CustomIndexReachabilityStatus,
+        compare_custom_index_reachability,
+    )
+
+    saved = (
+        '{% set season_num = "%02d"|format(season_number|int) %}'
+        '{% set ep_num = "%02d"|format(episode_number|int) %}'
+        "{% set is_extra = season_type == 'extra' or episode_type == 'aux' or episode_type == 'trailer' %}"
+        "{% set extra_num = 'extra' | custom_index %}"
+        "{% set plex_year = ' (' ~ meta_show_year ~ ')' if meta_show_year %}"
+        "{% set plex_show_title = show_title ~ plex_year %}"
+        "{% set plex_season = 'Specials' if is_extra else 'Season ' ~ season_num %}"
+        "{% set plex_ep_id = 'other' ~ extra_num if is_extra else 'S' ~ season_num ~ 'E' ~ ep_num %}"
+        "/downloads/Video/{{ plex_show_title }}/{{ plex_season }}/{{ plex_ep_id }}.ext"
+    )
+    draft = saved.replace("/downloads/Video/", "/downloads/Video/The Daily Wire Shows/")
+    result = compare_custom_index_reachability(
+        saved,
+        draft,
+        environment=environment,
+        keys={"extra"},
+    )
+    assert result.status == CustomIndexReachabilityStatus.UNCHANGED
+    assert result.dependencies == set()
