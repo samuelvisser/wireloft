@@ -144,7 +144,7 @@ Watchdog observations are process-local and reset on backend restart. The durabl
 
 ## Frontend ownership
 
-`FrontendPuller` is mounted once above the router and is the single recurring polling transport for changing execution state. Its `/api/pull` response contains active TaskOperations from every source plus terminal operations that have not yet been acknowledged by a frontend. The backend selects `fast` cadence whenever any operation is active and `slow` cadence otherwise.
+`FrontendPuller` is mounted only inside the authenticated, completed application shell and is the single recurring polling transport for changing execution state. Its `/api/pull` response contains active TaskOperations from every source plus terminal operations that have not yet been acknowledged by a frontend. The backend selects `fast` cadence whenever any operation is active and `slow` cadence otherwise. The frontend pauses this polling whenever its document is hidden or its browser window does not have focus. A `401` stops the puller and returns the application to the login screen; a foregrounded authenticated client resumes polling and catches up from the durable operation state.
 
 Persistent library data does not ride the background-state poll. Downloads, episodes, movies and other domain resources remain ordinary React Query/REST data. Every terminal operation stays in the generic operation stream until `OperationNotifier` has refreshed the ordinary domain queries affected by that work and acknowledged the completion. This also means a short SYSTEM or API operation that starts and finishes entirely between two slow polls cannot silently skip the cache refresh its result requires.
 

@@ -11,6 +11,27 @@ PREVIOUS_REVISION = "c5a9e2f7b104"
 REVISION = "e1c7a4b9d302"
 
 
+def _ensure_historical_starter_profile(connection) -> int:
+    profile_id = connection.execute(text(
+        "SELECT id FROM local_media_profiles WHERE slug = 'wireloft-shows-video'"
+    )).scalar_one_or_none()
+    if profile_id is not None:
+        return int(profile_id)
+
+    profile_id = connection.execute(text(
+        "INSERT INTO local_media_profiles "
+        "(type, slug, name, output_template, preferred_format, "
+        "append_media_type_to_filename) VALUES "
+        "('show', 'wireloft-shows-video', 'WireLoft Shows (Video)', "
+        "'/downloads/shows/{{ show_title }}/{{ season_name }}/{{ episode_title }}.ext', "
+        "'format_1080p', 0)"
+    )).lastrowid
+    connection.execute(text(
+        "INSERT INTO local_media_profiles_show (id) VALUES (:profile_id)"
+    ), {"profile_id": profile_id})
+    return int(profile_id)
+
+
 def test_media_item_download_ownership_migration_upgrades_from_c5_and_downgrades(
     tmp_path: Path,
     monkeypatch,
@@ -69,9 +90,7 @@ def test_media_item_download_ownership_migration_upgrades_from_c5_and_downgrades
             "VALUES ('media_items_episodes', :episode_id, 'migration.test', 'preserved')"
         ), {"episode_id": episode_id})
 
-        profile_id = connection.execute(text(
-            "SELECT id FROM local_media_profiles WHERE slug = 'wireloft-shows-video'"
-        )).scalar_one()
+        profile_id = _ensure_historical_starter_profile(connection)
         series_profile_id = connection.execute(text(
             "INSERT INTO download_profiles "
             "(show_id, local_media_profile_id, type, enable_profile, ep_id_type_list) "

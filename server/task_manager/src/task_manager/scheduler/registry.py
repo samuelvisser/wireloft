@@ -21,6 +21,7 @@ class TriggerMeta:
     """Metadata for a task trigger."""
     trigger_type: str  # 'cron', 'event'
     cron: Optional[str] = None  # For cron triggers (actual cron expression)
+    enabled: bool = True  # Whether this trigger should be registered
     event_name: Optional[str] = None  # For event triggers
     resource_type: Optional[str] = None  # Resource type for the trigger
     resource_id: Optional[int] = None  # Resource ID (0 = global, None = passed via event)
@@ -96,7 +97,13 @@ def task(
     return decorator
 
 
-def on_cron(cron: str, resource_type: str = "show", resource_id: int = 0, coalesce: bool = True):
+def on_cron(
+    cron: str,
+    resource_type: str = "show",
+    resource_id: int = 0,
+    coalesce: bool = True,
+    enabled: bool = True,
+):
     """Decorator to add a cron-based trigger to a task.
 
     Args:
@@ -104,6 +111,7 @@ def on_cron(cron: str, resource_type: str = "show", resource_id: int = 0, coales
         resource_type: Resource type to run on
         resource_id: Resource ID to run on
         coalesce: Whether to coalesce multiple pending jobs
+        enabled: Whether this cron trigger should be registered
     """
     def decorator(fn: Callable[..., Awaitable[Any]]):
         if not hasattr(fn, '_task_meta'):
@@ -112,6 +120,7 @@ def on_cron(cron: str, resource_type: str = "show", resource_id: int = 0, coales
         trigger = TriggerMeta(
             trigger_type='cron',
             cron=cron,
+            enabled=enabled,
             resource_type=resource_type,
             resource_id=resource_id,
             coalesce=coalesce,

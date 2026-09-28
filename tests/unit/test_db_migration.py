@@ -60,7 +60,19 @@ def _seed_wireloft_1_0_data(database_path: Path, engine) -> dict[str, int | str]
         profile_id = connection.execute(text(
             "SELECT id FROM local_media_profiles "
             "WHERE slug = 'wireloft-shows-video'"
-        )).scalar_one()
+        )).scalar_one_or_none()
+        if profile_id is None:
+            profile_id = connection.execute(text(
+                "INSERT INTO local_media_profiles "
+                "(type, slug, name, output_template, preferred_format, "
+                "append_media_type_to_filename) VALUES "
+                "('show', 'wireloft-shows-video', 'WireLoft Shows (Video)', "
+                "'/downloads/shows/{{ show_title }}/{{ season_name }}/{{ episode_title }}.ext', "
+                "'format_1080p', 0)"
+            )).lastrowid
+            connection.execute(text(
+                "INSERT INTO local_media_profiles_show (id) VALUES (:profile_id)"
+            ), {"profile_id": profile_id})
 
         show_id = connection.execute(text(
             "INSERT INTO shows "
@@ -292,6 +304,52 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
         assert connection.execute(text(
             "SELECT alembic_version_num FROM settings"
         )).scalar_one() == HEAD_REVISION
+        assert connection.execute(text(
+            "SELECT onboarding_completed FROM settings"
+        )).scalar_one() == 0
+
+        profiles = connection.execute(text(
+            "SELECT type, slug, output_template, preferred_format "
+            "FROM local_media_profiles ORDER BY slug"
+        )).mappings().all()
+        assert [profile["slug"] for profile in profiles] == [
+            "wireloft-movies",
+            "wireloft-shows-audio",
+            "wireloft-shows-video",
+        ]
+        assert {profile["type"] for profile in profiles} == {"movie", "show"}
+        assert connection.execute(text(
+            "SELECT COUNT(*) FROM local_media_profiles_show"
+        )).scalar_one() == 2
+        assert connection.execute(text(
+            "SELECT COUNT(*) FROM local_media_profiles_movie"
+        )).scalar_one() == 1
+
+    from backend.db.initial_seed import seed_initial_database
+
+    seed_initial_database()
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT COUNT(*) FROM local_media_profiles"
+        )).scalar_one() == 3
+
+
+def test_existing_database_upgrade_does_not_run_initial_seed(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import upgrade_database
+
+    _upgrade_to_wireloft_1_0(engine)
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT COUNT(*) FROM local_media_profiles"
+        )).scalar_one() == 0
+
+    upgrade_database()
+
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT COUNT(*) FROM local_media_profiles"
+        )).scalar_one() == 0
 
 
 def test_historical_e4_production_database_upgrades_to_current_head(migration_database):

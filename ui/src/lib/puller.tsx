@@ -2,7 +2,9 @@ import {
   createContext,
   type ReactNode,
   useContext,
+  useEffect,
   useMemo,
+  useSyncExternalStore,
 } from 'react'
 import {type QueryClient, useQuery} from '@tanstack/react-query'
 import {
@@ -24,12 +26,38 @@ type FrontendPullerContextValue = {
   refetch: () => Promise<unknown>
 }
 
+type FrontendPullerProps = {
+  children: ReactNode
+  onUnauthorized?: () => void
+}
+
+class FrontendPullError extends Error {
+  constructor(readonly status: number) {
+    super('HTTP ' + status)
+  }
+}
+
 const FrontendPullerContext = createContext<FrontendPullerContextValue | null>(null)
 
-async function fetchFrontendPuller(): Promise<FrontendPullRead> {
+function isForeground() {
+  return document.visibilityState === 'visible' && document.hasFocus()
+}
+
+function subscribeToForeground(onChange: () => void) {
+  window.addEventListener('focus', onChange)
+  window.addEventListener('blur', onChange)
+  document.addEventListener('visibilitychange', onChange)
+  return () => {
+    window.removeEventListener('focus', onChange)
+    window.removeEventListener('blur', onChange)
+    document.removeEventListener('visibilitychange', onChange)
+  }
+}
+
+async function fetchFrontendPuller(signal?: AbortSignal): Promise<FrontendPullRead> {
   const base = (window as any).appConfig?.API_URL || '/api'
-  const response = await fetch(`${base}/pull`, {credentials: 'include'})
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const response = await fetch(base + '/pull', {credentials: 'include', signal})
+  if (!response.ok) throw new FrontendPullError(response.status)
   return FrontendPullReadSchema.parse(await response.json())
 }
 
@@ -37,20 +65,32 @@ export function refreshFrontendPuller(queryClient: QueryClient) {
   return queryClient.invalidateQueries({queryKey: FRONTEND_PULLER_QUERY_KEY})
 }
 
-export default function FrontendPuller({children}: {children: ReactNode}) {
+export default function FrontendPuller({children, onUnauthorized}: FrontendPullerProps) {
+  const foreground = useSyncExternalStore(subscribeToForeground, isForeground, () => false)
   const query = useQuery({
     queryKey: FRONTEND_PULLER_QUERY_KEY,
-    queryFn: fetchFrontendPuller,
+    queryFn: ({signal}) => fetchFrontendPuller(signal),
+    enabled: foreground,
     staleTime: 0,
+    retry: false,
     refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     refetchIntervalInBackground: false,
-    refetchInterval: (current) => (
-      current.state.data?.mode === 'fast'
+    refetchInterval: (current) => {
+      if (current.state.error instanceof FrontendPullError && current.state.error.status === 401) {
+        return false
+      }
+      return current.state.data?.mode === 'fast'
         ? FRONTEND_PULLER_FAST_MS
         : FRONTEND_PULLER_SLOW_MS
-    ),
+    },
   })
+
+  useEffect(() => {
+    if (query.error instanceof FrontendPullError && query.error.status === 401) {
+      onUnauthorized?.()
+    }
+  }, [onUnauthorized, query.error])
 
   const value = useMemo<FrontendPullerContextValue>(() => ({
     snapshot: query.data,

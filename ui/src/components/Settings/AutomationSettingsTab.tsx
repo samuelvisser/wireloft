@@ -89,10 +89,15 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     id="settings-find-episodes-cron"
                     label="Find new episodes"
                     value={draft.newEpisodeSchedule.findEpisodesCron}
+                    enabled={draft.newEpisodeSchedule.findEpisodesCronEnabled}
                     error={errorFor('newEpisodeSchedule.findEpisodesCron')}
                     environmentVariable={environmentVariableFor('newEpisodeSchedule.findEpisodesCron')}
+                    enabledEnvironmentVariable={environmentVariableFor('newEpisodeSchedule.findEpisodesCronEnabled')}
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.findEpisodesCron = value
+                    })}
+                    onEnabledChange={(enabled) => updateDraft((next) => {
+                        next.newEpisodeSchedule.findEpisodesCronEnabled = enabled
                     })}
                     help={
                         <ReadMore summary={<span>Finds new episodes for every show indexed in WireLoft.</span>}>
@@ -107,10 +112,15 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     id="settings-monitor-pending-episode-cron"
                     label="Monitor pending episodes"
                     value={draft.newEpisodeSchedule.monitorPendingEpisodeCron}
+                    enabled={draft.newEpisodeSchedule.monitorPendingEpisodeCronEnabled}
                     error={errorFor('newEpisodeSchedule.monitorPendingEpisodeCron')}
                     environmentVariable={environmentVariableFor('newEpisodeSchedule.monitorPendingEpisodeCron')}
+                    enabledEnvironmentVariable={environmentVariableFor('newEpisodeSchedule.monitorPendingEpisodeCronEnabled')}
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.monitorPendingEpisodeCron = value
+                    })}
+                    onEnabledChange={(enabled) => updateDraft((next) => {
+                        next.newEpisodeSchedule.monitorPendingEpisodeCronEnabled = enabled
                     })}
                     help={
                         <ReadMore summary={<span>Monitors scheduled, delayed, live, processing and countdown episodes.</span>}>
@@ -133,10 +143,15 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     id="settings-monitor-no-usable-media-episode-cron"
                     label="Monitor episodes without usable media"
                     value={draft.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron}
+                    enabled={draft.newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled}
                     error={errorFor('newEpisodeSchedule.monitorNoUsableMediaEpisodeCron')}
                     environmentVariable={environmentVariableFor('newEpisodeSchedule.monitorNoUsableMediaEpisodeCron')}
+                    enabledEnvironmentVariable={environmentVariableFor('newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled')}
                     onChange={(value) => updateDraft((next) => {
                         next.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron = value
+                    })}
+                    onEnabledChange={(enabled) => updateDraft((next) => {
+                        next.newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled = enabled
                     })}
                     help={
                         <ReadMore summary={<span>Rechecks every episode without usable media for recovery or confirmed removal.</span>}>

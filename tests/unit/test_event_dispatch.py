@@ -59,6 +59,30 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
     )
 
 
+def test_disabled_cron_trigger_is_not_registered(monkeypatch):
+    import task_manager.scheduler.registry as registry_module
+    import task_manager.scheduler.scheduler as scheduler_module
+    from controller.app import setup_triggers_from_registry
+
+    monkeypatch.setattr(registry_module, "_REGISTRY", {})
+
+    @registry_module.on_cron("* * * * *", enabled=False)
+    @registry_module.task(
+        key="test_disabled_cron",
+        title="Disabled cron",
+        allowed_resource_types=("show",),
+    )
+    async def target(*, resource_id=None, progress=None):
+        return None
+
+    fake_scheduler = FakeScheduler()
+    monkeypatch.setattr(scheduler_module, "start_scheduler", lambda: fake_scheduler)
+
+    setup_triggers_from_registry()
+
+    assert fake_scheduler.jobs == {}
+
+
 def test_domain_events_preserve_task_operation_context_across_executor_thread():
     from task_manager.events.emitters import emit_event
     from task_manager.events.registry import WireloftEventLinker, wait_for_events
