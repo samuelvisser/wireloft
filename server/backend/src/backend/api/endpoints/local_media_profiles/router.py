@@ -63,6 +63,7 @@ def local_media_profile_template_sources(
     search: str | None = Query(None, max_length=200),
     offset: int = Query(0, ge=0),
     limit: int = Query(30, ge=1, le=100),
+    anchor_source_id: str | None = Query(None, max_length=100),
 ):
     """Search applicable media items for testing an output path template."""
     with db_session() as s:
@@ -74,6 +75,7 @@ def local_media_profile_template_sources(
                 search=search,
                 offset=offset,
                 limit=limit,
+                anchor_source_id=anchor_source_id,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc

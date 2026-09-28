@@ -422,9 +422,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     }, [canonicalTemplate, form, template])
 
     const [sourceSearch, setSourceSearch] = useState('')
+    const [selectedSource, setSelectedSource] = useState<LocalMediaProfileTemplateSource | null>(null)
+    const [testValues, setTestValues] = useState<Record<string, string>>({})
+    const [testValuesExpanded, setTestValuesExpanded] = useState(false)
     const sourceQuery = useLocalMediaProfileTemplateSources(mode, {
         showScope,
         search: sourceSearch,
+        anchorSourceId: selectedSource?.id,
     })
     const randomShowSourceQuery = useRandomShowTemplateSource(showScope, mode === 'show')
     const variableQuery = useLocalMediaProfileTemplateVariables(mode)
@@ -608,14 +612,15 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         ]
     }, [mode, printVariableCompletionOptions, statementCompletionOptions, variableCompletionOptions])
 
-    const sources = useMemo(
-        () => sourceQuery.data?.pages.flatMap((page) => page.items) ?? [],
-        [sourceQuery.data],
-    )
-    const [selectedSource, setSelectedSource] = useState<LocalMediaProfileTemplateSource | null>(null)
-    const [testValues, setTestValues] = useState<Record<string, string>>({})
-    const [testValuesExpanded, setTestValuesExpanded] = useState(false)
-
+    const sources = useMemo(() => {
+        const byId = new Map<string, LocalMediaProfileTemplateSource>()
+        for (const page of sourceQuery.data?.pages ?? []) {
+            for (const source of page.items) {
+                if (!byId.has(source.id)) byId.set(source.id, source)
+            }
+        }
+        return [...byId.values()]
+    }, [sourceQuery.data])
     useEffect(() => {
         setSelectedSource(null)
         setTestValues({})
@@ -642,13 +647,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         selectedSource,
         sources,
     ])
-
-    const selectableSources = useMemo(
-        () => selectedSource && !sources.some(({id}) => id === selectedSource.id)
-            ? [selectedSource, ...sources]
-            : sources,
-        [selectedSource, sources],
-    )
 
     useEffect(() => {
         setTestValues((current) => {
@@ -780,17 +778,20 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             <span>Example source</span>
                             <TemplateSourceSelect
                                 mode={mode}
-                                sources={selectableSources}
+                                sources={sources}
                                 selectedSource={selectedSource}
                                 isLoading={
                                     sourceQuery.isLoading
                                     || sourceQuery.isFetchingNextPage
+                                    || sourceQuery.isFetchingPreviousPage
                                     || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)
                                 }
                                 hasMore={sourceQuery.hasNextPage ?? false}
+                                hasPrevious={sourceQuery.hasPreviousPage ?? false}
                                 onChange={chooseSource}
                                 onSearchChange={setSourceSearch}
                                 onLoadMore={() => void sourceQuery.fetchNextPage()}
+                                onLoadPrevious={() => void sourceQuery.fetchPreviousPage()}
                             />
                         </label>
                     </div>

@@ -15,9 +15,11 @@ type Props = {
     selectedSource: LocalMediaProfileTemplateSource | null
     isLoading: boolean
     hasMore: boolean
+    hasPrevious?: boolean
     onChange: (source: LocalMediaProfileTemplateSource) => void
     onSearchChange: (search: string) => void
     onLoadMore: () => void
+    onLoadPrevious?: () => void
 }
 
 function optionForSource(
@@ -64,9 +66,11 @@ export default function TemplateSourceSelect({
     selectedSource,
     isLoading,
     hasMore,
+    hasPrevious = false,
     onChange,
     onSearchChange,
     onLoadMore,
+    onLoadPrevious,
 }: Props) {
     const options = useMemo(
         () => sources.map((source) => optionForSource(source, mode)),
@@ -89,12 +93,14 @@ export default function TemplateSourceSelect({
             value={selectedOption}
             isLoading={isLoading}
             hasMore={hasMore}
+            hasPrevious={hasPrevious}
             onChange={(option) => {
                 const source = sourcesById.get(option.value)
                 if (source) onChange(source)
             }}
             onSearchChange={onSearchChange}
             onLoadMore={onLoadMore}
+            onLoadPrevious={onLoadPrevious}
             placeholder="Search media…"
             noOptionsMessage="No matching media found"
             ariaLabel="Example source"

@@ -16,9 +16,11 @@ type Props = {
     value: LazySearchSelectOption | null
     isLoading: boolean
     hasMore: boolean
+    hasPrevious?: boolean
     onChange: (option: LazySearchSelectOption) => void
     onSearchChange: (search: string) => void
     onLoadMore: () => void
+    onLoadPrevious?: () => void
     placeholder?: string
     noOptionsMessage?: string
     debounceMs?: number
@@ -34,9 +36,11 @@ export default function LazySearchSelect({
     value,
     isLoading,
     hasMore,
+    hasPrevious = false,
     onChange,
     onSearchChange,
     onLoadMore,
+    onLoadPrevious,
     placeholder = 'Search…',
     noOptionsMessage = 'No results found',
     debounceMs = 250,
@@ -45,6 +49,21 @@ export default function LazySearchSelect({
 }: Props) {
     const [inputValue, setInputValue] = useState('')
     const onSearchChangeRef = useRef(onSearchChange)
+    const scrollSelectedWhenAvailable = useRef(false)
+
+    const scrollSelectedIntoView = () => {
+        window.requestAnimationFrame(() => {
+            if (!scrollSelectedWhenAvailable.current) return
+            const input = document.getElementById(inputId)
+            const selected = input
+                ?.closest(`.${classNamePrefix}__control`)
+                ?.parentElement
+                ?.querySelector<HTMLElement>(`.${classNamePrefix}__option--is-selected`)
+            if (!selected) return
+            selected.scrollIntoView({block: 'nearest'})
+            scrollSelectedWhenAvailable.current = false
+        })
+    }
 
     useEffect(() => {
         onSearchChangeRef.current = onSearchChange
@@ -78,6 +97,10 @@ export default function LazySearchSelect({
         ]
     }, [options])
 
+    useEffect(() => {
+        if (scrollSelectedWhenAvailable.current) scrollSelectedIntoView()
+    }, [groupedOptions])
+
     return (
         <Select<LazySearchSelectOption, false, GroupBase<LazySearchSelectOption>>
             inputId={inputId}
@@ -94,6 +117,16 @@ export default function LazySearchSelect({
                 if (!option) return
                 setInputValue('')
                 onChange(option)
+            }}
+            onMenuOpen={() => {
+                scrollSelectedWhenAvailable.current = true
+                scrollSelectedIntoView()
+            }}
+            onMenuClose={() => {
+                scrollSelectedWhenAvailable.current = false
+            }}
+            onMenuScrollToTop={() => {
+                if (hasPrevious && !isLoading) onLoadPrevious?.()
             }}
             onMenuScrollToBottom={() => {
                 if (hasMore && !isLoading) onLoadMore()

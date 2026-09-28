@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from random import choice
 
-from sqlalchemy import func, literal, select, union_all
+from sqlalchemy import and_, func, literal, or_, select, union_all
 from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from backend.api.models.local_media_profile import (
@@ -149,6 +149,53 @@ def _show_template_source(episode: Episode) -> LocalMediaProfileTemplateSource:
         label=f"{episode.show.title} — {episode.title}",
         values=episode_output_template_values(episode),
     )
+
+
+def _show_source_anchor_offset(
+    session: Session,
+    show_scope: ShowLocalMediaProfileScope,
+    source_id: str,
+    *,
+    limit: int,
+) -> int | None:
+    """Return a page offset that keeps one selected Episode near the middle."""
+    kind, separator, identifier = source_id.partition(":")
+    if kind != "episode" or not separator or not identifier.isascii() or not identifier.isdigit():
+        return None
+
+    episode = session.scalar(
+        select(Episode)
+        .options(joinedload(Episode.show))
+        .where(Episode.id == int(identifier))
+    )
+    if episode is None or episode.show.type not in _show_type_values(show_scope):
+        return None
+
+    show_title = episode.show.title.lower()
+    before_anchor = or_(
+        func.lower(Show.title) < show_title,
+        and_(func.lower(Show.title) == show_title, Show.id < episode.show_id),
+        and_(
+            func.lower(Show.title) == show_title,
+            Show.id == episode.show_id,
+            Episode.index < episode.index,
+        ),
+        and_(
+            func.lower(Show.title) == show_title,
+            Show.id == episode.show_id,
+            Episode.index == episode.index,
+            Episode.id < episode.id,
+        ),
+    )
+    position = session.scalar(
+        select(func.count())
+        .select_from(Episode)
+        .join(Episode.show)
+        .join(Episode.season)
+        .where(Show.type.in_(_show_type_values(show_scope)))
+        .where(before_anchor)
+    ) or 0
+    return max(0, position - limit // 2)
 
 
 def _show_source_page(
@@ -379,9 +426,19 @@ def get_output_template_source_page(
     search: str | None = None,
     offset: int = 0,
     limit: int = 30,
+    anchor_source_id: str | None = None,
 ) -> LocalMediaProfileTemplateSourcePage:
     """Search every locally stored media item applicable to a Local Media Profile."""
     if profile_type == LocalMediaProfileType.SHOW:
+        if anchor_source_id and not (search or "").strip():
+            anchor_offset = _show_source_anchor_offset(
+                session,
+                show_scope,
+                anchor_source_id,
+                limit=limit,
+            )
+            if anchor_offset is not None:
+                offset = anchor_offset
         sources, has_more = _show_source_page(
             session,
             show_scope,

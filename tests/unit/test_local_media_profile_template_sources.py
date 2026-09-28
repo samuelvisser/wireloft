@@ -414,3 +414,61 @@ def test_random_show_source_respects_profile_scope(db_session, monkeypatch):
     assert seen == [[series.id], [series_episode.id]]
     assert source is not None
     assert source.values["show_title"] == "Series"
+
+
+def test_show_source_anchor_opens_at_selected_episode_in_natural_order(db_session):
+    from backend.api.endpoints.local_media_profiles.output_template import (
+        get_output_template_source_page,
+    )
+    from backend.types.local_media_profile_types import (
+        LocalMediaProfileType,
+        ShowLocalMediaProfileScope,
+    )
+    from backend.types.show_types import ShowType
+
+    alpha = _make_show(db_session, slug="alpha-show", show_type=ShowType.PODCAST.value)
+    beta = _make_show(db_session, slug="beta-show", show_type=ShowType.PODCAST.value)
+    for index in range(1, 6):
+        _add_episode(db_session, alpha, index=index)
+    beta_episodes = [
+        _add_episode(db_session, beta, index=index)
+        for index in range(1, 31)
+    ]
+
+    selected = beta_episodes[19]
+    page = get_output_template_source_page(
+        db_session,
+        LocalMediaProfileType.SHOW,
+        ShowLocalMediaProfileScope.PODCAST,
+        limit=5,
+        anchor_source_id=f"episode:{selected.id}",
+    )
+
+    assert page.offset == 22
+    assert [source.values["episode_number"] for source in page.items] == [
+        "18", "19", "20", "21", "22",
+    ]
+    assert page.items[2].id == f"episode:{selected.id}"
+
+
+def test_show_source_anchor_does_not_override_search_order(db_session):
+    from backend.api.endpoints.local_media_profiles.output_template import (
+        get_output_template_source_page,
+    )
+    from backend.types.local_media_profile_types import LocalMediaProfileType
+    from backend.types.show_types import ShowType
+
+    show = _make_show(db_session, slug="search-show", show_type=ShowType.PODCAST.value)
+    first = _add_episode(db_session, show, index=1, title="Ordinary episode")
+    _add_episode(db_session, show, index=2, title="Unique selected result")
+
+    page = get_output_template_source_page(
+        db_session,
+        LocalMediaProfileType.SHOW,
+        search="Ordinary",
+        limit=5,
+        anchor_source_id=f"episode:{first.id}",
+    )
+
+    assert page.offset == 0
+    assert [source.values["episode_title"] for source in page.items] == ["Ordinary episode"]
