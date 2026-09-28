@@ -44,6 +44,7 @@
     /* LazySearchSelect preserves the visual anchor explicitly when pages are
        prepended, so native scroll anchoring must not adjust it a second time. */
     overflow-anchor: none;
+    overscroll-behavior: contain;
 }
 
 .template-source-select .select__group {

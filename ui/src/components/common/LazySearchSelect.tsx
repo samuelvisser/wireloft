@@ -1,5 +1,5 @@
-import {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
-import Select, {type GroupBase} from 'react-select'
+import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
+import Select, {components, type GroupBase, type MenuListProps} from 'react-select'
 
 export type LazySearchSelectOption = {
     value: string
@@ -51,14 +51,24 @@ export default function LazySearchSelect({
     const onSearchChangeRef = useRef(onSearchChange)
     const scrollSelectedWhenAvailable = useRef(false)
     const previousPageScrollPosition = useRef<{height: number; top: number} | null>(null)
-
-    const menuListElement = () => {
-        const input = document.getElementById(inputId)
-        return input
-            ?.closest(`.${classNamePrefix}__control`)
-            ?.parentElement
-            ?.querySelector<HTMLElement>(`.${classNamePrefix}__menu-list`) ?? null
+    const nextPageRequested = useRef(false)
+    const menuListRef = useRef<HTMLDivElement | null>(null)
+    const paginationState = useRef({
+        hasMore,
+        hasPrevious,
+        isLoading,
+        onLoadMore,
+        onLoadPrevious,
+    })
+    paginationState.current = {
+        hasMore,
+        hasPrevious,
+        isLoading,
+        onLoadMore,
+        onLoadPrevious,
     }
+
+    const menuListElement = () => menuListRef.current
 
     const scrollSelectedIntoView = () => {
         // React Select performs its own selected-option scroll while opening.
@@ -85,9 +95,74 @@ export default function LazySearchSelect({
         })
     }
 
+    const handleMenuScroll = useCallback((menuList: HTMLElement) => {
+        const {
+            hasMore: canLoadMore,
+            hasPrevious: canLoadPrevious,
+            isLoading: loading,
+            onLoadMore: loadMore,
+            onLoadPrevious: loadPrevious,
+        } = paginationState.current
+        if (loading) return
+
+        if (
+            menuList.scrollTop <= 1
+            && canLoadPrevious
+            && loadPrevious
+            && previousPageScrollPosition.current === null
+        ) {
+            previousPageScrollPosition.current = {
+                height: menuList.scrollHeight,
+                top: menuList.scrollTop,
+            }
+            loadPrevious()
+            return
+        }
+
+        const remaining = menuList.scrollHeight - menuList.clientHeight - menuList.scrollTop
+        if (remaining <= 1 && canLoadMore && !nextPageRequested.current) {
+            nextPageRequested.current = true
+            loadMore()
+        }
+    }, [])
+
+    const MenuList = useCallback((
+        props: MenuListProps<LazySearchSelectOption, false, GroupBase<LazySearchSelectOption>>,
+    ) => {
+        const innerRef = props.innerRef
+        const innerOnScroll = props.innerProps.onScroll
+        return (
+            <components.MenuList
+                {...props}
+                innerRef={(element) => {
+                    menuListRef.current = element
+                    if (typeof innerRef === 'function') innerRef(element)
+                }}
+                innerProps={{
+                    ...props.innerProps,
+                    onScroll: (event) => {
+                        innerOnScroll?.(event)
+                        handleMenuScroll(event.currentTarget)
+                    },
+                }}
+            />
+        )
+    }, [handleMenuScroll])
+
+    const selectComponents = useMemo(() => ({MenuList}), [MenuList])
+
     useEffect(() => {
         onSearchChangeRef.current = onSearchChange
     }, [onSearchChange])
+
+    useEffect(() => {
+        if (!isLoading) {
+            if (previousPageScrollPosition.current !== null) {
+                previousPageScrollPosition.current = null
+            }
+            nextPageRequested.current = false
+        }
+    }, [isLoading])
 
     useEffect(() => {
         const timer = window.setTimeout(() => onSearchChangeRef.current(inputValue), debounceMs)
@@ -134,6 +209,10 @@ export default function LazySearchSelect({
         menuList.scrollTop = previousPosition.top + addedHeight
     }, [groupedOptions])
 
+    useLayoutEffect(() => {
+        nextPageRequested.current = false
+    }, [groupedOptions])
+
     useEffect(() => {
         if (scrollSelectedWhenAvailable.current) scrollSelectedIntoView()
     }, [groupedOptions])
@@ -162,20 +241,11 @@ export default function LazySearchSelect({
             onMenuClose={() => {
                 scrollSelectedWhenAvailable.current = false
                 previousPageScrollPosition.current = null
+                nextPageRequested.current = false
+                menuListRef.current = null
             }}
-            onMenuScrollToTop={() => {
-                if (!hasPrevious || isLoading || !onLoadPrevious) return
-                const menuList = menuListElement()
-                if (!menuList) return
-                previousPageScrollPosition.current = {
-                    height: menuList.scrollHeight,
-                    top: menuList.scrollTop,
-                }
-                onLoadPrevious()
-            }}
-            onMenuScrollToBottom={() => {
-                if (hasMore && !isLoading) onLoadMore()
-            }}
+            components={selectComponents}
+            captureMenuScroll={false}
             isLoading={isLoading}
             isClearable={false}
             isSearchable
