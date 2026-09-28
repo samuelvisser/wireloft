@@ -52,16 +52,32 @@ export default function LazySearchSelect({
     const scrollSelectedWhenAvailable = useRef(false)
 
     const scrollSelectedIntoView = () => {
+        // React Select performs its own selected-option scroll while opening.
+        // Wait until that has settled, then center the option within the menu.
         window.requestAnimationFrame(() => {
-            if (!scrollSelectedWhenAvailable.current) return
-            const input = document.getElementById(inputId)
-            const selected = input
-                ?.closest(`.${classNamePrefix}__control`)
-                ?.parentElement
-                ?.querySelector<HTMLElement>(`.${classNamePrefix}__option--is-selected`)
-            if (!selected) return
-            selected.scrollIntoView({block: 'nearest'})
-            scrollSelectedWhenAvailable.current = false
+            window.requestAnimationFrame(() => {
+                if (!scrollSelectedWhenAvailable.current) return
+                const input = document.getElementById(inputId)
+                const selectRoot = input
+                    ?.closest(`.${classNamePrefix}__control`)
+                    ?.parentElement
+                const menuList = selectRoot
+                    ?.querySelector<HTMLElement>(`.${classNamePrefix}__menu-list`)
+                const selected = menuList
+                    ?.querySelector<HTMLElement>(`.${classNamePrefix}__option--is-selected`)
+                if (!menuList || !selected) return
+
+                const menuRect = menuList.getBoundingClientRect()
+                const selectedRect = selected.getBoundingClientRect()
+                const selectedCenter = (
+                    menuList.scrollTop
+                    + selectedRect.top
+                    - menuRect.top
+                    + selectedRect.height / 2
+                )
+                menuList.scrollTop = selectedCenter - menuList.clientHeight / 2
+                scrollSelectedWhenAvailable.current = false
+            })
         })
     }
 
