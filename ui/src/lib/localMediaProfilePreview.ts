@@ -68,7 +68,7 @@ export function useLocalMediaProfilePreview(request: PreviewRequest | null): Loc
     }, [serialized])
 
     // Once a preview has settled, keep it visible while the next debounced
-    // request is in flight. The response still replaces the snapshot atomically,
+    // request is in flight. The response replaces the snapshot atomically,
     // and aborted/out-of-order requests can never overwrite the latest one.
     const active = serialized !== null
     const current = active && snapshot?.request === serialized
