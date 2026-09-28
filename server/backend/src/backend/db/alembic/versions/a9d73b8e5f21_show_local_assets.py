@@ -14,6 +14,15 @@ depends_on = None
 
 def upgrade():
     op.add_column("local_media_profiles_show", sa.Column("download_show_assets", sa.Boolean(), nullable=True))
+
+    # Existing profiles predate this setting, so keep their upgrade behavior
+    # opt-in. New profiles remain NULL and inherit the enabled system default.
+    show_profiles = sa.table(
+        "local_media_profiles_show",
+        sa.column("download_show_assets", sa.Boolean()),
+    )
+    op.execute(show_profiles.update().values(download_show_assets=False))
+
     op.create_table(
         "show_local_assets",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),

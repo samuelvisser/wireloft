@@ -20,7 +20,11 @@ def test_show_assets_upgrade_downgrade_and_foreign_keys():
         connection.exec_driver_sql("INSERT INTO local_media_profiles_show VALUES (2)")
         with Operations.context(MigrationContext.configure(connection)):
             migration.upgrade()
-        assert connection.exec_driver_sql("SELECT download_show_assets FROM local_media_profiles_show").scalar() is None
+        assert connection.exec_driver_sql("SELECT download_show_assets FROM local_media_profiles_show").scalar() == 0
+        connection.exec_driver_sql("INSERT INTO local_media_profiles_show (id) VALUES (3)")
+        assert connection.exec_driver_sql(
+            "SELECT download_show_assets FROM local_media_profiles_show WHERE id=3"
+        ).scalar() is None
         connection.exec_driver_sql("INSERT INTO show_local_assets (show_id,local_media_profile_id,asset_type,file_path) VALUES (1,2,'poster','/downloads/show/poster.jpg')")
         connection.exec_driver_sql("DELETE FROM shows WHERE id=1")
         assert connection.exec_driver_sql("SELECT COUNT(*) FROM show_local_assets").scalar() == 0
