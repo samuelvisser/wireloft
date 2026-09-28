@@ -764,3 +764,172 @@ def test_simulation_compiles_the_output_template_once(db_session, monkeypatch):
         definitions=frozenset({"extras"}),
     )
     assert calls == 1
+
+
+def test_profile_save_skips_index_management_when_assignment_reachability_is_unchanged(db_session):
+    from backend.api.endpoints.show_local_media_profiles.service import update_show_local_media_profile
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPIUpdate
+    from backend.db.models import CustomIndexState
+    from backend.services.custom_indexes import reconcile_show_profile_custom_indexes
+    from task_manager.scheduler.db import TaskOperation
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    saved = (
+        "{% if episode_type == 'aux' %}{% set n = 'extras' | custom_index %}"
+        "{% else %}{% set n = '' %}{% endif %}"
+        "/downloads/{{ n }}-{{ episode }}.ext"
+    )
+    profile = _make_profile(db_session, template=saved)
+    _define(profile, ("extras", "Extras"))
+    state = _request(db_session, show, profile)
+    reconcile_show_profile_custom_indexes(
+        db_session,
+        show_id=show.id,
+        local_media_profile_id=profile.id,
+    )
+    generation = state.requested_generation
+
+    body = ShowLocalMediaProfileAPIUpdate(
+        name=profile.name,
+        preferred_format=profile.preferred_format,
+        output_template=saved.replace("/downloads/", "/downloads/renamed/"),
+        show_scope="both",
+        indexing_values=[{"key": "extras", "name": "Extras"}],
+    )
+    update_show_local_media_profile(
+        db_session,
+        profile.slug,
+        body,
+        rename_files=True,
+    )
+
+    operations = list(db_session.query(TaskOperation).order_by(TaskOperation.id))
+    assert [operation.kind for operation in operations] == ["local_media_profile.rename_files"]
+    db_session.refresh(state)
+    assert state.requested_generation == generation
+    assert state.completed_generation == generation
+
+
+def test_profile_save_queues_index_management_when_assignment_reachability_changes(db_session):
+    from backend.api.endpoints.show_local_media_profiles.service import update_show_local_media_profile
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPIUpdate
+    from backend.services.custom_indexes import reconcile_show_profile_custom_indexes
+    from task_manager.scheduler.db import TaskOperation
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    saved = (
+        "{% if episode_type == 'aux' %}{% set n = 'extras' | custom_index %}"
+        "{% else %}{% set n = '' %}{% endif %}"
+        "/downloads/{{ n }}-{{ episode }}.ext"
+    )
+    profile = _make_profile(db_session, template=saved)
+    _define(profile, ("extras", "Extras"))
+    _request(db_session, show, profile)
+    reconcile_show_profile_custom_indexes(
+        db_session,
+        show_id=show.id,
+        local_media_profile_id=profile.id,
+    )
+
+    changed = saved.replace("episode_type == 'aux'", "episode_type == 'ep'")
+    body = ShowLocalMediaProfileAPIUpdate(
+        name=profile.name,
+        preferred_format=profile.preferred_format,
+        output_template=changed,
+        show_scope="both",
+        indexing_values=[{"key": "extras", "name": "Extras"}],
+    )
+    update_show_local_media_profile(
+        db_session,
+        profile.slug,
+        body,
+        rename_files=True,
+    )
+
+    operations = list(db_session.query(TaskOperation).order_by(TaskOperation.id))
+    assert [operation.kind for operation in operations] == ["local_media_profile.manage_custom_indexes"]
+    assert operations[0].targets[0].task_kwargs["rename_after"] is True
+
+
+def test_profile_save_conservatively_queues_index_management_when_analysis_is_unknown(db_session):
+    from backend.api.endpoints.show_local_media_profiles.service import update_show_local_media_profile
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPIUpdate
+    from task_manager.scheduler.db import TaskOperation
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    saved = (
+        "{% macro number() %}{{ 'extras' | custom_index }}{% endmacro %}"
+        "/downloads/{{ number() }}-{{ episode }}.ext"
+    )
+    profile = _make_profile(db_session, template=saved)
+    _define(profile, ("extras", "Extras"))
+
+    body = ShowLocalMediaProfileAPIUpdate(
+        name=profile.name,
+        preferred_format=profile.preferred_format,
+        output_template=saved.replace("/downloads/", "/downloads/renamed/"),
+        show_scope="both",
+        indexing_values=[{"key": "extras", "name": "Extras"}],
+    )
+    update_show_local_media_profile(db_session, profile.slug, body)
+
+    operations = list(db_session.query(TaskOperation).order_by(TaskOperation.id))
+    assert [operation.kind for operation in operations] == ["local_media_profile.manage_custom_indexes"]
+
+
+def test_profile_save_scope_change_still_queues_index_management(db_session):
+    from backend.api.endpoints.show_local_media_profiles.service import update_show_local_media_profile
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPIUpdate
+    from task_manager.scheduler.db import TaskOperation
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    template = "/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext"
+    profile = _make_profile(db_session, template=template)
+    _define(profile, ("extras", "Extras"))
+
+    body = ShowLocalMediaProfileAPIUpdate(
+        name=profile.name,
+        preferred_format=profile.preferred_format,
+        output_template=template,
+        show_scope="podcast",
+        indexing_values=[{"key": "extras", "name": "Extras"}],
+    )
+    update_show_local_media_profile(db_session, profile.slug, body)
+
+    operations = list(db_session.query(TaskOperation).order_by(TaskOperation.id))
+    assert [operation.kind for operation in operations] == ["local_media_profile.manage_custom_indexes"]
+
+
+def test_profile_save_unused_definition_change_does_not_queue_index_management(db_session):
+    from backend.api.endpoints.show_local_media_profiles.service import update_show_local_media_profile
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPIUpdate
+    from task_manager.scheduler.db import TaskOperation
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    template = "/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext"
+    profile = _make_profile(db_session, template=template)
+    _define(profile, ("extras", "Extras"), ("unused", "Unused"))
+
+    body = ShowLocalMediaProfileAPIUpdate(
+        name=profile.name,
+        preferred_format=profile.preferred_format,
+        output_template=template,
+        show_scope="both",
+        indexing_values=[{"key": "extras", "name": "Extras"}],
+    )
+    update_show_local_media_profile(db_session, profile.slug, body)
+
+    assert not any(
+        operation.kind == "local_media_profile.manage_custom_indexes"
+        for operation in db_session.query(TaskOperation)
+    )
