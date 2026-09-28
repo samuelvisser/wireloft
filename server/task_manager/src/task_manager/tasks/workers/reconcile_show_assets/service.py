@@ -385,7 +385,10 @@ def run_reconcile_show_assets(
             if profile is None or show is None or not show_assets_enabled(profile):
                 continue
             if root.path is None or shared_root_conflict(roots, current_show_id, root.path):
-                warnings.append(f"{show.title}: {root.reason or 'the artwork directory is shared by another show'}")
+                warnings.append(
+                    f"{show.title} via Local Media Profile '{profile.name}': "
+                    f"{root.reason or 'the artwork directory is shared by another show'}"
+                )
                 continue
             directory = Path(root.path)
             sources = show_asset_sources(show)

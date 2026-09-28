@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,9 @@ from backend.utils.output_template import resolve_episode_output_path
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
+
+
+logger = logging.getLogger(__name__)
 
 
 _PHYSICAL_STATUSES = (
@@ -53,6 +57,52 @@ def _thumbnail_destination(download: EpisodeMediaDownload, destination: Path) ->
         return None
     suffix = Path(download.thumbnail_path).suffix
     return destination.with_suffix(suffix) if suffix else None
+
+
+def _existing_destination_conflicts(move: _Move, source_paths: set[Path]) -> tuple[Path, ...]:
+    conflicts = []
+    if move.destination.exists() and move.destination not in source_paths:
+        conflicts.append(move.destination)
+    if (
+        move.thumbnail_destination is not None
+        and move.thumbnail_destination.exists()
+        and move.thumbnail_destination not in source_paths
+    ):
+        conflicts.append(move.thumbnail_destination)
+    return tuple(conflicts)
+
+
+def _skip_existing_destination_conflicts(moves: list[_Move]) -> tuple[list[_Move], list[_Move]]:
+    """Skip collisions while preserving rename cycles among moves that still run."""
+    remaining = list(moves)
+    skipped = []
+    while remaining:
+        source_paths = {
+            path
+            for move in remaining
+            for path in (move.source, move.thumbnail_source)
+            if path is not None and path.exists()
+        }
+        blocked = [
+            (move, _existing_destination_conflicts(move, source_paths))
+            for move in remaining
+        ]
+        blocked = [(move, conflicts) for move, conflicts in blocked if conflicts]
+        if not blocked:
+            break
+
+        blocked_moves = {move for move, _conflicts in blocked}
+        remaining = [move for move in remaining if move not in blocked_moves]
+        for move, conflicts in blocked:
+            skipped.append(move)
+            logger.warning(
+                "Skipping rename for media download %s: '%s' -> '%s'; destination already exists%s",
+                move.download_id,
+                move.source,
+                move.destination,
+                f" ({', '.join(str(path) for path in conflicts)})" if conflicts else "",
+            )
+    return remaining, skipped
 
 
 def _record_location(
@@ -227,20 +277,22 @@ def run_rename_show_profile_files(
     ]
     if len(source_list) != len(set(source_list)):
         raise FileExistsError("Multiple MediaDownloads claim the same source artifact")
-    source_paths = set(source_list)
-    for move in moves:
-        if move.destination.exists() and move.destination not in source_paths:
-            raise FileExistsError(
-                f"Cannot rename '{move.source}' to '{move.destination}': destination already exists"
-            )
-        if (
-            move.thumbnail_destination is not None
-            and move.thumbnail_destination.exists()
-            and move.thumbnail_destination not in source_paths
-        ):
-            raise FileExistsError(
-                f"Cannot rename thumbnail to '{move.thumbnail_destination}': destination already exists"
-            )
+    moves, skipped_existing_moves = _skip_existing_destination_conflicts(moves)
+    skipped_existing = len(skipped_existing_moves)
+    if not moves:
+        update_progress(progress, 100, "No files renamed; destination already exists")
+        return TaskResult(
+            summary=(
+                f"Skipped {skipped_existing} file"
+                f"{'s' if skipped_existing != 1 else ''}; destination already exists"
+            ),
+            data={
+                "files_considered": len(downloads),
+                "files_renamed": 0,
+                "files_unchanged": unchanged,
+                "files_skipped_existing": skipped_existing,
+            },
+        )
 
     # Reconciliation changes above are local database facts. Make them durable and
     # release the transaction before the filesystem phase.
@@ -322,12 +374,19 @@ def run_rename_show_profile_files(
         _rollback_staging(staged)
         raise
 
-    update_progress(progress, 100, f"Renamed {len(moves)} file(s)")
+    summary = f"Renamed {len(moves)} file{'s' if len(moves) != 1 else ''}"
+    if skipped_existing:
+        summary += (
+            f"; skipped {skipped_existing} existing destination"
+            f"{'s' if skipped_existing != 1 else ''}"
+        )
+    update_progress(progress, 100, summary)
     return TaskResult(
-        summary=f"Renamed {len(moves)} file{'s' if len(moves) != 1 else ''}",
+        summary=summary,
         data={
             "files_considered": len(downloads),
             "files_renamed": len(moves),
             "files_unchanged": unchanged,
+            "files_skipped_existing": skipped_existing,
         },
     )

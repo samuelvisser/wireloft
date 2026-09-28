@@ -224,3 +224,16 @@ def test_generic_http_contract_and_validation(examples, monkeypatch):
         assert invalid.status_code == 422
         assert client.post("/local-media-profiles/template/preview", json={}).status_code == 404
         assert client.post("/local-media-profiles/template/show-root", json={}).status_code == 404
+
+
+
+def test_item_specific_directory_segment_has_no_shared_show_root(examples):
+    result = preview.get_local_media_profile_preview(examples.session, _body(
+        output_template="/downloads/shows/{{ episode }}{{ show_title }}/{{ season_name }}/{{ episode_title }}.ext",
+    ))
+
+    assert result.output.output_path == str(
+        examples.root / "shows/episode-1Saved Show 1/First season/Episode 1.mp4"
+    )
+    assert result.show_root.path is None
+    assert "No shared show-specific directory" in result.show_root.reason
