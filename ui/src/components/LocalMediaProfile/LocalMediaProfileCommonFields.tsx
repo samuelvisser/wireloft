@@ -100,6 +100,58 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
             </div>
 
             <div className="form-row">
+                <label htmlFor="local-media-embed-metadata">Embedded media metadata</label>
+                <label htmlFor="local-media-embed-metadata">
+                    <input
+                        id="local-media-embed-metadata"
+                        type="checkbox"
+                        {...register('embedMetadata')}
+                    />
+                    <span>Write metadata into downloaded media files</span>
+                </label>
+                {errors.embedMetadata && (
+                    <div className="error" role="alert" aria-live="polite">
+                        {String(errors.embedMetadata.message)}
+                    </div>
+                )}
+                <div className="help">
+                    <ReadMore summary="Embed titles and other media-server metadata directly in supported media files.">
+                        <p>
+                            WireLoft writes useful tags such as the episode or movie title, description, show title,
+                            season and episode numbers when they are actually known, dates, genres, authors, and movie
+                            credits. This can improve local-metadata discovery in media servers and other players.
+                        </p>
+                        <p>
+                            This requires a file container that FFmpeg can rewrite. HLS bundle downloads cannot contain
+                            embedded file metadata; use an NFO sidecar for HLS.
+                        </p>
+                    </ReadMore>
+                </div>
+            </div>
+
+            <div className="form-row">
+                <label htmlFor="local-media-download-nfo">NFO metadata</label>
+                <label htmlFor="local-media-download-nfo">
+                    <input
+                        id="local-media-download-nfo"
+                        type="checkbox"
+                        {...register('downloadNfo')}
+                    />
+                    <span>Write an NFO file beside each downloaded media file</span>
+                </label>
+                {errors.downloadNfo && (
+                    <div className="error" role="alert" aria-live="polite">
+                        {String(errors.downloadNfo.message)}
+                    </div>
+                )}
+                <div className="help">
+                    The NFO uses the media file's basename and contains the same relevant catalog metadata in a
+                    Kodi/Jellyfin-compatible XML structure. WireLoft manages it together with the media file when
+                    files are renamed or deleted.
+                </div>
+            </div>
+
+            <div className="form-row">
                 <label htmlFor="local-media-thumbnail-mode">Episode thumbnail behavior</label>
                 <Controller
                     control={control}

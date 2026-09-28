@@ -25,6 +25,8 @@ class LocalMediaProfileAPIBaseIn(RequestBase):
     preferred_format: PreferredFormat
     download_mode: LocalMediaProfileStorageMode = LocalMediaProfileStorageMode.SYSTEM
     thumbnail_mode: LocalMediaProfileThumbnailMode = LocalMediaProfileThumbnailMode.SYSTEM
+    embed_metadata: bool = False
+    download_nfo: bool = False
     output_template: str = Field(min_length=16, max_length=4096)
 
     @computed_field(return_type=str)
@@ -51,6 +53,8 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     preferred_format: Union[PreferredFormat, str]
     download_mode: Union[LocalMediaProfileStorageMode, str] = LocalMediaProfileStorageMode.SYSTEM
     thumbnail_mode: Union[LocalMediaProfileThumbnailMode, str] = LocalMediaProfileThumbnailMode.SYSTEM
+    embed_metadata: bool = False
+    download_nfo: bool = False
     append_media_type_to_filename: bool
     created_at: datetime
     updated_at: datetime

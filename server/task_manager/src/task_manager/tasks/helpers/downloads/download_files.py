@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 def remove_download_artifacts(
     file_path: Optional[str],
     thumbnail_path: Optional[str] = None,
+    nfo_path: Optional[str] = None,
 ) -> None:
     """Remove a download's owned final files and every temporary form WireLoft uses.
 
@@ -68,9 +69,14 @@ def remove_download_artifacts(
                             exc_info=True,
                         )
 
-    if thumbnail_path:
-        for path in (Path(thumbnail_path), Path(thumbnail_path + ".part")):
+    for sidecar_path, label in (
+        (thumbnail_path, "thumbnail"),
+        (nfo_path, "NFO"),
+    ):
+        if not sidecar_path:
+            continue
+        for path in (Path(sidecar_path), Path(sidecar_path + ".part")):
             try:
                 path.unlink(missing_ok=True)
             except OSError:
-                logger.warning("Could not remove thumbnail artifact '%s'", path, exc_info=True)
+                logger.warning("Could not remove %s artifact '%s'", label, path, exc_info=True)

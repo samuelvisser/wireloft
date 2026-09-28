@@ -42,6 +42,7 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     local_media_profile_id: int
     file_path: str
     thumbnail_path: Optional[str] = None
+    nfo_path: Optional[str] = None
     artifact_status: MediaDownloadArtifactStatus | str
     artifact_error: Optional[str]
     automatic_retry_suppressed: bool

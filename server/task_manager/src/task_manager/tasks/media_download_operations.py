@@ -64,7 +64,7 @@ def prepare_media_download_artifact(
             resolved_path = resolve_media_download_file(session, download)
         artifact_status_before_removal = download.artifact_status
         removed_path = str(resolved_path) if resolved_path is not None else download.file_path
-        remove_download_artifacts(removed_path, download.thumbnail_path)
+        remove_download_artifacts(removed_path, download.thumbnail_path, download.nfo_path)
         if resolved_path is not None:
             record_media_download_history(
                 session,
@@ -87,6 +87,7 @@ def prepare_media_download_artifact(
     download.format_downloaded = None
     download.downloaded_at = None
     download.thumbnail_path = None
+    download.nfo_path = None
     if isinstance(download, EpisodeMediaDownload):
         download.downloaded_publish_status = None
 
@@ -116,6 +117,7 @@ def _operation_context(download: MediaDownloadBase, *, is_redownload: bool) -> d
         "preferred_format": profile.preferred_format,
         "file_path": download.file_path,
         "thumbnail_path": download.thumbnail_path,
+        "nfo_path": download.nfo_path,
         "episode_slug": episode.slug if episode else None,
         "episode_title": episode.title if episode else None,
         "episode_identifier": episode.episode_identifier if episode else None,

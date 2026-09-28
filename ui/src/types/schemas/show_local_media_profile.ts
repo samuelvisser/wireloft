@@ -45,15 +45,28 @@ const ShowLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
     indexingValues: ShowLocalMediaProfileIndexingValuesSchema.default([]),
 })
 
+const validateMetadataOptions = (
+    value: z.infer<typeof ShowLocalMediaProfileBaseSchema>,
+    ctx: any,
+) => {
+    if (value.embedMetadata && value.preferredFormat === 'format_hls') {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['embedMetadata'],
+            message: 'Embedded file metadata is not supported for HLS downloads; enable NFO metadata or choose a file-based format',
+        })
+    }
+}
+
 export const ShowLocalMediaProfileCreateSchema = ShowLocalMediaProfileBaseSchema.safeExtend(
     LocalMediaProfileCreateBaseSchema.shape,
-)
+).superRefine(validateMetadataOptions)
 export type ShowLocalMediaProfileCreateIn = z.input<typeof ShowLocalMediaProfileCreateSchema>
 export type ShowLocalMediaProfileCreateOut = z.output<typeof ShowLocalMediaProfileCreateSchema>
 
 export const ShowLocalMediaProfileUpdateSchema = ShowLocalMediaProfileBaseSchema.safeExtend(
     LocalMediaProfileUpdateBaseSchema.shape,
-)
+).superRefine(validateMetadataOptions)
 export type ShowLocalMediaProfileUpdateIn = z.input<typeof ShowLocalMediaProfileUpdateSchema>
 export type ShowLocalMediaProfileUpdateOut = z.output<typeof ShowLocalMediaProfileUpdateSchema>
 

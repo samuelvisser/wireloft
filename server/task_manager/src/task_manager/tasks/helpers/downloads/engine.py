@@ -20,6 +20,7 @@ from dailywire_downloader import (
     download_file,
     download_hls,
     download_hls_bundle,
+    embed_metadata as embed_file_metadata,
     embed_thumbnail,
     hls_asset_marker,
     hls_asset_root,
@@ -34,6 +35,7 @@ from .download_paths import (
     publish_temporary_download,
     reserve_unique_download_path,
 )
+from .media_metadata import MediaServerMetadata, write_nfo
 from .thumbnails import prepare_thumbnail, wants_thumbnail_embed, wants_thumbnail_sidecar
 
 FORMAT_HEIGHTS: dict[str, int] = {
@@ -67,6 +69,9 @@ class DownloadPlan:
     ffmpeg_path: str
     thumbnail_url: str | None = None
     thumbnail_mode: ThumbnailMode = ThumbnailMode.NO_THUMBNAIL
+    metadata: MediaServerMetadata | None = None
+    embed_metadata: bool = False
+    write_nfo: bool = False
 
 
 @dataclass
@@ -77,6 +82,7 @@ class DownloadExecution:
     source: ResolvedDownloadSource
     thumbnail_path: str | None = None
     workspace: TemporaryDownloadWorkspace | None = None
+    nfo_path: str | None = None
 
     @property
     def format_downloaded(self) -> str:
@@ -250,6 +256,7 @@ def _execute_temporary_plan(
     )
     published_destination: str | None = None
     thumbnail_path: str | None = None
+    nfo_path: str | None = None
     keep_workspace = False
     try:
         result = _perform_download(
@@ -277,6 +284,12 @@ def _execute_temporary_plan(
                 should_cancel=cancellation,
             )
 
+        nfo_source = _apply_media_metadata(
+            plan,
+            result.path,
+            cancellation=cancellation,
+        )
+
         ensure_not_cancelled(cancellation)
         destination = publish_temporary_download(
             workspace.path,
@@ -287,6 +300,8 @@ def _execute_temporary_plan(
             _publish_hls_assets(workspace.path, destination)
         if thumbnail_source is not None and wants_thumbnail_sidecar(plan.thumbnail_mode):
             thumbnail_path = _publish_sidecar(thumbnail_source, destination)
+        if nfo_source is not None:
+            nfo_path = _publish_sidecar(Path(nfo_source), destination)
 
         keep_workspace = True
         return DownloadExecution(
@@ -297,11 +312,12 @@ def _execute_temporary_plan(
             ),
             source=plan.source,
             thumbnail_path=thumbnail_path,
+            nfo_path=nfo_path,
             workspace=workspace,
         )
     except BaseException:
         if published_destination is not None:
-            remove_download_artifacts(published_destination, thumbnail_path)
+            remove_download_artifacts(published_destination, thumbnail_path, nfo_path)
         raise
     finally:
         if not keep_workspace:
@@ -318,6 +334,7 @@ def _execute_direct_plan(
     reservation = reserve_unique_download_path(plan.requested_destination)
     destination = str(reservation.path)
     thumbnail_path: str | None = None
+    nfo_path: str | None = None
     try:
         if on_destination_reserved is not None:
             on_destination_reserved(destination)
@@ -351,16 +368,47 @@ def _execute_direct_plan(
                     thumbnail_source,
                     Path(destination),
                 )
+        nfo_path = _apply_media_metadata(
+            plan,
+            result.path,
+            cancellation=cancellation,
+        )
         return DownloadExecution(
             result=result,
             source=plan.source,
             thumbnail_path=thumbnail_path,
+            nfo_path=nfo_path,
         )
     except BaseException:
-        remove_download_artifacts(destination, thumbnail_path)
+        remove_download_artifacts(destination, thumbnail_path, nfo_path)
         raise
     finally:
         reservation.release_if_unclaimed()
+
+
+def _apply_media_metadata(
+    plan: DownloadPlan,
+    media_path: str,
+    *,
+    cancellation,
+) -> str | None:
+    if plan.metadata is None:
+        return None
+    if plan.embed_metadata:
+        if plan.source.hls_bundle:
+            raise DownloadError(
+                "Embedded file metadata is not supported for HLS bundle downloads"
+            )
+        embed_file_metadata(
+            media_path,
+            plan.metadata.ffmpeg_tags(),
+            ffmpeg_path=plan.ffmpeg_path,
+            should_cancel=cancellation,
+        )
+    ensure_not_cancelled(cancellation)
+    if plan.write_nfo:
+        return write_nfo(media_path, plan.metadata)
+    return None
 
 
 def _publish_sidecar(source: Path, media_destination: Path) -> str:

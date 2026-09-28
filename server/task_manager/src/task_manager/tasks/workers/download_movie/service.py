@@ -41,6 +41,7 @@ from task_manager.tasks.helpers.downloads.engine import (
     execute_download_plan,
     resolve_download_source,
 )
+from task_manager.tasks.helpers.downloads.media_metadata import build_movie_metadata
 from task_manager.tasks.helpers.downloads.thumbnails import select_thumbnail_url
 
 
@@ -126,13 +127,14 @@ async def run_download_movie(
         session.expire_all()
         download = session.get(MediaDownloadBase, media_download_id)
         if download is None:
-            remove_download_artifacts(execution.result.path, execution.thumbnail_path)
+            remove_download_artifacts(execution.result.path, execution.thumbnail_path, execution.nfo_path)
             raise DownloadCancelled("Media download was deleted while the worker was running")
         ensure_not_cancelled(progress)
 
         artifact_identity = inspect_artifact(execution.result.path)
         download.file_path = execution.result.path
         download.thumbnail_path = execution.thumbnail_path
+        download.nfo_path = execution.nfo_path
         download.artifact_stat_dev = artifact_identity.stat_dev
         download.artifact_stat_ino = artifact_identity.stat_ino
         download.artifact_size_bytes = artifact_identity.size_bytes
@@ -162,6 +164,7 @@ async def run_download_movie(
                 format_downloaded=execution.format_downloaded,
                 file_path=execution.result.path,
                 thumbnail_path=execution.thumbnail_path,
+                nfo_path=execution.nfo_path,
             ),
             occurred_at=finished_at,
         )
@@ -175,13 +178,14 @@ async def run_download_movie(
                 "format_downloaded": execution.format_downloaded,
                 "file_path": execution.result.path,
                 "thumbnail_path": execution.thumbnail_path,
+                "nfo_path": execution.nfo_path,
                 "is_redownload": is_redownload,
             },
         )
     except DownloadCancelled as exc:
         session.rollback()
         if execution is not None:
-            remove_download_artifacts(execution.result.path, execution.thumbnail_path)
+            remove_download_artifacts(execution.result.path, execution.thumbnail_path, execution.nfo_path)
         finished_at = datetime.now(timezone.utc)
         if record_media_download_operation_history_once(
             session,
@@ -202,7 +206,7 @@ async def run_download_movie(
     except Exception as exc:
         session.rollback()
         if execution is not None:
-            remove_download_artifacts(execution.result.path, execution.thumbnail_path)
+            remove_download_artifacts(execution.result.path, execution.thumbnail_path, execution.nfo_path)
         finished_at = datetime.now(timezone.utc)
         if record_media_download_history_if_exists(
             session,
@@ -317,8 +321,12 @@ def _download_movie_media(
         extension=source.extension,
     )
 
-    # Resolving the destination needs ORM-backed movie metadata. Release that
-    # transaction again before the potentially long media transfer.
+    metadata = build_movie_metadata(movie, media)
+    embed_metadata_requested = bool(download.local_media_profile.embed_metadata)
+    download_nfo_requested = bool(download.local_media_profile.download_nfo)
+
+    # Resolving the destination and metadata needs ORM-backed movie state.
+    # Release that transaction again before the potentially long media transfer.
     session.rollback()
 
     plan = DownloadPlan(
@@ -329,6 +337,9 @@ def _download_movie_media(
         ffmpeg_path=settings.ffmpeg_path,
         thumbnail_url=thumbnail_url,
         thumbnail_mode=thumbnail_mode,
+        metadata=metadata,
+        embed_metadata=embed_metadata_requested,
+        write_nfo=download_nfo_requested,
     )
 
     def persist_direct_destination(destination: str) -> None:

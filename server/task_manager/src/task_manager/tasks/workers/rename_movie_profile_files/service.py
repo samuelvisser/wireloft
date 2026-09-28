@@ -34,6 +34,8 @@ class _Move:
     destination: Path
     thumbnail_source: Path | None
     thumbnail_destination: Path | None
+    nfo_source: Path | None
+    nfo_destination: Path | None
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,7 @@ class _StagedMove:
     move: _Move
     staged_media: Path
     staged_thumbnail: Path | None
+    staged_nfo: Path | None
 
 
 def _temporary_path(path: Path) -> Path:
@@ -57,16 +60,29 @@ def _thumbnail_destination(
     return destination.with_suffix(suffix) if suffix else None
 
 
+def _nfo_destination(
+    download: MediaDownloadBase,
+    destination: Path,
+) -> Path | None:
+    return destination.with_suffix(".nfo") if download.nfo_path else None
+
+
 def _record_location(
     download: MediaDownloadBase,
     destination: Path,
     thumbnail_destination: Path | None,
+    nfo_destination: Path | None,
 ) -> None:
     identity = inspect_artifact(destination)
     download.file_path = str(destination)
     download.thumbnail_path = (
         str(thumbnail_destination)
         if thumbnail_destination is not None and thumbnail_destination.exists()
+        else None
+    )
+    download.nfo_path = (
+        str(nfo_destination)
+        if nfo_destination is not None and nfo_destination.exists()
         else None
     )
     download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
@@ -87,20 +103,27 @@ def _rollback_staging(staged: list[_StagedMove]) -> None:
         except OSError:
             pass
 
-        if item.staged_thumbnail is None or move.thumbnail_destination is None:
-            continue
-        try:
-            if (
-                move.thumbnail_destination.exists()
-                and not item.staged_thumbnail.exists()
-            ):
-                item.staged_thumbnail.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(
-                    str(move.thumbnail_destination),
-                    str(item.staged_thumbnail),
-                )
-        except OSError:
-            pass
+        if item.staged_thumbnail is not None and move.thumbnail_destination is not None:
+            try:
+                if (
+                    move.thumbnail_destination.exists()
+                    and not item.staged_thumbnail.exists()
+                ):
+                    item.staged_thumbnail.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(
+                        str(move.thumbnail_destination),
+                        str(item.staged_thumbnail),
+                    )
+            except OSError:
+                pass
+
+        if item.staged_nfo is not None and move.nfo_destination is not None:
+            try:
+                if move.nfo_destination.exists() and not item.staged_nfo.exists():
+                    item.staged_nfo.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(move.nfo_destination), str(item.staged_nfo))
+            except OSError:
+                pass
 
     for item in reversed(staged):
         move = item.move
@@ -111,17 +134,24 @@ def _rollback_staging(staged: list[_StagedMove]) -> None:
         except OSError:
             pass
 
-        if item.staged_thumbnail is None or move.thumbnail_source is None:
-            continue
-        try:
-            if item.staged_thumbnail.exists():
-                move.thumbnail_source.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(
-                    str(item.staged_thumbnail),
-                    str(move.thumbnail_source),
-                )
-        except OSError:
-            pass
+        if item.staged_thumbnail is not None and move.thumbnail_source is not None:
+            try:
+                if item.staged_thumbnail.exists():
+                    move.thumbnail_source.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(
+                        str(item.staged_thumbnail),
+                        str(move.thumbnail_source),
+                    )
+            except OSError:
+                pass
+
+        if item.staged_nfo is not None and move.nfo_source is not None:
+            try:
+                if item.staged_nfo.exists():
+                    move.nfo_source.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(item.staged_nfo), str(move.nfo_source))
+            except OSError:
+                pass
 
 
 def run_rename_movie_profile_files(
@@ -206,6 +236,8 @@ def run_rename_movie_profile_files(
                 else None
             ),
             thumbnail_destination=_thumbnail_destination(download, destination),
+            nfo_source=Path(download.nfo_path) if download.nfo_path else None,
+            nfo_destination=_nfo_destination(download, destination),
         ))
         update_progress(
             progress,
@@ -227,7 +259,7 @@ def run_rename_movie_profile_files(
     destinations = [
         path
         for move in moves
-        for path in (move.destination, move.thumbnail_destination)
+        for path in (move.destination, move.thumbnail_destination, move.nfo_destination)
         if path is not None
     ]
     if len(destinations) != len(set(destinations)):
@@ -238,7 +270,7 @@ def run_rename_movie_profile_files(
     source_list = [
         path
         for move in moves
-        for path in (move.source, move.thumbnail_source)
+        for path in (move.source, move.thumbnail_source, move.nfo_source)
         if path is not None and path.exists()
     ]
     if len(source_list) != len(set(source_list)):
@@ -260,6 +292,14 @@ def run_rename_movie_profile_files(
             raise FileExistsError(
                 "Cannot rename thumbnail: destination already exists"
             )
+        if (
+            move.nfo_destination is not None
+            and move.nfo_destination.exists()
+            and move.nfo_destination not in source_paths
+        ):
+            raise FileExistsError(
+                "Cannot rename NFO: destination already exists"
+            )
 
     session.commit()
 
@@ -275,11 +315,17 @@ def run_rename_movie_profile_files(
                 )
                 else None
             )
+            staged_nfo = (
+                _temporary_path(move.nfo_source)
+                if move.nfo_source is not None and move.nfo_source.exists()
+                else None
+            )
             shutil.move(str(move.source), str(staged_media))
             staged_item = _StagedMove(
                 move=move,
                 staged_media=staged_media,
                 staged_thumbnail=staged_thumbnail,
+                staged_nfo=staged_nfo,
             )
             staged.append(staged_item)
             if staged_thumbnail is not None and move.thumbnail_source is not None:
@@ -287,6 +333,8 @@ def run_rename_movie_profile_files(
                     str(move.thumbnail_source),
                     str(staged_thumbnail),
                 )
+            if staged_nfo is not None and move.nfo_source is not None:
+                shutil.move(str(move.nfo_source), str(staged_nfo))
             update_progress(
                 progress,
                 20 + round(index / len(moves) * 30),
@@ -309,6 +357,9 @@ def run_rename_movie_profile_files(
                     str(item.staged_thumbnail),
                     str(move.thumbnail_destination),
                 )
+            if item.staged_nfo is not None and move.nfo_destination is not None:
+                move.nfo_destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(item.staged_nfo), str(move.nfo_destination))
             update_progress(
                 progress,
                 50 + round(index / len(staged) * 40),
@@ -330,6 +381,7 @@ def run_rename_movie_profile_files(
                 download,
                 item.move.destination,
                 item.move.thumbnail_destination,
+                item.move.nfo_destination,
             )
             record_media_download_history(
                 session,

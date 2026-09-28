@@ -132,11 +132,18 @@ async def run_rename_file_worker(
                         f"Cannot rename '{source}' to '{destination}': destination already exists"
                     )
                 destination.parent.mkdir(parents=True, exist_ok=True)
+                thumbnail_source = Path(download.thumbnail_path) if download.thumbnail_path else None
                 thumbnail_destination = _planned_thumbnail_destination(download, destination)
-                if thumbnail_destination is not None and thumbnail_destination.exists():
-                    raise FileExistsError(
-                        f"Cannot rename thumbnail to '{thumbnail_destination}': destination already exists"
-                    )
+                nfo_source = Path(download.nfo_path) if download.nfo_path else None
+                nfo_destination = _planned_nfo_destination(download, destination)
+                for label, accessory_destination in (
+                    ("thumbnail", thumbnail_destination),
+                    ("NFO", nfo_destination),
+                ):
+                    if accessory_destination is not None and accessory_destination.exists():
+                        raise FileExistsError(
+                            f"Cannot rename {label} to '{accessory_destination}': destination already exists"
+                        )
                 _assert_hls_assets_can_move(source, destination)
 
                 shutil.move(str(source), str(destination))
@@ -144,8 +151,11 @@ async def run_rename_file_worker(
                 try:
                     hls_assets_moved = _move_hls_assets_if_present(source, destination)
                     _move_thumbnail_if_present(download, thumbnail_destination)
+                    _move_nfo_if_present(download, nfo_destination)
                 except BaseException:
                     # Keep the media and its accessories together if a later move fails.
+                    _rollback_sidecar(thumbnail_source, thumbnail_destination)
+                    _rollback_sidecar(nfo_source, nfo_destination)
                     if hls_assets_moved:
                         _rollback_hls_assets(source, destination)
                     if destination.exists() and not source.exists():
@@ -171,8 +181,10 @@ async def run_rename_file_worker(
                 # but before its database commit. Reconcile the sidecar in the same
                 # recovery pass so it remains beside the recovered media artifact.
                 thumbnail_destination = _planned_thumbnail_destination(download, destination)
+                nfo_destination = _planned_nfo_destination(download, destination)
                 _move_hls_assets_if_present(source, destination)
                 _move_thumbnail_if_present(download, thumbnail_destination)
+                _move_nfo_if_present(download, nfo_destination)
                 _record_artifact_location(download, destination)
                 record_media_download_history(
                     s,
@@ -274,6 +286,13 @@ def _planned_thumbnail_destination(
     return media_destination.with_suffix(suffix) if suffix else None
 
 
+def _planned_nfo_destination(
+    download: EpisodeMediaDownload,
+    media_destination: Path,
+) -> Path | None:
+    return media_destination.with_suffix(".nfo") if download.nfo_path else None
+
+
 def _move_thumbnail_if_present(
     download: EpisodeMediaDownload,
     destination: Path | None,
@@ -292,6 +311,34 @@ def _move_thumbnail_if_present(
         download.thumbnail_path = str(destination)
     else:
         download.thumbnail_path = None
+
+
+def _move_nfo_if_present(
+    download: EpisodeMediaDownload,
+    destination: Path | None,
+) -> None:
+    if not download.nfo_path or destination is None:
+        return
+
+    source = Path(download.nfo_path)
+    if source == destination:
+        return
+    if source.exists():
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(destination))
+        download.nfo_path = str(destination)
+    elif destination.exists():
+        download.nfo_path = str(destination)
+    else:
+        download.nfo_path = None
+
+
+def _rollback_sidecar(source: Path | None, destination: Path | None) -> None:
+    if source is None or destination is None or source == destination:
+        return
+    if destination.exists() and not source.exists():
+        source.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(destination), str(source))
 
 
 def _record_artifact_location(download: EpisodeMediaDownload, path: Path) -> None:

@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Optional
 
 from .errors import DownloadCancelled, DownloadError, FfmpegNotFoundError
@@ -177,6 +178,74 @@ def embed_thumbnail(
             )
             raise DownloadError(
                 f"ffmpeg thumbnail embedding failed (exit {result.returncode}): {_tail_lines(result.stdout)}"
+            )
+        os.replace(part_path, media_path)
+    except BaseException:
+        _remove_quietly(part_path)
+        raise
+
+
+def embed_metadata(
+        media_path: str,
+        metadata: Mapping[str, str],
+        *,
+        ffmpeg_path: str = "ffmpeg",
+        should_cancel: Optional[CancelCheck] = None,
+) -> None:
+    """Write container metadata without re-encoding any media streams."""
+    if not metadata:
+        return
+    if not ffmpeg_available(ffmpeg_path):
+        raise FfmpegNotFoundError(
+            f"ffmpeg binary '{ffmpeg_path}' not found on PATH; install ffmpeg or disable embedded metadata"
+        )
+
+    suffix = Path(media_path).suffix.lower()
+    muxer = {
+        ".mp4": "mp4",
+        ".m4a": "mp4",
+        ".m4v": "mp4",
+        ".mp3": "mp3",
+        ".mkv": "matroska",
+    }.get(suffix)
+    if muxer is None:
+        raise DownloadError(
+            f"Cannot embed metadata into '{suffix or 'extensionless'}' media; "
+            "use NFO metadata or an MP4, M4A, MP3, or MKV output"
+        )
+
+    part_path = media_path + ".metadata.part"
+    try:
+        command = [
+            ffmpeg_path, "-y",
+            "-i", media_path,
+            "-map", "0",
+            "-c", "copy",
+        ]
+        for key, value in metadata.items():
+            if value:
+                command += ["-metadata", f"{key}={value}"]
+        if muxer == "mp4":
+            command += ["-movflags", "+faststart+use_metadata_tags"]
+        command += ["-f", muxer, part_path]
+
+        result = (
+            _run_cancellable(command, should_cancel)
+            if should_cancel is not None
+            else subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+        )
+        if result.returncode != 0:
+            logger.error(
+                "ffmpeg metadata embedding failed (exit %s) for '%s':\n%s",
+                result.returncode, media_path, result.stdout,
+            )
+            raise DownloadError(
+                f"ffmpeg metadata embedding failed (exit {result.returncode}): {_tail_lines(result.stdout)}"
             )
         os.replace(part_path, media_path)
     except BaseException:

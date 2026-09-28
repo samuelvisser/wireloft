@@ -47,6 +47,7 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
 
     file_path: Mapped[str]
     thumbnail_path: Mapped[Optional[str]]
+    nfo_path: Mapped[Optional[str]]
     artifact_status: Mapped[str] = mapped_column(
         String(24),
         default=MediaDownloadArtifactStatus.ABSENT.value,

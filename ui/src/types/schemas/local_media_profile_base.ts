@@ -19,6 +19,8 @@ export const LocalMediaProfileSchemaRequest = z.object({
     name: z.string().min(1, 'Name is required'),
     downloadMode: LocalMediaProfileStorageModeSchema.default('system'),
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
+    embedMetadata: z.boolean().default(false),
+    downloadNfo: z.boolean().default(false),
 })
 
 export const LocalMediaProfileCreateBaseSchema = LocalMediaProfileSchemaRequest
@@ -52,6 +54,8 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     preferredFormat: z.string(),
     downloadMode: LocalMediaProfileStorageModeSchema.default('system'),
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
+    embedMetadata: z.boolean().default(false),
+    downloadNfo: z.boolean().default(false),
     appendMediaTypeToFilename: z.boolean().optional().default(false),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,

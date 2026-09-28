@@ -37,6 +37,7 @@ from task_manager.tasks.helpers.downloads.engine import (
     execute_download_plan,
     resolve_download_source,
 )
+from task_manager.tasks.helpers.downloads.media_metadata import build_episode_metadata
 from task_manager.tasks.helpers.downloads.thumbnails import select_thumbnail_url
 
 from ._helpers import refresh_episode_media_urls
@@ -110,13 +111,14 @@ async def run_download_episode(
         s.expire_all()
         download = s.get(MediaDownloadBase, media_download_id)
         if download is None:
-            remove_download_artifacts(execution.result.path, execution.thumbnail_path)
+            remove_download_artifacts(execution.result.path, execution.thumbnail_path, execution.nfo_path)
             raise DownloadCancelled("Media download was deleted while the worker was running")
         ensure_not_cancelled(progress)
 
         artifact_identity = inspect_artifact(execution.result.path)
         download.file_path = execution.result.path
         download.thumbnail_path = execution.thumbnail_path
+        download.nfo_path = execution.nfo_path
         download.artifact_stat_dev = artifact_identity.stat_dev
         download.artifact_stat_ino = artifact_identity.stat_ino
         download.artifact_size_bytes = artifact_identity.size_bytes
@@ -148,6 +150,7 @@ async def run_download_episode(
                 format_downloaded=execution.format_downloaded,
                 file_path=execution.result.path,
                 thumbnail_path=execution.thumbnail_path,
+                nfo_path=execution.nfo_path,
                 started_publish_status=attempt_publish_status,
                 downloaded_publish_status=downloaded_publish_status,
             ),
@@ -171,13 +174,14 @@ async def run_download_episode(
                 "format_downloaded": execution.format_downloaded,
                 "file_path": execution.result.path,
                 "thumbnail_path": execution.thumbnail_path,
+                "nfo_path": execution.nfo_path,
                 "is_redownload": is_redownload,
             },
         )
     except DownloadCancelled as exc:
         s.rollback()
         if execution is not None:
-            remove_download_artifacts(execution.result.path, execution.thumbnail_path)
+            remove_download_artifacts(execution.result.path, execution.thumbnail_path, execution.nfo_path)
         finished_at = datetime.now(timezone.utc)
         if record_media_download_operation_history_once(
             s,
@@ -199,7 +203,7 @@ async def run_download_episode(
     except Exception as exc:
         s.rollback()
         if execution is not None:
-            remove_download_artifacts(execution.result.path, execution.thumbnail_path)
+            remove_download_artifacts(execution.result.path, execution.thumbnail_path, execution.nfo_path)
         finished_at = datetime.now(timezone.utc)
         if record_media_download_history_if_exists(
             s,
@@ -337,8 +341,12 @@ def _attempt_download(
         extension=source.extension,
     )
 
-    # Rendering can lazily refresh the episode after the probe rollback. Release
-    # that transaction too before the potentially long media transfer.
+    metadata = build_episode_metadata(episode, episode.show)
+    embed_metadata_requested = bool(profile.embed_metadata)
+    download_nfo_requested = bool(profile.download_nfo)
+
+    # Rendering and metadata collection can lazily refresh ORM state after the
+    # probe rollback. Release that transaction too before the media transfer.
     s.rollback()
 
     plan = DownloadPlan(
@@ -349,6 +357,9 @@ def _attempt_download(
         ffmpeg_path=settings.ffmpeg_path,
         thumbnail_url=thumbnail_url,
         thumbnail_mode=thumbnail_mode,
+        metadata=metadata,
+        embed_metadata=embed_metadata_requested,
+        write_nfo=download_nfo_requested,
     )
 
     def persist_direct_destination(destination: str) -> None:

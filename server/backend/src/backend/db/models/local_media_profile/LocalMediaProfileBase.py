@@ -63,6 +63,18 @@ class LocalMediaProfileBase(Base):
         server_default="0",
         nullable=False,
     )
+    embed_metadata: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="0",
+        nullable=False,
+    )
+    download_nfo: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="0",
+        nullable=False,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
