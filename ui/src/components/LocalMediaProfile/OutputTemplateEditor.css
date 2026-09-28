@@ -186,9 +186,9 @@
 
 .template-source-label {
     display: grid;
-    flex: 0 1 280px;
+    flex: 0 1 400px;
     gap: 5px;
-    min-width: 190px;
+    min-width: 210px;
     color: var(--muted);
     font-size: 12px;
 }
