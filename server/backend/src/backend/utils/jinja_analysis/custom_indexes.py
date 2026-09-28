@@ -257,8 +257,8 @@ def analyze_custom_index_usage(
 
 
 def compare_custom_index_reachability(
-    saved_template: str,
-    draft_template: str,
+    prev_template: str,
+    new_template: str,
     *,
     environment: Environment,
     keys: Iterable[str],
@@ -272,30 +272,30 @@ def compare_custom_index_reachability(
     if not requested:
         return CustomIndexReachabilityComparison(CustomIndexReachabilityStatus.UNCHANGED)
 
-    saved = analyze_custom_index_usage(
-        saved_template,
+    prev = analyze_custom_index_usage(
+        prev_template,
         environment=environment,
         keys=requested,
     )
-    draft = analyze_custom_index_usage(
-        draft_template,
+    new = analyze_custom_index_usage(
+        new_template,
         environment=environment,
         keys=requested,
     )
-    if not saved.complete or not draft.complete:
+    if not prev.complete or not new.complete:
         return CustomIndexReachabilityComparison(
             CustomIndexReachabilityStatus.UNKNOWN,
-            reason=saved.reason or draft.reason,
+            reason=prev.reason or new.reason,
         )
 
     dependencies = frozenset(
         dependency
         for key in requested
-        for analysis in (saved, draft)
+        for analysis in (prev, new)
         for dependency in analysis.usage_for(key).dependencies
     )
     for key in requested:
-        if saved.usage_for(key).paths != draft.usage_for(key).paths:
+        if prev.usage_for(key).paths != new.usage_for(key).paths:
             return CustomIndexReachabilityComparison(
                 CustomIndexReachabilityStatus.CHANGED,
                 dependencies=dependencies,

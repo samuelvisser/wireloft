@@ -52,8 +52,8 @@ export function useLocalMediaProfilePreview(request: PreviewRequest | null): Loc
             }
 
             // Planning is intentionally separate from the full preview so the
-            // UI can announce the rare historical simulation while that longer
-            // request is still running. The full preview repeats this decision.
+            // UI can announce the historical simulation while that longer
+            // request is still running.
             if (request?.type === 'show' && request.outputTemplate.includes('custom_index')) {
                 void fetch(
                     `${(window as any).appConfig.API_URL}/local-media-profiles/preview/plan`,
