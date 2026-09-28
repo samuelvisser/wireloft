@@ -380,7 +380,11 @@
     }
 
     .template-test-values-toggle {
-        justify-self: stretch;
+        justify-self: end;
+    }
+
+    .template-preview-output code {
+        font-size: 11px;
     }
 
     .template-test-values {
