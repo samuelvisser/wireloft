@@ -558,3 +558,209 @@ def test_batch_file_rename_stages_source_destination_cycle(db_session):
     db_session.refresh(second_download)
     assert first_download.file_path == str(first_expected)
     assert second_download.file_path == str(second_expected)
+
+
+def test_preview_skips_custom_index_work_when_template_has_no_index(db_session, monkeypatch):
+    from backend.api.endpoints.local_media_profiles import output_template as preview_service
+    from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
+    from backend.utils.output_template import episode_output_template_values
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    profile = _make_profile(db_session, template="/downloads/{{ episode }}.ext")
+
+    monkeypatch.setattr(
+        preview_service,
+        "simulate_episode_indexes",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("simulation should be skipped")),
+    )
+    preview = preview_service.get_output_template_preview(
+        db_session,
+        LocalMediaProfileTemplatePreview(
+            type="show",
+            output_template="/downloads/renamed/{{ episode }}.ext",
+            preferred_format="format_1080p",
+            values=episode_output_template_values(episode),
+            source_id=f"episode:{episode.id}",
+            local_media_profile_id=profile.id,
+            indexing_values=[],
+        ),
+    )
+    assert preview.output_path.endswith("/renamed/first.mp4")
+
+
+def test_preview_skips_simulation_when_referenced_index_is_undefined(db_session, monkeypatch):
+    from backend.api.endpoints.local_media_profiles import output_template as preview_service
+    from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
+    from backend.utils.output_template import episode_output_template_values
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    profile = _make_profile(db_session, template="/downloads/{{ episode }}.ext")
+
+    monkeypatch.setattr(
+        preview_service,
+        "simulate_episode_indexes",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("simulation should be skipped")),
+    )
+    preview = preview_service.get_output_template_preview(
+        db_session,
+        LocalMediaProfileTemplatePreview(
+            type="show",
+            output_template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext",
+            preferred_format="format_1080p",
+            values=episode_output_template_values(episode),
+            source_id=f"episode:{episode.id}",
+            local_media_profile_id=profile.id,
+            indexing_values=[],
+        ),
+    )
+    assert preview.output_path.endswith("/-first.mp4")
+    assert preview.missing_indexing_values == ["extras"]
+
+
+def test_preview_reuses_saved_assignment_when_index_reachability_is_unchanged(db_session, monkeypatch):
+    from backend.api.endpoints.local_media_profiles import output_template as preview_service
+    from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
+    from backend.services.custom_indexes import reconcile_show_profile_custom_indexes
+    from backend.utils.output_template import episode_output_template_values
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    first = _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    second = _make_episode(db_session, show, season, index=2, slug="second", identifier="ep.2")
+    saved = (
+        "{% if episode == 'second' %}{% set n = 'extras' | custom_index %}"
+        "{% else %}{% set n = '' %}{% endif %}"
+        "/downloads/{{ n }}-{{ episode }}.ext"
+    )
+    profile = _make_profile(db_session, template=saved)
+    _define(profile, ("extras", "Extras"))
+    _request(db_session, show, profile)
+    reconcile_show_profile_custom_indexes(db_session, show_id=show.id, local_media_profile_id=profile.id)
+
+    monkeypatch.setattr(
+        preview_service,
+        "simulate_episode_indexes",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("saved assignment should be reused")),
+    )
+    draft = saved.replace("/downloads/", "/downloads/renamed/")
+    preview = preview_service.get_output_template_preview(
+        db_session,
+        LocalMediaProfileTemplatePreview(
+            type="show",
+            output_template=draft,
+            preferred_format="format_1080p",
+            values=episode_output_template_values(second),
+            source_id=f"episode:{second.id}",
+            local_media_profile_id=profile.id,
+            indexing_values=[{"key": "extras", "name": "Extras"}],
+        ),
+    )
+    assert preview.output_path.endswith("/renamed/1-second.mp4")
+    assert first.id != second.id
+
+
+def test_preview_simulates_when_index_reachability_changes(db_session):
+    from backend.api.endpoints.local_media_profiles.output_template import get_output_template_preview
+    from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
+    from backend.services.custom_indexes import reconcile_show_profile_custom_indexes
+    from backend.utils.output_template import episode_output_template_values
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    second = _make_episode(db_session, show, season, index=2, slug="second", identifier="ep.2")
+    saved = (
+        "{% if episode == 'second' %}{% set n = 'extras' | custom_index %}"
+        "{% else %}{% set n = '' %}{% endif %}"
+        "/downloads/{{ n }}-{{ episode }}.ext"
+    )
+    profile = _make_profile(db_session, template=saved)
+    _define(profile, ("extras", "Extras"))
+    _request(db_session, show, profile)
+    reconcile_show_profile_custom_indexes(db_session, show_id=show.id, local_media_profile_id=profile.id)
+
+    draft = (
+        "{% if episode != 'never' %}{% set n = 'extras' | custom_index %}"
+        "{% else %}{% set n = '' %}{% endif %}"
+        "/downloads/{{ n }}-{{ episode }}.ext"
+    )
+    preview = get_output_template_preview(
+        db_session,
+        LocalMediaProfileTemplatePreview(
+            type="show",
+            output_template=draft,
+            preferred_format="format_1080p",
+            values=episode_output_template_values(second),
+            source_id=f"episode:{second.id}",
+            local_media_profile_id=profile.id,
+            indexing_values=[{"key": "extras", "name": "Extras"}],
+        ),
+    )
+    assert preview.output_path.endswith("/2-second.mp4")
+
+
+def test_preview_simulates_when_index_dependency_test_value_changes(db_session):
+    from backend.api.endpoints.local_media_profiles.output_template import get_output_template_preview
+    from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
+    from backend.services.custom_indexes import reconcile_show_profile_custom_indexes
+    from backend.utils.output_template import episode_output_template_values
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(db_session, show, season, index=1, slug="first", identifier="ep.1")
+    second = _make_episode(db_session, show, season, index=2, slug="second", identifier="ep.2")
+    template = (
+        "{% if episode == 'second' %}{% set n = 'extras' | custom_index %}"
+        "{% else %}{% set n = '' %}{% endif %}"
+        "/downloads/{{ n }}-{{ episode }}.ext"
+    )
+    profile = _make_profile(db_session, template=template)
+    _define(profile, ("extras", "Extras"))
+    _request(db_session, show, profile)
+    reconcile_show_profile_custom_indexes(db_session, show_id=show.id, local_media_profile_id=profile.id)
+
+    values = episode_output_template_values(second)
+    values["episode"] = "first"
+    preview = get_output_template_preview(
+        db_session,
+        LocalMediaProfileTemplatePreview(
+            type="show",
+            output_template=template,
+            preferred_format="format_1080p",
+            values=values,
+            source_id=f"episode:{second.id}",
+            local_media_profile_id=profile.id,
+            indexing_values=[{"key": "extras", "name": "Extras"}],
+        ),
+    )
+    assert preview.output_path.endswith("/-first.mp4")
+
+
+def test_simulation_compiles_the_output_template_once(db_session, monkeypatch):
+    from backend.services import custom_indexes
+    from backend.utils.output_template import prepare_output_template as real_prepare
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episodes = [
+        _make_episode(db_session, show, season, index=index, slug=f"episode-{index}", identifier=f"ep.{index}")
+        for index in range(1, 5)
+    ]
+    calls = 0
+
+    def counted_prepare(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real_prepare(*args, **kwargs)
+
+    monkeypatch.setattr(custom_indexes, "prepare_output_template", counted_prepare)
+    custom_indexes.simulate_episode_indexes(
+        episodes,
+        template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext",
+        definitions=frozenset({"extras"}),
+    )
+    assert calls == 1

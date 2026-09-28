@@ -51,14 +51,17 @@ def create_output_template_environment(
     # also keeps helpers such as range() unavailable to user templates.
     environment.globals.clear()
     @pass_context
-    def custom_index(_context, value: object) -> object:
+    def custom_index(context, value: object) -> object:
         # custom_index is deliberately context-dependent. Marking it this way
         # prevents Jinja from constant-folding literal filter calls while
         # compiling the template, which would otherwise evaluate dead branches
-        # and allocate indexes that the rendered path never reaches.
-        if custom_index_resolver is None:
+        # and allocate indexes that the rendered path never reaches. Prepared
+        # templates may provide a per-render resolver through the private
+        # context key so one compiled Jinja template can be reused safely.
+        resolver = context.get("__wireloft_custom_index_resolver") or custom_index_resolver
+        if resolver is None:
             return ""
-        return custom_index_resolver(str(value))
+        return resolver(str(value))
 
     environment.filters.update({
         "regex_replace": regex_replace,

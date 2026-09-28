@@ -8,17 +8,21 @@ from sqlalchemy.orm import Session
 
 from backend.api.models.local_media_profile_preview import (
     LocalMediaProfileOutputPreview,
+    LocalMediaProfilePreviewPlan,
     LocalMediaProfilePreviewRequest,
     LocalMediaProfilePreviewResult,
     LocalMediaProfileShowPreview,
 )
 from backend.app import db_session
-from backend.db.models import Episode, Movie, MovieExtra
+from backend.db.models import Episode, Movie, MovieExtra, ShowLocalMediaProfile
+from backend.services.custom_index_preview import plan_custom_index_preview
 from backend.services.show_assets import get_show_asset_root_preview
+from backend.utils.custom_index import indexing_value_definition_keys
 from backend.utils.output_template import (
     _finish_output_path,
     episode_output_template_values,
     movie_output_template_values,
+    output_template_custom_index_keys,
     output_template_fields,
 )
 from config import get_settings
@@ -52,6 +56,66 @@ def _example_values(session: Session, body: LocalMediaProfilePreviewRequest) -> 
         else:
             original = movie_output_template_values(source)
     return {**original, **body.values}
+
+
+
+
+def _selected_episode(session: Session, body: LocalMediaProfilePreviewRequest) -> Episode | None:
+    source_id = body.source_id or ""
+    if body.type != "show" or not source_id.startswith("episode:"):
+        return None
+    identifier = source_id.split(":", 1)[1]
+    if not identifier.isascii() or not identifier.isdigit():
+        return None
+    return session.get(Episode, int(identifier))
+
+
+def get_local_media_profile_preview_plan(
+    session: Session,
+    body: LocalMediaProfilePreviewRequest,
+) -> LocalMediaProfilePreviewPlan:
+    """Return only the cheap planning decision used to expose slow simulation."""
+    if body.type != "show":
+        return LocalMediaProfilePreviewPlan(simulates_custom_indexes=False)
+
+    referenced = output_template_custom_index_keys(body.output_template)
+    if not referenced:
+        return LocalMediaProfilePreviewPlan(simulates_custom_indexes=False)
+
+    profile = (
+        session.get(ShowLocalMediaProfile, body.local_media_profile_id)
+        if body.indexing_values is None and body.local_media_profile_id is not None
+        else None
+    )
+    definitions = (
+        frozenset(item.key for item in body.indexing_values)
+        if body.indexing_values is not None
+        else indexing_value_definition_keys(profile) if profile is not None else frozenset()
+    )
+    if not referenced & definitions:
+        return LocalMediaProfilePreviewPlan(simulates_custom_indexes=False)
+
+    episode = _selected_episode(session, body)
+    try:
+        values = _example_values(session, body)
+        plan = plan_custom_index_preview(
+            session,
+            draft_template=body.output_template,
+            draft_definition_keys=definitions,
+            episode=episode,
+            local_media_profile_id=body.local_media_profile_id,
+            draft_values=values,
+            referenced_keys=referenced,
+        )
+    except (TemplateError, ValueError, TypeError, ArithmeticError) as exc:
+        return LocalMediaProfilePreviewPlan(
+            simulates_custom_indexes=False,
+            reason=str(exc),
+        )
+    return LocalMediaProfilePreviewPlan(
+        simulates_custom_indexes=plan.simulates,
+        reason=plan.reason,
+    )
 
 
 def get_local_media_profile_preview(
@@ -109,3 +173,11 @@ def local_media_profile_preview(body: LocalMediaProfilePreviewRequest):
     with db_session() as session:
         with session.no_autoflush:
             return get_local_media_profile_preview(session, body)
+
+
+@router.post("/preview/plan", response_model=LocalMediaProfilePreviewPlan)
+def local_media_profile_preview_plan(body: LocalMediaProfilePreviewRequest):
+    """Plan a preview without running historical Custom Index simulation."""
+    with db_session() as session:
+        with session.no_autoflush:
+            return get_local_media_profile_preview_plan(session, body)

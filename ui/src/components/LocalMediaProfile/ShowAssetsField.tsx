@@ -18,13 +18,15 @@ export default function ShowAssetsField({form, preview}: {
     const fieldError = errors.downloadShowAssets
     const showRootSummary = preview.error
         ? preview.error
-        : root?.path
-            ? root.path
-            : root?.reason
-                ? root.reason
-                : preview.loading
-                    ? 'Resolving show root...'
-                    : 'Select an episode and enter an output template to preview the shared show root.'
+        : preview.simulatingCustomIndexes
+            ? 'Calculating simulated Custom Index… This preview needs to recalculate index assignments and may take longer than normal.'
+            : root?.path
+                ? root.path
+                : root?.reason
+                    ? root.reason
+                    : preview.loading
+                        ? 'Resolving show root...'
+                        : 'Select an episode and enter an output template to preview the shared show root.'
 
 
     return (

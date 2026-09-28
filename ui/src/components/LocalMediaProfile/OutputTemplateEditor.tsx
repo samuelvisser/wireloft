@@ -808,6 +808,12 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
 
                     <div className={`template-preview-output${previewError ? ' has-error' : ''}`} aria-live="polite">
                         <span className="template-preview-output-label">Path</span>
+                        {preview.simulatingCustomIndexes && (
+                            <span className="template-preview-status">
+                                <strong>Calculating simulated Custom Index…</strong>{' '}
+                                This preview needs to recalculate index assignments and may take longer than normal.
+                            </span>
+                        )}
                         {!selectedSource && sourceQuery.isLoading
                             ? <code>Loading example source</code>
                             : previewError

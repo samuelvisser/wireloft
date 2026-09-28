@@ -17,3 +17,10 @@ export const LocalMediaProfilePreviewSchema = z.object({
     }).nullable(),
 })
 export type LocalMediaProfilePreview = z.infer<typeof LocalMediaProfilePreviewSchema>
+
+
+export const LocalMediaProfilePreviewPlanSchema = z.object({
+    simulatesCustomIndexes: z.boolean(),
+    reason: z.string().nullable(),
+})
+export type LocalMediaProfilePreviewPlan = z.infer<typeof LocalMediaProfilePreviewPlanSchema>

@@ -396,6 +396,76 @@ def movie_output_template_values(
     return values
 
 
+class PreparedOutputTemplate:
+    """Validated and compiled output template reusable across many renders."""
+
+    def __init__(
+        self,
+        output_template: str,
+        *,
+        allowed_fields: frozenset[str],
+        allowed_metadata_scopes: frozenset[CustomMetadataScope] = frozenset(),
+    ) -> None:
+        self.allowed_fields = allowed_fields
+        normalized = validate_output_template_fields(
+            output_template,
+            allowed_fields=allowed_fields,
+            allowed_metadata_scopes=allowed_metadata_scopes,
+        )
+        referenced_fields = output_template_fields(normalized)
+        self.dynamic_fields = frozenset(
+            field
+            for field in referenced_fields
+            if is_allowed_custom_metadata_template_variable(
+                field,
+                scopes=allowed_metadata_scopes,
+            )
+        )
+        environment = create_output_template_environment()
+        environment.finalize = _sanitize_emitted_output_value
+        self.template = environment.from_string(normalized)
+
+    def render(self, values: dict[str, object], *, custom_index_resolver=None) -> str:
+        context = {
+            field: values.get(field, "")
+            for field in self.allowed_fields | self.dynamic_fields
+        }
+        if custom_index_resolver is not None:
+            context["__wireloft_custom_index_resolver"] = custom_index_resolver
+        try:
+            rendered = self.template.render(context)
+        except TypeError as exc:
+            raise ValueError(str(exc)) from exc
+        except (SecurityError, UndefinedError, TemplateError) as exc:
+            raise ValueError(f"Could not render Jinja template: {exc}") from exc
+
+        if "\n" in rendered or "\r" in rendered:
+            raise ValueError("Rendered output path must be a single line")
+        if len(rendered) > _MAX_RENDERED_PATH_LENGTH:
+            raise ValueError("Rendered output path is too long")
+        if not rendered.startswith(_DOWNLOADS_PREFIX):
+            raise ValueError(
+                "Rendered output path must start with '/downloads/'. "
+                f"Actual output: {rendered!r}"
+            )
+        if not rendered.endswith(".ext"):
+            raise ValueError("Rendered output path must end with '.ext'")
+        return rendered
+
+
+def prepare_output_template(
+    output_template: str,
+    *,
+    allowed_fields: frozenset[str],
+    allowed_metadata_scopes: frozenset[CustomMetadataScope] = frozenset(),
+) -> PreparedOutputTemplate:
+    return PreparedOutputTemplate(
+        output_template,
+        allowed_fields=allowed_fields,
+        allowed_metadata_scopes=allowed_metadata_scopes,
+    )
+
+
 def render_output_template(
     output_template: str,
     values: dict[str, object],
@@ -405,45 +475,11 @@ def render_output_template(
     custom_index_resolver=None,
 ) -> str:
     """Render a path template with raw semantic values in the Jinja context."""
-    normalized = validate_output_template_fields(
+    return prepare_output_template(
         output_template,
         allowed_fields=allowed_fields,
         allowed_metadata_scopes=allowed_metadata_scopes,
-    )
-    referenced_fields = output_template_fields(normalized)
-    dynamic_fields = frozenset(
-        field
-        for field in referenced_fields
-        if is_allowed_custom_metadata_template_variable(
-            field,
-            scopes=allowed_metadata_scopes,
-        )
-    )
-    context = {
-        field: values.get(field, "")
-        for field in allowed_fields | dynamic_fields
-    }
-    environment = create_output_template_environment(custom_index_resolver=custom_index_resolver)
-    environment.finalize = _sanitize_emitted_output_value
-    try:
-        rendered = environment.from_string(normalized).render(context)
-    except TypeError as exc:
-        raise ValueError(str(exc)) from exc
-    except (SecurityError, UndefinedError, TemplateError) as exc:
-        raise ValueError(f"Could not render Jinja template: {exc}") from exc
-
-    if "\n" in rendered or "\r" in rendered:
-        raise ValueError("Rendered output path must be a single line")
-    if len(rendered) > _MAX_RENDERED_PATH_LENGTH:
-        raise ValueError("Rendered output path is too long")
-    if not rendered.startswith(_DOWNLOADS_PREFIX):
-        raise ValueError(
-            "Rendered output path must start with '/downloads/'. "
-            f"Actual output: {rendered!r}"
-        )
-    if not rendered.endswith(".ext"):
-        raise ValueError("Rendered output path must end with '.ext'")
-    return rendered
+    ).render(values, custom_index_resolver=custom_index_resolver)
 
 
 def resolve_episode_output_path_with_index_values(

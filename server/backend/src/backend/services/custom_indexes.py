@@ -23,7 +23,7 @@ from backend.utils.output_template import (
     SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
     episode_output_template_values,
     output_template_custom_index_keys,
-    render_output_template,
+    prepare_output_template,
     resolve_episode_output_path_with_index_values,
 )
 from task_manager.scheduler.operations import (
@@ -152,6 +152,11 @@ def simulate_episode_indexes(
     """Evaluate Jinja branches in canonical order without persisting anything."""
     counters: dict[str, int] = defaultdict(int)
     desired: dict[int, dict[str, int]] = {}
+    prepared = prepare_output_template(
+        template,
+        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+    )
     for episode in sorted(episodes, key=lambda item: (item.index, item.id)):
         selected: dict[str, int] = {}
 
@@ -163,10 +168,8 @@ def simulate_episode_indexes(
                 selected[key] = counters[key]
             return selected[key]
 
-        render_output_template(
-            template, (values_overrides or {}).get(episode.id) or episode_output_template_values(episode),
-            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-            allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        prepared.render(
+            (values_overrides or {}).get(episode.id) or episode_output_template_values(episode),
             custom_index_resolver=resolve,
         )
         desired[episode.id] = selected

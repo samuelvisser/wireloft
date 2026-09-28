@@ -196,3 +196,61 @@ def test_constant_none_inside_concat_uses_jinja_stringification(environment):
 def test_large_constant_operations_are_bounded_before_evaluation(environment):
     for value in ("'x' * 1000000000", '10 ** 1000000000'):
         assert not analyze_template('/downloads/{{ '+value+' }}.ext', environment=environment).complete
+
+
+def test_custom_index_reachability_ignores_unrelated_output_changes(environment):
+    from backend.utils.jinja_analysis import (
+        CustomIndexReachabilityStatus,
+        compare_custom_index_reachability,
+    )
+
+    saved = (
+        "{% if kind == 'aux' %}{% set n = 'extras' | custom_index %}"
+        "{% else %}{% set n = '' %}{% endif %}"
+        "/downloads/{{ n }}-{{ title }}.ext"
+    )
+    draft = saved.replace("/downloads/", "/downloads/renamed/")
+    result = compare_custom_index_reachability(
+        saved,
+        draft,
+        environment=environment,
+        keys={"extras"},
+    )
+    assert result.status == CustomIndexReachabilityStatus.UNCHANGED
+    assert result.dependencies == {"kind"}
+
+
+def test_custom_index_reachability_detects_assignment_condition_change(environment):
+    from backend.utils.jinja_analysis import (
+        CustomIndexReachabilityStatus,
+        compare_custom_index_reachability,
+    )
+
+    saved = (
+        "{% if kind == 'aux' %}{% set n = 'extras' | custom_index %}"
+        "{% else %}{% set n = '' %}{% endif %}/downloads/{{ n }}.ext"
+    )
+    draft = saved.replace("kind == 'aux'", "kind != 'ep'")
+    result = compare_custom_index_reachability(
+        saved,
+        draft,
+        environment=environment,
+        keys={"extras"},
+    )
+    assert result.status == CustomIndexReachabilityStatus.CHANGED
+
+
+def test_custom_index_reachability_is_unknown_for_short_circuit_effects(environment):
+    from backend.utils.jinja_analysis import (
+        CustomIndexReachabilityStatus,
+        compare_custom_index_reachability,
+    )
+
+    template = "/downloads/{{ flag and ('extras' | custom_index) }}.ext"
+    result = compare_custom_index_reachability(
+        template,
+        template,
+        environment=environment,
+        keys={"extras"},
+    )
+    assert result.status == CustomIndexReachabilityStatus.UNKNOWN

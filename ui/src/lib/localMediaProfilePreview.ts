@@ -1,6 +1,7 @@
 import {useEffect, useState} from 'react'
 
 import {
+    LocalMediaProfilePreviewPlanSchema,
     LocalMediaProfilePreviewSchema,
     type LocalMediaProfilePreview,
 } from '../types/schemas/local_media_profile_preview'
@@ -18,6 +19,7 @@ type PreviewRequest = {
 export type LocalMediaProfilePreviewState = {
     result: LocalMediaProfilePreview | null
     loading: boolean
+    simulatingCustomIndexes: boolean
     error: string
 }
 
@@ -27,22 +29,54 @@ type Snapshot = {
     error: string
 }
 
+type PlanSnapshot = {
+    request: string
+    simulatesCustomIndexes: boolean
+}
+
 export function useLocalMediaProfilePreview(request: PreviewRequest | null): LocalMediaProfilePreviewState {
     const serialized = request ? JSON.stringify(request) : null
     const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
+    const [planSnapshot, setPlanSnapshot] = useState<PlanSnapshot | null>(null)
 
     useEffect(() => {
         if (serialized === null) return
         const controller = new AbortController()
         const timer = window.setTimeout(async () => {
+            const requestOptions = {
+                method: 'POST',
+                credentials: 'include' as RequestCredentials,
+                headers: {'Content-Type': 'application/json'},
+                signal: controller.signal,
+                body: serialized,
+            }
+
+            // Planning is intentionally separate from the full preview so the
+            // UI can announce the rare historical simulation while that longer
+            // request is still running. The full preview repeats this decision.
+            if (request?.type === 'show' && request.outputTemplate.includes('custom_index')) {
+                void fetch(
+                    `${(window as any).appConfig.API_URL}/local-media-profiles/preview/plan`,
+                    requestOptions,
+                ).then(async (response) => {
+                    if (!response.ok) return
+                    const plan = LocalMediaProfilePreviewPlanSchema.parse(await response.json())
+                    if (!controller.signal.aborted) {
+                        setPlanSnapshot({
+                            request: serialized,
+                            simulatesCustomIndexes: plan.simulatesCustomIndexes,
+                        })
+                    }
+                }).catch(() => undefined)
+            } else {
+                setPlanSnapshot({request: serialized, simulatesCustomIndexes: false})
+            }
+
             try {
-                const response = await fetch(`${(window as any).appConfig.API_URL}/local-media-profiles/preview`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: {'Content-Type': 'application/json'},
-                    signal: controller.signal,
-                    body: serialized,
-                })
+                const response = await fetch(
+                    `${(window as any).appConfig.API_URL}/local-media-profiles/preview`,
+                    requestOptions,
+                )
                 const payload = await response.json()
                 if (controller.signal.aborted) return
                 if (!response.ok) {
@@ -72,9 +106,14 @@ export function useLocalMediaProfilePreview(request: PreviewRequest | null): Loc
     // and aborted/out-of-order requests can never overwrite the latest one.
     const active = serialized !== null
     const current = active && snapshot?.request === serialized
+    const loading = active && !current
     return {
         result: active ? snapshot?.result ?? null : null,
         error: current ? snapshot.error : '',
-        loading: active && !current,
+        loading,
+        simulatingCustomIndexes:
+            loading
+            && planSnapshot?.request === serialized
+            && planSnapshot.simulatesCustomIndexes,
     }
 }

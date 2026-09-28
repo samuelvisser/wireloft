@@ -17,6 +17,11 @@ class LocalMediaProfilePreviewRequest(LocalMediaProfileTemplatePreview):
     local_media_profile_id: int | None = Field(default=None, gt=0)
 
 
+class LocalMediaProfilePreviewPlan(ResponseBase):
+    simulates_custom_indexes: bool
+    reason: str | None = None
+
+
 class LocalMediaProfileOutputPreview(LocalMediaProfileTemplatePreviewResult):
     output_path: str | None = None
     used_variables: list[str] = Field(default_factory=list)
