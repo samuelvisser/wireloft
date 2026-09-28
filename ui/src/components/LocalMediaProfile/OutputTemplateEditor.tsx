@@ -302,13 +302,13 @@ function indentAfterNewline(update: ViewUpdate) {
 }
 
 function TemplateCodeEditor({
-    value,
-    placeholder,
-    extensions,
-    invalid,
-    onChange,
-    onBlur,
-}: TemplateCodeEditorProps) {
+                                value,
+                                placeholder,
+                                extensions,
+                                invalid,
+                                onChange,
+                                onBlur,
+                            }: TemplateCodeEditorProps) {
     const canonicalValue = value ?? ''
     const [editorValue, setEditorValue] = useState(() => (
         renderEditorOutputTemplate(parseOutputTemplate(canonicalValue, 'compact')).value
@@ -355,7 +355,7 @@ function TemplateCodeEditor({
     )
 }
 
-function PreviewPathPart({part}: {part: string}) {
+function PreviewPathPart({part}: { part: string }) {
     const leadingSpaceCount = part.match(/^ +/)?.[0].length ?? 0
     return (
         <>
@@ -372,7 +372,7 @@ function PreviewPathPart({part}: {part: string}) {
     )
 }
 
-function PreviewPath({path}: {path: string}) {
+function PreviewPath({path}: { path: string }) {
     const absolute = path.startsWith('/')
     const parts = path.split('/').filter(Boolean)
     if (!absolute || parts.length < 2) return <code>{path}</code>
@@ -691,231 +691,235 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
 
     return (
         <>
-        {renderPreviewFields?.(preview)}
-        <div className="form-row output-template-field">
-            <section className="template-workbench" aria-labelledby="template-editor-heading">
-                <div className="template-editor-heading">
-                    <div>
-                        <label id="template-editor-heading" htmlFor="mp-path">Output path template</label>
-                        <p>Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>
+            {renderPreviewFields?.(preview)}
+            <div className="form-row output-template-field">
+                <section className="template-workbench" aria-labelledby="template-editor-heading">
+                    <div className="template-editor-heading">
+                        <div>
+                            <label id="template-editor-heading" htmlFor="mp-path">Output path template</label>
+                            <p>Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>
+                        </div>
+                        <span className="template-language-badge">Jinja</span>
                     </div>
-                    <span className="template-language-badge">Jinja</span>
-                </div>
-                <Controller
-                    control={control}
-                    name="outputTemplate"
-                    render={({field}) => (
-                        <TemplateCodeEditor
-                            value={field.value ?? ''}
-                            placeholder={placeholder}
-                            extensions={editorExtensions}
-                            invalid={!!errors.outputTemplate}
-                            onChange={(value) => {
-                                field.onChange(value)
-                                form.clearErrors('outputTemplate')
-                            }}
-                            onBlur={field.onBlur}
-                        />
+                    <Controller
+                        control={control}
+                        name="outputTemplate"
+                        render={({field}) => (
+                            <TemplateCodeEditor
+                                value={field.value ?? ''}
+                                placeholder={placeholder}
+                                extensions={editorExtensions}
+                                invalid={!!errors.outputTemplate}
+                                onChange={(value) => {
+                                    field.onChange(value)
+                                    form.clearErrors('outputTemplate')
+                                }}
+                                onBlur={field.onBlur}
+                            />
+                        )}
+                    />
+                    {errors.outputTemplate && (
+                        <div id="mp-path-error" className="error" role="alert" aria-live="polite">
+                            {String(errors.outputTemplate.message)}
+                        </div>
                     )}
-                />
-                {errors.outputTemplate && (
-                    <div id="mp-path-error" className="error" role="alert" aria-live="polite">
-                        {String(errors.outputTemplate.message)}
-                    </div>
-                )}
-                {variableQuery.isError && (
-                    <div className="error" role="alert">
-                        Custom metadata fields could not be loaded. Try refreshing the page.
-                    </div>
-                )}
-                {missingMetadataVariables.length > 0 && (
-                    <div className="template-metadata-warning" role="status">
-                        {missingMetadataVariables.length === 1 ? 'Custom metadata field ' : 'Custom metadata fields '}
-                        {missingMetadataVariables.map((name, index) => (
-                            <span key={name}>
+                    {variableQuery.isError && (
+                        <div className="error" role="alert">
+                            Custom metadata fields could not be loaded. Try refreshing the page.
+                        </div>
+                    )}
+                    {missingMetadataVariables.length > 0 && (
+                        <div className="template-metadata-warning" role="status">
+                            {missingMetadataVariables.length === 1 ? 'Custom metadata field ' : 'Custom metadata fields '}
+                            {missingMetadataVariables.map((name, index) => (
+                                <span key={name}>
                                 {index > 0 ? ', ' : ''}<code>{`{{\u00a0${name}\u00a0}}`}</code>
                             </span>
-                        ))}
-                        {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
-                    </div>
-                )}
-                {missingIndexingValueNames.length > 0 && (
-                    <div className="template-metadata-warning" role="status">
-                        {missingIndexingValueNames.length === 1 ? 'Indexing Value ' : 'Indexing Values '}
-                        {missingIndexingValueNames.map((name, index) => (
-                            <span key={name}>
-                                {index > 0 ? ', ' : ''}<code>{name}</code>
-                            </span>
-                        ))}
-                        {missingIndexingValueNames.length === 1 ? ' is' : ' are'} not defined by this Local Media Profile and will render as empty.
-                    </div>
-                )}
-                {provisionalIndexingValueNames.length > 0 && (
-                    <div className="template-preview-status" role="status">
-                        {provisionalIndexingValueNames.length === 1 ? 'Indexing Value ' : 'Indexing Values '}
-                        {provisionalIndexingValueNames.map((name, index) => (
-                            <span key={name}>
-                                {index > 0 ? ', ' : ''}<code>{name}</code>
-                            </span>
-                        ))}
-                        {provisionalIndexingValueNames.length === 1 ? ' is' : ' are'} simulated from the current draft. Previewing does not save an assignment.
-                    </div>
-                )}
-                {pathHasLeadingSpace && (
-                    <div className="template-metadata-warning" role="status">
-                        One or more path parts begins with a space. This is usually not intentional.
-                    </div>
-                )}
-
-                <div className="template-workbench-divider"/>
-                <div className="template-preview-area">
-                    <div className="template-playground-heading">
-                        <div>
-                            <h3 id="template-preview-heading">Example output</h3>
-                            <p>Try different values here. Your profile is not changed.</p>
+                            ))}
+                            {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
                         </div>
-                        <label className="template-source-label" htmlFor="template-example-source">
-                            <span>Example source</span>
-                            <TemplateSourceSelect
-                                mode={mode}
-                                sources={sources}
-                                selectedSource={selectedSource}
-                                isLoading={
-                                    sourceQuery.isLoading
-                                    || sourceQuery.isFetchingNextPage
-                                    || sourceQuery.isFetchingPreviousPage
-                                    || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)
-                                }
-                                hasMore={sourceQuery.hasNextPage ?? false}
-                                hasPrevious={sourceQuery.hasPreviousPage ?? false}
-                                onChange={chooseSource}
-                                onSearchChange={setSourceSearch}
-                                onLoadMore={() => void sourceQuery.fetchNextPage()}
-                                onLoadPrevious={() => void sourceQuery.fetchPreviousPage()}
-                            />
-                        </label>
-                    </div>
+                    )}
+                    {missingIndexingValueNames.length > 0 && (
+                        <div className="template-metadata-warning" role="status">
+                            {missingIndexingValueNames.length === 1 ? 'Indexing Value ' : 'Indexing Values '}
+                            {missingIndexingValueNames.map((name, index) => (
+                                <span key={name}>
+                                {index > 0 ? ', ' : ''}<code>{name}</code>
+                            </span>
+                            ))}
+                            {missingIndexingValueNames.length === 1 ? ' is' : ' are'} not defined by this Local Media Profile and will render as
+                            empty.
+                        </div>
+                    )}
+                    {provisionalIndexingValueNames.length > 0 && (
+                        <div className="template-preview-status" role="status">
+                            {provisionalIndexingValueNames.length === 1 ? 'Indexing Value ' : 'Indexing Values '}
+                            {provisionalIndexingValueNames.map((name, index) => (
+                                <span key={name}>
+                                {index > 0 ? ', ' : ''}<code>{name}</code>
+                            </span>
+                            ))}
+                            {provisionalIndexingValueNames.length === 1 ? ' is' : ' are'} simulated from the current draft. Previewing does not save
+                            an assignment.
+                        </div>
+                    )}
+                    {pathHasLeadingSpace && (
+                        <div className="template-metadata-warning" role="status">
+                            One or more path parts begins with a space. This is usually not intentional.
+                        </div>
+                    )}
 
-                    {(sourceQuery.isLoading || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)) && (
-                        <p className="template-preview-status">Loading an example…</p>
-                    )}
-                    {sourceQuery.isError && (
-                        <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
-                    )}
-                    {selectedSource?.fallback && (
-                        <p className="template-preview-status">No {mode === 'movie' ? 'movies' : 'episodes'} found yet, so example values are being used.</p>
-                    )}
+                    <div className="template-workbench-divider"/>
+                    <div className="template-preview-area">
+                        <div className="template-playground-heading">
+                            <div>
+                                <h3 id="template-preview-heading">Example output</h3>
+                                <p>Try different values here. Your profile is not changed.</p>
+                            </div>
+                            <label className="template-source-label" htmlFor="template-example-source">
+                                <span>Example source</span>
+                                <TemplateSourceSelect
+                                    mode={mode}
+                                    sources={sources}
+                                    selectedSource={selectedSource}
+                                    isLoading={
+                                        sourceQuery.isLoading
+                                        || sourceQuery.isFetchingNextPage
+                                        || sourceQuery.isFetchingPreviousPage
+                                        || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)
+                                    }
+                                    hasMore={sourceQuery.hasNextPage ?? false}
+                                    hasPrevious={sourceQuery.hasPreviousPage ?? false}
+                                    onChange={chooseSource}
+                                    onSearchChange={setSourceSearch}
+                                    onLoadMore={() => void sourceQuery.fetchNextPage()}
+                                    onLoadPrevious={() => void sourceQuery.fetchPreviousPage()}
+                                />
+                            </label>
+                        </div>
 
-                    <div className={`template-preview-output${previewError ? ' has-error' : ''}`} aria-live="polite">
-                        <span className="template-preview-output-label">Path</span>
+                        {(sourceQuery.isLoading || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)) && (
+                            <p className="template-preview-status">Loading an example…</p>
+                        )}
                         {preview.simulatingCustomIndexes && (
                             <span className="template-preview-status">
                                 <strong>Calculating simulated Custom Index…</strong>{' '}
                                 This preview needs to recalculate index assignments and may take longer than normal.
                             </span>
                         )}
-                        {!selectedSource && sourceQuery.isLoading
-                            ? <code>Loading example source</code>
-                            : previewError
-                                ? <span className="error">{previewError}</span>
-                                : previewPath
-                                    ? <PreviewPath path={previewPath}/>
-                                    : <code>{previewLoading ? 'Rendering…' : 'Add a variable to preview this path.'}</code>
-                        }
-                    </div>
-
-                    <div className="template-test-values">
-                        {!testValuesExpanded && (
-                            <>
-                                <span className="template-preview-live-note">Preview updates as you type</span>
-                                <button
-                                    type="button"
-                                    className="btn btn-small template-test-values-toggle"
-                                    aria-expanded={false}
-                                    aria-controls="template-test-values-fields"
-                                    onClick={() => setTestValuesExpanded(true)}
-                                >
-                                    Test different values
-                                </button>
-                            </>
+                        {sourceQuery.isError && (
+                            <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
                         )}
-                        {testValuesExpanded && (
-                            <div id="template-test-values-fields" className="template-test-values-content">
-                                <div className="template-test-values-heading">
-                                    <h4>Test values</h4>
-                                    <div className="template-test-values-actions">
-                                        {selectedSource && usedVariables.length > 0 && (
+                        {selectedSource?.fallback && (
+                            <p className="template-preview-status">No {mode === 'movie' ? 'movies' : 'episodes'} found yet, so example values are
+                                being used.</p>
+                        )}
+
+                        <div className={`template-preview-output${previewError ? ' has-error' : ''}`} aria-live="polite">
+                            <span className="template-preview-output-label">Path</span>
+
+                            {!selectedSource && sourceQuery.isLoading
+                                ? <code>Loading example source</code>
+                                : previewError
+                                    ? <span className="error">{previewError}</span>
+                                    : previewPath
+                                        ? <PreviewPath path={previewPath}/>
+                                        : <code>{previewLoading ? 'Rendering…' : 'Add a variable to preview this path.'}</code>
+                            }
+                        </div>
+
+                        <div className="template-test-values">
+                            {!testValuesExpanded && (
+                                <>
+                                    <span className="template-preview-live-note">Preview updates as you type</span>
+                                    <button
+                                        type="button"
+                                        className="btn btn-small template-test-values-toggle"
+                                        aria-expanded={false}
+                                        aria-controls="template-test-values-fields"
+                                        onClick={() => setTestValuesExpanded(true)}
+                                    >
+                                        Test different values
+                                    </button>
+                                </>
+                            )}
+                            {testValuesExpanded && (
+                                <div id="template-test-values-fields" className="template-test-values-content">
+                                    <div className="template-test-values-heading">
+                                        <h4>Test values</h4>
+                                        <div className="template-test-values-actions">
+                                            {selectedSource && usedVariables.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-small"
+                                                    onClick={() => setTestValues({...selectedSource.values})}
+                                                >
+                                                    Reset values
+                                                </button>
+                                            )}
                                             <button
                                                 type="button"
                                                 className="btn btn-small"
-                                                onClick={() => setTestValues({...selectedSource.values})}
+                                                aria-expanded={true}
+                                                aria-controls="template-test-values-fields"
+                                                onClick={() => setTestValuesExpanded(false)}
                                             >
-                                                Reset values
+                                                Hide test values
                                             </button>
-                                        )}
-                                        <button
-                                            type="button"
-                                            className="btn btn-small"
-                                            aria-expanded={true}
-                                            aria-controls="template-test-values-fields"
-                                            onClick={() => setTestValuesExpanded(false)}
-                                        >
-                                            Hide test values
-                                        </button>
+                                        </div>
                                     </div>
-                                </div>
-                                {usedVariables.length === 0 ? (
-                                    <p className="template-preview-status">Variables you add to the template will appear here automatically.</p>
-                                ) : (
-                                    <div className="template-test-values-grid">
-                                        {usedVariables.map((variable) => (
-                                            <label key={variable.name}>
-                                                <span><code>{`{{\u00a0${variable.name}\u00a0}}`}</code> <small>{variable.description}</small></span>
-                                                <input
-                                                    className="input"
-                                                    type="text"
-                                                    value={testValues[variable.name] ?? ''}
-                                                    onChange={(event) => setTestValues((current) => ({
-                                                        ...current,
-                                                        [variable.name]: event.target.value,
-                                                    }))}
-                                                />
-                                            </label>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </section>
-
-            <div className="help output-template-help" id="mp-path-help">
-                <ReadMore summary="Jinja syntax and all available variables.">
-                    <div className="output-template-guidance">{help}</div>
-                    <h4>Available variables</h4>
-                    <dl className="output-template-variable-reference">
-                        {variables.map((variable) => (
-                            <div key={variable.name}>
-                                <dt><code>{`{{ ${variable.name} }}`}</code></dt>
-                                <dd>
-                                    {variable.readMore ? (
-                                        <ReadMore summary={variable.readMore.summary ?? variable.description}>
-                                            {variable.readMore.paragraphs.map((paragraph) => (
-                                                <p
-                                                    key={paragraph}
-                                                    dangerouslySetInnerHTML={{__html: paragraph}}
-                                                />
+                                    {usedVariables.length === 0 ? (
+                                        <p className="template-preview-status">Variables you add to the template will appear here automatically.</p>
+                                    ) : (
+                                        <div className="template-test-values-grid">
+                                            {usedVariables.map((variable) => (
+                                                <label key={variable.name}>
+                                                    <span><code>{`{{\u00a0${variable.name}\u00a0}}`}</code> <small>{variable.description}</small></span>
+                                                    <input
+                                                        className="input"
+                                                        type="text"
+                                                        value={testValues[variable.name] ?? ''}
+                                                        onChange={(event) => setTestValues((current) => ({
+                                                            ...current,
+                                                            [variable.name]: event.target.value,
+                                                        }))}
+                                                    />
+                                                </label>
                                             ))}
-                                        </ReadMore>
-                                    ) : variable.description}
-                                </dd>
-                            </div>
-                        ))}
-                    </dl>
-                </ReadMore>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </section>
+
+                <div className="help output-template-help" id="mp-path-help">
+                    <ReadMore summary="Jinja syntax and all available variables.">
+                        <div className="output-template-guidance">{help}</div>
+                        <h4>Available variables</h4>
+                        <dl className="output-template-variable-reference">
+                            {variables.map((variable) => (
+                                <div key={variable.name}>
+                                    <dt><code>{`{{ ${variable.name} }}`}</code></dt>
+                                    <dd>
+                                        {variable.readMore ? (
+                                            <ReadMore summary={variable.readMore.summary ?? variable.description}>
+                                                {variable.readMore.paragraphs.map((paragraph) => (
+                                                    <p
+                                                        key={paragraph}
+                                                        dangerouslySetInnerHTML={{__html: paragraph}}
+                                                    />
+                                                ))}
+                                            </ReadMore>
+                                        ) : variable.description}
+                                    </dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </ReadMore>
+                </div>
             </div>
-        </div>
         </>
     )
 }
