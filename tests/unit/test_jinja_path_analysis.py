@@ -93,6 +93,10 @@ def _eval(expression, environment, values):
     "{% set a, b = title, kind %}/downloads/{{ a }}-{{ b }}.ext",
     "/downloads/{% for k,v in [('a',1),('b',2)] %}{{k}}-{{v}}/{% endfor %}{{title}}.ext",
     "{% macro label(x) %}{{x}}{% endmacro %}/downloads/{{label(title)}}-{{label(kind)}}.ext",
+    "{% set suffix = ' (' ~ kind ~ ')' if flag %}/downloads/{{ title }}{{ suffix }}.ext",
+    "{% set label = 'A' if flag %}{% if label %}/downloads/{{ label }}/{{ title }}.ext{% else %}/downloads/{{ title }}.ext{% endif %}",
+    "{% set label = 'A' if flag %}/downloads/{{ label|default('fallback') }}/{{ title }}.ext",
+    "{% set label = 'A' if flag %}/downloads/{{ 'missing' if label is undefined else label }}/{{ title }}.ext",
 ])
 def test_symbolic_paths_agree_with_real_jinja(environment, template):
     analysis = analyze_template(template, environment=environment)
@@ -254,3 +258,54 @@ def test_custom_index_reachability_is_unknown_for_short_circuit_effects(environm
         keys={"extras"},
     )
     assert result.status == CustomIndexReachabilityStatus.UNKNOWN
+
+
+def test_inline_conditional_without_else_matches_explicit_empty_output(environment):
+    implicit = "{% set suffix = ' (' ~ kind ~ ')' if flag %}/downloads/{{ title }}{{ suffix }}.ext"
+    explicit = "{% set suffix = ' (' ~ kind ~ ')' if flag else '' %}/downloads/{{ title }}{{ suffix }}.ext"
+    assert _compare(implicit, explicit, environment) == OutputOverlap.OVERLAP
+
+
+def test_inline_conditional_without_else_uses_standard_undefined_under_strict_environment(environment):
+    template = (
+        "{% set value = 'present' if flag %}"
+        "/downloads/{{ value|default('fallback') }}/"
+        "{{ 'undefined' if value is undefined else value }}.ext"
+    )
+    assert environment.from_string(template).render(flag=False) == "/downloads/fallback/undefined.ext"
+
+    analysis = analyze_template(template, environment=environment)
+    assert analysis.complete, analysis.reason
+    expected = (
+        "{% if flag %}/downloads/present/present.ext"
+        "{% else %}/downloads/fallback/undefined.ext{% endif %}"
+    )
+    assert compare_outputs(
+        analysis,
+        analyze_template(expected, environment=environment),
+        environment=environment,
+    ).status == OutputOverlap.OVERLAP
+
+
+def test_inline_conditional_without_else_does_not_coerce_undefined_to_empty_for_operations(environment):
+    implicit = "{% set value = 1 if flag %}/downloads/{{ value + 1 }}.ext"
+    analysis = analyze_template(
+        implicit,
+        environment=environment,
+        known_values={"flag": False},
+    )
+    empty_output = analyze_template("/downloads/.ext", environment=environment)
+    assert compare_outputs(
+        analysis,
+        empty_output,
+        environment=environment,
+    ).status == OutputOverlap.UNKNOWN
+
+
+def test_internal_undefined_filter_cannot_be_used_by_source_templates(environment):
+    result = analyze_template(
+        "/downloads/{{ none | __wireloft_analysis_undefined }}.ext",
+        environment=environment,
+    )
+    assert not result.complete
+    assert result.reason == "An internal analysis filter cannot be used in source templates"

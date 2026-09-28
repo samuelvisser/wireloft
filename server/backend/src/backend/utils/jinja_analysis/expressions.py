@@ -5,17 +5,51 @@ from collections.abc import Mapping
 from copy import deepcopy
 
 from jinja2 import Environment, nodes
-from jinja2.runtime import EvalContext
+from jinja2.runtime import EvalContext, Undefined
 from jinja2.visitor import NodeTransformer
 
 
 # Context-dependent calls must stay symbolic, including literal custom-index keys.
 VOLATILE_FILTERS = frozenset({"random", "custom_index"})
 EMIT_FILTER = "__wireloft_analysis_emit"
+JINJA_UNDEFINED_FILTER = "__wireloft_analysis_undefined"
+INTERNAL_FILTERS = frozenset({EMIT_FILTER, JINJA_UNDEFINED_FILTER})
 
 
 class ExpressionAnalysisLimit(Exception):
     pass
+
+
+def jinja_undefined_value() -> Undefined:
+    """Return Jinja's standard implicit-conditional Undefined value.
+
+    Jinja deliberately uses the base Undefined class for an inline conditional
+    without an else, even when the template environment uses StrictUndefined.
+    """
+    return Undefined(
+        hint="the inline if-expression evaluated to false and no else section was defined",
+    )
+
+
+def _jinja_undefined(_value: object) -> Undefined:
+    return jinja_undefined_value()
+
+
+def jinja_undefined_expression(*, lineno: int | None = None) -> nodes.Filter:
+    """Create the private symbolic expression for Jinja's implicit Undefined."""
+    return nodes.Filter(
+        nodes.Const(None),
+        JINJA_UNDEFINED_FILTER,
+        [],
+        [],
+        None,
+        None,
+        lineno=lineno,
+    )
+
+
+def is_jinja_undefined_expression(node: nodes.Node) -> bool:
+    return isinstance(node, nodes.Filter) and node.name == JINJA_UNDEFINED_FILTER
 
 
 def _check_size(node: nodes.Node, limit: int = 2048) -> None:
@@ -60,6 +94,7 @@ def analysis_environment(environment: Environment) -> Environment:
     result = environment.overlay()
     result.filters = dict(environment.filters)
     result.filters[EMIT_FILTER] = environment.finalize or str
+    result.filters[JINJA_UNDEFINED_FILTER] = _jinja_undefined
     return result
 
 
