@@ -688,6 +688,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     const previewPath = preview.result?.output.outputPath ?? ''
     const previewError = preview.error || preview.result?.output.error || ''
     const previewLoading = preview.loading
+    const previewIndicatorLoading = selectedSource
+        ? previewLoading
+        : sourceQuery.isLoading || (mode === 'show' && randomShowSourceQuery.isLoading)
 
     useEffect(() => {
         // Keep editable controls mounted while the shared request is pending.
@@ -828,9 +831,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
 
                         <div className={`template-preview-output${previewError ? ' has-error' : ''}`} aria-live="polite">
                             <span className="template-preview-output-label">Path</span>
-                            {(sourceQuery.isLoading || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)) && (
-                                <PreviewLoadingIndicator/>
-                            )}
+                            {previewIndicatorLoading && <PreviewLoadingIndicator/>}
 
                             {!selectedSource && sourceQuery.isLoading
                                 ? <code>Loading example source</code>
