@@ -372,6 +372,20 @@ function PreviewPathPart({part}: { part: string }) {
     )
 }
 
+function PreviewLoadingIndicator() {
+    return (
+        <span
+            className="template-preview-loading-indicator"
+            role="status"
+            aria-label="Loading example"
+        >
+            <span/>
+            <span/>
+            <span/>
+        </span>
+    )
+}
+
 function PreviewPath({path}: { path: string }) {
     const absolute = path.startsWith('/')
     const parts = path.split('/').filter(Boolean)
@@ -798,9 +812,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             </label>
                         </div>
 
-                        {(sourceQuery.isLoading || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)) && (
-                            <p className="template-preview-status">Loading an example…</p>
-                        )}
                         {preview.simulatingCustomIndexes && (
                             <span className="template-preview-status">
                                 <strong>Calculating simulated Custom Index…</strong>{' '}
@@ -817,6 +828,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
 
                         <div className={`template-preview-output${previewError ? ' has-error' : ''}`} aria-live="polite">
                             <span className="template-preview-output-label">Path</span>
+                            {(sourceQuery.isLoading || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)) && (
+                                <PreviewLoadingIndicator/>
+                            )}
 
                             {!selectedSource && sourceQuery.isLoading
                                 ? <code>Loading example source</code>

@@ -201,12 +201,57 @@
 }
 
 .template-preview-output {
+    position: relative;
     display: grid;
     gap: 5px;
     padding: 13px 15px;
     border: 1px solid transparent;
     border-radius: 10px;
     background: #edf4ff;
+}
+
+@keyframes template-preview-loading-dot {
+    0%, 80%, 100% {
+        opacity: 0;
+    }
+
+    40% {
+        opacity: 1;
+    }
+}
+
+.template-preview-loading-indicator {
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    display: flex;
+    padding: 8px;
+    color: hsl(0, 0%, 80%);
+    font-size: 4px;
+    line-height: 1;
+    text-align: center;
+    vertical-align: middle;
+    pointer-events: none;
+}
+
+.template-preview-loading-indicator > span {
+    width: 1em;
+    height: 1em;
+    border-radius: 1em;
+    background: currentColor;
+    animation: template-preview-loading-dot 1s ease-in-out infinite;
+}
+
+.template-preview-loading-indicator > span + span {
+    margin-left: 1em;
+}
+
+.template-preview-loading-indicator > span:nth-child(2) {
+    animation-delay: 160ms;
+}
+
+.template-preview-loading-indicator > span:nth-child(3) {
+    animation-delay: 320ms;
 }
 
 .template-preview-output.has-error {
