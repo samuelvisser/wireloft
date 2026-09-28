@@ -20,7 +20,7 @@ type Props = {
     onChange: (option: LazySearchSelectOption) => void
     onSearchChange: (search: string) => void
     onLoadMore: () => void
-    onLoadPrevious?: () => void
+    onLoadPrevious?: () => Promise<unknown> | void
     placeholder?: string
     noOptionsMessage?: string
     debounceMs?: number
@@ -51,18 +51,21 @@ export default function LazySearchSelect({
     const onSearchChangeRef = useRef(onSearchChange)
     const scrollSelectedWhenAvailable = useRef(false)
 
+    const menuListElement = () => {
+        const input = document.getElementById(inputId)
+        return input
+            ?.closest(`.${classNamePrefix}__control`)
+            ?.parentElement
+            ?.querySelector<HTMLElement>(`.${classNamePrefix}__menu-list`) ?? null
+    }
+
     const scrollSelectedIntoView = () => {
         // React Select performs its own selected-option scroll while opening.
         // Wait until that has settled, then center the option within the menu.
         window.requestAnimationFrame(() => {
             window.requestAnimationFrame(() => {
                 if (!scrollSelectedWhenAvailable.current) return
-                const input = document.getElementById(inputId)
-                const selectRoot = input
-                    ?.closest(`.${classNamePrefix}__control`)
-                    ?.parentElement
-                const menuList = selectRoot
-                    ?.querySelector<HTMLElement>(`.${classNamePrefix}__menu-list`)
+                const menuList = menuListElement()
                 const selected = menuList
                     ?.querySelector<HTMLElement>(`.${classNamePrefix}__option--is-selected`)
                 if (!menuList || !selected) return
@@ -142,7 +145,25 @@ export default function LazySearchSelect({
                 scrollSelectedWhenAvailable.current = false
             }}
             onMenuScrollToTop={() => {
-                if (hasPrevious && !isLoading) onLoadPrevious?.()
+                if (!hasPrevious || isLoading || !onLoadPrevious) return
+                const menuList = menuListElement()
+                if (!menuList) return
+
+                const previousScrollHeight = menuList.scrollHeight
+                void Promise.resolve(onLoadPrevious()).then(() => {
+                    // Prepending options can trigger browser scroll anchoring, which
+                    // keeps the old first option visible and hides the new page above.
+                    // Move one viewport into the newly prepended content instead.
+                    window.requestAnimationFrame(() => {
+                        window.requestAnimationFrame(() => {
+                            if (!menuList.isConnected) return
+                            const addedHeight = menuList.scrollHeight - previousScrollHeight
+                            if (addedHeight <= 0) return
+                            const revealDistance = Math.min(addedHeight, menuList.clientHeight)
+                            menuList.scrollTop = Math.max(1, menuList.scrollTop - revealDistance)
+                        })
+                    })
+                })
             }}
             onMenuScrollToBottom={() => {
                 if (hasMore && !isLoading) onLoadMore()
