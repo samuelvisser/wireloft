@@ -18,10 +18,14 @@ from backend.db.model_mapping import create_database_fields, update_database_fie
 from backend.db.models import CustomIndexState, Show, ShowLocalMediaProfile
 from backend.services.show_assets import request_profile_show_assets
 from backend.services.custom_indexes import (
-    profile_applies_to_show, profile_uses_custom_indexes, remove_profile_custom_index_state,
+    compare_custom_index_assignments,
+    profile_applies_to_show,
+    profile_uses_custom_indexes,
+    remove_profile_custom_index_state,
     request_custom_index_reconciliation,
 )
 from backend.utils.custom_index import indexing_value_definition_keys, replace_indexing_value_definitions
+from backend.utils.jinja_analysis import CustomIndexReachabilityStatus
 from backend.utils.output_template import output_template_custom_index_keys
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
@@ -152,15 +156,20 @@ def update_show_local_media_profile(
     definition_keys_changed = previous_definition_keys != current_definition_keys
     template_changed = previous_template != item.output_template
     scope_changed = previous_scope != item.show_scope
+
+    assignment_change = compare_custom_index_assignments(
+        previous_template,
+        item.output_template,
+        previous_definition_keys=previous_definition_keys,
+        current_definition_keys=current_definition_keys,
+    )
+    has_active_indexes = bool(
+        previous_index_keys & previous_definition_keys
+        or current_index_keys & current_definition_keys
+    )
     needs_custom_index_management = (
-        (template_changed or scope_changed or definition_keys_changed)
-        and bool(
-            previous_index_keys & previous_definition_keys
-            or current_index_keys & current_definition_keys
-            or s.scalar(select(CustomIndexState.id).where(
-                CustomIndexState.local_media_profile_id == item.id,
-            ).limit(1)) is not None
-        )
+        assignment_change.status != CustomIndexReachabilityStatus.UNCHANGED
+        or scope_changed and has_active_indexes
     )
 
     if needs_custom_index_management:
