@@ -74,29 +74,34 @@ def get_local_media_profile_preview_plan(
     session: Session,
     body: LocalMediaProfilePreviewRequest,
 ) -> LocalMediaProfilePreviewPlan:
-    """Return only the cheap planning decision used to expose slow simulation."""
+    """Return only the cheap planning decision used to expose slow simulation.
+
+    Invalid/incomplete draft Jinja is normal while the user is typing. Planning
+    is advisory, so expected template/value errors return a non-simulating plan
+    instead of turning a transient editor state into a 500 response.
+    """
     if body.type != "show":
         return LocalMediaProfilePreviewPlan(simulates_custom_indexes=False)
 
-    referenced = output_template_custom_index_keys(body.output_template)
-    if not referenced:
-        return LocalMediaProfilePreviewPlan(simulates_custom_indexes=False)
-
-    profile = (
-        session.get(ShowLocalMediaProfile, body.local_media_profile_id)
-        if body.indexing_values is None and body.local_media_profile_id is not None
-        else None
-    )
-    definitions = (
-        frozenset(item.key for item in body.indexing_values)
-        if body.indexing_values is not None
-        else indexing_value_definition_keys(profile) if profile is not None else frozenset()
-    )
-    if not referenced & definitions:
-        return LocalMediaProfilePreviewPlan(simulates_custom_indexes=False)
-
-    episode = _selected_episode(session, body)
     try:
+        referenced = output_template_custom_index_keys(body.output_template)
+        if not referenced:
+            return LocalMediaProfilePreviewPlan(simulates_custom_indexes=False)
+
+        profile = (
+            session.get(ShowLocalMediaProfile, body.local_media_profile_id)
+            if body.indexing_values is None and body.local_media_profile_id is not None
+            else None
+        )
+        definitions = (
+            frozenset(item.key for item in body.indexing_values)
+            if body.indexing_values is not None
+            else indexing_value_definition_keys(profile) if profile is not None else frozenset()
+        )
+        if not referenced & definitions:
+            return LocalMediaProfilePreviewPlan(simulates_custom_indexes=False)
+
+        episode = _selected_episode(session, body)
         values = _example_values(session, body)
         plan = plan_custom_index_preview(
             session,
