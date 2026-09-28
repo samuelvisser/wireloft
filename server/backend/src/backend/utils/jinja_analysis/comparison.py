@@ -15,7 +15,7 @@ from jinja2.visitor import NodeTransformer
 from .conditions import Conditions, compatible, equality_values
 from .expressions import (
     EMIT_FILTER, ExpressionAnalysisLimit, analysis_environment, depends_on_runtime, expression_dependencies,
-    expression_key, normalize_expression,
+    expression_key, is_jinja_undefined_expression, jinja_undefined_value, normalize_expression,
 )
 from .paths import OutputVariant, TemplateAnalysis, UnknownOutput
 
@@ -63,6 +63,9 @@ def _fragments(expression: nodes.Expr, environment: Environment, *, concatenated
         yield from _fragments(expression.node, environment)
     elif isinstance(expression, nodes.Const):
         value = str(expression.value) if concatenated else expression.value
+        yield str(environment.finalize(value) if environment.finalize else value)
+    elif is_jinja_undefined_expression(expression):
+        value = jinja_undefined_value()
         yield str(environment.finalize(value) if environment.finalize else value)
     else:
         yield _Symbol(expression_key(expression))

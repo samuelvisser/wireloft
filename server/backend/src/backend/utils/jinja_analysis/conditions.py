@@ -6,7 +6,7 @@ from typing import Iterable
 
 from jinja2 import nodes
 
-from .expressions import expression_key
+from .expressions import expression_key, is_jinja_undefined_expression
 
 
 @dataclass(frozen=True)
@@ -106,6 +106,10 @@ def assume(conditions: Conditions, expression: nodes.Expr, truth: bool) -> Itera
     """
     if isinstance(expression, nodes.Const):
         if bool(expression.value) == truth:
+            yield conditions
+        return
+    if is_jinja_undefined_expression(expression):
+        if not truth:
             yield conditions
         return
     if isinstance(expression, nodes.Not):

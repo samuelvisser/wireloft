@@ -14,8 +14,16 @@ from jinja2 import Environment, TemplateError, nodes
 from jinja2.visitor import NodeTransformer
 
 from .conditions import Conditions, assume
-from .expressions import (ExpressionAnalysisLimit, analysis_environment, emitted_expression,
-                          expression_dependencies, expression_key, normalize_expression)
+from .expressions import (
+    INTERNAL_FILTERS,
+    ExpressionAnalysisLimit,
+    analysis_environment,
+    emitted_expression,
+    expression_dependencies,
+    expression_key,
+    jinja_undefined_expression,
+    normalize_expression,
+)
 
 INPUT_PREFIX = "__wireloft_input_"
 
@@ -100,9 +108,12 @@ class _Analyzer:
         inline = next((node for node in (expression, *expression.find_all(nodes.CondExpr))
                        if isinstance(node, nodes.CondExpr)), None)
         if inline is not None:
-            if inline.expr2 is None:
-                raise _IncompleteAnalysis("An inline conditional without else may produce Undefined")
-            for truth, value in ((True, inline.expr1), (False, inline.expr2)):
+            false_value = (
+                inline.expr2
+                if inline.expr2 is not None
+                else jinja_undefined_expression(lineno=inline.lineno)
+            )
+            for truth, value in ((True, inline.expr1), (False, false_value)):
                 for conditions in self._bounded(assume(state.conditions, inline.test, truth)):
                     # Replacement identities must belong to the same private tree.
                     candidate = deepcopy(expression)
@@ -319,7 +330,7 @@ def analyze_template(
     try:
         tree = environment.parse(template) if isinstance(template, str) else deepcopy(template)
         for index, node in enumerate(tree.find_all(nodes.Filter)):
-            if node.name == "__wireloft_analysis_emit":
+            if node.name in INTERNAL_FILTERS:
                 raise _IncompleteAnalysis("An internal analysis filter cannot be used in source templates")
             if node.name in {"custom_index", "random"}:
                 node._analysis_scope = namespace if node.name == "custom_index" else f"{namespace}:{index}"

@@ -93,6 +93,10 @@ def _eval(expression, environment, values):
     "{% set a, b = title, kind %}/downloads/{{ a }}-{{ b }}.ext",
     "/downloads/{% for k,v in [('a',1),('b',2)] %}{{k}}-{{v}}/{% endfor %}{{title}}.ext",
     "{% macro label(x) %}{{x}}{% endmacro %}/downloads/{{label(title)}}-{{label(kind)}}.ext",
+    "{% set suffix = ' (' ~ kind ~ ')' if flag %}/downloads/{{ title }}{{ suffix }}.ext",
+    "{% set label = 'A' if flag %}{% if label %}/downloads/{{ label }}/{{ title }}.ext{% else %}/downloads/{{ title }}.ext{% endif %}",
+    "{% set label = 'A' if flag %}/downloads/{{ label|default('fallback') }}/{{ title }}.ext",
+    "{% set label = 'A' if flag %}/downloads/{{ 'missing' if label is undefined else label }}/{{ title }}.ext",
 ])
 def test_symbolic_paths_agree_with_real_jinja(environment, template):
     analysis = analyze_template(template, environment=environment)
@@ -256,74 +260,52 @@ def test_custom_index_reachability_is_unknown_for_short_circuit_effects(environm
     assert result.status == CustomIndexReachabilityStatus.UNKNOWN
 
 
-def test_custom_index_reachability_ignores_unrelated_unsupported_assignments(environment):
-    from backend.utils.jinja_analysis import (
-        CustomIndexReachabilityStatus,
-        compare_custom_index_reachability,
-    )
-
-    saved = (
-        "{% set plex_year = (' (' ~ meta_show_year ~ ')') if meta_show_year %}"
-        "{% set n = 'extra' | custom_index %}"
-        "/downloads/{{ plex_year }}/{{ n }}-{{ title }}.ext"
-    )
-    draft = saved.replace(
-        "(' (' ~ meta_show_year ~ ')')",
-        "(' [' ~ meta_show_year ~ ']')",
-    )
-    result = compare_custom_index_reachability(
-        saved,
-        draft,
-        environment=environment,
-        keys={"extra"},
-    )
-    assert result.status == CustomIndexReachabilityStatus.UNCHANGED
-    assert result.dependencies == set()
+def test_inline_conditional_without_else_matches_explicit_empty_output(environment):
+    implicit = "{% set suffix = ' (' ~ kind ~ ')' if flag %}/downloads/{{ title }}{{ suffix }}.ext"
+    explicit = "{% set suffix = ' (' ~ kind ~ ')' if flag else '' %}/downloads/{{ title }}{{ suffix }}.ext"
+    assert _compare(implicit, explicit, environment) == OutputOverlap.OVERLAP
 
 
-def test_custom_index_reachability_keeps_unsupported_assignments_that_control_index(environment):
-    from backend.utils.jinja_analysis import (
-        CustomIndexReachabilityStatus,
-        compare_custom_index_reachability,
-    )
-
+def test_inline_conditional_without_else_uses_standard_undefined_under_strict_environment(environment):
     template = (
-        "{% set is_extra = 'yes' if episode_type == 'aux' %}"
-        "{% if is_extra %}{% set n = 'extra' | custom_index %}{% endif %}"
-        "/downloads/{{ n }}-{{ title }}.ext"
+        "{% set value = 'present' if flag %}"
+        "/downloads/{{ value|default('fallback') }}/"
+        "{{ 'undefined' if value is undefined else value }}.ext"
     )
-    result = compare_custom_index_reachability(
-        template,
-        template,
+    assert environment.from_string(template).render(flag=False) == "/downloads/fallback/undefined.ext"
+
+    analysis = analyze_template(template, environment=environment)
+    assert analysis.complete, analysis.reason
+    expected = (
+        "{% if flag %}/downloads/present/present.ext"
+        "{% else %}/downloads/fallback/undefined.ext{% endif %}"
+    )
+    assert compare_outputs(
+        analysis,
+        analyze_template(expected, environment=environment),
         environment=environment,
-        keys={"extra"},
-    )
-    assert result.status == CustomIndexReachabilityStatus.UNKNOWN
+    ).status == OutputOverlap.OVERLAP
 
 
-def test_custom_index_reachability_ignores_unrelated_production_path_logic(environment):
-    from backend.utils.jinja_analysis import (
-        CustomIndexReachabilityStatus,
-        compare_custom_index_reachability,
-    )
-
-    saved = (
-        '{% set season_num = "%02d"|format(season_number|int) %}'
-        '{% set ep_num = "%02d"|format(episode_number|int) %}'
-        "{% set is_extra = season_type == 'extra' or episode_type == 'aux' or episode_type == 'trailer' %}"
-        "{% set extra_num = 'extra' | custom_index %}"
-        "{% set plex_year = ' (' ~ meta_show_year ~ ')' if meta_show_year %}"
-        "{% set plex_show_title = show_title ~ plex_year %}"
-        "{% set plex_season = 'Specials' if is_extra else 'Season ' ~ season_num %}"
-        "{% set plex_ep_id = 'other' ~ extra_num if is_extra else 'S' ~ season_num ~ 'E' ~ ep_num %}"
-        "/downloads/Video/{{ plex_show_title }}/{{ plex_season }}/{{ plex_ep_id }}.ext"
-    )
-    draft = saved.replace("/downloads/Video/", "/downloads/Video/The Daily Wire Shows/")
-    result = compare_custom_index_reachability(
-        saved,
-        draft,
+def test_inline_conditional_without_else_does_not_coerce_undefined_to_empty_for_operations(environment):
+    implicit = "{% set value = 1 if flag %}/downloads/{{ value + 1 }}.ext"
+    analysis = analyze_template(
+        implicit,
         environment=environment,
-        keys={"extra"},
+        known_values={"flag": False},
     )
-    assert result.status == CustomIndexReachabilityStatus.UNCHANGED
-    assert result.dependencies == set()
+    empty_output = analyze_template("/downloads/.ext", environment=environment)
+    assert compare_outputs(
+        analysis,
+        empty_output,
+        environment=environment,
+    ).status == OutputOverlap.UNKNOWN
+
+
+def test_internal_undefined_filter_cannot_be_used_by_source_templates(environment):
+    result = analyze_template(
+        "/downloads/{{ none | __wireloft_analysis_undefined }}.ext",
+        environment=environment,
+    )
+    assert not result.complete
+    assert result.reason == "An internal analysis filter cannot be used in source templates"
