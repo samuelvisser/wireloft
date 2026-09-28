@@ -323,6 +323,11 @@ class ThumbnailMode(StrEnum):
     EMBED_AND_SIDECAR = "embed_and_sidecar"
 
 
+class ShowArtworkFallbackFormat(StrEnum):
+    JPG = "jpg"
+    PNG = "png"
+
+
 class DownloadSettings(SubmodelBase):
     verify_downloads_cron_enabled: bool = Field(
         default=True,
@@ -362,7 +367,11 @@ class DownloadSettings(SubmodelBase):
     )
     download_show_assets: bool = Field(
         default=True,
-        description="Download show posters, backgrounds and square artwork to the shared show directory; Local Media Profiles can override this default",
+        description="Download shared show artwork to the inferred show directory; Local Media Profiles can override this default",
+    )
+    show_artwork_fallback_format: ShowArtworkFallbackFormat = Field(
+        default=ShowArtworkFallbackFormat.JPG,
+        description="Format used when upstream show artwork is neither JPEG nor PNG",
     )
     temporary_download_root: Path = Field(
         default_factory=lambda data: data["download_root"] / ".wireloft-temp",

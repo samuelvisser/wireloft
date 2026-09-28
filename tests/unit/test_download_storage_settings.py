@@ -4,12 +4,13 @@ from __future__ import annotations
 def test_system_download_storage_defaults_to_direct_mode():
     from backend.api.models.settings import SettingsValues
     from config.settings.settings import AppSettings
-    from config.settings.submodels import DownloadMode, ThumbnailMode
+    from config.settings.submodels import DownloadMode, ShowArtworkFallbackFormat, ThumbnailMode
 
     settings = AppSettings()
 
     assert settings.download_settings.download_mode is DownloadMode.DIRECT
     assert settings.download_settings.thumbnail_mode is ThumbnailMode.EMBED
+    assert settings.download_settings.show_artwork_fallback_format is ShowArtworkFallbackFormat.JPG
     assert (
         settings.download_settings.temporary_download_root
         == settings.download_settings.download_root / ".wireloft-temp"
@@ -26,6 +27,7 @@ def test_system_download_storage_defaults_to_direct_mode():
     )
     assert values["downloadSettings"]["downloadMode"] == "direct"
     assert values["downloadSettings"]["thumbnailMode"] == "embed"
+    assert values["downloadSettings"]["showArtworkFallbackFormat"] == "jpg"
     assert values["downloadSettings"]["temporaryDownloadRoot"] == str(
         settings.download_settings.download_root / ".wireloft-temp"
     )

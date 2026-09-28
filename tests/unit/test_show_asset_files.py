@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-from pathlib import Path
 import shutil
 
 import pytest
@@ -88,7 +87,10 @@ def test_outside_paths_symlinks_and_directories_are_rejected(tmp_path):
 class _Response:
     def __init__(self, content, *, content_type="image/png", length=None):
         self.content = content
-        self.headers = {"Content-Type": content_type, "Content-Length": str(len(content) if length is None else length)}
+        self.headers = {
+            "Content-Type": content_type,
+            "Content-Length": str(len(content) if length is None else length),
+        }
 
     def __enter__(self):
         return self
@@ -104,20 +106,100 @@ class _Response:
 
 
 def test_non_images_and_oversize_responses_are_rejected(tmp_path, monkeypatch):
-    for response in (_Response(b"html", content_type="text/html"), _Response(b"image", length=files.MAX_ASSET_BYTES + 1)):
+    for response in (
+        _Response(b"html", content_type="text/html"),
+        _Response(b"image", length=files.MAX_ASSET_BYTES + 1),
+    ):
         monkeypatch.setattr(files.requests, "get", lambda *_args, **_kwargs: response)
         with pytest.raises(ValueError):
-            files.download_show_asset_jpeg("https://example.invalid/art", tmp_path, ffmpeg_path="ffmpeg", check_cancelled=_active)
-    assert not (tmp_path / "asset.jpg").exists()
+            files.download_show_asset(
+                "https://example.invalid/art",
+                tmp_path,
+                ffmpeg_path="ffmpeg",
+                fallback_format="jpg",
+                check_cancelled=_active,
+            )
+    assert not list(tmp_path.glob("asset.*"))
 
 
-def test_real_png_is_converted_to_jpeg_not_just_renamed(tmp_path, monkeypatch):
+def test_native_png_stays_png(tmp_path, monkeypatch):
     if not shutil.which("ffmpeg"):
         pytest.skip("FFmpeg is not installed")
-    image = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==")
+    image = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAAEUlEQVR4nGP4z8BgD8IMMAYAMUoE+QYxJhsAAAAASUVORK5CYII="
+    )
     monkeypatch.setattr(files.requests, "get", lambda *_args, **_kwargs: _Response(image))
-    result = files.download_show_asset_jpeg("https://example.invalid/art", tmp_path, ffmpeg_path="ffmpeg", check_cancelled=_active)
-    assert result.read_bytes().startswith(b"\xff\xd8\xff")
+    result = files.download_show_asset(
+        "https://example.invalid/art",
+        tmp_path,
+        ffmpeg_path="ffmpeg",
+        fallback_format="jpg",
+        check_cancelled=_active,
+    )
+    assert result.source_format == "png"
+    assert result.output_format == "png"
+    assert result.path.suffix == ".png"
+    data = result.path.read_bytes()
+    assert data.startswith(b"\x89PNG\r\n\x1a\n")
+    assert data[25] == 6
+
+
+def test_non_native_image_uses_configured_fallback(tmp_path, monkeypatch):
+    if not shutil.which("ffmpeg"):
+        pytest.skip("FFmpeg is not installed")
+    webp = base64.b64decode("UklGRhwAAABXRUJQVlA4TA8AAAAvAUAAEAcQ/Y/+BCKi/wEA")
+    monkeypatch.setattr(
+        files.requests,
+        "get",
+        lambda *_args, **_kwargs: _Response(webp, content_type="image/webp"),
+    )
+    jpg = files.download_show_asset(
+        "https://example.invalid/art",
+        tmp_path / "jpg",
+        ffmpeg_path="ffmpeg",
+        fallback_format="jpg",
+        check_cancelled=_active,
+    )
+    assert jpg.source_format == "other"
+    assert jpg.output_format == "jpg"
+    assert jpg.path.read_bytes().startswith(b"\xff\xd8\xff")
+
+    png = files.download_show_asset(
+        "https://example.invalid/art",
+        tmp_path / "png",
+        ffmpeg_path="ffmpeg",
+        fallback_format="png",
+        check_cancelled=_active,
+    )
+    assert png.source_format == "other"
+    assert png.output_format == "png"
+    assert png.path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_forced_png_overrides_fallback_for_clearlogos(tmp_path, monkeypatch):
+    if not shutil.which("ffmpeg"):
+        pytest.skip("FFmpeg is not installed")
+    webp = base64.b64decode(
+        "UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoCAAIAAgA0JaACdLoB+AADsAD+8MQL/yC5YXXI1/8gP+QH/ID/+PIAAAA="
+    )
+    monkeypatch.setattr(
+        files.requests,
+        "get",
+        lambda *_args, **_kwargs: _Response(webp, content_type="image/webp"),
+    )
+    result = files.download_show_asset(
+        "https://example.invalid/logo",
+        tmp_path,
+        ffmpeg_path="ffmpeg",
+        fallback_format="jpg",
+        forced_format="png",
+        check_cancelled=_active,
+    )
+    assert result.source_format == "other"
+    assert result.output_format == "png"
+    data = result.path.read_bytes()
+    assert data.startswith(b"\x89PNG\r\n\x1a\n")
+    assert data[25] == 6
 
 
 def test_cancellation_before_publication_leaves_no_target(tmp_path):

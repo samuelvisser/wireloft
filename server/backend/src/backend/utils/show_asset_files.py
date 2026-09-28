@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass
 import hashlib
 import os
 from pathlib import Path
@@ -14,10 +15,18 @@ from typing import Callable
 import requests
 
 MAX_ASSET_BYTES = 20 * 1024 * 1024
+_NATIVE_FORMATS = {"jpg", "png"}
 
 
 class ArtworkConflict(ValueError):
     """An unsafe path or user-owned file must be left untouched."""
+
+
+@dataclass(frozen=True)
+class PreparedShowAsset:
+    path: Path
+    source_format: str
+    output_format: str
 
 
 def safe_asset_path(download_root: Path, target: Path) -> Path:
@@ -57,18 +66,23 @@ def asset_file_lock(download_root: Path, target: Path):
             if lock.tell() == 0:
                 lock.write(b"\0")
                 lock.flush()
+
             def acquire():
                 lock.seek(0)
                 msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+
             def release():
                 lock.seek(0)
                 msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
         else:
             import fcntl
+
             def acquire():
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
             def release():
                 fcntl.flock(lock, fcntl.LOCK_UN)
+
         deadline = time.monotonic() + 30
         while True:
             try:
@@ -85,13 +99,37 @@ def asset_file_lock(download_root: Path, target: Path):
     # Do not unlink lock files: another process can still have their inode open.
 
 
-def download_show_asset_jpeg(
-    url: str, workspace: Path, *, ffmpeg_path: str, check_cancelled: Callable[[], None],
-) -> Path:
-    """Decode and convert the source, rather than merely naming PNG/WebP bytes .jpg."""
+def _source_image_format(path: Path) -> str:
+    with path.open("rb") as source:
+        header = source.read(8)
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if header.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    return "other"
+
+
+def _output_format(value) -> str:
+    value = getattr(value, "value", value)
+    if value not in _NATIVE_FORMATS:
+        raise ValueError("Show artwork output format must be jpg or png")
+    return str(value)
+
+
+def download_show_asset(
+    url: str,
+    workspace: Path,
+    *,
+    ffmpeg_path: str,
+    fallback_format,
+    forced_format: str | None = None,
+    check_cancelled: Callable[[], None],
+) -> PreparedShowAsset:
+    """Preserve JPEG/PNG sources and convert other image formats as configured."""
     if not url.startswith(("http://", "https://")):
         raise ValueError("Show artwork requires an HTTP(S) URL")
     check_cancelled()
+    workspace.mkdir(parents=True, exist_ok=True)
     source = workspace / "source.image"
     with requests.get(url, stream=True, timeout=(5, 30)) as response:
         response.raise_for_status()
@@ -107,17 +145,42 @@ def download_show_asset_jpeg(
                 if size > MAX_ASSET_BYTES:
                     raise ValueError("Show artwork exceeds the 20 MiB limit")
                 output.write(chunk)
+
     check_cancelled()
-    destination = workspace / "asset.jpg"
+    source_format = _source_image_format(source)
+    output_format = _output_format(
+        forced_format
+        or (source_format if source_format in _NATIVE_FORMATS else fallback_format)
+    )
+    destination = workspace / f"asset.{output_format}"
+    command = [
+        ffmpeg_path,
+        "-nostdin",
+        "-v",
+        "error",
+        "-protocol_whitelist",
+        "file,pipe",
+        "-i",
+        str(source),
+        "-frames:v",
+        "1",
+    ]
+    if output_format == "jpg":
+        command.extend(("-q:v", "2"))
+    else:
+        command.extend(("-c:v", "png"))
+    command.extend(("-update", "1", "-y", str(destination)))
     subprocess.run(
-        [ffmpeg_path, "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe",
-         "-f", "image2", "-pattern_type", "none", "-i", str(source), "-frames:v", "1", "-q:v", "2", "-update", "1", "-y", str(destination)],
-        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=45,
+        command,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        timeout=45,
     )
     check_cancelled()
     if not destination.is_file() or not 0 < destination.stat().st_size <= MAX_ASSET_BYTES:
-        raise ValueError("Show artwork could not be converted to a bounded JPEG")
-    return destination
+        raise ValueError(f"Show artwork could not be converted to a bounded {output_format.upper()} image")
+    return PreparedShowAsset(destination, source_format, output_format)
 
 
 def publish_show_asset(
@@ -141,8 +204,6 @@ def publish_show_asset(
             raise ArtworkConflict(f"Artwork changed during download and was left untouched: {target}")
         if expected_hash is None:
             try:
-                # Claim a previously absent name atomically; never replace a file
-                # another writer created after our absence check.
                 os.link(temporary, target)
             except FileExistsError as exc:
                 raise ArtworkConflict(f"Artwork appeared during download: {target}") from exc

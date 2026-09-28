@@ -17,6 +17,7 @@ from config.settings.settings import AppSettings
 from config.settings.submodels import (
     DownloadMode,
     FilenameRestrictionMode,
+    ShowArtworkFallbackFormat,
     ThumbnailMode,
     normalize_metadata_refresh_intervals,
 )
@@ -66,6 +67,7 @@ SettingFieldPath = Literal[
     "downloadSettings.downloadMode",
     "downloadSettings.thumbnailMode",
     "downloadSettings.downloadShowAssets",
+    "downloadSettings.showArtworkFallbackFormat",
     "downloadSettings.temporaryDownloadRoot",
     "downloadSettings.rssCacheRoot",
     "downloadSettings.rssCacheRetentionSeconds",
@@ -269,6 +271,7 @@ class DownloadSettingsValue(_SettingsValueModel):
     download_mode: DownloadMode
     thumbnail_mode: ThumbnailMode
     download_show_assets: bool
+    show_artwork_fallback_format: ShowArtworkFallbackFormat
     temporary_download_root: Path
     rss_cache_root: Path
     rss_cache_retention_seconds: int = Field(ge=1)

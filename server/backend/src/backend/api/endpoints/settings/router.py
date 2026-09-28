@@ -31,8 +31,9 @@ def settings_update(body: SettingsAPIUpdate):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     if set(body.changed_fields) & {
-        "downloadSettings.downloadShowAssets", "downloadSettings.downloadRoot",
-        "downloadSettings.filenameRestrictionMode", "downloadSettings.ffmpegPath",
+        "downloadSettings.downloadShowAssets", "downloadSettings.showArtworkFallbackFormat",
+        "downloadSettings.downloadRoot", "downloadSettings.filenameRestrictionMode",
+        "downloadSettings.ffmpegPath",
     }:
         with db_session() as session:
             request_show_asset_reconciliation(session)

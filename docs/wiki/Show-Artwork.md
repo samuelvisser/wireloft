@@ -4,7 +4,7 @@ WireLoft can save shared show artwork alongside your downloaded library. This is
 
 ## Enable or override
 
-**Settings / Downloads / Download show assets** controls the system default and is enabled by default. In a Show Local Media Profile, **Download show assets** has three choices: **System**, **Enabled**, or **Disabled**. Existing profiles inherit the system setting.
+**Settings / Downloads / Download show assets** controls the system default and is enabled by default. In a Show Local Media Profile, **Download show assets** has three choices: **System**, **Enabled**, or **Disabled**. New profiles inherit the system setting; profiles that existed before show artwork support are migrated to **Disabled** so an upgrade does not unexpectedly begin downloading artwork.
 
 The corresponding configuration value is:
 
@@ -17,15 +17,23 @@ The help underneath the profile setting shows the resolved show root for the epi
 
 ## Files and sources
 
-WireLoft writes available images as real JPEG files, using the configured FFmpeg executable:
+WireLoft preserves native JPEG and PNG show artwork. JPEG sources are stored as `.jpg`, PNG sources remain `.png`, and other image formats are converted using **Show artwork fallback format** (JPEG by default). The transparent show logo is always stored as `clearlogo.png` so transparency is retained.
 
 | File | Source, in preference order |
 | --- | --- |
-| `poster.jpg` | Show portrait thumbnail, then square thumbnail |
-| `fanart.jpg` | Show background image, then landscape thumbnail |
-| `square.jpg` | Show square thumbnail |
+| `poster.jpg` or `poster.png` | Show portrait thumbnail, then square thumbnail |
+| `fanart.jpg` or `fanart.png` | Show background image, then landscape thumbnail |
+| `square.jpg` or `square.png` | Show square thumbnail |
+| `clearlogo.png` | Show logo |
 
-Missing artwork types are skipped. No arbitrary episode thumbnail is substituted for a show poster.
+Missing artwork types are skipped. No arbitrary episode thumbnail is substituted for a show poster. Existing custom artwork in alternate formats is preserved rather than overwritten.
+
+The corresponding fallback setting is:
+
+```yaml
+downloadSettings:
+  showArtworkFallbackFormat: jpg
+```
 
 ## How the show folder is chosen
 
@@ -47,6 +55,6 @@ Layouts that put different episode types in unrelated trees, omit a show-specifi
 
 Artwork reconciliation runs after indexing, relevant show/profile/settings changes, successful episode downloads, file renames, and at startup. Initial creation waits for at least one indexed episode. Normal episode scans also refresh available artwork URLs from the already-fetched show page. Existing managed images are checked again on reconciliation after a day, so unchanged URLs do not cause a download on every episode.
 
-WireLoft tracks artwork ownership and content hashes. It leaves pre-existing custom artwork, alternate image formats, and externally modified files untouched. Managed replacements are staged on the destination filesystem and published atomically. The destination filesystem must support hard links for safe, non-overwriting first publication; failures leave existing files untouched and are reported in task logs.
+WireLoft tracks artwork ownership, upstream format and content hashes. It leaves pre-existing custom artwork, alternate image formats, and externally modified files untouched. If a managed upstream asset changes between JPEG and PNG, WireLoft safely publishes the new variant and removes the old managed variant only after the replacement is verified. Managed replacements are staged on the destination filesystem and published atomically. The destination filesystem must support hard links for safe, non-overwriting first publication; failures leave existing files untouched and are reported in task logs.
 
 When a template changes, WireLoft creates artwork in the new root. An old managed copy is removed only after a verified replacement exists and tracked media no longer needs the old location. Artwork still shared by another profile is retained. Disabling artwork or deleting a show/profile does not delete existing artwork files.

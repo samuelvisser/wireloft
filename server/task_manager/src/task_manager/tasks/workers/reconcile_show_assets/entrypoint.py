@@ -20,7 +20,7 @@ from .service import run_reconcile_show_assets
 @task(
     key="reconcile_show_assets",
     title="Reconcile show artwork",
-    description="Download and reconcile shared show posters, backgrounds and square artwork.",
+    description="Download and reconcile shared show posters, backgrounds, square artwork and clear logos.",
     allowed_resource_types=("show", "download_profile"),
     default_max_retries=3,
     tracks_progress=True,

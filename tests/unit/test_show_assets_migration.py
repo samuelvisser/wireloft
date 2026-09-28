@@ -34,3 +34,24 @@ def test_show_assets_upgrade_downgrade_and_foreign_keys():
         assert [column["name"] for column in sa.inspect(connection).get_columns("local_media_profiles_show")] == ["id"]
         assert connection.exec_driver_sql("SELECT id FROM local_media_profiles_show").scalar() == 2
     engine.dispose()
+
+
+
+def test_show_asset_source_format_migration_upgrade_and_downgrade():
+    base_migration = importlib.import_module("backend.db.alembic.versions.a9d73b8e5f21_show_local_assets")
+    migration = importlib.import_module("backend.db.alembic.versions.f4c2a8d19e73_show_asset_source_format")
+    engine = sa.create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE shows (id INTEGER PRIMARY KEY)")
+        connection.exec_driver_sql("CREATE TABLE local_media_profiles (id INTEGER PRIMARY KEY)")
+        connection.exec_driver_sql("CREATE TABLE local_media_profiles_show (id INTEGER PRIMARY KEY)")
+        with Operations.context(MigrationContext.configure(connection)):
+            base_migration.upgrade()
+            migration.upgrade()
+        columns = {column["name"] for column in sa.inspect(connection).get_columns("show_local_assets")}
+        assert "source_format" in columns
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.downgrade()
+        columns = {column["name"] for column in sa.inspect(connection).get_columns("show_local_assets")}
+        assert "source_format" not in columns
+    engine.dispose()

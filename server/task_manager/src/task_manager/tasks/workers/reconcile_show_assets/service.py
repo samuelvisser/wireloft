@@ -8,7 +8,6 @@ import tempfile
 from typing import Callable
 
 from dailywire_downloader import DownloadCancelled
-
 from sqlalchemy import select
 
 from backend.db.models import DownloadProfileBase, Episode, EpisodeMediaDownload, Show, ShowLocalMediaProfile
@@ -18,8 +17,8 @@ from backend.services.show_assets import (
     show_asset_sources, show_assets_enabled, show_profile_roots,
 )
 from backend.utils.show_asset_files import (
-    ArtworkConflict, asset_file_hash, asset_file_lock, download_show_asset_jpeg,
-    publish_show_asset, safe_asset_path,
+    ArtworkConflict, PreparedShowAsset, asset_file_hash, asset_file_lock,
+    download_show_asset, publish_show_asset, safe_asset_path,
 )
 from config import get_settings
 from controller.db_utils import db_session
@@ -27,6 +26,7 @@ from task_manager.tasks.helpers.progress import update_progress
 
 logger = logging.getLogger(__name__)
 _REFRESH_AFTER = timedelta(days=1)
+_SUPPORTED_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
 
 @dataclass(frozen=True)
@@ -35,9 +35,25 @@ class AssetPlan:
     profile_id: int
     kind: str
     url: str
-    target: Path
+    directory: Path
     download_root: Path
     output_template: str
+    forced_format: str | None = None
+
+
+def _fallback_format() -> str:
+    value = get_settings().download_settings.show_artwork_fallback_format
+    return str(getattr(value, "value", value))
+
+
+def _expected_output_format(row: ShowLocalAsset, plan: AssetPlan) -> str | None:
+    if plan.forced_format is not None:
+        return plan.forced_format
+    if row.source_format in {"jpg", "png"}:
+        return row.source_format
+    if row.source_format == "other":
+        return _fallback_format()
+    return None
 
 
 def _current(session, plan: AssetPlan) -> bool:
@@ -51,87 +67,238 @@ def _current(session, plan: AssetPlan) -> bool:
         return False
     if Path(get_settings().download_settings.download_root).resolve() != plan.download_root:
         return False
+    source = next((candidate for candidate in show_asset_sources(show) if candidate.kind == plan.kind), None)
     return (
-        resolve_show_media_directory(show, profile.output_template).path == str(plan.target.parent)
-        and dict(show_asset_sources(show)).get(plan.kind) == plan.url
+        resolve_show_media_directory(show, profile.output_template).path == str(plan.directory)
+        and source is not None
+        and source.url == plan.url
+        and source.forced_format == plan.forced_format
     )
 
 
-def _owned_file(session, plan):
-    safe_asset_path(plan.download_root, plan.target)
-    rows = list(session.scalars(select(ShowLocalAsset).where(ShowLocalAsset.file_path == str(plan.target))))
+def _path_rows(session, path: Path) -> list[ShowLocalAsset]:
+    return list(session.scalars(select(ShowLocalAsset).where(ShowLocalAsset.file_path == str(path))))
+
+
+def _asset_rows(session, plan: AssetPlan) -> list[ShowLocalAsset]:
+    return list(session.scalars(select(ShowLocalAsset).where(
+        ShowLocalAsset.show_id == plan.show_id,
+        ShowLocalAsset.asset_type == plan.kind,
+    )))
+
+
+def _owned_file(session, plan: AssetPlan, target: Path):
+    safe_asset_path(plan.download_root, target)
+    rows = _path_rows(session, target)
     if any(row.show_id != plan.show_id for row in rows):
-        raise ArtworkConflict(f"Another show owns artwork at {plan.target}")
-    for suffix in (".png", ".jpeg", ".webp"):
-        alternate = plan.target.with_suffix(suffix)
-        if alternate.exists() or alternate.is_symlink():
+        raise ArtworkConflict(f"Another show owns artwork at {target}")
+
+    for suffix in _SUPPORTED_EXTENSIONS:
+        alternate = target.with_suffix(suffix)
+        if alternate == target or not (alternate.exists() or alternate.is_symlink()):
+            continue
+        alternate_rows = _path_rows(session, alternate)
+        alternate_digest = asset_file_hash(alternate)
+        if alternate_digest is None or not any(
+            row.show_id == plan.show_id
+            and alternate_digest in (row.content_hash, row.pending_hash)
+            for row in alternate_rows
+        ):
             raise ArtworkConflict(f"Existing alternate-format artwork was left untouched: {alternate}")
-    digest = asset_file_hash(plan.target)
+
+    digest = asset_file_hash(target)
     if digest is not None and not any(digest in (row.content_hash, row.pending_hash) for row in rows):
-        raise ArtworkConflict(f"User-supplied or edited artwork was left untouched: {plan.target}")
+        raise ArtworkConflict(f"User-supplied or edited artwork was left untouched: {target}")
     return rows, digest
 
 
-def _owner(session, rows, plan):
-    owner = next((row for row in rows if row.local_media_profile_id == plan.profile_id and row.asset_type == plan.kind), None)
+def _owner(session, rows, plan: AssetPlan, target: Path) -> ShowLocalAsset:
+    owner = next((
+        row for row in rows
+        if row.local_media_profile_id == plan.profile_id and row.asset_type == plan.kind
+    ), None)
     if owner is None:
-        owner = ShowLocalAsset(show_id=plan.show_id, local_media_profile_id=plan.profile_id, asset_type=plan.kind, file_path=str(plan.target))
+        owner = ShowLocalAsset(
+            show_id=plan.show_id,
+            local_media_profile_id=plan.profile_id,
+            asset_type=plan.kind,
+            file_path=str(target),
+        )
         session.add(owner)
         rows.append(owner)
     return owner
 
 
+def _claim_fresh_asset(
+    plan: AssetPlan,
+    now: datetime,
+    check_cancelled: Callable[[], None],
+) -> tuple[bool, Path | None]:
+    with db_session() as session:
+        if not _current(session, plan):
+            return False, None
+        candidates = [
+            Path(row.file_path)
+            for row in _asset_rows(session, plan)
+            if Path(row.file_path).parent == plan.directory
+            and row.source_url == plan.url
+            and row.pending_hash is None
+            and row.checked_at is not None
+            and now - row.checked_at < _REFRESH_AFTER
+            and _expected_output_format(row, plan) is not None
+            and Path(row.file_path).suffix.lower() == f".{_expected_output_format(row, plan)}"
+        ]
+
+    for target in dict.fromkeys(candidates):
+        check_cancelled()
+        with asset_file_lock(plan.download_root, target):
+            with db_session() as session:
+                if not _current(session, plan):
+                    return False, None
+                rows = _path_rows(session, target)
+                if any(row.show_id != plan.show_id for row in rows):
+                    raise ArtworkConflict(f"Another show owns artwork at {target}")
+                digest = asset_file_hash(target)
+                owned_by_profile = next((
+                    row for row in rows
+                    if row.show_id == plan.show_id
+                    and row.local_media_profile_id == plan.profile_id
+                    and row.asset_type == plan.kind
+                ), None)
+                if owned_by_profile is not None and digest not in (
+                    owned_by_profile.content_hash,
+                    owned_by_profile.pending_hash,
+                ):
+                    raise ArtworkConflict(f"User-supplied or edited artwork was left untouched: {target}")
+                fresh = next((
+                    row for row in rows
+                    if row.show_id == plan.show_id
+                    and row.asset_type == plan.kind
+                    and digest is not None
+                    and row.content_hash == digest
+                    and row.pending_hash is None
+                    and row.source_url == plan.url
+                    and row.checked_at is not None
+                    and now - row.checked_at < _REFRESH_AFTER
+                    and _expected_output_format(row, plan) is not None
+                    and target.suffix.lower() == f".{_expected_output_format(row, plan)}"
+                ), None)
+                if fresh is None:
+                    continue
+                owner = _owner(session, rows, plan, target)
+                owner.content_hash = digest
+                owner.pending_hash = None
+                owner.source_url = plan.url
+                owner.source_format = fresh.source_format
+                owner.checked_at = fresh.checked_at
+                session.commit()
+                return True, target
+    return True, None
+
+
+def _cleanup_obsolete_variants(
+    plan: AssetPlan,
+    current_target: Path,
+    check_cancelled: Callable[[], None],
+) -> None:
+    with db_session() as session:
+        obsolete = [
+            (row.id, Path(row.file_path))
+            for row in session.scalars(select(ShowLocalAsset).where(
+                ShowLocalAsset.show_id == plan.show_id,
+                ShowLocalAsset.local_media_profile_id == plan.profile_id,
+                ShowLocalAsset.asset_type == plan.kind,
+            ))
+            if Path(row.file_path).parent == plan.directory and Path(row.file_path) != current_target
+        ]
+
+    for record_id, path in obsolete:
+        check_cancelled()
+        try:
+            with asset_file_lock(plan.download_root, path):
+                with db_session() as session:
+                    row = session.get(ShowLocalAsset, record_id)
+                    if row is None or not _current(session, plan):
+                        continue
+                    replacement = session.scalar(select(ShowLocalAsset).where(
+                        ShowLocalAsset.show_id == plan.show_id,
+                        ShowLocalAsset.local_media_profile_id == plan.profile_id,
+                        ShowLocalAsset.asset_type == plan.kind,
+                        ShowLocalAsset.file_path == str(current_target),
+                    ))
+                    if (
+                        replacement is None
+                        or replacement.content_hash is None
+                        or asset_file_hash(current_target) != replacement.content_hash
+                    ):
+                        continue
+                    shared = session.scalar(select(ShowLocalAsset.id).where(
+                        ShowLocalAsset.file_path == str(path),
+                        ShowLocalAsset.id != record_id,
+                    ).limit(1))
+                    if shared is None:
+                        digest = asset_file_hash(path)
+                        if digest is not None and digest in (row.content_hash, row.pending_hash):
+                            safe_asset_path(plan.download_root, path).unlink(missing_ok=True)
+                    session.delete(row)
+                    session.commit()
+        except ArtworkConflict as exc:
+            logger.warning("Old show artwork variant was left untouched: %s", exc)
+
+
 def _refresh_asset(plan: AssetPlan, check_cancelled: Callable[[], None]) -> bool:
     check_cancelled()
     now = datetime.now(timezone.utc)
-    with asset_file_lock(plan.download_root, plan.target):
-        with db_session() as session:
-            if not _current(session, plan):
-                return False
-            rows, digest = _owned_file(session, plan)
-            fresh = next((row for row in rows if digest is not None and row.content_hash == digest
-                          and row.pending_hash is None and row.source_url == plan.url and row.checked_at is not None
-                          and now - row.checked_at < _REFRESH_AFTER), None)
-            if fresh is not None:
-                owner = _owner(session, rows, plan)
-                owner.content_hash, owner.source_url, owner.checked_at = digest, plan.url, fresh.checked_at
-                owner.pending_hash = None
-                session.commit()
-                return True
+    current, fresh_target = _claim_fresh_asset(plan, now, check_cancelled)
+    if not current:
+        return False
+    if fresh_target is not None:
+        _cleanup_obsolete_variants(plan, fresh_target, check_cancelled)
+        return True
 
-    # No database transaction or filesystem publication lock spans HTTP/FFmpeg.
     with tempfile.TemporaryDirectory(prefix="wireloft-show-assets-") as temporary:
-        prepared = download_show_asset_jpeg(
-            plan.url, Path(temporary), ffmpeg_path=get_settings().download_settings.ffmpeg_path,
+        settings = get_settings().download_settings
+        prepared: PreparedShowAsset = download_show_asset(
+            plan.url,
+            Path(temporary),
+            ffmpeg_path=settings.ffmpeg_path,
+            fallback_format=settings.show_artwork_fallback_format,
+            forced_format=plan.forced_format,
             check_cancelled=check_cancelled,
         )
-        new_hash = asset_file_hash(prepared)
+        target = plan.directory / f"{plan.kind}.{prepared.output_format}"
+        new_hash = asset_file_hash(prepared.path)
         if new_hash is None:
             raise ValueError("Prepared show artwork disappeared before publication")
         check_cancelled()
-        with asset_file_lock(plan.download_root, plan.target):
+        with asset_file_lock(plan.download_root, target):
             with db_session() as session:
                 if not _current(session, plan):
                     return False
-                if shared_root_conflict(show_profile_roots(session), plan.show_id, str(plan.target.parent)):
+                if shared_root_conflict(show_profile_roots(session), plan.show_id, str(plan.directory)):
                     raise ArtworkConflict("The show directory became shared by another show")
-                rows, previous_hash = _owned_file(session, plan)
-                _owner(session, rows, plan)
+                rows, previous_hash = _owned_file(session, plan, target)
+                _owner(session, rows, plan, target)
                 for row in rows:
                     row.pending_hash = new_hash
-                # A retry recognizes the new bytes after a crash before final commit.
                 session.commit()
                 if new_hash != previous_hash:
                     publish_show_asset(
-                        prepared, plan.target, download_root=plan.download_root,
-                        expected_hash=previous_hash, check_cancelled=check_cancelled,
+                        prepared.path,
+                        target,
+                        download_root=plan.download_root,
+                        expected_hash=previous_hash,
+                        check_cancelled=check_cancelled,
                     )
                 for row in rows:
                     row.content_hash = new_hash
                     row.pending_hash = None
                     row.source_url = plan.url
+                    row.source_format = prepared.source_format
                     row.checked_at = now
                 session.commit()
+
+    _cleanup_obsolete_variants(plan, target, check_cancelled)
     return True
 
 
@@ -149,8 +316,6 @@ def _cleanup_old_roots(
         ) if path]
     for record_id, path in obsolete:
         check_cancelled()
-        # A template may change without the user requesting existing media renames.
-        # A missing file may simply await file-watcher rename reconciliation.
         if any(media.is_relative_to(path.parent) and not media.is_relative_to(current_root) for media in media_paths):
             continue
         try:
@@ -165,13 +330,17 @@ def _cleanup_old_roots(
                         continue
                     if resolve_show_media_directory(show, profile.output_template).path != str(current_root):
                         continue
-                    replacement = session.scalar(select(ShowLocalAsset).where(
+                    replacements = list(session.scalars(select(ShowLocalAsset).where(
                         ShowLocalAsset.show_id == show_id,
                         ShowLocalAsset.local_media_profile_id == profile_id,
                         ShowLocalAsset.asset_type == row.asset_type,
-                        ShowLocalAsset.file_path == str(current_root / f"{row.asset_type}.jpg"),
-                    ))
-                    if replacement is None or replacement.content_hash is None:
+                    )))
+                    replacement = next((
+                        candidate for candidate in replacements
+                        if Path(candidate.file_path).parent == current_root
+                        and candidate.content_hash is not None
+                    ), None)
+                    if replacement is None:
                         continue
                     if asset_file_hash(Path(replacement.file_path)) != replacement.content_hash:
                         continue
@@ -182,7 +351,6 @@ def _cleanup_old_roots(
                         digest = asset_file_hash(path)
                         if digest is not None and digest in (row.content_hash, row.pending_hash):
                             safe_asset_path(download_root, path).unlink(missing_ok=True)
-                    # Modified artwork is preserved but is no longer claimed by us.
                     session.delete(row)
                     session.commit()
         except ArtworkConflict as exc:
@@ -221,8 +389,19 @@ def run_reconcile_show_assets(
                 continue
             directory = Path(root.path)
             sources = show_asset_sources(show)
-            plans.extend(AssetPlan(show.id, profile_id, kind, url, directory / f"{kind}.jpg", download_root, profile.output_template)
-                         for kind, url in sources)
+            plans.extend(
+                AssetPlan(
+                    show.id,
+                    profile_id,
+                    source.kind,
+                    source.url,
+                    directory,
+                    download_root,
+                    profile.output_template,
+                    source.forced_format,
+                )
+                for source in sources
+            )
             if sources:
                 cleanup.append((show.id, profile_id, directory))
 

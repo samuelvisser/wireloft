@@ -27,6 +27,7 @@ class ShowLocalAsset(Base):
     asset_type: Mapped[str] = mapped_column(String(16))
     file_path: Mapped[str]
     source_url: Mapped[str | None]
+    source_format: Mapped[str | None] = mapped_column(String(16))
     content_hash: Mapped[str | None] = mapped_column(String(64))
     pending_hash: Mapped[str | None] = mapped_column(String(64))
     checked_at: Mapped[datetime | None] = mapped_column(UTCDateTime())

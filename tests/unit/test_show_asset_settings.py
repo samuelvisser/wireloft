@@ -24,18 +24,25 @@ def test_artwork_source_priorities_and_missing_variants():
         thumbnail_square_path='https://example.invalid/square',
         thumbnail_landscape_path='https://example.invalid/landscape',
         background_image_path='https://example.invalid/background',
+        logo_image_path='https://example.invalid/logo',
     )
-    assert dict(assets.show_asset_sources(show)) == {
-        'poster': show.thumbnail_portrait_path,
-        'fanart': show.background_image_path,
-        'square': show.thumbnail_square_path,
+    assert {
+        source.kind: (source.url, source.forced_format)
+        for source in assets.show_asset_sources(show)
+    } == {
+        'poster': (show.thumbnail_portrait_path, None),
+        'fanart': (show.background_image_path, None),
+        'square': (show.thumbnail_square_path, None),
+        'clearlogo': (show.logo_image_path, 'png'),
     }
     show.thumbnail_portrait_path = None
     show.background_image_path = None
-    assert dict(assets.show_asset_sources(show))['poster'] == show.thumbnail_square_path
-    assert dict(assets.show_asset_sources(show))['fanart'] == show.thumbnail_landscape_path
+    source_map = {source.kind: source.url for source in assets.show_asset_sources(show)}
+    assert source_map['poster'] == show.thumbnail_square_path
+    assert source_map['fanart'] == show.thumbnail_landscape_path
     show.thumbnail_square_path = None
     show.thumbnail_landscape_path = 'file:///not-a-remote-image'
+    show.logo_image_path = None
     assert assets.show_asset_sources(show) == ()
 
 

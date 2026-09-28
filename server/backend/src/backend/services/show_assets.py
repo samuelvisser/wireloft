@@ -36,6 +36,13 @@ class ShowAssetRootPreview:
     system_enabled: bool
 
 
+@dataclass(frozen=True)
+class ShowAssetSource:
+    kind: str
+    url: str
+    forced_format: str | None = None
+
+
 def show_assets_enabled(profile: ShowLocalMediaProfile) -> bool:
     override = profile.download_show_assets
     return get_settings().download_settings.download_show_assets if override is None else override
@@ -159,16 +166,22 @@ def get_show_asset_root_preview(
     return ShowAssetRootPreview(result.path, result.reason, title, enabled)
 
 
-def show_asset_sources(show: Show) -> tuple[tuple[str, str], ...]:
-    choices = {
-        "poster": (show.thumbnail_portrait_path, show.thumbnail_square_path),
-        "fanart": (show.background_image_path, show.thumbnail_landscape_path),
-        "square": (show.thumbnail_square_path,),
-    }
-    return tuple(
-        (kind, url) for kind, candidates in choices.items()
-        if (url := next((value for value in candidates if isinstance(value, str) and value.startswith(("https://", "http://"))), None))
+def show_asset_sources(show: Show) -> tuple[ShowAssetSource, ...]:
+    choices = (
+        ("poster", (show.thumbnail_portrait_path, show.thumbnail_square_path), None),
+        ("fanart", (show.background_image_path, show.thumbnail_landscape_path), None),
+        ("square", (show.thumbnail_square_path,), None),
+        ("clearlogo", (show.logo_image_path,), "png"),
     )
+    sources = []
+    for kind, candidates, forced_format in choices:
+        url = next(
+            (value for value in candidates if isinstance(value, str) and value.startswith(("https://", "http://"))),
+            None,
+        )
+        if url is not None:
+            sources.append(ShowAssetSource(kind, url, forced_format))
+    return tuple(sources)
 
 
 def request_show_asset_reconciliation(session: Session, show_id: int = 0) -> None:

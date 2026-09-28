@@ -1,4 +1,9 @@
-import type {DownloadMode, FilenameRestrictionMode, ThumbnailMode} from '../../types/schemas/settings'
+import type {
+    DownloadMode,
+    FilenameRestrictionMode,
+    ShowArtworkFallbackFormat,
+    ThumbnailMode,
+} from '../../types/schemas/settings'
 import ReadMore from '../../utils/ReadMore'
 import CronEditor from './CronEditor'
 import type {SettingsTabProps} from './SettingsTabTypes'
@@ -32,6 +37,12 @@ const THUMBNAIL_MODE_LABELS = {
     sidecar: 'Download besides media',
     embed_and_sidecar: 'Both embed and download',
 } satisfies Record<ThumbnailMode, string>
+
+const SHOW_ARTWORK_FALLBACK_FORMATS = ['jpg', 'png'] as const
+const SHOW_ARTWORK_FALLBACK_FORMAT_LABELS = {
+    jpg: 'JPEG',
+    png: 'PNG',
+} satisfies Record<ShowArtworkFallbackFormat, string>
 
 function childPath(root: string, name: string) {
     const trimmedRoot = root.trim()
@@ -181,8 +192,21 @@ export default function DownloadsSettingsTab({
                     onChange={(checked) => updateDraft((next) => {
                         next.downloadSettings.downloadShowAssets = checked
                     })}
-                    help="Save poster.jpg, fanart.jpg and square.jpg in each show's inferred shared folder. Local Media Profiles can inherit or override this setting. Existing custom artwork is preserved."
+                    help="Save poster, fanart, square artwork and clearlogo.png in each show's inferred shared folder. Native JPEG and PNG formats are preserved. Local Media Profiles can inherit or override this setting. Existing custom artwork is preserved."
                     wide
+                />
+                <SelectField
+                    id="settings-show-artwork-fallback-format"
+                    label="Show artwork fallback format"
+                    value={draft.downloadSettings.showArtworkFallbackFormat}
+                    options={SHOW_ARTWORK_FALLBACK_FORMATS}
+                    optionLabels={SHOW_ARTWORK_FALLBACK_FORMAT_LABELS}
+                    error={errorFor('downloadSettings.showArtworkFallbackFormat')}
+                    environmentVariable={environmentVariableFor('downloadSettings.showArtworkFallbackFormat')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.showArtworkFallbackFormat = value as ShowArtworkFallbackFormat
+                    })}
+                    help="Used only when upstream show artwork is neither JPEG nor PNG. Clear logos are always stored as PNG to preserve transparency."
                 />
                 <SelectField
                     id="settings-filename-restriction-mode"
