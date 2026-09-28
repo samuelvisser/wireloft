@@ -158,7 +158,7 @@ def _show_source_anchor_offset(
     *,
     limit: int,
 ) -> int | None:
-    """Return a page offset that keeps one selected Episode near the middle."""
+    """Return a page offset that keeps one selected Episode near the middle of the page."""
     kind, separator, identifier = source_id.partition(":")
     if kind != "episode" or not separator or not identifier.isascii() or not identifier.isdigit():
         return None
