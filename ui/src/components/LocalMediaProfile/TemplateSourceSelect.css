@@ -41,8 +41,8 @@
 
 .template-source-select .select__menu-list {
     padding: 5px;
-    /* Keep scrollTop at the edge when previous pages are prepended so the
-       newly loaded options become visible immediately. */
+    /* LazySearchSelect preserves the visual anchor explicitly when pages are
+       prepended, so native scroll anchoring must not adjust it a second time. */
     overflow-anchor: none;
 }
 

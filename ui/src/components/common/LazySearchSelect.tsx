@@ -50,7 +50,7 @@ export default function LazySearchSelect({
     const [inputValue, setInputValue] = useState('')
     const onSearchChangeRef = useRef(onSearchChange)
     const scrollSelectedWhenAvailable = useRef(false)
-    const previousPageScrollHeight = useRef<number | null>(null)
+    const previousPageScrollPosition = useRef<{height: number; top: number} | null>(null)
 
     const menuListElement = () => {
         const input = document.getElementById(inputId)
@@ -118,23 +118,20 @@ export default function LazySearchSelect({
     }, [options])
 
     useLayoutEffect(() => {
-        const previousHeight = previousPageScrollHeight.current
-        if (previousHeight === null) return
+        const previousPosition = previousPageScrollPosition.current
+        if (previousPosition === null) return
 
         const menuList = menuListElement()
-        previousPageScrollHeight.current = null
+        previousPageScrollPosition.current = null
         if (!menuList) return
 
-        const addedHeight = menuList.scrollHeight - previousHeight
-        if (addedHeight <= 0 || menuList.scrollTop <= 0) return
+        const addedHeight = menuList.scrollHeight - previousPosition.height
+        if (addedHeight <= 0) return
 
-        // Browsers that preserve the old first visible option after a prepend
-        // move scrollTop down by the inserted height. Reveal one viewport of the
-        // newly loaded page immediately instead of requiring another gesture.
-        menuList.scrollTop = Math.max(
-            0,
-            menuList.scrollTop - Math.min(addedHeight, menuList.clientHeight),
-        )
+        // Keep the same content at the same visual position. The newly
+        // prepended page then exists directly above the current viewport,
+        // without triggering another page load until the user scrolls there.
+        menuList.scrollTop = previousPosition.top + addedHeight
     }, [groupedOptions])
 
     useEffect(() => {
@@ -164,13 +161,16 @@ export default function LazySearchSelect({
             }}
             onMenuClose={() => {
                 scrollSelectedWhenAvailable.current = false
-                previousPageScrollHeight.current = null
+                previousPageScrollPosition.current = null
             }}
             onMenuScrollToTop={() => {
                 if (!hasPrevious || isLoading || !onLoadPrevious) return
                 const menuList = menuListElement()
                 if (!menuList) return
-                previousPageScrollHeight.current = menuList.scrollHeight
+                previousPageScrollPosition.current = {
+                    height: menuList.scrollHeight,
+                    top: menuList.scrollTop,
+                }
                 onLoadPrevious()
             }}
             onMenuScrollToBottom={() => {
