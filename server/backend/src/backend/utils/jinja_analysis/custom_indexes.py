@@ -221,8 +221,7 @@ def _instrument_body(
 
     Marker output makes a Custom Index call observable to the shared path
     analyzer. Ordinary rendered output and assignments unrelated to index
-    reachability are removed entirely, so unsupported filename/path expressions
-    cannot force the Custom Index comparison to UNKNOWN.
+    reachability are removed entirely to help prevent false positives.
     """
     result: list[nodes.Stmt] = []
     for statement in body:
