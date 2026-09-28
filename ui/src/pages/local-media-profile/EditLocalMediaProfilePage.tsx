@@ -28,6 +28,7 @@ import {
     loadLocalMediaProfileDraft,
     saveLocalMediaProfileDraft,
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
+import './EditLocalMediaProfilePage.css'
 
 export default function EditLocalMediaProfilePage() {
     const navigate = useNavigate()
@@ -36,6 +37,7 @@ export default function EditLocalMediaProfilePage() {
     const initializedSlug = useRef<string | undefined>(undefined)
     const renameDecisionRef = useRef<boolean | null>(null)
     const [draftReady, setDraftReady] = useState(false)
+    const [restoredDraft, setRestoredDraft] = useState(false)
     const [renameTemplateConfirm, setRenameTemplateConfirm] = useState(false)
 
     const {data: profile, isLoading, error} = useQuery<LocalMediaProfileRead | undefined>({
@@ -71,7 +73,7 @@ export default function EditLocalMediaProfilePage() {
             : ShowLocalMediaProfileUpdateSchema.parse(profile)
         const draftKey = editLocalMediaProfileDraftKey(slug)
         const draft = loadLocalMediaProfileDraft<LocalMediaProfileUpdateIn>(draftKey)
-        const values = draft?.mode === profile.type
+        const restoredValues = draft?.mode === profile.type
             ? {
                 ...canonical,
                 ...draft.values,
@@ -80,9 +82,15 @@ export default function EditLocalMediaProfilePage() {
                 slug: canonical.slug,
             }
             : canonical
+        const hasRestoredChanges = (
+            draft?.mode === profile.type
+            && JSON.stringify(restoredValues) !== JSON.stringify(canonical)
+        )
 
-        form.reset(values)
+        form.reset(restoredValues)
         initializedSlug.current = slug
+        setRestoredDraft(hasRestoredChanges)
+        if (draft && !hasRestoredChanges) clearLocalMediaProfileDraft(draftKey)
         setDraftReady(true)
     }, [profile, slug, form])
 
@@ -150,6 +158,7 @@ export default function EditLocalMediaProfilePage() {
 
     const onSuccess = async () => {
         renameDecisionRef.current = null
+        setRestoredDraft(false)
         await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
         await qc.invalidateQueries({queryKey: ['localMediaProfile', slug]})
         clearLocalMediaProfileDraft(editLocalMediaProfileDraftKey(slug))
@@ -182,6 +191,17 @@ export default function EditLocalMediaProfilePage() {
         void onUpdate()
     }
 
+    const discardRestoredDraft = () => {
+        const canonical = profile.type === 'movie'
+            ? MovieLocalMediaProfileUpdateSchema.parse(profile)
+            : ShowLocalMediaProfileUpdateSchema.parse(profile)
+        form.reset(canonical)
+        clearLocalMediaProfileDraft(editLocalMediaProfileDraftKey(slug))
+        renameDecisionRef.current = null
+        setRestoredDraft(false)
+    }
+
+    const formId = 'edit-local-media-profile-form'
     const {formState: {isSubmitting}} = form
 
     return (
@@ -191,7 +211,7 @@ export default function EditLocalMediaProfilePage() {
                 {profile.type === 'show' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
-            <form className="form" onSubmit={onFormSubmit} noValidate>
+            <form id={formId} className="form" onSubmit={onFormSubmit} noValidate>
                 <div className="form-row">
                     <label>Profile type</label>
                     <div style={{padding: '6px 0'}}>{LocalMediaProfileTypeReg.getLabelLoose(profile.type)}</div>
@@ -204,6 +224,35 @@ export default function EditLocalMediaProfilePage() {
                     <input type="submit" className="btn btn-primary" value="Save changes" disabled={isSubmitting}/>
                 </div>
             </form>
+
+            {restoredDraft ? (
+                <div className="local-media-profile-restored-draft" role="status" aria-live="polite">
+                    <div>
+                        <strong>Unsaved changes restored</strong>
+                        <span>
+                            This form was restored from changes saved in this browser. They have not been saved to WireLoft yet.
+                        </span>
+                    </div>
+                    <div className="local-media-profile-restored-draft__buttons">
+                        <button
+                            className="btn"
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={discardRestoredDraft}
+                        >
+                            Discard
+                        </button>
+                        <button
+                            className="btn btn-primary"
+                            type="submit"
+                            form={formId}
+                            disabled={isSubmitting}
+                        >
+                            {isSubmitting ? 'Saving…' : 'Save changes'}
+                        </button>
+                    </div>
+                </div>
+            ) : null}
 
             <ConfirmDialog
                 open={renameTemplateConfirm}
