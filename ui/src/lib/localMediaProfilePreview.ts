@@ -67,12 +67,14 @@ export function useLocalMediaProfilePreview(request: PreviewRequest | null): Loc
         }
     }, [serialized])
 
-    // Invalidate both paths synchronously, including during the debounce delay.
-    // A completed response from another example can never leak into this one.
-    const current = serialized !== null && snapshot?.request === serialized
+    // Once a preview has settled, keep it visible while the next debounced
+    // request is in flight. The response still replaces the snapshot atomically,
+    // and aborted/out-of-order requests can never overwrite the latest one.
+    const active = serialized !== null
+    const current = active && snapshot?.request === serialized
     return {
-        result: current ? snapshot.result : null,
+        result: active ? snapshot?.result ?? null : null,
         error: current ? snapshot.error : '',
-        loading: serialized !== null && !current,
+        loading: active && !current,
     }
 }

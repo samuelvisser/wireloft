@@ -16,14 +16,14 @@ export default function ShowAssetsField({form, preview}: {
         {value: 'disabled', label: 'Disabled'},
     ]
     const fieldError = errors.downloadShowAssets
-    const showRootSummary = preview.loading
-        ? 'Resolving show root...'
-        : preview.error
-            ? preview.error
-            : root?.path
-                ? root.path
-                : root?.reason
-                    ? root.reason
+    const showRootSummary = preview.error
+        ? preview.error
+        : root?.path
+            ? root.path
+            : root?.reason
+                ? root.reason
+                : preview.loading
+                    ? 'Resolving show root...'
                     : 'Select an episode and enter an output template to preview the shared show root.'
 
 

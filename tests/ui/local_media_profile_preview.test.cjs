@@ -77,20 +77,31 @@ test('one request carries selected source and edits and supplies both paths', as
     assert.equal(state.result.output.outputPath, '/media/Edited/Episode.mp4')
 })
 
-test('edited values invalidate both paths before the next debounce fires', async () => {
+test('edited values keep the last preview stable until the next response arrives', async () => {
     const h = harness(), first = request('First'), second = request('Second')
-    h.render(first); const job = h.start()
-    respond(h.requests[0], payload('First')); await job
+    h.render(first); const firstJob = h.start()
+    respond(h.requests[0], payload('First')); await firstJob
     assert.equal(h.render(first).result.showRoot.path, '/media/First')
+
     const pending = h.render(second)
-    assert.equal(pending.result, null)
     assert.equal(pending.loading, true)
+    assert.equal(pending.result.showRoot.path, '/media/First')
+    assert.equal(pending.result.output.outputPath, '/media/First/Episode.mp4')
+
+    const secondJob = h.start()
+    respond(h.requests[1], payload('Second')); await secondJob
+    const settled = h.render(second)
+    assert.equal(settled.loading, false)
+    assert.equal(settled.result.showRoot.path, '/media/Second')
+    assert.equal(settled.result.output.outputPath, '/media/Second/Episode.mp4')
 })
 
 test('out-of-order responses cannot restore paths from an older example', async () => {
     const h = harness(), a = request('A'), b = request('B', 'episode:2')
     h.render(a); const first = h.start()
-    h.render(b); const second = h.start()
+    h.render(b)
+    assert.equal(h.render(b).loading, true)
+    const second = h.start()
     assert.equal(h.requests[0].options.signal.aborted, true)
     respond(h.requests[1], payload('B')); await second
     respond(h.requests[0], payload('A')); await first
