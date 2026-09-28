@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState} from 'react'
+import {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
 import Select, {type GroupBase} from 'react-select'
 
 export type LazySearchSelectOption = {
@@ -20,7 +20,7 @@ type Props = {
     onChange: (option: LazySearchSelectOption) => void
     onSearchChange: (search: string) => void
     onLoadMore: () => void
-    onLoadPrevious?: () => Promise<unknown> | void
+    onLoadPrevious?: () => void
     placeholder?: string
     noOptionsMessage?: string
     debounceMs?: number
@@ -50,6 +50,7 @@ export default function LazySearchSelect({
     const [inputValue, setInputValue] = useState('')
     const onSearchChangeRef = useRef(onSearchChange)
     const scrollSelectedWhenAvailable = useRef(false)
+    const previousPageScrollHeight = useRef<number | null>(null)
 
     const menuListElement = () => {
         const input = document.getElementById(inputId)
@@ -116,6 +117,26 @@ export default function LazySearchSelect({
         ]
     }, [options])
 
+    useLayoutEffect(() => {
+        const previousHeight = previousPageScrollHeight.current
+        if (previousHeight === null) return
+
+        const menuList = menuListElement()
+        previousPageScrollHeight.current = null
+        if (!menuList) return
+
+        const addedHeight = menuList.scrollHeight - previousHeight
+        if (addedHeight <= 0 || menuList.scrollTop <= 0) return
+
+        // Browsers that preserve the old first visible option after a prepend
+        // move scrollTop down by the inserted height. Reveal one viewport of the
+        // newly loaded page immediately instead of requiring another gesture.
+        menuList.scrollTop = Math.max(
+            0,
+            menuList.scrollTop - Math.min(addedHeight, menuList.clientHeight),
+        )
+    }, [groupedOptions])
+
     useEffect(() => {
         if (scrollSelectedWhenAvailable.current) scrollSelectedIntoView()
     }, [groupedOptions])
@@ -143,27 +164,14 @@ export default function LazySearchSelect({
             }}
             onMenuClose={() => {
                 scrollSelectedWhenAvailable.current = false
+                previousPageScrollHeight.current = null
             }}
             onMenuScrollToTop={() => {
                 if (!hasPrevious || isLoading || !onLoadPrevious) return
                 const menuList = menuListElement()
                 if (!menuList) return
-
-                const previousScrollHeight = menuList.scrollHeight
-                void Promise.resolve(onLoadPrevious()).then(() => {
-                    // Prepending options can trigger browser scroll anchoring, which
-                    // keeps the old first option visible and hides the new page above.
-                    // Move one viewport into the newly prepended content instead.
-                    window.requestAnimationFrame(() => {
-                        window.requestAnimationFrame(() => {
-                            if (!menuList.isConnected) return
-                            const addedHeight = menuList.scrollHeight - previousScrollHeight
-                            if (addedHeight <= 0) return
-                            const revealDistance = Math.min(addedHeight, menuList.clientHeight)
-                            menuList.scrollTop = Math.max(1, menuList.scrollTop - revealDistance)
-                        })
-                    })
-                })
+                previousPageScrollHeight.current = menuList.scrollHeight
+                onLoadPrevious()
             }}
             onMenuScrollToBottom={() => {
                 if (hasMore && !isLoading) onLoadMore()

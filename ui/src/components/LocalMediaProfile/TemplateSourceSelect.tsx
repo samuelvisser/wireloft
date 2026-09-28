@@ -19,7 +19,7 @@ type Props = {
     onChange: (source: LocalMediaProfileTemplateSource) => void
     onSearchChange: (search: string) => void
     onLoadMore: () => void
-    onLoadPrevious?: () => Promise<unknown> | void
+    onLoadPrevious?: () => void
 }
 
 function optionForSource(

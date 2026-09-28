@@ -791,7 +791,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                                 onChange={chooseSource}
                                 onSearchChange={setSourceSearch}
                                 onLoadMore={() => void sourceQuery.fetchNextPage()}
-                                onLoadPrevious={() => sourceQuery.fetchPreviousPage()}
+                                onLoadPrevious={() => void sourceQuery.fetchPreviousPage()}
                             />
                         </label>
                     </div>

@@ -41,6 +41,9 @@
 
 .template-source-select .select__menu-list {
     padding: 5px;
+    /* Keep scrollTop at the edge when previous pages are prepended so the
+       newly loaded options become visible immediately. */
+    overflow-anchor: none;
 }
 
 .template-source-select .select__group {
