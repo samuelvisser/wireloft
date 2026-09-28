@@ -78,7 +78,6 @@ def get_local_media_profile_preview_plan(
 
     Invalid/incomplete draft Jinja is normal while the user is typing. Planning
     is advisory, so expected template/value errors return a non-simulating plan
-    instead of turning a transient editor state into a 500 response.
     """
     if body.type != "show":
         return LocalMediaProfilePreviewPlan(simulates_custom_indexes=False)
