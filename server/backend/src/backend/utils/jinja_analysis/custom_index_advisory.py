@@ -192,6 +192,68 @@ def _assignment_sources(source: str, environment: Environment) -> dict[str, _Sta
     return {name: span for name, span in result.items() if name not in duplicates}
 
 
+def _assignment_block_sources(source: str, environment: Environment) -> dict[str, _StatementSource]:
+    """Locate complete set/endset spans without formatting the source."""
+    tokens = list(environment.lex(source))
+    if "".join(value for _, _, value in tokens) != source:
+        raise _Uncertain("Source locations could not be preserved")
+
+    tags: list[_StatementSource] = []
+    offset = 0
+    start: int | None = None
+    for _, kind, value in tokens:
+        if kind == "block_begin":
+            start = offset
+        offset += len(value)
+        if kind == "block_end" and start is not None:
+            tags.append(_StatementSource(start, offset, source[start:offset]))
+            start = None
+
+    result: dict[str, _StatementSource] = {}
+    duplicates: set[str] = set()
+    stack: list[tuple[str, int]] = []
+    for tag in tags:
+        tag_tokens = list(environment.lex(tag.source))
+        keyword = next((value for _, kind, value in tag_tokens if kind == "name"), "")
+        if keyword == "set":
+            try:
+                parsed = environment.parse(tag.source + "{% endset %}")
+            except TemplateError:
+                continue
+            if len(parsed.body) == 1 and isinstance(parsed.body[0], nodes.AssignBlock):
+                target = parsed.body[0].target
+                if isinstance(target, nodes.Name):
+                    stack.append((target.name, tag.start))
+            continue
+        if keyword != "endset" or not stack:
+            continue
+        name, block_start = stack.pop()
+        span = _StatementSource(block_start, tag.end, source[block_start:tag.end])
+        if name in result:
+            duplicates.add(name)
+        result[name] = span
+
+    return {name: span for name, span in result.items() if name not in duplicates}
+
+
+def _name_token_spans(
+    source: str,
+    environment: Environment,
+    *,
+    name: str,
+    within: _StatementSource,
+) -> tuple[tuple[int, int], ...]:
+    """Return exact lexer spans for a name inside one already-located block."""
+    result: list[tuple[int, int]] = []
+    offset = 0
+    for _, kind, value in environment.lex(source):
+        start = offset
+        offset += len(value)
+        if kind == "name" and value == name and within.start <= start < within.end:
+            result.append((start, offset))
+    return tuple(result)
+
+
 # Only expressions whose original value and evaluation count can be retained by
 # the small suggested refactor. This list is NOT a template-language restriction.
 _SAFE_FILTERS = frozenset({
@@ -313,6 +375,93 @@ def _stable_guard(expression: nodes.Expr, declarations: list[nodes.Assign], writ
     return True
 
 
+def _suggest_assignment_block_use(
+    source: str,
+    tree: nodes.Template,
+    *,
+    key: str,
+    environment: Environment,
+    current: nodes.Assign,
+    replacement: nodes.Expr,
+    removed: list[nodes.Assign],
+    writes: Counter,
+) -> CustomIndexSuggestion | None:
+    """Inline one eager index chain into an existing conditional set block.
+
+    The set block itself stays untouched except for the single variable load.
+    Jinja therefore remains responsible for every if/elif/else rule.
+    """
+    name = current.target.name
+    candidates = [
+        item for item in tree.body
+        if isinstance(item, nodes.AssignBlock) and name in _names(item)
+    ]
+    if len(candidates) != 1:
+        return None
+    block = candidates[0]
+    if not isinstance(block.target, nodes.Name):
+        return None
+    if writes[block.target.name] != 1 or not _reaches_output(tree, block.target.name):
+        return None
+
+    current_index = tree.body.index(current)
+    block_index = tree.body.index(block)
+    if block_index <= current_index:
+        return None
+
+    # Inlining inside an arbitrary Jinja block could otherwise change the
+    # meaning of free variables through loop/with/macro shadowing. Formatting
+    # chains around the Custom Index itself remain fine.
+    if _names(replacement):
+        return None
+
+    assignment_sources = _assignment_sources(source, environment)
+    if any(item.target.name not in assignment_sources for item in removed):
+        return None
+    block_sources = _assignment_block_sources(source, environment)
+    block_source = block_sources.get(block.target.name)
+    if block_source is None:
+        return None
+
+    references = _name_token_spans(
+        source, environment, name=name, within=block_source,
+    )
+    if len(references) != 1:
+        return None
+
+    replacement_source = _expression_source(replacement)
+    reference_start, reference_end = references[0]
+    revised_block = (
+        source[block_source.start:reference_start]
+        + replacement_source
+        + source[reference_end:block_source.end]
+    )
+
+    edits: list[tuple[int, int, str]] = [
+        (assignment_sources[item.target.name].start, assignment_sources[item.target.name].end, "")
+        for item in removed
+    ]
+    edits.append((reference_start, reference_end, replacement_source))
+    revised = source
+    for start, end, text in sorted(edits, reverse=True):
+        revised = revised[:start] + text + revised[end:]
+    if len(revised) > 4096:
+        return None
+
+    parsed = environment.parse(revised)
+    if key in _MustRun(parsed).body(parsed.body):
+        return None
+
+    return CustomIndexSuggestion(
+        before="\n".join([
+            *(assignment_sources[item.target.name].source for item in removed),
+            block_source.source,
+        ]),
+        after=revised_block,
+        output_template=revised,
+    )
+
+
 def _suggest(source: str, tree: nodes.Template, key: str, environment: Environment) -> CustomIndexSuggestion | None:
     """Move a single-use assignment chain into its existing selected branch.
 
@@ -342,7 +491,18 @@ def _suggest(source: str, tree: nodes.Template, key: str, environment: Environme
         if writes[name] != 1 or references[name] != 1 or name not in sources:
             return None
         consumer = next((item for item in declarations if name in _names(item.node)), None)
-        if consumer is None or tree.body.index(consumer) <= tree.body.index(current):
+        if consumer is None:
+            return _suggest_assignment_block_use(
+                source,
+                tree,
+                key=key,
+                environment=environment,
+                current=current,
+                replacement=replacement,
+                removed=removed,
+                writes=writes,
+            )
+        if tree.body.index(consumer) <= tree.body.index(current):
             return None
         if writes[consumer.target.name] != 1 or consumer.target.name not in sources:
             return None

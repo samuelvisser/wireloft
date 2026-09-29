@@ -43,6 +43,96 @@ PLEX = (
 )
 
 
+def test_reversed_inline_condition_still_gets_a_safe_set_block_suggestion(environment):
+    source = (
+        "{% set season_num = '%02d'|format(season_index|int) %}"
+        "{% set ep_num = '%02d'|format(episode_number|int) %}"
+        "{% set plex_year = ' (' ~ meta_show_year ~ ')' if meta_show_year != '' else '' %}"
+        "{% set extra_num='extra'|custom_index %}"
+        "{% set is_extra = season_type == 'extra' or episode_type == 'aux' or episode_type == 'trailer' %}"
+        "{% set plex_season = 'Season ' ~ season_num if not is_extra else 'Specials' %}"
+        "{% set plex_ep_id = 'S' ~ season_num ~ 'E' ~ ep_num if not is_extra else 'extra' ~ extra_num %}"
+        "/downloads/{{ plex_season }}/{{ plex_ep_id }}{{ plex_year }}.ext"
+    )
+    item, = advisory(environment, source).advisories
+    suggestion = item.suggestion
+    assert suggestion is not None
+    assert "'extra' | custom_index" in suggestion.after
+    assert "if not (is_extra)" in suggestion.after
+    assert "{% set extra_num=" not in suggestion.output_template
+
+    for is_extra in (False, True):
+        used = []
+        values = dict(
+            season_index='1',
+            episode_number='4',
+            meta_show_year='',
+            season_type='extra' if is_extra else 'normal',
+            episode_type='ep',
+            resolve=lambda key: used.append(key) or 7,
+        )
+        before = environment.from_string(source).render(values)
+        used.clear()
+        after = environment.from_string(suggestion.output_template).render(values)
+        assert after == before
+        assert bool(used) == is_extra
+
+
+def test_existing_multibranch_set_block_gets_the_index_inlined_into_its_selected_branch(environment):
+    source = (
+        "{% set extra_num='extra'|custom_index %}"
+        "{% set is_extra = episode_type == 'aux' or episode_type == 'trailer' %}"
+        "{% set plex_ep_id %}"
+        "{% if not is_extra %}S{{ season_num }}E{{ ep_num }}"
+        "{% elif season == 'test' %}Test"
+        "{% else %}extra{{ extra_num }}"
+        "{% endif %}"
+        "{% endset %}"
+        "/downloads/{{ plex_ep_id }}.ext"
+    )
+    item, = advisory(environment, source).advisories
+    suggestion = item.suggestion
+    assert suggestion is not None
+    assert "{% set extra_num=" not in suggestion.output_template
+    assert "{% elif season == 'test' %}" in suggestion.after
+    assert "extra{{ 'extra' | custom_index }}" in suggestion.after
+    assert not advisory(environment, suggestion.output_template).advisories
+
+    cases = [
+        dict(episode_type='ep', season='01', expected_use=False),
+        dict(episode_type='aux', season='test', expected_use=False),
+        dict(episode_type='aux', season='02', expected_use=True),
+    ]
+    for case in cases:
+        before_used = []
+        after_used = []
+        values = dict(
+            episode_type=case['episode_type'],
+            season=case['season'],
+            season_num='01',
+            ep_num='04',
+        )
+        before = environment.from_string(source).render(
+            **values, resolve=lambda key: before_used.append(key) or 7,
+        )
+        after = environment.from_string(suggestion.output_template).render(
+            **values, resolve=lambda key: after_used.append(key) or 7,
+        )
+        assert after == before
+        assert bool(after_used) == case['expected_use']
+        assert before_used == ['extra']
+
+
+@pytest.mark.parametrize('block', [
+    "{% set label %}{{ n }}{% endset %}",  # still unconditional after moving
+    "{% set label %}{% if flag %}{{ n }}-{{ n }}{% endif %}{% endset %}",  # multiple uses
+])
+def test_set_block_advice_stays_conservative_when_moving_the_index_would_not_be_safe(environment, block):
+    source = "{% set n='extra'|custom_index %}" + block + "/downloads/{{ label }}.ext"
+    item, = advisory(environment, source).advisories
+    assert item.suggestion is None
+
+
 def test_plex_suggestion_uses_existing_condition_and_a_native_set_block(environment):
     result = advisory(environment, PLEX)
     assert result.error is None
