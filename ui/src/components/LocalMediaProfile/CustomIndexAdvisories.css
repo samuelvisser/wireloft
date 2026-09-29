@@ -28,44 +28,6 @@
     font-weight: 600;
 }
 
-.template-index-suggestion .output-template-code-editor.template-index-code-editor {
-    max-width: 100%;
-    overflow: hidden;
-    border: 1px solid currentColor;
-    border-radius: 6px;
-    background: var(--bg);
-    box-shadow: none;
-    transition: none;
-}
-
-.template-index-suggestion .output-template-code-editor.template-index-code-editor:hover,
-.template-index-suggestion .output-template-code-editor.template-index-code-editor:focus-within {
-    border-color: currentColor;
-    box-shadow: none;
-}
-
-.template-index-suggestion .template-index-code-editor .cm-editor,
-.template-index-suggestion .template-index-code-editor .cm-gutters {
-    background: var(--bg);
-}
-
-.template-index-suggestion .template-index-code-editor .cm-scroller {
-    min-height: 0;
-}
-
-.template-index-suggestion .template-index-code-editor .cm-content {
-    padding: 10px 0;
-    line-height: 1.5;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 12px;
-    -webkit-text-size-adjust: 100%;
-    text-size-adjust: 100%;
-}
-
-.template-index-suggestion .template-index-code-editor .cm-line {
-    padding: 0 10px;
-}
-
 .template-index-suggestion button {
     font-size: 12px;
     padding: 5px 9px;

@@ -1,0 +1,37 @@
+.output-template-code-editor.read-only-output-template-code-editor {
+    max-width: 100%;
+    overflow: hidden;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    background: var(--bg);
+    box-shadow: none;
+    transition: none;
+}
+
+.output-template-code-editor.read-only-output-template-code-editor:hover,
+.output-template-code-editor.read-only-output-template-code-editor:focus-within {
+    border-color: currentColor;
+    box-shadow: none;
+}
+
+.read-only-output-template-code-editor .cm-editor,
+.read-only-output-template-code-editor .cm-gutters {
+    background: var(--bg);
+}
+
+.read-only-output-template-code-editor .cm-scroller {
+    min-height: 0;
+}
+
+.read-only-output-template-code-editor .cm-content {
+    padding: 10px 0;
+    line-height: 1.5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+.read-only-output-template-code-editor .cm-line {
+    padding: 0 10px;
+}
