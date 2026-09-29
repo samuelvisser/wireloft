@@ -752,9 +752,13 @@ def get_custom_index_advisories(
                 "of maintaining a separate Custom Index. The stored episode index includes "
                 "all episode types and can contain gaps, so review the preview before saving."
             ) if key in unconditional else (
-                "This Custom Index runs for every episode, even when its number is not used in the path. "
-                "This is fine for an all-episode sequence. To number only some episodes, "
-                "put the custom_index call inside the condition that selects them."
+                "Custom Indexes are designed to apply an index to only some episodes within a "
+                "show. As currently setup, this Custom Index runs for every episode, "
+                "even when its number is not used in the path. "
+                "If you intend to use an all-episode sequence, you should probably use the "
+                "{{\u00a0episode_index\u00a0}} variable WireLoft provides. "
+                "To number only some episodes, put the custom_index call inside the condition "
+                "that selects them."
             ),
             suggestion=suggestion,
         ))
