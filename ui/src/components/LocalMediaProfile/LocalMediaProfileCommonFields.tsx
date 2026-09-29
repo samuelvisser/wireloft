@@ -138,7 +138,7 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                     </div>
                 )}
                 <div className="help" id="local-media-thumbnail-mode-help">
-                    <ReadMore summary="Choose whether downloaded media stores its Daily Wire thumbnail.">
+                    <ReadMore summary="Choose how this profile stores the Daily Wire thumbnail for downloaded media.">
                         <p><strong>System</strong> follows the current system-wide default.</p>
                         <p><strong>No thumbnail</strong> keeps downloads media-only.</p>
                         <p><strong>Embed in media</strong> stores the thumbnail as cover artwork inside the downloaded media file.</p>
@@ -177,7 +177,7 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                     </div>
                 )}
                 <div className="help" id="local-media-metadata-mode-help">
-                    <ReadMore summary="Choose whether this profile inherits or overrides the system metadata behavior.">
+                    <ReadMore summary="Choose how this profile stores metadata for downloaded media.">
                         <p><strong>System</strong> follows the current system-wide default.</p>
                         <p><strong>No metadata</strong> leaves the downloaded media without WireLoft-generated metadata.</p>
                         <p><strong>Embed in media</strong> writes useful media-server metadata directly into supported media containers.</p>
