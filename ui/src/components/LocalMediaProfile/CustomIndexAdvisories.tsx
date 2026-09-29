@@ -73,11 +73,11 @@ export default function CustomIndexAdvisories({template, indexingValues, onApply
                             <summary>Suggested change for <code>{key}</code></summary>
                             <p>{kind === 'episode_index'
                                 ? <>Use the existing show-wide episode index. The <code>int</code> filter preserves numeric formatting and arithmetic.</>
-                                : <>Use the condition already in your template to control the index call. A Jinja set block builds the text only in the selected branch.</>
+                                : <>Keep the existing output logic and request the index only where its value is needed.</>
                             }</p>
                             <div className="template-index-code-label">Replace this code</div>
                             <SuggestionCode source={suggestion.before} label={`Code to replace for Custom Index ${key}`}/>
-                            <div className="template-index-code-label">{kind === 'episode_index' ? 'With the built-in variable' : 'With this set block'}</div>
+                            <div className="template-index-code-label">{kind === 'episode_index' ? 'With the built-in variable' : 'With this code'}</div>
                             <SuggestionCode source={suggestion.after} label={`Suggested replacement for Custom Index ${key}`}/>
                             <p>{kind === 'episode_index'
                                 ? <>Other template code is kept. Stored episode indexes can contain gaps; review the preview before saving. You can remove the Indexing Value definition once nothing uses it.</>

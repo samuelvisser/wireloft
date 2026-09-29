@@ -123,14 +123,18 @@ def test_no_else_inline_condition_gets_a_safe_conditional_set_block(environment)
         assert bool(after_used) == expected_use
 
 
-def test_no_else_inline_condition_is_not_rewritten_when_undefined_semantics_are_observed(environment):
+def test_no_else_inline_condition_preserves_undefined_with_an_expression_rewrite(environment):
     source = (
         "{% set n='extra'|custom_index %}"
         "{% set label='extra' ~ n if flag %}"
         "/downloads/{{ label | default('missing') }}.ext"
     )
     item, = advisory(environment, source).advisories
-    assert item.suggestion is None
+    assert item.suggestion is not None
+    assert "{% set label %}" not in item.suggestion.output_template
+    for flag in (False, True):
+        values = dict(flag=flag, resolve=lambda key: 7)
+        assert environment.from_string(item.suggestion.output_template).render(values) == environment.from_string(source).render(values)
 
 
 def test_existing_multibranch_set_block_gets_the_index_inlined_into_its_selected_branch(environment):
@@ -307,7 +311,6 @@ def test_single_use_alias_and_format_chains_are_not_plex_specific(environment, m
 
 @pytest.mark.parametrize('source', [
     "{% set n='extra'|custom_index %}{% set label='x' ~ n if flag else 'y' %}/downloads/{{label}}-{{n}}.ext",  # multiple use
-    "{% set n='extra'|custom_index %}{% set label=n if flag else 0 %}/downloads/{{label + 1}}.ext",  # nonstring
     "{% set n='extra'|custom_index %}{% set label='x' ~ n if n>5 else 'y' %}/downloads/{{label}}.ext",  # self guard
     "{% set n='extra'|custom_index %}{% set alias=title|random ~ n %}{% set label='x' ~ alias if flag else 'y' %}/downloads/{{label}}.ext",  # nondeterministic computation
     "{% set n='extra'|custom_index %}{% set alias=title ~ n %}{% set title='new' %}{% set label='x' ~ alias if flag else 'y' %}/downloads/{{label}}.ext",  # time-dependent binding
