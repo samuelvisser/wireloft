@@ -107,6 +107,7 @@ export default function LocalMediaProfilesPage() {
                         </>
                     )}
                     onRowClick={(p) => navigate(`/local-media-profile/${p.slug}`)}
+                    mobileRowActionLabel="View"
                     actions={(p) => [
                         {
                             onClick: () => navigate(`/edit-local-media-profile/${p.slug}`, { state: p }),
