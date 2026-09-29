@@ -169,6 +169,7 @@ export default function DownloadsSettingsTab({
                             <p>
                                 Temporary mode is particularly useful when the destination folder is used by a media server and you do not want it to pick up partly downloaded or empty media files.
                             </p>
+                            <p>Local Media Profiles default to System and can override this setting individually.</p>
                         </ReadMore>
                     }
                 />
@@ -206,7 +207,7 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.metadataMode = value as MetadataMode
                     })}
                     help={
-                        <ReadMore summary="Choose how WireLoft stores media-server metadata for downloaded media.">
+                        <ReadMore summary="Choose how WireLoft stores metadata for downloaded media.">
                             <p><strong>No metadata</strong> leaves the downloaded media without WireLoft-generated metadata.</p>
                             <p><strong>Embed in media</strong> writes metadata such as titles, dates and available episode or movie details into supported media containers.</p>
                             <p><strong>Download as NFO</strong> writes a same-basename NFO file beside the downloaded media.</p>
