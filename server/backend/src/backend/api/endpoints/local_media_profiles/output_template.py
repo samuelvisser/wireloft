@@ -61,6 +61,7 @@ _EXAMPLE_SHOW_VALUES = {
     "episode_type": "ep",
     "episode_extra_type": "",
     "episode_number": "1",
+    "episode_index": "1",
     "episode_sub_number": "",
     "episode_label": "1",
     "episode_identifier": "ep.1",

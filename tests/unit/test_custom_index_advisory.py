@@ -94,7 +94,8 @@ def test_plex_suggestion_uses_existing_condition_and_a_native_set_block(environm
 def test_guaranteed_calls_warn_even_without_a_safe_refactor(environment, template):
     result = advisory(environment, template)
     assert [item.key for item in result.advisories] == ['extra']
-    assert result.advisories[0].suggestion is None
+    if result.advisories[0].kind == 'all_episodes':
+        assert result.advisories[0].suggestion is None
 
 
 @pytest.mark.parametrize('template', [
@@ -229,3 +230,142 @@ def test_multiple_indexes_offer_separate_independent_suggestions(environment):
     assert all(item.suggestion for item in result.advisories)
     updated = result.advisories[0].suggestion.output_template
     assert [item.key for item in advisory(environment, updated, ('alpha', 'beta')).advisories] == ['beta']
+
+
+INTENTIONAL_SEQUENCE = (
+    "{% set extra_num = 'extra' | custom_index %}"
+    "{% set clean_title = title.replace(' ', '-') %}"
+    "/downloads/{{ extra_num }} - {{ clean_title }}.ext"
+)
+
+
+def test_unconditional_sequence_recommends_builtin_episode_index(environment):
+    item, = advisory(environment, INTENTIONAL_SEQUENCE).advisories
+    assert item.kind == 'episode_index'
+    assert 'episode_index' in item.message
+    assert 'gaps' in item.message
+    assert item.suggestion is not None
+    assert item.suggestion.after == '{% set extra_num = (episode_index | int) %}'
+    assert "{% set clean_title = title.replace(' ', '-') %}" in item.suggestion.output_template
+    assert not advisory(environment, item.suggestion.output_template).advisories
+    used = []
+    result = environment.from_string(item.suggestion.output_template).render(
+        title='The Episode', episode_index='42', resolve=lambda key: used.append(key),
+    )
+    assert result == '/downloads/42 - The-Episode.ext'
+    assert used == []
+
+
+@pytest.mark.parametrize('template', [
+    "/downloads/{{'extra'|custom_index}}.ext",
+    "{% set n='extra'|custom_index %}{% set alias=n %}/downloads/{{alias}}-{{n}}.ext",
+    "{% set n='extra'|custom_index %}{% set label='%03d'|format(n) %}/downloads/{{label}}.ext",
+    "{% set n='extra'|custom_index %}/downloads/{{ n + 1 }}.ext",
+    "{% set n='extra'|custom_index %}{% if flag %}{% set title='changed' %}{% endif %}/downloads/{{n}}-{{title}}.ext",
+    "/downloads/{% for c in title %}{{c}}{% endfor %}{{'extra'|custom_index}}.ext",
+    "/downloads/{% filter upper %}{{'extra'|custom_index}}{% endfilter %}.ext",
+])
+def test_plain_uses_follow_aliases_but_ignore_unrelated_jinja(environment, template):
+    item, = advisory(environment, template).advisories
+    assert item.kind == 'episode_index'
+    assert item.suggestion is not None
+    for number in (1, 12, 101):
+        values = dict(title='Title', flag=False, episode_index=str(number), resolve=lambda key: number)
+        original = environment.from_string(template).render(values)
+        changed = environment.from_string(item.suggestion.output_template).render(values)
+        assert changed == original
+
+
+@pytest.mark.parametrize('use', [
+    "{% set alias=n %}/downloads/{{alias if flag else 0}}.ext",
+    "{% set alias=n %}/downloads/{{flag and alias}}.ext",
+    "{% set alias=n %}/downloads/{{flag or alias}}.ext",
+    "{% set label='X' ~ n if flag else 'Y' %}/downloads/{{label}}.ext",
+    "/downloads/{% if flag %}{{n}}{% else %}normal{% endif %}.ext",
+    "/downloads/{% if n > 4 %}large{% else %}small{% endif %}.ext",
+    "/downloads/{% for part in title %}{{n}}{% endfor %}.ext",
+    "/downloads/{{n}}-{{n if flag else 0}}.ext",
+    "{% macro label() %}{{n if flag else 0}}{% endmacro %}/downloads/{{label()}}.ext",
+])
+def test_conditionally_used_eager_indexes_do_not_get_builtin_recommendation(environment, use):
+    item, = advisory(environment, "{% set n='extra'|custom_index %}" + use).advisories
+    assert item.kind == 'all_episodes'
+    assert 'put the custom_index call inside the condition' in item.message
+
+
+def test_plex_keeps_existing_conditional_set_block_recommendation(environment):
+    item, = advisory(environment, PLEX).advisories
+    assert item.kind == 'all_episodes'
+    assert item.suggestion is not None
+    assert '{% if is_extra %}' in item.suggestion.after
+    assert 'episode_index' not in item.suggestion.output_template
+
+
+@pytest.mark.parametrize('suffix', [
+    "/downloads/{{title}}.ext",  # declared but never used
+    "{% set n=99 %}/downloads/{{n}}.ext",  # ambiguous rebinding
+    "{% with n=99 %}{{n}}{% endwith %}/downloads/{{n}}.ext",  # shadowing
+    "/downloads/{{title.replace('x', n)}}.ext",  # opaque index-connected call
+])
+def test_uncertain_or_unused_values_keep_generic_warning(environment, suffix):
+    item, = advisory(environment, "{% set n='extra'|custom_index %}" + suffix).advisories
+    assert item.kind == 'all_episodes'
+
+
+def test_recommendation_and_replacements_are_independent_per_key(environment):
+    template = (
+        "{% set all='all'|custom_index %}{% set n='extra'|custom_index %}"
+        "{% set label='X' ~ n if flag else 'normal' %}/downloads/{{all}}-{{label}}.ext"
+    )
+    items = advisory(environment, template, ('all', 'extra')).advisories
+    assert [(item.key, item.kind) for item in items] == [('all', 'episode_index'), ('extra', 'all_episodes')]
+    assert all(item.suggestion for item in items)
+    changed = items[0].suggestion.output_template
+    assert "'extra'|custom_index" in changed
+    remaining = advisory(environment, changed, ('all', 'extra')).advisories
+    assert [(item.key, item.kind) for item in remaining] == [('extra', 'all_episodes')]
+
+
+def test_builtin_replacement_preserves_comments_raw_text_and_other_keys(environment):
+    template = (
+        "{# 'extra'|custom_index #}"
+        "{% set literal=\"'extra'|custom_index\" %}"
+        "/downloads/{{'extra'|custom_index}}-{{'other'|custom_index}}"
+        "{% raw %}'extra'|custom_index{% endraw %}.ext"
+    )
+    item, = advisory(environment, template).advisories
+    assert item.suggestion is not None
+    changed = item.suggestion.output_template
+    assert "{# 'extra'|custom_index #}" in changed
+    assert '{% set literal="\'extra\'|custom_index" %}' in changed
+    assert "{{'other'|custom_index}}" in changed
+    assert "{% raw %}'extra'|custom_index{% endraw %}" in changed
+
+
+@pytest.mark.parametrize('definition', [
+    "{% set episode_index=999 %}",
+    "{% macro episode_index() %}different{% endmacro %}",
+])
+def test_shadowed_builtin_retains_recommendation_without_an_unsafe_edit(environment, definition):
+    template = definition + "/downloads/{{'extra'|custom_index}}.ext"
+    item, = advisory(environment, template).advisories
+    assert item.kind == 'episode_index'
+    assert item.suggestion is None
+
+
+def test_unknown_source_locations_do_not_remove_the_builtin_warning(environment):
+    template = " \n{%- set n='extra'|custom_index %}/downloads/{{n}}.ext"
+    item, = advisory(environment, template).advisories
+    assert item.kind == 'episode_index'
+    assert item.suggestion is None
+
+
+def test_unconditional_advice_does_not_execute_any_filters(environment):
+    calls = []
+    environment.filters['observed'] = lambda value: calls.append(value)
+    environment.filters['custom_index'] = lambda value: calls.append(value)
+    template = "{% set ignored='value'|observed %}/downloads/{{'extra'|custom_index}}.ext"
+    item, = advisory(environment, template).advisories
+    assert item.kind == 'episode_index'
+    assert item.suggestion is not None
+    assert calls == []

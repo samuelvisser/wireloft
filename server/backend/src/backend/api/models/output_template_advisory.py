@@ -5,6 +5,7 @@ from typing import Annotated
 from pydantic import Field
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.utils.jinja_analysis.custom_index_advisory import CustomIndexAdvisoryKind
 
 
 class CustomIndexAdvisoryRequest(RequestBase):
@@ -25,6 +26,7 @@ class CustomIndexSuggestionRead(ResponseBase):
 class CustomIndexAdvisoryRead(ResponseBase):
     key: str
     message: str
+    kind: CustomIndexAdvisoryKind
     suggestion: CustomIndexSuggestionRead | None = None
 
 

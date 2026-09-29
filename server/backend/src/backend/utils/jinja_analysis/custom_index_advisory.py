@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Literal
 
 from jinja2 import Environment, TemplateError, nodes
 from jinja2.visitor import NodeTransformer
@@ -25,10 +25,14 @@ class CustomIndexSuggestion:
     output_template: str
 
 
+CustomIndexAdvisoryKind = Literal["all_episodes", "episode_index"]
+
+
 @dataclass(frozen=True)
 class CustomIndexAdvisory:
     key: str
     message: str
+    kind: CustomIndexAdvisoryKind = "all_episodes"
     suggestion: CustomIndexSuggestion | None = None
 
 
@@ -395,6 +399,119 @@ def _suggest(source: str, tree: nodes.Template, key: str, environment: Environme
     return None
 
 
+def _unconditional_output_keys(tree: nodes.Template) -> set[str]:
+    """Recognize unconditional output use, not merely an eager declaration.
+
+    Follow ordinary aliases/formatting, then exclude keys connected to any
+    conditional or uncertain scope. Unrelated Jinja cannot disqualify a key.
+    This is an advisory-only intent heuristic, never a rendering rule.
+    """
+    bindings: dict[str, set[str]] = {}
+
+    def keys(node: nodes.Node) -> set[str]:
+        found = {
+            key for item in (node, *node.find_all(nodes.Filter))
+            if (key := _index_key(item)) is not None
+        }
+        for name in _names(node):
+            found.update(bindings.get(name, ()))
+        return found
+
+    declarations = [
+        item for item in tree.body
+        if isinstance(item, nodes.Assign) and isinstance(item.target, nodes.Name)
+    ]
+    # Union across writes is intentional: ambiguous rebinding can only suppress
+    # this recommendation, not hide a conditional downstream use.
+    for _ in range(64):
+        changed = False
+        for item in declarations:
+            old = bindings.setdefault(item.target.name, set())
+            before = len(old)
+            old.update(keys(item.node))
+            changed |= len(old) != before
+        if not changed:
+            break
+    else:
+        return set()
+
+    uncertain: set[str] = set()
+    writes = Counter(item.name for item in tree.find_all(nodes.Name) if item.ctx in {"store", "param"})
+    for name, dependencies in bindings.items():
+        if writes[name] != 1:
+            uncertain.update(dependencies)
+    # Do not try to infer intent through runtime-selected scopes or opaque
+    # calls carrying an index. A title.replace() elsewhere is irrelevant.
+    for item in tree.find_all((
+        nodes.If, nodes.CondExpr, nodes.And, nodes.Or, nodes.Compare,
+        nodes.For, nodes.With, nodes.Macro, nodes.AssignBlock, nodes.CallBlock,
+        nodes.Call, nodes.Block, nodes.Import, nodes.FromImport, nodes.Include,
+    )):
+        uncertain.update(keys(item))
+    output = set().union(*(
+        keys(item) for item in tree.body if isinstance(item, (nodes.Output, nodes.FilterBlock))
+    ))
+    return output - uncertain
+
+
+def _suggest_episode_index(
+    source: str, tree: nodes.Template, key: str, environment: Environment,
+) -> CustomIndexSuggestion | None:
+    """Replace literal calls, preserving unrelated source and integer semantics."""
+    shadowed = _names(tree, "store") | _names(tree, "param")
+    shadowed.update(item.name for item in tree.find_all(nodes.Macro))
+    shadowed.update(item.target for item in tree.find_all(nodes.Import))
+    for item in tree.find_all(nodes.FromImport):
+        shadowed.update(name[1] if isinstance(name, tuple) else name for name in item.names)
+    if "episode_index" in shadowed:
+        return None  # The built-in variable would be shadowed by user code.
+    tokens = list(environment.lex(source))
+    if "".join(value for _, _, value in tokens) != source:
+        return None
+    significant = []
+    tags: list[tuple[int, int]] = []
+    offset = 0
+    start = None
+    for _, kind, value in tokens:
+        if kind in {"block_begin", "variable_begin"}:
+            start = offset
+        if kind != "whitespace":
+            significant.append((kind, value, offset, offset + len(value)))
+        offset += len(value)
+        if kind in {"block_end", "variable_end"} and start is not None:
+            tags.append((start, offset))
+            start = None
+    edits: list[tuple[int, int]] = []
+    for a, b, c in zip(significant, significant[1:], significant[2:]):
+        if a[0] != "string" or b[1] != "|" or c[0:2] != ("name", "custom_index"):
+            continue
+        fragment = source[a[2]:c[3]]
+        parsed = environment.parse("{{ " + fragment + " }}")
+        if _index_key(parsed.body[0].nodes[0]) == key:
+            edits.append((a[2], c[3]))
+    calls = [item for item in tree.find_all(nodes.Filter) if _index_key(item) == key]
+    if not edits or len(edits) != len(calls):
+        return None  # Parenthesized/unusual syntax is advice, not a guessed fix.
+
+    def replace(start: int, end: int) -> str:
+        fragment = source[start:end]
+        for a, b in reversed(edits):
+            if start <= a < b <= end:
+                fragment = fragment[:a - start] + "(episode_index | int)" + fragment[b - start:]
+        return fragment
+
+    revised = replace(0, len(source))
+    if len(revised) > 4096:
+        return None
+    environment.parse(revised)
+    changed = [(a, b) for a, b in tags if any(a <= x < y <= b for x, y in edits)]
+    return CustomIndexSuggestion(
+        before="\n".join(source[a:b] for a, b in changed),
+        after="\n".join(replace(a, b) for a, b in changed),
+        output_template=revised,
+    )
+
+
 def get_custom_index_advisories(
     template: str, *, definition_keys: Iterable[str], environment: Environment,
 ) -> CustomIndexAdvisoryResult:
@@ -412,16 +529,30 @@ def get_custom_index_advisories(
         guaranteed = _MustRun(tree).body(tree.body) & definitions
     except (TemplateError, _Uncertain, RecursionError) as exc:
         return CustomIndexAdvisoryResult(error=str(exc))
+    unconditional = set()
+    try:
+        unconditional = _unconditional_output_keys(tree) & guaranteed
+    except (_Uncertain, RecursionError):
+        pass  # Unknown intent retains the original proven all-episode warning.
     advisories = []
     for key in sorted(guaranteed):
         suggestion = None
         try:
-            suggestion = _suggest(template, tree, key, environment)
+            suggestion = (
+                _suggest_episode_index(template, tree, key, environment)
+                if key in unconditional else _suggest(template, tree, key, environment)
+            )
         except (TemplateError, _Uncertain, RecursionError, KeyError):
             pass  # A missing refactor must never hide a proven warning.
         advisories.append(CustomIndexAdvisory(
             key=key,
+            kind="episode_index" if key in unconditional else "all_episodes",
             message=(
+                "This Custom Index runs for every episode and has no conditional uses. "
+                "Use WireLoft's episode_index variable for this show-wide numbering instead "
+                "of maintaining a separate Custom Index. The stored episode index includes "
+                "all episode types and can contain gaps, so review the preview before saving."
+            ) if key in unconditional else (
                 "This Custom Index runs for every episode, even when its number is not used in the path. "
                 "This is fine for an all-episode sequence. To number only some episodes, "
                 "put the custom_index call inside the condition that selects them."

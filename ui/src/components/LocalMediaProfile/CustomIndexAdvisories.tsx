@@ -34,25 +34,28 @@ export default function CustomIndexAdvisories({template, indexingValues, onApply
                     </p>
                 </div>
             ))}
-            {advisories.map(({key, message, suggestion}) => (
+            {advisories.map(({key, kind, message, suggestion}) => (
                 <div className="template-metadata-warning template-index-advisory" role="status" key={key}>
-                    <strong>Custom Index <code>{key}</code> numbers every episode</strong>
+                    <strong>{kind === 'episode_index'
+                        ? <>Use <code>episode_index</code> instead of Custom Index <code>{key}</code></>
+                        : <>Custom Index <code>{key}</code> numbers every episode</>
+                    }</strong>
                     <p>{message}</p>
                     {suggestion && (
                         <details className="template-index-suggestion">
                             <summary>Suggested change for <code>{key}</code></summary>
-                            <p>
-                                Use the condition already in your template to control the index call.
-                                A Jinja set block builds the text only in the selected branch.
-                            </p>
-                            <div className="template-index-code-label">Replace these assignments</div>
+                            <p>{kind === 'episode_index'
+                                ? <>Use the existing show-wide episode index. The <code>int</code> filter preserves numeric formatting and arithmetic.</>
+                                : <>Use the condition already in your template to control the index call. A Jinja set block builds the text only in the selected branch.</>
+                            }</p>
+                            <div className="template-index-code-label">Replace this code</div>
                             <pre><code>{exampleCode(suggestion.before)}</code></pre>
-                            <div className="template-index-code-label">With this set block</div>
+                            <div className="template-index-code-label">{kind === 'episode_index' ? 'With the built-in variable' : 'With this set block'}</div>
                             <pre><code>{exampleCode(suggestion.after)}</code></pre>
-                            <p>
-                                This changes which episodes receive a number. Other template code is kept.
-                                Review the preview before saving; saving may renumber this index.
-                            </p>
+                            <p>{kind === 'episode_index'
+                                ? <>Other template code is kept. Stored episode indexes can contain gaps; review the preview before saving. You can remove the Indexing Value definition once nothing uses it.</>
+                                : <>This changes which episodes receive a number. Other template code is kept. Review the preview before saving; saving may renumber this index.</>
+                            }</p>
                             <button
                                 type="button"
                                 className="btn btn-secondary"

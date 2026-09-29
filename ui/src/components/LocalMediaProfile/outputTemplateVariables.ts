@@ -52,6 +52,17 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
         },
     },
     {name: 'episode', description: 'Episode URL slug'},
+    {
+        name: 'episode_index',
+        description: 'WireLoft episode index across the whole show, including extras',
+        readMore: {
+            paragraphs: [
+                'Use this existing show-wide index instead of a Custom Index that numbers every episode.',
+                'Unlike episode_number, it does not restart for a season or episode type. It is the stored Episode index, not a database ID or a newly calculated counter; gaps are preserved.',
+                'Template variables are text. Use episode_index | int for arithmetic or numeric formatting.',
+            ],
+        },
+    },
     {name: 'episode_title', description: 'Episode title'},
     {name: 'title', description: 'Episode title'},
     {name: 'dw_episode_number', description: 'Raw episode number exactly as returned by The Daily Wire'},
