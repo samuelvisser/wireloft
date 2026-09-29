@@ -349,6 +349,24 @@ def _reaches_output(tree: nodes.Template, name: str) -> bool:
     return False
 
 
+def _is_direct_output_value(tree: nodes.Template, name: str) -> bool:
+    """Whether a variable's only load is a plain output expression."""
+    loads = [
+        item for item in tree.find_all(nodes.Name)
+        if item.ctx == "load" and item.name == name
+    ]
+    if len(loads) != 1:
+        return False
+    return any(
+        isinstance(statement, nodes.Output)
+        and any(
+            isinstance(item, nodes.Name) and item.ctx == "load" and item.name == name
+            for item in statement.nodes
+        )
+        for statement in tree.body
+    )
+
+
 def _stable_guard(expression: nodes.Expr, declarations: list[nodes.Assign], writes: Counter, before: nodes.Assign) -> bool:
     """Do not recommend a random/index-dependent guard hidden behind aliases."""
     by_name = {item.target.name: item for item in declarations[:declarations.index(before)]}
@@ -513,16 +531,28 @@ def _suggest(source: str, tree: nodes.Template, key: str, environment: Environme
             return None
         expression = consumer.node
         if isinstance(expression, nodes.CondExpr):
-            if expression.expr2 is None or name in _names(expression.test):
+            if name in _names(expression.test):
                 return None
             yes = name in _names(expression.expr1)
-            no = name in _names(expression.expr2)
+            no = expression.expr2 is not None and name in _names(expression.expr2)
             if yes == no or not _reaches_output(tree, consumer.target.name):
                 return None
-            # Keep captures string-valued. An unknown/numeric result needs a
-            # different refactor; do not silently change its Jinja value type.
-            if not (_string_expression(expression.expr1) and _string_expression(expression.expr2)):
-                return None
+
+            implicit_else = expression.expr2 is None
+            if implicit_else:
+                # A no-else inline conditional yields Jinja Undefined when false.
+                # An empty captured set is render-equivalent only when this value
+                # is emitted directly and is not otherwise inspected downstream.
+                if not yes or not _is_direct_output_value(tree, consumer.target.name):
+                    return None
+                if not _string_expression(expression.expr1):
+                    return None
+            else:
+                # Keep captures string-valued. An unknown/numeric result needs a
+                # different refactor; do not silently change its Jinja value type.
+                if not (_string_expression(expression.expr1) and _string_expression(expression.expr2)):
+                    return None
+
             if not _stable_guard(expression.test, declarations, writes, consumer):
                 return None
             guard = _expression_source(expression.test)
@@ -530,12 +560,19 @@ def _suggest(source: str, tree: nodes.Template, key: str, environment: Environme
             if expression_key(parsed_guard) != expression_key(expression.test):
                 return None
             first = _Inline(name, replacement).visit(deepcopy(expression.expr1))
-            second = _Inline(name, replacement).visit(deepcopy(expression.expr2))
-            body = (
-                "{% set " + consumer.target.name + " %}{% if " + guard + " %}"
-                + _captured_output(first, strings) + "{% else %}" + _captured_output(second, strings)
-                + "{% endif %}{% endset %}"
-            )
+            if implicit_else:
+                body = (
+                    "{% set " + consumer.target.name + " %}{% if " + guard + " %}"
+                    + _captured_output(first, strings)
+                    + "{% endif %}{% endset %}"
+                )
+            else:
+                second = _Inline(name, replacement).visit(deepcopy(expression.expr2))
+                body = (
+                    "{% set " + consumer.target.name + " %}{% if " + guard + " %}"
+                    + _captured_output(first, strings) + "{% else %}" + _captured_output(second, strings)
+                    + "{% endif %}{% endset %}"
+                )
             edits = [(sources[item.target.name], "") for item in removed]
             edits.append((sources[consumer.target.name], body))
             revised = source

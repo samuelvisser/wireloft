@@ -78,6 +78,61 @@ def test_reversed_inline_condition_still_gets_a_safe_set_block_suggestion(enviro
         assert bool(used) == is_extra
 
 
+def test_no_else_inline_condition_gets_a_safe_conditional_set_block(environment):
+    source = (
+        '{# Variables #}'
+        '{% set season_num = "%02d"|format(season_number|int) %}'
+        '{% set ep_num = "%02d"|format(episode_number|int) %}'
+        "{% set is_extra = season_type == 'extra' or episode_type == 'aux' or episode_type == 'trailer' %}"
+        "{% set extra_num = 'extra' | custom_index %}"
+        "{% set plex_year = ' (' ~ meta_show_year ~ ')' if meta_show_year %}"
+        "{% set plex_show_title = show_title ~ plex_year %}"
+        "{% set plex_season = 'Specials' if is_extra else 'Season ' ~ season_num %}"
+        "{% set plex_ep_id = 'other' ~ extra_num if is_extra %}"
+        "/downloads/{{ plex_show_title }}/{{ plex_season }}/{{ plex_ep_id }}.ext"
+    )
+    item, = advisory(environment, source).advisories
+    suggestion = item.suggestion
+    assert suggestion is not None
+    assert "{% set extra_num =" not in suggestion.output_template
+    assert suggestion.after == (
+        "{% set plex_ep_id %}{% if is_extra %}"
+        "other{{ 'extra' | custom_index }}{% endif %}{% endset %}"
+    )
+    assert not advisory(environment, suggestion.output_template).advisories
+
+    for episode_type, expected_use in (('ep', False), ('aux', True)):
+        before_used = []
+        after_used = []
+        values = dict(
+            season_number='1',
+            episode_number='4',
+            season_type='normal',
+            episode_type=episode_type,
+            meta_show_year='',
+            show_title='A Show',
+        )
+        before = environment.from_string(source).render(
+            **values, resolve=lambda key: before_used.append(key) or 7,
+        )
+        after = environment.from_string(suggestion.output_template).render(
+            **values, resolve=lambda key: after_used.append(key) or 7,
+        )
+        assert after == before
+        assert before_used == ['extra']
+        assert bool(after_used) == expected_use
+
+
+def test_no_else_inline_condition_is_not_rewritten_when_undefined_semantics_are_observed(environment):
+    source = (
+        "{% set n='extra'|custom_index %}"
+        "{% set label='extra' ~ n if flag %}"
+        "/downloads/{{ label | default('missing') }}.ext"
+    )
+    item, = advisory(environment, source).advisories
+    assert item.suggestion is None
+
+
 def test_existing_multibranch_set_block_gets_the_index_inlined_into_its_selected_branch(environment):
     source = (
         "{% set extra_num='extra'|custom_index %}"
