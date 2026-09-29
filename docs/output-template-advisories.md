@@ -82,12 +82,48 @@ choose **Use suggested change** to update the form. Nothing is applied or saved
 automatically. Review the preview before saving: restricting membership can
 renumber the participating episodes when Custom Indexes are reconciled.
 
+## Other supported patterns
+
+Advice is not limited to a particular variable name or a set block. Bounded,
+unambiguous patterns also include direct and nested `if`/`elif` branches,
+inline conditionals, `and`/`or` short-circuiting, closed formatting chains,
+and existing captured set or filter blocks. Where a captured string could
+change a later filter, numeric operation, or `Undefined` test, the suggestion
+keeps the original expression instead.
+
+A uniquely called, locally defined macro can capture an index or receive one
+as an eagerly evaluated argument. When the relevant value is used once in a
+known conditional branch, the editor can move the call into that branch. Other
+macro arguments remain at their original evaluation site. Shared, redefined,
+recursive, introspected, or ambiguously scoped macros do not get this refactor.
+
+Literal list and dictionary selection can also be made conditional. For a named
+table, the suggestion keeps the table and its other entries at the original
+location, replacing only the index entry and its checked lookups. This avoids
+silently skipping other computations or their errors. Inline tables have a
+stricter limit: their other entries must be constants or simple scalar reads.
+Tables exposed elsewhere, dynamic keys, uncertain selectors, or multiple index
+uses do not receive a speculative replacement.
+
+## Safety boundary
+
+The advisor moves only single-use index expressions and supported closed,
+side-effect-free formatting of them. It does not move arbitrary function calls,
+random computations, expressions depending on reassigned inputs, or operations
+whose failure or value type could change. It preserves original native Jinja
+conditions, including omitted `else` and Boolean short-circuit behavior, rather
+than interpreting them using sample episodes.
+
+Each proposed source edit is parsed again and checked against the intended
+syntax-tree edit. This is not a proof based on the selected preview example.
+With the same index value, a safe conditional rewrite keeps the rendered result;
+reconciliation can subsequently change the number because fewer episodes now
+participate in that index.
+
 Suggestions reuse conditions already in the template; index names such as
 `extra` have no special meaning. Ambiguous scopes, reassignments, or opaque
 index-dependent code keep the generic warning rather than guessing intent.
-Multiple uses, uncertain value types or operations that cannot safely be moved
-can prevent a conditional suggestion. The warning remains when that fact is
-known. Complex Jinja does not become invalid because advice is unavailable.
+Complex Jinja does not become invalid because advice is unavailable.
 
 Advice may be temporarily unavailable or incomplete while typing. It never adds
 validation restrictions to the LMP or changes path rendering, index assignment,

@@ -90,3 +90,19 @@ def test_mixed_advisory_kinds_are_serialized_per_key(client):
     assert [(item['key'], item['kind']) for item in response.json()['advisories']] == [
         ('all', 'episode_index'), ('extra', 'all_episodes'),
     ]
+
+
+@pytest.mark.parametrize('template', [
+    "{% set n='extra'|custom_index %}/downloads/{% if flag %}{{n}}{% else %}normal{% endif %}.ext",
+    "{% set n='extra'|custom_index %}/downloads/{{flag and n or 'normal'}}.ext",
+    "{% macro m(n, gate) %}{{n if gate else 'normal'}}{% endmacro %}/downloads/{{m('extra'|custom_index,flag)}}.ext",
+    "{% set choices=['normal','extra'|custom_index] %}/downloads/{{choices[1 if flag else 0]}}.ext",
+])
+def test_guarded_refactors_are_exposed_without_changing_the_response_contract(client, template):
+    response = request(client, template)
+    assert response.status_code == 200
+    item, = response.json()['advisories']
+    assert item['kind'] == 'all_episodes'
+    assert item['suggestion']['outputTemplate'] != template
+    assert item['suggestion']['before']
+    assert item['suggestion']['after']

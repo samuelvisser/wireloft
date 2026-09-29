@@ -17,14 +17,8 @@ from typing import Iterable, Literal
 from jinja2 import Environment, TemplateError, nodes
 from jinja2.visitor import NodeTransformer
 
+from .custom_index_refactors import CustomIndexSuggestion, suggest_guarded_index
 from .expressions import expression_key
-
-
-@dataclass(frozen=True)
-class CustomIndexSuggestion:
-    before: str
-    after: str
-    output_template: str
 
 
 CustomIndexAdvisoryKind = Literal["all_episodes", "episode_index"]
@@ -192,68 +186,6 @@ def _assignment_sources(source: str, environment: Environment) -> dict[str, _Sta
     return {name: span for name, span in result.items() if name not in duplicates}
 
 
-def _assignment_block_sources(source: str, environment: Environment) -> dict[str, _StatementSource]:
-    """Locate complete set/endset spans without formatting the source."""
-    tokens = list(environment.lex(source))
-    if "".join(value for _, _, value in tokens) != source:
-        raise _Uncertain("Source locations could not be preserved")
-
-    tags: list[_StatementSource] = []
-    offset = 0
-    start: int | None = None
-    for _, kind, value in tokens:
-        if kind == "block_begin":
-            start = offset
-        offset += len(value)
-        if kind == "block_end" and start is not None:
-            tags.append(_StatementSource(start, offset, source[start:offset]))
-            start = None
-
-    result: dict[str, _StatementSource] = {}
-    duplicates: set[str] = set()
-    stack: list[tuple[str, int]] = []
-    for tag in tags:
-        tag_tokens = list(environment.lex(tag.source))
-        keyword = next((value for _, kind, value in tag_tokens if kind == "name"), "")
-        if keyword == "set":
-            try:
-                parsed = environment.parse(tag.source + "{% endset %}")
-            except TemplateError:
-                continue
-            if len(parsed.body) == 1 and isinstance(parsed.body[0], nodes.AssignBlock):
-                target = parsed.body[0].target
-                if isinstance(target, nodes.Name):
-                    stack.append((target.name, tag.start))
-            continue
-        if keyword != "endset" or not stack:
-            continue
-        name, block_start = stack.pop()
-        span = _StatementSource(block_start, tag.end, source[block_start:tag.end])
-        if name in result:
-            duplicates.add(name)
-        result[name] = span
-
-    return {name: span for name, span in result.items() if name not in duplicates}
-
-
-def _name_token_spans(
-    source: str,
-    environment: Environment,
-    *,
-    name: str,
-    within: _StatementSource,
-) -> tuple[tuple[int, int], ...]:
-    """Return exact lexer spans for a name inside one already-located block."""
-    result: list[tuple[int, int]] = []
-    offset = 0
-    for _, kind, value in environment.lex(source):
-        start = offset
-        offset += len(value)
-        if kind == "name" and value == name and within.start <= start < within.end:
-            result.append((start, offset))
-    return tuple(result)
-
-
 # Only expressions whose original value and evaluation count can be retained by
 # the small suggested refactor. This list is NOT a template-language restriction.
 _SAFE_FILTERS = frozenset({
@@ -335,20 +267,6 @@ class _Inline(NodeTransformer):
         return self.value if node.ctx == "load" and node.name == self.name else node
 
 
-def _reaches_output(tree: nodes.Template, name: str) -> bool:
-    needed = {name}
-    for _ in range(64):
-        previous = set(needed)
-        for statement in tree.body:
-            if isinstance(statement, nodes.Output) and _names(statement) & needed:
-                return True
-            if isinstance(statement, nodes.Assign) and isinstance(statement.target, nodes.Name) and _names(statement.node) & needed:
-                needed.add(statement.target.name)
-        if needed == previous:
-            return False
-    return False
-
-
 def _is_direct_output_value(tree: nodes.Template, name: str) -> bool:
     """Whether a variable's only load is a plain output expression."""
     loads = [
@@ -393,99 +311,8 @@ def _stable_guard(expression: nodes.Expr, declarations: list[nodes.Assign], writ
     return True
 
 
-def _suggest_assignment_block_use(
-    source: str,
-    tree: nodes.Template,
-    *,
-    key: str,
-    environment: Environment,
-    current: nodes.Assign,
-    replacement: nodes.Expr,
-    removed: list[nodes.Assign],
-    writes: Counter,
-) -> CustomIndexSuggestion | None:
-    """Inline one eager index chain into an existing conditional set block.
-
-    The set block itself stays untouched except for the single variable load.
-    Jinja therefore remains responsible for every if/elif/else rule.
-    """
-    name = current.target.name
-    candidates = [
-        item for item in tree.body
-        if isinstance(item, nodes.AssignBlock) and name in _names(item)
-    ]
-    if len(candidates) != 1:
-        return None
-    block = candidates[0]
-    if not isinstance(block.target, nodes.Name):
-        return None
-    if writes[block.target.name] != 1 or not _reaches_output(tree, block.target.name):
-        return None
-
-    current_index = tree.body.index(current)
-    block_index = tree.body.index(block)
-    if block_index <= current_index:
-        return None
-
-    # Inlining inside an arbitrary Jinja block could otherwise change the
-    # meaning of free variables through loop/with/macro shadowing. Formatting
-    # chains around the Custom Index itself remain fine.
-    if _names(replacement):
-        return None
-
-    assignment_sources = _assignment_sources(source, environment)
-    if any(item.target.name not in assignment_sources for item in removed):
-        return None
-    block_sources = _assignment_block_sources(source, environment)
-    block_source = block_sources.get(block.target.name)
-    if block_source is None:
-        return None
-
-    references = _name_token_spans(
-        source, environment, name=name, within=block_source,
-    )
-    if len(references) != 1:
-        return None
-
-    replacement_source = _expression_source(replacement)
-    reference_start, reference_end = references[0]
-    revised_block = (
-        source[block_source.start:reference_start]
-        + replacement_source
-        + source[reference_end:block_source.end]
-    )
-
-    edits: list[tuple[int, int, str]] = [
-        (assignment_sources[item.target.name].start, assignment_sources[item.target.name].end, "")
-        for item in removed
-    ]
-    edits.append((reference_start, reference_end, replacement_source))
-    revised = source
-    for start, end, text in sorted(edits, reverse=True):
-        revised = revised[:start] + text + revised[end:]
-    if len(revised) > 4096:
-        return None
-
-    parsed = environment.parse(revised)
-    if key in _MustRun(parsed).body(parsed.body):
-        return None
-
-    return CustomIndexSuggestion(
-        before="\n".join([
-            *(assignment_sources[item.target.name].source for item in removed),
-            block_source.source,
-        ]),
-        after=revised_block,
-        output_template=revised,
-    )
-
-
 def _suggest(source: str, tree: nodes.Template, key: str, environment: Environment) -> CustomIndexSuggestion | None:
-    """Move a single-use assignment chain into its existing selected branch.
-
-    Do not infer a new predicate from names such as 'extra'. Only reuse a guard
-    already present in the author's code. Ambiguous uses/scope/type => no fix.
-    """
+    """Keep the existing readable set-block suggestion for simple string branches."""
     sources = _assignment_sources(source, environment)
     writes = Counter(item.name for item in tree.find_all(nodes.Name) if item.ctx in {"store", "param"})
     references = Counter(item.name for item in tree.find_all(nodes.Name) if item.ctx == "load")
@@ -509,22 +336,10 @@ def _suggest(source: str, tree: nodes.Template, key: str, environment: Environme
         if writes[name] != 1 or references[name] != 1 or name not in sources:
             return None
         consumer = next((item for item in declarations if name in _names(item.node)), None)
-        if consumer is None:
-            return _suggest_assignment_block_use(
-                source,
-                tree,
-                key=key,
-                environment=environment,
-                current=current,
-                replacement=replacement,
-                removed=removed,
-                writes=writes,
-            )
-        if tree.body.index(consumer) <= tree.body.index(current):
+        if consumer is None or tree.body.index(consumer) <= tree.body.index(current):
             return None
         if writes[consumer.target.name] != 1 or consumer.target.name not in sources:
             return None
-        # Moving a computation past a rebinding would change its value.
         start, end = tree.body.index(current), tree.body.index(consumer)
         inputs = _names(replacement)
         if any(_names(item, "store") & inputs for item in tree.body[start + 1:end]):
@@ -535,23 +350,20 @@ def _suggest(source: str, tree: nodes.Template, key: str, environment: Environme
                 return None
             yes = name in _names(expression.expr1)
             no = expression.expr2 is not None and name in _names(expression.expr2)
-            if yes == no or not _reaches_output(tree, consumer.target.name):
+            if yes == no or not _is_direct_output_value(tree, consumer.target.name):
                 return None
+            # Pretty captures finalize their fragments. Use them only at a direct
+            # output sink; the general refactor preserves expressions/types when
+            # later filters or tests could observe the unfinalized value.
 
             implicit_else = expression.expr2 is None
             if implicit_else:
-                # A no-else inline conditional yields Jinja Undefined when false.
-                # An empty captured set is render-equivalent only when this value
-                # is emitted directly and is not otherwise inspected downstream.
                 if not yes or not _is_direct_output_value(tree, consumer.target.name):
                     return None
                 if not _string_expression(expression.expr1):
                     return None
-            else:
-                # Keep captures string-valued. An unknown/numeric result needs a
-                # different refactor; do not silently change its Jinja value type.
-                if not (_string_expression(expression.expr1) and _string_expression(expression.expr2)):
-                    return None
+            elif not (_string_expression(expression.expr1) and _string_expression(expression.expr2)):
+                return None
 
             if not _stable_guard(expression.test, declarations, writes, consumer):
                 return None
@@ -582,14 +394,12 @@ def _suggest(source: str, tree: nodes.Template, key: str, environment: Environme
                 return None
             parsed = environment.parse(revised)
             if key in _MustRun(parsed).body(parsed.body):
-                return None  # A constant/otherwise unconditional guard would not help.
+                return None
             return CustomIndexSuggestion(
                 before="\n".join(sources[item.target.name].source for item in [*removed, consumer]),
                 after=body,
                 output_template=revised,
             )
-        # Follow ordinary one-use aliases/formatting rather than special-casing
-        # a name or a Plex layout. The serializer doubles as a conservative gate.
         _expression_source(expression)
         replacement = _Inline(name, replacement).visit(deepcopy(expression))
         _expression_source(replacement)
@@ -644,7 +454,7 @@ def _unconditional_output_keys(tree: nodes.Template) -> set[str]:
     for item in tree.find_all((
         nodes.If, nodes.CondExpr, nodes.And, nodes.Or, nodes.Compare,
         nodes.For, nodes.With, nodes.Macro, nodes.AssignBlock, nodes.CallBlock,
-        nodes.Call, nodes.Block, nodes.Import, nodes.FromImport, nodes.Include,
+        nodes.Call, nodes.Getitem, nodes.Getattr, nodes.Block, nodes.Import, nodes.FromImport, nodes.Include,
     )):
         uncertain.update(keys(item))
     output = set().union(*(
@@ -737,10 +547,20 @@ def get_custom_index_advisories(
     for key in sorted(guaranteed):
         suggestion = None
         try:
-            suggestion = (
-                _suggest_episode_index(template, tree, key, environment)
-                if key in unconditional else _suggest(template, tree, key, environment)
-            )
+            if key in unconditional:
+                suggestion = _suggest_episode_index(template, tree, key, environment)
+            else:
+                # The bounded source-preserving proof is required even for the
+                # older pretty set-block form. No filters/templates are executed.
+                suggestion = suggest_guarded_index(template, tree, key, environment)
+                if suggestion is not None:
+                    try:
+                        suggestion = _suggest(template, tree, key, environment) or suggestion
+                    except (TemplateError, _Uncertain, RecursionError, KeyError):
+                        pass
+                    proposed = environment.parse(suggestion.output_template)
+                    if key in _MustRun(proposed).body(proposed.body):
+                        suggestion = None
         except (TemplateError, _Uncertain, RecursionError, KeyError):
             pass  # A missing refactor must never hide a proven warning.
         advisories.append(CustomIndexAdvisory(

@@ -26,7 +26,9 @@ function load(relative, mocks) {
 
 function component(advisories) {
     const applied = []
-    const jsx = (type, props) => ({type, props})
+    // Execute the small SuggestionCode function too, so read-only assertions
+    // inspect its CodeMirror props rather than an unrendered component node.
+    const jsx = (type, props) => typeof type === 'function' ? type(props) : {type, props}
     const {default: Advisory} = load('src/components/LocalMediaProfile/CustomIndexAdvisories.tsx', {
         'react/jsx-runtime': {jsx, jsxs: jsx, Fragment: 'fragment'},
         react: {useMemo: (factory) => factory()},
@@ -99,8 +101,8 @@ test('mixed advisories remain independent and keep the existing conditional guid
     }])
     assert.equal(result.elements.filter(({props}) => props.role === 'status').length, 2)
     assert.equal(result.elements.filter(({type}) => type === 'button').length, 2)
-    assert.match(result.text, /With this set block/)
-    assert.match(result.text, /A Jinja set block/)
+    assert.match(result.text, /With this code/)
+    assert.match(result.text, /Keep the existing output logic/)
     assert.match(result.text, /With the built-in variable/)
 })
 
@@ -118,3 +120,22 @@ test('episode_index is exposed in the shared show variable reference, not movies
     assert.match(variable.readMore.paragraphs.join(' '), /gaps/)
     assert.ok(!getOutputTemplateVariables('movie').some(({name}) => name === 'episode_index'))
 })
+
+for (const after of [
+    "{% if is_extra %}{{ 'extra' | custom_index }}{% endif %}",
+    "{% macro label(flag) %}{{ ('extra' | custom_index) if flag else 'normal' }}{% endmacro %}",
+]) {
+    test('non-capture replacement remains static and explicitly applied: ' + after, () => {
+        const suggestion = {before: 'original source', after, outputTemplate: 'complete replacement ' + after}
+        const result = component([{key: 'extra', kind: 'all_episodes', message: 'Every episode', suggestion}])
+        assert.match(result.text, /With this code/)
+        assert.doesNotMatch(result.text, /With this set block/)
+        assert.deepEqual(result.applied, [])
+        const examples = result.elements.filter(({type}) => type === 'static-code')
+        assert.equal(examples.length, 2)
+        assert.ok(examples.every(({props}) => props.editable === false))
+        assert.equal(examples[1].props.value, after)
+        result.elements.find(({type}) => type === 'button').props.onClick()
+        assert.deepEqual(result.applied, [suggestion.outputTemplate])
+    })
+}
