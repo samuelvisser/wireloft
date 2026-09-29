@@ -2,14 +2,23 @@ import CodeMirror from '@uiw/react-codemirror'
 import {EditorView} from '@codemirror/view'
 
 import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
-import {parseOutputTemplate, renderEditorOutputTemplate} from './outputTemplateFormatting'
+import {
+    parseOutputTemplate,
+    renderCompactOutputTemplate,
+    renderEditorOutputTemplate,
+    type OutputTemplateSourceMode,
+} from './outputTemplateFormatting'
 import './OutputTemplateEditor.css'
 import './ReadOnlyOutputTemplateCode.css'
 
-type Props = {
+export type OutputTemplateRenderMode = 'compact' | 'editor'
+
+export type ReadOnlyOutputTemplateCodeProps = {
     source: string
     label: string
-    sourceMode?: 'compact' | 'editor'
+    sourceMode?: OutputTemplateSourceMode
+    renderMode?: OutputTemplateRenderMode
+    className?: string
 }
 
 const readOnlyCodeExtensions = [
@@ -21,12 +30,17 @@ export default function ReadOnlyOutputTemplateCode({
     source,
     label,
     sourceMode = 'editor',
-}: Props) {
-    const value = renderEditorOutputTemplate(parseOutputTemplate(source, sourceMode)).value
+    renderMode = 'editor',
+    className,
+}: ReadOnlyOutputTemplateCodeProps) {
+    const ast = parseOutputTemplate(source, sourceMode)
+    const value = renderMode === 'compact'
+        ? renderCompactOutputTemplate(ast)
+        : renderEditorOutputTemplate(ast).value
 
     return (
         <CodeMirror
-            className="output-template-code-editor read-only-output-template-code-editor"
+            className={`output-template-code-editor read-only-output-template-code-editor${className ? ` ${className}` : ''}`}
             value={value}
             editable={false}
             extensions={readOnlyCodeExtensions}

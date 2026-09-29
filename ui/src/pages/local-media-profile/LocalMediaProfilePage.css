@@ -95,17 +95,6 @@
     overflow-wrap: anywhere;
 }
 
-.local-media-profile-properties .output-template-code-editor.read-only-output-template-code-editor {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-}
-
-.local-media-profile-properties .read-only-output-template-code-editor .cm-editor,
-.local-media-profile-properties .read-only-output-template-code-editor .cm-gutters {
-    background: transparent;
-}
 
 @media (prefers-color-scheme: dark) {
     .local-media-profile-stat {

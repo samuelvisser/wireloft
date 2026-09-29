@@ -11,6 +11,7 @@ import {
 import DataTable, { Column } from '../components/DataTable/DataTable';
 import ConfirmDeleteDialog, { ConfirmDeleteDialogRef } from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import PageSubtitle from "../components/common/PageSubtitle";
+import OpaqueOutputTemplateCode from '../components/LocalMediaProfile/OpaqueOutputTemplateCode'
 import './LocalMediaProfilesPage.css'
 
 function getAvailableForLabel(profile: LocalMediaProfileRead) {
@@ -43,9 +44,13 @@ export default function LocalMediaProfilesPage() {
         {
             header: 'Output Path Template',
             cell: (p) => (
-                <span className="mono local-media-profile-output-template" title={p.outputTemplate}>
-                    {p.outputTemplate}
-                </span>
+                <OpaqueOutputTemplateCode
+                    source={p.outputTemplate}
+                    sourceMode="compact"
+                    renderMode="compact"
+                    label={`Output path template for ${p.name}`}
+                    className="local-media-profile-output-template"
+                />
             ),
             width: '100%',
             cellStyle: {maxWidth: 0},

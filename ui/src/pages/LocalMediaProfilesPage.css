@@ -1,3 +1,25 @@
+.local-media-profile-output-template {
+  width: 100%;
+  min-width: 0;
+}
+
+.local-media-profile-output-template .cm-editor,
+.local-media-profile-output-template .cm-scroller,
+.local-media-profile-output-template .cm-content,
+.local-media-profile-output-template .cm-line {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.local-media-profile-output-template .cm-content,
+.local-media-profile-output-template .cm-line {
+  padding: 0;
+}
+
+.local-media-profile-output-template .cm-scroller {
+  overflow: hidden !important;
+}
+
 @media (min-width: 641px) {
   .local-media-profiles-table-wrapper {
     overflow-x: hidden;
@@ -8,13 +30,27 @@
     table-layout: auto;
   }
 
-  .local-media-profile-name,
-  .local-media-profile-output-template {
+  .local-media-profile-name {
     display: block;
     width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .local-media-profile-output-template {
+    display: block;
+    overflow: hidden;
+  }
+
+  .local-media-profile-output-template .cm-content,
+  .local-media-profile-output-template .cm-line {
+    white-space: nowrap;
+  }
+
+  .local-media-profile-output-template .cm-line {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .local-media-profiles-table th:last-child,
@@ -29,11 +65,12 @@
 }
 
 @media (max-width: 640px) {
-  .local-media-profile-output-template {
+  .local-media-profile-output-template .cm-line {
     display: -webkit-box;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: normal;
+    overflow-wrap: anywhere;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 5;
   }
