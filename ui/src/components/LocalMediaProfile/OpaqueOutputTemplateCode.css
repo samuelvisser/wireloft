@@ -1,0 +1,17 @@
+.output-template-code-editor.read-only-output-template-code-editor.opaque-output-template-code-editor {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.output-template-code-editor.read-only-output-template-code-editor.opaque-output-template-code-editor:hover,
+.output-template-code-editor.read-only-output-template-code-editor.opaque-output-template-code-editor:focus-within {
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.output-template-code-editor.read-only-output-template-code-editor.opaque-output-template-code-editor .cm-editor,
+.output-template-code-editor.read-only-output-template-code-editor.opaque-output-template-code-editor .cm-gutters {
+    background: transparent;
+}

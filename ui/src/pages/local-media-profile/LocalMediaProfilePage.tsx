@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
-import ReadOnlyOutputTemplateCode from '../../components/LocalMediaProfile/ReadOnlyOutputTemplateCode'
+import OpaqueOutputTemplateCode from '../../components/LocalMediaProfile/OpaqueOutputTemplateCode'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import {useLocalMediaProfileView} from '../../lib/queries'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
@@ -267,7 +267,7 @@ export default function LocalMediaProfilePage() {
                     <div>
                         <dt>Output path template</dt>
                         <dd>
-                            <ReadOnlyOutputTemplateCode
+                            <OpaqueOutputTemplateCode
                                 source={profile.outputTemplate}
                                 sourceMode="compact"
                                 label="Output path template"
