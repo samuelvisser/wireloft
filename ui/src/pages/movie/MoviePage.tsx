@@ -118,12 +118,13 @@ function MovieDownloadControl({
                     {download && (
                         <button
                             type="button"
-                            className="btn movie-media-redownload"
+                            className="progress-button-control"
                             onClick={() => onRetry(download)}
                             disabled={controlBusy}
+                            title="Re-download"
+                            aria-label="Re-download"
                         >
                             <FontAwesomeIcon icon={['fas', 'rotate-right']}/>
-                            Re-download
                         </button>
                     )}
                 </>
