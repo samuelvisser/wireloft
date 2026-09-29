@@ -101,13 +101,16 @@ function ProfileDownloadRow({
                         </span>
                     </div>
                 )}
-                {download && status === 'downloaded' && (
+                {download && (status === 'downloaded' || status === 'redownloaded') && (
                     <div className="download-row-done">
                         <span className="download-state-ok">
                             <FontAwesomeIcon icon={['fas', 'circle-check']}/>{' '}
                             Downloaded{download.formatDownloaded ? ` (${download.formatDownloaded}` : ''}
                             {download.formatDownloaded && download.downloadedBytes ? `, ${formatBytes(download.downloadedBytes)})` : download.formatDownloaded ? ')' : ''}
                         </span>
+                        <button className="btn download-row-redownload" onClick={retryDownload} disabled={busy}>
+                            <FontAwesomeIcon icon={['fas', 'rotate-right']}/> Re-download
+                        </button>
                         <div className="download-row-path mono truncate" title={download.filePath}>{download.filePath}</div>
                     </div>
                 )}
@@ -130,7 +133,7 @@ function ProfileDownloadRow({
                         </button>
                     </div>
                 )}
-                {download && status && !['pending', 'downloading', 'downloaded', 'cancelled', 'error', 'missing', 'corrupted'].includes(status) && (
+                {download && status && !['pending', 'downloading', 'downloaded', 'redownloaded', 'cancelled', 'error', 'missing', 'corrupted'].includes(status) && (
                     <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
                 )}
             </div>
@@ -477,7 +480,9 @@ export default function EpisodePage() {
         .download-row-progress { display: flex; align-items: center; gap: 10px; }
         .download-row-progress .progress { flex: 1; max-width: 380px; }
         .download-row-progress-label { min-width: 60px; color: var(--muted, #777); }
-        .download-row-path { color: var(--muted, #777); font-size: 0.85rem; margin-top: 4px; }
+        .download-row-done { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .download-row-redownload { padding: 5px 8px; font-size: 0.85rem; }
+        .download-row-path { flex-basis: 100%; color: var(--muted, #777); font-size: 0.85rem; margin-top: 4px; }
         .download-row-error { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .download-state-ok { color: #2fa84f; }
         .download-state-error { color: var(--error, #d64545); }

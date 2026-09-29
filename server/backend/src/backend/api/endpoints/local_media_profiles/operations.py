@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from backend.api.endpoints.media_downloads.operations import bulk_retry_target
 from backend.db.models import LocalMediaProfileBase
 from task_manager.scheduler.operation_factory import OperationDefinition
 from task_manager.scheduler.operations import OperationTargetSpec
@@ -102,4 +103,36 @@ class LocalMediaProfileDeleteDownloadsOperation(OperationDefinition[LocalMediaPr
             "local_media_profile_name": self.resource.name,
             "downloads_requested": len(self.media_download_ids),
             "download_profiles_disabled": self.disabled_download_profiles,
+        }
+
+
+class LocalMediaProfileRedownloadOperation(OperationDefinition[LocalMediaProfileBase]):
+    kind = "local_media_profile.redownload_media"
+    resource_type = "local_media_profile"
+
+    def __init__(
+        self,
+        local_media_profile: LocalMediaProfileBase,
+        *,
+        media_download_ids: Sequence[int],
+    ) -> None:
+        super().__init__(local_media_profile)
+        self.media_download_ids = tuple(
+            dict.fromkeys(int(download_id) for download_id in media_download_ids)
+        )
+
+    @property
+    def title(self) -> str:
+        return self.resource.name
+
+    def targets(self) -> tuple[OperationTargetSpec, ...]:
+        if not self.media_download_ids:
+            return ()
+        return (bulk_retry_target(self.media_download_ids),)
+
+    def context(self) -> dict[str, object]:
+        return {
+            "local_media_profile_slug": self.resource.slug,
+            "local_media_profile_name": self.resource.name,
+            "downloads_requested": len(self.media_download_ids),
         }

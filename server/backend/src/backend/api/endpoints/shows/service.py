@@ -275,6 +275,16 @@ def request_show_episode_redownload(
         show_slug,
         local_media_profile_id,
     )
+    scope = scope.select(artifact_statuses=(
+        MediaDownloadArtifactStatus.AVAILABLE.value,
+        MediaDownloadArtifactStatus.MISSING.value,
+        MediaDownloadArtifactStatus.CORRUPTED.value,
+    ))
+    if not scope.downloads:
+        raise HTTPException(
+            status_code=422,
+            detail="This show has no previously downloaded episode media in the selected scope",
+        )
     return _queue_show_download_maintenance(
         s,
         scope,

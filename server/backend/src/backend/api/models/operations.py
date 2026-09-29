@@ -19,6 +19,10 @@ class MediaDownloadBulkOperationAccepted(TaskOperationAccepted):
     downloads_queued: int
 
 
+class MovieRedownloadOperationAccepted(TaskOperationAccepted):
+    downloads_queued: int
+
+
 class ShowMetadataOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
 
@@ -40,6 +44,12 @@ class LocalMediaProfileDeleteDownloadsOperationAccepted(
     LocalMediaProfileMaintenanceOperationAccepted
 ):
     download_profiles_disabled: int
+
+
+class LocalMediaProfileRedownloadOperationAccepted(
+    LocalMediaProfileMaintenanceOperationAccepted
+):
+    pass
 
 
 class _ShowDownloadMaintenanceOperationAccepted(TaskOperationAccepted):

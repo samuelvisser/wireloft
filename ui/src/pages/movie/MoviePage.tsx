@@ -4,6 +4,8 @@ import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
+import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
+import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ProgressBar from '../../components/common/ProgressBar'
 import ProgressButton from '../../components/common/ProgressButton'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
@@ -12,7 +14,13 @@ import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {useDailywireMovie, useLocalMediaProfiles, useMovieDownloads, useMovies} from '../../lib/queries'
-import {OperationStartError, useStartOperation} from '../../lib/operations'
+import {
+    OperationControlError,
+    type OperationControlAction,
+    OperationStartError,
+    useControlOperation,
+    useStartOperation,
+} from '../../lib/operations'
 import {ACTIVE_DOWNLOAD_STATUSES} from '../../types/media_download'
 import {MovieExtraType} from '../../types/schemas/dailywire_catalog'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
@@ -102,10 +110,23 @@ function MovieDownloadControl({
     return (
         <div className={`movie-media-download-control${panel ? ' is-panel' : ''}`}>
             {downloaded ? (
-                <span className="movie-media-downloaded" role="status">
-                    <FontAwesomeIcon icon={['fas', 'circle-check']}/>
-                    <span>Downloaded{downloadedDetails ? ` (${downloadedDetails})` : ''}</span>
-                </span>
+                <>
+                    <span className="movie-media-downloaded" role="status">
+                        <FontAwesomeIcon icon={['fas', 'circle-check']}/>
+                        <span>Downloaded{downloadedDetails ? ` (${downloadedDetails})` : ''}</span>
+                    </span>
+                    {download && (
+                        <button
+                            type="button"
+                            className="btn movie-media-redownload"
+                            onClick={() => onRetry(download)}
+                            disabled={controlBusy}
+                        >
+                            <FontAwesomeIcon icon={['fas', 'rotate-right']}/>
+                            Re-download
+                        </button>
+                    )}
+                </>
             ) : (
                 <ProgressButton
                     definition={frontendOperationDefinitions['media.download']}
@@ -169,6 +190,7 @@ export default function MoviePage() {
     const navigate = useNavigate()
     const queryClient = useQueryClient()
     const startOperation = useStartOperation()
+    const controlOperation = useControlOperation()
     const {data: localMovies, error: localMoviesError} = useMovies()
     const localMovie = useMemo(
         () => localMovies?.find((item) => item.slug === slug),
@@ -190,6 +212,11 @@ export default function MoviePage() {
         'movie',
         localMovie?.id ?? null,
     )
+    const redownloadOperation = useActiveOperation(
+        'movie.redownload_media',
+        'movie',
+        localMovie?.id ?? null,
+    )
     const videoProfiles = useMemo(
         () => profiles?.filter((profile) => profile.type === 'movie') || [],
         [profiles],
@@ -198,11 +225,13 @@ export default function MoviePage() {
     const [submitting, setSubmitting] = useState<string | null>(null)
     const [addingMovie, setAddingMovie] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
+    const [redownloadConfirm, setRedownloadConfirm] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [retryingMetadata, setRetryingMetadata] = useState(false)
     const [refreshingExtrasStarting, setRefreshingExtrasStarting] = useState(false)
     const [logDownloadId, setLogDownloadId] = useState<number | null>(null)
     const [downloadControlBusy, setDownloadControlBusy] = useState<string | null>(null)
+    const [operationControlBusy, setOperationControlBusy] = useState<string | null>(null)
     const refreshingExtras = refreshingExtrasStarting || refreshExtrasOperation !== undefined
 
     const selectedProfileDownloads = useMemo(() => {
@@ -331,7 +360,8 @@ export default function MoviePage() {
                 toast.error(message || `Could not ${action} the download`)
                 return
             }
-            toast.success(action === 'retry' ? 'Download queued for retry' : 'Download cancelled')
+            const retryLabel = download.artifactStatus === 'available' ? 'Re-download queued' : 'Download queued for retry'
+            toast.success(action === 'retry' ? retryLabel : 'Download cancelled')
         } catch {
             toast.error(`Could not ${action} the download`)
         } finally {
@@ -416,6 +446,45 @@ export default function MoviePage() {
         }
     }
 
+    const controlTaskOperation = async (
+        operationId: string,
+        action: OperationControlAction,
+        label: string,
+    ) => {
+        if (operationControlBusy !== null) return
+        const busyKey = `${operationId}:${action}`
+        setOperationControlBusy(busyKey)
+        try {
+            await controlOperation(operationId, action)
+            toast.success(action === 'restart' ? `${label} restarted` : `${label} canceled`)
+        } catch (controlError) {
+            const detail = controlError instanceof OperationControlError ? controlError.message : undefined
+            toast.error(`Could not ${action} ${label}${detail ? `: ${detail}` : ''}`)
+        } finally {
+            setOperationControlBusy((current) => current === busyKey ? null : current)
+        }
+    }
+
+    const operationControls = (operationId: string | undefined, label: string) => {
+        if (!operationId) return undefined
+        const controlsBusy = operationControlBusy !== null
+        return [
+            {
+                label: `Restart ${label}`,
+                icon: ['fas', 'rotate-right'],
+                disabled: controlsBusy,
+                onSelect: () => void controlTaskOperation(operationId, 'restart', label),
+            },
+            {
+                label: `Cancel ${label}`,
+                icon: ['fas', 'xmark'],
+                tone: 'danger' as const,
+                disabled: controlsBusy,
+                onSelect: () => void controlTaskOperation(operationId, 'cancel', label),
+            },
+        ]
+    }
+
     const deleteMovie = async () => {
         if (!slug || !localMovie || deleting) return
         setDeleting(true)
@@ -459,6 +528,8 @@ export default function MoviePage() {
         ? extraDownloadsBySlug.get(featuredTrailer.slug)
         : undefined
     const controlBusy = downloadControlBusy !== null
+    const hasRedownloadableMedia = (downloads ?? []).some((download) => download.artifactStatus !== 'absent')
+    const redownloadBusy = redownloadOperation !== undefined
 
     return (
         <section className="view movie-detail-view" aria-labelledby="movie-title">
@@ -499,12 +570,6 @@ export default function MoviePage() {
                         <span>Edit</span>
                     </Link>
                 )}
-                {localMovie && (
-                    <button type="button" className="btn" onClick={() => void refreshMovieExtras()} disabled={refreshingExtras}>
-                        <FontAwesomeIcon icon={['fas', 'rotate']} spin={refreshingExtras}/>
-                        {refreshingExtras ? 'Refreshing extras…' : 'Refresh extras'}
-                    </button>
-                )}
                 {localMovie?.releaseDateLookupStatus === 'error' && (
                     <button type="button" className="btn" onClick={() => void retryReleaseMetadata()} disabled={retryingMetadata}>
                         <FontAwesomeIcon icon={['fas', 'rotate']}/>
@@ -515,6 +580,40 @@ export default function MoviePage() {
                     <button type="button" className="btn btn-danger" onClick={() => setConfirmDelete(true)}>
                         <FontAwesomeIcon icon={['fas', 'trash']}/> Delete
                     </button>
+                )}
+                {localMovie && (
+                    <ActionMenu
+                        items={[
+                            {
+                                label: 'Refresh extras',
+                                icon: ['fas', 'rotate'],
+                                disabled: refreshingExtras,
+                                disabledReason: refreshExtrasOperation
+                                    ? 'A movie-extra refresh is already running.'
+                                    : refreshingExtrasStarting
+                                        ? 'This task is starting...'
+                                        : undefined,
+                                progress: refreshExtrasOperation?.progress ?? undefined,
+                                controls: operationControls(refreshExtrasOperation?.id, 'movie-extra refresh'),
+                                onSelect: () => void refreshMovieExtras(),
+                            },
+                            {
+                                label: 'Delete and re-download all media',
+                                icon: ['fas', 'arrows-rotate'],
+                                tone: 'danger',
+                                separatorBefore: true,
+                                disabled: redownloadBusy || !hasRedownloadableMedia,
+                                disabledReason: redownloadOperation
+                                    ? 'A re-download operation is already running for this movie.'
+                                    : !hasRedownloadableMedia
+                                        ? 'This movie has no previously downloaded media.'
+                                        : undefined,
+                                progress: redownloadOperation?.progress ?? undefined,
+                                controls: operationControls(redownloadOperation?.id, 're-download'),
+                                onSelect: () => setRedownloadConfirm(true),
+                            },
+                        ]}
+                    />
                 )}
             </div>
 
@@ -661,6 +760,25 @@ export default function MoviePage() {
             )}
 
             <DownloadLogDialog row={logDownload} onClose={() => setLogDownloadId(null)}/>
+
+            <ActionConfirmDialogue
+                open={redownloadConfirm && Boolean(localMovie)}
+                operationDefinition={frontendOperationDefinitions['movie.redownload_media']}
+                requestPath={`/movies/${encodeURIComponent(slug || '')}/redownload-media`}
+                resourceLabel={movie.title}
+                title="Delete and re-download all media"
+                onDismiss={() => setRedownloadConfirm(false)}
+                icon={['fas', 'arrows-rotate']}
+                iconTone="danger"
+                confirmLabel="Delete and re-download"
+                disabled={redownloadBusy || !hasRedownloadableMedia}
+            >
+                <p>
+                    Delete every previously downloaded file for "{movie.title}", including the main movie
+                    and movie extras, and download those files again. Media that has never been downloaded
+                    will not be added by this action.
+                </p>
+            </ActionConfirmDialogue>
 
             <ConfirmDialog
                 open={confirmDelete && Boolean(localMovie)}

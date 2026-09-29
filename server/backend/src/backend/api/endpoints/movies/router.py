@@ -3,7 +3,11 @@ from fastapi import APIRouter, HTTPException, status
 from .service import *
 from ...models.movie import *
 from ...models.media_download import MovieDownloadAPICreate
-from ...models.operations import MediaDownloadOperationAccepted, TaskOperationAccepted
+from ...models.operations import (
+    MediaDownloadOperationAccepted,
+    MovieRedownloadOperationAccepted,
+    TaskOperationAccepted,
+)
 from ..dailywire.movies.service import (
     get_live_movie as get_live_dailywire_movie,
     get_movie_for_action as get_dailywire_movie,
@@ -112,6 +116,23 @@ def movie_extras_refresh(movie_slug: str):
     with db_session() as s:
         try:
             result = request_movie_extras_refresh(s, movie_slug)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post(
+    "/{movie_slug}/redownload-media",
+    response_model=MovieRedownloadOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def movie_redownload_media(movie_slug: str):
+    """Delete and re-download all existing movie and movie-extra artifacts."""
+    with db_session() as s:
+        try:
+            result = request_movie_redownload(s, movie_slug)
             s.commit()
             return result
         except Exception:

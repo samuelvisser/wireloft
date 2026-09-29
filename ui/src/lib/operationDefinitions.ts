@@ -155,6 +155,19 @@ function invalidateMovie(
   }
 }
 
+function invalidateMovieFiles(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateMovie(queryClient, operation, invalidations)
+  const movieSlug = contextString(operation, 'movie_slug')
+  invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+  if (movieSlug) {
+    invalidations.push(queryClient.invalidateQueries({queryKey: ['movieDownloads', movieSlug]}))
+  }
+}
+
 function invalidateLocalMediaProfileFiles(
   queryClient: QueryClient,
   _operation: TaskOperationRead,
@@ -322,6 +335,19 @@ export const frontendOperationDefinitions = {
       return fileRenameSuccessMessage(operation, profileName)
     },
   },
+  'local_media_profile.redownload_media': {
+    kind: 'local_media_profile.redownload_media',
+    resourceType: 'local_media_profile',
+    label: 'Re-download media',
+    invalidate: invalidateLocalMediaProfileFiles,
+    success: (operation) => {
+      const profileName = contextString(operation, 'local_media_profile_name') || operation.title
+      const count = resultNumber(operation, 'downloads_completed')
+        ?? contextNumber(operation, 'downloads_requested')
+        ?? 0
+      return `Re-download finished for ${profileName}: ${count} ${plural(count, 'file')} re-downloaded`
+    },
+  },
   'local_media_profile.delete_downloads': {
     kind: 'local_media_profile.delete_downloads',
     resourceType: 'local_media_profile',
@@ -377,21 +403,37 @@ export const frontendOperationDefinitions = {
     label: 'Movie extra refresh',
     invalidate: invalidateMovie,
   },
+  'movie.redownload_media': {
+    kind: 'movie.redownload_media',
+    resourceType: 'movie',
+    label: 'Re-download media',
+    invalidate: invalidateMovieFiles,
+    success: (operation) => {
+      const movieTitle = contextString(operation, 'movie_title') || operation.title
+      const count = resultNumber(operation, 'downloads_completed')
+        ?? contextNumber(operation, 'downloads_requested')
+        ?? 0
+      return `Re-download finished for ${movieTitle}: ${count} ${plural(count, 'file')} re-downloaded`
+    },
+  },
   'media_download.bulk_retry': {
     kind: 'media_download.bulk_retry',
     resourceType: 'media_download',
     label: 'Retry downloads',
     invalidate: invalidateMediaDownloadCollection,
     success: (operation) => {
-      const count = operation.progressTotal
-      return `${count} ${plural(count, 'download')} queued for retry`
+      const count = resultNumber(operation, 'downloads_completed')
+        ?? contextNumber(operation, 'downloads_requested')
+        ?? 0
+      return `Retry finished for ${count} ${plural(count, 'download')}`
     },
-    partial: (operation) => (
-      `${completedCount(operation)} of ${operation.progressTotal} downloads queued for retry`
-    ),
-    canceled: (operation) => (
-      `Retry all canceled after ${completedCount(operation)} of ${operation.progressTotal} downloads`
-    ),
+    canceled: (operation) => {
+      const count = contextNumber(operation, 'downloads_requested') ?? 0
+      return `Retry all canceled before all ${count} ${plural(count, 'download')} finished`
+    },
+    failed: (operation) => operation.error
+      ? `Retry all failed: ${operation.error}`
+      : 'Retry all failed',
   },
   'media_download.bulk_cancel': {
     kind: 'media_download.bulk_cancel',

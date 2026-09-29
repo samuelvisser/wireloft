@@ -199,11 +199,11 @@ def queue_bulk_media_download_operation(
         )
 
     queued_operation = create_operation(s, operation)
-    for media_download_id in ids:
+    for target in queued_operation.targets:
         queue_operation_target_dispatch(
             s,
             queued_operation.id,
-            f"media_download:{media_download_id}",
+            target.slot_key,
         )
 
     return {

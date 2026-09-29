@@ -12,6 +12,7 @@ from backend.api.models.local_media_profile_view import (
 from backend.api.models.operations import (
     LocalMediaProfileDeleteDownloadsOperationAccepted,
     LocalMediaProfileFileRenameOperationAccepted,
+    LocalMediaProfileRedownloadOperationAccepted,
 )
 from backend.app import db_session
 from backend.types.local_media_profile_types import (
@@ -25,7 +26,10 @@ from .output_template import (
     get_output_template_variables,
 )
 from .file_rename import request_local_media_profile_file_rename
-from .maintenance import request_local_media_profile_download_delete
+from .maintenance import (
+    request_local_media_profile_download_delete,
+    request_local_media_profile_redownload,
+)
 from .advisory import router as advisory_router
 from .preview import router as preview_router
 from .service import (
@@ -133,6 +137,25 @@ def local_media_profiles_delete_downloads(local_media_profile_slug: str):
     with db_session() as s:
         try:
             result = request_local_media_profile_download_delete(
+                s,
+                local_media_profile_slug,
+            )
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post(
+    "/{local_media_profile_slug}/redownload-media",
+    response_model=LocalMediaProfileRedownloadOperationAccepted,
+    status_code=202,
+)
+def local_media_profiles_redownload_media(local_media_profile_slug: str):
+    with db_session() as s:
+        try:
+            result = request_local_media_profile_redownload(
                 s,
                 local_media_profile_slug,
             )

@@ -35,6 +35,7 @@ export default function LocalMediaProfilePage() {
 
     const [renameConfirm, setRenameConfirm] = useState(false)
     const [deleteDownloadsConfirm, setDeleteDownloadsConfirm] = useState(false)
+    const [redownloadConfirm, setRedownloadConfirm] = useState(false)
     const [deleteProfileConfirm, setDeleteProfileConfirm] = useState(false)
     const [deletingProfile, setDeletingProfile] = useState(false)
     const [operationControlBusy, setOperationControlBusy] = useState<string | null>(null)
@@ -49,6 +50,11 @@ export default function LocalMediaProfilePage() {
     )
     const deleteDownloadsOperation = useActiveOperation(
         'local_media_profile.delete_downloads',
+        'local_media_profile',
+        profile?.id ?? null,
+    )
+    const redownloadOperation = useActiveOperation(
+        'local_media_profile.redownload_media',
         'local_media_profile',
         profile?.id ?? null,
     )
@@ -75,7 +81,7 @@ export default function LocalMediaProfilePage() {
         )
     }
 
-    const actionBusy = Boolean(renameOperation || deleteDownloadsOperation)
+    const actionBusy = Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)
     const managedLabel = profile.type === 'show' ? 'Managed episodes' : 'Managed items'
     const downloadedLabel = profile.type === 'show' ? 'Downloaded episodes' : 'Downloaded items'
 
@@ -206,12 +212,14 @@ export default function LocalMediaProfilePage() {
                                 {
                                     label: 'Rename all managed files',
                                     icon: ['fas', 'file-pen'],
-                                    disabled: Boolean(renameOperation || deleteDownloadsOperation),
+                                    disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation),
                                     disabledReason: renameOperation
                                         ? 'A file rename operation is already running for this profile.'
                                         : deleteDownloadsOperation
                                             ? 'A delete downloads operation is running for this profile.'
-                                            : undefined,
+                                            : redownloadOperation
+                                                ? 'A re-download operation is running for this profile.'
+                                                : undefined,
                                     progress: renameOperation?.progress ?? undefined,
                                     controls: operationControls(renameOperation?.id, 'file rename'),
                                     onSelect: () => setRenameConfirm(true),
@@ -221,20 +229,43 @@ export default function LocalMediaProfilePage() {
                                     icon: ['fas', 'trash'],
                                     tone: 'danger',
                                     separatorBefore: true,
-                                    disabled: Boolean(renameOperation || deleteDownloadsOperation) || statistics.managedMediaCount === 0,
+                                    disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
                                     disabledReason: deleteDownloadsOperation
                                         ? 'A delete downloads operation is already running for this profile.'
                                         : renameOperation
                                             ? 'A file rename operation is running for this profile.'
-                                            : statistics.managedMediaCount === 0
-                                            ? 'This Local Media Profile does not manage any downloads.'
-                                            : undefined,
+                                            : redownloadOperation
+                                                ? 'A re-download operation is running for this profile.'
+                                                : statistics.managedMediaCount === 0
+                                                    ? 'This Local Media Profile does not manage any downloads.'
+                                                    : undefined,
                                     progress: deleteDownloadsOperation?.progress ?? undefined,
                                     controls: operationControls(
                                         deleteDownloadsOperation?.id,
                                         'delete downloads',
                                     ),
                                     onSelect: () => setDeleteDownloadsConfirm(true),
+                                },
+                                {
+                                    label: 'Delete and re-download all media',
+                                    icon: ['fas', 'arrows-rotate'],
+                                    tone: 'danger',
+                                    disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
+                                    disabledReason: redownloadOperation
+                                        ? 'A re-download operation is already running for this profile.'
+                                        : deleteDownloadsOperation
+                                            ? 'A delete downloads operation is running for this profile.'
+                                            : renameOperation
+                                                ? 'A file rename operation is running for this profile.'
+                                                : statistics.managedMediaCount === 0
+                                                    ? 'This Local Media Profile does not manage any downloads.'
+                                                    : undefined,
+                                    progress: redownloadOperation?.progress ?? undefined,
+                                    controls: operationControls(
+                                        redownloadOperation?.id,
+                                        're-download',
+                                    ),
+                                    onSelect: () => setRedownloadConfirm(true),
                                 },
                             ]}
                         />
@@ -287,7 +318,7 @@ export default function LocalMediaProfilePage() {
                 onDismiss={() => setRenameConfirm(false)}
                 icon={['fas', 'file-pen']}
                 confirmLabel="Rename files"
-                disabled={Boolean(deleteDownloadsOperation)}
+                disabled={Boolean(deleteDownloadsOperation || redownloadOperation)}
             >
                 <p>
                     Rename all existing files managed by "{profile.name}" so their paths match
@@ -305,7 +336,7 @@ export default function LocalMediaProfilePage() {
                 icon={['fas', 'trash']}
                 iconTone="danger"
                 confirmLabel="Delete downloads"
-                disabled={Boolean(renameOperation)}
+                disabled={Boolean(renameOperation || redownloadOperation)}
             >
                 <p>
                     Delete every downloaded file managed by "{profile.name}". MediaDownload
@@ -317,6 +348,24 @@ export default function LocalMediaProfilePage() {
                         before deleting files so automatic downloads do not immediately recreate them.
                     </p>
                 )}
+            </ActionConfirmDialogue>
+
+            <ActionConfirmDialogue
+                open={redownloadConfirm}
+                operationDefinition={frontendOperationDefinitions['local_media_profile.redownload_media']}
+                requestPath={`/local-media-profiles/${encodeURIComponent(profile.slug)}/redownload-media`}
+                resourceLabel={profile.name}
+                title="Delete and re-download all media"
+                onDismiss={() => setRedownloadConfirm(false)}
+                icon={['fas', 'arrows-rotate']}
+                iconTone="danger"
+                confirmLabel="Delete and re-download"
+                disabled={Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)}
+            >
+                <p>
+                    Delete all previously downloaded files managed by "{profile.name}" and download
+                    them again. Media that has never been downloaded will not be added by this action.
+                </p>
             </ActionConfirmDialogue>
 
             <ConfirmDialog
@@ -347,8 +396,8 @@ export default function LocalMediaProfilePage() {
                         Change or delete those profiles before deleting this Local Media Profile.
                     </p>
                 )}
-                {(renameOperation?.status === 'WAITING' || deleteDownloadsOperation?.status === 'WAITING') && (
-                    <p>{renameOperation?.message || deleteDownloadsOperation?.message || OPERATION_WAITING_MESSAGE}</p>
+                {(renameOperation?.status === 'WAITING' || deleteDownloadsOperation?.status === 'WAITING' || redownloadOperation?.status === 'WAITING') && (
+                    <p>{renameOperation?.message || deleteDownloadsOperation?.message || redownloadOperation?.message || OPERATION_WAITING_MESSAGE}</p>
                 )}
             </ConfirmDialog>
         </section>

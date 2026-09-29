@@ -8,8 +8,10 @@ from sqlalchemy.orm import Session
 from backend.api.endpoints.movie_extras.service import create_movie_extra
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.movie import *
+from backend.db.models.media_download import MediaDownloadBase
 from backend.db.models.media_item import Movie
 from backend.integrations.tmdb import lookup_movie_release_metadata
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_types import MediaType
 from backend.services.movies import (
     DAILYWIRE_RELEASE_SOURCE,
@@ -19,9 +21,9 @@ from backend.services.movies import (
 )
 from dailywire_api.records import DwMovieRecord
 from task_manager.scheduler.operation_factory import create_operation
-from task_manager.scheduler.operations import queue_operation_target_dispatch
+from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
 
-from .operations import MovieExtrasRefreshOperation
+from .operations import MovieExtrasRefreshOperation, MovieRedownloadOperation
 
 
 def get_movies_list(s: Session) -> list[MovieAPIRead]:
@@ -45,6 +47,46 @@ def request_movie_extras_refresh(s: Session, movie_slug: str) -> dict[str, bool 
     operation = create_operation(s, MovieExtrasRefreshOperation(movie))
     queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
     return {"queued": True, "operation_id": operation.id}
+
+
+def request_movie_redownload(s: Session, movie_slug: str) -> dict[str, bool | int | str]:
+    movie: Optional[Movie] = s.query(Movie).filter(Movie.slug == movie_slug).one_or_none()
+    if movie is None:
+        raise HTTPException(status_code=404, detail="Movie not found")
+
+    media_item_ids = [movie.id, *(extra.id for extra in movie.movie_extras)]
+    download_ids = tuple(
+        download_id
+        for (download_id,) in s.query(MediaDownloadBase.id)
+        .filter(
+            MediaDownloadBase.media_item_id.in_(media_item_ids),
+            MediaDownloadBase.type.in_((MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value)),
+            MediaDownloadBase.artifact_status != MediaDownloadArtifactStatus.ABSENT.value,
+        )
+        .order_by(MediaDownloadBase.id.asc())
+        .all()
+    )
+
+    operation = create_operation(
+        s,
+        MovieRedownloadOperation(movie, media_download_ids=download_ids),
+    )
+    if not download_ids:
+        complete_operation(
+            s,
+            operation.id,
+            summary=f"No downloaded media exists for {movie.title}",
+            data={"downloads_requested": 0, "downloads_completed": 0},
+        )
+    else:
+        queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
+
+    s.flush()
+    return {
+        "queued": bool(download_ids),
+        "downloads_queued": len(download_ids),
+        "operation_id": operation.id,
+    }
 
 
 def retry_movie_release_metadata(s: Session, movie_slug: str) -> MovieAPIRead:

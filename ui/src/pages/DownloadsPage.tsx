@@ -161,6 +161,11 @@ function isRetryableDownload(row: MediaDownloadViewRead): boolean {
     return _RETRYABLE_STATUSES.has(String(row.downloadStatus))
 }
 
+function isRedownloadableDownload(row: MediaDownloadViewRead): boolean {
+    const status = String(row.downloadStatus)
+    return status === 'downloaded' || status === 'redownloaded'
+}
+
 function isCancellableDownload(row: MediaDownloadViewRead): boolean {
     return ACTIVE_DOWNLOAD_STATUSES.has(String(row.downloadStatus))
 }
@@ -243,7 +248,7 @@ export default function DownloadsPage() {
         [downloads, statusFilter],
     )
     const retryableDownloads = useMemo(
-        () => filteredDownloads.filter(isRetryableDownload),
+        () => filteredDownloads.filter((row) => isRetryableDownload(row) || isRedownloadableDownload(row)),
         [filteredDownloads],
     )
     const cancellableDownloads = useMemo(
@@ -562,11 +567,11 @@ export default function DownloadsPage() {
                                 text: 'Prioritize',
                                 classes: 'btn',
                             })
-                        } else if (isRetryableDownload(row)) {
+                        } else if (isRetryableDownload(row) || isRedownloadableDownload(row)) {
                             actions.push({
                                 onClick: () => void retry(row),
                                 icon: ['fas', 'rotate-right'],
-                                text: 'Retry',
+                                text: isRedownloadableDownload(row) ? 'Re-download' : 'Retry',
                                 classes: 'btn',
                             })
                         }
