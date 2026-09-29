@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from backend.types.local_media_profile_types import (
+    LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
     LocalMediaProfileThumbnailMode,
 )
 from config import get_settings
-from config.settings.submodels import DownloadMode, ThumbnailMode
+from config.settings.submodels import DownloadMode, MetadataMode, ThumbnailMode
 
 
 def effective_download_mode(local_media_profile) -> DownloadMode:
@@ -21,6 +22,21 @@ def effective_download_mode(local_media_profile) -> DownloadMode:
     if profile_mode is LocalMediaProfileStorageMode.SYSTEM:
         return system_mode
     return DownloadMode(profile_mode.value)
+
+
+def effective_metadata_mode(local_media_profile) -> MetadataMode:
+    """Resolve a Local Media Profile metadata override against the system default."""
+    system_mode = MetadataMode(get_settings().download_settings.metadata_mode)
+    profile_mode = LocalMediaProfileMetadataMode(
+        getattr(
+            local_media_profile,
+            "metadata_mode",
+            LocalMediaProfileMetadataMode.SYSTEM.value,
+        )
+    )
+    if profile_mode is LocalMediaProfileMetadataMode.SYSTEM:
+        return system_mode
+    return MetadataMode(profile_mode.value)
 
 
 def effective_thumbnail_mode(local_media_profile) -> ThumbnailMode:

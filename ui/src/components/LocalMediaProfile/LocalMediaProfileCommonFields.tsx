@@ -10,6 +10,13 @@ const THUMBNAIL_MODE_LABELS = {
     embed_and_sidecar: 'Both embed and download',
 } as const
 
+const METADATA_MODE_LABELS = {
+    no_metadata: 'No metadata',
+    embed: 'Embed in media',
+    nfo: 'Download as NFO',
+    embed_and_nfo: 'Both embed and download',
+} as const
+
 export default function LocalMediaProfileCommonFields({form}: { form: UseFormReturn<any> }) {
     const {control, register, formState: {errors}} = form
     const {data: settings} = useSettings()
@@ -21,6 +28,9 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
     const systemThumbnailModeLabel = !settings
         ? 'Loading system setting…'
         : THUMBNAIL_MODE_LABELS[settings.values.downloadSettings.thumbnailMode]
+    const systemMetadataModeLabel = !settings
+        ? 'Loading system setting…'
+        : METADATA_MODE_LABELS[settings.values.downloadSettings.metadataMode]
 
     return (
         <>
@@ -100,54 +110,42 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
             </div>
 
             <div className="form-row">
-                <label htmlFor="local-media-embed-metadata">Embedded media metadata</label>
-                <label htmlFor="local-media-embed-metadata">
-                    <input
-                        id="local-media-embed-metadata"
-                        type="checkbox"
-                        {...register('embedMetadata')}
-                    />
-                    <span>Write metadata into downloaded media files</span>
-                </label>
-                {errors.embedMetadata && (
-                    <div className="error" role="alert" aria-live="polite">
-                        {String(errors.embedMetadata.message)}
+                <label htmlFor="local-media-metadata-mode">Media metadata behavior</label>
+                <Controller
+                    control={control}
+                    name="metadataMode"
+                    render={({field}) => (
+                        <select
+                            id="local-media-metadata-mode"
+                            className="input"
+                            value={field.value ?? 'system'}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            aria-invalid={!!errors.metadataMode}
+                            aria-describedby={errors.metadataMode ? 'local-media-metadata-mode-errors' : 'local-media-metadata-mode-help'}
+                        >
+                            <option value="system">System ({systemMetadataModeLabel})</option>
+                            <option value="no_metadata">No metadata</option>
+                            <option value="embed">Embed in media</option>
+                            <option value="nfo">Download as NFO</option>
+                            <option value="embed_and_nfo">Both embed and download</option>
+                        </select>
+                    )}
+                />
+                {errors.metadataMode && (
+                    <div id="local-media-metadata-mode-errors" className="error" role="alert" aria-live="polite">
+                        {String(errors.metadataMode.message)}
                     </div>
                 )}
-                <div className="help">
-                    <ReadMore summary="Embed titles and other media-server metadata directly in supported media files.">
-                        <p>
-                            WireLoft writes useful tags such as the episode or movie title, description, show title,
-                            season and episode numbers when they are actually known, dates, genres, authors, and movie
-                            credits. This can improve local-metadata discovery in media servers and other players.
-                        </p>
-                        <p>
-                            This requires a file container that FFmpeg can rewrite. HLS bundle downloads cannot contain
-                            embedded file metadata; use an NFO sidecar for HLS.
-                        </p>
+                <div className="help" id="local-media-metadata-mode-help">
+                    <ReadMore summary="Choose whether this profile inherits or overrides the system metadata behavior.">
+                        <p><strong>System</strong> follows the current system-wide default shown in parentheses.</p>
+                        <p><strong>No metadata</strong> leaves the downloaded media without WireLoft-generated metadata.</p>
+                        <p><strong>Embed in media</strong> writes useful media-server metadata directly into supported media containers.</p>
+                        <p><strong>Download as NFO</strong> writes the same metadata in a same-basename NFO file beside the media.</p>
+                        <p><strong>Both embed and download</strong> does both.</p>
+                        <p>HLS bundles cannot contain embedded file metadata, so only the NFO part applies when selected.</p>
                     </ReadMore>
-                </div>
-            </div>
-
-            <div className="form-row">
-                <label htmlFor="local-media-download-nfo">NFO metadata</label>
-                <label htmlFor="local-media-download-nfo">
-                    <input
-                        id="local-media-download-nfo"
-                        type="checkbox"
-                        {...register('downloadNfo')}
-                    />
-                    <span>Write an NFO file beside each downloaded media file</span>
-                </label>
-                {errors.downloadNfo && (
-                    <div className="error" role="alert" aria-live="polite">
-                        {String(errors.downloadNfo.message)}
-                    </div>
-                )}
-                <div className="help">
-                    The NFO uses the media file's basename and contains the same relevant catalog metadata in a
-                    Kodi/Jellyfin-compatible XML structure. WireLoft manages it together with the media file when
-                    files are renamed or deleted.
                 </div>
             </div>
 

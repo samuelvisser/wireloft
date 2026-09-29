@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from backend.types.local_media_profile_types import PreferredFormat
-from config.settings.submodels import DownloadMode, ThumbnailMode
+from config.settings.submodels import DownloadMode, MetadataMode, ThumbnailMode
 from dailywire_downloader import (
     DownloadCancelled,
     DownloadError,
@@ -35,7 +35,12 @@ from .download_paths import (
     publish_temporary_download,
     reserve_unique_download_path,
 )
-from .media_metadata import MediaServerMetadata, write_nfo
+from .media_metadata import (
+    MediaServerMetadata,
+    wants_metadata_embed,
+    wants_metadata_nfo,
+    write_nfo,
+)
 from .thumbnails import prepare_thumbnail, wants_thumbnail_embed, wants_thumbnail_sidecar
 
 FORMAT_HEIGHTS: dict[str, int] = {
@@ -70,8 +75,7 @@ class DownloadPlan:
     thumbnail_url: str | None = None
     thumbnail_mode: ThumbnailMode = ThumbnailMode.NO_THUMBNAIL
     metadata: MediaServerMetadata | None = None
-    embed_metadata: bool = False
-    write_nfo: bool = False
+    metadata_mode: MetadataMode = MetadataMode.NO_METADATA
 
 
 @dataclass
@@ -394,11 +398,7 @@ def _apply_media_metadata(
 ) -> str | None:
     if plan.metadata is None:
         return None
-    if plan.embed_metadata:
-        if plan.source.hls_bundle:
-            raise DownloadError(
-                "Embedded file metadata is not supported for HLS bundle downloads"
-            )
+    if wants_metadata_embed(plan.metadata_mode) and not plan.source.hls_bundle:
         embed_file_metadata(
             media_path,
             plan.metadata.ffmpeg_tags(),
@@ -406,7 +406,7 @@ def _apply_media_metadata(
             should_cancel=cancellation,
         )
     ensure_not_cancelled(cancellation)
-    if plan.write_nfo:
+    if wants_metadata_nfo(plan.metadata_mode):
         return write_nfo(media_path, plan.metadata)
     return None
 

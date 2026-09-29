@@ -11,7 +11,6 @@ from backend.api.models.local_media_profile import (
 from backend.api.models.custom_metadata import IndexingValueDefinitionAPI
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
-    PreferredFormat,
     ShowLocalMediaProfileScope,
 )
 from backend.utils.output_template import (
@@ -32,11 +31,6 @@ class _ShowLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
         keys = [item.key for item in self.indexing_values]
         if len(keys) != len(set(keys)):
             raise ValueError("Indexing Value keys must be unique")
-        if self.embed_metadata and self.preferred_format == PreferredFormat.FORMAT_HLS:
-            raise ValueError(
-                "Embedded file metadata is not supported for HLS bundle downloads; "
-                "enable NFO metadata instead or choose a file-based format"
-            )
         return self
 
     @field_validator("output_template")

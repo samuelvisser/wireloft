@@ -12,6 +12,14 @@ export const LocalMediaProfileThumbnailModeSchema = z.enum([
     'embed_and_sidecar',
 ])
 export type LocalMediaProfileThumbnailMode = z.infer<typeof LocalMediaProfileThumbnailModeSchema>
+export const LocalMediaProfileMetadataModeSchema = z.enum([
+    'system',
+    'no_metadata',
+    'embed',
+    'nfo',
+    'embed_and_nfo',
+])
+export type LocalMediaProfileMetadataMode = z.infer<typeof LocalMediaProfileMetadataModeSchema>
 
 
 // ---------- Strict request (create/update) ----------
@@ -19,8 +27,7 @@ export const LocalMediaProfileSchemaRequest = z.object({
     name: z.string().min(1, 'Name is required'),
     downloadMode: LocalMediaProfileStorageModeSchema.default('system'),
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
-    embedMetadata: z.boolean().default(false),
-    downloadNfo: z.boolean().default(false),
+    metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
 })
 
 export const LocalMediaProfileCreateBaseSchema = LocalMediaProfileSchemaRequest
@@ -54,8 +61,7 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     preferredFormat: z.string(),
     downloadMode: LocalMediaProfileStorageModeSchema.default('system'),
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
-    embedMetadata: z.boolean().default(false),
-    downloadNfo: z.boolean().default(false),
+    metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
     appendMediaTypeToFilename: z.boolean().optional().default(false),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,

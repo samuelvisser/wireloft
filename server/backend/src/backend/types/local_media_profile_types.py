@@ -23,6 +23,14 @@ class LocalMediaProfileThumbnailMode(StrEnum):
     EMBED_AND_SIDECAR = "embed_and_sidecar"
 
 
+class LocalMediaProfileMetadataMode(StrEnum):
+    SYSTEM = "system"
+    NO_METADATA = "no_metadata"
+    EMBED = "embed"
+    NFO = "nfo"
+    EMBED_AND_NFO = "embed_and_nfo"
+
+
 class ShowLocalMediaProfileScope(StrEnum):
     BOTH = "both"
     PODCAST = "podcast"

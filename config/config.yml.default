@@ -26,5 +26,8 @@ downloadSettings:
   # Thumbnail handling: no_thumbnail, embed, sidecar, or embed_and_sidecar.
   thumbnailMode: embed
 
+  # Media metadata handling: no_metadata, embed, nfo, or embed_and_nfo.
+  metadataMode: embed
+
   # Filename compatibility: unrestricted, windows, or restricted.
   filenameRestrictionMode: windows

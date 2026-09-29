@@ -8,6 +8,7 @@ from typing import Iterable
 from xml.etree import ElementTree as ET
 
 from backend.types.show_types import EpisodeIdentifier
+from config.settings.submodels import MetadataMode
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,14 @@ class MediaServerMetadata:
         if self.media_type:
             tags["media_type"] = self.media_type
         return tags
+
+
+def wants_metadata_embed(mode: MetadataMode) -> bool:
+    return mode in {MetadataMode.EMBED, MetadataMode.EMBED_AND_NFO}
+
+
+def wants_metadata_nfo(mode: MetadataMode) -> bool:
+    return mode in {MetadataMode.NFO, MetadataMode.EMBED_AND_NFO}
 
 
 def build_episode_metadata(episode, show) -> MediaServerMetadata:

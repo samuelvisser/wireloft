@@ -9,6 +9,7 @@ from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.custom_metadata import IndexingValueDefinitionAPI
 from backend.api.models.pagination import OffsetPageRead
 from backend.types.local_media_profile_types import (
+    LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
     LocalMediaProfileThumbnailMode,
     LocalMediaProfileType,
@@ -25,8 +26,7 @@ class LocalMediaProfileAPIBaseIn(RequestBase):
     preferred_format: PreferredFormat
     download_mode: LocalMediaProfileStorageMode = LocalMediaProfileStorageMode.SYSTEM
     thumbnail_mode: LocalMediaProfileThumbnailMode = LocalMediaProfileThumbnailMode.SYSTEM
-    embed_metadata: bool = False
-    download_nfo: bool = False
+    metadata_mode: LocalMediaProfileMetadataMode = LocalMediaProfileMetadataMode.SYSTEM
     output_template: str = Field(min_length=16, max_length=4096)
 
     @computed_field(return_type=str)
@@ -53,8 +53,7 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     preferred_format: Union[PreferredFormat, str]
     download_mode: Union[LocalMediaProfileStorageMode, str] = LocalMediaProfileStorageMode.SYSTEM
     thumbnail_mode: Union[LocalMediaProfileThumbnailMode, str] = LocalMediaProfileThumbnailMode.SYSTEM
-    embed_metadata: bool = False
-    download_nfo: bool = False
+    metadata_mode: Union[LocalMediaProfileMetadataMode, str] = LocalMediaProfileMetadataMode.SYSTEM
     append_media_type_to_filename: bool
     created_at: datetime
     updated_at: datetime

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.types.local_media_profile_types import (
+    LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
     LocalMediaProfileThumbnailMode,
     LocalMediaProfileType,
@@ -63,16 +64,10 @@ class LocalMediaProfileBase(Base):
         server_default="0",
         nullable=False,
     )
-    embed_metadata: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False,
-        server_default="0",
-        nullable=False,
-    )
-    download_nfo: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False,
-        server_default="0",
+    metadata_mode: Mapped[str] = mapped_column(
+        String(24),
+        default=LocalMediaProfileMetadataMode.SYSTEM.value,
+        server_default=LocalMediaProfileMetadataMode.SYSTEM.value,
         nullable=False,
     )
 

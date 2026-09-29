@@ -323,6 +323,13 @@ class ThumbnailMode(StrEnum):
     EMBED_AND_SIDECAR = "embed_and_sidecar"
 
 
+class MetadataMode(StrEnum):
+    NO_METADATA = "no_metadata"
+    EMBED = "embed"
+    NFO = "nfo"
+    EMBED_AND_NFO = "embed_and_nfo"
+
+
 class ShowArtworkFallbackFormat(StrEnum):
     JPG = "jpg"
     PNG = "png"
@@ -364,6 +371,10 @@ class DownloadSettings(SubmodelBase):
     thumbnail_mode: ThumbnailMode = Field(
         default=ThumbnailMode.EMBED,
         description="Whether downloaded media embeds its thumbnail, writes a sidecar image, does both, or stores no thumbnail",
+    )
+    metadata_mode: MetadataMode = Field(
+        default=MetadataMode.EMBED,
+        description="Whether downloaded media embeds metadata, writes an NFO sidecar, does both, or stores no metadata",
     )
     download_show_assets: bool = Field(
         default=True,

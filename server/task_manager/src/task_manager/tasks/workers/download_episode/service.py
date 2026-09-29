@@ -27,6 +27,7 @@ from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
 from task_manager.tasks.helpers.downloads.download_modes import (
     effective_download_mode,
+    effective_metadata_mode,
     effective_thumbnail_mode,
 )
 from task_manager.tasks.helpers.downloads.engine import (
@@ -318,6 +319,7 @@ def _attempt_download(
     output_template = profile.output_template
     download_mode = effective_download_mode(profile)
     thumbnail_mode = effective_thumbnail_mode(profile)
+    metadata_mode = effective_metadata_mode(profile)
     thumbnail_url = select_thumbnail_url(episode)
     settings = get_settings().download_settings
 
@@ -342,8 +344,6 @@ def _attempt_download(
     )
 
     metadata = build_episode_metadata(episode, episode.show)
-    embed_metadata_requested = bool(profile.embed_metadata)
-    download_nfo_requested = bool(profile.download_nfo)
 
     # Rendering and metadata collection can lazily refresh ORM state after the
     # probe rollback. Release that transaction too before the media transfer.
@@ -358,8 +358,7 @@ def _attempt_download(
         thumbnail_url=thumbnail_url,
         thumbnail_mode=thumbnail_mode,
         metadata=metadata,
-        embed_metadata=embed_metadata_requested,
-        write_nfo=download_nfo_requested,
+        metadata_mode=metadata_mode,
     )
 
     def persist_direct_destination(destination: str) -> None:

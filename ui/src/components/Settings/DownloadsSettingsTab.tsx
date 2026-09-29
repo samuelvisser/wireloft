@@ -1,6 +1,7 @@
 import type {
     DownloadMode,
     FilenameRestrictionMode,
+    MetadataMode,
     ShowArtworkFallbackFormat,
     ThumbnailMode,
 } from '../../types/schemas/settings'
@@ -37,6 +38,14 @@ const THUMBNAIL_MODE_LABELS = {
     sidecar: 'Download besides media',
     embed_and_sidecar: 'Both embed and download',
 } satisfies Record<ThumbnailMode, string>
+
+const METADATA_MODES = ['no_metadata', 'embed', 'nfo', 'embed_and_nfo'] as const
+const METADATA_MODE_LABELS = {
+    no_metadata: 'No metadata',
+    embed: 'Embed in media',
+    nfo: 'Download as NFO',
+    embed_and_nfo: 'Both embed and download',
+} satisfies Record<MetadataMode, string>
 
 const SHOW_ARTWORK_FALLBACK_FORMATS = ['jpg', 'png'] as const
 const SHOW_ARTWORK_FALLBACK_FORMAT_LABELS = {
@@ -179,6 +188,28 @@ export default function DownloadsSettingsTab({
                             <p><strong>No thumbnail</strong> keeps downloads media-only.</p>
                             <p><strong>Embed in media</strong> stores the thumbnail as cover artwork inside the downloaded media file.</p>
                             <p><strong>Download besides media</strong> writes the image alongside the final media file, using the same basename.</p>
+                            <p><strong>Both embed and download</strong> does both.</p>
+                            <p>HLS bundles cannot contain embedded file metadata, so only the NFO part applies when selected.</p>
+                            <p>Local Media Profiles default to System and can override this setting individually.</p>
+                        </ReadMore>
+                    }
+                />
+                <SelectField
+                    id="settings-metadata-mode"
+                    label="Default metadata behavior"
+                    value={draft.downloadSettings.metadataMode}
+                    options={METADATA_MODES}
+                    optionLabels={METADATA_MODE_LABELS}
+                    error={errorFor('downloadSettings.metadataMode')}
+                    environmentVariable={environmentVariableFor('downloadSettings.metadataMode')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.metadataMode = value as MetadataMode
+                    })}
+                    help={
+                        <ReadMore summary="Choose how WireLoft stores media-server metadata for downloaded media.">
+                            <p><strong>No metadata</strong> leaves the downloaded media without WireLoft-generated metadata.</p>
+                            <p><strong>Embed in media</strong> writes metadata such as titles, dates and available episode or movie details into supported media containers.</p>
+                            <p><strong>Download as NFO</strong> writes a same-basename NFO file beside the downloaded media.</p>
                             <p><strong>Both embed and download</strong> does both.</p>
                             <p>Local Media Profiles default to System and can override this setting individually.</p>
                         </ReadMore>

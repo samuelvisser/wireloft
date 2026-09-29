@@ -69,6 +69,8 @@ export const DownloadModeSchema = z.enum(['direct', 'temporary'])
 export type DownloadMode = z.infer<typeof DownloadModeSchema>
 export const ThumbnailModeSchema = z.enum(['no_thumbnail', 'embed', 'sidecar', 'embed_and_sidecar'])
 export type ThumbnailMode = z.infer<typeof ThumbnailModeSchema>
+export const MetadataModeSchema = z.enum(['no_metadata', 'embed', 'nfo', 'embed_and_nfo'])
+export type MetadataMode = z.infer<typeof MetadataModeSchema>
 export const ShowArtworkFallbackFormatSchema = z.enum(['jpg', 'png'])
 export type ShowArtworkFallbackFormat = z.infer<typeof ShowArtworkFallbackFormatSchema>
 
@@ -81,6 +83,7 @@ const DownloadSettingsSchema = z.object({
     downloadRoot: z.string(),
     downloadMode: DownloadModeSchema,
     thumbnailMode: ThumbnailModeSchema,
+    metadataMode: MetadataModeSchema,
     downloadShowAssets: z.boolean(),
     showArtworkFallbackFormat: ShowArtworkFallbackFormatSchema,
     temporaryDownloadRoot: z.string(),
@@ -239,6 +242,7 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadSettings.downloadRoot',
     'downloadSettings.downloadMode',
     'downloadSettings.thumbnailMode',
+    'downloadSettings.metadataMode',
     'downloadSettings.downloadShowAssets',
     'downloadSettings.showArtworkFallbackFormat',
     'downloadSettings.temporaryDownloadRoot',

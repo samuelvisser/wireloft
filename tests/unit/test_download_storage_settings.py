@@ -4,12 +4,18 @@ from __future__ import annotations
 def test_system_download_storage_defaults_to_direct_mode():
     from backend.api.models.settings import SettingsValues
     from config.settings.settings import AppSettings
-    from config.settings.submodels import DownloadMode, ShowArtworkFallbackFormat, ThumbnailMode
+    from config.settings.submodels import (
+        DownloadMode,
+        MetadataMode,
+        ShowArtworkFallbackFormat,
+        ThumbnailMode,
+    )
 
     settings = AppSettings()
 
     assert settings.download_settings.download_mode is DownloadMode.DIRECT
     assert settings.download_settings.thumbnail_mode is ThumbnailMode.EMBED
+    assert settings.download_settings.metadata_mode is MetadataMode.EMBED
     assert settings.download_settings.show_artwork_fallback_format is ShowArtworkFallbackFormat.JPG
     assert (
         settings.download_settings.temporary_download_root
@@ -27,6 +33,7 @@ def test_system_download_storage_defaults_to_direct_mode():
     )
     assert values["downloadSettings"]["downloadMode"] == "direct"
     assert values["downloadSettings"]["thumbnailMode"] == "embed"
+    assert values["downloadSettings"]["metadataMode"] == "embed"
     assert values["downloadSettings"]["showArtworkFallbackFormat"] == "jpg"
     assert values["downloadSettings"]["temporaryDownloadRoot"] == str(
         settings.download_settings.download_root / ".wireloft-temp"
@@ -59,7 +66,7 @@ def test_explicit_download_storage_paths_override_default_factories():
     assert settings.rss_cache_root.as_posix() == "/tmp/wireloft-rss-cache"
 
 
-def test_local_media_profile_defaults_to_system_storage_and_thumbnail_modes():
+def test_local_media_profile_defaults_to_system_storage_thumbnail_and_metadata_modes():
     from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
 
     body = ShowLocalMediaProfileAPICreate(
@@ -71,9 +78,11 @@ def test_local_media_profile_defaults_to_system_storage_and_thumbnail_modes():
 
     assert str(body.download_mode) == "system"
     assert str(body.thumbnail_mode) == "system"
+    assert str(body.metadata_mode) == "system"
     payload = body.model_dump(by_alias=True, mode="json")
     assert payload["download_mode"] == "system"
     assert payload["thumbnail_mode"] == "system"
+    assert payload["metadata_mode"] == "system"
 
 
 def test_local_media_profile_accepts_each_storage_override():
@@ -102,6 +111,57 @@ def test_local_media_profile_accepts_each_thumbnail_override():
             output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
         )
         assert str(body.thumbnail_mode) == mode
+
+
+def test_local_media_profile_accepts_each_metadata_override():
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+
+    for mode in ("system", "no_metadata", "embed", "nfo", "embed_and_nfo"):
+        body = ShowLocalMediaProfileAPICreate(
+            name=f"Audio metadata {mode}",
+            type="show",
+            preferred_format="format_audio_only",
+            metadata_mode=mode,
+            output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+        )
+        assert str(body.metadata_mode) == mode
+
+
+def test_local_media_profile_uses_one_metadata_column():
+    from backend.db.models import LocalMediaProfileBase
+
+    columns = set(LocalMediaProfileBase.__table__.columns.keys())
+    assert "metadata_mode" in columns
+    assert "embed_metadata" not in columns
+    assert "download_nfo" not in columns
+
+
+def test_effective_metadata_mode_inherits_system_setting(monkeypatch):
+    from types import SimpleNamespace
+
+    from config import get_settings
+    from config.settings.submodels import MetadataMode
+    from task_manager.tasks.helpers.downloads.download_modes import effective_metadata_mode
+
+    settings = get_settings().download_settings
+    monkeypatch.setattr(settings, "metadata_mode", MetadataMode.NFO)
+
+    profile = SimpleNamespace(metadata_mode="system")
+    assert effective_metadata_mode(profile) is MetadataMode.NFO
+
+
+def test_effective_metadata_mode_honors_profile_override(monkeypatch):
+    from types import SimpleNamespace
+
+    from config import get_settings
+    from config.settings.submodels import MetadataMode
+    from task_manager.tasks.helpers.downloads.download_modes import effective_metadata_mode
+
+    settings = get_settings().download_settings
+    monkeypatch.setattr(settings, "metadata_mode", MetadataMode.EMBED)
+
+    profile = SimpleNamespace(metadata_mode="embed_and_nfo")
+    assert effective_metadata_mode(profile) is MetadataMode.EMBED_AND_NFO
 
 
 def test_download_profile_no_longer_contains_storage_mode():

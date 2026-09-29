@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from xml.etree import ElementTree as ET
 
 import pytest
-from pydantic import ValidationError
 
 
 def _episode(*, identifier: str = "numbered"):
@@ -156,16 +155,24 @@ def test_ffmpeg_metadata_embedding_stream_copies_media(tmp_path, monkeypatch):
     assert command[command.index("-f") + 1] == "mp4"
 
 
-def test_show_profile_rejects_embedded_metadata_for_hls():
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+def test_metadata_mode_helpers_match_requested_outputs():
+    from config.settings.submodels import MetadataMode
+    from task_manager.tasks.helpers.downloads.media_metadata import (
+        wants_metadata_embed,
+        wants_metadata_nfo,
+    )
 
-    with pytest.raises(ValidationError, match="Embedded file metadata"):
-        ShowLocalMediaProfileAPICreate(
-            name="HLS",
-            output_template="/downloads/shows/{{ show }}/{{ title }}.ext",
-            preferred_format="format_hls",
-            embed_metadata=True,
-        )
+    assert not wants_metadata_embed(MetadataMode.NO_METADATA)
+    assert not wants_metadata_nfo(MetadataMode.NO_METADATA)
+
+    assert wants_metadata_embed(MetadataMode.EMBED)
+    assert not wants_metadata_nfo(MetadataMode.EMBED)
+
+    assert not wants_metadata_embed(MetadataMode.NFO)
+    assert wants_metadata_nfo(MetadataMode.NFO)
+
+    assert wants_metadata_embed(MetadataMode.EMBED_AND_NFO)
+    assert wants_metadata_nfo(MetadataMode.EMBED_AND_NFO)
 
 
 def test_remove_download_artifacts_removes_tracked_nfo(tmp_path):
