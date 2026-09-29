@@ -52,22 +52,27 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
         },
     },
     {name: 'episode', description: 'Episode URL slug'},
-    {
-        name: 'episode_index',
-        description: 'WireLoft episode index across the whole show, including extras',
-        readMore: {
-            paragraphs: [
-                'Use this existing show-wide index instead of a Custom Index that numbers every episode.',
-                'Unlike episode_number, it does not restart for a season or episode type. It is the stored Episode index, not a database ID or a newly calculated counter; gaps are preserved.',
-                'Template variables are text. Use episode_index | int for arithmetic or numeric formatting.',
-            ],
-        },
-    },
     {name: 'episode_title', description: 'Episode title'},
     {name: 'title', description: 'Episode title'},
     {name: 'dw_episode_number', description: 'Raw episode number exactly as returned by The Daily Wire'},
     {name: 'episode_type', description: 'Episode type: ep, ep-extra, aux, or trailer'},
     {name: 'episode_extra_type', description: 'Episode-extra subtype: other or trailer; empty otherwise'},
+    {
+        name: 'episode_index',
+        description: 'WireLoft episode index across the whole show, including extras',
+        readMore: {
+            paragraphs: [
+                'WireLoft\'s internal episode index, in ascending order.',
+                'Unlike <code>episode_number</code>, it does not restart for a season or episode type. It is the stored Episode index, ' +
+                'not a database ID or a newly calculated counter. Gaps caused by episodes that disappear from The Daily ' +
+                'Wire are preserved.',
+                'In most cases, it is better practice to use this index value instead of a custom index if your goal is ' +
+                'to number every episode in a show in order. However, custom indexes do automatically reconcile in the ' +
+                'case of an episode getting deleted in the middle of the show, which makes them slightly different.',
+
+            ],
+        },
+    },
     {name: 'episode_number', description: 'Main episode number, or WireLoft counter for aux/trailer'},
     {name: 'episode_sub_number', description: 'The Daily Wire sub-episode number for episode extras; empty otherwise'},
     {name: 'episode_label', description: 'Canonical label without the type prefix (e.g. 2497, 2497.1, S01E07, S01E07.1)'},

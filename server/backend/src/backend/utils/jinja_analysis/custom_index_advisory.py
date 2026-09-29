@@ -1,9 +1,11 @@
 """Read-only Custom Index diagnostics and optional, user-applied Jinja refactors.
 
-Nothing here is used to render paths or assign indexes. The warning is a proof
-about native Jinja execution; suggesting a different membership rule is always
-an explicit choice for the author. Unknown syntax/data flow means no suggestion,
-never different runtime semantics or a validation failure.
+This module helps generate advisory replacement Jinja code if it detects the
+user might be creating unintentional side-effects or other obvious improvements
+could be made.
+
+Unknown syntax/data flow means no suggestion, it does not mean the Jinja is
+faulty and therefore WireLoft simply omits a suggestion in this case.
 """
 from __future__ import annotations
 
