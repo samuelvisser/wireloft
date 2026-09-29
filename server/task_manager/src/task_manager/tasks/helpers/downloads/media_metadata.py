@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Iterable
 from xml.etree import ElementTree as ET
 
+from backend.db.models.media_item import Episode
 from backend.types.show_types import EpisodeIdentifier
 from config.settings.submodels import MetadataMode
 
@@ -20,6 +21,7 @@ class MediaServerMetadata:
     source_url: str | None = None
     show_title: str | None = None
     season_number: int | None = None
+    episode_index: int | None = None
     episode_number: int | None = None
     aired: date | None = None
     release_date: date | None = None
@@ -56,7 +58,8 @@ class MediaServerMetadata:
             tags["season_number"] = str(self.season_number)
         if self.episode_number is not None:
             tags["episode_id"] = str(self.episode_number)
-            tags["episode_sort"] = str(self.episode_number)
+        if self.episode_index is not None:
+            tags["episode_sort"] = str(self.episode_index)
         if self.genres:
             tags["genre"] = ", ".join(self.genres)
         if self.directors:
@@ -90,7 +93,7 @@ def wants_metadata_nfo(mode: MetadataMode) -> bool:
     return mode in {MetadataMode.NFO, MetadataMode.EMBED_AND_NFO}
 
 
-def build_episode_metadata(episode, show) -> MediaServerMetadata:
+def build_episode_metadata(episode: Episode, show) -> MediaServerMetadata:
     published = episode.published_date or episode.went_live_date or episode.scheduled_date
     season_number: int | None = None
     episode_number: int | None = None
@@ -111,6 +114,7 @@ def build_episode_metadata(episode, show) -> MediaServerMetadata:
         source_url=episode.sharing_url,
         show_title=show.title,
         season_number=season_number,
+        episode_index=episode.index,
         episode_number=episode_number,
         aired=_as_date(published),
         duration_seconds=episode.duration,
