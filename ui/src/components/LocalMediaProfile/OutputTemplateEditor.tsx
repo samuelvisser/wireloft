@@ -7,10 +7,8 @@ import {
     type Completion,
     type CompletionContext,
 } from '@codemirror/autocomplete'
-import {indentUnit, HighlightStyle, syntaxHighlighting} from '@codemirror/language'
-import {jinja} from '@codemirror/lang-jinja'
+import {indentUnit} from '@codemirror/language'
 import {EditorView, type ViewUpdate} from '@codemirror/view'
-import {tags} from '@lezer/highlight'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import ReadMore from '../../utils/ReadMore'
@@ -23,6 +21,8 @@ import {
 } from '../../lib/localMediaProfileTemplateSources'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import TemplateSourceSelect from './TemplateSourceSelect'
+import CustomIndexAdvisories from './CustomIndexAdvisories'
+import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
 import {
     analyzeJinjaStatement,
     editorPositionForCompactOffset,
@@ -105,26 +105,6 @@ const jinjaFilterCompletionOptions: Completion[] = [
         info: 'Use the current episode number from a defined Indexing Value.',
     },
 ]
-
-const jinjaHighlightStyle = HighlightStyle.define([
-    {tag: tags.brace, class: 'cm-jinja-brace'},
-    {
-        tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.operatorKeyword],
-        class: 'cm-jinja-keyword',
-    },
-    {
-        tag: [tags.variableName, tags.propertyName, tags.special(tags.variableName)],
-        class: 'cm-jinja-variable',
-    },
-    {tag: tags.string, class: 'cm-jinja-string'},
-    {tag: [tags.number, tags.bool], class: 'cm-jinja-literal'},
-    {
-        tag: [tags.operator, tags.arithmeticOperator, tags.logicOperator, tags.compareOperator],
-        class: 'cm-jinja-operator',
-    },
-    {tag: tags.comment, class: 'cm-jinja-comment'},
-    {tag: tags.blockComment, class: 'cm-jinja-comment'},
-])
 
 function statementVariableExpression(statement: string): string | null {
     const keywordMatch = /^\s*([A-Za-z_][A-Za-z0-9_]*)\b/.exec(statement)
@@ -452,7 +432,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         [customVariables, mode],
     )
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
-    const [missingIndexingValueNames, setMissingIndexingValueNames] = useState<string[]>([])
     const [provisionalIndexingValueNames, setProvisionalIndexingValueNames] = useState<string[]>([])
     const usedVariables = useMemo(
         () => {
@@ -611,10 +590,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
             }
         })
         return [
-            jinja(),
+            ...outputTemplateSyntaxExtensions,
             indentUnit.of('\t'),
             autocompletion({override: [filterCompletionSource, variableCompletionSource, statementCompletionSource]}),
-            syntaxHighlighting(jinjaHighlightStyle),
             EditorView.lineWrapping,
             openCompletionsAfterJinjaDelimiter,
             EditorView.updateListener.of(indentAfterNewline),
@@ -697,7 +675,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         if (preview.loading) return
         const output = preview.result?.output
         setUsedVariableNames(output?.usedVariables ?? [])
-        setMissingIndexingValueNames(output?.missingIndexingValues ?? [])
         setProvisionalIndexingValueNames(output?.provisionalIndexingValues ?? [])
     }, [preview.loading, preview.result])
 
@@ -756,17 +733,19 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
                         </div>
                     )}
-                    {missingIndexingValueNames.length > 0 && (
-                        <div className="template-metadata-warning" role="status">
-                            {missingIndexingValueNames.length === 1 ? 'Indexing Value ' : 'Indexing Values '}
-                            {missingIndexingValueNames.map((name, index) => (
-                                <span key={name}>
-                                {index > 0 ? ', ' : ''}<code>{name}</code>
-                            </span>
-                            ))}
-                            {missingIndexingValueNames.length === 1 ? ' is' : ' are'} not defined by this Local Media Profile and will render as
-                            empty.
-                        </div>
+                    {mode === 'show' && (
+                        <CustomIndexAdvisories
+                            template={template}
+                            indexingValues={indexingValues}
+                            onApply={(value) => {
+                                form.clearErrors('outputTemplate')
+                                form.setValue('outputTemplate', value, {
+                                    shouldDirty: true,
+                                    shouldTouch: true,
+                                    shouldValidate: true,
+                                })
+                            }}
+                        />
                     )}
                     {provisionalIndexingValueNames.length > 0 && (
                         <div className="template-preview-status" role="status">

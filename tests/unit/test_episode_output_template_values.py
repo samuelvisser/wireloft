@@ -16,6 +16,7 @@ def _episode(identifier: str, *, dw_episode_number: str | None = None):
         episode_identifier=identifier,
         dw_episode_number=dw_episode_number,
         published_date=None,
+        index=42,
     )
 
 
@@ -92,3 +93,59 @@ def test_episode_identifier_info_extracts_parent_and_sub_episode_numbers() -> No
     assert info.season_number == 3
     assert info.episode_number == "12"
     assert info.sub_episode_number == "2"
+
+
+def test_episode_index_is_the_stored_show_wide_value_not_season_number() -> None:
+    from backend.utils.output_template import (
+        SHOW_OUTPUT_TEMPLATE_FIELDS, episode_output_template_values, render_output_template,
+    )
+
+    for identifier in ("ep.S01E07", "aux.2", "trailer.1"):
+        values = episode_output_template_values(_episode(identifier))
+        assert values["episode_index"] == "42"
+        assert "episode_index" in SHOW_OUTPUT_TEMPLATE_FIELDS
+        assert render_output_template(
+            "/downloads/{{ episode_index }}-{{ '%03d'|format(episode_index|int) }}.ext",
+            values, allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        ) == "/downloads/42-042.ext"
+
+
+def test_episode_index_does_not_require_custom_index_state_or_recount_gaps(monkeypatch) -> None:
+    from backend.utils import output_template
+
+    episode = _episode("ep.7")
+    episode.index = 105
+    monkeypatch.setattr(output_template, "_finish_output_path", lambda rendered, **kwargs: rendered)
+    assert output_template.resolve_episode_output_path(
+        "/downloads/{{ episode_index }}.ext", episode=episode,
+    ) == "/downloads/105.ext"
+
+
+def test_episode_index_is_not_available_to_movie_profiles() -> None:
+    import pytest
+    from backend.utils.output_template import MOVIE_OUTPUT_TEMPLATE_FIELDS, validate_output_template_fields
+
+    with pytest.raises(ValueError, match="Unsupported output template variable"):
+        validate_output_template_fields(
+            "/downloads/{{ episode_index }}.ext", allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
+        )
+
+
+def test_episode_index_is_available_in_real_and_fallback_preview_sources() -> None:
+    from backend.api.endpoints.local_media_profiles.output_template import (
+        _EXAMPLE_SHOW_VALUES, _show_template_source, get_output_template_preview,
+    )
+    from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
+
+    episode = _episode("ep.S01E07")
+    episode.id = 987
+    source = _show_template_source(episode)
+    assert source.values["episode_index"] == "42"
+    assert _EXAMPLE_SHOW_VALUES["episode_index"] == "1"
+    for values, expected in ((source.values, "42"), (_EXAMPLE_SHOW_VALUES, "1")):
+        result = get_output_template_preview(None, LocalMediaProfileTemplatePreview(
+            type="show", output_template="/downloads/{{ episode_index }}.ext",
+            preferred_format="format_1080p", values=values, indexing_values=[],
+        ))
+        assert result.output_path == f"/downloads/{expected}.mp4"
+        assert result.used_variables == ["episode_index"]

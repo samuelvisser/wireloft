@@ -25,6 +25,8 @@ def _episode(*, show_metadata=None):
         title="Episode One",
         episode_identifier="ep.1",
         published_date=None,
+        index=1,
+        dw_episode_number=None,
     )
 
 
