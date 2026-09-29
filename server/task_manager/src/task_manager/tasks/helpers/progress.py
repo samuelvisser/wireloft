@@ -52,6 +52,39 @@ class CollectionListProgressTracker:
         update_progress(self._progress_sink, self.mapped_pct(), message)
 
 
+def weighted_progress_percent(
+    progress_by_size: list[tuple[int, int | None]],
+) -> int:
+    """Return aggregate progress weighted by each item's expected byte size.
+
+    Unknown sizes use the average known size so one legacy/missing item neither
+    dominates the operation nor effectively disappears from the aggregate.
+    """
+    if not progress_by_size:
+        return 100
+
+    known_sizes = [
+        int(size)
+        for _progress, size in progress_by_size
+        if size is not None and int(size) > 0
+    ]
+    fallback_size = (
+        max(1, int(sum(known_sizes) / len(known_sizes)))
+        if known_sizes
+        else 1
+    )
+
+    weighted_progress = 0
+    total_weight = 0
+    for item_progress, size in progress_by_size:
+        progress_value = max(0, min(100, int(item_progress)))
+        weight = int(size) if size is not None and int(size) > 0 else fallback_size
+        weighted_progress += progress_value * weight
+        total_weight += weight
+
+    return max(0, min(100, int(weighted_progress / max(1, total_weight))))
+
+
 def update_progress(progress, percentage: int, msg: str):
     """Small helper to update the progress in any worker"""
     if progress:

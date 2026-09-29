@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.utils.output_template import resolve_episode_output_path
 from task_manager.scheduler.db import TaskOperation
 from task_manager.scheduler.types import OperationSource, OperationStatus
+from task_manager.tasks.helpers.progress import weighted_progress_percent
 from task_manager.tasks.helpers.downloads.show_episode_downloads import (
     cancel_active_download_attempts,
     delete_episode_download_artifact,
@@ -33,6 +34,7 @@ class RedownloadTarget:
     media_download_id: int
     operation_id: str
     episode_title: str
+    expected_size_bytes: int | None
 
 
 def _prepare_redownloads(
@@ -57,6 +59,14 @@ def _prepare_redownloads(
             media_download=download,
         ))
 
+        expected_size_bytes = (
+            int(download.downloaded_bytes)
+            if download.downloaded_bytes is not None and int(download.downloaded_bytes) > 0
+            else int(download.artifact_size_bytes)
+            if download.artifact_size_bytes is not None and int(download.artifact_size_bytes) > 0
+            else None
+        )
+
         delete_episode_download_artifact(s, download)
         download.file_path = target_path
         s.flush()
@@ -71,6 +81,7 @@ def _prepare_redownloads(
             media_download_id=download.id,
             operation_id=operation.id,
             episode_title=episode.title,
+            expected_size_bytes=expected_size_bytes,
         ))
         # Keep destructive file changes and their durable child operation paired.
         s.commit()
@@ -97,25 +108,28 @@ def _check_targets(
     }
 
     completed = 0
-    progress_total = 0
+    progress_by_size: list[tuple[int, int | None]] = []
+    failure: str | None = None
     for target in targets:
         operation = operations.get(target.operation_id)
         if operation is None:
-            return completed, int(progress_total / len(targets)), (
-                f"Download operation for '{target.episode_title}' was removed"
-            )
+            progress_by_size.append((0, target.expected_size_bytes))
+            if failure is None:
+                failure = f"Download operation for '{target.episode_title}' was removed"
+            continue
 
-        progress_total += max(0, min(100, int(operation.progress or 0)))
+        operation_progress = max(0, min(100, int(operation.progress or 0)))
         if operation.status == OperationStatus.SUCCEEDED.value:
             completed += 1
+            progress_by_size.append((100, target.expected_size_bytes))
             continue
-        if operation.status in _TERMINAL_CHILD_STATUSES:
-            detail = operation.error or operation.message or operation.status.lower()
-            return completed, int(progress_total / len(targets)), (
-                f"Download for '{target.episode_title}' {detail}"
-            )
 
-    return completed, int(progress_total / len(targets)), None
+        progress_by_size.append((operation_progress, target.expected_size_bytes))
+        if operation.status in _TERMINAL_CHILD_STATUSES and failure is None:
+            detail = operation.error or operation.message or operation.status.lower()
+            failure = f"Download for '{target.episode_title}' {detail}"
+
+    return completed, weighted_progress_percent(progress_by_size), failure
 
 
 def _cancel_targets(targets: list[RedownloadTarget], *, reason: str) -> None:

@@ -207,6 +207,7 @@ def test_redownload_worker_preserves_manual_download_provenance(monkeypatch, tmp
         prepared = _helpers._prepare_redownloads(session, [audio_download])
 
         assert len(prepared) == 1
+        assert prepared[0].expected_size_bytes == 5
         session.expire_all()
         refreshed = session.get(EpisodeMediaDownload, audio_download.id)
         assert refreshed is not None
@@ -279,3 +280,49 @@ def test_redownload_worker_is_not_automatically_retried():
     from task_manager.tasks.workers.redownload_show_episodes_worker import redownload_show_episodes_worker
 
     assert redownload_show_episodes_worker._task_meta.default_max_retries == 0
+
+
+def test_show_redownload_progress_is_weighted_by_previous_file_size():
+    from task_manager.scheduler.types import OperationStatus
+    from task_manager.tasks.workers.redownload_show_episodes_worker import _helpers
+
+    targets = [
+        _helpers.RedownloadTarget(
+            media_download_id=1,
+            operation_id="small",
+            episode_title="Small extra",
+            expected_size_bytes=10,
+        ),
+        _helpers.RedownloadTarget(
+            media_download_id=2,
+            operation_id="large",
+            episode_title="Large episode",
+            expected_size_bytes=90,
+        ),
+    ]
+    operations = [
+        SimpleNamespace(
+            id="small",
+            status=OperationStatus.SUCCEEDED.value,
+            progress=100,
+            error=None,
+            message="Downloaded",
+        ),
+        SimpleNamespace(
+            id="large",
+            status=OperationStatus.RUNNING.value,
+            progress=0,
+            error=None,
+            message="Downloading",
+        ),
+    ]
+
+    class FakeSession:
+        def scalars(self, _statement):
+            return operations
+
+    completed, aggregate_percent, failure = _helpers._check_targets(FakeSession(), targets)
+
+    assert completed == 1
+    assert aggregate_percent == 10
+    assert failure is None

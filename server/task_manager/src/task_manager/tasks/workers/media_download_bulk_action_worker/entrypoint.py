@@ -3,22 +3,56 @@ from __future__ import annotations
 import asyncio
 
 from dailywire_downloader import DownloadCancelled
+from sqlalchemy import select
 
 from backend.api.endpoints.media_downloads.actions import (
     cancel_media_download_action,
     delete_media_download_artifact_action,
     retry_media_download_action,
 )
+from backend.db.core import get_session
+from backend.db.models.media_download import MediaDownloadBase
 from task_manager.scheduler.operations import get_operation
 from task_manager.scheduler.registry import task
 from task_manager.scheduler.results import TaskResult
 from task_manager.scheduler.types import OperationSource, OperationStatus
+from task_manager.tasks.helpers.progress import weighted_progress_percent
 from task_manager.tasks.media_download_operations import cancel_media_download_operation
+
+
+def _snapshot_download_sizes(media_download_ids: list[int]) -> dict[int, int | None]:
+    """Capture expected byte sizes before retry preparation clears artifact facts."""
+    ids = tuple(dict.fromkeys(int(value) for value in media_download_ids))
+    if not ids:
+        return {}
+
+    session = get_session()
+    try:
+        rows = session.execute(
+            select(
+                MediaDownloadBase.id,
+                MediaDownloadBase.downloaded_bytes,
+                MediaDownloadBase.artifact_size_bytes,
+            ).where(MediaDownloadBase.id.in_(ids))
+        )
+        return {
+            int(media_download_id): (
+                int(downloaded_bytes)
+                if downloaded_bytes is not None and int(downloaded_bytes) > 0
+                else int(artifact_size_bytes)
+                if artifact_size_bytes is not None and int(artifact_size_bytes) > 0
+                else None
+            )
+            for media_download_id, downloaded_bytes, artifact_size_bytes in rows
+        }
+    finally:
+        session.close()
 
 
 async def _run_bulk_retry(
         media_download_ids: list[int],
         *,
+        expected_size_bytes_by_id: dict[int, int | None] | None = None,
         progress=None,
 ) -> TaskResult:
     """Queue replacement downloads and wait for every child operation to finish."""
@@ -28,6 +62,12 @@ async def _run_bulk_retry(
             summary="No downloads to retry",
             data={"downloads_requested": 0, "downloads_completed": 0},
         )
+
+    expected_sizes = (
+        dict(expected_size_bytes_by_id)
+        if expected_size_bytes_by_id is not None
+        else _snapshot_download_sizes(ids)
+    )
 
     children: list[tuple[int, str]] = []
     try:
@@ -47,14 +87,16 @@ async def _run_bulk_retry(
                 raise DownloadCancelled("Bulk retry was canceled")
 
             completed = 0
-            aggregate_progress = 0
             terminal = 0
             failures: list[str] = []
+            progress_by_size: list[tuple[int, int | None]] = []
 
             for media_download_id, operation_id in children:
                 operation = get_operation(operation_id)
+                expected_size = expected_sizes.get(media_download_id)
                 if operation is None:
                     terminal += 1
+                    progress_by_size.append((100, expected_size))
                     failures.append(f"Download {media_download_id} operation disappeared")
                     continue
 
@@ -67,16 +109,16 @@ async def _run_bulk_retry(
                     OperationStatus.CANCELED.value,
                 }:
                     terminal += 1
-                    aggregate_progress += 100
+                    progress_by_size.append((100, expected_size))
                     if status == OperationStatus.SUCCEEDED.value:
                         completed += 1
                     else:
                         detail = operation.error or operation.message or status.lower()
                         failures.append(f"Download {media_download_id}: {detail}")
                 else:
-                    aggregate_progress += child_progress
+                    progress_by_size.append((child_progress, expected_size))
 
-            percent = int(aggregate_progress / len(children))
+            percent = weighted_progress_percent(progress_by_size)
             if progress is not None:
                 progress.set(
                     min(99, percent) if terminal < len(children) else 100,
@@ -137,7 +179,12 @@ async def media_download_bulk_action_worker(
         progress.raise_if_cancelled()
 
     if action == "retry_bulk":
-        return await _run_bulk_retry(media_download_ids or [], progress=progress)
+        ids = media_download_ids or []
+        return await _run_bulk_retry(
+            ids,
+            expected_size_bytes_by_id=_snapshot_download_sizes(ids),
+            progress=progress,
+        )
 
     if media_download_id is None:
         raise ValueError(f"Bulk media download action '{action}' requires media_download_id")

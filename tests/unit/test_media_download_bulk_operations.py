@@ -67,9 +67,16 @@ def test_bulk_retry_worker_waits_for_child_download_completion(monkeypatch):
     def get_operation(operation_id: str):
         polls[operation_id] += 1
         if polls[operation_id] == 1:
+            if operation_id == "operation-8":
+                return SimpleNamespace(
+                    status=OperationStatus.SUCCEEDED.value,
+                    progress=100,
+                    error=None,
+                    message="Downloaded",
+                )
             return SimpleNamespace(
                 status=OperationStatus.RUNNING.value,
-                progress=50,
+                progress=0,
                 error=None,
                 message="Downloading",
             )
@@ -94,10 +101,15 @@ def test_bulk_retry_worker_waits_for_child_download_completion(monkeypatch):
         def set(self, percent: int, message: str | None = None) -> None:
             progress_updates.append((percent, message))
 
-    result = asyncio.run(entrypoint._run_bulk_retry([8, 3], progress=Progress()))
+    result = asyncio.run(entrypoint._run_bulk_retry(
+        [8, 3],
+        expected_size_bytes_by_id={8: 10, 3: 90},
+        progress=Progress(),
+    ))
 
     assert polls == {"operation-8": 2, "operation-3": 2}
-    assert progress_updates[0][0] == 50
+    # The 10-byte item finishing first contributes 10%, not half the operation.
+    assert progress_updates[0][0] == 10
     assert progress_updates[-1][0] == 100
     assert result.data == {
         "downloads_requested": 2,
@@ -137,3 +149,14 @@ def test_scoped_redownload_operations_use_bulk_retry_coordinator(kind: str, oper
         "media_download_ids": [4, 5],
         "action": "retry_bulk",
     }
+
+
+def test_weighted_progress_uses_average_known_size_for_unknown_items():
+    from task_manager.tasks.helpers.progress import weighted_progress_percent
+
+    # Unknown-size legacy rows should still count, without being treated as a
+    # near-zero one-byte item beside a large known download.
+    assert weighted_progress_percent([
+        (100, 100),
+        (0, None),
+    ]) == 50
