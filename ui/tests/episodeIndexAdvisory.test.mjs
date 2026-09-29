@@ -30,6 +30,8 @@ function component(advisories) {
     const {default: Advisory} = load('src/components/LocalMediaProfile/CustomIndexAdvisories.tsx', {
         'react/jsx-runtime': {jsx, jsxs: jsx, Fragment: 'fragment'},
         react: {useMemo: (factory) => factory()},
+        '@uiw/react-codemirror': {default: 'static-code'},
+        '@codemirror/view': {EditorView: {lineWrapping: 'line-wrapping'}},
         '../../lib/customIndexAdvisory': {
             customIndexReferences: () => advisories.map(({key}) => key),
             customIndexAdvisoryRequest: () => 'draft',
@@ -37,6 +39,7 @@ function component(advisories) {
         '../../lib/useCustomIndexAdvisory': {
             useCustomIndexAdvisory: () => ({advisories, unavailable: false}),
         },
+        './outputTemplateCodeMirror': {outputTemplateSyntaxExtensions: ['jinja', 'highlighting']},
         './outputTemplateFormatting': {
             parseOutputTemplate: (source) => source,
             renderEditorOutputTemplate: (source) => ({value: source}),
@@ -78,6 +81,11 @@ test('unconditional advisory explains the built-in variable, not a conditional s
     assert.match(result.text, /int/)
     assert.doesNotMatch(result.text, /A Jinja set block/)
     assert.deepEqual(result.applied, [])
+    const examples = result.elements.filter(({type}) => type === 'static-code')
+    assert.equal(examples.length, 2)
+    assert.ok(examples.every(({props}) => props.editable === false))
+    assert.equal(examples[0].props.value, builtin.suggestion.before)
+    assert.equal(examples[1].props.value, builtin.suggestion.after)
     const button = result.elements.find(({type}) => type === 'button')
     assert.equal(button.props.type, 'button')
     button.props.onClick()

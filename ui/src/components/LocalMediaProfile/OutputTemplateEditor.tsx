@@ -7,10 +7,8 @@ import {
     type Completion,
     type CompletionContext,
 } from '@codemirror/autocomplete'
-import {indentUnit, HighlightStyle, syntaxHighlighting} from '@codemirror/language'
-import {jinja} from '@codemirror/lang-jinja'
+import {indentUnit} from '@codemirror/language'
 import {EditorView, type ViewUpdate} from '@codemirror/view'
-import {tags} from '@lezer/highlight'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import ReadMore from '../../utils/ReadMore'
@@ -24,6 +22,7 @@ import {
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import TemplateSourceSelect from './TemplateSourceSelect'
 import CustomIndexAdvisories from './CustomIndexAdvisories'
+import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
 import {
     analyzeJinjaStatement,
     editorPositionForCompactOffset,
@@ -106,26 +105,6 @@ const jinjaFilterCompletionOptions: Completion[] = [
         info: 'Use the current episode number from a defined Indexing Value.',
     },
 ]
-
-const jinjaHighlightStyle = HighlightStyle.define([
-    {tag: tags.brace, class: 'cm-jinja-brace'},
-    {
-        tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.operatorKeyword],
-        class: 'cm-jinja-keyword',
-    },
-    {
-        tag: [tags.variableName, tags.propertyName, tags.special(tags.variableName)],
-        class: 'cm-jinja-variable',
-    },
-    {tag: tags.string, class: 'cm-jinja-string'},
-    {tag: [tags.number, tags.bool], class: 'cm-jinja-literal'},
-    {
-        tag: [tags.operator, tags.arithmeticOperator, tags.logicOperator, tags.compareOperator],
-        class: 'cm-jinja-operator',
-    },
-    {tag: tags.comment, class: 'cm-jinja-comment'},
-    {tag: tags.blockComment, class: 'cm-jinja-comment'},
-])
 
 function statementVariableExpression(statement: string): string | null {
     const keywordMatch = /^\s*([A-Za-z_][A-Za-z0-9_]*)\b/.exec(statement)
@@ -611,10 +590,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
             }
         })
         return [
-            jinja(),
+            ...outputTemplateSyntaxExtensions,
             indentUnit.of('\t'),
             autocompletion({override: [filterCompletionSource, variableCompletionSource, statementCompletionSource]}),
-            syntaxHighlighting(jinjaHighlightStyle),
             EditorView.lineWrapping,
             openCompletionsAfterJinjaDelimiter,
             EditorView.updateListener.of(indentAfterNewline),

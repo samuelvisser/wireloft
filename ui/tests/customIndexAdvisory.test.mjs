@@ -201,11 +201,14 @@ function componentTree(props, advisoryState = {advisories: [], unavailable: fals
     const dependencies = {
         'react/jsx-runtime': {jsx, jsxs: jsx},
         react: {useMemo: (factory) => factory()},
+        '@uiw/react-codemirror': {default: 'static-code'},
+        '@codemirror/view': {EditorView: {lineWrapping: 'line-wrapping'}},
         '../../lib/customIndexAdvisory': {customIndexReferences, customIndexAdvisoryRequest},
         '../../lib/useCustomIndexAdvisory': {useCustomIndexAdvisory: (request) => {
             sentRequest = request
             return advisoryState
         }},
+        './outputTemplateCodeMirror': {outputTemplateSyntaxExtensions: ['jinja', 'highlighting']},
         './outputTemplateFormatting': formatting,
         './CustomIndexAdvisories.css': {},
     }
@@ -248,6 +251,9 @@ test('suggestions require explicit review/apply; warnings without suggestions re
     assert.deepEqual(applied, [])
     assert.equal(result.elements.filter((node) => node.props.role === 'status').length, 2)
     assert.equal(result.elements.filter((node) => node.type === 'details').length, 1)
+    const examples = result.elements.filter((node) => node.type === 'static-code')
+    assert.equal(examples.length, 2)
+    assert.ok(examples.every(({props}) => props.editable === false))
     const button = result.elements.find((node) => node.type === 'button')
     assert.equal(button.props.type, 'button')
     button.props.onClick()

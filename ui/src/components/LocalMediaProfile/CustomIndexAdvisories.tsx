@@ -1,7 +1,10 @@
 import {useMemo} from 'react'
+import CodeMirror from '@uiw/react-codemirror'
+import {EditorView} from '@codemirror/view'
 
 import {customIndexAdvisoryRequest, customIndexReferences, type IndexDefinition} from '../../lib/customIndexAdvisory'
 import {useCustomIndexAdvisory} from '../../lib/useCustomIndexAdvisory'
+import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
 import {parseOutputTemplate, renderEditorOutputTemplate} from './outputTemplateFormatting'
 import './CustomIndexAdvisories.css'
 
@@ -13,6 +16,30 @@ type Props = {
 
 function exampleCode(source: string) {
     return renderEditorOutputTemplate(parseOutputTemplate(source, 'editor')).value
+}
+
+const exampleCodeExtensions = [
+    ...outputTemplateSyntaxExtensions,
+    EditorView.lineWrapping,
+]
+
+function SuggestionCode({source, label}: {source: string; label: string}) {
+    return (
+        <CodeMirror
+            className="output-template-code-editor template-index-code-editor"
+            value={exampleCode(source)}
+            editable={false}
+            extensions={exampleCodeExtensions}
+            basicSetup={{
+                lineNumbers: false,
+                foldGutter: false,
+                highlightActiveLine: false,
+                highlightActiveLineGutter: false,
+                autocompletion: false,
+            }}
+            aria-label={label}
+        />
+    )
 }
 
 export default function CustomIndexAdvisories({template, indexingValues, onApply}: Props) {
@@ -49,9 +76,9 @@ export default function CustomIndexAdvisories({template, indexingValues, onApply
                                 : <>Use the condition already in your template to control the index call. A Jinja set block builds the text only in the selected branch.</>
                             }</p>
                             <div className="template-index-code-label">Replace this code</div>
-                            <pre><code>{exampleCode(suggestion.before)}</code></pre>
+                            <SuggestionCode source={suggestion.before} label={`Code to replace for Custom Index ${key}`}/>
                             <div className="template-index-code-label">{kind === 'episode_index' ? 'With the built-in variable' : 'With this set block'}</div>
-                            <pre><code>{exampleCode(suggestion.after)}</code></pre>
+                            <SuggestionCode source={suggestion.after} label={`Suggested replacement for Custom Index ${key}`}/>
                             <p>{kind === 'episode_index'
                                 ? <>Other template code is kept. Stored episode indexes can contain gaps; review the preview before saving. You can remove the Indexing Value definition once nothing uses it.</>
                                 : <>This changes which episodes receive a number. Other template code is kept. Review the preview before saving; saving may renumber this index.</>
