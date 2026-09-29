@@ -61,13 +61,16 @@ export default function CustomIndexAdvisories({template, indexingValues, onApply
                     </p>
                 </div>
             ))}
-            {advisories.map(({key, kind, message, suggestion}) => (
+            {advisories.map(({key, kind, suggestion}) => (
                 <div className="template-metadata-warning template-index-advisory" role="status" key={key}>
                     <strong>{kind === 'episode_index'
                         ? <>Use <code>episode_index</code> instead of Custom Index <code>{key}</code></>
                         : <>Custom Index <code>{key}</code> numbers every episode</>
                     }</strong>
-                    <p>{message}</p>
+                    <p>{kind === 'episode_index'
+                        ? <>This Custom Index runs for every episode and has no conditional uses. Use WireLoft's <code>episode_index</code> variable for this show-wide numbering instead of maintaining a separate Custom Index. The stored episode index includes all episode types and can contain gaps, so review the preview before saving.</>
+                        : <>Custom Indexes are designed to apply an index to only some episodes within a show. As currently set up, this Custom Index runs for every episode, even when its number is not used in the path. If you intend to use an all-episode sequence, you should probably use the <code>episode_index</code> variable WireLoft provides. To number only some episodes, put the <code>custom_index</code> call inside the condition that selects them.</>
+                    }</p>
                     {suggestion && (
                         <details className="template-index-suggestion">
                             <summary>Suggested change for <code>{key}</code></summary>
