@@ -1,0 +1,55 @@
+.template-index-advisories {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+}
+
+.template-index-advisory {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    font-size: 12px;
+}
+
+.template-index-advisory p {
+    margin: 0;
+}
+
+.template-index-suggestion summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.template-index-suggestion > :not(summary) {
+    margin-top: 8px;
+}
+
+.template-index-code-label {
+    font-weight: 600;
+}
+
+.template-index-suggestion pre {
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 10px;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.template-index-suggestion pre code {
+    color: inherit;
+    background: transparent;
+    padding: 0;
+    font-size: 12px;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+.template-index-suggestion button {
+    font-size: 12px;
+    padding: 5px 9px;
+}

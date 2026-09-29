@@ -23,6 +23,7 @@ import {
 } from '../../lib/localMediaProfileTemplateSources'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import TemplateSourceSelect from './TemplateSourceSelect'
+import CustomIndexAdvisories from './CustomIndexAdvisories'
 import {
     analyzeJinjaStatement,
     editorPositionForCompactOffset,
@@ -452,7 +453,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         [customVariables, mode],
     )
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
-    const [missingIndexingValueNames, setMissingIndexingValueNames] = useState<string[]>([])
     const [provisionalIndexingValueNames, setProvisionalIndexingValueNames] = useState<string[]>([])
     const usedVariables = useMemo(
         () => {
@@ -697,7 +697,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         if (preview.loading) return
         const output = preview.result?.output
         setUsedVariableNames(output?.usedVariables ?? [])
-        setMissingIndexingValueNames(output?.missingIndexingValues ?? [])
         setProvisionalIndexingValueNames(output?.provisionalIndexingValues ?? [])
     }, [preview.loading, preview.result])
 
@@ -756,17 +755,19 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
                         </div>
                     )}
-                    {missingIndexingValueNames.length > 0 && (
-                        <div className="template-metadata-warning" role="status">
-                            {missingIndexingValueNames.length === 1 ? 'Indexing Value ' : 'Indexing Values '}
-                            {missingIndexingValueNames.map((name, index) => (
-                                <span key={name}>
-                                {index > 0 ? ', ' : ''}<code>{name}</code>
-                            </span>
-                            ))}
-                            {missingIndexingValueNames.length === 1 ? ' is' : ' are'} not defined by this Local Media Profile and will render as
-                            empty.
-                        </div>
+                    {mode === 'show' && (
+                        <CustomIndexAdvisories
+                            template={template}
+                            indexingValues={indexingValues}
+                            onApply={(value) => {
+                                form.clearErrors('outputTemplate')
+                                form.setValue('outputTemplate', value, {
+                                    shouldDirty: true,
+                                    shouldTouch: true,
+                                    shouldValidate: true,
+                                })
+                            }}
+                        />
                     )}
                     {provisionalIndexingValueNames.length > 0 && (
                         <div className="template-preview-status" role="status">
