@@ -67,7 +67,7 @@ function component(advisories) {
 }
 
 const builtin = {
-    key: 'extra', kind: 'episode_index', message: 'Use the stored episode index.',
+    key: 'extra', kind: 'episode_index',
     suggestion: {
         before: "{% set n='extra'|custom_index %}",
         after: '{% set n=(episode_index | int) %}',
@@ -79,6 +79,7 @@ test('unconditional advisory explains the built-in variable, not a conditional s
     const result = component([builtin])
     assert.match(result.text, /Use episode_index instead of Custom Index extra/)
     assert.match(result.text, /With the built-in variable/)
+    assert.match(result.text, /runs for every episode and has no conditional uses/)
     assert.match(result.text, /gaps/)
     assert.match(result.text, /int/)
     assert.doesNotMatch(result.text, /A Jinja set block/)
@@ -96,11 +97,12 @@ test('unconditional advisory explains the built-in variable, not a conditional s
 
 test('mixed advisories remain independent and keep the existing conditional guidance', () => {
     const result = component([builtin, {
-        key: 'bonus', kind: 'all_episodes', message: 'Move the call behind its condition.',
+        key: 'bonus', kind: 'all_episodes',
         suggestion: {before: 'before', after: 'after', outputTemplate: 'conditional suggestion'},
     }])
     assert.equal(result.elements.filter(({props}) => props.role === 'status').length, 2)
     assert.equal(result.elements.filter(({type}) => type === 'button').length, 2)
+    assert.match(result.text, /Custom Indexes are designed to apply an index to only some episodes/)
     assert.match(result.text, /With this code/)
     assert.match(result.text, /Keep the existing output logic/)
     assert.match(result.text, /With the built-in variable/)
@@ -127,7 +129,7 @@ for (const after of [
 ]) {
     test('non-capture replacement remains static and explicitly applied: ' + after, () => {
         const suggestion = {before: 'original source', after, outputTemplate: 'complete replacement ' + after}
-        const result = component([{key: 'extra', kind: 'all_episodes', message: 'Every episode', suggestion}])
+        const result = component([{key: 'extra', kind: 'all_episodes', suggestion}])
         assert.match(result.text, /With this code/)
         assert.doesNotMatch(result.text, /With this set block/)
         assert.deepEqual(result.applied, [])

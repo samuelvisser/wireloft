@@ -27,7 +27,6 @@ CustomIndexAdvisoryKind = Literal["all_episodes", "episode_index"]
 @dataclass(frozen=True)
 class CustomIndexAdvisory:
     key: str
-    message: str
     kind: CustomIndexAdvisoryKind = "all_episodes"
     suggestion: CustomIndexSuggestion | None = None
 
@@ -566,20 +565,6 @@ def get_custom_index_advisories(
         advisories.append(CustomIndexAdvisory(
             key=key,
             kind="episode_index" if key in unconditional else "all_episodes",
-            message=(
-                "This Custom Index runs for every episode and has no conditional uses. "
-                "Use WireLoft's episode_index variable for this show-wide numbering instead "
-                "of maintaining a separate Custom Index. The stored episode index includes "
-                "all episode types and can contain gaps, so review the preview before saving."
-            ) if key in unconditional else (
-                "Custom Indexes are designed to apply an index to only some episodes within a "
-                "show. As currently setup, this Custom Index runs for every episode, "
-                "even when its number is not used in the path. "
-                "If you intend to use an all-episode sequence, you should probably use the "
-                "{{\u00a0episode_index\u00a0}} variable WireLoft provides. "
-                "To number only some episodes, put the custom_index call inside the condition "
-                "that selects them."
-            ),
             suggestion=suggestion,
         ))
     return CustomIndexAdvisoryResult(tuple(advisories))

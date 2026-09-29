@@ -25,7 +25,6 @@ class CustomIndexSuggestionRead(ResponseBase):
 
 class CustomIndexAdvisoryRead(ResponseBase):
     key: str
-    message: str
     kind: CustomIndexAdvisoryKind
     suggestion: CustomIndexSuggestionRead | None = None
 

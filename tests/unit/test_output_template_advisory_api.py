@@ -30,6 +30,7 @@ def test_advisory_returns_camelcase_suggestion_without_needing_a_saved_profile(c
     item, = body['advisories']
     assert item['key'] == 'extra'
     assert item['kind'] == 'all_episodes'
+    assert 'message' not in item
     assert item['suggestion']['outputTemplate'].startswith('{% set label %}')
     assert 'output_template' not in item['suggestion']
 
@@ -57,8 +58,8 @@ def test_unconditional_warning_survives_without_a_suggestion(client):
     response = request(client, "{% set n='extra'|custom_index %}/downloads/{{title}}.ext")
     assert response.status_code == 200
     item, = response.json()['advisories']
-    assert 'every episode' in item['message']
     assert item['kind'] == 'all_episodes'
+    assert 'message' not in item
     assert item['suggestion'] is None
 
 
@@ -76,7 +77,7 @@ def test_unconditional_output_returns_builtin_episode_index_advice(client):
     assert response.status_code == 200
     item, = response.json()['advisories']
     assert item['kind'] == 'episode_index'
-    assert 'episode_index' in item['message']
+    assert 'message' not in item
     assert 'episode_index | int' in item['suggestion']['after']
     assert 'custom_index' not in item['suggestion']['outputTemplate']
 
