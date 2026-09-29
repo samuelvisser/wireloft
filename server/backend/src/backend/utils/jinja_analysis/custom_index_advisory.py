@@ -17,14 +17,8 @@ from typing import Iterable, Literal
 from jinja2 import Environment, TemplateError, nodes
 from jinja2.visitor import NodeTransformer
 
+from .custom_index_refactors import CustomIndexSuggestion, suggest_guarded_index
 from .expressions import expression_key
-
-
-@dataclass(frozen=True)
-class CustomIndexSuggestion:
-    before: str
-    after: str
-    output_template: str
 
 
 CustomIndexAdvisoryKind = Literal["all_episodes", "episode_index"]
@@ -273,18 +267,22 @@ class _Inline(NodeTransformer):
         return self.value if node.ctx == "load" and node.name == self.name else node
 
 
-def _reaches_output(tree: nodes.Template, name: str) -> bool:
-    needed = {name}
-    for _ in range(64):
-        previous = set(needed)
-        for statement in tree.body:
-            if isinstance(statement, nodes.Output) and _names(statement) & needed:
-                return True
-            if isinstance(statement, nodes.Assign) and isinstance(statement.target, nodes.Name) and _names(statement.node) & needed:
-                needed.add(statement.target.name)
-        if needed == previous:
-            return False
-    return False
+def _is_direct_output_value(tree: nodes.Template, name: str) -> bool:
+    """Whether a variable's only load is a plain output expression."""
+    loads = [
+        item for item in tree.find_all(nodes.Name)
+        if item.ctx == "load" and item.name == name
+    ]
+    if len(loads) != 1:
+        return False
+    return any(
+        isinstance(statement, nodes.Output)
+        and any(
+            isinstance(item, nodes.Name) and item.ctx == "load" and item.name == name
+            for item in statement.nodes
+        )
+        for statement in tree.body
+    )
 
 
 def _stable_guard(expression: nodes.Expr, declarations: list[nodes.Assign], writes: Counter, before: nodes.Assign) -> bool:
@@ -314,11 +312,7 @@ def _stable_guard(expression: nodes.Expr, declarations: list[nodes.Assign], writ
 
 
 def _suggest(source: str, tree: nodes.Template, key: str, environment: Environment) -> CustomIndexSuggestion | None:
-    """Move a single-use assignment chain into its existing selected branch.
-
-    Do not infer a new predicate from names such as 'extra'. Only reuse a guard
-    already present in the author's code. Ambiguous uses/scope/type => no fix.
-    """
+    """Keep the existing readable set-block suggestion for simple string branches."""
     sources = _assignment_sources(source, environment)
     writes = Counter(item.name for item in tree.find_all(nodes.Name) if item.ctx in {"store", "param"})
     references = Counter(item.name for item in tree.find_all(nodes.Name) if item.ctx == "load")
@@ -346,23 +340,31 @@ def _suggest(source: str, tree: nodes.Template, key: str, environment: Environme
             return None
         if writes[consumer.target.name] != 1 or consumer.target.name not in sources:
             return None
-        # Moving a computation past a rebinding would change its value.
         start, end = tree.body.index(current), tree.body.index(consumer)
         inputs = _names(replacement)
         if any(_names(item, "store") & inputs for item in tree.body[start + 1:end]):
             return None
         expression = consumer.node
         if isinstance(expression, nodes.CondExpr):
-            if expression.expr2 is None or name in _names(expression.test):
+            if name in _names(expression.test):
                 return None
             yes = name in _names(expression.expr1)
-            no = name in _names(expression.expr2)
-            if yes == no or not _reaches_output(tree, consumer.target.name):
+            no = expression.expr2 is not None and name in _names(expression.expr2)
+            if yes == no or not _is_direct_output_value(tree, consumer.target.name):
                 return None
-            # Keep captures string-valued. An unknown/numeric result needs a
-            # different refactor; do not silently change its Jinja value type.
-            if not (_string_expression(expression.expr1) and _string_expression(expression.expr2)):
+            # Pretty captures finalize their fragments. Use them only at a direct
+            # output sink; the general refactor preserves expressions/types when
+            # later filters or tests could observe the unfinalized value.
+
+            implicit_else = expression.expr2 is None
+            if implicit_else:
+                if not yes or not _is_direct_output_value(tree, consumer.target.name):
+                    return None
+                if not _string_expression(expression.expr1):
+                    return None
+            elif not (_string_expression(expression.expr1) and _string_expression(expression.expr2)):
                 return None
+
             if not _stable_guard(expression.test, declarations, writes, consumer):
                 return None
             guard = _expression_source(expression.test)
@@ -370,12 +372,19 @@ def _suggest(source: str, tree: nodes.Template, key: str, environment: Environme
             if expression_key(parsed_guard) != expression_key(expression.test):
                 return None
             first = _Inline(name, replacement).visit(deepcopy(expression.expr1))
-            second = _Inline(name, replacement).visit(deepcopy(expression.expr2))
-            body = (
-                "{% set " + consumer.target.name + " %}{% if " + guard + " %}"
-                + _captured_output(first, strings) + "{% else %}" + _captured_output(second, strings)
-                + "{% endif %}{% endset %}"
-            )
+            if implicit_else:
+                body = (
+                    "{% set " + consumer.target.name + " %}{% if " + guard + " %}"
+                    + _captured_output(first, strings)
+                    + "{% endif %}{% endset %}"
+                )
+            else:
+                second = _Inline(name, replacement).visit(deepcopy(expression.expr2))
+                body = (
+                    "{% set " + consumer.target.name + " %}{% if " + guard + " %}"
+                    + _captured_output(first, strings) + "{% else %}" + _captured_output(second, strings)
+                    + "{% endif %}{% endset %}"
+                )
             edits = [(sources[item.target.name], "") for item in removed]
             edits.append((sources[consumer.target.name], body))
             revised = source
@@ -385,14 +394,12 @@ def _suggest(source: str, tree: nodes.Template, key: str, environment: Environme
                 return None
             parsed = environment.parse(revised)
             if key in _MustRun(parsed).body(parsed.body):
-                return None  # A constant/otherwise unconditional guard would not help.
+                return None
             return CustomIndexSuggestion(
                 before="\n".join(sources[item.target.name].source for item in [*removed, consumer]),
                 after=body,
                 output_template=revised,
             )
-        # Follow ordinary one-use aliases/formatting rather than special-casing
-        # a name or a Plex layout. The serializer doubles as a conservative gate.
         _expression_source(expression)
         replacement = _Inline(name, replacement).visit(deepcopy(expression))
         _expression_source(replacement)
@@ -447,7 +454,7 @@ def _unconditional_output_keys(tree: nodes.Template) -> set[str]:
     for item in tree.find_all((
         nodes.If, nodes.CondExpr, nodes.And, nodes.Or, nodes.Compare,
         nodes.For, nodes.With, nodes.Macro, nodes.AssignBlock, nodes.CallBlock,
-        nodes.Call, nodes.Block, nodes.Import, nodes.FromImport, nodes.Include,
+        nodes.Call, nodes.Getitem, nodes.Getattr, nodes.Block, nodes.Import, nodes.FromImport, nodes.Include,
     )):
         uncertain.update(keys(item))
     output = set().union(*(
@@ -540,10 +547,20 @@ def get_custom_index_advisories(
     for key in sorted(guaranteed):
         suggestion = None
         try:
-            suggestion = (
-                _suggest_episode_index(template, tree, key, environment)
-                if key in unconditional else _suggest(template, tree, key, environment)
-            )
+            if key in unconditional:
+                suggestion = _suggest_episode_index(template, tree, key, environment)
+            else:
+                # The bounded source-preserving proof is required even for the
+                # older pretty set-block form. No filters/templates are executed.
+                suggestion = suggest_guarded_index(template, tree, key, environment)
+                if suggestion is not None:
+                    try:
+                        suggestion = _suggest(template, tree, key, environment) or suggestion
+                    except (TemplateError, _Uncertain, RecursionError, KeyError):
+                        pass
+                    proposed = environment.parse(suggestion.output_template)
+                    if key in _MustRun(proposed).body(proposed.body):
+                        suggestion = None
         except (TemplateError, _Uncertain, RecursionError, KeyError):
             pass  # A missing refactor must never hide a proven warning.
         advisories.append(CustomIndexAdvisory(
@@ -555,9 +572,13 @@ def get_custom_index_advisories(
                 "of maintaining a separate Custom Index. The stored episode index includes "
                 "all episode types and can contain gaps, so review the preview before saving."
             ) if key in unconditional else (
-                "This Custom Index runs for every episode, even when its number is not used in the path. "
-                "This is fine for an all-episode sequence. To number only some episodes, "
-                "put the custom_index call inside the condition that selects them."
+                "Custom Indexes are designed to apply an index to only some episodes within a "
+                "show. As currently setup, this Custom Index runs for every episode, "
+                "even when its number is not used in the path. "
+                "If you intend to use an all-episode sequence, you should probably use the "
+                "{{\u00a0episode_index\u00a0}} variable WireLoft provides. "
+                "To number only some episodes, put the custom_index call inside the condition "
+                "that selects them."
             ),
             suggestion=suggestion,
         ))
