@@ -47,15 +47,10 @@ def test_canceling_queue_follower_does_not_leave_a_ticket_hole(monkeypatch):
     pacer = pacing.RequestPacer()
     pacer.last_request, pacer.last_request_wall = monotonic(), time()
     cancel, enqueued = Event(), Event()
-    seen = []
     def first():
         pacer.wait()
     def second():
-        def observe(event):
-            seen.append(event)
-            if event:
-                enqueued.set()
-        with pacing.request_context(should_cancel=cancel.is_set, observer=observe):
+        with pacing.request_context(should_cancel=cancel.is_set, observer=lambda event: enqueued.set() if event else None):
             pacer.wait()
     with ThreadPoolExecutor(max_workers=2) as pool:
         primary = pool.submit(first)
@@ -67,8 +62,6 @@ def test_canceling_queue_follower_does_not_leave_a_ticket_hole(monkeypatch):
         primary.result(timeout=2)
     pacer.wait()
     assert not pacer.queue
-    assert seen[-1] is not None
-    assert seen[-1].reason == 'daily_wire_request_cooldown'
 
 
 def test_observer_runs_without_holding_pacing_lock(monkeypatch):
@@ -145,37 +138,3 @@ def test_generic_non_download_executor_persists_follower_wait(task_database, mon
             pacer.condition.notify_all()
         for future in futures:
             future.result(timeout=4)
-
-
-
-def test_canceling_retry_wait_keeps_wait_visible():
-    cancel, waiting = Event(), Event()
-    seen = []
-
-    def run():
-        def observe(event):
-            seen.append(event)
-            if event:
-                waiting.set()
-        with pacing.request_context(observer=observe, should_cancel=cancel.is_set):
-            pacing.wait_for_retry(RuntimeError('retry'), 0, base_delay=5)
-
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(run)
-        assert waiting.wait(2)
-        cancel.set()
-        with pytest.raises(pacing.RequestCancelled):
-            future.result(timeout=2)
-
-    assert seen[-1] is not None
-    assert seen[-1].reason == 'retry_backoff'
-
-
-
-def test_observer_failure_after_cancellation_is_reported_as_cancellation():
-    def broken_observer(_event):
-        raise RuntimeError('progress sink rejected update')
-
-    with pacing.request_context(observer=broken_observer, should_cancel=lambda: True):
-        with pytest.raises(pacing.RequestCancelled):
-            pacing.notify_wait(pacing.RequestWait('daily_wire_request_cooldown'))

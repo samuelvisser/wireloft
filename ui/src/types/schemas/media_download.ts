@@ -66,7 +66,6 @@ export const MediaDownloadViewReadSchema = MediaDownloadReadSchema.extend({
     latestTaskStatus: z.string().nullable(),
     latestTaskError: z.string().nullable(),
     latestTaskIsRedownload: z.boolean().nullable(),
-    latestTaskCancelRequested: z.boolean().default(false),
     latestTaskStartedAt: ApiDateTimeSchema.nullable(),
     latestTaskFinishedAt: ApiDateTimeSchema.nullable(),
 })

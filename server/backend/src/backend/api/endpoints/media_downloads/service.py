@@ -24,7 +24,6 @@ from backend.services.media_download_history import record_media_download_histor
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
 from task_manager.scheduler.db import TaskDefinition, TaskRun
-from task_manager.scheduler.operation_control import run_cancel_requested
 from task_manager.scheduler.types import ResourceType
 from task_manager.tasks.media_download_operations import (
     get_active_media_download_operation,
@@ -109,10 +108,6 @@ class _MediaDownloadViewSource:
     @property
     def latest_task_is_redownload(self) -> Optional[bool]:
         return _run_is_redownload(self.latest_run)
-
-    @property
-    def latest_task_cancel_requested(self) -> bool:
-        return bool(self.latest_run is not None and run_cancel_requested(self.latest_run))
 
 
 def _run_is_redownload(run: TaskRun | None) -> Optional[bool]:

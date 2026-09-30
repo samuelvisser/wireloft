@@ -66,12 +66,7 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
     if (starting) return {status: 'preparing', ...workingPresentation('Starting', 'Starting the requested download.')}
     if (operation && ACTIVE_OPERATION_STATUSES.has(operation.status)) {
         const execution = downloadExecution(operation)
-        if (
-            operation.progressMeta?.canceling === true
-            || operation.context?.cancel_requested === true
-            || execution?.canceling
-            || download?.latestTaskCancelRequested
-        ) {
+        if (operation.progressMeta?.canceling === true || operation.context?.cancel_requested === true || execution?.canceling) {
             return {status: 'canceling', ...workingPresentation('Canceling', 'Stopping the download and its owned auxiliary work before cleaning up.'), canCancel: false, canRetry: false}
         }
         if (operation.status === 'QUEUED') return {status: 'pending', ...waitingPresentation('download_capacity'), canRetry: false}
@@ -103,9 +98,6 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
     if (download?.artifactStatus === 'available') return terminal(download.latestTaskIsRedownload ? 'redownloaded' : 'downloaded', 'Downloaded', 'The media file is available.', 'success')
     if (download?.artifactStatus === 'missing') return terminal('missing', 'Missing', 'The downloaded file could not be found.', 'error')
     if (download?.artifactStatus === 'corrupted') return terminal('corrupted', 'Corrupted', download.artifactError || 'The downloaded file failed verification.', 'error')
-    if (download?.latestTaskCancelRequested && download?.latestTaskStatus === 'RUNNING') {
-        return {status: 'canceling', ...workingPresentation('Canceling', 'Stopping the download and its owned auxiliary work before cleaning up.'), canCancel: false, canRetry: false}
-    }
     if (download?.latestTaskStatus === 'RUNNING') return {status: 'preparing', ...workingPresentation('Preparing', 'Waiting for the current execution snapshot.')}
     if (download?.latestTaskStatus === 'FAILED') return terminal('error', 'Failed', download.latestTaskError || 'Download failed.', 'error')
     if (download?.automaticRetrySuppressed || download?.latestTaskStatus === 'CANCELED') return terminal('cancelled', 'Canceled', 'No automatic replacement is queued.', 'canceled')
