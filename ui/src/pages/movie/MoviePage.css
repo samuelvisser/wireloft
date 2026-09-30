@@ -106,6 +106,10 @@
     margin: 0;
 }
 
+.movie-extra-actions .wl-progress-with-details {
+    padding-left: 4px;
+}
+
 .movie-extra-actions .progress-button-root {
     flex: 0 1 auto;
     width: max-content;

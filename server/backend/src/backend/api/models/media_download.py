@@ -110,6 +110,7 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
         validation_alias=AliasPath("latest_run", "last_error"),
     )
     latest_task_is_redownload: Optional[bool] = None
+    latest_task_cancel_requested: bool = False
     latest_task_started_at: Optional[datetime] = Field(
         default=None,
         validation_alias=AliasPath("latest_run", "started_at"),

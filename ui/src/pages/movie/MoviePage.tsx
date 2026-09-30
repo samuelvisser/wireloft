@@ -629,7 +629,6 @@ export default function MoviePage() {
                                             <MovieDownloadControl
                                                 download={download}
                                                 label="Download"
-                                                downloadedLabel={`${movieExtraTypeLabel(extra.movieExtraType)} downloaded`}
                                                 progressLabel={extra.title}
                                                 queueing={submitting === `extra:${extra.slug}`}
                                                 disabled={submitting !== null || addingMovie || !profileId}

@@ -150,6 +150,7 @@ def test_media_download_view_maps_composed_sources_without_manual_serialization(
             finished_at=NOW,
         ),
         latest_task_is_redownload=True,
+        latest_task_cancel_requested=True,
         queue_position=None,
     )
 
@@ -160,6 +161,21 @@ def test_media_download_view_maps_composed_sources_without_manual_serialization(
     assert view.show_title == "Show"
     assert view.latest_task_status == TaskStatus.SUCCEEDED.value
     assert view.latest_task_is_redownload is True
+    assert view.latest_task_cancel_requested is True
+
+
+def test_media_download_view_source_exposes_run_cancellation_request():
+    from backend.api.endpoints.media_downloads.service import _MediaDownloadViewSource
+    from task_manager.scheduler.operation_control import RUN_CANCEL_REQUESTED_META_KEY
+
+    source = _MediaDownloadViewSource(
+        download=SimpleNamespace(),
+        profile=SimpleNamespace(),
+        latest_run=SimpleNamespace(meta={RUN_CANCEL_REQUESTED_META_KEY: True}),
+        queue_position=None,
+    )
+
+    assert source.latest_task_cancel_requested is True
 
 
 def test_task_models_follow_relationship_aliases():

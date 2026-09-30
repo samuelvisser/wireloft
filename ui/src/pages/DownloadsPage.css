@@ -52,6 +52,20 @@
     white-space: nowrap;
 }
 
+/* Match the compact episode-row action spacing. Do not wrap row actions; let
+   the Actions column claim enough horizontal space for every icon instead. */
+.downloads-table th:last-child,
+.downloads-table td:last-child {
+    width: 7.25rem !important;
+    min-width: 7.25rem;
+    white-space: nowrap;
+}
+
+.downloads-table td:last-child > div {
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+}
+
 .downloads-table td:nth-child(4) > div {
     min-width: 0 !important;
 }

@@ -476,7 +476,14 @@ export default function DownloadsPage() {
                                 classes: 'btn',
                             },
                         ]
-                        if (status === 'pending') {
+                        if (status === 'not_downloaded') {
+                            actions.push({
+                                onClick: () => void retry(row),
+                                icon: ['fas', 'download'],
+                                text: 'Download',
+                                classes: 'btn',
+                            })
+                        } else if (status === 'pending') {
                             actions.push({
                                 onClick: () => void prioritize(row),
                                 icon: ['fas', 'arrow-up'],
