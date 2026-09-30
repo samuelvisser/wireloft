@@ -106,12 +106,7 @@ def run_download(
     tracker = DownloadTracker(reporter, progress if callable(progress) else None)
     execution = None
     committed = False
-    settings = get_settings()
-    database_path = Path(settings.database_path)
-    resources.media.configure(
-        settings.download_settings.max_concurrent_downloads,
-        lock_root=database_path.parent / f".{database_path.name}.download-capacity",
-    )
+    resources.media.configure(get_settings().download_settings.max_concurrent_downloads)
     try:
         with tracker:
             if prepare_existing_artifact:
