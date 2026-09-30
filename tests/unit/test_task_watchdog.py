@@ -82,6 +82,7 @@ def test_watchdog_uses_reserved_executor(monkeypatch):
             enabled=False,
             max_workers=3,
         ),
+        download_settings=SimpleNamespace(max_concurrent_downloads=2),
     )
     monkeypatch.setattr(scheduler_module, "get_settings", lambda: settings)
 

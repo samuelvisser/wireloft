@@ -12,12 +12,58 @@ def test_scheduler_uses_configured_worker_limit(monkeypatch):
             enabled=False,
             max_workers=3,
         ),
+        download_settings=SimpleNamespace(max_concurrent_downloads=4),
     )
     monkeypatch.setattr(scheduler_module, "get_settings", lambda: settings)
 
     scheduler = scheduler_module._new_scheduler()
     executor = scheduler._executors["default"]
     assert executor._pool._max_workers == 3
+    download_executor = scheduler._executors[scheduler_module.DOWNLOAD_EXECUTOR_ALIAS]
+    assert download_executor._pool._max_workers == 8
+
+
+def test_download_tasks_use_their_reserved_executor(monkeypatch):
+    import task_manager.scheduler.registry as registry_module
+    import task_manager.scheduler.scheduler as scheduler_module
+
+    captured: dict = {}
+
+    class FakeScheduler:
+        timezone = __import__("datetime").timezone.utc
+
+        def add_job(self, *args, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(id="download-job")
+
+    monkeypatch.setattr(registry_module, "_REGISTRY", {})
+
+    @registry_module.task(
+        key="download_lane_test_worker",
+        title="Download lane test",
+        allowed_resource_types=("media_download",),
+        executor_alias=scheduler_module.DOWNLOAD_EXECUTOR_ALIAS,
+    )
+    async def download_lane_test_worker(*, resource_id=None, progress=None):
+        return None
+
+    monkeypatch.setattr(
+        scheduler_module,
+        "_scheduler_for_task",
+        lambda _def_key: FakeScheduler(),
+    )
+    monkeypatch.setattr(
+        "task_manager.scheduler.operation_context.current_operation_ids",
+        lambda: (),
+    )
+
+    scheduler_module.trigger_now(
+        def_key="download_lane_test_worker",
+        resource_type="media_download",
+        resource_id=7,
+    )
+
+    assert captured["executor"] == scheduler_module.DOWNLOAD_EXECUTOR_ALIAS
 
 
 def test_immediate_operation_jobs_do_not_expire_while_waiting_for_worker(monkeypatch):
@@ -59,6 +105,7 @@ def test_scheduler_disabled_keeps_task_execution_available(monkeypatch):
             enabled=False,
             max_workers=2,
         ),
+        download_settings=SimpleNamespace(max_concurrent_downloads=2),
     )
     monkeypatch.setattr(scheduler_module, "get_settings", lambda: settings)
     monkeypatch.setattr(scheduler_module, "_scheduler", None)
@@ -81,6 +128,7 @@ def test_scheduled_work_pause_is_reference_counted(monkeypatch):
             enabled=True,
             max_workers=2,
         ),
+        download_settings=SimpleNamespace(max_concurrent_downloads=2),
     )
     monkeypatch.setattr(scheduler_module, "get_settings", lambda: settings)
     monkeypatch.setattr(registry_module, "_REGISTRY", {})

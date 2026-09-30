@@ -23,6 +23,7 @@ from dailywire_downloader import MediaUnavailableError
 _scheduler: Optional[AsyncIOScheduler] = None
 _critical_scheduler: Optional[AsyncIOScheduler] = None
 WATCHDOG_EXECUTOR_ALIAS = "watchdog"
+DOWNLOAD_EXECUTOR_ALIAS = "downloads"
 logger = logging.getLogger(__name__)
 
 _scheduled_work_pause_lock = threading.Lock()
@@ -191,10 +192,18 @@ def get_trigger(name: str, args: dict):
 
 def _new_scheduler(loop: asyncio.AbstractEventLoop | None = None) -> AsyncIOScheduler:
     settings = get_settings()
+    # Primary transfer concurrency is enforced by the durable media-download
+    # queue, not by APScheduler. Give downloads their own executor so a large
+    # fan-out of unrelated work (for example metadata refreshes) cannot strand
+    # reserved download TaskRuns behind that executor's backlog. Two worker
+    # threads per transfer slot leaves room for the post-processing phase after
+    # it releases its primary-transfer slot and a replacement download starts.
+    download_workers = max(2, int(settings.download_settings.max_concurrent_downloads) * 2)
     kwargs = {
         "timezone": settings.timezone,
         "executors": {
             "default": ThreadPoolExecutor(max_workers=settings.scheduler.max_workers),
+            DOWNLOAD_EXECUTOR_ALIAS: ThreadPoolExecutor(max_workers=download_workers),
             # The stalled-work watchdog must remain runnable when every normal
             # worker slot is occupied by the work it is responsible for watching.
             WATCHDOG_EXECUTOR_ALIAS: ThreadPoolExecutor(max_workers=1),
@@ -322,6 +331,13 @@ def _task_pauses_scheduled_work(def_key: str) -> bool:
     return bool(meta is not None and meta.pauses_scheduled_work)
 
 
+def _executor_alias_for_task(def_key: str) -> str:
+    meta = _task_meta(def_key)
+    if meta is None or meta.pauses_scheduled_work:
+        return "default"
+    return meta.executor_alias or "default"
+
+
 def _release_job_scheduled_work_pause(job_kwargs: dict) -> None:
     pause_token = job_kwargs.get("_scheduled_work_pause_token")
     if isinstance(pause_token, str):
@@ -347,11 +363,12 @@ def _started_task_schedulers() -> tuple[AsyncIOScheduler, ...]:
 
 
 def schedule_job(*, schedule_id: int, def_key: str, resource_type: str, resource_id: int, trigger: str, trigger_args: dict) -> str:
-    sch = start_scheduler()
+    sch = _scheduler_for_task(def_key)
     job = sch.add_job(
         _execute_task_job,
         trigger=get_trigger(trigger, trigger_args),
         kwargs=dict(def_key=def_key, resource_type=resource_type, resource_id=resource_id, schedule_id=schedule_id),
+        executor=_executor_alias_for_task(def_key),
         replace_existing=True,
         id=f"ts-{schedule_id}",
     )
@@ -473,6 +490,7 @@ def schedule_retry(*, def_key: str, resource_type: str, resource_id: int, run_id
         _execute_task_job,
         trigger=DateTrigger(run_date=run_at),
         kwargs=dict(def_key=def_key, resource_type=resource_type, resource_id=resource_id, schedule_id=None, run_id=run_id),
+        executor=_executor_alias_for_task(def_key),
         replace_existing=False,
         id=f"retry-{run_id}-{int(run_at.timestamp())}",
         # Retries are durable in TaskRun. A saturated worker pool must delay them,
@@ -528,6 +546,7 @@ def trigger_now(
             _execute_task_job,
             trigger=DateTrigger(run_date=datetime.now(tz=sch.timezone)),
             kwargs=execution_kwargs,
+            executor=_executor_alias_for_task(def_key),
             replace_existing=False,
             # Operation fan-out can legitimately queue hundreds of immediate jobs.
             # They should wait for a worker rather than expire while the pool is busy.

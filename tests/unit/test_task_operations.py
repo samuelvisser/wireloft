@@ -398,6 +398,56 @@ def test_multi_target_operation_falls_back_to_completed_targets_without_worker_p
         session.close()
 
 
+def test_scheduled_reservation_keeps_operation_queued():
+    from task_manager.scheduler.operations import (
+        OperationTargetSpec,
+        create_operation,
+        link_run_to_operations,
+        refresh_operation,
+    )
+    from task_manager.scheduler.types import OperationStatus, ResourceType, TaskStatus
+
+    session = _session()
+    try:
+        definition = _definition(session, "reserved_worker")
+        operation = create_operation(
+            session,
+            kind="media.download",
+            resource_type="media_download",
+            resource_id=77,
+            title="Reserved download",
+            targets=[
+                OperationTargetSpec(
+                    task_key=definition.key,
+                    resource_type="episode",
+                    resource_id=77,
+                )
+            ],
+        )
+        run = _run(
+            session,
+            definition,
+            resource_type=ResourceType.EPISODE,
+            resource_id=77,
+            status=TaskStatus.SCHEDULED,
+        )
+        run.started_at = None
+        link_run_to_operations(
+            session,
+            run=run,
+            task_key=definition.key,
+            operation_ids=(operation.id,),
+        )
+
+        refresh_operation(session, operation.id)
+
+        assert operation.status == OperationStatus.QUEUED.value
+        assert operation.message == "Queued"
+        assert operation.started_at is None
+    finally:
+        session.close()
+
+
 def test_operation_target_input_mismatch_does_not_coalesce():
     from task_manager.scheduler.operations import OperationTargetSpec, create_operation
     from task_manager.scheduler.types import OperationStatus, ResourceType

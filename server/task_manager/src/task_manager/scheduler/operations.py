@@ -512,14 +512,26 @@ def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
         )
         active_runs = [run for run in linked_runs if _task_status(run.status) not in _TERMINAL_TASK_STATUSES]
         all_blocked = active_runs and all(_run_wait_state(run) is not None for run in active_runs)
+        running_runs = [
+            run for run in active_runs
+            if _task_status(run.status) == TaskStatus.RUNNING
+        ]
         if wait_state is not None and all_blocked:
             operation.status = OperationStatus.WAITING.value
             message = wait_state.get("message")
             operation.message = message if isinstance(message, str) and message else "Waiting"
+        elif not running_runs:
+            # SCHEDULED/QUEUED TaskRuns can be durable reservations that have not
+            # entered an executor yet. Do not present them as active execution.
+            operation.status = OperationStatus.QUEUED.value
+            if total == 1:
+                operation.message = linked_runs[-1].message or "Queued"
+            else:
+                operation.message = f"{len(terminal_runs)}/{total} tasks finished; queued"
         else:
             operation.status = OperationStatus.RUNNING.value
             if total == 1:
-                operation.message = linked_runs[-1].message or "Running"
+                operation.message = running_runs[-1].message or "Running"
             else:
                 operation.message = f"{len(terminal_runs)}/{total} tasks finished"
         return operation
