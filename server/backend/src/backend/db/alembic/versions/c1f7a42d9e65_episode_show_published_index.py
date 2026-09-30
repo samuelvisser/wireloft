@@ -1,13 +1,13 @@
 """Index show episode pagination.
 
 Revision ID: c1f7a42d9e65
-Revises: e3a7d92b4c61
+Revises: f7a3c91d2e84
 """
 from alembic import op
 
 
 revision = "c1f7a42d9e65"
-down_revision = "e3a7d92b4c61"
+down_revision = "f7a3c91d2e84"
 branch_labels = None
 depends_on = None
 
