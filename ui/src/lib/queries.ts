@@ -508,6 +508,7 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         latestTaskStatus: null,
         latestTaskError: null,
         latestTaskIsRedownload: null,
+        latestTaskCancelRequested: false,
         latestTaskStartedAt: null,
         latestTaskFinishedAt: null,
     }
