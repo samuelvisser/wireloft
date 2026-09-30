@@ -34,8 +34,8 @@ class TaskOperation(Base):
     title: Mapped[str] = mapped_column(String(255))
 
     status: Mapped[str] = mapped_column(String(24), index=True)
-    progress: Mapped[Optional[int]] = mapped_column(Integer)
-    completion_progress: Mapped[Optional[int]] = mapped_column(Integer, default=0, server_default="0")
+    progress: Mapped[Optional[int]] = mapped_column(Integer, comment="Narrow progress tracker for most relevant work in this operation. 100% might mean some background work still needs to happen.")
+    completion_progress: Mapped[Optional[int]] = mapped_column(Integer, default=0, server_default="0", comment="Holistic progress tracker for all work in this operation. 100% means the operation is done.")
     message: Mapped[Optional[str]] = mapped_column(Text)
     result: Mapped[Optional[dict]] = mapped_column(JSON)
     context: Mapped[Optional[dict]] = mapped_column(JSON)
@@ -78,6 +78,5 @@ class TaskOperation(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<TaskOperation id={self.id} kind={self.kind} status={self.status} "
-            f"resource_type={self.resource_type} resource_id={self.resource_id}>"
+            f"<TaskOperation id={self.id} kind={self.kind} status={self.status} resource_type={self.resource_type} resource_id={self.resource_id}>"
         )

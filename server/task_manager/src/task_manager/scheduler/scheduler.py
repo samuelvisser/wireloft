@@ -192,12 +192,7 @@ def get_trigger(name: str, args: dict):
 
 def _new_scheduler(loop: asyncio.AbstractEventLoop | None = None) -> AsyncIOScheduler:
     settings = get_settings()
-    # Primary transfer concurrency is enforced by the durable media-download
-    # queue, not by APScheduler. Give downloads their own executor so a large
-    # fan-out of unrelated work (for example metadata refreshes) cannot strand
-    # reserved download TaskRuns behind that executor's backlog. Two worker
-    # threads per transfer slot leaves room for the post-processing phase after
-    # it releases its primary-transfer slot and a replacement download starts.
+
     download_workers = max(2, int(settings.download_settings.max_concurrent_downloads) * 2)
     kwargs = {
         "timezone": settings.timezone,
