@@ -106,8 +106,8 @@
     margin: 0;
 }
 
-.movie-extra-actions .wl-progress-with-details {
-    padding-left: 4px;
+.movie-extra-actions .wl-progress-with-details:not(.download-progress) {
+    padding-left: 8px;
 }
 
 .movie-extra-actions .progress-button-root {
