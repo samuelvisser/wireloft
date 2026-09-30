@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, event, func, select
 from sqlalchemy.orm import Session
 
 from backend.db.core import get_session
@@ -63,6 +64,38 @@ _ACTIVE_RUN_STATUSES = (
     TaskStatus.RUNNING,
     TaskStatus.RETRY_SCHEDULED,
 )
+
+# The queue budget and its durable TaskRun reservations must be one serialized
+# transaction. Without this guard, two dispatcher sessions can both observe five
+# free slots and each reserve five before either transaction commits.
+_DOWNLOAD_DISPATCH_LOCK = threading.Lock()
+_DOWNLOAD_DISPATCH_TRANSACTION_KEY = "wireloft.media_download_dispatch_transaction"
+
+
+def _hold_download_dispatch_lock_until_transaction_end(session: Session) -> None:
+    """Serialize queue budget calculation through the reservation commit."""
+    current_transaction = session.get_transaction()
+    held_transaction = session.info.get(_DOWNLOAD_DISPATCH_TRANSACTION_KEY)
+    if held_transaction is current_transaction and held_transaction is not None:
+        return
+    if held_transaction is not None:
+        raise RuntimeError("Download dispatch lock is already held by another transaction")
+
+    if current_transaction is None:
+        session.begin()
+        current_transaction = session.get_transaction()
+    assert current_transaction is not None
+
+    _DOWNLOAD_DISPATCH_LOCK.acquire()
+    session.info[_DOWNLOAD_DISPATCH_TRANSACTION_KEY] = current_transaction
+
+
+@event.listens_for(Session, "after_transaction_end")
+def _release_download_dispatch_lock(session: Session, transaction) -> None:
+    if session.info.get(_DOWNLOAD_DISPATCH_TRANSACTION_KEY) is not transaction:
+        return
+    session.info.pop(_DOWNLOAD_DISPATCH_TRANSACTION_KEY, None)
+    _DOWNLOAD_DISPATCH_LOCK.release()
 
 
 def prepare_media_download_artifact(
@@ -679,10 +712,18 @@ def dispatch_queued_media_download_operations(
     *,
     budget: int | None = None,
 ) -> int:
-    """Reserve queued media.download operations up to the global download limit."""
-    if budget is None:
-        budget = remaining_media_download_budget(session)
-    if budget <= 0:
+    """Reserve queued media.download operations up to the global download limit.
+
+    The configured concurrency limit is a global reservation budget, so the
+    budget read and every TaskRun reservation stay serialized until the caller's
+    transaction commits. The optional budget is only an additional upper bound;
+    it can never override maxConcurrentDownloads.
+    """
+    _hold_download_dispatch_lock_until_transaction_end(session)
+
+    available = remaining_media_download_budget(session)
+    effective_budget = available if budget is None else min(max(0, int(budget)), available)
+    if effective_budget <= 0:
         return 0
 
     # Fetch beyond the budget because an older QUEUED operation may already have
@@ -691,14 +732,14 @@ def dispatch_queued_media_download_operations(
     # consuming another free slot.
     operations = _ordered_queued_media_download_operations(
         session,
-        limit=max(25, budget * 4),
+        limit=max(25, effective_budget * 4),
     )
 
     dispatched = 0
     for operation in operations:
         if _reserve_target_dispatch(session, operation):
             dispatched += 1
-            if dispatched >= budget:
+            if dispatched >= effective_budget:
                 break
     return dispatched
 

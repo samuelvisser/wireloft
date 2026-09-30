@@ -283,6 +283,182 @@ def test_manual_download_jumps_ahead_of_background_queue(monkeypatch):
         engine.dispose()
 
 
+def test_dispatch_budget_cannot_exceed_configured_concurrency(monkeypatch):
+    from types import SimpleNamespace
+
+    from task_manager.tasks import media_download_operations
+
+    session, engine = _session()
+    try:
+        first = _make_download(session, slug="budget-first")
+        second = _make_download(session, slug="budget-second")
+        media_download_operations.create_media_download_operation(session, first)
+        media_download_operations.create_media_download_operation(session, second)
+        session.commit()
+
+        monkeypatch.setattr(
+            media_download_operations,
+            "get_settings",
+            lambda: SimpleNamespace(
+                download_settings=SimpleNamespace(max_concurrent_downloads=1),
+            ),
+        )
+
+        dispatched: list[str] = []
+
+        def capture_dispatch(_session: Session, operation) -> bool:
+            dispatched.append(operation.id)
+            return True
+
+        monkeypatch.setattr(
+            media_download_operations,
+            "_reserve_target_dispatch",
+            capture_dispatch,
+        )
+
+        assert media_download_operations.dispatch_queued_media_download_operations(
+            session,
+            budget=10,
+        ) == 1
+        assert len(dispatched) == 1
+        session.commit()
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_concurrent_dispatchers_cannot_double_reserve_download_slots(tmp_path, monkeypatch):
+    import threading
+    from types import SimpleNamespace
+
+    import backend.db.models  # noqa: F401
+    import task_manager.scheduler.db  # noqa: F401
+    from backend.db import Base
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.types import TaskStatus
+    from task_manager.tasks import media_download_operations
+
+    engine = create_engine(
+        f"sqlite+pysqlite:///{tmp_path / 'download-dispatch.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(engine)
+
+    setup = Session(engine)
+    try:
+        setup.add_all([
+            TaskDefinition(
+                key="download_episode",
+                title="Download episode media",
+                description="",
+                allowed_resource_types=["media_download"],
+                default_max_retries=2,
+            ),
+            TaskDefinition(
+                key="download_movie",
+                title="Download movie media",
+                description="",
+                allowed_resource_types=["media_download"],
+                default_max_retries=2,
+            ),
+        ])
+        first = _make_download(setup, slug="concurrent-first")
+        second = _make_download(setup, slug="concurrent-second")
+        media_download_operations.create_media_download_operation(setup, first)
+        media_download_operations.create_media_download_operation(setup, second)
+        setup.commit()
+    finally:
+        setup.close()
+
+    monkeypatch.setattr(
+        media_download_operations,
+        "get_settings",
+        lambda: SimpleNamespace(
+            download_settings=SimpleNamespace(max_concurrent_downloads=1),
+        ),
+    )
+    monkeypatch.setattr(
+        "task_manager.scheduler.scheduler.trigger_now",
+        lambda **_kwargs: "download-job",
+    )
+
+    first_reserved = threading.Event()
+    allow_first_commit = threading.Event()
+    second_started = threading.Event()
+    second_finished = threading.Event()
+    results: list[tuple[str, int]] = []
+    errors: list[BaseException] = []
+
+    def first_dispatcher():
+        session = Session(engine)
+        try:
+            results.append((
+                "first",
+                media_download_operations.dispatch_queued_media_download_operations(session),
+            ))
+            first_reserved.set()
+            assert allow_first_commit.wait(2)
+            session.commit()
+        except BaseException as exc:
+            errors.append(exc)
+            session.rollback()
+        finally:
+            session.close()
+
+    def second_dispatcher():
+        assert first_reserved.wait(2)
+        session = Session(engine)
+        try:
+            second_started.set()
+            results.append((
+                "second",
+                media_download_operations.dispatch_queued_media_download_operations(session),
+            ))
+            session.commit()
+        except BaseException as exc:
+            errors.append(exc)
+            session.rollback()
+        finally:
+            session.close()
+            second_finished.set()
+
+    first_thread = threading.Thread(target=first_dispatcher)
+    second_thread = threading.Thread(target=second_dispatcher)
+    first_thread.start()
+    second_thread.start()
+
+    assert first_reserved.wait(2)
+    assert second_started.wait(2)
+    # The second dispatcher must remain blocked until the transaction containing
+    # the first reservation commits; otherwise both can observe the same slot.
+    assert not second_finished.wait(0.1)
+    allow_first_commit.set()
+
+    first_thread.join(2)
+    second_thread.join(2)
+    assert not first_thread.is_alive()
+    assert not second_thread.is_alive()
+    assert errors == []
+    assert sorted(results) == [("first", 1), ("second", 0)]
+
+    session = Session(engine)
+    try:
+        active_runs = session.query(TaskRun).filter(
+            TaskRun.status.in_(
+                (
+                    TaskStatus.SCHEDULED,
+                    TaskStatus.QUEUED,
+                    TaskStatus.RUNNING,
+                    TaskStatus.RETRY_SCHEDULED,
+                )
+            )
+        ).count()
+        assert active_runs == 1
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_prioritize_queued_download_records_the_click_time():
     from task_manager.tasks.media_download_operations import (
         create_media_download_operation,
