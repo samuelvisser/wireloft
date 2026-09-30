@@ -19,7 +19,13 @@ from backend.services.media_download_history import (
 )
 from dailywire_downloader.storage.artifacts import remove_download_artifacts
 from config import get_settings
-from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskOperationRun, TaskRun
+from task_manager.scheduler.db import (
+    TaskDefinition,
+    TaskOperation,
+    TaskOperationRun,
+    TaskOperationTarget,
+    TaskRun,
+)
 from task_manager.scheduler.operation_control import (
     cancel_operation as cancel_task_operation,
     restart_operation as restart_task_operation,
@@ -622,6 +628,10 @@ def _ordered_queued_media_download_operations(
     """Return queued downloads in the exact order used by the dispatcher."""
     stmt = (
         select(TaskOperation)
+        .join(
+            TaskOperationTarget,
+            TaskOperationTarget.operation_id == TaskOperation.id,
+        )
         .where(
             TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
             TaskOperation.status == OperationStatus.QUEUED.value,
@@ -630,6 +640,12 @@ def _ordered_queued_media_download_operations(
             case((TaskOperation.prioritized_at.is_not(None), 0), else_=1),
             TaskOperation.prioritized_at.asc(),
             TaskOperation.created_at.asc(),
+            # Bulk dependency creation can insert many media.download operations
+            # inside one transaction. SQLite's server timestamp has only
+            # second-level precision, so created_at alone no longer preserves
+            # their creation/FIFO order. The target id is monotonic and is the
+            # durable creation-order tiebreaker for these one-target operations.
+            TaskOperationTarget.id.asc(),
             TaskOperation.id.asc(),
         )
     )

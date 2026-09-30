@@ -111,3 +111,37 @@ def test_queue_positions_use_the_dispatcher_order():
     finally:
         session.close()
         engine.dispose()
+
+
+def test_queue_positions_preserve_creation_order_when_timestamps_tie():
+    from task_manager.tasks.media_download_operations import (
+        create_media_download_operation,
+        get_media_download_queue_positions,
+    )
+
+    session, engine = _session()
+    try:
+        first_download = _make_download(session, slug="bulk-first")
+        second_download = _make_download(session, slug="bulk-second")
+        third_download = _make_download(session, slug="bulk-third")
+
+        first = create_media_download_operation(session, first_download)
+        second = create_media_download_operation(session, second_download)
+        third = create_media_download_operation(session, third_download)
+
+        # Dependency fan-out creates all children in one transaction. On SQLite,
+        # the server-side created_at values can therefore be identical.
+        same_time = datetime(2026, 9, 10, 0, 30, tzinfo=timezone.utc)
+        first.created_at = same_time
+        second.created_at = same_time
+        third.created_at = same_time
+        session.commit()
+
+        assert get_media_download_queue_positions(session) == {
+            first_download.id: 1,
+            second_download.id: 2,
+            third_download.id: 3,
+        }
+    finally:
+        session.close()
+        engine.dispose()
