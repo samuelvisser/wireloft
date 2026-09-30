@@ -36,7 +36,7 @@ export default function ShowPage() {
   const qc = useQueryClient()
   const startOperation = useStartOperation()
   const controlOperation = useControlOperation()
-  const PAGE_SIZE = 25
+  const PAGE_SIZE = 36
 
   const { data: show, isLoading, error } = useShow(id)
   const isSeasonal = show?.episodeIdentifier === 'seasonal'

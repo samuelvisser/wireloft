@@ -305,7 +305,7 @@ export function useEpisodePages(
         enabled?: boolean
     },
 ) {
-    const pageSize = opts?.pageSize ?? 25
+    const pageSize = opts?.pageSize ?? 36
     const seasonId = opts?.seasonId
     const result = useInfiniteQuery({
         queryKey: ['episodes', showSlug, 'pages', seasonId ?? null, pageSize] as const,
