@@ -4,7 +4,6 @@
 .download-progress-status>small {color:var(--muted);font-size:.75rem;line-height:1.3;overflow-wrap:anywhere}
 .download-progress-status.is-compact {min-width:95px}
 .download-progress-action {display:inline-flex;gap:6px;align-items:center;margin-left:auto;font-size:.78rem;white-space:nowrap}
-.download-progress-action .wl-progress-fill {opacity:.22}
 .download-progress-action-label {position:relative;z-index:1}
 .action-menu-item:has(.download-progress-action) {justify-content:space-between;gap:12px}
 .progress-button .wl-progress-fill {opacity:.3}

@@ -137,6 +137,5 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
 
     def __repr__(self) -> str:
         return (
-            f"<MediaDownloadBase(id={self.id}, type={self.type}, "
-            f"artifact_status={self.artifact_status}, file_path={self.file_path!r})>"
+            f"<MediaDownloadBase(id={self.id}, type={self.type}, artifact_status={self.artifact_status}, file_path={self.file_path!r})>"
         )
