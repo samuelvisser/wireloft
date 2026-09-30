@@ -51,69 +51,56 @@ def test_bulk_cancel_media_download_operation_keeps_per_download_targets():
 
 
 def test_bulk_retry_worker_waits_for_child_download_completion(monkeypatch):
-    from task_manager.scheduler.types import OperationStatus
-    from task_manager.tasks.workers.media_download_bulk_action_worker import entrypoint
+    from task_manager.tasks import download_batch
 
-    child_ids = {8: "operation-8", 3: "operation-3"}
-    polls = {"operation-8": 0, "operation-3": 0}
+    targets = [
+        download_batch.BatchTarget(1, 8, "Extra", 10, "operation-8", True, True, None),
+        download_batch.BatchTarget(2, 3, "Movie", 90, "operation-3", True, True, None),
+    ]
+    polls = []
     progress_updates: list[tuple[int, str | None]] = []
+    monkeypatch.setattr(download_batch, "create_batch_manifest", lambda *args, **kwargs: targets)
 
-    monkeypatch.setattr(
-        entrypoint,
-        "retry_media_download_action",
-        lambda media_download_id, **_kwargs: child_ids[media_download_id],
-    )
+    def snapshots(_targets):
+        polls.append(True)
+        return {
+            "operation-8": SimpleNamespace(status="SUCCEEDED", progress_meta=None),
+            "operation-3": SimpleNamespace(
+                status="RUNNING" if len(polls) == 1 else "SUCCEEDED",
+                progress_meta=None,
+            ),
+        }
 
-    def get_operation(operation_id: str):
-        polls[operation_id] += 1
-        if polls[operation_id] == 1:
-            if operation_id == "operation-8":
-                return SimpleNamespace(
-                    status=OperationStatus.SUCCEEDED.value,
-                    progress=100,
-                    error=None,
-                    message="Downloaded",
-                )
-            return SimpleNamespace(
-                status=OperationStatus.RUNNING.value,
-                progress=0,
-                error=None,
-                message="Downloading",
-            )
-        return SimpleNamespace(
-            status=OperationStatus.SUCCEEDED.value,
-            progress=100,
-            error=None,
-            message="Downloaded",
-        )
-
-    monkeypatch.setattr(entrypoint, "get_operation", get_operation)
+    monkeypatch.setattr(download_batch, "_snapshots", snapshots)
 
     async def no_sleep(_seconds: float) -> None:
         return None
 
-    monkeypatch.setattr(entrypoint.asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(download_batch.asyncio, "sleep", no_sleep)
 
     class Progress:
+        run_id = 1
+
         def __call__(self) -> bool:
             return False
 
-        def set(self, percent: int, message: str | None = None) -> None:
+        def set(self, percent: int, message: str | None = None, *, meta=None) -> None:
             progress_updates.append((percent, message))
 
-    result = asyncio.run(entrypoint._run_bulk_retry(
-        [8, 3],
-        expected_size_bytes_by_id={8: 10, 3: 90},
-        progress=Progress(),
-    ))
+    result = asyncio.run(download_batch.run_download_batch([8, 3], progress=Progress()))
 
-    assert polls == {"operation-8": 2, "operation-3": 2}
-    # The 10-byte item finishing first contributes 10%, not half the operation.
+    assert len(polls) == 2
+    # Captured size weights belong to the durable manifest, not the UI percent.
     assert progress_updates[0][0] == 10
-    assert progress_updates[-1][0] == 100
+    # The executor publishes terminal 100% after the coordinator returns success.
+    assert progress_updates[-1][0] == 99
+    assert result.outcome == "succeeded"
     assert result.data == {
         "downloads_requested": 2,
         "downloads_completed": 2,
+        "downloads_failed": 0,
+        "downloads_canceled": 0,
+        "errors": [],
     }
 
 

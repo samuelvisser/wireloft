@@ -64,7 +64,7 @@ class DownloadExecution:
 
 @contextmanager
 def _local_activity(tracker: DownloadTracker, resources: DownloadResources, activity: str) -> Iterator[None]:
-    with tracker.activity(activity, deadline_seconds=3600):
+    with tracker.activity(activity):
         with resources.processing.acquire(
             should_cancel=tracker.is_canceled,
             waiting=lambda value: tracker.wait(activity, "processing_capacity" if value else None),
@@ -207,19 +207,19 @@ def execute_download_plan(
             if not asset.spec.publish:
                 continue
             activity = f"publish:{asset.spec.id}"
-            with tracker.activity(activity, deadline_seconds=1800):
+            with tracker.activity(activity):
                 path = journal.publish(
                     asset.path, asset.target_suffix, should_cancel=tracker.is_canceled,
                     progress=lambda value, activity=activity: tracker.progress(activity, value),
                 )
                 published.append(PublishedSidecar(asset.spec.id, asset.spec.kind, str(path), inspect_artifact(path)))
-        with tracker.activity("verify", deadline_seconds=120):
+        with tracker.activity("verify"):
             identity = inspect_artifact(destination)
             if identity.size_bytes <= 0:
                 raise DownloadError("Downloaded media is empty")
             if plan.source.hls_bundle and missing_hls_bundle_files(destination):
                 raise DownloadError("Published HLS bundle is incomplete")
-        tracker.start("finalize", deadline_seconds=120)
+        tracker.start("finalize")
         tracker.ensure_active()
         successful = True
         return DownloadExecution(

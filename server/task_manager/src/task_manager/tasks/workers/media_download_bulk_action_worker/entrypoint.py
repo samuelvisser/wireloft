@@ -1,23 +1,12 @@
 from __future__ import annotations
 
-import asyncio
-
-from dailywire_downloader import DownloadCancelled
-from sqlalchemy import select
-
 from backend.services.download_actions import (
     cancel_media_download_action,
     delete_media_download_artifact_action,
-    retry_media_download_action,
 )
-from backend.db.core import get_session
-from backend.db.models.media_download import MediaDownloadBase
-from task_manager.scheduler.operations import get_operation
 from task_manager.scheduler.registry import task
 from task_manager.scheduler.results import TaskResult
-from task_manager.scheduler.types import OperationSource, OperationStatus
 from task_manager.tasks.download_batch import run_download_batch
-from task_manager.tasks.media_download_operations import cancel_media_download_operation
 
 
 @task(

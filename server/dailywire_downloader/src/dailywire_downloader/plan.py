@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from math import isfinite
 from typing import Literal
 from uuid import uuid4
 
@@ -78,6 +79,16 @@ class StageSpec:
     resource: Resource = "none"
     weight: float = 1.0
     asset_id: str | None = None
+    depends_on: tuple[str, ...] = ()
+    deadline_seconds: float | None = None
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.weight) or self.weight < 0:
+            raise ValueError("Stage work weights must be finite and nonnegative")
+        if self.deadline_seconds is not None and (
+            not isfinite(self.deadline_seconds) or self.deadline_seconds <= 0
+        ):
+            raise ValueError("Stage deadlines must be finite and positive")
 
 
 @dataclass(frozen=True)
@@ -94,6 +105,25 @@ class DownloadPlan:
     stages: tuple[StageSpec, ...]
     publication_requires_copy: bool
     warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        stages = {stage.id: stage for stage in self.stages}
+        if len(stages) != len(self.stages):
+            raise ValueError("Stage IDs must be unique within an attempt")
+        if not {"prepare", "media", "publish", "verify", "finalize"} <= stages.keys():
+            raise ValueError("The download plan is missing a required lifecycle stage")
+        for stage in self.stages:
+            if any(dependency not in stages for dependency in stage.depends_on):
+                raise ValueError(f"Unknown dependency in stage '{stage.id}'")
+        pending = dict(stages)
+        completed: set[str] = set()
+        while pending:
+            ready = {name for name, stage in pending.items() if set(stage.depends_on) <= completed}
+            if not ready:
+                raise ValueError("Download stage dependencies contain a cycle")
+            completed.update(ready)
+            for name in ready:
+                del pending[name]
 
     def stage(self, stage_id: str) -> StageSpec:
         return next(stage for stage in self.stages if stage.id == stage_id)
@@ -151,26 +181,51 @@ def build_download_plan(
     media_bytes = max(1, source.expected_bytes or 100 * 1024 * 1024)
     stages = [
         StageSpec("prepare", "prepare", "preparing", weight=0.02),
-        StageSpec("media", "download_media", "transferring", "media"),
+        StageSpec("media", "download_media", "transferring", "media", depends_on=("prepare",)),
     ]
     for asset in assets:
         weight = max(0.002, (len(asset.content) if asset.content is not None else 512 * 1024) / media_bytes)
         stages.append(StageSpec(
             f"acquire:{asset.id}", "generate_sidecar" if asset.content is not None else "download_sidecar",
-            "transferring", "sidecar", weight, asset.id,
+            "transferring", "sidecar", weight, asset.id, depends_on=("prepare",),
         ))
+    # Dependencies and deadlines are policy, not runtime decisions. Auxiliary
+    # acquisition depends only on preparation; a remux can overlap it, whereas
+    # embedding must await its artwork. The tracker enforces these boundaries.
+    media_ready = "media"
     if source.remux_to_mp4:
-        stages.append(StageSpec("remux", "remux", "finishing", "processing"))
+        stages.append(StageSpec(
+            "remux", "remux", "finishing", "processing",
+            depends_on=(media_ready,), deadline_seconds=3600,
+        ))
+        media_ready = "remux"
     if metadata_tags or artwork_asset_id:
         code = "embed_artwork_metadata" if metadata_tags and artwork_asset_id else "embed_artwork" if artwork_asset_id else "embed_metadata"
-        stages.append(StageSpec("embed", code, "finishing", "processing"))
-    stages.append(StageSpec("publish", "publish_media", "finishing", "processing", 1.0 if copying else 0.01))
+        dependencies = (media_ready,) + ((f"acquire:{artwork_asset_id}",) if artwork_asset_id else ())
+        stages.append(StageSpec(
+            "embed", code, "finishing", "processing",
+            depends_on=dependencies, deadline_seconds=3600,
+        ))
+        media_ready = "embed"
+    stages.append(StageSpec(
+        "publish", "publish_media", "finishing", "processing", 1.0 if copying else 0.01,
+        depends_on=(media_ready, *(f"acquire:{asset.id}" for asset in assets)),
+        deadline_seconds=3600,
+    ))
     for asset in assets:
         if asset.publish:
-            stages.append(StageSpec(f"publish:{asset.id}", "publish_sidecar", "finishing", "none", 0.002, asset.id))
+            stages.append(StageSpec(
+                f"publish:{asset.id}", "publish_sidecar", "finishing", "none", 0.002, asset.id,
+                depends_on=("publish", f"acquire:{asset.id}"), deadline_seconds=1800,
+            ))
     stages.extend((
-        StageSpec("verify", "verify", "finishing", weight=0.01),
-        StageSpec("finalize", "finalize", "finishing", weight=0.01),
+        StageSpec(
+            "verify", "verify", "finishing", weight=0.01,
+            depends_on=("publish", *(f"publish:{asset.id}" for asset in assets if asset.publish)),
+            deadline_seconds=120,
+        ),
+        StageSpec("finalize", "finalize", "finishing", weight=0.01,
+                  depends_on=("verify",), deadline_seconds=120),
     ))
     return DownloadPlan(
         attempt_id or str(uuid4()), source, str(requested_destination), download_mode,

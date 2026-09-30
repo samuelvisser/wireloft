@@ -96,6 +96,7 @@ class DownloadTracker:
         self._started = time()
         self._activity_at = self._started
         self._sequence = 0
+        self._plan: DownloadPlan | None = None
         self._phase: Phase = "preparing"
         self._main = "prepare"
         self._media_complete = False
@@ -194,6 +195,9 @@ class DownloadTracker:
         if plan.attempt_id != self.attempt_id:
             raise ValueError("A plan cannot belong to a different attempt")
         with self._lock:
+            if self._plan is not None:
+                raise ValueError("A download attempt can only install one immutable plan")
+            self._plan = plan
             prepare = self._stages["prepare"]
             self._stages = {stage.id: StageSnapshot(
                 stage.id, stage.code, stage.phase, stage.resource, stage.weight, stage.asset_id,
@@ -202,11 +206,21 @@ class DownloadTracker:
             self._preparation_steps.append(StepTiming(self._step_code, self._step_start, time()))
         self.complete("prepare")
 
-    def start(self, activity: str, *, foreground: bool = True, deadline_seconds: float | None = None) -> None:
+    def start(self, activity: str, *, foreground: bool = True) -> None:
         self.ensure_active()
         now = time()
         with self._lock:
+            if self._plan is None:
+                raise ValueError("Download stages require an installed plan")
+            spec = self._plan.stage(activity)
+            unfinished = [dependency for dependency in spec.depends_on
+                          if self._stages[dependency].state not in ("completed", "skipped")]
+            if unfinished:
+                raise ValueError(f"Stage '{activity}' has unfinished dependencies: {', '.join(unfinished)}")
+            deadline_seconds = spec.deadline_seconds
             stage = self._stages[activity]
+            if stage.state != "pending":
+                raise ValueError(f"Stage '{activity}' has already started")
             self._stages[activity] = replace(
                 stage, state="running", started_at=stage.started_at or now,
                 last_activity_at=now,
@@ -309,8 +323,8 @@ class DownloadTracker:
                 self._sink(self.snapshot())
 
     @contextmanager
-    def activity(self, activity: str, *, foreground: bool = True, deadline_seconds: float | None = None) -> Iterator[None]:
-        self.start(activity, foreground=foreground, deadline_seconds=deadline_seconds)
+    def activity(self, activity: str, *, foreground: bool = True) -> Iterator[None]:
+        self.start(activity, foreground=foreground)
         def waiting(event: TransferWait | None) -> None:
             self.wait(activity, event.reason if event else None, event.until if event else None)
         try:

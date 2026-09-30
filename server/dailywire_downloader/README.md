@@ -9,7 +9,9 @@ acquisition, media rewrites, capacity limits, publication and filesystem recover
 `build_download_plan` returns an immutable `DownloadPlan`. Its inputs are resolved
 source information, a concrete output path, storage policy, auxiliary asset specs,
 and already-prepared container tags. The plan describes every required stage,
-its dependencies, resource class and estimated work weight. The coordinator never
+its dependencies, processing deadline, resource class and estimated work weight.
+The tracker rejects unknown/cyclic dependencies and out-of-order stage execution.
+The coordinator never
 reads mutable application settings to make a later policy decision.
 
 Signed URLs, actual response lengths, collision-resolved destination names and
@@ -28,6 +30,10 @@ Generated NFO content is not represented as a network request.
 `execute_download_plan` consumes the plan and a `DownloadTracker`. Primary media
 and auxiliary acquisition overlap; only stages requiring an asset wait for it.
 FFmpeg mutations are serialized, and artwork plus container tags share one rewrite.
+MP4 artwork uses native metadata atoms, because FFmpeg's arbitrary-key `mdta`
+writer omits cover art. Standard title/show/episode tags are retained in that
+mode; NFO remains the complete metadata representation for fields the container
+cannot represent. Metadata-only MP4 output can use arbitrary-key `mdta` tags.
 Media-transfer, auxiliary and local-processing capacity are independently bounded.
 
 The returned `DownloadExecution` represents ready-to-commit outputs. The application

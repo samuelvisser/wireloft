@@ -167,7 +167,12 @@ def embed_media(
             if value:
                 command += ["-metadata", f"{key}={value}"]
         if muxer == "mp4":
-            command += ["-movflags", "+faststart+use_metadata_tags" if metadata else "+faststart"]
+            # FFmpeg's mdta writer does not emit the covr atom. Selecting it
+            # alongside attached_pic silently drops the requested artwork even
+            # though FFmpeg exits successfully. Use native MP4 tags when writing
+            # artwork; metadata-only downloads can retain arbitrary mdta keys.
+            flags = "+faststart+use_metadata_tags" if metadata and thumbnail_path is None else "+faststart"
+            command += ["-movflags", flags]
         command += ["-f", muxer, part_path]
         result = (_run_cancellable(command, should_cancel) if should_cancel is not None
                   else subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
