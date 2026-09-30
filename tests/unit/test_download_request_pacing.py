@@ -34,7 +34,7 @@ def test_all_queue_followers_observe_global_cooldown(monkeypatch):
         assert all(event.wait(2) for event in waiting)
         assert len(pacer.queue) == 3
         with pacer.condition:
-            pacer.last_request = monotonic() - 1
+            pacer.slow_cooldown_until = monotonic() - 1
             pacer.condition.notify_all()
         for future in futures:
             future.result(timeout=3)
@@ -83,26 +83,161 @@ def test_observer_runs_without_holding_pacing_lock(monkeypatch):
         pacer.wait()
 
 
-def test_interactive_priority_has_bounded_burst_and_aging():
+def test_bulk_priority_precedes_background_until_aging():
     pacer = pacing.RequestPacer()
     now = monotonic()
-    pacer.queue = {1: pacing._Ticket(1, 'background', now), 2: pacing._Ticket(2, 'interactive', now)}
+    pacer.queue = {
+        1: pacing._Ticket(1, 'background', now),
+        2: pacing._Ticket(2, 'bulk', now),
+    }
     assert pacer._next(now) == 2
-    pacer.foreground_streak = 3
-    assert pacer._next(now) == 1
-    pacer.foreground_streak = 0
     assert pacer._next(now + 31) == 1
 
 
-def test_upstream_delay_is_observed_by_all_request_priorities(monkeypatch):
+def test_upstream_delay_is_observed_by_paced_priorities(monkeypatch):
     policy(monkeypatch, slow=0)
     pacer = pacing.RequestPacer()
     pacer.defer_upstream(.05)
     seen = []
-    with pacing.request_context(observer=seen.append, priority='interactive'):
+    with pacing.request_context(observer=seen.append, priority='bulk'):
         pacer.wait()
     assert seen[0].reason == 'upstream_retry'
     assert seen[-1] is None
+
+
+def test_interactive_execution_context_bypasses_wait_and_still_counts(monkeypatch):
+    policy(monkeypatch, slow=1000, maximum=0)
+    pacer = pacing.RequestPacer()
+    pacer.last_request, pacer.last_request_wall = monotonic(), time()
+    pacer.fast_requests = 1
+    seen = []
+
+    # Task workers inherit this ContextVar from the scheduler; their
+    # MiddlewareClient usually does not pass an explicit request priority.
+    with pacing.request_context(observer=seen.append, priority='interactive'):
+        pacer.wait()
+
+    assert pacer.queue == {}
+    assert pacer.fast_requests == 2
+    assert seen == []
+
+
+def test_interactive_requests_bypass_wait_and_count_toward_background_cooldown(monkeypatch):
+    policy(monkeypatch, slow=200, maximum=2)
+    pacer = pacing.RequestPacer()
+
+    # Interactive requests never enter the pacing queue, including while an
+    # upstream restriction exists.
+    pacer.defer_upstream(1)
+    pacer.wait('interactive')
+    pacer.wait('interactive')
+    pacer.wait('interactive')
+    assert pacer.queue == {}
+    assert pacer.fast_requests == 3
+
+    # Clear the unrelated upstream restriction so the next paced request exposes
+    # the slow cooldown created by the interactive burst.
+    with pacer.condition:
+        pacer.upstream_until = 0
+        pacer.upstream_until_wall = 0
+
+    seen = []
+    waiting = Event()
+
+    def background():
+        def observe(event):
+            seen.append(event)
+            if event and event.reason == 'daily_wire_request_cooldown':
+                waiting.set()
+        with pacing.request_context(observer=observe):
+            pacer.wait('background')
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(background)
+        assert waiting.wait(2)
+        assert pacer.slow_cooldown_until is not None
+        with pacer.condition:
+            pacer.slow_cooldown_until = monotonic() - 1
+            pacer.condition.notify_all()
+        future.result(timeout=2)
+
+    assert pacer.fast_requests == 1
+    assert seen[-1] is None
+
+
+def test_interactive_grace_does_not_extend_active_background_cooldown(monkeypatch):
+    policy(monkeypatch, slow=500, maximum=0)
+    pacer = pacing.RequestPacer()
+    pacer.last_request, pacer.last_request_wall = monotonic(), time()
+    pacer.fast_requests = 1
+
+    waiting = Event()
+
+    def background():
+        def observe(event):
+            if event and event.reason == 'daily_wire_request_cooldown':
+                waiting.set()
+        with pacing.request_context(observer=observe):
+            pacer.wait('background')
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(background)
+        assert waiting.wait(2)
+        initial_deadline = pacer.slow_cooldown_until
+        assert initial_deadline is not None
+
+        for _ in range(pacing._SLOW_COOLDOWN_UNPACED_GRACE_REQUESTS):
+            pacer.wait('interactive')
+
+        assert pacer.slow_cooldown_until == initial_deadline
+        assert (
+            pacer.slow_cooldown_unpaced_requests
+            == pacing._SLOW_COOLDOWN_UNPACED_GRACE_REQUESTS
+        )
+
+        with pacer.condition:
+            pacer.slow_cooldown_until = monotonic() - 1
+            pacer.condition.notify_all()
+        future.result(timeout=2)
+
+
+def test_interactive_request_beyond_grace_renews_background_cooldown(monkeypatch):
+    policy(monkeypatch, slow=500, maximum=0)
+    pacer = pacing.RequestPacer()
+    pacer.last_request, pacer.last_request_wall = monotonic(), time()
+    pacer.fast_requests = 1
+
+    waiting = Event()
+
+    def background():
+        def observe(event):
+            if event and event.reason == 'daily_wire_request_cooldown':
+                waiting.set()
+        with pacing.request_context(observer=observe):
+            pacer.wait('background')
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(background)
+        assert waiting.wait(2)
+        initial_deadline = pacer.slow_cooldown_until
+        assert initial_deadline is not None
+
+        for _ in range(pacing._SLOW_COOLDOWN_UNPACED_GRACE_REQUESTS):
+            pacer.wait('interactive')
+
+        pacer.wait('interactive')
+        renewed_deadline = pacer.slow_cooldown_until
+        assert renewed_deadline is not None
+        assert renewed_deadline > initial_deadline
+        assert (
+            pacer.slow_cooldown_unpaced_requests
+            == pacing._SLOW_COOLDOWN_UNPACED_GRACE_REQUESTS + 1
+        )
+
+        with pacer.condition:
+            pacer.slow_cooldown_until = monotonic() - 1
+            pacer.condition.notify_all()
+        future.result(timeout=2)
 
 
 def test_generic_non_download_executor_persists_follower_wait(task_database, monkeypatch):
@@ -134,7 +269,7 @@ def test_generic_non_download_executor_persists_follower_wait(task_database, mon
             start.wait(.02)
         assert observed, 'Both unrelated operations must report the shared cooldown'
         with pacer.condition:
-            pacer.last_request = monotonic() - 5
+            pacer.slow_cooldown_until = monotonic() - 1
             pacer.condition.notify_all()
         for future in futures:
             future.result(timeout=4)

@@ -83,8 +83,9 @@ class MiddlewareClient:
     HTTP client for DailyWire Middleware API.
 
     Pass an access token if you have one; premium content typically requires it.
-    All requests share rate protection. Interactive reads may receive fair
-    queue priority, but cannot bypass a cooldown or upstream Retry-After.
+    Bulk/background requests share global pacing. Interactive reads preserve
+    WireLoft's explicit pacing override: they bypass the wait but still count
+    toward the burst/cooldown accounting seen by background work.
     """
 
     def __init__(
@@ -93,10 +94,19 @@ class MiddlewareClient:
         request_timeout: float = 30.0,
         base_url: str = get_settings().dw_api.middleware_api,
         request_priority: RequestPriority | None = None,
+        pace_requests: bool | None = None,
     ) -> None:
         self._req_timeout = request_timeout
         self._base_url = base_url.rstrip('/')
-        self._request_priority = request_priority
+        # Preserve the pre-planner explicit bypass while also supporting the
+        # newer execution-scoped priority model. False is intentionally stronger
+        # than a supplied priority: it means this client must never wait for
+        # global pacing.
+        self._request_priority = (
+            "interactive"
+            if pace_requests is False
+            else request_priority
+        )
         headers = {
             # These are generally not required for Middleware, but harmless if present
             'Accept': 'application/json',
