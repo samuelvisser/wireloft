@@ -100,7 +100,7 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
             : execution?.phase === 'preparing' ? 'Preparing' : main ? activityLabel(main) : 'Preparing'
         const label = main?.id === 'media' && execution?.primary_transfer_complete ? 'Finishing' : main ? activityLabel(main) : 'Preparing'
         return {status: execution?.primary_transfer_complete ? 'local_processing' : 'preparing',
-            ...workingPresentation(label, `${label}. This step does not have a reliable percentage.`, compact), secondary}
+            ...workingPresentation(label, `${label}.`, compact), secondary}
     }
     if (operation?.status === 'SUCCEEDED') return terminal(operation.context?.is_redownload ? 'redownloaded' : 'downloaded', 'Downloaded', 'All required outputs were published successfully.', 'success')
     if (operation?.status === 'FAILED' || operation?.status === 'PARTIAL') return terminal('error', 'Failed', operation.error || operation.message || 'Download failed.', 'error')

@@ -35,6 +35,7 @@ class TaskOperationDependency(Base):
         ),
     )
 
+    # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     parent_operation_id: Mapped[str] = mapped_column(
         String(36),
@@ -54,6 +55,7 @@ class TaskOperationDependency(Base):
     context: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
+    # Relationships
     parent_operation: Mapped["TaskOperation"] = relationship(
         back_populates="dependencies",
         foreign_keys=[parent_operation_id],
@@ -62,3 +64,9 @@ class TaskOperationDependency(Base):
         back_populates="dependents",
         foreign_keys=[child_operation_id],
     )
+
+
+    def __repr__(self) -> str:
+        return (
+            f"<TaskOperationDependency id={self.id} parent_operation_id={self.parent_operation_id}, child_operation_id={self.child_operation_id}, created_at={self.created_at}>"
+        )
