@@ -52,7 +52,7 @@ def episodes_by_show_list(show_slug: str, limit: int | None = None):
 
 @router.get("/as-view/by-show-slug/{show_slug}", response_model=list[EpisodeAPIReadView])
 def episode_views_by_show_list(show_slug: str, limit: int | None = None):
-    """List compact episode fields for callers that still need the legacy list shape."""
+    """List compact episode fields."""
     with db_session() as s:
         return get_episode_views_by_show_list(s, show_slug, limit)
 
