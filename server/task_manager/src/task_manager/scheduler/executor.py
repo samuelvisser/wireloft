@@ -59,6 +59,17 @@ class _PreparedExecution:
     call_kwargs: dict[str, Any]
 
 
+def _run_has_active_operation_owner(session, run_id: int) -> bool:
+    operation_ids = tuple(
+        session.scalars(
+            select(TaskOperationRun.operation_id).where(
+                TaskOperationRun.task_run_id == run_id
+            )
+        )
+    )
+    return not operation_ids or operation_ids_allow_execution(session, operation_ids)
+
+
 class ProgressUpdater:
     """Generic progress and cooperative-cancellation channel for a TaskRun.
 
@@ -111,6 +122,10 @@ class ProgressUpdater:
                 self._cancel_reason = (
                     reason if isinstance(reason, str) and reason else "Canceled"
                 )
+                return True, self._cancel_reason
+            if not _run_has_active_operation_owner(s, self.run_id):
+                self._cancelled = True
+                self._cancel_reason = "Owning operation was canceled"
                 return True, self._cancel_reason
             return False, self._cancel_reason
         except Exception:
@@ -181,6 +196,10 @@ class ProgressUpdater:
                         self._cancel_reason = (
                             reason if isinstance(reason, str) and reason else "Canceled"
                         )
+                        raise TaskCancellationRequested(self._cancel_reason)
+                    if not _run_has_active_operation_owner(s, self.run_id):
+                        self._cancelled = True
+                        self._cancel_reason = "Owning operation was canceled"
                         raise TaskCancellationRequested(self._cancel_reason)
 
                     values: dict[str, Any] = {"progress": p}
@@ -279,6 +298,9 @@ class ProgressUpdater:
                         ).scalar_one_or_none()
                         if exists is None:
                             return
+
+                    if not _run_has_active_operation_owner(s, self.run_id):
+                        return
 
                     merged_meta = dict(current_meta or {})
                     if reason:
@@ -477,6 +499,8 @@ def _finalize_execution(
 
         if run_cancel_requested(run):
             cancellation_reason = run_cancel_reason(run, cancellation_reason or "Canceled")
+        elif cancellation_reason is None and not _run_has_active_operation_owner(session, run.id):
+            cancellation_reason = "Owning operation was canceled"
 
         if cancellation_reason is not None:
             _mark_run_canceled(run, cancellation_reason)
@@ -633,6 +657,19 @@ def execute_task(
     cancellation_reason: str | None = None
     started_perf = time.perf_counter()
 
+    # Re-check after the TaskRun and operation links are committed. Cancellation
+    # can happen after the initial preflight but before this durable handoff.
+    if prepared.linked_operation_ids:
+        ownership_session = get_session()
+        try:
+            if not _run_has_active_operation_owner(
+                ownership_session,
+                prepared.run_id,
+            ):
+                cancellation_reason = "Owning operation was canceled"
+        finally:
+            ownership_session.close()
+
     def on_request_wait(event: RequestWait | None) -> None:
         updater.set_wait_state(
             event.reason if event else None,
@@ -641,23 +678,24 @@ def execute_task(
         )
 
     try:
-        with (
-            operation_context(prepared.linked_operation_ids),
-            request_context(
-                observer=on_request_wait, should_cancel=updater,
-                priority=_execution_request_priority(prepared.linked_operation_ids),
-            ),
-        ):
-            if inspect.iscoroutinefunction(fn):
-                worker_result = asyncio.run(
-                    fn(resource_id=resource_id, progress=updater, **prepared.call_kwargs)
-                )
-            else:
-                worker_result = fn(  # type: ignore[arg-type]
-                    resource_id=resource_id,
-                    progress=updater,
-                    **prepared.call_kwargs,
-                )
+        if cancellation_reason is None:
+            with (
+                operation_context(prepared.linked_operation_ids),
+                request_context(
+                    observer=on_request_wait, should_cancel=updater,
+                    priority=_execution_request_priority(prepared.linked_operation_ids),
+                ),
+            ):
+                if inspect.iscoroutinefunction(fn):
+                    worker_result = asyncio.run(
+                        fn(resource_id=resource_id, progress=updater, **prepared.call_kwargs)
+                    )
+                else:
+                    worker_result = fn(  # type: ignore[arg-type]
+                        resource_id=resource_id,
+                        progress=updater,
+                        **prepared.call_kwargs,
+                    )
     except (TaskCancellationRequested, DownloadCancelled, RequestCancelled) as exc:
         cancellation_reason = str(exc) or "Canceled"
     except Exception as exc:

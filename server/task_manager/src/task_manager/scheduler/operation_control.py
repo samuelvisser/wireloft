@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 RUN_CANCEL_REQUESTED_META_KEY = "_operation_cancel_requested"
 RUN_CANCEL_REASON_META_KEY = "_operation_cancel_reason"
+OPERATION_CANCEL_REQUESTED_CONTEXT_KEY = "cancel_requested"
 
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
@@ -45,15 +46,36 @@ _ACTIVE_TASK_STATUSES = {
 }
 
 
+def _operation_context_cancel_requested(context: object) -> bool:
+    return (
+        isinstance(context, dict)
+        and context.get(OPERATION_CANCEL_REQUESTED_CONTEXT_KEY) is True
+    )
+
+
+def operation_cancel_requested(operation: TaskOperation) -> bool:
+    """Return whether cancellation is durably authoritative for an operation."""
+    return _operation_context_cancel_requested(operation.context)
+
+
 def operation_ids_allow_execution(session: Session, operation_ids: Iterable[str]) -> bool:
-    """Return whether explicitly operation-owned work should still execute."""
+    """Return whether explicitly operation-owned work should still execute.
+
+    Status alone is not enough: aggregate refreshes can race cancellation and
+    briefly persist a stale active status. The durable cancellation marker is
+    authoritative across that handoff.
+    """
     ids = tuple(dict.fromkeys(str(value) for value in operation_ids if value))
     if not ids:
         return True
-    statuses = session.scalars(
-        select(TaskOperation.status).where(TaskOperation.id.in_(ids))
+    rows = session.execute(
+        select(TaskOperation.status, TaskOperation.context).where(TaskOperation.id.in_(ids))
     ).all()
-    return any(status in _ACTIVE_OPERATION_STATUSES for status in statuses)
+    return any(
+        status in _ACTIVE_OPERATION_STATUSES
+        and not _operation_context_cancel_requested(context)
+        for status, context in rows
+    )
 
 
 def run_cancel_requested(run: TaskRun) -> bool:
@@ -139,6 +161,7 @@ def cancel_operation(
             if (
                 child is not None
                 and child.status in _ACTIVE_OPERATION_STATUSES
+                and not operation_cancel_requested(child)
                 and dependency.cancel_policy == OperationDependencyCancelPolicy.CANCEL_IF_EXCLUSIVE.value
                 and not _dependency_shared_with_other_active_parent(
                     session,
@@ -180,11 +203,13 @@ def cancel_operation(
             run.id in cancelable_run_ids and _task_status(run.status) == TaskStatus.RUNNING for run in runs
         )
         now = datetime.now(timezone.utc)
+        operation.context = {
+            **(operation.context or {}),
+            OPERATION_CANCEL_REQUESTED_CONTEXT_KEY: True,
+        }
         operation.status = OperationStatus.RUNNING.value if cleaning_up else OperationStatus.CANCELED.value
         if not cleaning_up:
             operation.completion_progress = 100
-        if cleaning_up:
-            operation.context = {**(operation.context or {}), "cancel_requested": True}
         operation.message = "Canceling download" if cleaning_up else reason
         operation.result = {
             "summary": reason,
@@ -228,6 +253,7 @@ def cancel_operation(
             still_exclusive = (
                 child is not None
                 and child.status in _ACTIVE_OPERATION_STATUSES
+                and not operation_cancel_requested(child)
                 and not _dependency_shared_with_other_active_parent(
                     check_session,
                     child_operation_id,
@@ -386,7 +412,7 @@ def restart_operation(operation_id: str) -> OperationSnapshot | None:
         operation.context = {
             key: value
             for key, value in (operation.context or {}).items()
-            if key != "cancel_requested"
+            if key != OPERATION_CANCEL_REQUESTED_CONTEXT_KEY
         }
         operation.message = "Restarting"
         operation.result = None
@@ -464,16 +490,20 @@ def _run_shared_with_other_active_operation(
         run_id: int,
         operation_id: str,
 ) -> bool:
-    return session.scalar(
-        select(TaskOperationRun.task_run_id)
-        .join(TaskOperation, TaskOperation.id == TaskOperationRun.operation_id)
+    rows = session.execute(
+        select(TaskOperation.status, TaskOperation.context)
+        .join(TaskOperationRun, TaskOperation.id == TaskOperationRun.operation_id)
         .where(
             TaskOperationRun.task_run_id == run_id,
             TaskOperationRun.operation_id != operation_id,
             TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
         )
-        .limit(1)
-    ) is not None
+    ).all()
+    return any(
+        status in _ACTIVE_OPERATION_STATUSES
+        and not _operation_context_cancel_requested(context)
+        for status, context in rows
+    )
 
 
 def _dependency_shared_with_other_active_parent(
@@ -481,10 +511,10 @@ def _dependency_shared_with_other_active_parent(
         child_operation_id: str,
         parent_operation_id: str,
 ) -> bool:
-    return session.scalar(
-        select(TaskOperationDependency.id)
+    rows = session.execute(
+        select(TaskOperation.status, TaskOperation.context)
         .join(
-            TaskOperation,
+            TaskOperationDependency,
             TaskOperation.id == TaskOperationDependency.parent_operation_id,
         )
         .where(
@@ -492,8 +522,12 @@ def _dependency_shared_with_other_active_parent(
             TaskOperationDependency.parent_operation_id != parent_operation_id,
             TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
         )
-        .limit(1)
-    ) is not None
+    ).all()
+    return any(
+        status in _ACTIVE_OPERATION_STATUSES
+        and not _operation_context_cancel_requested(context)
+        for status, context in rows
+    )
 
 
 def _load_operation(session: Session, operation_id: str) -> TaskOperation | None:

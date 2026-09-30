@@ -18,7 +18,7 @@ from task_manager.scheduler.db import (
     TaskOperationTarget,
     TaskRun,
 )
-from task_manager.scheduler.operation_control import run_cancel_requested
+from task_manager.scheduler.operation_control import operation_cancel_requested, run_cancel_requested
 from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import (
     OperationDependencyCancelPolicy,
@@ -368,7 +368,7 @@ def link_run_to_operations(
                 targets[target.id] = target
 
     auto_statement = (
-        select(TaskOperationTarget)
+        select(TaskOperationTarget, TaskOperation)
         .join(TaskOperation, TaskOperation.id == TaskOperationTarget.operation_id)
         .where(
             TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
@@ -377,7 +377,9 @@ def link_run_to_operations(
             TaskOperationTarget.resource_id == run.resource_id,
         )
     )
-    for target in session.scalars(auto_statement):
+    for target, operation in session.execute(auto_statement):
+        if operation_cancel_requested(operation):
+            continue
         if _run_matches_target_inputs(run, target):
             targets[target.id] = target
 
@@ -438,8 +440,35 @@ def _refresh_operation_tree(
 
 
 def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
-    # A user cancellation is an explicit terminal decision. Do not let linked
-    # worker or child-operation state resurrect it while cancellation propagates.
+    cancel_requested = operation_cancel_requested(operation)
+    download_cleanup_active = (
+        operation.kind == "media.download"
+        and any(
+            link.task_run is not None
+            and _task_status(link.task_run.status) == TaskStatus.RUNNING
+            and run_cancel_requested(link.task_run)
+            for target in operation.targets
+            for link in target.run_links
+        )
+    )
+
+    # A cancellation marker survives an aggregate refresh that loaded the old
+    # RUNNING/WAITING state just before cancel_operation committed. Generic and
+    # composite operations are terminal immediately. media.download deliberately
+    # remains RUNNING only while a worker that received the cancellation request
+    # is cooperatively cleaning up.
+    if cancel_requested and not download_cleanup_active:
+        operation.status = OperationStatus.CANCELED.value
+        operation.completion_progress = 100
+        if isinstance(operation.result, dict):
+            summary = operation.result.get("summary")
+            if isinstance(summary, str) and summary:
+                operation.message = summary
+        operation.error = None
+        operation.finished_at = operation.finished_at or datetime.now(timezone.utc)
+        return operation
+
+    # Preserve older terminal cancellations that predate the marker too.
     if operation.status == OperationStatus.CANCELED.value and operation.finished_at is not None:
         return operation
 
@@ -493,7 +522,7 @@ def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
         return operation
 
     if len(terminal_runs) < total:
-        if (operation.context or {}).get("cancel_requested"):
+        if operation.kind == "media.download" and operation_cancel_requested(operation):
             operation.status = OperationStatus.RUNNING.value
             operation.message = "Canceling download"
             operation.finished_at = None
@@ -749,7 +778,11 @@ def mark_interrupted_operations_for_recovery(
     )
     for operation_id in operation_ids:
         operation = session.get(TaskOperation, operation_id)
-        if operation is None or operation.status not in _ACTIVE_OPERATION_STATUSES:
+        if (
+            operation is None
+            or operation.status not in _ACTIVE_OPERATION_STATUSES
+            or operation_cancel_requested(operation)
+        ):
             continue
         operation.status = OperationStatus.QUEUED.value
         operation.message = "Recovering after WireLoft restart"
@@ -774,6 +807,8 @@ def recover_pending_operations() -> int:
         )
         recoveries: list[tuple[str, str, str, int | None, str, dict[str, Any]]] = []
         for operation in operations:
+            if operation_cancel_requested(operation):
+                continue
             for target in operation.targets:
                 if not target.recover_on_restart:
                     continue
