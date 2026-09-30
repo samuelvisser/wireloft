@@ -404,7 +404,7 @@ def test_operation_target_input_mismatch_does_not_coalesce():
 
     session = _session()
     try:
-        definition = _definition(session, "redownload_show_episodes_worker")
+        definition = _definition(session, "parameterized_test_worker")
         _run(
             session,
             definition,
@@ -535,6 +535,252 @@ def test_refresh_operation_eager_loads_target_run_graph_without_n_plus_one_queri
 
         # Operation + targets + association rows are loaded in a bounded number
         # of SELECTs regardless of the number of logical targets.
-        assert len(statements) <= 4
+        assert len(statements) <= 5
+    finally:
+        session.close()
+
+
+
+def test_operation_dependencies_weight_child_completion_without_replacing_child_progress():
+    from task_manager.scheduler.operations import (
+        OperationDependencySpec,
+        add_operation_dependencies,
+        create_operation,
+        refresh_operation,
+    )
+    from task_manager.scheduler.types import OperationStatus
+
+    session = _session()
+    try:
+        first = create_operation(
+            session,
+            kind="media.download",
+            resource_type="media_download",
+            resource_id=1,
+            title="First download",
+            targets=[],
+        )
+        second = create_operation(
+            session,
+            kind="media.download",
+            resource_type="media_download",
+            resource_id=2,
+            title="Second download",
+            targets=[],
+        )
+        first.status = OperationStatus.RUNNING.value
+        first.progress = 80
+        first.completion_progress = 20
+        second.status = OperationStatus.RUNNING.value
+        second.progress = 10
+        second.completion_progress = 40
+        session.flush()
+
+        parent = create_operation(
+            session,
+            kind="media_download.bulk_retry",
+            resource_type="media_download",
+            resource_id=None,
+            title="Downloads",
+            targets=[],
+        )
+        add_operation_dependencies(
+            session,
+            parent.id,
+            [
+                OperationDependencySpec(
+                    child_operation_id=first.id,
+                    slot_key="first",
+                    weight=25,
+                ),
+                OperationDependencySpec(
+                    child_operation_id=second.id,
+                    slot_key="second",
+                    weight=75,
+                ),
+            ],
+        )
+        refresh_operation(session, parent.id)
+
+        assert parent.status == OperationStatus.RUNNING.value
+        assert parent.progress == 35
+        assert parent.completion_progress == 35
+        assert first.progress == 80
+        assert second.progress == 10
+        assert {dependency.child_operation_id for dependency in parent.dependencies} == {
+            first.id,
+            second.id,
+        }
+    finally:
+        session.close()
+
+
+def test_dependency_child_terminal_outcomes_finish_parent_at_full_completion():
+    from task_manager.scheduler.operations import (
+        OperationDependencySpec,
+        add_operation_dependencies,
+        create_operation,
+        refresh_operation,
+    )
+    from task_manager.scheduler.types import OperationStatus
+
+    session = _session()
+    try:
+        first = create_operation(
+            session,
+            kind="media.download",
+            resource_type="media_download",
+            resource_id=1,
+            title="First download",
+            targets=[],
+        )
+        second = create_operation(
+            session,
+            kind="media.download",
+            resource_type="media_download",
+            resource_id=2,
+            title="Second download",
+            targets=[],
+        )
+        parent = create_operation(
+            session,
+            kind="media_download.bulk_retry",
+            resource_type="media_download",
+            resource_id=None,
+            title="Downloads",
+            targets=[],
+        )
+        add_operation_dependencies(
+            session,
+            parent.id,
+            [
+                OperationDependencySpec(first.id, slot_key="first", weight=9),
+                OperationDependencySpec(second.id, slot_key="second", weight=1),
+            ],
+        )
+
+        now = datetime.now(timezone.utc)
+        first.status = OperationStatus.SUCCEEDED.value
+        first.completion_progress = 100
+        first.finished_at = now
+        second.status = OperationStatus.FAILED.value
+        second.completion_progress = 100
+        second.error = "boom"
+        second.finished_at = now
+        session.flush()
+
+        refresh_operation(session, second.id)
+
+        assert parent.status == OperationStatus.PARTIAL.value
+        assert parent.progress == 100
+        assert parent.completion_progress == 100
+        assert parent.result["data"] == {
+            "completed": 1,
+            "failed": 1,
+            "canceled": 0,
+            "total": 2,
+        }
+    finally:
+        session.close()
+
+
+def test_operation_dependency_refresh_propagates_transitively():
+    from task_manager.scheduler.operations import (
+        OperationDependencySpec,
+        add_operation_dependencies,
+        create_operation,
+        refresh_operation,
+    )
+    from task_manager.scheduler.types import OperationStatus
+
+    session = _session()
+    try:
+        leaf = create_operation(
+            session,
+            kind="leaf",
+            resource_type="media_download",
+            resource_id=1,
+            title="Leaf",
+            targets=[],
+        )
+        middle = create_operation(
+            session,
+            kind="middle",
+            resource_type="media_download",
+            resource_id=None,
+            title="Middle",
+            targets=[],
+        )
+        root = create_operation(
+            session,
+            kind="root",
+            resource_type="media_download",
+            resource_id=None,
+            title="Root",
+            targets=[],
+        )
+        add_operation_dependencies(
+            session,
+            middle.id,
+            [OperationDependencySpec(leaf.id)],
+        )
+        add_operation_dependencies(
+            session,
+            root.id,
+            [OperationDependencySpec(middle.id)],
+        )
+
+        leaf.status = OperationStatus.RUNNING.value
+        leaf.completion_progress = 63
+        session.flush()
+        refresh_operation(session, leaf.id)
+
+        assert middle.completion_progress == 63
+        assert root.completion_progress == 63
+        assert middle.status == OperationStatus.RUNNING.value
+        assert root.status == OperationStatus.RUNNING.value
+    finally:
+        session.close()
+
+
+def test_operation_dependency_cycles_are_rejected():
+    import pytest
+
+    from task_manager.scheduler.operations import (
+        OperationDependencySpec,
+        add_operation_dependencies,
+        create_operation,
+    )
+
+    session = _session()
+    try:
+        first = create_operation(
+            session,
+            kind="first",
+            resource_type="show",
+            resource_id=1,
+            title="First",
+            targets=[],
+        )
+        second = create_operation(
+            session,
+            kind="second",
+            resource_type="show",
+            resource_id=2,
+            title="Second",
+            targets=[],
+        )
+        add_operation_dependencies(
+            session,
+            first.id,
+            [OperationDependencySpec(second.id)],
+        )
+
+        with pytest.raises(ValueError, match="acyclic"):
+            add_operation_dependencies(
+                session,
+                second.id,
+                [OperationDependencySpec(first.id)],
+            )
     finally:
         session.close()

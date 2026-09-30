@@ -69,6 +69,31 @@ class DownloadSnapshot:
     warnings: tuple[str, ...]
 
 
+def download_completion_fraction(snapshot: DownloadSnapshot) -> float:
+    """Return estimated whole-attempt work completion for orchestration.
+
+    This is deliberately separate from the user-facing media-transfer
+    percentage. Stage weights describe units of work, not elapsed-time
+    prediction, and terminal boundaries are the only source of completion for
+    unmeasurable stages.
+    """
+    total = 0.0
+    done = 0.0
+    for stage in snapshot.stages:
+        weight = max(0.0, float(stage.weight))
+        total += weight
+        if stage.state in ("completed", "skipped"):
+            fraction = 1.0
+        elif stage.state in ("running", "waiting") and stage.fraction is not None:
+            fraction = max(0.0, min(1.0, float(stage.fraction)))
+        else:
+            fraction = 0.0
+        done += weight * fraction
+    if total <= 0:
+        return 0.0
+    return max(0.0, min(1.0, done / total))
+
+
 class DownloadTracker:
     """Report a coalesced snapshot; concurrent assets never replace the main activity.
 

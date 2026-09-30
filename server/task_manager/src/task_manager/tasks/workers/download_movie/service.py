@@ -6,6 +6,13 @@ from task_manager.tasks.download_adapter import run_download
 
 
 async def run_download_movie(
-    session: Session, *, media_download_id: int, is_redownload: bool = False, progress=None,
+    session: Session, *, media_download_id: int, is_redownload: bool = False,
+    prepare_existing_artifact: bool = False, progress=None,
 ) -> TaskResult:
-    return run_download(session, media_download_id=media_download_id, is_redownload=is_redownload, progress=progress)
+    return run_download(
+        session,
+        media_download_id=media_download_id,
+        is_redownload=is_redownload,
+        prepare_existing_artifact=prepare_existing_artifact,
+        progress=progress,
+    )

@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import asyncio
 from types import SimpleNamespace
 
 import pytest
 
 
-def test_bulk_retry_media_download_operation_uses_one_coordinator_target():
+def test_bulk_retry_media_download_operation_is_dependency_only():
     from backend.api.endpoints.media_downloads.operations import BulkRetryMediaDownloadsOperation
 
     definition = BulkRetryMediaDownloadsOperation([8, 3, 8])
-    targets = definition.targets()
 
     assert definition.kind == "media_download.bulk_retry"
     assert definition.resource_type == "media_download"
@@ -18,16 +16,7 @@ def test_bulk_retry_media_download_operation_uses_one_coordinator_target():
     assert definition.title == "Downloads"
     assert definition.context() == {"downloads_requested": 2}
     assert definition.media_download_ids == (8, 3)
-
-    assert len(targets) == 1
-    assert targets[0].task_key == "media_download_bulk_action_worker"
-    assert targets[0].resource_type == "media_download"
-    assert targets[0].resource_id is None
-    assert targets[0].slot_key == "bulk_retry"
-    assert targets[0].task_kwargs == {
-        "media_download_ids": [8, 3],
-        "action": "retry_bulk",
-    }
+    assert definition.targets() == ()
 
 
 def test_bulk_cancel_media_download_operation_keeps_per_download_targets():
@@ -50,60 +39,6 @@ def test_bulk_cancel_media_download_operation_keeps_per_download_targets():
     ]
 
 
-def test_bulk_retry_worker_waits_for_child_download_completion(monkeypatch):
-    from task_manager.tasks import download_batch
-
-    targets = [
-        download_batch.BatchTarget(1, 8, "Extra", 10, "operation-8", True, True, None),
-        download_batch.BatchTarget(2, 3, "Movie", 90, "operation-3", True, True, None),
-    ]
-    polls = []
-    progress_updates: list[tuple[int, str | None]] = []
-    monkeypatch.setattr(download_batch, "create_batch_manifest", lambda *args, **kwargs: targets)
-
-    def snapshots(_targets):
-        polls.append(True)
-        return {
-            "operation-8": SimpleNamespace(status="SUCCEEDED", progress_meta=None),
-            "operation-3": SimpleNamespace(
-                status="RUNNING" if len(polls) == 1 else "SUCCEEDED",
-                progress_meta=None,
-            ),
-        }
-
-    monkeypatch.setattr(download_batch, "_snapshots", snapshots)
-
-    async def no_sleep(_seconds: float) -> None:
-        return None
-
-    monkeypatch.setattr(download_batch.asyncio, "sleep", no_sleep)
-
-    class Progress:
-        run_id = 1
-
-        def __call__(self) -> bool:
-            return False
-
-        def set(self, percent: int, message: str | None = None, *, meta=None) -> None:
-            progress_updates.append((percent, message))
-
-    result = asyncio.run(download_batch.run_download_batch([8, 3], progress=Progress()))
-
-    assert len(polls) == 2
-    # Captured size weights belong to the durable manifest, not the UI percent.
-    assert progress_updates[0][0] == 10
-    # The executor publishes terminal 100% after the coordinator returns success.
-    assert progress_updates[-1][0] == 99
-    assert result.outcome == "succeeded"
-    assert result.data == {
-        "downloads_requested": 2,
-        "downloads_completed": 2,
-        "downloads_failed": 0,
-        "downloads_canceled": 0,
-        "errors": [],
-    }
-
-
 @pytest.mark.parametrize(
     ("kind", "operation_type"),
     [
@@ -111,9 +46,14 @@ def test_bulk_retry_worker_waits_for_child_download_completion(monkeypatch):
         ("movie.redownload_media", "movie"),
     ],
 )
-def test_scoped_redownload_operations_use_bulk_retry_coordinator(kind: str, operation_type: str):
+def test_scoped_redownload_operations_have_no_coordinator_target(
+    kind: str,
+    operation_type: str,
+):
     if operation_type == "local_media_profile":
-        from backend.api.endpoints.local_media_profiles.operations import LocalMediaProfileRedownloadOperation
+        from backend.api.endpoints.local_media_profiles.operations import (
+            LocalMediaProfileRedownloadOperation,
+        )
 
         resource = SimpleNamespace(id=11, slug="profile", name="Profile")
         definition = LocalMediaProfileRedownloadOperation(
@@ -130,12 +70,9 @@ def test_scoped_redownload_operations_use_bulk_retry_coordinator(kind: str, oper
         )
 
     assert definition.kind == kind
-    targets = definition.targets()
-    assert len(targets) == 1
-    assert targets[0].task_kwargs == {
-        "media_download_ids": [4, 5],
-        "action": "retry_bulk",
-    }
+    assert definition.media_download_ids == (4, 5)
+    assert definition.targets() == ()
+    assert definition.context()["downloads_requested"] == 2
 
 
 def test_weighted_progress_uses_average_known_size_for_unknown_items():

@@ -4,8 +4,9 @@
 
 - A **TaskRun** is one execution attempt of one registered worker.
 - A **TaskOperation** is one durable high-level unit of work, such as a user action or a system-created download.
-- A **TaskOperationTarget** describes a logical worker result required to satisfy an operation.
+- A **TaskOperationTarget** describes worker work owned directly by an operation.
 - **TaskOperationRun** links a logical target to the concrete TaskRun(s) that can satisfy it.
+- A **TaskOperationDependency** links a parent operation to another independently meaningful TaskOperation. The child keeps its own resource identity, progress, controls and history while also contributing to the parent.
 
 Keeping those concepts separate is what allows one UI action to fan out over many workers, one already-running automatic worker to satisfy a UI action, and retries/recovery to remain implementation details rather than UI concerns.
 
@@ -76,6 +77,8 @@ When none of an operation's active workers reports granular progress, `TaskOpera
 
 Operation targets and their run associations are loaded through SQLAlchemy relationships with eager loading when aggregate state is calculated. Aggregate progress must remain a bounded-query operation as target counts grow; do not reintroduce per-target TaskRun queries.
 
+A TaskOperation also stores `completion_progress`. For most workers this follows ordinary worker progress. A worker whose user-facing percentage intentionally describes only part of the lifecycle can report a separate completion percentage through `ProgressUpdater.set(..., completion_percent=...)`. Media downloads use this split: their ordinary progress remains the primary network-media transfer, while their completion progress accounts for the planned preparation, transfer and post-processing stages. Composite parents aggregate the latter and never need to understand downloader-specific stage metadata.
+
 There must not be a worker-specific frontend polling loop for progress.
 
 ## Coalescing
@@ -92,11 +95,13 @@ A target can be associated with multiple equivalent runs. Once any linked run su
 
 Target inputs should contain every value that changes the semantics of the requested work. For example, an explicit metadata refresh includes `scheduled_offset_seconds=None`, so it cannot be confused with a timed post-publication check.
 
-## Child work and events
+## Child work, operation dependencies and events
 
 Operation IDs are held in an internal execution `ContextVar`. `trigger_now()` inherits that context automatically. The domain-event executor also copies Python context variables into its worker thread, so a task started by an event emitted from another task retains the operation context without putting an ID in the event payload.
 
-A child task only becomes part of completion accounting when the operation has a matching logical target. A master worker can alternatively aggregate its child work itself and expose one target, as the show re-download worker does.
+A child TaskRun becomes part of direct completion accounting only when the operation has a matching logical target. When the child work is itself an independently meaningful operation, use `TaskOperationDependency` instead of hiding that work under a coordinator worker. This is how bulk re-downloads work: every `media.download` child stays visible on its episode/movie/download surfaces, while a show/movie/profile/bulk parent observes the same child through a durable dependency.
+
+Dependencies form a DAG. The scheduler rejects cycles and propagates child refreshes transitively to parents. A dependency freezes its aggregate `weight`, whether it is `required`, and its cancellation policy. `detach` leaves the child alone when the parent is canceled; `cancel_if_exclusive` cancels the child only when no other active parent still depends on it.
 
 ## Resource ownership and deletion
 
@@ -114,9 +119,9 @@ Logical targets are durable. APScheduler's jobs are process-local, so on backend
 
 Some task types use a constrained operation queue. Media downloads, for example, reserve a `SCHEDULED` TaskRun before dispatch so the configured download concurrency limit cannot be exceeded merely because APScheduler has not started the job yet. Such targets register a recovery dispatcher: generic recovery restores the operation to `QUEUED`, then the dispatcher refills only the available slots instead of bypassing the queue policy.
 
-A user-requested operation restart uses the same durable targets. Targets already satisfied by a successful TaskRun remain satisfied; only unfinished targets are detached and requeued. Queue-managed tasks are returned through their registered dispatcher rather than being triggered directly. This means restarting a large fan-out action does not repeat completed work or bypass a task-specific concurrency lane.
+A user-requested direct-operation restart uses the same durable targets. Targets already satisfied by a successful TaskRun remain satisfied; only unfinished targets are detached and requeued. Queue-managed tasks are returned through their registered dispatcher rather than being triggered directly. A composite operation with TaskOperationDependencies is not restarted in place: an explicit retry creates a new parent operation, which may reuse independently active children where appropriate. This keeps the original dependency graph as durable history and removes the need for coordinator generations.
 
-Cancellation immediately marks the TaskOperation canceled and removes exclusively owned queued/retry jobs. APScheduler cannot safely terminate an arbitrary Python function that is already executing in a worker thread, so running work is canceled cooperatively: `ProgressUpdater.set()` is a cancellation checkpoint, long-running download helpers use the same updater as a cancellation callback, and the executor checks again before accepting a worker result or scheduling a retry. A TaskRun that is still needed by another active TaskOperation is not canceled.
+Cancellation immediately marks the parent TaskOperation canceled and removes exclusively owned queued/retry jobs. Direct TaskRuns still needed by another active TaskOperation are left running. Dependency children follow their persisted cancellation policy; a `cancel_if_exclusive` child is canceled only when no other active parent requires it. APScheduler cannot safely terminate an arbitrary Python function that is already executing in a worker thread, so running work is canceled cooperatively: `ProgressUpdater.set()` is a cancellation checkpoint, long-running download helpers use the same updater as a cancellation callback, and the executor checks again before accepting a worker result or scheduling a retry. A TaskRun that is still needed by another active TaskOperation is not canceled.
 
 This is why recovery and control state must live in scheduler infrastructure rather than in React state or worker-specific request IDs.
 

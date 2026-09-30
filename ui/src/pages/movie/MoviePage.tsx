@@ -368,19 +368,23 @@ export default function MoviePage() {
         }
     }
 
-    const operationControls = (operationId: string | undefined, label: string) => {
+    const operationControls = (
+        operationId: string | undefined,
+        label: string,
+        restartable = true,
+    ) => {
         if (!operationId) return undefined
         const controlsBusy = operationControlBusy !== null
         return [
-            {
+            ...(restartable ? [{
                 label: `Restart ${label}`,
-                icon: ['fas', 'rotate-right'],
+                icon: ['fas', 'rotate-right'] as const,
                 disabled: controlsBusy,
                 onSelect: () => void controlTaskOperation(operationId, 'restart', label),
-            },
+            }] : []),
             {
                 label: `Cancel ${label}`,
-                icon: ['fas', 'xmark'],
+                icon: ['fas', 'xmark'] as const,
                 tone: 'danger' as const,
                 disabled: controlsBusy,
                 onSelect: () => void controlTaskOperation(operationId, 'cancel', label),
@@ -512,7 +516,7 @@ export default function MoviePage() {
                                         ? 'This movie has no previously downloaded media.'
                                         : undefined,
                                 operation: redownloadOperation,
-                                controls: operationControls(redownloadOperation?.id, 're-download'),
+                                controls: operationControls(redownloadOperation?.id, 're-download', false),
                                 onSelect: () => setRedownloadConfirm(true),
                             },
                         ]}

@@ -25,11 +25,18 @@ from dailywire_api.pacing import RequestCancelled, request_context
 from dailywire_downloader import DownloadCancelled
 from dailywire_downloader.capacity import resources
 from dailywire_downloader.coordinator import execute_download_plan
-from dailywire_downloader.lifecycle import DownloadSnapshot, DownloadTracker
+from dailywire_downloader.lifecycle import (
+    DownloadSnapshot,
+    DownloadTracker,
+    download_completion_fraction,
+)
 from dailywire_downloader.transfer_context import transfer_context
 from task_manager.scheduler.operation_context import current_operation_ids
 from task_manager.scheduler.results import TaskResult
-from task_manager.tasks.media_download_operations import on_media_download_transfer_complete
+from task_manager.tasks.media_download_operations import (
+    on_media_download_transfer_complete,
+    prepare_media_download_artifact,
+)
 
 
 class DownloadProgressReporter:
@@ -55,13 +62,20 @@ class DownloadProgressReporter:
             wait["message"] = request_wait_message(wait["reason"])
             message = wait["message"]
         metadata = {"download": asdict(snapshot), "selected_format": self.selected_format}
+        completion_percent = min(99, int(100 * download_completion_fraction(snapshot)))
         # The real executor supports atomic state+wait checkpoints. CLI sinks
         # report the same structured facts without owning a scheduler wait state.
         from task_manager.scheduler.executor import ProgressUpdater
         if isinstance(self.progress, ProgressUpdater):
             from task_manager.scheduler.executor import TaskCancellationRequested
             try:
-                self.progress.set(percent, message, meta=metadata, wait_state=wait)
+                self.progress.set(
+                    percent,
+                    message,
+                    meta=metadata,
+                    completion_percent=completion_percent,
+                    wait_state=wait,
+                )
             except TaskCancellationRequested as exc:
                 raise DownloadCancelled(str(exc)) from exc
         else:
@@ -69,7 +83,8 @@ class DownloadProgressReporter:
 
 
 def run_download(
-    session: Session, *, media_download_id: int, is_redownload: bool = False, progress=None,
+    session: Session, *, media_download_id: int, is_redownload: bool = False,
+    prepare_existing_artifact: bool = False, progress=None,
 ) -> TaskResult:
     download = session.get(MediaDownloadBase, media_download_id)
     if download is None:
@@ -94,6 +109,16 @@ def run_download(
     resources.media.configure(get_settings().download_settings.max_concurrent_downloads)
     try:
         with tracker:
+            if prepare_existing_artifact:
+                tracker.ensure_active()
+                tracker.preparing("prepare_existing_artifact")
+                current = session.get(MediaDownloadBase, media_download_id)
+                if current is None:
+                    raise DownloadCancelled("Media download was deleted before replacement preparation")
+                prepare_media_download_artifact(session, current)
+                session.commit()
+                session.expire_all()
+
             def waiting(event):
                 tracker.wait("prepare", event.reason if event else None, event.until if event else None)
             with request_context(observer=waiting, should_cancel=tracker.is_canceled), transfer_context(tracker.is_canceled, waiting):

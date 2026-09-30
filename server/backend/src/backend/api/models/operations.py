@@ -77,6 +77,7 @@ class TaskOperationRead(ResponseBase):
     title: str
     status: str
     progress: Optional[int]
+    completion_progress: Optional[int]
     progress_current: int
     progress_total: int
     message: Optional[str]

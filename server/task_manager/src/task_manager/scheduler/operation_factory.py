@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from task_manager.scheduler.db import TaskOperation
 from task_manager.scheduler.operations import (
+    OperationDependencySpec,
     OperationTargetSpec,
     create_operation as create_task_operation,
 )
@@ -59,6 +60,9 @@ class OperationDefinition(Generic[ResourceT]):
             ),
         )
 
+    def dependencies(self) -> tuple[OperationDependencySpec, ...]:
+        return ()
+
     def context(self) -> dict[str, Any]:
         return {}
 
@@ -79,6 +83,7 @@ class OperationFactory:
             resource_id=definition.resource_id,
             title=definition.title,
             targets=tuple(definition.targets()),
+            dependencies=tuple(definition.dependencies()),
             context=definition.context(),
         )
 

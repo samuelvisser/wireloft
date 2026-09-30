@@ -31,6 +31,7 @@ async def download_episode(
         *,
         resource_id: Optional[int] = None,
         is_redownload: bool = False,
+        prepare_existing_artifact: bool = False,
         progress=None,
 ):
     """Execute one MediaDownload artifact attempt.
@@ -57,7 +58,9 @@ async def download_episode(
                         with db_session() as session:
                             result = await run_download_episode(
                                 session, media_download_id=resource_id,
-                                is_redownload=is_redownload, progress=progress,
+                                is_redownload=is_redownload,
+                                prepare_existing_artifact=prepare_existing_artifact,
+                                progress=progress,
                             )
                             request_show_asset_reconciliation(session, pair[0])
                             session.commit()
@@ -65,7 +68,9 @@ async def download_episode(
                 with db_session() as session:
                     return await run_download_episode(
                         session, media_download_id=resource_id,
-                        is_redownload=is_redownload, progress=progress,
+                        is_redownload=is_redownload,
+                        prepare_existing_artifact=prepare_existing_artifact,
+                        progress=progress,
                     )
     except CustomIndexNotReadyError as exc:
         request_missing_index_repair(exc)

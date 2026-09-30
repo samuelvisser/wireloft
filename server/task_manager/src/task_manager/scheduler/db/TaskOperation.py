@@ -10,6 +10,7 @@ from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 
 if TYPE_CHECKING:
+    from .TaskOperationDependency import TaskOperationDependency
     from .TaskOperationRun import TaskOperationRun
     from .TaskOperationTarget import TaskOperationTarget
 
@@ -18,7 +19,9 @@ class TaskOperation(Base):
     """A TaskOperation represents the user's high-level intent rather than an individual worker execution.
 
     It is usually triggered by a user action and is used to track task progress and its result when done.
-    A TaskOperation can be connected to multiple TaskOperationTarget objects that represent logical units of work.
+    TaskOperationTarget objects represent work owned directly by this operation.
+    TaskOperationDependency objects represent independently meaningful child operations
+    whose lifecycle remains visible and controllable in its own right.
     """
 
     __tablename__ = "task_operations"
@@ -32,6 +35,7 @@ class TaskOperation(Base):
 
     status: Mapped[str] = mapped_column(String(24), index=True)
     progress: Mapped[Optional[int]] = mapped_column(Integer)
+    completion_progress: Mapped[Optional[int]] = mapped_column(Integer, default=0, server_default="0")
     message: Mapped[Optional[str]] = mapped_column(Text)
     result: Mapped[Optional[dict]] = mapped_column(JSON)
     context: Mapped[Optional[dict]] = mapped_column(JSON)
@@ -58,6 +62,18 @@ class TaskOperation(Base):
         back_populates="operation",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+    dependencies: Mapped[list["TaskOperationDependency"]] = relationship(
+        back_populates="parent_operation",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        foreign_keys="TaskOperationDependency.parent_operation_id",
+        order_by="TaskOperationDependency.id",
+    )
+    dependents: Mapped[list["TaskOperationDependency"]] = relationship(
+        back_populates="child_operation",
+        passive_deletes=True,
+        foreign_keys="TaskOperationDependency.child_operation_id",
     )
 
     def __repr__(self) -> str:

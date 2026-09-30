@@ -25,13 +25,21 @@ from task_manager.scheduler.operation_control import (
     restart_operation as restart_task_operation,
 )
 from task_manager.scheduler.operations import (
+    OperationDependencySpec,
     OperationTargetSpec,
+    add_operation_dependencies,
     create_operation,
     link_run_to_operations,
     operation_target_needs_dispatch,
 )
 from task_manager.scheduler.transactional import queue_task_after_commit
-from task_manager.scheduler.types import OperationSource, OperationStatus, ResourceType, TaskStatus
+from task_manager.scheduler.types import (
+    OperationDependencyCancelPolicy,
+    OperationSource,
+    OperationStatus,
+    ResourceType,
+    TaskStatus,
+)
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
@@ -97,7 +105,12 @@ def _task_key(download: MediaDownloadBase) -> str:
     return "download_episode"
 
 
-def _operation_context(download: MediaDownloadBase, *, is_redownload: bool) -> dict:
+def _operation_context(
+    download: MediaDownloadBase,
+    *,
+    is_redownload: bool,
+    prepare_existing_artifact: bool,
+) -> dict:
     media = download.media
     episode = media if isinstance(media, Episode) else None
     movie_extra = media if isinstance(media, MovieExtra) else None
@@ -126,6 +139,7 @@ def _operation_context(download: MediaDownloadBase, *, is_redownload: bool) -> d
         "movie_title": movie.title if movie else None,
         "movie_extra_type": movie_extra.movie_extra_type if movie_extra else None,
         "is_redownload": bool(is_redownload),
+        "prepare_existing_artifact": bool(prepare_existing_artifact),
     }
 
 
@@ -198,6 +212,7 @@ def create_media_download_operation(
     *,
     source: str = OperationSource.SYSTEM.value,
     is_redownload: bool = False,
+    prepare_existing_artifact: bool | None = None,
 ) -> TaskOperation:
     """Create the canonical execution operation for one MediaDownload attempt.
 
@@ -215,11 +230,19 @@ def create_media_download_operation(
             _prioritize_queued_operation(session, existing)
         return existing
 
+    should_prepare_existing = (
+        bool(is_redownload)
+        if prepare_existing_artifact is None
+        else bool(prepare_existing_artifact)
+    )
     target = OperationTargetSpec(
         task_key=_task_key(download),
         resource_type="media_download",
         resource_id=download.id,
-        task_kwargs={"is_redownload": bool(is_redownload)},
+        task_kwargs={
+            "is_redownload": bool(is_redownload),
+            "prepare_existing_artifact": should_prepare_existing,
+        },
         slot_key=f"media-download:{download.id}",
         # This target belongs to a constrained operation queue. Generic recovery
         # restores it to QUEUED but does not bypass maxConcurrentDownloads by
@@ -235,7 +258,11 @@ def create_media_download_operation(
         resource_id=download.id,
         title=getattr(download.media, "title", None) or f"Media download {download.id}",
         targets=[target],
-        context=_operation_context(download, is_redownload=is_redownload),
+        context=_operation_context(
+            download,
+            is_redownload=is_redownload,
+            prepare_existing_artifact=should_prepare_existing,
+        ),
     )
     record_media_download_history(
         session,
@@ -254,6 +281,92 @@ def create_media_download_operation(
         _prioritize_queued_operation(session, operation)
     session.flush()
     return operation
+
+
+def attach_redownload_dependencies(
+        session: Session,
+        parent_operation: TaskOperation,
+        downloads: list[MediaDownloadBase] | tuple[MediaDownloadBase, ...],
+) -> tuple[TaskOperation, ...]:
+    """Attach one independently visible media.download operation per artifact.
+
+    Captured byte weights are frozen before any child begins destructive
+    preparation. Existing active downloads are observed without ownership;
+    newly created children may be canceled with the parent while exclusive.
+    """
+    unique_downloads = list({download.id: download for download in downloads}.values())
+    if not unique_downloads:
+        return ()
+
+    sizes = {
+        download.id: next(
+            (
+                int(size)
+                for size in (download.downloaded_bytes, download.artifact_size_bytes)
+                if size is not None and size > 0
+            ),
+            None,
+        )
+        for download in unique_downloads
+    }
+    known_sizes = [size for size in sizes.values() if size is not None]
+    fallback_size = max(1, sum(known_sizes) // len(known_sizes)) if known_sizes else 1
+
+    children: list[TaskOperation] = []
+    dependency_specs: list[OperationDependencySpec] = []
+    for download in unique_downloads:
+        active = get_active_media_download_operation(session, download.id)
+        if active is not None:
+            child = active
+            cancel_policy = OperationDependencyCancelPolicy.DETACH.value
+        else:
+            is_redownload = (
+                download.downloaded_at is not None
+                or download.artifact_status in {
+                    MediaDownloadArtifactStatus.AVAILABLE.value,
+                    MediaDownloadArtifactStatus.MISSING.value,
+                    MediaDownloadArtifactStatus.CORRUPTED.value,
+                }
+            )
+            record_media_download_history(
+                session,
+                download.id,
+                MediaDownloadHistoryAction.RETRY_REQUESTED,
+                metadata={
+                    "source": OperationSource.SYSTEM.value,
+                    "parent_operation_id": parent_operation.id,
+                },
+            )
+            child = create_media_download_operation(
+                session,
+                download,
+                source=OperationSource.SYSTEM.value,
+                is_redownload=is_redownload,
+                prepare_existing_artifact=True,
+            )
+            cancel_policy = OperationDependencyCancelPolicy.CANCEL_IF_EXCLUSIVE.value
+
+        weight = sizes.get(download.id) or fallback_size
+        dependency_specs.append(OperationDependencySpec(
+            child_operation_id=child.id,
+            slot_key=f"media_download:{download.id}",
+            weight=float(weight),
+            required=True,
+            cancel_policy=cancel_policy,
+            context={
+                "media_download_id": download.id,
+                "captured_size_bytes": int(weight),
+            },
+        ))
+        children.append(child)
+
+    add_operation_dependencies(
+        session,
+        parent_operation.id,
+        dependency_specs,
+    )
+    dispatch_queued_media_download_operations(session)
+    return tuple(children)
 
 
 def _get_media_download_operation(

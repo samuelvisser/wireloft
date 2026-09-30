@@ -38,3 +38,8 @@ class ResourceType(str, Enum):
     DOWNLOAD_PROFILE = "download_profile"
     DOWNLOAD_PROFILE_SERIES = "download_profile_series"
     LOCAL_MEDIA_PROFILE = "local_media_profile"
+
+
+class OperationDependencyCancelPolicy(str, Enum):
+    DETACH = "detach"
+    CANCEL_IF_EXCLUSIVE = "cancel_if_exclusive"

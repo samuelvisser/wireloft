@@ -24,6 +24,7 @@ from .operation_control import (
     run_cancel_requested,
 )
 from .operations import (
+    TASK_RUN_COMPLETION_PROGRESS_META_KEY,
     TASK_RUN_PROGRESS_META_KEY,
     TASK_RUN_WAIT_STATE_META_KEY,
     link_run_to_operations,
@@ -136,9 +137,15 @@ class ProgressUpdater:
             percent: int,
             message: Optional[str] = None,
             meta: Optional[dict[str, Any]] = None,
-            *, wait_state: dict[str, Any] | None | object = _WAIT_UNCHANGED,
+            *, completion_percent: int | None = None,
+            wait_state: dict[str, Any] | None | object = _WAIT_UNCHANGED,
     ) -> None:
         p = max(0, min(100, int(percent)))
+        completion = (
+            None
+            if completion_percent is None
+            else max(0, min(100, int(completion_percent)))
+        )
 
         # Progress writes deliberately use their own short-lived Session. The
         # executor does not hold a connection while worker code is running, so a
@@ -180,17 +187,23 @@ class ProgressUpdater:
                     if message is not None:
                         values["message"] = message
 
-                    if meta is not None or wait_state is not _WAIT_UNCHANGED:
+                    if (
+                        meta is not None
+                        or completion is not None
+                        or wait_state is not _WAIT_UNCHANGED
+                    ):
                         merged_meta = dict(current_meta or {})
-                        current_progress_meta = merged_meta.get(TASK_RUN_PROGRESS_META_KEY)
-                        merged_progress_meta = (
-                            dict(current_progress_meta)
-                            if isinstance(current_progress_meta, dict)
-                            else {}
-                        )
                         if meta is not None:
+                            current_progress_meta = merged_meta.get(TASK_RUN_PROGRESS_META_KEY)
+                            merged_progress_meta = (
+                                dict(current_progress_meta)
+                                if isinstance(current_progress_meta, dict)
+                                else {}
+                            )
                             merged_progress_meta.update(meta)
-                        merged_meta[TASK_RUN_PROGRESS_META_KEY] = merged_progress_meta
+                            merged_meta[TASK_RUN_PROGRESS_META_KEY] = merged_progress_meta
+                        if completion is not None:
+                            merged_meta[TASK_RUN_COMPLETION_PROGRESS_META_KEY] = completion
                         if wait_state is not _WAIT_UNCHANGED:
                             if wait_state is None:
                                 merged_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
