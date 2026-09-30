@@ -2,6 +2,7 @@ import type {MediaDownloadDomainViewRead} from '../types/schemas/media_download'
 import type {TaskOperationRead} from '../types/schemas/operation'
 import type {DownloadPresentation, ProgressPresentation} from '../types/progress'
 import {DownloadExecutionSchema, type DownloadExecution, type DownloadStage} from '../types/schemas/download_execution'
+import {formatBytes} from '../utils/formatting'
 
 export const ACTIVE_OPERATION_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
 
@@ -80,7 +81,16 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
         const secondary = execution?.stages.filter(stage => stage.id !== main?.id && ['running', 'waiting'].includes(stage.state))
             .map(stage => stage.wait ? `${activityLabel(stage)}: waiting` : activityLabel(stage)).join(' / ')
         if (execution?.phase === 'transferring' && main?.id === 'media') {
-            const basis = media?.segments_total ? `${media.segments_done || 0}/${media.segments_total} media segments` : media?.total_bytes ? `${media.bytes_received.toLocaleString()}/${media.total_bytes.toLocaleString()} bytes` : `${media?.bytes_received?.toLocaleString() || '0'} bytes received; total size unknown`
+            const audioOnly = download?.preferredFormat === 'format_audio_only'
+            const basis = media?.segments_total
+                ? `${media.segments_done || 0}/${media.segments_total} media segments`
+                : media?.total_bytes
+                    ? audioOnly
+                        ? `${formatBytes(media.bytes_received)} / ${formatBytes(media.total_bytes)} downloaded`
+                        : `${media.bytes_received.toLocaleString()}/${media.total_bytes.toLocaleString()} bytes`
+                    : audioOnly
+                        ? `${formatBytes(media?.bytes_received ?? 0)} downloaded; total size unknown`
+                        : `${media?.bytes_received?.toLocaleString() || '0'} bytes received; total size unknown`
             if (transferPercent !== null) return {status: 'downloading', mode: 'determinate', active: true, percent: transferPercent,
                 label: `${transferPercent}%`, detail: `Primary media transfer: ${basis}.`, icon: ['fas', 'download'], secondary,
                 canCancel: true, canRetry: true}

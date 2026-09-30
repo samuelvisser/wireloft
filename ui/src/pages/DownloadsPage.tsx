@@ -17,6 +17,7 @@ import {useControlOperation, useStartOperation} from '../lib/operations'
 import {useMediaDownloadsView} from '../lib/queries'
 import {MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
+import {formatBytes} from '../utils/formatting'
 import {getErrorMessageFromResponse} from '../utils/helpers'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
 import './DownloadsPage.css'
@@ -88,13 +89,6 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
-
-function formatBytes(n: number | null | undefined) {
-    if (!n && n !== 0) return '—'
-    if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GiB`
-    if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MiB`
-    return `${Math.round(n / 1024)} KiB`
-}
 
 function StatusCell({row}: {row: MediaDownloadViewRead}) {
     return <DownloadProgressStatus download={row} compact/>
@@ -347,7 +341,7 @@ export default function DownloadsPage() {
         },
         {
             header: 'Size',
-            accessor: (row) => formatBytes(row.downloadedBytes),
+            accessor: (row) => formatBytes(row.downloadedBytes) || '—',
             align: 'right',
             dataLabel: 'Size',
             sortAccessor: (row) => row.downloadedBytes,

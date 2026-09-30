@@ -33,6 +33,22 @@ test('individual percentage describes the network only',()=>{
     const view=presentDownloadProgress(undefined,active())
     assert.equal(view.percent,42);assert.equal(view.label,'42%')
 })
+test('audio transfer detail uses human-readable downloaded and total sizes',()=>{
+    const snapshot=execution()
+    Object.assign(snapshot.stages[0], {
+        bytes_received: Math.round(50.5 * 1024 ** 2),
+        total_bytes: Math.round(67.8 * 1024 ** 2),
+    })
+    const view=presentDownloadProgress(
+        {preferredFormat:'format_audio_only'} as any,
+        operation({progressMeta:{download:snapshot}}),
+    )
+    assert.equal(view.detail,'Primary media transfer: 50.5 MiB / 67.8 MiB downloaded.')
+})
+test('non-audio direct transfer detail keeps the byte-count wording',()=>{
+    const view=presentDownloadProgress(undefined,active())
+    assert.equal(view.detail,'Primary media transfer: 42/100 bytes.')
+})
 test('unknown transfer size is indeterminate',()=>assert.equal(presentDownloadProgress(undefined,active('transferring','media',null)).mode,'indeterminate'))
 test('global cooldown is not flattened into 0%',()=>{
     const view=presentDownloadProgress(undefined,operation({status:'WAITING',progressMeta:{wait_state:{reason:'daily_wire_request_cooldown'}}}))
