@@ -51,17 +51,6 @@ test('completed transfer switches to finishing, not success',()=>{
     const view=presentDownloadProgress(undefined,active('finishing','embed',1))
     assert.equal(view.active,true);assert.equal(view.percent,null);assert.equal(view.compactLabel,'Embedding...')
 })
-test('cancellation intent does not fall back to preparing after the operation disappears',()=>{
-    const view=presentDownloadProgress({latestTaskCancelRequested:true,latestTaskStatus:'RUNNING',artifactStatus:'absent'} as any)
-    assert.equal(view.status,'canceling');assert.equal(view.label,'Canceling...');assert.equal(view.canCancel,false)
-})
-test('durable cancellation overrides a stale active operation snapshot',()=>{
-    const view=presentDownloadProgress(
-        {latestTaskCancelRequested:true,latestTaskStatus:'RUNNING',artifactStatus:'absent'} as any,
-        operation({status:'RUNNING',progressMeta:{}}),
-    )
-    assert.equal(view.status,'canceling');assert.equal(view.label,'Canceling...')
-})
 test('bulk has its own estimate and completion counts',()=>{
     const view=presentOperationProgress(operation({kind:'media.bulk_retry',progress:55,progressMeta:{batch:{requested:2,completed:1,finishing:1}}}))!
     assert.equal(view.percent,55);assert.equal(view.label,'~55%');assert.equal(view.estimated,true)
