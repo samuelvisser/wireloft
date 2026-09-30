@@ -51,6 +51,10 @@ test('completed transfer switches to finishing, not success',()=>{
     const view=presentDownloadProgress(undefined,active('finishing','embed',1))
     assert.equal(view.active,true);assert.equal(view.percent,null);assert.equal(view.compactLabel,'Embedding...')
 })
+test('cancellation intent does not fall back to preparing after the operation disappears',()=>{
+    const view=presentDownloadProgress({automaticRetrySuppressed:true,latestTaskStatus:'RUNNING',artifactStatus:'absent'} as any)
+    assert.equal(view.status,'canceling');assert.equal(view.label,'Canceling...');assert.equal(view.canCancel,false)
+})
 test('bulk has its own estimate and completion counts',()=>{
     const view=presentOperationProgress(operation({kind:'media.bulk_retry',progress:55,progressMeta:{batch:{requested:2,completed:1,finishing:1}}}))!
     assert.equal(view.percent,55);assert.equal(view.label,'~55%');assert.equal(view.estimated,true)
@@ -79,4 +83,18 @@ test('all three layouts render the same activity',()=>{
     const menu=renderToStaticMarkup(<DownloadProgressActionItem presentation={presentation}/>)
     assert.match(button,/Embedding\.\.\./);assert.match(menu,/Embedding\.\.\./);assert.match(standalone,/Embedding artwork and metadata/)
     assert.doesNotMatch(button,/aria-valuenow/);assert.doesNotMatch(standalone,/aria-valuenow/)
+})
+test('download progress button can name the completed artifact',()=>{
+    const presentation=presentDownloadProgress({artifactStatus:'available'} as any)
+    const download={id:1,presentation} as any
+    const client=new QueryClient()
+    const markup=renderToStaticMarkup(
+        <QueryClientProvider client={client}>
+            <FrontendPuller>
+                <DownloadProgressButton download={download} downloadedLabel="Trailer downloaded" onStart={()=>{}}/>
+            </FrontendPuller>
+        </QueryClientProvider>,
+    )
+    assert.match(markup,/Trailer downloaded/)
+    assert.doesNotMatch(markup,/>Downloaded</)
 })

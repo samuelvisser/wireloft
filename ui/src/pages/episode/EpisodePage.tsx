@@ -79,6 +79,13 @@ function ProfileDownloadRow({
             'Could not retry the download',
         )
 
+    const cancelDownload = () =>
+        request(
+            `${(window as any).appConfig.API_URL}/media-downloads/${download!.id}/cancel`,
+            {method: 'POST'},
+            'Could not cancel the download',
+        )
+
     const showDownloadButton = !download
         || (!download.presentation.active && download.presentation.status === 'not_downloaded')
 
@@ -104,6 +111,18 @@ function ProfileDownloadRow({
             </div>
             {download && (
                 <div className="download-row-actions" aria-label={`Actions for ${profile.name}`}>
+                    {download.presentation.active && download.presentation.canCancel && (
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={cancelDownload}
+                            disabled={busy}
+                            title="Cancel download"
+                            aria-label={`Cancel download for ${profile.name}`}
+                        >
+                            <FontAwesomeIcon icon={['fas', 'ban']}/>
+                        </button>
+                    )}
                     {!download.presentation.active && download.presentation.canRetry && (
                         <button
                             type="button"

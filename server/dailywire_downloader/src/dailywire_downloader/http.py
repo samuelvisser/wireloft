@@ -146,13 +146,17 @@ def wait_for_retry(error: BaseException | None, attempt: int) -> None:
     deadline = time.monotonic() + delay
     if observer is not None:
         observer(TransferWait(reason, time.time() + delay))
+    completed = False
     try:
         while True:
             _check_cancelled()
             remaining = deadline - time.monotonic()
             if remaining <= 0:
+                completed = True
                 break
             time.sleep(min(0.1, remaining))
     finally:
-        if observer is not None:
+        # A canceled attempt is transitioning to Canceling; do not briefly
+        # advertise the interrupted stage as runnable again by clearing its wait.
+        if observer is not None and completed:
             observer(None)

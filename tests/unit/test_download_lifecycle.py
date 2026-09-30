@@ -196,3 +196,17 @@ def test_sidecar_retry_does_not_repeat_primary_transfer(tmp_path, monkeypatch):
         assert len(attempts) == 2 and len(transfers) == 1
         assert Path(execution.assets[0].path).read_bytes() == b'image'
         execution.cleanup_workspace()
+
+
+
+def test_canceling_downloader_retry_wait_does_not_clear_wait_state():
+    from dailywire_downloader import http
+    from dailywire_downloader.transfer_context import transfer_context
+
+    seen = []
+    with transfer_context(lambda: True, seen.append):
+        with pytest.raises(DownloadCancelled):
+            http.wait_for_retry(RuntimeError('retry'), 0)
+
+    assert seen[-1] is not None
+    assert seen[-1].reason == 'retry_backoff'

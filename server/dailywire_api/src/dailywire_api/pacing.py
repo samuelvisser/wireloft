@@ -68,6 +68,10 @@ def notify_wait(event: RequestWait | None) -> None:
         except RequestCancelled:
             raise
         except Exception:
+            # A progress sink can discover the same durable cancellation while
+            # reporting the wait. Prefer the cancellation signal over logging
+            # that expected control flow as an observer failure.
+            check_cancelled()
             # Reporting is not permission to send a request. Cancellation is
             # checked independently, even when a reporting sink is unavailable.
             logger.exception("Could not report The Daily Wire request wait")
@@ -127,6 +131,7 @@ class RequestPacer:
             self.queue[ticket_id] = _Ticket(ticket_id, selected_priority, monotonic())
             self.condition.notify_all()
         previous: RequestWait | None = None
+        completed = False
         try:
             while True:
                 check_cancelled()
@@ -162,6 +167,7 @@ class RequestPacer:
                     notify_wait(event)
                     previous = event
                 if granted:
+                    completed = True
                     return
                 with self.condition:
                     self.condition.wait(timeout=delay)
@@ -169,7 +175,12 @@ class RequestPacer:
             with self.condition:
                 self.queue.pop(ticket_id, None)
                 self.condition.notify_all()
-            if previous is not None:
+            # Do not clear a visible wait when cancellation interrupted it.
+            # The owning operation transitions to Canceling instead. Clearing
+            # here would emit a misleading "Preparing" checkpoint and, for a
+            # canceled TaskRun, the observer itself can legitimately reject the
+            # progress write as a cancellation signal.
+            if completed and previous is not None:
                 notify_wait(None)
 
 
@@ -200,12 +211,15 @@ def wait_for_retry(error: Exception, attempt: int, *, base_delay: float = 1.5) -
             pacer.defer_upstream(delay)
     deadline = monotonic() + delay
     notify_wait(RequestWait(reason, time() + delay))
+    completed = False
     try:
         while True:
             check_cancelled()
             remaining = deadline - monotonic()
             if remaining <= 0:
+                completed = True
                 return
             sleep(min(remaining, 0.1))
     finally:
-        notify_wait(None)
+        if completed:
+            notify_wait(None)

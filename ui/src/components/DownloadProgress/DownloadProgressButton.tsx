@@ -6,9 +6,9 @@ import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import ProgressButton from '../common/ProgressButton'
 import './DownloadProgress.css'
 
-export default function DownloadProgressButton({download, starting = false, label = 'Download', ariaLabel,
+export default function DownloadProgressButton({download, starting = false, label = 'Download', downloadedLabel = 'Downloaded', ariaLabel,
     onStart, onRetry, onCancel, disabled = false, controlBusy = false, primary = true, showCompletedStatus = true}: {
-    download?: MediaDownloadViewRead; starting?: boolean; label?: string; ariaLabel?: string;
+    download?: MediaDownloadViewRead; starting?: boolean; label?: string; downloadedLabel?: string; ariaLabel?: string;
     onStart: () => void; onRetry?: () => void; onCancel?: () => void;
     disabled?: boolean; controlBusy?: boolean; primary?: boolean; showCompletedStatus?: boolean
 }) {
@@ -16,7 +16,7 @@ export default function DownloadProgressButton({download, starting = false, labe
     const iconName = state?.outcome === 'success' ? 'rotate-right' : 'download'
     const retry = !!download && state?.canRetry && onRetry
     if (download && state?.outcome === 'success') return <span className="wl-progress-with-details">
-        {showCompletedStatus && <DownloadProgressStatus download={download} compact details={false}/>}
+        {showCompletedStatus && <DownloadProgressStatus download={download} compact details={false} labelOverride={downloadedLabel}/>} 
         <button type="button" className="progress-button-control" onClick={onRetry || onStart}
                 disabled={disabled || controlBusy} title="Re-download" aria-label={`Re-download ${ariaLabel || ''}`}>
             <FontAwesomeIcon icon={['fas', 'rotate-right']}/>

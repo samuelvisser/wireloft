@@ -42,6 +42,7 @@ type MovieExtraSummary = {
 type MovieDownloadControlProps = {
     download?: MediaDownloadViewRead
     label: string
+    downloadedLabel?: string
     progressLabel: string
     queueing: boolean
     disabled: boolean
@@ -54,10 +55,10 @@ type MovieDownloadControlProps = {
     onCancel: (download: MediaDownloadViewRead) => void
 }
 
-function MovieDownloadControl({download, label, progressLabel, queueing, disabled, primary = true,
+function MovieDownloadControl({download, label, downloadedLabel, progressLabel, queueing, disabled, primary = true,
     panel = false, controlBusy, onStart, onOpenLog, onRetry, onCancel}: MovieDownloadControlProps) {
     return <div className={`movie-media-download-control${panel ? ' is-panel' : ''}`}>
-        <DownloadProgressButton download={download} label={label} ariaLabel={progressLabel} starting={queueing}
+        <DownloadProgressButton download={download} label={label} downloadedLabel={downloadedLabel} ariaLabel={progressLabel} starting={queueing}
             onStart={onStart} onRetry={download ? () => onRetry(download) : undefined}
             onCancel={download ? () => onCancel(download) : undefined}
             disabled={disabled} controlBusy={controlBusy} primary={primary}/>
@@ -542,6 +543,7 @@ export default function MoviePage() {
                                 <MovieDownloadControl
                                     download={movieDownload}
                                     label="Download movie"
+                                    downloadedLabel="Movie downloaded"
                                     progressLabel={movie.title}
                                     queueing={submitting === 'movie'}
                                     disabled={submitting !== null || addingMovie || !profileId}
@@ -565,6 +567,7 @@ export default function MoviePage() {
                                 <MovieDownloadControl
                                     download={featuredTrailerDownload}
                                     label="Download trailer"
+                                    downloadedLabel="Trailer downloaded"
                                     progressLabel={featuredTrailer.title}
                                     queueing={submitting === `extra:${featuredTrailer.slug}`}
                                     disabled={submitting !== null || addingMovie || !profileId}
@@ -626,6 +629,7 @@ export default function MoviePage() {
                                             <MovieDownloadControl
                                                 download={download}
                                                 label="Download"
+                                                downloadedLabel={`${movieExtraTypeLabel(extra.movieExtraType)} downloaded`}
                                                 progressLabel={extra.title}
                                                 queueing={submitting === `extra:${extra.slug}`}
                                                 disabled={submitting !== null || addingMovie || !profileId}
