@@ -1,9 +1,9 @@
 """Process-wide request pacing and execution-scoped wait reporting.
 
 Bulk/background callers share fair pacing and cooldowns. Interactive callers
-retain WireLoft's explicit bypass: they start immediately but still contribute
-to the global burst accounting used to defer subsequent paced work. Callbacks
-execute outside the condition lock so persistence never blocks request queuing.
+start immediately but still contribute to the global burst accounting used to
+defer subsequent paced work. Callbacks execute outside the condition lock so
+persistence never blocks request queuing.
 """
 from __future__ import annotations
 
@@ -100,7 +100,7 @@ class RequestPacer:
     def _next(self, now: float) -> int:
         tickets = tuple(self.queue.values())
         oldest = min(tickets, key=lambda item: item.id)
-        # Interactive requests bypass this queue entirely. Bulk work still gets
+        # Interactive requests bypass this queue entirely. Bulk work gets
         # preference over background work, while aging prevents starvation.
         if now - oldest.enqueued_at >= 30:
             return oldest.id
@@ -120,7 +120,7 @@ class RequestPacer:
     def record_unpaced(self) -> None:
         """Record an interactive request without making it wait.
 
-        Interactive requests preserve WireLoft's explicit pacing override, but
+        Interactive requests use WireLoft's explicit pacing override, but
         every actual Daily Wire request still contributes to the shared burst
         history seen by paced bulk/background work.
 
@@ -180,10 +180,7 @@ class RequestPacer:
         if selected_priority not in {"interactive", "bulk", "background"}:
             raise ValueError("Unknown request priority")
 
-        # This is the compatibility contract that predates the download planner:
-        # user-interactive API calls never wait for global pacing. They still
-        # count, so a burst of manual activity can defer subsequent background
-        # work.
+        # user-interactive API calls never wait for global pacing.
         if selected_priority == "interactive":
             check_cancelled()
             self.record_unpaced()

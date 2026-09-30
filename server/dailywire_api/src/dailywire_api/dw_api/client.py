@@ -83,9 +83,8 @@ class MiddlewareClient:
     HTTP client for DailyWire Middleware API.
 
     Pass an access token if you have one; premium content typically requires it.
-    Bulk/background requests share global pacing. Interactive reads preserve
-    WireLoft's explicit pacing override: they bypass the wait but still count
-    toward the burst/cooldown accounting seen by background work.
+    Bulk/background requests share global pacing. Interactive reads bypass the wait
+    but still count toward the burst/cooldown accounting seen by background work.
     """
 
     def __init__(
@@ -98,10 +97,6 @@ class MiddlewareClient:
     ) -> None:
         self._req_timeout = request_timeout
         self._base_url = base_url.rstrip('/')
-        # Preserve the pre-planner explicit bypass while also supporting the
-        # newer execution-scoped priority model. False is intentionally stronger
-        # than a supplied priority: it means this client must never wait for
-        # global pacing.
         self._request_priority = (
             "interactive"
             if pace_requests is False
