@@ -111,6 +111,11 @@ function ProfileDownloadRow({
             </div>
             {download && (
                 <div className="download-row-actions" aria-label={`Actions for ${profile.name}`}>
+                    <ProgressExplanation
+                        detail={download.presentation.detail + (download.presentation.secondary
+                            ? ` ${download.presentation.secondary}.`
+                            : '')}
+                    />
                     {download.presentation.active && download.presentation.canCancel && (
                         <button
                             type="button"
@@ -137,11 +142,6 @@ function ProfileDownloadRow({
                             <FontAwesomeIcon icon={['fas', 'rotate-right']}/>
                         </button>
                     )}
-                    <ProgressExplanation
-                        detail={download.presentation.detail + (download.presentation.secondary
-                            ? ` ${download.presentation.secondary}.`
-                            : '')}
-                    />
                     <button
                         type="button"
                         className="icon-btn"

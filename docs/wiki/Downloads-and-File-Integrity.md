@@ -19,38 +19,6 @@ WireLoft can show downloads as:
 
 Completed downloads are hidden by the default Downloads-page filter so active/problems are easier to see. Enable the **Downloaded** filter when you want full history.
 
-## Understanding download progress
-
-For an individual download, the percentage measures the **primary media transfer**.
-Before that transfer starts, WireLoft shows the current activity, such as resolving
-playback or inspecting the stream. After the transfer, it shows activities such as
-embedding artwork and metadata or moving files into the library, without pretending
-to know how long those steps will take. When a transfer has no known total, its
-indicator also remains indeterminate.
-
-A **Cooldown** indicator means The Daily Wire requests are intentionally waiting.
-This includes operations behind another request in the shared queue, not just the
-request at its front. The information control reveals the full reason on desktop
-and touch screens. Interactive requests receive fair priority, but do not bypass
-request-rate protection or an upstream retry delay.
-
-Artwork acquisition can run alongside the primary media transfer. A slow artwork
-download does not hide the media percentage; if it is still needed afterwards,
-WireLoft shows that activity while it finishes. Required outputs must be ready before
-a download becomes completed. Cancellation remains visible while owned work stops
-and temporary files are cleaned up.
-
-Bulk re-download actions show a separate **estimated work-completion percentage**.
-This includes preparation, transfers and finishing stages, weighted by the captured
-media sizes. It is not an estimate of time remaining. Completion counts distinguish
-successful, failed and canceled downloads, and a remaining processing stage can
-legitimately pause the estimate. Unknown sizes use the average known size, or equal
-weights when none are known. Restart recovery preserves the batch selection and
-does not re-delete already completed replacement downloads.
-
-The download log includes stage timings, wait intervals and optional-output warnings.
-Some activities overlap, so their individual durations do not add up to total time.
-
 ## Download actions
 
 Available actions depend on the current state.
