@@ -38,6 +38,17 @@
 }
 
 .downloads-table td:nth-child(3) {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.downloads-format-value {
+    display: block;
+    width: 100%;
+    max-width: 7.5rem;
+    overflow: hidden;
+    text-overflow: clip;
     white-space: nowrap;
 }
 

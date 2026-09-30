@@ -6,6 +6,6 @@
 .wl-progress-with-details {display:inline-flex;align-items:center;gap:5px;max-width:100%;min-width:0}
 .wl-progress-explanation {position:relative;display:inline-flex;flex:0 0 auto}
 .wl-progress-explanation>.icon-btn {width:26px;height:26px;font-size:.82rem;opacity:.7}
-.wl-progress-explanation-text {position:absolute;z-index:30;right:0;top:100%;width:260px;max-width:75vw;padding:10px 12px;background:var(--card-bg,var(--bg,#fff));color:var(--text,#222);border:1px solid var(--divider,#bbb);border-radius:8px;box-shadow:0 6px 22px rgb(0 0 0 / 16%);font-size:.82rem;line-height:1.5;font-weight:400;white-space:normal;text-align:left;overflow-wrap:anywhere}
+.wl-progress-explanation-text {position:fixed;z-index:10000;width:260px;max-width:calc(100vw - 16px);padding:10px 12px;background:var(--card-bg,var(--bg,#fff));color:var(--text,#222);border:1px solid var(--divider,#bbb);border-radius:8px;box-shadow:0 6px 22px rgb(0 0 0 / 16%);font-size:.82rem;line-height:1.5;font-weight:400;white-space:normal;text-align:left;overflow-wrap:anywhere}
 .wl-progress-icon {margin-right:6px;opacity:.8}
 @media (prefers-reduced-motion:reduce) {.wl-progress-fill {animation:none!important;transition:none!important}.wl-progress-fill.is-indeterminate {width:100%;opacity:.35}.download-progress .fa-spin {animation:none}}

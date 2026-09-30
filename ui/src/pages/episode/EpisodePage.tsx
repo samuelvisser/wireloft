@@ -14,8 +14,8 @@ import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import DownloadProgressStatus from '../../components/DownloadProgress/DownloadProgressStatus'
-import DownloadProgressButton from '../../components/DownloadProgress/DownloadProgressButton'
 import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
+import ProgressExplanation from '../../components/common/ProgressExplanation'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
@@ -79,6 +79,8 @@ function ProfileDownloadRow({
             'Could not retry the download',
         )
 
+    const showDownloadButton = !download
+        || (!download.presentation.active && download.presentation.status === 'not_downloaded')
 
     return (
         <div className="download-row" role="listitem" aria-label={`Download for ${profile.name}`}>
@@ -87,21 +89,50 @@ function ProfileDownloadRow({
                 <div className="download-row-format">{PreferredFormatReg.getLabelLoose(profile.preferredFormat)}</div>
             </div>
             <div className="download-row-state">
-                {download && <DownloadProgressStatus download={download}/>}
-                {!download?.presentation.active && <DownloadProgressButton showCompletedStatus={false} download={download} starting={busy}
-                    onStart={startDownload} onRetry={retryDownload} controlBusy={busy}/>}
-
+                {download && !showDownloadButton
+                    ? <DownloadProgressStatus download={download} details={false}/>
+                    : <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={startDownload}
+                        disabled={busy}
+                        aria-label={`Download ${profile.name}`}
+                    >
+                        <FontAwesomeIcon icon={['fas', 'download']}/>
+                        Download
+                    </button>}
             </div>
             {download && (
-                <button
-                    type="button"
-                    className="icon-btn"
-                    onClick={() => setShowLog(true)}
-                    title="View log"
-                    aria-label={`View log for ${profile.name}`}
-                >
-                    <FontAwesomeIcon icon={['fas', 'file-lines']}/>
-                </button>
+                <div className="download-row-actions" aria-label={`Actions for ${profile.name}`}>
+                    {!download.presentation.active && download.presentation.canRetry && (
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={retryDownload}
+                            disabled={busy}
+                            title={download.presentation.outcome === 'success' ? 'Re-download' : 'Retry download'}
+                            aria-label={download.presentation.outcome === 'success'
+                                ? `Re-download ${profile.name}`
+                                : `Retry download for ${profile.name}`}
+                        >
+                            <FontAwesomeIcon icon={['fas', 'rotate-right']}/>
+                        </button>
+                    )}
+                    <ProgressExplanation
+                        detail={download.presentation.detail + (download.presentation.secondary
+                            ? ` ${download.presentation.secondary}.`
+                            : '')}
+                    />
+                    <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => setShowLog(true)}
+                        title="View log"
+                        aria-label={`View log for ${profile.name}`}
+                    >
+                        <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+                    </button>
+                </div>
             )}
             <DownloadLogDialog row={showLog ? (download ?? null) : null} onClose={() => setShowLog(false)}/>
         </div>
@@ -428,6 +459,9 @@ export default function EpisodePage() {
         .download-row-name { font-weight: 600; }
         .download-row-format { color: var(--muted, #777); font-size: 0.9rem; }
         .download-row-state { flex: 1; min-width: 0; }
+        .download-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; flex: 0 0 auto; }
+        .download-row-actions > .icon-btn,
+        .download-row-actions .wl-progress-explanation > .icon-btn { width: 30px; height: 30px; }
         .download-row-progress { display: flex; align-items: center; gap: 10px; }
         .download-row-progress .progress { flex: 1; max-width: 380px; }
         .download-row-progress-label { min-width: 60px; color: var(--muted, #777); }
@@ -450,7 +484,10 @@ export default function EpisodePage() {
           .episode-description { margin-top: 18px; padding-top: 16px; }
           .episode-description p { font-size: 0.95rem; }
           .episode-downloads { margin-top: 18px; padding-top: 16px; }
-          .download-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+          .download-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px 12px; }
+          .download-row-info { grid-column: 1 / -1; min-width: 0; }
+          .download-row-state { min-width: 0; width: 100%; }
+          .download-row-actions { align-self: center; }
         }
       `}</style>
         </section>

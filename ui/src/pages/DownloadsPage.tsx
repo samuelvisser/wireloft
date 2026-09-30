@@ -331,7 +331,7 @@ export default function DownloadsPage() {
         },
         {
             header: 'Format',
-            accessor: (row) => row.formatDownloaded ?? '—',
+            cell: (row) => <span className="downloads-format-value">{row.formatDownloaded ?? '—'}</span>,
             align: 'center',
             dataLabel: 'Format',
             sortAccessor: (row) => row.formatDownloaded,
