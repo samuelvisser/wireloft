@@ -3,18 +3,17 @@ import {QueryClient} from '@tanstack/react-query'
 import {
   getEpisodesCacheFetchedAt,
   getSeasonsCacheFetchedAt,
-  loadEpisodesFromStorage,
   loadSeasonsFromStorage,
   saveEpisodesToStorage,
   saveSeasonsToStorage,
   saveShowsToStorage,
 } from './cache'
 import {
-  episodesQueryOptions,
+  episodePreviewQueryOptions,
   seasonsQueryOptions,
+  SHOW_EPISODE_PREVIEW_SIZE,
   showsQueryOptions,
 } from './showQueryOptions'
-import {EpisodeReadView} from '../types/schemas/episode'
 import {SeasonRead} from '../types/schemas/season'
 import {ShowRead} from '../types/schemas/show'
 
@@ -38,23 +37,12 @@ function showSlugFromCurrentRoute(): string | undefined {
 }
 
 /**
- * Hydrate only the show that is being opened directly. Parsing every persisted episode list before
- * the initial render would delay startup, while parsing one requested show is cheap and lets a cold
- * browser reload render its episode cards immediately.
+ * Hydrate the small season list needed by a directly-opened seasonal show before React mounts.
+ * Episode previews stay in browser storage and ShowPage reads only its own preview on demand.
  */
 export function hydrateCurrentShowRouteCache(queryClient: QueryClient): void {
   const showSlug = showSlugFromCurrentRoute()
   if (!showSlug) return
-
-  const episodeOptions = episodesQueryOptions(showSlug)
-  const episodes = loadEpisodesFromStorage(showSlug)
-  if (episodes !== undefined) {
-    queryClient.setQueryData(
-      episodeOptions.queryKey,
-      episodes,
-      {updatedAt: getEpisodesCacheFetchedAt(showSlug) ?? 0},
-    )
-  }
 
   const seasonOptions = seasonsQueryOptions(showSlug)
   const seasons = loadSeasonsFromStorage(showSlug)
@@ -82,31 +70,13 @@ export function hydrateCachedSeasonQueries(queryClient: QueryClient, shows: Show
 }
 
 async function warmEpisodes(queryClient: QueryClient, show: ShowRead) {
-  const options = episodesQueryOptions(show.slug)
-  const queryData = queryClient.getQueryData(options.queryKey)
-  const queryUpdatedAt = queryClient.getQueryState(options.queryKey)?.dataUpdatedAt
   const cachedAt = getEpisodesCacheFetchedAt(show.slug)
+  if (cachedAt !== undefined && isFresh(cachedAt)) return
 
-  // If the cached data is recent, do put it in memory so it can immediately be used
-  if (
-    cachedAt !== undefined
-    && isFresh(cachedAt)
-    && (queryData === undefined || (queryUpdatedAt ?? 0) < cachedAt)
-  ) {
-    const cachedEpisodes = loadEpisodesFromStorage(show.slug)
-    if (cachedEpisodes !== undefined) {
-      queryClient.setQueryData(options.queryKey, cachedEpisodes, {updatedAt: cachedAt})
-      return
-    }
-  }
-
-  if (queryData !== undefined && isFresh(queryUpdatedAt)) return
-
-  // Persist data fetched by the warmer directly. The query-cache subscription below still handles
-  // normal foreground refreshes, but warming should not depend on that side effect being installed.
-  const episodes = await queryClient.fetchQuery({...options, staleTime: 0})
+  const options = episodePreviewQueryOptions(show.slug, SHOW_EPISODE_PREVIEW_SIZE)
+  const page = await queryClient.fetchQuery({...options, staleTime: 0})
   const fetchedAt = queryClient.getQueryState(options.queryKey)?.dataUpdatedAt ?? Date.now()
-  saveEpisodesToStorage(show.slug, episodes, fetchedAt)
+  saveEpisodesToStorage(show.slug, page.items, fetchedAt, page.showTotal)
 }
 
 async function warmSeasons(queryClient: QueryClient, show: ShowRead) {
@@ -166,12 +136,21 @@ async function warmShowDataCache(queryClient: QueryClient) {
   }
 
   if (shows.length === 0) return
-  await warmShowsWithLimitedConcurrency(queryClient, shows)
+
+  // The current route owns its foreground episode request. Do not duplicate it with a preview warm.
+  const currentShowSlug = showSlugFromCurrentRoute()
+  const backgroundShows = currentShowSlug
+    ? shows.filter((show) => (
+        show.slug !== currentShowSlug
+        || show.episodeIdentifier === 'seasonal'
+      ))
+    : shows
+  await warmShowsWithLimitedConcurrency(queryClient, backgroundShows)
 }
 
 const persistenceInstalledFor = new WeakSet<QueryClient>()
 
-/** Persist successful show-list episode/season query results, including normal foreground refreshes. */
+/** Persist successful seasonal lookup results produced by normal foreground refreshes. */
 export function installShowDataQueryPersistence(queryClient: QueryClient): void {
   if (persistenceInstalledFor.has(queryClient)) return
   persistenceInstalledFor.add(queryClient)
@@ -182,23 +161,13 @@ export function installShowDataQueryPersistence(queryClient: QueryClient): void 
     const state = query.state
     if (state.status !== 'success' || state.dataUpdatedAt <= 0 || !Array.isArray(state.data)) return
 
-    const [kind, showSlug, limit] = query.queryKey
-    if (typeof showSlug !== 'string') return
+    const [kind, showSlug] = query.queryKey
+    if (kind !== 'seasons' || typeof showSlug !== 'string') return
 
-    if (kind === 'episodes' && limit === undefined) {
-      const marker = `episodes:${showSlug}`
-      if (lastPersistedAt.get(marker) === state.dataUpdatedAt) return
-      lastPersistedAt.set(marker, state.dataUpdatedAt)
-      saveEpisodesToStorage(showSlug, state.data as EpisodeReadView[], state.dataUpdatedAt)
-      return
-    }
-
-    if (kind === 'seasons') {
-      const marker = `seasons:${showSlug}`
-      if (lastPersistedAt.get(marker) === state.dataUpdatedAt) return
-      lastPersistedAt.set(marker, state.dataUpdatedAt)
-      saveSeasonsToStorage(showSlug, state.data as SeasonRead[], state.dataUpdatedAt)
-    }
+    const marker = `seasons:${showSlug}`
+    if (lastPersistedAt.get(marker) === state.dataUpdatedAt) return
+    lastPersistedAt.set(marker, state.dataUpdatedAt)
+    saveSeasonsToStorage(showSlug, state.data as SeasonRead[], state.dataUpdatedAt)
   })
 }
 
@@ -215,7 +184,7 @@ function scheduleAfterFirstPaint(run: () => void) {
   }
 }
 
-/** Start after the first paint, then keep network/parse pressure low with a two-request worker pool. */
+/** Start after first paint and warm only five episodes per stale show with two workers. */
 export function scheduleShowDataCacheWarm(queryClient: QueryClient): void {
   const run = () => {
     void warmShowDataCache(queryClient)

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
-import { useDownloadProfilesView, useEpisodes, useMediaDownloadsView, useShow, useShowSeasons, useStreamProfilesView } from '../../lib/queries'
+import { useDownloadProfilesView, useEpisodePages, useMediaDownloadsView, useShow, useShowSeasons, useStreamProfilesView } from '../../lib/queries'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
@@ -16,7 +16,7 @@ import ShowSyncLogModal from '../../components/ShowSyncLogModal/ShowSyncLogModal
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {OperationControlError, type OperationControlAction, useControlOperation, useStartOperation} from '../../lib/operations'
 import {PreferredFormatReg} from '../../types/local_media_profile'
-import {loadEpisodesFromStorage, removeEpisodesFromStorage, saveEpisodesToStorage} from '../../lib/cache'
+import {getEpisodesCacheTotal, loadEpisodesFromStorage, removeEpisodesFromStorage} from '../../lib/cache'
 import './ShowPage.css'
 
 library.add(fas)
@@ -39,35 +39,8 @@ export default function ShowPage() {
   const PAGE_SIZE = 25
 
   const { data: show, isLoading, error } = useShow(id)
-  const {
-    data: episodesData,
-    isLoading: episodesLoading,
-    isPlaceholderData: episodesPlaceholder,
-  } = useEpisodes(id)
-  const cachedEpisodes = useMemo(() => loadEpisodesFromStorage(id), [id])
-  const hasCachedEpisodes = cachedEpisodes !== undefined
-  const episodes: any[] = episodesPlaceholder
-    ? (cachedEpisodes ?? [])
-    : (episodesData ?? cachedEpisodes ?? [])
-  const episodesInitialLoading = !hasCachedEpisodes && (episodesLoading || episodesPlaceholder)
   const isSeasonal = show?.episodeIdentifier === 'seasonal'
-  const {
-    data: seasonsData,
-    isLoading: seasonsLoading,
-    isPlaceholderData: seasonsPlaceholder,
-  } = useShowSeasons(isSeasonal ? id : undefined)
-  const seasons = useMemo(() => {
-    if (seasonsPlaceholder) return []
-    return [...(seasonsData ?? [])].sort((a, b) => b.index - a.index)
-  }, [seasonsData, seasonsPlaceholder])
-  const {
-    data: downloads,
-    isLoading: downloadsLoading,
-    error: downloadsError,
-  } = useMediaDownloadsView()
-  const { data: downloadProfiles } = useDownloadProfilesView()
-  const { data: streamProfiles } = useStreamProfilesView()
-  const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
+
   const [confirm, setConfirm] = useState(false)
   const [syncStarting, setSyncStarting] = useState(false)
   const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)
@@ -78,6 +51,77 @@ export default function ShowPage() {
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
   const [operationControlBusy, setOperationControlBusy] = useState<string | null>(null)
+
+  const {
+    data: seasonsData,
+    isLoading: seasonsLoading,
+    isPlaceholderData: seasonsPlaceholder,
+  } = useShowSeasons(isSeasonal ? id : undefined)
+  const seasons = useMemo(() => {
+    if (seasonsPlaceholder) return []
+    return [...(seasonsData ?? [])].sort((a, b) => b.index - a.index)
+  }, [seasonsData, seasonsPlaceholder])
+
+  useEffect(() => {
+    if (!isSeasonal || seasons.length === 0) {
+      setSelectedSeasonId(null)
+      return
+    }
+
+    setSelectedSeasonId((current) => {
+      if (current !== null && seasons.some((season) => season.id === current)) return current
+      return seasons[0].id
+    })
+  }, [isSeasonal, seasons])
+
+  const episodeSeasonId = isSeasonal ? selectedSeasonId : undefined
+  const {
+    data: episodePagesData,
+    isLoading: episodesLoading,
+    isFetchingNextPage,
+    fetchNextPage,
+    hasNextPage,
+  } = useEpisodePages(id, {
+    pageSize: PAGE_SIZE,
+    seasonId: episodeSeasonId,
+    enabled: Boolean(show) && (!isSeasonal || selectedSeasonId !== null),
+  })
+
+  const cachedEpisodes = useMemo(() => loadEpisodesFromStorage(id), [id])
+  const cachedTotal = useMemo(
+    () => id ? getEpisodesCacheTotal(id) : undefined,
+    [id],
+  )
+  const cachedViewEpisodes = useMemo(() => {
+    if (!cachedEpisodes) return []
+    if (!isSeasonal) return cachedEpisodes
+    if (selectedSeasonId === null) return []
+    return cachedEpisodes
+      .filter((episode) => episode.seasonId === selectedSeasonId)
+      .sort((a, b) => a.index - b.index)
+  }, [cachedEpisodes, isSeasonal, selectedSeasonId])
+  const fetchedEpisodes = useMemo(
+    () => episodePagesData?.pages.flatMap((page) => page.items) ?? [],
+    [episodePagesData],
+  )
+  const episodes = episodePagesData !== undefined ? fetchedEpisodes : cachedViewEpisodes
+  const firstEpisodePage = episodePagesData?.pages[0]
+  const total = firstEpisodePage?.showTotal ?? cachedTotal ?? episodes.length
+  const displayedTotal = firstEpisodePage?.total ?? episodes.length
+  const episodesInitialLoading = (
+    episodePagesData === undefined
+    && cachedViewEpisodes.length === 0
+    && episodesLoading
+  )
+
+  const {
+    data: downloads,
+    isLoading: downloadsLoading,
+    error: downloadsError,
+  } = useMediaDownloadsView()
+  const { data: downloadProfiles } = useDownloadProfilesView()
+  const { data: streamProfiles } = useStreamProfilesView()
+  const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
 
   const operationResourceId = show?.id ?? null
   const syncOperation = useActiveOperation('show.sync', 'show', operationResourceId)
@@ -91,23 +135,6 @@ export default function ShowPage() {
   const fileRenameBusy = fileRenameOperation !== undefined
   const deleteDownloadsBusy = deleteDownloadsOperation !== undefined
   const redownloadBusy = redownloadOperation !== undefined
-
-  useEffect(() => {
-    if (!id || episodesPlaceholder || episodesData === undefined) return
-    saveEpisodesToStorage(id, episodesData)
-  }, [episodesData, episodesPlaceholder, id])
-
-  useEffect(() => {
-    if (!isSeasonal || seasons.length === 0) {
-      setSelectedSeasonId(null)
-      return
-    }
-
-    setSelectedSeasonId((current) => {
-      if (current !== null && seasons.some((season) => season.id === current)) return current
-      return seasons[0].id
-    })
-  }, [isSeasonal, seasons])
 
   const attachedDownloadProfiles = useMemo(
     () => (downloadProfiles ?? []).filter((profile) => profile.showSlug === id),
@@ -138,13 +165,7 @@ export default function ShowPage() {
     })),
     [downloadLocalMediaProfiles],
   )
-  const displayedEpisodes = useMemo(() => {
-    if (!isSeasonal) return episodes
-    if (selectedSeasonId === null) return []
-    return episodes
-      .filter((episode) => episode.seasonId === selectedSeasonId)
-      .sort((a, b) => a.index - b.index)
-  }, [episodes, isSeasonal, selectedSeasonId])
+  const displayedEpisodes = episodes
   const seasonViewLoading = Boolean(
     isSeasonal && (
       seasonsLoading
@@ -153,27 +174,22 @@ export default function ShowPage() {
     )
   )
 
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE)
-  }, [id, selectedSeasonId])
-
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     const node = sentinelRef.current
-    if (!node) return
+    if (!node || !hasNextPage || isFetchingNextPage) return
 
     const observer = new IntersectionObserver(
-        (entries) => {
-          if (entries[0]?.isIntersecting) {
-            setVisibleCount((c) => Math.min(c + PAGE_SIZE, displayedEpisodes.length))
-          }
-        },
-        {rootMargin: '600px'},
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void fetchNextPage()
+        }
+      },
+      {rootMargin: '600px'},
     )
     observer.observe(node)
     return () => observer.disconnect()
-  }, [displayedEpisodes.length, visibleCount])
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage])
 
   if (!id) {
     return (
@@ -202,9 +218,8 @@ export default function ShowPage() {
     )
   }
 
-  const total = episodes.length
-  const visibleItems = displayedEpisodes.slice(0, visibleCount)
-  const hasMore = visibleCount < displayedEpisodes.length
+  const visibleItems = displayedEpisodes
+  const hasMore = Boolean(hasNextPage)
   const episodesViewLoading = episodesInitialLoading || seasonViewLoading
 
   const syncDisabledReason = syncStarting
@@ -448,7 +463,7 @@ export default function ShowPage() {
           <ShowIndexingProgress
             showId={show.id}
             showSlug={show.slug}
-            pollForStart={episodes.length === 0}
+            pollForStart={total === 0}
             className="show-page-indexing"
           />
 
@@ -537,7 +552,7 @@ export default function ShowPage() {
               ))}
             </select>
             <span className="show-season-count">
-              {displayedEpisodes.length} {displayedEpisodes.length === 1 ? 'episode' : 'episodes'}
+              {displayedTotal} {displayedTotal === 1 ? 'episode' : 'episodes'}
             </span>
           </div>
         )}

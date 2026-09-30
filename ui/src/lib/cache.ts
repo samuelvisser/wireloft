@@ -1,20 +1,18 @@
-// Lightweight browser persistence for React Query data that materially improves cold-page loads.
-// Show episode lists deliberately use a compact representation so long-running shows do not exhaust
-// localStorage with detail-only fields such as descriptions. The full episode is still fetched when
-// an episode detail page opens; show grids use the compact EpisodeReadView representation.
+// Lightweight browser persistence for data that materially improves cold-page loads.
+// Show caches retain only a compact five-episode preview; full show histories are paged from the
+// local API as the user scrolls. Episode detail pages still fetch the complete episode record.
 
 import {LocalMediaProfileRead, LocalMediaProfileReadSchema} from "../types/schemas/local_media_profile";
-import {EpisodeReadSchema, EpisodeReadView, EpisodeReadViewSchema} from "../types/schemas/episode";
+import {EpisodeReadView, EpisodeReadViewSchema} from "../types/schemas/episode";
 import {SeasonRead, SeasonReadSchema} from "../types/schemas/season";
 import {ShowRead, ShowReadSchema} from "../types/schemas/show";
 
 const STORAGE_PREFIX = 'wl_rq_v1:'
 const KEY_SHOWS = STORAGE_PREFIX + 'shows'
 const KEY_PROFILES = STORAGE_PREFIX + 'localMediaProfiles'
-const LEGACY_KEY_EPISODES_PREFIX = STORAGE_PREFIX + 'episodes:'
 
 const SHOW_CACHE_PREFIX = 'wl_show_cache_v3:'
-const SHOW_CACHE_VERSION = 3
+const SHOW_CACHE_VERSION = 4
 const KEY_EPISODES_PREFIX = SHOW_CACHE_PREFIX + 'episodes:'
 const KEY_EPISODES_META_PREFIX = SHOW_CACHE_PREFIX + 'episodes-meta:'
 const KEY_SEASONS_PREFIX = SHOW_CACHE_PREFIX + 'seasons:'
@@ -23,11 +21,13 @@ const KEY_SEASONS_META_PREFIX = SHOW_CACHE_PREFIX + 'seasons-meta:'
 type CacheMetadata = {
   version: number
   fetchedAt: number
+  total?: number
 }
 
 type MemoryEntry<T> = {
   data: T
   fetchedAt: number
+  total?: number
 }
 
 const episodeMemoryCache = new Map<string, MemoryEntry<EpisodeReadView[]>>()
@@ -80,7 +80,15 @@ function parseCacheMetadata(raw: string | null): CacheMetadata | undefined {
   const record = value as Record<string, unknown>
   if (record.version !== SHOW_CACHE_VERSION) return undefined
   if (typeof record.fetchedAt !== 'number' || !Number.isFinite(record.fetchedAt)) return undefined
-  return {version: SHOW_CACHE_VERSION, fetchedAt: record.fetchedAt}
+  if (
+    record.total !== undefined
+    && (typeof record.total !== 'number' || !Number.isInteger(record.total) || record.total < 0)
+  ) return undefined
+  return {
+    version: SHOW_CACHE_VERSION,
+    fetchedAt: record.fetchedAt,
+    total: record.total as number | undefined,
+  }
 }
 
 function showCacheKey(prefix: string, showSlug: string) {
@@ -95,10 +103,6 @@ function episodesMetadataKey(showSlug: string) {
   return showCacheKey(KEY_EPISODES_META_PREFIX, showSlug)
 }
 
-function legacyEpisodesStorageKey(showSlug: string) {
-  return showCacheKey(LEGACY_KEY_EPISODES_PREFIX, showSlug)
-}
-
 function seasonsStorageKey(showSlug: string) {
   return showCacheKey(KEY_SEASONS_PREFIX, showSlug)
 }
@@ -107,8 +111,8 @@ function seasonsMetadataKey(showSlug: string) {
   return showCacheKey(KEY_SEASONS_META_PREFIX, showSlug)
 }
 
-function cacheMetadata(fetchedAt: number): CacheMetadata {
-  return {version: SHOW_CACHE_VERSION, fetchedAt}
+function cacheMetadata(fetchedAt: number, total?: number): CacheMetadata {
+  return {version: SHOW_CACHE_VERSION, fetchedAt, total}
 }
 
 function compactEpisodes(data: EpisodeReadView[]): EpisodeReadView[] {
@@ -152,20 +156,17 @@ export function loadEpisodesFromStorage(showSlug?: string): EpisodeReadView[] | 
   const memory = episodeMemoryCache.get(showSlug)
   if (memory) return memory.data
 
+  const metadata = parseCacheMetadata(safeGetItem(episodesMetadataKey(showSlug)))
+  if (metadata === undefined) return undefined
+
   const cached = parseStored(safeGetItem(episodesStorageKey(showSlug)), EpisodeReadViewSchema.array())
   if (cached !== undefined) {
-    const fetchedAt = getEpisodesCacheFetchedAt(showSlug) ?? 0
-    episodeMemoryCache.set(showSlug, {data: cached, fetchedAt})
+    episodeMemoryCache.set(showSlug, {
+      data: cached,
+      fetchedAt: metadata.fetchedAt,
+      total: metadata.total,
+    })
     return cached
-  }
-
-  // Compatibility with the old full-object cache. It has no trustworthy timestamp, so startup
-  // treats it as stale and refreshes it into the compact v2 representation in the background.
-  const legacy = parseStored(safeGetItem(legacyEpisodesStorageKey(showSlug)), EpisodeReadSchema.array())
-  if (legacy !== undefined) {
-    const compact = compactEpisodes(legacy)
-    episodeMemoryCache.set(showSlug, {data: compact, fetchedAt: 0})
-    return compact
   }
 
   return undefined
@@ -175,14 +176,21 @@ export function getEpisodesCacheFetchedAt(showSlug: string): number | undefined 
   const memory = episodeMemoryCache.get(showSlug)
   if (memory) return memory.fetchedAt > 0 ? memory.fetchedAt : undefined
 
-  if (safeGetItem(episodesStorageKey(showSlug)) === null) return undefined
   return parseCacheMetadata(safeGetItem(episodesMetadataKey(showSlug)))?.fetchedAt
+}
+
+export function getEpisodesCacheTotal(showSlug: string): number | undefined {
+  const memory = episodeMemoryCache.get(showSlug)
+  if (memory?.total !== undefined) return memory.total
+
+  return parseCacheMetadata(safeGetItem(episodesMetadataKey(showSlug)))?.total
 }
 
 export function saveEpisodesToStorage(
   showSlug: string,
   data: EpisodeReadView[] | undefined,
   fetchedAt?: number,
+  total?: number,
 ) {
   if (data === undefined) {
     removeEpisodesFromStorage(showSlug)
@@ -191,14 +199,25 @@ export function saveEpisodesToStorage(
 
   const existing = episodeMemoryCache.get(showSlug)
   const effectiveFetchedAt = fetchedAt ?? existing?.fetchedAt ?? Date.now()
-  if (existing?.data === data && existing.fetchedAt === effectiveFetchedAt) return
+  const effectiveTotal = total ?? existing?.total
+  if (
+    existing?.data === data
+    && existing.fetchedAt === effectiveFetchedAt
+    && existing.total === effectiveTotal
+  ) return
 
-  episodeMemoryCache.set(showSlug, {data, fetchedAt: effectiveFetchedAt})
+  episodeMemoryCache.set(showSlug, {
+    data,
+    fetchedAt: effectiveFetchedAt,
+    total: effectiveTotal,
+  })
 
   const persisted = safeSetItem(episodesStorageKey(showSlug), JSON.stringify(compactEpisodes(data)))
   if (persisted) {
-    safeSetItem(episodesMetadataKey(showSlug), JSON.stringify(cacheMetadata(effectiveFetchedAt)))
-    safeRemoveItem(legacyEpisodesStorageKey(showSlug))
+    safeSetItem(
+      episodesMetadataKey(showSlug),
+      JSON.stringify(cacheMetadata(effectiveFetchedAt, effectiveTotal)),
+    )
   }
 }
 
@@ -206,7 +225,6 @@ export function removeEpisodesFromStorage(showSlug: string) {
   episodeMemoryCache.delete(showSlug)
   safeRemoveItem(episodesStorageKey(showSlug))
   safeRemoveItem(episodesMetadataKey(showSlug))
-  safeRemoveItem(legacyEpisodesStorageKey(showSlug))
 }
 
 export function loadSeasonsFromStorage(showSlug?: string): SeasonRead[] | undefined {

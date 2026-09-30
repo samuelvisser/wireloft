@@ -76,3 +76,14 @@ export const EpisodeReadViewSchema = z.object({
     thumbnailSquarePath: z.string().nullable().optional(),
 })
 export type EpisodeReadView = z.infer<typeof EpisodeReadViewSchema>
+
+
+export const EpisodeReadViewPageSchema = z.object({
+    items: EpisodeReadViewSchema.array(),
+    offset: z.int().nonnegative(),
+    limit: z.int().positive(),
+    total: z.int().nonnegative(),
+    showTotal: z.int().nonnegative(),
+    hasMore: z.boolean(),
+})
+export type EpisodeReadViewPage = z.infer<typeof EpisodeReadViewPageSchema>

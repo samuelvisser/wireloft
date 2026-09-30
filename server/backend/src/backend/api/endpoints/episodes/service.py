@@ -2,7 +2,7 @@ from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
 from backend.services.custom_indexes import request_show_custom_index_reconciliation
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from fastapi import HTTPException
 
@@ -46,11 +46,7 @@ def get_episodes_by_show_list(s: Session, show_slug: str, limit: int | None = No
     return [EpisodeAPIRead.model_validate(episode) for episode in episodes]
 
 
-def get_episode_views_by_show_list(
-        s: Session,
-        show_slug: str,
-        limit: int | None = None,
-) -> list[EpisodeAPIReadView]:
+def _episode_view_stmt(show_slug: str, season_id: int | None = None):
     # The show grid needs only a small subset of Episode. Selecting those columns directly avoids
     # constructing full ORM entities (and their select-in metadata relationship), then sending and
     # validating descriptions/timestamps that the grid never renders.
@@ -71,8 +67,20 @@ def get_episode_views_by_show_list(
         )
         .join(Show, Episode.show_id == Show.id)
         .where(Show.slug == show_slug)
-        .order_by(Episode.published_date.desc())
     )
+    if season_id is not None:
+        stmt = stmt.where(Episode.season_id == season_id)
+        return stmt.order_by(Episode.index.asc(), Episode.id.asc())
+    return stmt.order_by(Episode.published_date.desc(), Episode.id.desc())
+
+
+def get_episode_views_by_show_list(
+        s: Session,
+        show_slug: str,
+        limit: int | None = None,
+) -> list[EpisodeAPIReadView]:
+    """Return compact rows for internal callers that still need a simple list."""
+    stmt = _episode_view_stmt(show_slug)
     if limit is not None:
         stmt = stmt.limit(limit)
 
@@ -80,6 +88,46 @@ def get_episode_views_by_show_list(
         EpisodeAPIReadView.model_validate(row)
         for row in s.execute(stmt).mappings().all()
     ]
+
+
+def get_episode_views_by_show_page(
+        s: Session,
+        show_slug: str,
+        *,
+        offset: int,
+        limit: int,
+        season_id: int | None = None,
+) -> EpisodeAPIReadViewPage:
+    """Return only the compact episode page the frontend currently needs."""
+    show_count_stmt = (
+        select(func.count(Episode.id))
+        .join(Show, Episode.show_id == Show.id)
+        .where(Show.slug == show_slug)
+    )
+    show_total = int(s.scalar(show_count_stmt) or 0)
+
+    if season_id is None:
+        total = show_total
+    else:
+        total = int(s.scalar(
+            show_count_stmt.where(Episode.season_id == season_id)
+        ) or 0)
+
+    rows = s.execute(
+        _episode_view_stmt(show_slug, season_id)
+        .offset(offset)
+        .limit(limit)
+    ).mappings().all()
+    items = [EpisodeAPIReadView.model_validate(row) for row in rows]
+
+    return EpisodeAPIReadViewPage(
+        items=items,
+        offset=offset,
+        limit=limit,
+        total=total,
+        show_total=show_total,
+        has_more=offset + len(items) < total,
+    )
 
 
 def get_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
