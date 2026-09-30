@@ -79,7 +79,7 @@ export function seasonsQueryOptions(showSlug: string | undefined) {
 }
 
 
-export const SHOW_EPISODE_PREVIEW_SIZE = 5
+export const SHOW_EPISODE_PREVIEW_SIZE = 15
 
 export async function fetchEpisodePage(
   showSlug: string,
