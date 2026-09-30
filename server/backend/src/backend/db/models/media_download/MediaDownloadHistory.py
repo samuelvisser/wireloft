@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import ForeignKey, JSON, String, func
+from sqlalchemy import ForeignKey, Index, JSON, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -17,6 +17,12 @@ class MediaDownloadHistory(Base):
     """Append-only history of user-meaningful changes to one media download."""
 
     __tablename__ = "media_download_history"
+    __table_args__ = (
+        Index(
+            "ix_media_download_history_download_occurred_id",
+            "media_download_id", "occurred_at", "id",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     media_download_id: Mapped[int] = mapped_column(

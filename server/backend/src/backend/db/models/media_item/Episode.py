@@ -3,7 +3,7 @@ from typing import Optional, TYPE_CHECKING
 
 from .MediaItemBase import MediaItemBase
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Boolean, ForeignKey, Index, PrimaryKeyConstraint, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Index, PrimaryKeyConstraint, UniqueConstraint, text
 
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
@@ -34,6 +34,22 @@ class Episode(
             "show_id",
             "published_date",
             "id",
+        ),
+        Index(
+            "ix_media_items_episode_show_publish_status",
+            "show_id",
+            "publish_status",
+        ),
+        Index(
+            "ix_media_items_episode_season_index_id",
+            "season_id",
+            "index",
+            "id",
+        ),
+        Index(
+            "ix_media_items_episode_unfinished_metadata_status",
+            "publish_status",
+            sqlite_where=text("metadata_is_final = 0"),
         ),
         PrimaryKeyConstraint("id", "show_id", name="pk_episodes"),
     )

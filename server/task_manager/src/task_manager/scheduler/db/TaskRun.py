@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Enum as SAEnum, ForeignKey, JSON, func
+from sqlalchemy import Enum as SAEnum, ForeignKey, Index, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -19,6 +19,12 @@ class TaskRun(Base):
     """ A TaskRun represents one execution attempt of one registered worker """
 
     __tablename__ = "task_runs"
+    __table_args__ = (
+        Index(
+            "ix_task_runs_definition_status_resource_started_id",
+            "definition_id", "status", "resource_type", "resource_id", "started_at", "id",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     schedule_id: Mapped[Optional[int]] = mapped_column(ForeignKey("task_schedules.id", ondelete="SET NULL"), index=True)
