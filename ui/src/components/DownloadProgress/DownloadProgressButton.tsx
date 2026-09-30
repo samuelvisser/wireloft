@@ -17,7 +17,7 @@ export default function DownloadProgressButton({download, starting = false, labe
     const retry = !!download && state?.canRetry && onRetry
     if (download && state?.outcome === 'success') return <span className="wl-progress-with-details">
         {showCompletedStatus && <DownloadProgressStatus download={download} compact details={false} labelOverride={downloadedLabel}/>} 
-        <button type="button" className="progress-button-control" onClick={onRetry || onStart}
+        <button type="button" className="icon-btn" onClick={onRetry || onStart}
                 disabled={disabled || controlBusy} title="Re-download" aria-label={`Re-download ${ariaLabel || ''}`}>
             <FontAwesomeIcon icon={['fas', 'rotate-right']}/>
         </button>

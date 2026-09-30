@@ -152,3 +152,12 @@
         background: rgba(96, 165, 250, 0.22);
     }
 }
+
+.downloads-table-loading {
+    display: inline-flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 0;
+    color: var(--muted);
+}

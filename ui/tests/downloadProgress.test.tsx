@@ -94,3 +94,17 @@ test('download progress button can name the completed artifact',()=>{
     assert.match(markup,/Trailer downloaded/)
     assert.doesNotMatch(markup,/>Downloaded</)
 })
+test('idle re-download uses the same plain icon button treatment as ledger actions',()=>{
+    const presentation=presentDownloadProgress({artifactStatus:'available'} as any)
+    const download={id:1,presentation} as any
+    const client=new QueryClient()
+    const markup=renderToStaticMarkup(
+        <QueryClientProvider client={client}>
+            <FrontendPuller>
+                <DownloadProgressButton download={download} onStart={()=>{}}/>
+            </FrontendPuller>
+        </QueryClientProvider>,
+    )
+    assert.match(markup,/class="icon-btn"/)
+    assert.doesNotMatch(markup,/class="progress-button-control"/)
+})

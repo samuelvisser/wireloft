@@ -40,8 +40,8 @@ export type DataTableProps<T> = {
     loading?: boolean
     error?: unknown
     ariaLabel: string
-    loadingMessage?: string
-    emptyMessage?: string
+    loadingMessage?: ReactNode
+    emptyMessage?: ReactNode
     rowKey: (row: T) => string | number
     onRowClick?: (row: T) => void
     rowAriaLabel?: (row: T) => string

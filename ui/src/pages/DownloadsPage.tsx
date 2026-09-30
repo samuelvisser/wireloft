@@ -4,6 +4,7 @@ import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {library} from '@fortawesome/fontawesome-svg-core'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {Column, DataTable, DataTableAction} from '../components/DataTable/DataTable'
 import DownloadLogDialog from '../components/MediaDownload/DownloadLogDialog'
@@ -143,7 +144,8 @@ export default function DownloadsPage() {
     const qc = useQueryClient()
     const startOperation = useStartOperation()
     const controlOperation = useControlOperation()
-    const {data: downloads, isLoading, error} = useMediaDownloadsView()
+    const {data: downloads, error} = useMediaDownloadsView()
+    const loadingDownloads = downloads === undefined && !error
     const lastFilterPressRef = useRef<{value: string; timestamp: number} | null>(null)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
     const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(DEFAULT_STATUS_FILTER))
@@ -441,7 +443,12 @@ export default function DownloadsPage() {
                     data={filteredDownloads}
                     className="table downloads-table"
                     wrapperClassName="table-wrapper downloads-table-wrapper"
-                    loading={isLoading}
+                    loading={loadingDownloads}
+                    loadingMessage={
+                        <span className="downloads-table-loading" role="status" aria-label="Loading downloads">
+                            <FontAwesomeIcon icon={['fas', 'spinner']} spin aria-hidden="true"/>
+                        </span>
+                    }
                     error={error}
                     emptyMessage={
                         downloads && downloads.length > 0
