@@ -7,6 +7,7 @@ from typing import Literal, Optional
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from fastapi import HTTPException, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
@@ -408,45 +409,62 @@ def get_feed_items(
     if not profile.use_downloads and not profile.use_dw_stream and not live_enabled:
         return []
 
-    episodes = (
+    previous_handoffs = set(profile.live_episode_handoff_ids or [])
+    next_handoffs: set[int] = set()
+    items: list[tuple[Episode, Optional[EpisodeMediaDownload]]] = []
+    seen_episode_ids: set[int] = set()
+
+    order_date = func.coalesce(
+        Episode.published_date,
+        Episode.went_live_date,
+        Episode.created_at,
+    )
+    episode_query = (
         s.query(Episode)
         .filter(Episode.show_id == profile.show_id)
-        .all()
+        .order_by(order_date.desc(), Episode.id.asc())
     )
 
-    downloads_by_episode: dict[int, list[EpisodeMediaDownload]] = {}
-    if profile.use_downloads:
+    def load_downloads(episodes: list[Episode]) -> dict[int, list[EpisodeMediaDownload]]:
+        if not profile.use_downloads or not episodes:
+            return {}
         rows = (
             s.query(EpisodeMediaDownload)
-            .join(Episode, EpisodeMediaDownload.media_item_id == Episode.id)
             .options(joinedload(EpisodeMediaDownload.local_media_profile))
-            .filter(Episode.show_id == profile.show_id)
+            .filter(EpisodeMediaDownload.media_item_id.in_(
+                [episode.id for episode in episodes]
+            ))
             .filter(
                 EpisodeMediaDownload.artifact_status.in_(_RECONCILABLE_ARTIFACT_STATUSES)
             )
             .all()
         )
+        grouped: dict[int, list[EpisodeMediaDownload]] = {}
         for download in rows:
-            downloads_by_episode.setdefault(download.media_item_id, []).append(download)
+            grouped.setdefault(download.media_item_id, []).append(download)
+        return grouped
 
-    previous_handoffs = set(profile.live_episode_handoff_ids or [])
-    next_handoffs: set[int] = set()
-    items: list[tuple[Episode, Optional[EpisodeMediaDownload]]] = []
-
-    for episode in episodes:
+    def consider(
+        episode: Episode,
+        downloads_by_episode: dict[int, list[EpisodeMediaDownload]],
+        *,
+        collect: bool,
+    ) -> None:
+        seen_episode_ids.add(episode.id)
         if not _profile_allows_episode(profile, episode):
-            continue
+            return
 
         is_live = episode.publish_status == EpisodePublishStatus.LIVE.value
         if is_live:
             if _can_stream_live_episode(s, profile, episode):
-                items.append((episode, None))
+                if collect:
+                    items.append((episode, None))
                 if (
                     episode.id in previous_handoffs
                     and _profile_keeps_live_handoff(profile)
                 ):
                     next_handoffs.add(episode.id)
-            continue
+            return
 
         downloads = downloads_by_episode.get(episode.id, [])
         audio, mp4, hls = _mode_downloads(s, profile, downloads)
@@ -465,12 +483,13 @@ def get_feed_items(
             handoff_active = False
 
         if handoff_active:
-            items.append((episode, relevant_local))
+            if collect:
+                items.append((episode, relevant_local))
             next_handoffs.add(episode.id)
-            continue
+            return
 
         if episode.publish_status in _UNAVAILABLE_PUBLISH_STATUSES:
-            continue
+            return
 
         local_delivery_complete = _has_required_local_media(
             profile,
@@ -478,29 +497,49 @@ def get_feed_items(
             mp4=mp4,
             hls=hls,
         )
-        if profile.use_dw_stream or local_delivery_complete:
+        if collect and (profile.use_dw_stream or local_delivery_complete):
             items.append((episode, relevant_local))
 
-    def sort_key(pair: tuple[Episode, Optional[EpisodeMediaDownload]]):
-        episode = pair[0]
-        value = (
-            episode.published_date
-            or episode.went_live_date
-            or episode.created_at
+    if profile.max_items > 0:
+        batch_size = max(50, min(profile.max_items * 2, 250))
+        offset = 0
+        while len(items) < profile.max_items:
+            batch = episode_query.offset(offset).limit(batch_size).all()
+            if not batch:
+                break
+            downloads_by_episode = load_downloads(batch)
+            for episode in batch:
+                consider(episode, downloads_by_episode, collect=True)
+            offset += len(batch)
+            if len(batch) < batch_size:
+                break
+    else:
+        episodes = episode_query.all()
+        downloads_by_episode = load_downloads(episodes)
+        for episode in episodes:
+            consider(episode, downloads_by_episode, collect=True)
+
+    # Handoff durability is independent of max_items. Reconcile old handoffs that
+    # were older than the bounded scan without loading the rest of the show.
+    remaining_handoff_ids = previous_handoffs - seen_episode_ids
+    if remaining_handoff_ids:
+        handoff_episodes = (
+            s.query(Episode)
+            .filter(
+                Episode.show_id == profile.show_id,
+                Episode.id.in_(remaining_handoff_ids),
+            )
+            .all()
         )
-        return utc_datetime(value)
+        downloads_by_episode = load_downloads(handoff_episodes)
+        for episode in handoff_episodes:
+            consider(episode, downloads_by_episode, collect=False)
 
-    items.sort(key=sort_key, reverse=True)
-    result = items[:profile.max_items] if profile.max_items > 0 else items
-
-    # A podcast app may keep an older RSS result and call its stable HLS URL
-    # after the episode has fallen outside max_items. Keep an established live
-    # handoff until the final local HLS artifact exists, independent of feed paging.
     normalized_handoffs = sorted(next_handoffs)
     if list(profile.live_episode_handoff_ids or []) != normalized_handoffs:
         profile.live_episode_handoff_ids = normalized_handoffs
 
-    return result
+    return items[:profile.max_items] if profile.max_items > 0 else items
 
 
 def get_episode_for_feed(

@@ -145,6 +145,13 @@ def get_media_downloads_view(
     )
     if statuses:
         stmt = stmt.where(MediaDownloadBase.artifact_status.in_(statuses))
+    if episode_slug is not None:
+        stmt = (
+            stmt.join(Episode, Episode.id == MediaDownloadBase.media_item_id)
+            .where(Episode.slug == episode_slug)
+        )
+    if limit is not None and episode_slug is not None and movie_slug is None:
+        stmt = stmt.limit(limit)
 
     rows = list(s.execute(stmt))
     latest_runs = _latest_download_runs(s, [download.id for download, _ in rows])
@@ -158,9 +165,7 @@ def get_media_downloads_view(
             latest_run=latest_runs.get(download.id),
             queue_position=queue_positions.get(download.id),
         )
-        if episode_slug is not None and (
-            source.episode is None or source.episode.slug != episode_slug
-        ):
+        if episode_slug is not None and source.episode is None:
             continue
         if movie_slug is not None and (
             source.movie is None or source.movie.slug != movie_slug

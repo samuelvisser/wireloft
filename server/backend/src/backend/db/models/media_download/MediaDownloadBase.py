@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import BigInteger, Boolean, String, Text, func, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Index, String, Text, func, UniqueConstraint
 from sqlalchemy.sql.schema import ForeignKey
 
 from backend.db import Base
@@ -38,6 +38,7 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
     __table_args__ = (
         # A media item can only have one persistent artifact per local media profile.
         UniqueConstraint("media_item_id", "local_media_profile_id", name="uq_download_per_media_profile"),
+        Index("ix_media_downloads_local_profile_id", "local_media_profile_id", "id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

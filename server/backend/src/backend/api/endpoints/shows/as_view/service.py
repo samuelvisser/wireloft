@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -18,34 +18,70 @@ class _ShowViewSource:
     years: str
 
 
-def _view_source(s: Session, show: Show) -> _ShowViewSource:
-    count = (
-        s.query(func.count())
-        .select_from(Episode)
-        .filter(Episode.show_id == show.id)
-        .scalar()
-    ) or 0
-    min_dt, max_dt = (
-        s.query(func.min(Episode.published_date), func.max(Episode.published_date))
-        .filter(Episode.show_id == show.id)
-        .one_or_none()
-        or (None, None)
+def _episode_stats():
+    return (
+        select(
+            Episode.show_id.label("show_id"),
+            func.count(Episode.id).label("episode_count"),
+            func.min(Episode.published_date).label("min_published_date"),
+            func.max(Episode.published_date).label("max_published_date"),
+        )
+        .group_by(Episode.show_id)
+        .subquery()
     )
-    years = f"{min_dt.year}-{max_dt.year}" if min_dt and max_dt else ""
-    return _ShowViewSource(show=show, episode_count=count, years=years)
 
 
-def _to_view(s: Session, show: Show) -> ShowAPIReadView:
-    return ShowAPIReadView.model_validate(_view_source(s, show))
+def _show_view_statement():
+    stats = _episode_stats()
+    return (
+        select(
+            Show,
+            func.coalesce(stats.c.episode_count, 0),
+            stats.c.min_published_date,
+            stats.c.max_published_date,
+        )
+        .outerjoin(stats, stats.c.show_id == Show.id)
+    )
+
+
+def _to_view(
+    show: Show,
+    episode_count: int,
+    min_published_date,
+    max_published_date,
+) -> ShowAPIReadView:
+    years = (
+        f"{min_published_date.year}-{max_published_date.year}"
+        if min_published_date and max_published_date
+        else ""
+    )
+    return ShowAPIReadView.model_validate(_ShowViewSource(
+        show=show,
+        episode_count=int(episode_count or 0),
+        years=years,
+    ))
 
 
 def get_show_views_list(s: Session) -> list[ShowAPIReadView]:
-    shows: Sequence[Show] = s.scalars(select(Show).order_by(Show.title.asc())).all()
-    return [_to_view(s, show) for show in shows]
+    rows = s.execute(_show_view_statement().order_by(Show.title.asc())).all()
+    return [_to_view(*row) for row in rows]
 
 
 def get_show_view(s: Session, show_slug: str) -> ShowAPIReadView:
     show: Optional[Show] = s.query(Show).filter_by(slug=show_slug).one_or_none()
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
-    return _to_view(s, show)
+
+    episode_count, min_published_date, max_published_date = s.execute(
+        select(
+            func.count(Episode.id),
+            func.min(Episode.published_date),
+            func.max(Episode.published_date),
+        ).where(Episode.show_id == show.id)
+    ).one()
+    return _to_view(
+        show,
+        episode_count,
+        min_published_date,
+        max_published_date,
+    )

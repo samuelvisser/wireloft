@@ -3,8 +3,10 @@ from types import SimpleNamespace
 
 
 class _FakeQuery:
-    def __init__(self, rows):
+    def __init__(self, rows, *, offset=0, limit=None):
         self._rows = rows
+        self._offset = offset
+        self._limit = limit
 
     def filter(self, *_args, **_kwargs):
         return self
@@ -15,8 +17,18 @@ class _FakeQuery:
     def options(self, *_args, **_kwargs):
         return self
 
+    def order_by(self, *_args, **_kwargs):
+        return self
+
+    def offset(self, value):
+        return _FakeQuery(self._rows, offset=value, limit=self._limit)
+
+    def limit(self, value):
+        return _FakeQuery(self._rows, offset=self._offset, limit=value)
+
     def all(self):
-        return self._rows
+        end = None if self._limit is None else self._offset + self._limit
+        return self._rows[self._offset:end]
 
 
 class _FakeSession:
@@ -79,3 +91,16 @@ def test_zero_feed_limit_keeps_full_history():
     items = get_feed_items(_FakeSession(episodes), _profile(0))
 
     assert [episode.id for episode, _ in items] == [0, 1, 2, 3, 4]
+
+
+def test_feed_limit_scans_past_ineligible_newest_items():
+    from backend.api.endpoints.feeds.service import get_feed_items
+
+    now = datetime(2026, 1, 1, 12, 0, 0)
+    episodes = [_episode(index, now - timedelta(minutes=index)) for index in range(60)]
+    for episode in episodes[:55]:
+        episode.publish_status = "dw_processing"
+
+    items = get_feed_items(_FakeSession(episodes), _profile(2))
+
+    assert [episode.id for episode, _ in items] == [55, 56]
