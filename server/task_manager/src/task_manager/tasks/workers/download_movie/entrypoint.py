@@ -29,7 +29,7 @@ async def download_movie(
     if resource_id is None:
         raise ValueError("A MediaDownload resource ID is required")
 
-    with serialize_download_attempt(resource_id):
+    with serialize_download_attempt(resource_id, progress=progress):
         with db_session() as session:
             return await run_download_movie(
                 session,

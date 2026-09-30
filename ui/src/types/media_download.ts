@@ -16,6 +16,9 @@ export enum MediaDownloadStatus {
 export const MediaDownloadStatusReg = createSelectRegistry('MediaDownloadStatus', {
     'not_downloaded': {label: 'Not downloaded', help: 'No file exists and no download is currently queued'},
     'pending': {label: 'Queued', help: 'Waiting for the download worker to pick this up'},
+    'preparing': {label: 'Preparing', help: 'Resolving playback and planning required outputs'},
+    'waiting': {label: 'Waiting', help: 'Waiting for a request or resource dependency'},
+    'canceling': {label: 'Canceling', help: 'Stopping owned work before cleanup'},
     'downloading': {label: 'Downloading', help: 'Download in progress'},
     'downloaded': {label: 'Downloaded', help: 'Download completed'},
     'redownloaded': {label: 'Redownloaded', help: 'Episode was downloaded again'},
@@ -27,4 +30,4 @@ export const MediaDownloadStatusReg = createSelectRegistry('MediaDownloadStatus'
 });
 
 /** Statuses that mean a download is still in flight. */
-export const ACTIVE_DOWNLOAD_STATUSES = new Set<string>(['pending', 'downloading', 'local_processing']);
+export const ACTIVE_DOWNLOAD_STATUSES = new Set<string>(['pending', 'preparing', 'waiting', 'canceling', 'downloading', 'local_processing']);

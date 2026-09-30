@@ -19,7 +19,7 @@ from backend.types.media_download_history_types import MediaDownloadHistoryActio
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
-from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
+from dailywire_downloader.storage.artifacts import remove_download_artifacts
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
@@ -383,7 +383,7 @@ def suppress_media_download_automatic_retry(s: Session, media_download_id: int) 
         raise HTTPException(status_code=404, detail="Media download not found")
     download.automatic_retry_suppressed = True
     if download.artifact_status == MediaDownloadArtifactStatus.ABSENT.value:
-        remove_download_artifacts(download.file_path, download.thumbnail_path, download.nfo_path)
+        remove_download_artifacts(download.file_path, sidecar_paths=tuple(asset.path for asset in download.assets))
     s.flush()
     return download
 

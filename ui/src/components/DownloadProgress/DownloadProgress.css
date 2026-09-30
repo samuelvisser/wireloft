@@ -1,0 +1,16 @@
+.download-progress-status {display:inline-flex;flex-direction:column;gap:5px;width:100%;min-width:120px;max-width:100%;vertical-align:middle}
+.download-progress-heading {display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:25px}
+.download-progress-label {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:.85rem}
+.download-progress-status>small {color:var(--muted);font-size:.75rem;line-height:1.3;overflow-wrap:anywhere}
+.download-progress-status.is-compact {min-width:95px}
+.download-progress-action {display:inline-flex;gap:6px;align-items:center;margin-left:auto;font-size:.78rem;white-space:nowrap}
+.download-progress-action .wl-progress-fill {opacity:.22}
+.download-progress-action-label {position:relative;z-index:1}
+.action-menu-item:has(.download-progress-action) {justify-content:space-between;gap:12px}
+.progress-button .wl-progress-fill {opacity:.3}
+@media (prefers-reduced-motion:reduce) {.download-progress .fa-spin {animation:none}}
+.download-stage-timings {margin-top:8px;font-size:.82rem;overflow-x:auto}
+.download-stage-timings summary {cursor:pointer}
+.download-stage-timings table {width:100%;border-collapse:collapse;text-align:left}
+.download-stage-timings th,.download-stage-timings td {padding:6px;border-bottom:1px solid var(--divider);vertical-align:top}
+.download-stage-timings p {color:var(--muted);line-height:1.5}

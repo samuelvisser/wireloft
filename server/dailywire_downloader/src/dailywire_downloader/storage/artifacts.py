@@ -14,6 +14,7 @@ def remove_download_artifacts(
     file_path: Optional[str],
     thumbnail_path: Optional[str] = None,
     nfo_path: Optional[str] = None,
+    *, sidecar_paths: tuple[str, ...] = (),
 ) -> None:
     """Remove a download's owned final files and every temporary form WireLoft uses.
 
@@ -37,6 +38,7 @@ def remove_download_artifacts(
                 Path(file_path + ".rawts"),
                 Path(file_path + ".rawts.part"),
                 Path(file_path + ".thumbnail.part"),
+                Path(file_path + ".metadata.part"),
             )
             for path in paths:
                 try:
@@ -72,6 +74,7 @@ def remove_download_artifacts(
     for sidecar_path, label in (
         (thumbnail_path, "thumbnail"),
         (nfo_path, "NFO"),
+        *((path, "sidecar") for path in sidecar_paths),
     ):
         if not sidecar_path:
             continue

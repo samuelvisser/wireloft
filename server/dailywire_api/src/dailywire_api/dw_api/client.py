@@ -1,9 +1,6 @@
 import json
 import logging
 import time
-from contextlib import contextmanager
-from contextvars import ContextVar
-from threading import Condition
 
 from builtins import str
 from dataclasses import dataclass
@@ -30,127 +27,10 @@ from config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# ---------------- request pacing (global across dailywire_api) ----------------
-# We intentionally keep this module-level so that all clients share the same pacing state.
-# A ticketed Condition serializes request starts without holding the underlying lock while
-# a caller waits for its pacing delay. This prevents queued requests from calculating
-# delays from stale pre-lock timestamps.
-_pacing_condition = Condition()
-_pacing_next_ticket: int = 0
-_pacing_serving_ticket: int = 0
-_last_request_ns: Optional[int] = None
-_ms_since_last_request: Optional[int] = None
-_fast_requests: int = 0
-
-SlowRequestCooldownObserver = Callable[[bool], None]
-_slow_request_cooldown_observer: ContextVar[SlowRequestCooldownObserver | None] = ContextVar(
-    "dailywire_slow_request_cooldown_observer",
-    default=None,
+from dailywire_api.pacing import (
+    RequestCancelled, RequestPriority, check_cancelled,
+    wait_before_request, wait_for_retry,
 )
-
-
-@contextmanager
-def slow_request_cooldown_observer(observer: SlowRequestCooldownObserver) -> Iterator[None]:
-    """Observe slow request cooldown waits in the current execution context."""
-    token = _slow_request_cooldown_observer.set(observer)
-    try:
-        yield
-    finally:
-        _slow_request_cooldown_observer.reset(token)
-
-
-def _notify_slow_request_cooldown(waiting: bool) -> None:
-    observer = _slow_request_cooldown_observer.get()
-    if observer is None:
-        return
-    try:
-        observer(waiting)
-    except Exception:
-        # Pacing must never fail a Daily Wire request merely because optional
-        # execution-state reporting could not be persisted.
-        logger.exception("Daily Wire slow request cooldown observer failed")
-
-
-def _wait_before_request() -> None:
-    """Enforce the global Daily Wire request pacing policy.
-
-    Requests take a ticket so their starts remain serialized, but ``Condition.wait``
-    releases the pacing lock while a request is delayed. Timing is sampled only after
-    a caller reaches the front of the queue, so time spent waiting behind another
-    caller can never turn into a negative/stale elapsed interval.
-
-    A request that exceeds ``max_fast_requests`` waits for the configured slow gap and
-    then starts a fresh burst. Resetting the burst counter at that point is important:
-    otherwise every request already queued behind the cooldown would independently
-    incur another full slow delay.
-    """
-    global _pacing_next_ticket, _pacing_serving_ticket
-    global _last_request_ns, _ms_since_last_request, _fast_requests
-
-    st = get_settings().dw_timeout
-    min_fast_ms = int(st.min_fast_request_ms)
-    min_slow_ms = int(st.min_slow_request_ms)
-    max_fast = int(st.max_fast_requests)
-    cooldown_waiting = False
-
-    try:
-        with _pacing_condition:
-            ticket = _pacing_next_ticket
-            _pacing_next_ticket += 1
-
-            while ticket != _pacing_serving_ticket:
-                _pacing_condition.wait()
-
-            try:
-                # Sample the clock only after this request owns the pacing turn. A
-                # timestamp captured before waiting in the queue can be minutes stale.
-                now_ns = time.monotonic_ns()
-                if _last_request_ns is None:
-                    elapsed_ms: Optional[int] = None
-                    next_fast_requests = 0
-                    slow_cooldown = False
-                    target_start_ns = now_ns
-                else:
-                    elapsed_ns = max(0, now_ns - _last_request_ns)
-                    elapsed_ms = int(elapsed_ns / 1_000_000)
-
-                    if elapsed_ms >= min_slow_ms:
-                        next_fast_requests = 0
-                    else:
-                        next_fast_requests = _fast_requests + 1
-
-                    slow_cooldown = next_fast_requests > max_fast
-                    target_ms = min_fast_ms
-                    if slow_cooldown:
-                        target_ms = max(target_ms, min_slow_ms)
-
-                    target_start_ns = max(
-                        now_ns,
-                        _last_request_ns + (target_ms * 1_000_000),
-                    )
-
-                _ms_since_last_request = elapsed_ms
-
-                remaining_ns = target_start_ns - time.monotonic_ns()
-                if slow_cooldown and remaining_ns > 0:
-                    cooldown_waiting = True
-                    _notify_slow_request_cooldown(True)
-
-                # Condition.wait() releases the underlying lock. Other callers can
-                # therefore enqueue while this request is pacing, but cannot overtake
-                # it because only the serving ticket may proceed.
-                while remaining_ns > 0:
-                    _pacing_condition.wait(timeout=remaining_ns / 1_000_000_000)
-                    remaining_ns = target_start_ns - time.monotonic_ns()
-
-                _last_request_ns = time.monotonic_ns()
-                _fast_requests = 0 if slow_cooldown else next_fast_requests
-            finally:
-                _pacing_serving_ticket += 1
-                _pacing_condition.notify_all()
-    finally:
-        if cooldown_waiting:
-            _notify_slow_request_cooldown(False)
 
 
 @dataclass(frozen=True)
@@ -203,8 +83,8 @@ class MiddlewareClient:
     HTTP client for DailyWire Middleware API.
 
     Pass an access token if you have one; premium content typically requires it.
-    Request pacing is enabled by default. Low-volume interactive UI reads may
-    explicitly disable it so they are not blocked behind background cooldowns.
+    All requests share rate protection. Interactive reads may receive fair
+    queue priority, but cannot bypass a cooldown or upstream Retry-After.
     """
 
     def __init__(
@@ -212,11 +92,11 @@ class MiddlewareClient:
         access_token: Optional[str] = None,
         request_timeout: float = 30.0,
         base_url: str = get_settings().dw_api.middleware_api,
-        pace_requests: bool = True,
+        request_priority: RequestPriority | None = None,
     ) -> None:
         self._req_timeout = request_timeout
         self._base_url = base_url.rstrip('/')
-        self._pace_requests = bool(pace_requests)
+        self._request_priority = request_priority
         headers = {
             # These are generally not required for Middleware, but harmless if present
             'Accept': 'application/json',
@@ -594,16 +474,13 @@ class MiddlewareClient:
     def _get_url(self, url: str) -> Dict[str, Any]:
         data: Optional[bytes] = None
         for attempt in range(self._TRANSIENT_RETRIES + 1):
-            # Background/bulk callers use the global pacing policy. Explicitly
-            # interactive clients bypass only this wait; retries and network
-            # timeouts remain unchanged.
-            if self._pace_requests:
-                _wait_before_request()
+            wait_before_request(self._request_priority)
 
             req = Request(url, headers=self._headers, method='GET')
             try:
                 with urlopen(req, timeout=self._req_timeout) as resp:
                     data = resp.read()
+                check_cancelled()
                 break
             except HTTPError as e:
                 try:
@@ -611,14 +488,16 @@ class MiddlewareClient:
                 except Exception:
                     err_body = ''
                 if e.code in self._TRANSIENT_HTTP_CODES and attempt < self._TRANSIENT_RETRIES:
-                    time.sleep(self._TRANSIENT_RETRY_DELAY_S * (attempt + 1))
+                    wait_for_retry(e, attempt, base_delay=self._TRANSIENT_RETRY_DELAY_S)
                     continue
                 raise MiddlewareAPIError(f"HTTP error {e.code}: {err_body or e.reason}", status_code=e.code) from e
             except URLError as e:
                 if attempt < self._TRANSIENT_RETRIES:
-                    time.sleep(self._TRANSIENT_RETRY_DELAY_S * (attempt + 1))
+                    wait_for_retry(e, attempt, base_delay=self._TRANSIENT_RETRY_DELAY_S)
                     continue
                 raise MiddlewareAPIError(f"Network error: {e.reason}") from e
+            except RequestCancelled:
+                raise
             except Exception as e:
                 raise MiddlewareAPIError(str(e)) from e
 

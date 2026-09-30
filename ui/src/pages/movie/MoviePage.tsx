@@ -6,8 +6,8 @@ import toast from 'react-hot-toast'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
-import ProgressBar from '../../components/common/ProgressBar'
-import ProgressButton from '../../components/common/ProgressButton'
+import DownloadProgressStatus from '../../components/DownloadProgress/DownloadProgressStatus'
+import DownloadProgressButton from '../../components/DownloadProgress/DownloadProgressButton'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
@@ -21,11 +21,9 @@ import {
     useControlOperation,
     useStartOperation,
 } from '../../lib/operations'
-import {ACTIVE_DOWNLOAD_STATUSES} from '../../types/media_download'
 import {MovieExtraType} from '../../types/schemas/dailywire_catalog'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {MovieRead, MovieReadSchema} from '../../types/schemas/movie'
-import {formatBytes} from '../../utils/formatting'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
 import './MoviePage.css'
@@ -56,115 +54,18 @@ type MovieDownloadControlProps = {
     onCancel: (download: MediaDownloadViewRead) => void
 }
 
-const RETRYABLE_DOWNLOAD_STATUSES = new Set([
-    'pending',
-    'downloading',
-    'local_processing',
-    'cancelled',
-    'error',
-    'missing',
-    'corrupted',
-])
-
-function MovieDownloadControl({
-    download,
-    label,
-    progressLabel,
-    queueing,
-    disabled,
-    primary = true,
-    panel = false,
-    controlBusy,
-    onStart,
-    onOpenLog,
-    onRetry,
-    onCancel,
-}: MovieDownloadControlProps) {
-    const status = download ? String(download.downloadStatus) : null
-    const downloaded = download?.artifactStatus === 'available'
-    const waitingForDownloadedLabel = !downloaded && (status === 'downloaded' || status === 'redownloaded')
-    const active = queueing || waitingForDownloadedLabel || (status !== null && ACTIVE_DOWNLOAD_STATUSES.has(status))
-    const progress = waitingForDownloadedLabel
-        ? 100
-        : queueing || status === 'pending'
-            ? 0
-            : Math.max(0, Math.min(100, download?.progress ?? 0))
-    const activeLabel = queueing
-        ? 'Queuing…'
-        : waitingForDownloadedLabel
-            ? '100%'
-            : status === 'pending'
-                ? 'Queued…'
-                : status === 'local_processing'
-                    ? 'Processing…'
-                    : `${progress}%`
-    const downloadedDetails = download && downloaded
-        ? [
-            download.formatDownloaded || download.preferredFormat,
-            download.downloadedBytes != null ? formatBytes(download.downloadedBytes) : null,
-        ].filter(Boolean).join(', ')
-        : ''
-    const retryable = download && status !== null && RETRYABLE_DOWNLOAD_STATUSES.has(status)
-    const cancellable = download && status !== null && ACTIVE_DOWNLOAD_STATUSES.has(status)
-
-    return (
-        <div className={`movie-media-download-control${panel ? ' is-panel' : ''}`}>
-            {downloaded ? (
-                <>
-                    <span className="movie-media-downloaded" role="status">
-                        <FontAwesomeIcon icon={['fas', 'circle-check']}/>
-                        <span>Downloaded{downloadedDetails ? ` (${downloadedDetails})` : ''}</span>
-                    </span>
-                    {download && (
-                        <button
-                            type="button"
-                            className="progress-button-control"
-                            onClick={() => onRetry(download)}
-                            disabled={controlBusy}
-                            title="Re-download"
-                            aria-label="Re-download"
-                        >
-                            <FontAwesomeIcon icon={['fas', 'rotate-right']}/>
-                        </button>
-                    )}
-                </>
-            ) : (
-                <ProgressButton
-                    definition={frontendOperationDefinitions['media.download']}
-                    resourceId={download?.id ?? null}
-                    label={label}
-                    icon={['fas', 'download']}
-                    onClick={onStart}
-                    disabled={disabled}
-                    primary={primary}
-                    starting={queueing}
-                    active={active}
-                    progress={progress}
-                    activeLabel={activeLabel}
-                    ariaLabel={progressLabel}
-                    onCancel={cancellable && download ? () => onCancel(download) : undefined}
-                    cancelDisabled={controlBusy}
-                    retry={retryable && download ? {
-                        onClick: () => onRetry(download),
-                        disabled: controlBusy,
-                        label: 'Retry download',
-                    } : undefined}
-                />
-            )}
-
-            {download && (
-                <button
-                    type="button"
-                    className="icon-btn movie-download-log-button"
-                    onClick={() => onOpenLog(download.id)}
-                    title="View download log"
-                    aria-label={`View download log for ${progressLabel}`}
-                >
-                    <FontAwesomeIcon icon={['fas', 'file-lines']}/>
-                </button>
-            )}
-        </div>
-    )
+function MovieDownloadControl({download, label, progressLabel, queueing, disabled, primary = true,
+    panel = false, controlBusy, onStart, onOpenLog, onRetry, onCancel}: MovieDownloadControlProps) {
+    return <div className={`movie-media-download-control${panel ? ' is-panel' : ''}`}>
+        <DownloadProgressButton download={download} label={label} ariaLabel={progressLabel} starting={queueing}
+            onStart={onStart} onRetry={download ? () => onRetry(download) : undefined}
+            onCancel={download ? () => onCancel(download) : undefined}
+            disabled={disabled} controlBusy={controlBusy} primary={primary}/>
+        {download && <button type="button" className="icon-btn movie-download-log-button" onClick={() => onOpenLog(download.id)}
+                             title="View download log" aria-label={`View download log for ${progressLabel}`}>
+            <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+        </button>}
+    </div>
 }
 
 function formatDuration(seconds: number) {
@@ -594,7 +495,7 @@ export default function MoviePage() {
                                     : refreshingExtrasStarting
                                         ? 'This task is starting...'
                                         : undefined,
-                                progress: refreshExtrasOperation?.progress ?? undefined,
+                                operation: refreshExtrasOperation,
                                 controls: operationControls(refreshExtrasOperation?.id, 'movie-extra refresh'),
                                 onSelect: () => void refreshMovieExtras(),
                             },
@@ -609,7 +510,7 @@ export default function MoviePage() {
                                     : !hasRedownloadableMedia
                                         ? 'This movie has no previously downloaded media.'
                                         : undefined,
-                                progress: redownloadOperation?.progress ?? undefined,
+                                operation: redownloadOperation,
                                 controls: operationControls(redownloadOperation?.id, 're-download'),
                                 onSelect: () => setRedownloadConfirm(true),
                             },
@@ -752,9 +653,7 @@ export default function MoviePage() {
                                 <strong>{download.type === 'movie_extra' ? movieExtraTypeLabel(download.movieExtraType) : 'Movie'} · {download.localMediaProfileName}</strong>
                                 <small>{download.mediaTitle && download.type === 'movie_extra' ? `${download.mediaTitle} • ` : ''}{download.formatDownloaded || download.preferredFormat || 'Waiting for format'}</small>
                             </div>
-                            {(download.downloadStatus === 'downloading' || download.downloadStatus === 'pending') ? (
-                                <div className="movie-download-progress"><ProgressBar value={download.progress} ariaLabel={`Download progress for ${movie.title}`}/><span>{download.downloadStatus === 'pending' ? 'Queued' : `${download.progress}%`}</span></div>
-                            ) : <span className={`download-status status-${download.downloadStatus}`}>{String(download.downloadStatus).replace(/_/g, ' ')}</span>}
+                            <DownloadProgressStatus download={download}/>
                         </div>
                     ))}
                 </section>

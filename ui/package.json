@@ -11,7 +11,8 @@
     "build:free-icons": "npm run validate:free-icons && tsc --noEmit && vite build --mode free-icons",
     "build:pro-icons": "npm run validate:free-icons && tsc --noEmit && vite build --mode pro-icons",
     "preview": "vite preview",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:download-progress": "node scripts/test-download-progress.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

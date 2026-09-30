@@ -1,7 +1,7 @@
+import DownloadStatusBadge from '../DownloadProgress/DownloadStatusBadge'
 import React from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useNavigate} from 'react-router-dom'
-import {statusIcon, statusLabel} from '../../utils/showStatus'
 import {EpisodeReadView} from '../../types/schemas/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 
@@ -85,19 +85,7 @@ function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }
 
     return (
         <span className="status-group" role="list" aria-label="Download status">
-            {shown.map((d) => {
-                const status = String(d.downloadStatus)
-                return (
-                    <span
-                        key={d.id}
-                        role="listitem"
-                        className={`status status-${status}`}
-                        title={`${d.localMediaProfileName ?? 'Download'}: ${statusLabel(status)}`}
-                    >
-                        <FontAwesomeIcon icon={statusIcon(status) as any} spin={status === 'local_processing'}/>
-                    </span>
-                )
-            })}
+            {shown.map(download => <DownloadStatusBadge key={download.id} download={download}/>)}
             {remaining > 0 && (
                 <span className="status status-more" title={`${remaining} more download(s)`}>+{remaining}</span>
             )}

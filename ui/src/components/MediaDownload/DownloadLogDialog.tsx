@@ -1,6 +1,8 @@
+import DownloadStageTimings from '../DownloadProgress/DownloadStageTimings'
+import DownloadProgressStatus from '../DownloadProgress/DownloadProgressStatus'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useMediaDownloadHistory} from '../../lib/mediaDownloadHistory'
-import {ACTIVE_DOWNLOAD_STATUSES, MediaDownloadStatusReg} from '../../types/media_download'
+import {MediaDownloadStatusReg} from '../../types/media_download'
 import {PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
@@ -48,7 +50,6 @@ export default function DownloadLogDialog({row, onClose}: Props) {
     const downloadedVersion = row.downloadedPublishStatus
         ? PUBLISH_STATUS_LABELS[row.downloadedPublishStatus] ?? row.downloadedPublishStatus
         : null
-    const isActive = ACTIVE_DOWNLOAD_STATUSES.has(String(row.downloadStatus))
 
     return (
         <div className="modal-overlay" role="presentation" onClick={onClose}>
@@ -76,8 +77,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                     <div>
                         <dt>Current status</dt>
                         <dd>
-                            {MediaDownloadStatusReg.getLabelLoose(String(row.downloadStatus))}
-                            {isActive ? ` (${row.progress}%)` : ''}
+                            <DownloadProgressStatus download={row}/>
                         </dd>
                     </div>
                     {currentAttempt && <div><dt>Current attempt</dt><dd>{currentAttempt}</dd></div>}
@@ -105,6 +105,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                                         {formatDateTime(entry.occurredAt)}
                                     </span>
                                 </div>
+                                <DownloadStageTimings value={entry.metadata.lifecycle}/>
                                 {(entry.duration || entry.detail) && (
                                     <div className="log-attempt-details">
                                         {entry.duration && <span>Duration: {entry.duration}</span>}

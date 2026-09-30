@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 
 @dataclass(frozen=True)
@@ -15,9 +15,11 @@ class TaskResult:
 
     summary: str
     data: dict[str, Any] = field(default_factory=dict)
+    outcome: Literal["succeeded", "partial", "failed"] = "succeeded"
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "summary": self.summary,
             "data": dict(self.data),
+            **({"outcome": self.outcome} if self.outcome != "succeeded" else {}),
         }

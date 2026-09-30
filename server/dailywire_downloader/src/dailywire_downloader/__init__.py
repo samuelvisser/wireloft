@@ -1,10 +1,8 @@
-"""Standalone HLS / direct-file media downloader used by Wireloft.
+"""Standalone media download planning, coordination, assets and publication.
 
-This package knows nothing about Daily Wire's API or Wireloft's database. It
-answers two questions for a media URL: "what can be downloaded from this?"
-(:func:`probe`) and "download exactly this" (:func:`download_hls` /
-:func:`download_file`). Choosing *which* rendition to download is the caller's
-job.
+The package has no dependency on WireLoft's ORM, API response models, settings,
+Task Manager, or frontend. Callers prepare immutable plans and consume lifecycle
+snapshots; filesystem ownership and optional download behavior live here.
 """
 
 from .downloader import download_file, download_hls, probe
@@ -56,3 +54,10 @@ __all__ = [
     "FfmpegNotFoundError",
     "__version__",
 ]
+
+from .plan import DownloadPlan, ResolvedDownloadSource, SidecarSpec, build_download_plan
+from .lifecycle import DownloadTracker, DownloadSnapshot
+from .coordinator import DownloadExecution, execute_download_plan
+
+__all__ += ["DownloadPlan", "ResolvedDownloadSource", "SidecarSpec", "build_download_plan",
+            "DownloadTracker", "DownloadSnapshot", "DownloadExecution", "execute_download_plan"]

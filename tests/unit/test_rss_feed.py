@@ -265,7 +265,7 @@ def test_rss_media_urls_do_not_change_when_download_appears(
         stable_suffixes,
 ):
     from backend.api.endpoints.feeds.service import render_rss_feed
-    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader.storage.identity import inspect_artifact
     from dailywire_downloader import hls_asset_marker, hls_asset_root
 
     show = _make_show(db_session)

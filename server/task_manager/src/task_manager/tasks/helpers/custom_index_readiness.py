@@ -73,30 +73,40 @@ def request_missing_index_repair(error: CustomIndexNotReadyError) -> None:
 
 
 async def wait_for_custom_index_pair(
-    show_id: int, local_media_profile_id: int, *, timeout: float = 180,
+    show_id: int, local_media_profile_id: int, *, timeout: float = 180, progress=None,
 ) -> None:
     """Wait outside the caller's write transaction for the latest generation."""
-    deadline = monotonic() + timeout
-    while True:
-        with db_session() as session:
-            profile = session.get(ShowLocalMediaProfile, local_media_profile_id)
-            if profile is None or not profile_uses_custom_indexes(profile):
-                return
-            state = session.scalar(select(CustomIndexState).where(
-                CustomIndexState.show_id == show_id,
-                CustomIndexState.local_media_profile_id == local_media_profile_id,
-            ))
-            if state is None:
-                request_custom_index_reconciliation(
-                    session, show_id=show_id,
-                    local_media_profile_id=local_media_profile_id,
+    waiting = False
+    try:
+        deadline = monotonic() + timeout
+        while True:
+            if progress is not None and hasattr(progress, "raise_if_cancelled"):
+                progress.raise_if_cancelled()
+            with db_session() as session:
+                profile = session.get(ShowLocalMediaProfile, local_media_profile_id)
+                if profile is None or not profile_uses_custom_indexes(profile):
+                    return
+                state = session.scalar(select(CustomIndexState).where(
+                    CustomIndexState.show_id == show_id,
+                    CustomIndexState.local_media_profile_id == local_media_profile_id,
+                ))
+                if state is None:
+                    request_custom_index_reconciliation(
+                        session, show_id=show_id,
+                        local_media_profile_id=local_media_profile_id,
+                    )
+                    session.commit()
+                elif state.completed_generation == state.requested_generation:
+                    return
+            if monotonic() >= deadline:
+                raise CustomIndexNotReadyError(
+                    f"Manage Custom Indexes did not finish for Show {show_id}, "
+                    f"Local Media Profile {local_media_profile_id}"
                 )
-                session.commit()
-            elif state.completed_generation == state.requested_generation:
-                return
-        if monotonic() >= deadline:
-            raise CustomIndexNotReadyError(
-                f"Manage Custom Indexes did not finish for Show {show_id}, "
-                f"Local Media Profile {local_media_profile_id}"
-            )
-        await asyncio.sleep(0.5)
+            if progress is not None and hasattr(progress, "set_wait_state") and not waiting:
+                progress.set_wait_state("custom_indexes", "Waiting for Custom Index assignments")
+                waiting = True
+            await asyncio.sleep(0.5)
+    finally:
+        if waiting and progress is not None:
+            progress.set_wait_state(None)

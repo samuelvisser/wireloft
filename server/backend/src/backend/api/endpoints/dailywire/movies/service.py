@@ -147,7 +147,7 @@ def get_live_movie(movie_slug: str) -> DwMovieRecord:
     tokens = DeviceAuthClient().get_token()
     client = MovieMiddlewareClient(
         access_token=tokens.access_token if tokens else None,
-        pace_requests=False,
+        request_priority="interactive",
     )
     movie = client.get_movie_page(movie_slug)
     return _prefer_reliable_catalog_poster(movie)

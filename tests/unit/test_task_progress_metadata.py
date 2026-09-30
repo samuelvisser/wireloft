@@ -3,21 +3,21 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 
-def test_download_progress_writer_reports_selected_format_as_standard_progress_metadata():
-    from task_manager.tasks.workers.download_episode._helpers import TaskProgressWriter
+def test_download_reporter_preserves_structured_activity_and_selected_format():
+    from task_manager.tasks.download_adapter import DownloadProgressReporter
+    from dailywire_downloader.lifecycle import DownloadTracker
 
-    calls: list[tuple[int, str | None, dict | None]] = []
-
+    calls = []
     class Progress:
-        def set(self, percent: int, message: str | None = None, meta: dict | None = None) -> None:
+        def set(self, percent, message=None, meta=None):
             calls.append((percent, message, meta))
 
-    writer = TaskProgressWriter(Progress())
-    writer.set_selected_format("1280x720")
-
-    assert calls == [
-        (0, None, {"selected_format": "1280x720"}),
-    ]
+    reporter = DownloadProgressReporter(Progress())
+    reporter.selected_format = "1280x720"
+    reporter(DownloadTracker().snapshot())
+    assert calls[-1][0] == 0
+    assert calls[-1][2]["selected_format"] == "1280x720"
+    assert calls[-1][2]["download"]["phase"] == "preparing"
 
 
 def _operation(*, status: str, targets: list[object]):

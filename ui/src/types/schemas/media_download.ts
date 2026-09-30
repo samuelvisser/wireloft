@@ -1,3 +1,5 @@
+import type {DownloadPresentation} from '../progress'
+import type {TaskOperationRead} from './operation'
 import {z} from "zod";
 
 import {ApiDateTimeSchema} from "./datetime";
@@ -33,6 +35,7 @@ export const MediaDownloadReadSchema = z.looseObject({
     mediaItemId: z.int(),
     localMediaProfileId: z.int(),
     filePath: z.string(),
+  assets: z.array(z.object({assetKey: z.string(), kind: z.string(), path: z.string(), suffix: z.string(), sizeBytes: z.number().nullable(), fingerprint: z.string().nullable()})).default([]),
     artifactStatus: z.enum(MediaDownloadArtifactStatus),
     artifactError: z.string().nullable(),
     automaticRetrySuppressed: z.boolean(),
@@ -77,7 +80,8 @@ export type MediaDownloadDomainViewRead = z.infer<typeof MediaDownloadViewReadSc
  */
 export type MediaDownloadViewRead = MediaDownloadDomainViewRead & {
     downloadStatus: string
-    progress: number
+    presentation: DownloadPresentation
+    operation?: TaskOperationRead
     errorMessage: string | null
     startedAt: Date | null
     finishedAt: Date | null

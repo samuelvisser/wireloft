@@ -1,3 +1,8 @@
+import ProgressExplanation from '../common/ProgressExplanation'
+import type {TaskOperationRead} from '../../types/schemas/operation'
+import type {ProgressPresentation} from '../../types/progress'
+import {presentOperationProgress} from '../../lib/operationProgress'
+import DownloadProgressActionItem from '../DownloadProgress/DownloadProgressActionItem'
 import {useEffect, useId, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import './ActionMenu.css'
@@ -17,6 +22,8 @@ export type ActionMenuItem = {
     disabled?: boolean
     disabledReason?: string
     progress?: number
+    operation?: TaskOperationRead
+    presentation?: ProgressPresentation
     controls?: ActionMenuControl[]
     tone?: 'default' | 'danger'
     separatorBefore?: boolean
@@ -112,6 +119,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                     <div id={menuId} className="action-menu-popover" role="menu" aria-label={label}>
                         {items.map((item, index) => {
                             const progress = normalizedProgress(item.progress)
+                            const presentation = item.presentation ?? presentOperationProgress(item.operation)
                             const tooltipId = item.disabled && item.disabledReason
                                 ? `${menuId}-disabled-reason-${index}`
                                 : undefined
@@ -123,7 +131,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                                 >
                                     {item.separatorBefore && <div className="action-menu-separator" role="separator"/>}
                                     <div className="action-menu-item-row">
-                                        {progress !== undefined && (
+                                        {!presentation && progress !== undefined && (
                                             <span
                                                 className="action-menu-item-progress"
                                                 style={{width: `${progress}%`}}
@@ -136,13 +144,16 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                                             className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}${item.disabled ? ' is-disabled' : ''}`}
                                             aria-disabled={item.disabled || undefined}
                                             aria-describedby={tooltipId}
+                                            aria-label={presentation ? `${item.label}: ${presentation.detail}` : item.label}
                                             onClick={() => selectItem(item)}
                                         >
                                             {item.icon && (
                                                 <FontAwesomeIcon className="action-menu-item-icon" icon={item.icon} aria-hidden="true"/>
                                             )}
                                             <span>{item.label}</span>
+                                            {presentation && <DownloadProgressActionItem presentation={presentation}/>}
                                         </button>
+                                        {presentation && <ProgressExplanation detail={presentation.detail}/>}
                                         {!!item.controls?.length && (
                                             <div className="action-menu-item-controls" aria-label={`${item.label} task controls`}>
                                                 {item.controls.map((control) => (

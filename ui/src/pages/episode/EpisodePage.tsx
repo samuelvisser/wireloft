@@ -9,17 +9,17 @@ import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles} from '.
 import {useSettings} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {isShowLocalMediaProfileAvailableFor, PreferredFormatReg} from '../../types/local_media_profile'
-import {MediaDownloadStatusReg} from '../../types/media_download'
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
-import ProgressBar from '../../components/common/ProgressBar'
+import DownloadProgressStatus from '../../components/DownloadProgress/DownloadProgressStatus'
+import DownloadProgressButton from '../../components/DownloadProgress/DownloadProgressButton'
 import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
-import {formatBytes, formatDate, formatDurationMinutes} from "../../utils/formatting";
+import {formatDate, formatDurationMinutes} from "../../utils/formatting";
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -79,7 +79,6 @@ function ProfileDownloadRow({
             'Could not retry the download',
         )
 
-    const status = download ? String(download.downloadStatus) : null
 
     return (
         <div className="download-row" role="listitem" aria-label={`Download for ${profile.name}`}>
@@ -88,54 +87,10 @@ function ProfileDownloadRow({
                 <div className="download-row-format">{PreferredFormatReg.getLabelLoose(profile.preferredFormat)}</div>
             </div>
             <div className="download-row-state">
-                {!download && (
-                    <button className="btn btn-primary" onClick={startDownload} disabled={busy}>
-                        <FontAwesomeIcon icon={['fas', 'download']}/> Download
-                    </button>
-                )}
-                {download && (status === 'pending' || status === 'downloading') && (
-                    <div className="download-row-progress" aria-live="polite">
-                        <ProgressBar value={download.progress} ariaLabel={`Download progress for ${profile.name}`}/>
-                        <span className="download-row-progress-label">
-                            {status === 'pending' ? 'Queued…' : `${download.progress}%`}
-                        </span>
-                    </div>
-                )}
-                {download && (status === 'downloaded' || status === 'redownloaded') && (
-                    <div className="download-row-done">
-                        <span className="download-state-ok">
-                            <FontAwesomeIcon icon={['fas', 'circle-check']}/>{' '}
-                            Downloaded{download.formatDownloaded ? ` (${download.formatDownloaded}` : ''}
-                            {download.formatDownloaded && download.downloadedBytes ? `, ${formatBytes(download.downloadedBytes)})` : download.formatDownloaded ? ')' : ''}
-                        </span>
-                        <button className="btn download-row-redownload" onClick={retryDownload} disabled={busy}>
-                            <FontAwesomeIcon icon={['fas', 'rotate-right']}/> Re-download
-                        </button>
-                        <div className="download-row-path mono truncate" title={download.filePath}>{download.filePath}</div>
-                    </div>
-                )}
-                {download && (status === 'error' || status === 'missing' || status === 'corrupted') && (
-                    <div className="download-row-error">
-                        <span className="download-state-error">
-                            <FontAwesomeIcon icon={['fas', 'circle-exclamation']}/>{' '}
-                            {download.errorMessage || MediaDownloadStatusReg.getLabelLoose(status)}
-                        </span>
-                        <button className="btn" onClick={retryDownload} disabled={busy}>
-                            <FontAwesomeIcon icon={['fas', 'rotate-right']}/> Retry
-                        </button>
-                    </div>
-                )}
-                {download && status === 'cancelled' && (
-                    <div className="download-row-error">
-                        <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
-                        <button className="btn" onClick={startDownload} disabled={busy}>
-                            <FontAwesomeIcon icon={['fas', 'download']}/> Download
-                        </button>
-                    </div>
-                )}
-                {download && status && !['pending', 'downloading', 'downloaded', 'redownloaded', 'cancelled', 'error', 'missing', 'corrupted'].includes(status) && (
-                    <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
-                )}
+                {download && <DownloadProgressStatus download={download}/>}
+                {!download?.presentation.active && <DownloadProgressButton showCompletedStatus={false} download={download} starting={busy}
+                    onStart={startDownload} onRetry={retryDownload} controlBusy={busy}/>}
+
             </div>
             {download && (
                 <button
@@ -342,9 +297,7 @@ export default function EpisodePage() {
                                         : metadataRefreshOperation
                                             ? 'A metadata refresh is already running for this episode.'
                                             : undefined,
-                                    progress: metadataRefreshOperation
-                                        ? (metadataRefreshOperation.progress ?? 0)
-                                        : undefined,
+                                    operation: metadataRefreshOperation,
                                     onSelect: () => void refreshMetadata(),
                                 },
                                 ...(earlyDeleteAvailable ? [{
@@ -354,9 +307,7 @@ export default function EpisodePage() {
                                     separatorBefore: true,
                                     disabled: earlyDeleteDisabledReason !== undefined,
                                     disabledReason: earlyDeleteDisabledReason,
-                                    progress: earlyDeleteOperation
-                                        ? (earlyDeleteOperation.progress ?? 0)
-                                        : undefined,
+                                    operation: earlyDeleteOperation,
                                     onSelect: () => setEarlyDeleteConfirm(true),
                                 }] : []),
                             ]}

@@ -16,7 +16,7 @@ def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes |
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from backend.types.show_types import EpisodeIdentifier, ShowType
-    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader.storage.identity import inspect_artifact
     from backend.utils.helpers import generate_uuid
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
@@ -349,7 +349,7 @@ def test_scan_can_be_scoped_to_one_show(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from backend.types.show_types import EpisodeIdentifier, ShowType
-    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader.storage.identity import inspect_artifact
     from backend.utils.helpers import generate_uuid
 
     session, engine, show, _episode, download = _db_with_download(tmp_path)

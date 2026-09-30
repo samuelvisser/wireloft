@@ -17,7 +17,7 @@ from backend.services.media_download_history import (
     record_media_download_history,
     record_media_download_operation_history_once,
 )
-from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
+from dailywire_downloader.storage.artifacts import remove_download_artifacts
 from config import get_settings
 from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskOperationRun, TaskRun
 from task_manager.scheduler.operation_control import (
@@ -64,7 +64,7 @@ def prepare_media_download_artifact(
             resolved_path = resolve_media_download_file(session, download)
         artifact_status_before_removal = download.artifact_status
         removed_path = str(resolved_path) if resolved_path is not None else download.file_path
-        remove_download_artifacts(removed_path, download.thumbnail_path, download.nfo_path)
+        remove_download_artifacts(removed_path, sidecar_paths=tuple(asset.path for asset in download.assets))
         if resolved_path is not None:
             record_media_download_history(
                 session,
@@ -86,8 +86,7 @@ def prepare_media_download_artifact(
     download.downloaded_bytes = None
     download.format_downloaded = None
     download.downloaded_at = None
-    download.thumbnail_path = None
-    download.nfo_path = None
+    download.assets.clear()
     if isinstance(download, EpisodeMediaDownload):
         download.downloaded_publish_status = None
 
@@ -141,6 +140,7 @@ def get_active_media_download_operation(
             TaskOperation.resource_type == "media_download",
             TaskOperation.resource_id == media_download_id,
             TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
+            func.coalesce(TaskOperation.context["cancel_requested"].as_boolean(), False).is_(False),
         )
         .order_by(TaskOperation.created_at.desc())
         .limit(1)
@@ -324,8 +324,8 @@ def cancel_media_download_operation(
         reason=reason,
         acknowledge=acknowledge,
     )
-    if snapshot is None:
-        return None
+    if snapshot is None or snapshot.status != OperationStatus.CANCELED.value:
+        return snapshot
 
     session = get_session()
     try:
@@ -425,16 +425,17 @@ def remaining_media_download_budget(session: Session) -> int:
     cannot be mistaken for free capacity merely because a worker has not started.
     """
     max_concurrent = get_settings().download_settings.max_concurrent_downloads
-    in_flight = session.scalar(
-        select(func.count())
-        .select_from(TaskRun)
+    active = session.scalars(
+        select(TaskRun)
         .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
-        .where(
-            TaskDefinition.key.in_(_DOWNLOAD_TASK_KEYS),
-            TaskRun.status.in_(_ACTIVE_RUN_STATUSES),
-        )
-    ) or 0
-    return max(0, int(max_concurrent) - int(in_flight))
+        .where(TaskDefinition.key.in_(_DOWNLOAD_TASK_KEYS), TaskRun.status.in_(_ACTIVE_RUN_STATUSES))
+    )
+    in_flight = sum(
+        1 for run in active
+        if not ((run.meta or {}).get("_progress_meta", {}).get("download", {}).get("primary_transfer_complete") is True)
+    )
+    return max(0, int(max_concurrent) - in_flight)
+
 
 
 def _reserve_target_dispatch(
@@ -584,3 +585,8 @@ def on_media_download_task_terminal(**_) -> None:
         logger.exception("Failed to dispatch the next queued media download operation")
     finally:
         session.close()
+
+
+def on_media_download_transfer_complete() -> None:
+    """Release a primary-media lane after its durable transfer-complete snapshot."""
+    on_media_download_task_terminal()

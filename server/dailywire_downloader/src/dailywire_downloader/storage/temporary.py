@@ -11,13 +11,17 @@ import stat
 import sys
 import tempfile
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from itertools import count
 from pathlib import Path
 
-from backend.db import get_session
-from backend.utils.artifact_identity import ArtifactIdentity, inspect_artifact
+from .identity import ArtifactIdentity, inspect_artifact
 from dailywire_downloader import hls_asset_marker, hls_asset_root
+
+from .copying import copy_file
+from ..models import DownloadProgress
+from ..errors import DownloadCancelled
 
 from .helpers import (
     _numbered_candidate,
@@ -277,27 +281,25 @@ def _portable_publication_path(parent: Path) -> Path:
     return parent / f"{_PORTABLE_PUBLICATION_PREFIX}{uuid.uuid4().hex}{_PORTABLE_PUBLICATION_SUFFIX}"
 
 
-def _copy_completed_file(source: Path, destination: Path) -> None:
+def _copy_completed_file(
+    source: Path, destination: Path, *,
+    progress: Callable[[DownloadProgress], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> None:
+    if should_cancel is not None and should_cancel():
+        raise DownloadCancelled("Canceled while publishing media")
     try:
         os.replace(source, destination)
+        if progress is not None:
+            size = destination.stat().st_size
+            progress(DownloadProgress(size, size))
         return
     except OSError as exc:
         if exc.errno != errno.EXDEV:
             raise TemporaryDownloadFilesystemError(
                 f"Could not move completed temporary download into destination staging: {exc}"
             ) from exc
-
-    try:
-        with source.open("rb") as source_file, destination.open("xb") as destination_file:
-            shutil.copyfileobj(source_file, destination_file, length=1024 * 1024)
-            destination_file.flush()
-            os.fsync(destination_file.fileno())
-    except BaseException:
-        try:
-            destination.unlink()
-        except FileNotFoundError:
-            pass
-        raise
+    copy_file(source, destination, progress=progress, should_cancel=should_cancel)
 
 
 def _linux_rename_noreplace(source: Path, destination: Path) -> bool:
@@ -362,6 +364,9 @@ def _publish_complete_file(source: Path, destination: Path) -> None:
 def publish_temporary_download(
     staged_path: str | Path,
     requested_destination: str | Path,
+    *,
+    progress: Callable[[DownloadProgress], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> Path:
     """Publish a completed staged file under the first unused exact filename.
 
@@ -398,7 +403,7 @@ def publish_temporary_download(
     )
 
     try:
-        _copy_completed_file(staged, portable)
+        _copy_completed_file(staged, portable, progress=progress, should_cancel=should_cancel)
         portable_identity = inspect_artifact(portable)
         if (
             portable_identity.size_bytes != staged_identity.size_bytes
@@ -409,6 +414,8 @@ def publish_temporary_download(
             )
 
         for number in count(0):
+            if should_cancel is not None and should_cancel():
+                raise DownloadCancelled("Canceled while publishing media")
             candidate = _numbered_candidate(requested, number)
             lock = _claim_publication_lock(candidate)
             if lock is None:
@@ -548,50 +555,11 @@ def _artifact_matches_record(
     )
 
 
-def _is_committed_download_artifact(path: Path, identity: ArtifactIdentity) -> bool:
-    """Return whether the database owns this exact published media content."""
-    from sqlalchemy import select
-
-    from backend.db.models.media_download import MediaDownloadBase
-    from backend.types.download_profile_types import MediaDownloadArtifactStatus
-
-    session = get_session()
-    try:
-        statement = (
-            select(
-                MediaDownloadBase.artifact_stat_dev,
-                MediaDownloadBase.artifact_stat_ino,
-                MediaDownloadBase.artifact_size_bytes,
-                MediaDownloadBase.artifact_fingerprint,
-            )
-            .where(
-                MediaDownloadBase.file_path == str(path),
-                MediaDownloadBase.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value,
-            )
-        )
-        for row in session.execute(statement):
-            # Content identity is the portable path for NAS/network filesystems,
-            # whose inode/device identifiers may change between mounts. Keep the
-            # filesystem identity fast path for older rows without a fingerprint.
-            if (
-                row.artifact_size_bytes == identity.size_bytes
-                and row.artifact_fingerprint
-                and row.artifact_fingerprint == identity.fingerprint
-            ):
-                return True
-            if (
-                row.artifact_stat_dev == identity.stat_dev
-                and row.artifact_stat_ino == identity.stat_ino
-            ):
-                return True
-        return False
-    finally:
-        session.close()
-
-
 def cleanup_abandoned_temporary_downloads(
     temporary_root: str | Path,
     download_root: str | Path,
+    *,
+    is_committed: Callable[[Path, ArtifactIdentity], bool],
 ) -> int:
     """Reconcile temporary publication workspaces left by an unclean shutdown."""
     staging_root = Path(temporary_root) / _STAGING_DIRECTORY_NAME
@@ -615,6 +583,11 @@ def cleanup_abandoned_temporary_downloads(
         if workspace.is_symlink() or not workspace.is_dir():
             if _remove_workspace(workspace):
                 removed += 1
+            continue
+
+        from .publication import reconcile_publication_journal
+        if not reconcile_publication_journal(workspace, download_root_path, is_committed):
+            logger.warning("Preserving unsafe or unverifiable auxiliary publication workspace '%s'", workspace)
             continue
 
         marker = workspace / _STAGING_PUBLICATION_MARKER
@@ -685,7 +658,7 @@ def cleanup_abandoned_temporary_downloads(
                         )
                         continue
                     try:
-                        committed = _is_committed_download_artifact(candidate, candidate_identity)
+                        committed = is_committed(candidate, candidate_identity)
                     except Exception:
                         logger.warning(
                             "Could not verify whether staged download '%s' was committed; preserving workspace for safety",
@@ -755,7 +728,7 @@ def cleanup_abandoned_temporary_downloads(
                     continue
                 try:
                     artifact_identity = inspect_artifact(candidate)
-                    committed = _is_committed_download_artifact(candidate, artifact_identity)
+                    committed = is_committed(candidate, artifact_identity)
                 except Exception:
                     logger.warning(
                         "Could not verify whether legacy staged download '%s' was committed; preserving workspace for safety",

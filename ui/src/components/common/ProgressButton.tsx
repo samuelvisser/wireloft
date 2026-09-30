@@ -4,6 +4,11 @@ import type {ReactNode} from 'react'
 
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
+import type {ProgressPresentation} from '../../types/progress'
+import {presentOperationProgress} from '../../lib/operationProgress'
+import {workingPresentation} from '../../lib/downloadProgress'
+import ProgressFill from './ProgressFill'
+import ProgressExplanation from './ProgressExplanation'
 import './ProgressButton.css'
 
 export type ProgressButtonRetryAction = {
@@ -13,6 +18,7 @@ export type ProgressButtonRetryAction = {
 }
 
 type ProgressButtonProps = {
+    presentation?: ProgressPresentation
     definition: FrontendOperationDefinition
     resourceId?: number | null
     label: ReactNode
@@ -39,6 +45,7 @@ function clampProgress(value: number | null | undefined): number {
 
 export default function ProgressButton({
     definition,
+    presentation,
     resourceId,
     label,
     icon,
@@ -63,16 +70,11 @@ export default function ProgressButton({
         definition.resourceType,
         resourceId ?? null,
     )
-    const isActive = starting || active || operation !== undefined
-    const resolvedProgress = clampProgress(progress ?? operation?.progress)
-    const resolvedActiveLabel = activeLabel
-        ?? (starting && operation === undefined
-            ? 'Starting…'
-            : operation?.status === 'QUEUED'
-                ? 'Queued…'
-                : operation?.status === 'WAITING'
-                    ? operation.message || 'Waiting…'
-                    : `${resolvedProgress}%`)
+    const resolved = presentation ?? presentOperationProgress(operation, starting)
+        ?? (active ? workingPresentation('Working') : undefined)
+    const isActive = resolved?.active ?? false
+    const resolvedProgress = resolved?.percent ?? clampProgress(progress)
+    const resolvedActiveLabel = resolved?.compactLabel ?? resolved?.label ?? activeLabel ?? `${resolvedProgress}%`
     const showCancel = isActive && onCancel !== undefined
     const controls = Number(Boolean(retry)) + Number(showCancel)
     const rootClassName = [
@@ -87,6 +89,7 @@ export default function ProgressButton({
     const accessibleLabel = ariaLabel || definition.label
 
     return (
+        <span className="wl-progress-with-details download-progress">
         <span className={rootClassName}>
             {isActive ? (
                 <span
@@ -94,15 +97,12 @@ export default function ProgressButton({
                     role="progressbar"
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-valuenow={resolvedProgress}
+                    aria-valuenow={resolved?.mode === 'determinate' ? resolvedProgress : undefined}
+                    aria-valuetext={resolved?.detail}
                     aria-label={`${accessibleLabel}: ${resolvedActiveLabel}`}
                 >
-                    <span
-                        className="progress-button-fill"
-                        style={{width: `${resolvedProgress}%`}}
-                        aria-hidden="true"
-                    />
-                    <span className="progress-button-label">{resolvedActiveLabel}</span>
+                    {resolved && <ProgressFill presentation={resolved} className="progress-button-fill"/>}
+                    <span className="progress-button-label">{resolved?.mode !== 'determinate' && resolved && <FontAwesomeIcon className="wl-progress-icon" icon={resolved.icon}/>} {resolvedActiveLabel}</span>
                 </span>
             ) : (
                 <button
@@ -145,6 +145,8 @@ export default function ProgressButton({
                     )}
                 </span>
             )}
+        </span>
+        {isActive && resolved && <ProgressExplanation detail={resolved.detail}/>}
         </span>
     )
 }

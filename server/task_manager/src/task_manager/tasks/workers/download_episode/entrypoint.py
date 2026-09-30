@@ -47,10 +47,10 @@ async def download_episode(
         episode = session.get(Episode, download.media_item_id) if download is not None else None
         pair = (episode.show_id, download.local_media_profile_id) if episode is not None else None
     try:
-        with serialize_download_attempt(resource_id):
+        with serialize_download_attempt(resource_id, progress=progress):
             while True:
                 if pair is not None:
-                    await wait_for_custom_index_pair(*pair)
+                    await wait_for_custom_index_pair(*pair, progress=progress)
                     async with custom_index_pair_lock(*pair, shared=True):
                         if not pair_is_ready(*pair):
                             continue

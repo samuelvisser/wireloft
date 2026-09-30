@@ -1,3 +1,4 @@
+import {presentDownloadProgress} from './downloadProgress'
 import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClient} from '@tanstack/react-query'
 import {useEffect, useMemo} from 'react'
 import {saveProfilesToStorage, saveShowsToStorage} from './cache'
@@ -414,42 +415,20 @@ function operationForDownload(
     operations: TaskOperationRead[],
     mediaDownloadId: number,
 ): TaskOperationRead | undefined {
-    return operations.find((operation) => (
+    return operations.filter((operation) => (
         operation.kind === 'media.download'
         && operation.resourceType === 'media_download'
         && operation.resourceId === mediaDownloadId
-    ))
-}
+    )).sort((left, right) => Date.parse(right.createdAt || '') - Date.parse(left.createdAt || ''))[0]
 
-function presentationStatus(
-    download: MediaDownloadDomainViewRead,
-    operation?: TaskOperationRead,
-): string {
-    if (operation?.status === 'QUEUED') return 'pending'
-    if (operation?.status === 'RUNNING' || operation?.status === 'WAITING') return 'downloading'
-    if (operation?.status === 'FAILED' || operation?.status === 'PARTIAL') return 'error'
-    if (operation?.status === 'CANCELED') return 'cancelled'
-    if (operation?.status === 'SUCCEEDED') {
-        return contextBoolean(operation, 'is_redownload') ? 'redownloaded' : 'downloaded'
-    }
-
-    if (download.artifactStatus === 'available') {
-        return download.latestTaskIsRedownload ? 'redownloaded' : 'downloaded'
-    }
-    if (download.artifactStatus === 'missing') return 'missing'
-    if (download.artifactStatus === 'corrupted') return 'corrupted'
-    if (download.automaticRetrySuppressed) return 'cancelled'
-    if (download.latestTaskStatus === 'CANCELED') return 'cancelled'
-    if (download.latestTaskStatus === 'FAILED') return 'error'
-    if (download.latestTaskStatus === 'RUNNING') return 'downloading'
-    return 'not_downloaded'
 }
 
 function presentDownload(
     download: MediaDownloadDomainViewRead,
     operation?: TaskOperationRead,
 ): MediaDownloadViewRead {
-    const status = presentationStatus(download, operation)
+    const presentation = presentDownloadProgress(download, operation)
+    const status = presentation.status
     const operationError = operation?.status === 'FAILED'
         ? (operation.error || operation.message || null)
         : null
@@ -457,11 +436,8 @@ function presentDownload(
         ...download,
         formatDownloaded: progressMetaString(operation, 'selected_format') ?? download.formatDownloaded,
         downloadStatus: status,
-        progress: operation && ACTIVE_OPERATION_STATUSES.has(operation.status)
-            ? Math.max(0, Math.min(100, operation.progress ?? 0))
-            : status === 'downloaded' || status === 'redownloaded'
-                ? 100
-                : 0,
+        presentation,
+        operation,
         errorMessage: operationError || download.artifactError || download.latestTaskError,
         startedAt: operationDate(operation?.startedAt) || download.latestTaskStartedAt,
         finishedAt: operationDate(operation?.finishedAt) || download.downloadedAt || download.latestTaskFinishedAt,
@@ -492,6 +468,7 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         mediaItemId,
         localMediaProfileId,
         filePath: contextString(operation, 'file_path') || '',
+        assets: [],
         artifactStatus: 'absent',
         artifactError: null,
         automaticRetrySuppressed: false,

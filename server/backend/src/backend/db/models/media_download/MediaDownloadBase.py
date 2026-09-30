@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
     from backend.db.models.media_item import MediaItemBase
     from backend.db.models import LocalMediaProfileBase
     from .MediaDownloadHistory import MediaDownloadHistory
+    from .MediaDownloadAsset import MediaDownloadAsset
 
 
 class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
@@ -46,8 +48,6 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
     local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
 
     file_path: Mapped[str]
-    thumbnail_path: Mapped[Optional[str]]
-    nfo_path: Mapped[Optional[str]]
     artifact_status: Mapped[str] = mapped_column(
         String(24),
         default=MediaDownloadArtifactStatus.ABSENT.value,
@@ -97,6 +97,43 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
         passive_deletes=True,
         order_by="MediaDownloadHistory.occurred_at.desc(), MediaDownloadHistory.id.desc()",
     )
+
+    assets: Mapped[list["MediaDownloadAsset"]] = relationship(
+        back_populates="media_download", cascade="all, delete-orphan",
+        passive_deletes=True, lazy="selectin",
+    )
+
+    def asset_path(self, asset_key: str) -> str | None:
+        return next((asset.path for asset in self.assets if asset.asset_key == asset_key), None)
+
+    def set_asset_path(self, asset_key: str, kind: str, path: str | None) -> None:
+        """Update a named output convenience property without duplicate storage."""
+        from .MediaDownloadAsset import MediaDownloadAsset
+        existing = next((asset for asset in self.assets if asset.asset_key == asset_key), None)
+        if path is None:
+            if existing is not None:
+                self.assets.remove(existing)
+        elif existing is not None:
+            existing.path = path
+            existing.suffix = Path(path).suffix
+        else:
+            self.assets.append(MediaDownloadAsset(asset_key=asset_key, kind=kind, path=path, suffix=Path(path).suffix))
+
+    @property
+    def thumbnail_path(self) -> str | None:
+        return self.asset_path("artwork")
+
+    @thumbnail_path.setter
+    def thumbnail_path(self, path: str | None) -> None:
+        self.set_asset_path("artwork", "thumbnail", path)
+
+    @property
+    def nfo_path(self) -> str | None:
+        return self.asset_path("nfo")
+
+    @nfo_path.setter
+    def nfo_path(self, path: str | None) -> None:
+        self.set_asset_path("nfo", "nfo", path)
 
     def __repr__(self) -> str:
         return (

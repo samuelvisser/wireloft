@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from backend.services.download_recovery import cleanup_abandoned_temporary_downloads
+
 import logging
 import threading
 from contextlib import asynccontextmanager, contextmanager
@@ -41,10 +43,9 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
     released.
     """
     from backend.api.endpoints.feeds.cached_video import cleanup_expired_rss_cache
-    from task_manager.tasks.helpers.downloads.download_paths import (
+    from dailywire_downloader.storage import (
         cleanup_abandoned_download_path_reservations,
-        cleanup_abandoned_temporary_downloads,
-    )
+        )
 
     try:
         logger.info("Starting background download filesystem recovery")

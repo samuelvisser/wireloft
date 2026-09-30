@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Iterable
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
@@ -148,9 +148,18 @@ def cancel_operation(
                         released_run_ids.add(run.id)
                         released_definition_ids.add(run.definition_id)
 
+        runs = [link.task_run for target in operation.targets for link in target.run_links if link.task_run is not None]
+        if operation.kind == "media.download" and runs and all(_task_status(run.status) == TaskStatus.SUCCEEDED for run in runs):
+            session.rollback()
+            raise ValueError("The download has already been published")
+        cleaning_up = operation.kind == "media.download" and any(
+            run.id in cancelable_run_ids and _task_status(run.status) == TaskStatus.RUNNING for run in runs
+        )
         now = datetime.now(timezone.utc)
-        operation.status = OperationStatus.CANCELED.value
-        operation.message = reason
+        operation.status = OperationStatus.RUNNING.value if cleaning_up else OperationStatus.CANCELED.value
+        if cleaning_up:
+            operation.context = {**(operation.context or {}), "cancel_requested": True}
+        operation.message = "Canceling download" if cleaning_up else reason
         operation.result = {
             "summary": reason,
             "data": {
@@ -160,7 +169,7 @@ def cancel_operation(
         }
         operation.error = None
         operation.notification_seen_at = now if acknowledge else None
-        operation.finished_at = now
+        operation.finished_at = None if cleaning_up else now
         session.flush()
         terminal_callbacks = _terminal_callbacks_for_definition_ids(
             session,
@@ -210,12 +219,15 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
         meta = dict(run.meta or {})
         meta[RUN_CANCEL_REQUESTED_META_KEY] = True
         meta[RUN_CANCEL_REASON_META_KEY] = reason
-        run.meta = meta
-        run.status = TaskStatus.CANCELED
-        run.message = reason
-        run.last_error = None
-        run.next_retry_at = None
-        run.finished_at = datetime.now(timezone.utc)
+        changed = session.execute(update(TaskRun).where(
+            TaskRun.id == run_id, TaskRun.status.in_(_ACTIVE_TASK_STATUSES),
+        ).values(
+            meta=meta, status=TaskStatus.CANCELED, message=reason,
+            last_error=None, next_retry_at=None, finished_at=datetime.now(timezone.utc),
+        ).execution_options(synchronize_session=False))
+        if changed.rowcount != 1:
+            session.rollback()
+            return False
         session.commit()
 
         from task_manager.scheduler.operations import refresh_operations_for_run
@@ -309,6 +321,12 @@ def restart_operation(operation_id: str) -> OperationSnapshot | None:
 
         operation.status = OperationStatus.QUEUED.value
         operation.progress = int((completed / len(operation.targets)) * 100)
+        context = {key: value for key, value in (operation.context or {}).items() if key != "cancel_requested"}
+        # Explicit restart is different from recovering an interrupted TaskRun.
+        # Coordinators can retain completed logical work while replacing failed
+        # children without sharing ownership with the prior running coordinator.
+        context["restart_generation"] = int(context.get("restart_generation", 0)) + 1
+        operation.context = context
         operation.message = "Restarting"
         operation.result = None
         operation.error = None
@@ -362,18 +380,22 @@ def _request_run_cancellation(
     if _run_shared_with_other_active_operation(session, run.id, operation_id):
         return False
 
+    status = _task_status(run.status)
+    if status not in _ACTIVE_TASK_STATUSES:
+        return False
     meta = dict(run.meta or {})
     meta[RUN_CANCEL_REQUESTED_META_KEY] = True
     meta[RUN_CANCEL_REASON_META_KEY] = reason
-    run.meta = meta
-
-    status = _task_status(run.status)
+    values = {"meta": meta}
     if status in {TaskStatus.SCHEDULED, TaskStatus.QUEUED, TaskStatus.RETRY_SCHEDULED}:
-        run.status = TaskStatus.CANCELED
-        run.message = reason
-        run.next_retry_at = None
-        run.finished_at = datetime.now(timezone.utc)
-    return True
+        values.update(status=TaskStatus.CANCELED, message=reason, next_retry_at=None, finished_at=datetime.now(timezone.utc))
+    result = session.execute(
+        update(TaskRun).where(
+            TaskRun.id == run.id, TaskRun.status.in_(_ACTIVE_TASK_STATUSES),
+        ).values(**values).execution_options(synchronize_session=False)
+    )
+    session.refresh(run)
+    return result.rowcount == 1
 
 
 def _run_shared_with_other_active_operation(

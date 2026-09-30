@@ -26,12 +26,13 @@ def _episode(*, identifier: str = "numbered"):
         duration=1800.0,
         season=season,
         episode_number="7",
+        index=7,
     )
     return episode, show
 
 
 def test_episode_metadata_keeps_real_season_and_episode_numbers():
-    from task_manager.tasks.helpers.downloads.media_metadata import build_episode_metadata
+    from backend.services.download_metadata import build_episode_metadata
 
     episode, show = _episode()
     metadata = build_episode_metadata(episode, show)
@@ -44,7 +45,7 @@ def test_episode_metadata_keeps_real_season_and_episode_numbers():
 
 
 def test_date_based_episode_metadata_does_not_invent_numbers():
-    from task_manager.tasks.helpers.downloads.media_metadata import build_episode_metadata
+    from backend.services.download_metadata import build_episode_metadata
 
     episode, show = _episode(identifier="date_based")
     metadata = build_episode_metadata(episode, show)
@@ -52,14 +53,12 @@ def test_date_based_episode_metadata_does_not_invent_numbers():
     assert metadata.season_number is None
     assert metadata.episode_number is None
     assert "season_number" not in metadata.ffmpeg_tags()
-    assert "episode_sort" not in metadata.ffmpeg_tags()
+    assert "episode_id" not in metadata.ffmpeg_tags()
 
 
 def test_movie_nfo_contains_media_server_metadata(tmp_path):
-    from task_manager.tasks.helpers.downloads.media_metadata import (
-        build_movie_metadata,
-        write_nfo,
-    )
+    from backend.services.download_metadata import build_movie_metadata
+    from dailywire_downloader.metadata import write_nfo
 
     movie = SimpleNamespace(
         title="Example Movie",
@@ -102,7 +101,7 @@ def test_movie_nfo_contains_media_server_metadata(tmp_path):
 
 
 def test_nfo_writer_refuses_to_overwrite_external_file(tmp_path):
-    from task_manager.tasks.helpers.downloads.media_metadata import (
+    from dailywire_downloader.metadata import (
         MediaServerMetadata,
         write_nfo,
     )
@@ -155,28 +154,26 @@ def test_ffmpeg_metadata_embedding_stream_copies_media(tmp_path, monkeypatch):
     assert command[command.index("-f") + 1] == "mp4"
 
 
-def test_metadata_mode_helpers_match_requested_outputs():
-    from config.settings.submodels import MetadataMode
-    from task_manager.tasks.helpers.downloads.media_metadata import (
-        wants_metadata_embed,
-        wants_metadata_nfo,
+@pytest.mark.parametrize("metadata,artwork,code", [
+    ((), None, None),
+    ((("title", "Example"),), None, "embed_metadata"),
+    ((), "artwork", "embed_artwork"),
+    ((("title", "Example"),), "artwork", "embed_artwork_metadata"),
+])
+def test_plan_resolves_exactly_one_optional_embedding_pass(tmp_path, metadata, artwork, code):
+    from dailywire_downloader.plan import ResolvedDownloadSource, SidecarSpec, build_download_plan
+    value = build_download_plan(
+        source=ResolvedDownloadSource("https://example.test/a.mp4", "1080p", False, False, "mp4", False),
+        requested_destination=tmp_path/"a.mp4", temporary_root=tmp_path/"temp", download_mode="direct",
+        metadata_tags=metadata, artwork_asset_id=artwork,
+        assets=(SidecarSpec("artwork", "thumbnail", content=b"image", extension="jpg", publish=False),) if artwork else (),
     )
-
-    assert not wants_metadata_embed(MetadataMode.NO_METADATA)
-    assert not wants_metadata_nfo(MetadataMode.NO_METADATA)
-
-    assert wants_metadata_embed(MetadataMode.EMBED)
-    assert not wants_metadata_nfo(MetadataMode.EMBED)
-
-    assert not wants_metadata_embed(MetadataMode.NFO)
-    assert wants_metadata_nfo(MetadataMode.NFO)
-
-    assert wants_metadata_embed(MetadataMode.EMBED_AND_NFO)
-    assert wants_metadata_nfo(MetadataMode.EMBED_AND_NFO)
+    stages = [stage.code for stage in value.stages if stage.id == "embed"]
+    assert stages == ([code] if code else [])
 
 
 def test_remove_download_artifacts_removes_tracked_nfo(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
+    from dailywire_downloader.storage.artifacts import remove_download_artifacts
 
     media = tmp_path / "episode.mp4"
     nfo = tmp_path / "episode.nfo"

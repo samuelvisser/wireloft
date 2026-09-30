@@ -5,178 +5,32 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.api.models.media_download import MediaDownloadAPIRead
-from backend.app import db_session
 from backend.db.models.media_download import MediaDownloadBase
-from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from backend.types.media_download_history_types import MediaDownloadHistoryAction
-from backend.services.media_download_history import record_media_download_history
+from backend.services import download_actions as actions
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
 from task_manager.scheduler.types import OperationSource
-from task_manager.tasks.media_download_operations import (
-    cancel_media_download_operation,
-    create_media_download_operation,
-    dispatch_queued_media_download_operations,
-    get_active_media_download_operation,
-    prepare_media_download_artifact,
-)
-
 from .operations import _BulkMediaDownloadOperation
-from .service import retry_media_download
 
 
-def retry_media_download_action(
-        media_download_id: int,
-        *,
-        source: str = OperationSource.UI.value,
-        reuse_matching_active: bool = False,
-) -> str:
-    """Replace one download attempt and return the new media.download operation ID."""
-    active_operation_id: str | None = None
-    is_redownload = False
-    with db_session() as s:
-        download = s.get(MediaDownloadBase, media_download_id)
-        if download is None:
-            raise HTTPException(status_code=404, detail="Media download not found")
-        record_media_download_history(
-            s,
-            media_download_id,
-            MediaDownloadHistoryAction.RETRY_REQUESTED,
-            metadata={"source": source},
-        )
-        s.commit()
-        active = get_active_media_download_operation(s, media_download_id)
-        if active is not None:
-            if reuse_matching_active and active.source == source:
-                return active.id
-            active_operation_id = active.id
-        is_redownload = (
-            download.downloaded_at is not None
-            or download.artifact_status in {"available", "missing", "corrupted"}
-        )
-
-    if active_operation_id is not None:
-        cancel_media_download_operation(
-            active_operation_id,
-            reason="Replaced by retry",
-            acknowledge=True,
-        )
-
-    with db_session() as s:
-        try:
-            download = retry_media_download(s, media_download_id)
-            operation = create_media_download_operation(
-                s,
-                download,
-                source=source,
-                is_redownload=is_redownload,
-            )
-            dispatch_queued_media_download_operations(s)
-            operation_id = operation.id
-            s.commit()
-            return operation_id
-        except Exception:
-            s.rollback()
-            raise
+def _invoke(action, *args, **kwargs):
+    try:
+        return action(*args, **kwargs)
+    except actions.DownloadActionError as exc:
+        raise HTTPException(status_code=404 if exc.kind == "missing" else 409, detail=str(exc)) from exc
 
 
-def cancel_media_download_action(
-        media_download_id: int,
-        *,
-        allow_inactive: bool = False,
-        missing_ok: bool = False,
-) -> MediaDownloadAPIRead | None:
-    """Cancel one download and durably suppress automatic replacement work."""
-    operation_id: str | None = None
-    with db_session() as s:
-        download = s.get(MediaDownloadBase, media_download_id)
-        if download is None:
-            if missing_ok:
-                return None
-            raise HTTPException(status_code=404, detail="Media download not found")
-        operation = get_active_media_download_operation(s, media_download_id)
-        if operation is None:
-            if not allow_inactive:
-                raise HTTPException(status_code=409, detail="This download is not currently in progress")
-        else:
-            operation_id = operation.id
-
-    if operation_id is not None:
-        try:
-            cancel_media_download_operation(operation_id, reason="Canceled by user", acknowledge=True)
-        except ValueError as exc:
-            if not allow_inactive:
-                raise HTTPException(status_code=409, detail="This download is not currently in progress") from exc
-
-    with db_session() as s:
-        try:
-            download = s.get(MediaDownloadBase, media_download_id)
-            if download is None:
-                if missing_ok:
-                    return None
-                raise HTTPException(status_code=404, detail="Media download not found")
-
-            # Persist the user's intent even when an earlier bulk attempt already
-            # canceled the active worker but crashed before recording suppression.
-            download.automatic_retry_suppressed = (
-                download.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value
-            )
-            payload = MediaDownloadAPIRead.model_validate(download)
-            s.commit()
-        except Exception:
-            s.rollback()
-            raise
-
-    # Close the cancellation/requeue race without canceling a newer explicit retry.
-    with db_session() as s:
-        replacement = get_active_media_download_operation(s, media_download_id)
-        replacement_id = (
-            replacement.id
-            if replacement is not None and replacement.source == OperationSource.SYSTEM.value
-            else None
-        )
-
-    if replacement_id is not None:
-        try:
-            cancel_media_download_operation(replacement_id, reason="Canceled by user", acknowledge=True)
-        except ValueError:
-            pass
-
-    return payload
+def retry_media_download_action(media_download_id: int, *, source: str = OperationSource.UI.value, reuse_matching_active: bool = False) -> str:
+    return _invoke(actions.retry_media_download_action, media_download_id, source=source, reuse_matching_active=reuse_matching_active)
 
 
+def cancel_media_download_action(media_download_id: int, *, allow_inactive: bool = False, missing_ok: bool = False) -> MediaDownloadAPIRead | None:
+    download = _invoke(actions.cancel_media_download_action, media_download_id, allow_inactive=allow_inactive, missing_ok=missing_ok)
+    return MediaDownloadAPIRead.model_validate(download) if download is not None else None
 
-def delete_media_download_artifact_action(
-        media_download_id: int,
-        *,
-        missing_ok: bool = False,
-) -> bool:
-    """Cancel active work and remove one managed artifact without deleting its MediaDownload row."""
-    cancel_media_download_action(
-        media_download_id,
-        allow_inactive=True,
-        missing_ok=missing_ok,
-    )
 
-    with db_session() as s:
-        try:
-            download = s.get(MediaDownloadBase, media_download_id)
-            if download is None:
-                if missing_ok:
-                    return False
-                raise HTTPException(status_code=404, detail="Media download not found")
-
-            prepare_media_download_artifact(s, download)
-            # A profile-wide delete is explicit user intent. Keep automatic
-            # reconciliation from immediately replacing this artifact even if a
-            # stale worker or profile sweep observes the row before its parent
-            # Download Profile disable becomes visible.
-            download.automatic_retry_suppressed = True
-            s.commit()
-            return True
-        except Exception:
-            s.rollback()
-            raise
+def delete_media_download_artifact_action(media_download_id: int, *, missing_ok: bool = False) -> bool:
+    return _invoke(actions.delete_media_download_artifact_action, media_download_id, missing_ok=missing_ok)
 
 
 def queue_bulk_media_download_operation(

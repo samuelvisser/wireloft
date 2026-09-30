@@ -32,6 +32,15 @@ class MediaDownloadBulkActionAPIRequest(RequestBase):
     media_download_ids: list[int]
 
 
+class MediaDownloadAssetAPIRead(ResponseBase):
+    asset_key: str
+    kind: str
+    path: str
+    suffix: str
+    size_bytes: int | None
+    fingerprint: str | None
+
+
 # ---------- Persistent artifact output ----------
 class _MediaDownloadAPIBaseOut(ResponseBase):
     model_config = response_model_config(nested_source="download")
@@ -43,6 +52,7 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     file_path: str
     thumbnail_path: Optional[str] = None
     nfo_path: Optional[str] = None
+    assets: list[MediaDownloadAssetAPIRead] = Field(default_factory=list)
     artifact_status: MediaDownloadArtifactStatus | str
     artifact_error: Optional[str]
     automatic_retry_suppressed: bool

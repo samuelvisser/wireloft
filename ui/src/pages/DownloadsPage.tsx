@@ -1,3 +1,4 @@
+import type {TaskOperationRead} from '../types/schemas/operation'
 import {useMemo, useRef, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
@@ -8,14 +9,13 @@ import {Column, DataTable, DataTableAction} from '../components/DataTable/DataTa
 import DownloadLogDialog from '../components/MediaDownload/DownloadLogDialog'
 import {useActiveOperation} from '../components/OperationNotifier/OperationNotifier'
 import PageSubtitle from '../components/common/PageSubtitle'
-import ProgressBar from '../components/common/ProgressBar'
+import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
 import ProgressButton from '../components/common/ProgressButton'
 import {frontendOperationDefinitions} from '../lib/operationDefinitions'
 import {useControlOperation, useStartOperation} from '../lib/operations'
 import {useMediaDownloadsView} from '../lib/queries'
-import {ACTIVE_DOWNLOAD_STATUSES, MediaDownloadStatusReg} from '../types/media_download'
+import {MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
-import {TaskOperationRead} from '../types/schemas/operation'
 import {getErrorMessageFromResponse} from '../utils/helpers'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
 import './DownloadsPage.css'
@@ -31,7 +31,7 @@ type BulkAction = 'retry' | 'cancel'
 const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
     {value: 'not_downloaded', label: 'Not downloaded', statuses: ['not_downloaded']},
     {value: 'pending', label: 'Queued', statuses: ['pending']},
-    {value: 'downloading', label: 'Downloading', statuses: ['downloading']},
+    {value: 'downloading', label: 'Downloading', statuses: ['downloading', 'preparing', 'waiting', 'canceling']},
     {value: 'downloaded', label: 'Downloaded', statuses: ['downloaded', 'redownloaded']},
     {value: 'local_processing', label: 'Processing', statuses: ['local_processing']},
     {value: 'cancelled', label: 'Cancelled', statuses: ['cancelled']},
@@ -85,14 +85,6 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
     return true
 }
 
-function bulkOperationLabel(operation: TaskOperationRead | undefined, starting: boolean): string | undefined {
-    if (starting && operation === undefined) return 'Starting…'
-    if (!operation) return undefined
-    if (operation.status === 'QUEUED') return 'Queued…'
-    if (operation.status === 'WAITING') return operation.message || 'Waiting…'
-    return `${operation.progress ?? 0}%`
-}
-
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
 
@@ -103,62 +95,12 @@ function formatBytes(n: number | null | undefined) {
     return `${Math.round(n / 1024)} KiB`
 }
 
-function tableErrorMessage(errorMessage: string | null | undefined): string | null {
-    if (!errorMessage) return null
-
-    const match = errorMessage.match(/^HTTP error \d+:\s*([\s\S]+)$/)
-    if (!match) return errorMessage
-
-    try {
-        const parsed = JSON.parse(match[1])
-        if (parsed && typeof parsed === 'object' && typeof parsed.error === 'string' && parsed.error.trim()) {
-            return parsed.error
-        }
-    } catch {
-        // Keep the original error when the HTTP response body is not JSON.
-    }
-
-    return errorMessage
-}
-
 function StatusCell({row}: {row: MediaDownloadViewRead}) {
-    const status = String(row.downloadStatus)
-    if (status === 'downloading' || status === 'pending') {
-        return (
-            <div style={{display: 'flex', alignItems: 'center', gap: 8, minWidth: 140}} aria-live="polite">
-                <div style={{flex: 1}}>
-                    <ProgressBar value={row.progress} ariaLabel={`Progress for ${rowTitle(row)}`}/>
-                </div>
-                <span style={{minWidth: 52}}>{status === 'pending' ? 'Queued' : `${row.progress}%`}</span>
-            </div>
-        )
-    }
-    if (status === 'error' || status === 'missing' || status === 'corrupted') {
-        const errorMessage = tableErrorMessage(row.errorMessage)
-        return (
-            <span className="download-status-message" title={row.errorMessage ?? undefined}>
-                {MediaDownloadStatusReg.getLabelLoose(status)}{errorMessage ? `: ${errorMessage}` : ''}
-            </span>
-        )
-    }
-    return <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
+    return <DownloadProgressStatus download={row} compact/>
 }
-
-// Queued operations can be prioritized. Records with no active queue item can be retried instead.
-const _RETRYABLE_STATUSES = new Set([
-    'not_downloaded',
-    'downloading',
-    'local_processing',
-    'cancelled',
-    'error',
-    'missing',
-    'corrupted',
-])
-
-const _ACTIVE_SORT_STATUSES = new Set(['downloading', 'local_processing'])
 
 function isRetryableDownload(row: MediaDownloadViewRead): boolean {
-    return _RETRYABLE_STATUSES.has(String(row.downloadStatus))
+    return row.presentation.canRetry
 }
 
 function isRedownloadableDownload(row: MediaDownloadViewRead): boolean {
@@ -167,14 +109,14 @@ function isRedownloadableDownload(row: MediaDownloadViewRead): boolean {
 }
 
 function isCancellableDownload(row: MediaDownloadViewRead): boolean {
-    return ACTIVE_DOWNLOAD_STATUSES.has(String(row.downloadStatus))
+    return row.presentation.canCancel
 }
 
 function defaultDownloadOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
     const leftStatus = String(left.downloadStatus)
     const rightStatus = String(right.downloadStatus)
-    const leftActive = _ACTIVE_SORT_STATUSES.has(leftStatus)
-    const rightActive = _ACTIVE_SORT_STATUSES.has(rightStatus)
+    const leftActive = left.presentation.active && leftStatus !== 'pending'
+    const rightActive = right.presentation.active && rightStatus !== 'pending'
     if (leftActive !== rightActive) return leftActive ? -1 : 1
 
     const leftQueued = leftStatus === 'pending'
@@ -468,8 +410,6 @@ export default function DownloadsPage() {
                             primary={false}
                             starting={bulkActionStarting === 'retry'}
                             active={retryAllOperation !== undefined}
-                            progress={retryAllOperation?.progress ?? 0}
-                            activeLabel={bulkOperationLabel(retryAllOperation, bulkActionStarting === 'retry')}
                             ariaLabel={`Retry ${retryableDownloads.length} visible retryable downloads`}
                             onCancel={retryAllOperation ? () => void cancelBulkOperation(retryAllOperation) : undefined}
                             cancelDisabled={bulkControlBusy === retryAllOperation?.id}
@@ -486,8 +426,6 @@ export default function DownloadsPage() {
                             primary={false}
                             starting={bulkActionStarting === 'cancel'}
                             active={cancelAllOperation !== undefined}
-                            progress={cancelAllOperation?.progress ?? 0}
-                            activeLabel={bulkOperationLabel(cancelAllOperation, bulkActionStarting === 'cancel')}
                             ariaLabel={`Cancel ${cancellableDownloads.length} visible active downloads`}
                             onCancel={cancelAllOperation ? () => void cancelBulkOperation(cancelAllOperation) : undefined}
                             cancelDisabled={bulkControlBusy === cancelAllOperation?.id}
@@ -512,39 +450,17 @@ export default function DownloadsPage() {
                     }
                     rowKey={(row) => row.id}
                     rowAriaLabel={(row) => `${rowTitle(row)} (${row.localMediaProfileName})`}
-                    mobileSummary={(row) => {
-                        const status = String(row.downloadStatus)
-                        const statusClass = status === 'downloaded' || status === 'redownloaded'
-                            ? 'is-success'
-                            : status === 'pending' || status === 'downloading' || status === 'local_processing'
-                                ? 'is-progress'
-                                : status === 'error' || status === 'missing' || status === 'corrupted'
-                                    ? 'is-error'
-                                    : ''
-                        const showProgress = status === 'downloading' || status === 'local_processing'
-                        const progress = Math.max(0, Math.min(100, Math.round(row.progress)))
-                        return (
-                            <>
-                                {showProgress && (
-                                    <span
-                                        className="downloads-mobile-progress"
-                                        style={{width: `${progress}%`}}
-                                        aria-hidden="true"
-                                    />
-                                )}
-                                <span className="mobile-summary-title">{rowTitle(row)}</span>
-                                <span className="mobile-summary-subtitle">{rowContext(row)}</span>
-                                <span className="mobile-summary-meta">
-                                    <span>{status === 'not_downloaded' ? 'Not downloaded' : status === 'pending' ? 'Queued' : status === 'downloading' ? `${row.progress}%` : status === 'cancelled' ? 'Cancelled' : formatBytes(row.downloadedBytes)}</span>
-                                    <span aria-hidden="true">•</span>
-                                    <span>{row.formatDownloaded ?? 'Unknown format'}</span>
-                                    <span className={`mobile-summary-status ${statusClass}`}>
-                                        {MediaDownloadStatusReg.getLabelLoose(status)}
-                                    </span>
-                                </span>
-                            </>
-                        )
-                    }}
+                    mobileSummary={(row) => (
+                        <>
+                            <span className="mobile-summary-title">{rowTitle(row)}</span>
+                            <span className="mobile-summary-subtitle">{rowContext(row)}</span>
+                            <DownloadProgressStatus download={row} compact details={false}/>
+                            <span className="mobile-summary-meta">
+                                <span>{formatBytes(row.downloadedBytes)}</span>
+                                <span>{row.formatDownloaded ?? 'Unknown format'}</span>
+                            </span>
+                        </>
+                    )}
                     mobileRowActionLabel="Open media"
                     onRowClick={(row) => {
                         if (row.movieSlug) navigate(`/movie/${row.movieSlug}`)

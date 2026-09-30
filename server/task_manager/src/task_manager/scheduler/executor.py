@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import OperationalError
 
 from backend.db.core import get_session
@@ -36,12 +36,13 @@ from config.network import (
     NoInternetConnectionError,
     is_no_internet_error,
 )
-from dailywire_api.dw_api.client import slow_request_cooldown_observer
+from dailywire_api.pacing import RequestCancelled, RequestWait, request_context
 from dailywire_downloader import DownloadCancelled
 from task_manager.scheduler import scheduler
 
 
 logger = logging.getLogger(__name__)
+_WAIT_UNCHANGED = object()
 _DAILY_WIRE_COOLDOWN_REASON = "daily_wire_request_cooldown"
 _DAILY_WIRE_COOLDOWN_MESSAGE = "Waiting for Daily Wire request cooldown. Will resume soon."
 
@@ -135,6 +136,7 @@ class ProgressUpdater:
             percent: int,
             message: Optional[str] = None,
             meta: Optional[dict[str, Any]] = None,
+            *, wait_state: dict[str, Any] | None | object = _WAIT_UNCHANGED,
     ) -> None:
         p = max(0, min(100, int(percent)))
 
@@ -178,7 +180,7 @@ class ProgressUpdater:
                     if message is not None:
                         values["message"] = message
 
-                    if meta is not None:
+                    if meta is not None or wait_state is not _WAIT_UNCHANGED:
                         merged_meta = dict(current_meta or {})
                         current_progress_meta = merged_meta.get(TASK_RUN_PROGRESS_META_KEY)
                         merged_progress_meta = (
@@ -186,13 +188,23 @@ class ProgressUpdater:
                             if isinstance(current_progress_meta, dict)
                             else {}
                         )
-                        merged_progress_meta.update(meta)
+                        if meta is not None:
+                            merged_progress_meta.update(meta)
                         merged_meta[TASK_RUN_PROGRESS_META_KEY] = merged_progress_meta
+                        if wait_state is not _WAIT_UNCHANGED:
+                            if wait_state is None:
+                                merged_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+                            else:
+                                merged_meta[TASK_RUN_WAIT_STATE_META_KEY] = wait_state
                         values["meta"] = merged_meta
 
                     result = s.execute(
                         update(TaskRun)
-                        .where(TaskRun.id == self.run_id)
+                        .where(
+                            TaskRun.id == self.run_id,
+                            TaskRun.status == TaskStatus.RUNNING,
+                            func.coalesce(TaskRun.meta[RUN_CANCEL_REQUESTED_META_KEY].as_boolean(), False).is_(False),
+                        )
                         .values(**values)
                     )
                     if result.rowcount == 0:
@@ -214,7 +226,31 @@ class ProgressUpdater:
         finally:
             s.close()
 
-    def set_wait_state(self, reason: str | None, message: str | None = None) -> None:
+    def complete_transactionally(self, session, result: TaskResult) -> None:
+        """Commit successful output and its execution outcome in one transaction.
+
+        The guarded update serializes completion against cancellation. If the
+        process exits just after commit, recovery sees a completed run rather
+        than downloading an already committed replacement again.
+        """
+        if result.outcome != "succeeded":
+            raise ValueError("Transactional completion requires successful output")
+        session.flush()
+        changed = session.execute(
+            update(TaskRun).where(
+                TaskRun.id == self.run_id, TaskRun.status == TaskStatus.RUNNING,
+                func.coalesce(TaskRun.meta[RUN_CANCEL_REQUESTED_META_KEY].as_boolean(), False).is_(False),
+            ).values(
+                status=TaskStatus.SUCCEEDED, progress=100, result=result.as_dict(),
+                message=result.summary, last_error=None, next_retry_at=None,
+                finished_at=datetime.now(timezone.utc),
+            ).execution_options(synchronize_session=False)
+        )
+        if changed.rowcount != 1:
+            raise DownloadCancelled("Download was canceled before publication committed")
+        refresh_operations_for_run(session, self.run_id)
+
+    def set_wait_state(self, reason: str | None, message: str | None = None, *, until: float | None = None) -> None:
         """Persist transient worker waiting state without changing worker progress."""
         s = get_session()
         last_operational_error: OperationalError | None = None
@@ -236,13 +272,18 @@ class ProgressUpdater:
                         merged_meta[TASK_RUN_WAIT_STATE_META_KEY] = {
                             "reason": reason,
                             "message": message,
+                            "until": until,
                         }
                     else:
                         merged_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
 
                     result = s.execute(
                         update(TaskRun)
-                        .where(TaskRun.id == self.run_id)
+                        .where(
+                            TaskRun.id == self.run_id,
+                            TaskRun.status == TaskStatus.RUNNING,
+                            func.coalesce(TaskRun.meta[RUN_CANCEL_REQUESTED_META_KEY].as_boolean(), False).is_(False),
+                        )
                         .values(meta=merged_meta or None)
                     )
                     if result.rowcount == 0:
@@ -414,6 +455,12 @@ def _finalize_execution(
         run_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
         run_meta.pop(TASK_RUN_PROGRESS_META_KEY, None)
         run.meta = run_meta or None
+        if run.status == TaskStatus.SUCCEEDED:
+            # A publishing worker already committed artifacts and outcome in one
+            # transaction. A late callback/cleanup error cannot revoke success.
+            run.runtime_ms = runtime_ms
+            session.commit()
+            return None, None
 
         if run_cancel_requested(run):
             cancellation_reason = run_cancel_reason(run, cancellation_reason or "Canceled")
@@ -424,11 +471,12 @@ def _finalize_execution(
             if isinstance(worker_result, TaskResult):
                 run.result = worker_result.as_dict()
                 run.message = worker_result.summary
-            run.status = TaskStatus.SUCCEEDED
+            incomplete = isinstance(worker_result, TaskResult) and worker_result.outcome != "succeeded"
+            run.status = TaskStatus.FAILED if incomplete else TaskStatus.SUCCEEDED
             run.progress = 100
             if not run.message:
                 run.message = "OK"
-            run.last_error = None
+            run.last_error = worker_result.summary if incomplete else None
             run.next_retry_at = None
         else:
             run.last_error = str(worker_error)
@@ -455,6 +503,29 @@ def _finalize_execution(
         refresh_operations_for_run(session, run.id)
         session.commit()
         return retry_at, terminal_error
+    finally:
+        session.close()
+
+
+def request_wait_message(reason: str) -> str:
+    return {
+        "daily_wire_request_cooldown": "Waiting for The Daily Wire request cooldown",
+        "daily_wire_request_queue": "Waiting for a turn to request The Daily Wire",
+        "request_spacing": "Waiting for request spacing",
+        "upstream_retry": "Waiting for The Daily Wire retry interval",
+        "retry_backoff": "Waiting to retry the request",
+    }.get(reason, "Waiting for an external dependency")
+
+
+def _execution_request_priority(operation_ids: tuple[str, ...]):
+    if not operation_ids:
+        return "background"
+    session = get_session()
+    try:
+        operations = list(session.scalars(select(TaskOperation).where(TaskOperation.id.in_(operation_ids))))
+        if any((item.context or {}).get("request_priority") == "bulk" or "bulk" in item.kind or "redownload" in item.kind for item in operations):
+            return "bulk"
+        return "interactive" if any(item.source == "UI" for item in operations) else "background"
     finally:
         session.close()
 
@@ -549,16 +620,20 @@ def execute_task(
     cancellation_reason: str | None = None
     started_perf = time.perf_counter()
 
-    def on_slow_request_cooldown(waiting: bool) -> None:
+    def on_request_wait(event: RequestWait | None) -> None:
         updater.set_wait_state(
-            _DAILY_WIRE_COOLDOWN_REASON if waiting else None,
-            _DAILY_WIRE_COOLDOWN_MESSAGE if waiting else None,
+            event.reason if event else None,
+            request_wait_message(event.reason) if event else None,
+            until=event.until if event else None,
         )
 
     try:
         with (
             operation_context(prepared.linked_operation_ids),
-            slow_request_cooldown_observer(on_slow_request_cooldown),
+            request_context(
+                observer=on_request_wait, should_cancel=updater,
+                priority=_execution_request_priority(prepared.linked_operation_ids),
+            ),
         ):
             if inspect.iscoroutinefunction(fn):
                 worker_result = asyncio.run(
@@ -570,7 +645,7 @@ def execute_task(
                     progress=updater,
                     **prepared.call_kwargs,
                 )
-    except (TaskCancellationRequested, DownloadCancelled) as exc:
+    except (TaskCancellationRequested, DownloadCancelled, RequestCancelled) as exc:
         cancellation_reason = str(exc) or "Canceled"
     except Exception as exc:
         if is_no_internet_error(exc):

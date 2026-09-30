@@ -1,3 +1,4 @@
+import {reconcileOperationSnapshots} from './operationSnapshots'
 import {
   createContext,
   type ReactNode,
@@ -71,6 +72,9 @@ export default function FrontendPuller({children, onUnauthorized}: FrontendPulle
     queryKey: FRONTEND_PULLER_QUERY_KEY,
     queryFn: ({signal}) => fetchFrontendPuller(signal),
     enabled: foreground,
+    structuralSharing: (previous, incoming) => reconcileOperationSnapshots(
+      previous as FrontendPullRead | undefined, incoming as FrontendPullRead,
+    ),
     staleTime: 0,
     retry: false,
     refetchOnMount: 'always',

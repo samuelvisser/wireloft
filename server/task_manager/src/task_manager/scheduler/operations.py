@@ -325,6 +325,11 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
         return operation
 
     if len(terminal_runs) < total:
+        if (operation.context or {}).get("cancel_requested"):
+            operation.status = OperationStatus.RUNNING.value
+            operation.message = "Canceling download"
+            operation.finished_at = None
+            return operation
         operation.finished_at = None
         operation.error = None
         wait_state = next(
@@ -337,7 +342,9 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
             ),
             None,
         )
-        if wait_state is not None:
+        active_runs = [run for run in linked_runs if _task_status(run.status) not in _TERMINAL_TASK_STATUSES]
+        all_blocked = active_runs and all(_run_wait_state(run) is not None for run in active_runs)
+        if wait_state is not None and all_blocked:
             operation.status = OperationStatus.WAITING.value
             message = wait_state.get("message")
             operation.message = message if isinstance(message, str) and message else "Waiting"
@@ -357,7 +364,7 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
     if succeeded == total:
         operation.status = OperationStatus.SUCCEEDED.value
         operation.error = None
-    elif succeeded > 0:
+    elif succeeded > 0 or any((run.result or {}).get("outcome") == "partial" for run in terminal_runs):
         operation.status = OperationStatus.PARTIAL.value
         operation.error = _first_terminal_error(terminal_runs)
     elif failed > 0:
@@ -529,13 +536,23 @@ def _operation_progress_meta(
         effective_runs: Sequence[TaskRun | None],
 ) -> dict[str, Any] | None:
     """Expose structured worker progress only when it has one unambiguous source."""
-    if operation.status not in _ACTIVE_OPERATION_STATUSES or len(effective_runs) != 1:
+    if operation.status not in _ACTIVE_OPERATION_STATUSES:
         return None
+    if len(effective_runs) != 1:
+        active = [run for run in effective_runs if run is not None and _task_status(run.status) not in _TERMINAL_TASK_STATUSES]
+        waits = [_run_wait_state(run) for run in active]
+        return {"wait_state": waits[0]} if waits and all(waits) else None
     run = effective_runs[0]
     if run is None or not isinstance(run.meta, dict):
         return None
     progress_meta = run.meta.get(TASK_RUN_PROGRESS_META_KEY)
-    return dict(progress_meta) if isinstance(progress_meta, dict) else None
+    result = dict(progress_meta) if isinstance(progress_meta, dict) else {}
+    if run_cancel_requested(run):
+        result["canceling"] = True
+    wait_state = _run_wait_state(run)
+    if wait_state is not None:
+        result["wait_state"] = wait_state
+    return result or None
 
 
 def _operation_snapshot(operation: TaskOperation) -> OperationSnapshot:

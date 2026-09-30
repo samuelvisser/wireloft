@@ -10,7 +10,7 @@ WireLoft can show downloads as:
 
 - **Queued** — waiting for a download slot;
 - **Downloading** — media is currently being transferred;
-- **Processing** — the download finished but local work such as MP4 remuxing is still happening;
+- **Processing** — the primary media transfer finished, but artwork, metadata, or final publication is still being completed;
 - **Downloaded** — the local file completed successfully;
 - **Cancelled** — the download was stopped;
 - **Error** — the attempt failed;
@@ -18,6 +18,38 @@ WireLoft can show downloads as:
 - **Corrupted** — the file exists but failed WireLoft's integrity checks.
 
 Completed downloads are hidden by the default Downloads-page filter so active/problems are easier to see. Enable the **Downloaded** filter when you want full history.
+
+## Understanding download progress
+
+For an individual download, the percentage measures the **primary media transfer**.
+Before that transfer starts, WireLoft shows the current activity, such as resolving
+playback or inspecting the stream. After the transfer, it shows activities such as
+embedding artwork and metadata or moving files into the library, without pretending
+to know how long those steps will take. When a transfer has no known total, its
+indicator also remains indeterminate.
+
+A **Cooldown** indicator means The Daily Wire requests are intentionally waiting.
+This includes operations behind another request in the shared queue, not just the
+request at its front. The information control reveals the full reason on desktop
+and touch screens. Interactive requests receive fair priority, but do not bypass
+request-rate protection or an upstream retry delay.
+
+Artwork acquisition can run alongside the primary media transfer. A slow artwork
+download does not hide the media percentage; if it is still needed afterwards,
+WireLoft shows that activity while it finishes. Required outputs must be ready before
+a download becomes completed. Cancellation remains visible while owned work stops
+and temporary files are cleaned up.
+
+Bulk re-download actions show a separate **estimated work-completion percentage**.
+This includes preparation, transfers and finishing stages, weighted by the captured
+media sizes. It is not an estimate of time remaining. Completion counts distinguish
+successful, failed and canceled downloads, and a remaining processing stage can
+legitimately pause the estimate. Unknown sizes use the average known size, or equal
+weights when none are known. Restart recovery preserves the batch selection and
+does not re-delete already completed replacement downloads.
+
+The download log includes stage timings, wait intervals and optional-output warnings.
+Some activities overlap, so their individual durations do not add up to total time.
 
 ## Download actions
 
@@ -50,6 +82,8 @@ The system-wide defaults are:
 | Timeout per attempt | 600 seconds |
 
 These are configured under **Settings → Downloads**.
+
+The concurrency limit applies to primary-media transfers. A completed transfer releases its slot while local processing continues; auxiliary downloads and expensive local work have separate bounded capacity.
 
 Higher concurrency is not always faster. Your internet connection, Daily Wire, CPU, FFmpeg work, and storage can all become bottlenecks.
 

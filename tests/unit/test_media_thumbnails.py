@@ -6,7 +6,7 @@ from types import SimpleNamespace
 def test_effective_thumbnail_mode_inherits_system_setting(monkeypatch):
     from config import get_settings
     from config.settings.submodels import ThumbnailMode
-    from task_manager.tasks.helpers.downloads.download_modes import effective_thumbnail_mode
+    from backend.services.download_options import effective_thumbnail_mode
 
     settings = get_settings().download_settings
     monkeypatch.setattr(settings, "thumbnail_mode", ThumbnailMode.SIDECAR)
@@ -18,7 +18,7 @@ def test_effective_thumbnail_mode_inherits_system_setting(monkeypatch):
 def test_effective_thumbnail_mode_honors_profile_override(monkeypatch):
     from config import get_settings
     from config.settings.submodels import ThumbnailMode
-    from task_manager.tasks.helpers.downloads.download_modes import effective_thumbnail_mode
+    from backend.services.download_options import effective_thumbnail_mode
 
     settings = get_settings().download_settings
     monkeypatch.setattr(settings, "thumbnail_mode", ThumbnailMode.EMBED)
@@ -28,7 +28,7 @@ def test_effective_thumbnail_mode_honors_profile_override(monkeypatch):
 
 
 def test_select_thumbnail_url_prefers_square_artwork():
-    from task_manager.tasks.helpers.downloads.thumbnails import select_thumbnail_url
+    from backend.services.download_metadata import select_thumbnail_url
 
     media = SimpleNamespace(
         thumbnail_square_path="https://example.test/square.jpg",
@@ -41,7 +41,7 @@ def test_select_thumbnail_url_prefers_square_artwork():
 
 
 def test_select_thumbnail_url_ignores_non_http_paths():
-    from task_manager.tasks.helpers.downloads.thumbnails import select_thumbnail_url
+    from backend.services.download_metadata import select_thumbnail_url
 
     media = SimpleNamespace(
         thumbnail_square_path="/local/square.jpg",
@@ -95,27 +95,27 @@ def test_embed_thumbnail_uses_attached_picture_stream_for_audio(tmp_path, monkey
 def test_sidecar_uses_media_basename_and_does_not_overwrite(tmp_path):
     import pytest
 
-    from task_manager.tasks.helpers.downloads.engine import _publish_sidecar
+    from dailywire_downloader.storage.publication import PublicationJournal
 
     thumbnail = tmp_path / "source.jpg"
     thumbnail.write_bytes(b"image")
     media = tmp_path / "episode-2.mp4"
     media.write_bytes(b"media")
 
-    result = _publish_sidecar(thumbnail, media)
+    result = str(PublicationJournal(tmp_path, media).publish(thumbnail, ".jpg", progress=lambda _: None, should_cancel=lambda: False))
     sidecar = tmp_path / "episode-2.jpg"
     assert result == str(sidecar)
     assert sidecar.read_bytes() == b"image"
 
     with pytest.raises(FileExistsError):
-        _publish_sidecar(thumbnail, media)
+        PublicationJournal(tmp_path, media).publish(thumbnail, ".jpg", progress=lambda _: None, should_cancel=lambda: False)
     assert sidecar.read_bytes() == b"image"
 
 
 def test_sidecar_refuses_external_empty_file_without_deleting_it(tmp_path):
     import pytest
 
-    from task_manager.tasks.helpers.downloads.engine import _publish_sidecar
+    from dailywire_downloader.storage.publication import PublicationJournal
 
     thumbnail = tmp_path / "source.jpg"
     thumbnail.write_bytes(b"image")
@@ -125,14 +125,14 @@ def test_sidecar_refuses_external_empty_file_without_deleting_it(tmp_path):
     sidecar.touch()
 
     with pytest.raises(FileExistsError):
-        _publish_sidecar(thumbnail, media)
+        PublicationJournal(tmp_path, media).publish(thumbnail, ".jpg", progress=lambda _: None, should_cancel=lambda: False)
 
     assert sidecar.exists()
     assert sidecar.stat().st_size == 0
 
 
 def test_remove_download_artifacts_removes_tracked_sidecar(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_files import remove_download_artifacts
+    from dailywire_downloader.storage.artifacts import remove_download_artifacts
 
     media = tmp_path / "episode.mp4"
     sidecar = tmp_path / "episode.jpg"

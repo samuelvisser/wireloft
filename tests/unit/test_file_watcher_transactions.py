@@ -17,7 +17,7 @@ def _db_with_download(tmp_path: Path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from backend.types.show_types import EpisodeIdentifier, ShowType
-    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader.storage.identity import inspect_artifact
     from backend.utils.helpers import generate_uuid
 
     database_path = tmp_path / "file-watcher-transactions.db"
@@ -123,7 +123,7 @@ def test_filesystem_checks_run_without_database_transaction(tmp_path, monkeypatc
 def test_stale_filesystem_result_does_not_overwrite_newer_download(tmp_path, monkeypatch):
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
-    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader.storage.identity import inspect_artifact
     from task_manager.tasks.workers.file_watcher import service
 
     session, engine, download_id, file_path = _db_with_download(tmp_path)

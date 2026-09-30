@@ -24,7 +24,7 @@ def get_show(
 
     client = MiddlewareClient(
         access_token=access_token,
-        pace_requests=False,
+        request_priority="interactive",
     )
 
     # Map the normalized ShowRecord payload into our response model

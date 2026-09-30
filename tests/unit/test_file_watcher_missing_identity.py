@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 def test_missing_artifact_without_identity_recovers_when_file_reappears(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
-    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader.storage.identity import inspect_artifact
     from task_manager.tasks.workers.file_watcher.service import _reconcile
 
     artifact = tmp_path / "reappeared.m4a"

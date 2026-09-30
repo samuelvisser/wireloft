@@ -141,7 +141,7 @@ def test_effective_metadata_mode_inherits_system_setting(monkeypatch):
 
     from config import get_settings
     from config.settings.submodels import MetadataMode
-    from task_manager.tasks.helpers.downloads.download_modes import effective_metadata_mode
+    from backend.services.download_options import effective_metadata_mode
 
     settings = get_settings().download_settings
     monkeypatch.setattr(settings, "metadata_mode", MetadataMode.NFO)
@@ -155,7 +155,7 @@ def test_effective_metadata_mode_honors_profile_override(monkeypatch):
 
     from config import get_settings
     from config.settings.submodels import MetadataMode
-    from task_manager.tasks.helpers.downloads.download_modes import effective_metadata_mode
+    from backend.services.download_options import effective_metadata_mode
 
     settings = get_settings().download_settings
     monkeypatch.setattr(settings, "metadata_mode", MetadataMode.EMBED)

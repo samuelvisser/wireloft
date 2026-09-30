@@ -1,0 +1,105 @@
+import type {MediaDownloadDomainViewRead} from '../types/schemas/media_download'
+import type {TaskOperationRead} from '../types/schemas/operation'
+import type {DownloadPresentation, ProgressPresentation} from '../types/progress'
+import {DownloadExecutionSchema, type DownloadExecution, type DownloadStage} from '../types/schemas/download_execution'
+
+export const ACTIVE_OPERATION_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
+
+const ACTIVITIES: Record<string, string> = {
+    prepare: 'Preparing', authorize: 'Authorizing', resolve_playback: 'Resolving playback',
+    inspect_stream: 'Inspecting stream', plan_outputs: 'Preparing outputs',
+    download_media: 'Downloading', remux: 'Remuxing media',
+    embed_artwork: 'Embedding thumbnail', embed_metadata: 'Embedding metadata',
+    embed_artwork_metadata: 'Embedding artwork and metadata',
+    publish_media: 'Moving media into the library', verify: 'Verifying files', finalize: 'Finalizing',
+}
+const WAITS: Record<string, [string, string]> = {
+    daily_wire_request_cooldown: ['Cooldown', 'Waiting for The Daily Wire request cooldown. The operation will resume automatically.'],
+    daily_wire_request_queue: ['API queue', 'Waiting for a turn to request The Daily Wire.'],
+    request_spacing: ['Waiting', 'Waiting for the next permitted API request.'],
+    upstream_retry: ['Retry wait', 'The server requested a delay before retrying.'],
+    retry_backoff: ['Retry wait', 'Waiting before retrying the network request.'],
+    download_capacity: ['Queued', 'Waiting for an available media download slot.'],
+    sidecar_capacity: ['Asset queue', 'Waiting for an auxiliary download slot.'],
+    processing_capacity: ['Processing queue', 'Waiting for a local processing slot.'],
+    custom_indexes: ['Preparing...', 'Waiting for Custom Index assignments.'],
+    previous_attempt: ['Restarting', 'Waiting for the previous download to stop and clean up.'],
+}
+
+export function waitingPresentation(reason: string, detail?: string | null, percent: number | null = null): ProgressPresentation {
+    const value = WAITS[reason]
+    return {
+        mode: 'waiting', active: true, percent,
+        label: `${value?.[0] || 'Waiting'}...`, detail: detail || value?.[1] || 'Waiting for a dependency.',
+        icon: ['fas', 'clock'], canCancel: true, canRetry: true,
+    }
+}
+
+export function workingPresentation(label = 'Preparing', detail = label, compactLabel = label): ProgressPresentation {
+    return {mode: 'indeterminate', active: true, percent: null, label: `${label}...`, compactLabel: `${compactLabel}...`, detail,
+        icon: ['fas', 'spinner'], canCancel: true, canRetry: true}
+}
+
+export function downloadExecution(operation?: TaskOperationRead): DownloadExecution | undefined {
+    const parsed = DownloadExecutionSchema.safeParse(operation?.progressMeta?.download)
+    return parsed.success ? parsed.data : undefined
+}
+
+export function activityLabel(stage: Pick<DownloadStage, 'code' | 'asset_id'>): string {
+    const asset = stage.asset_id === 'artwork' ? 'thumbnail' : stage.asset_id === 'nfo' ? 'NFO metadata' : 'sidecar'
+    if (stage.code === 'download_sidecar') return `Downloading ${asset}`
+    if (stage.code === 'generate_sidecar') return `Generating ${asset}`
+    if (stage.code === 'publish_sidecar') return `Publishing ${asset}`
+    return ACTIVITIES[stage.code] || 'Processing'
+}
+
+function terminal(status: string, label: string, detail: string, outcome?: ProgressPresentation['outcome']): DownloadPresentation {
+    const iconName = outcome === 'success' ? 'circle-check' : outcome === 'error' ? 'triangle-exclamation' : 'download'
+    return {
+        status, mode: 'terminal', active: false, percent: null, label, detail, outcome,
+        icon: ['fas', iconName],
+        canCancel: false, canRetry: status !== 'not_downloaded',
+    }
+}
+
+export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, operation?: TaskOperationRead, starting = false): DownloadPresentation {
+    if (starting) return {status: 'preparing', ...workingPresentation('Starting', 'Starting the requested download.')}
+    if (operation && ACTIVE_OPERATION_STATUSES.has(operation.status)) {
+        const execution = downloadExecution(operation)
+        if (operation.progressMeta?.canceling === true || operation.context?.cancel_requested === true || execution?.canceling) {
+            return {status: 'canceling', ...workingPresentation('Canceling', 'Stopping the download and its owned auxiliary work before cleaning up.'), canCancel: false, canRetry: false}
+        }
+        if (operation.status === 'QUEUED') return {status: 'pending', ...waitingPresentation('download_capacity'), canRetry: false}
+        const main = execution?.stages.find(stage => stage.id === execution.main_activity)
+        const media = execution?.stages.find(stage => stage.id === 'media')
+        const transferPercent = execution?.phase === 'transferring' && main?.id === 'media' && media?.fraction != null
+            ? Math.max(0, Math.min(100, Math.floor(media.fraction * 100))) : null
+        const wait = main?.wait || operation.progressMeta?.wait_state as {reason?: string; message?: string} | undefined
+        if (wait?.reason) return {status: 'waiting', ...waitingPresentation(wait.reason, 'message' in wait ? wait.message : undefined, transferPercent)}
+        if (operation.status === 'WAITING') return {status: 'waiting', ...waitingPresentation('dependency', operation.message, transferPercent)}
+        const secondary = execution?.stages.filter(stage => stage.id !== main?.id && ['running', 'waiting'].includes(stage.state))
+            .map(stage => stage.wait ? `${activityLabel(stage)}: waiting` : activityLabel(stage)).join(' / ')
+        if (execution?.phase === 'transferring' && main?.id === 'media') {
+            const basis = media?.segments_total ? `${media.segments_done || 0}/${media.segments_total} media segments` : media?.total_bytes ? `${media.bytes_received.toLocaleString()}/${media.total_bytes.toLocaleString()} bytes` : `${media?.bytes_received?.toLocaleString() || '0'} bytes received; total size unknown`
+            if (transferPercent !== null) return {status: 'downloading', mode: 'determinate', active: true, percent: transferPercent,
+                label: `${transferPercent}%`, detail: `Primary media transfer: ${basis}.`, icon: ['fas', 'download'], secondary,
+                canCancel: true, canRetry: true}
+            return {status: 'downloading', ...workingPresentation('Downloading', basis), secondary}
+        }
+        const compact = main?.code.startsWith('embed') ? 'Embedding' : main?.code.startsWith('publish') ? 'Publishing'
+            : execution?.phase === 'preparing' ? 'Preparing' : main ? activityLabel(main) : 'Preparing'
+        const label = main?.id === 'media' && execution?.primary_transfer_complete ? 'Finishing' : main ? activityLabel(main) : 'Preparing'
+        return {status: execution?.primary_transfer_complete ? 'local_processing' : 'preparing',
+            ...workingPresentation(label, `${label}. This step does not have a reliable percentage.`, compact), secondary}
+    }
+    if (operation?.status === 'SUCCEEDED') return terminal(operation.context?.is_redownload ? 'redownloaded' : 'downloaded', 'Downloaded', 'All required outputs were published successfully.', 'success')
+    if (operation?.status === 'FAILED' || operation?.status === 'PARTIAL') return terminal('error', 'Failed', operation.error || operation.message || 'Download failed.', 'error')
+    if (operation?.status === 'CANCELED') return terminal('cancelled', 'Canceled', 'The download was canceled.', 'canceled')
+    if (download?.artifactStatus === 'available') return terminal(download.latestTaskIsRedownload ? 'redownloaded' : 'downloaded', 'Downloaded', 'The media file is available.', 'success')
+    if (download?.artifactStatus === 'missing') return terminal('missing', 'Missing', 'The downloaded file could not be found.', 'error')
+    if (download?.artifactStatus === 'corrupted') return terminal('corrupted', 'Corrupted', download.artifactError || 'The downloaded file failed verification.', 'error')
+    if (download?.latestTaskStatus === 'RUNNING') return {status: 'preparing', ...workingPresentation('Preparing', 'Waiting for the current execution snapshot.')}
+    if (download?.latestTaskStatus === 'FAILED') return terminal('error', 'Failed', download.latestTaskError || 'Download failed.', 'error')
+    if (download?.automaticRetrySuppressed || download?.latestTaskStatus === 'CANCELED') return terminal('cancelled', 'Canceled', 'No automatic replacement is queued.', 'canceled')
+    return terminal('not_downloaded', 'Not downloaded', 'No download is currently queued.')
+}

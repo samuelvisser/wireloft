@@ -39,21 +39,4 @@ async def redownload_show_episodes_worker(
         request_missing_index_repair(exc)
         raise
 
-    count = int(result.get("episode_files", 0))
-    profile_count = int(result.get("local_media_profiles", 0))
-    target_title = str(
-        result.get("episode_title")
-        or result.get("show_title")
-        or "media"
-    )
-    return TaskResult(
-        summary=(
-            f"Re-download finished for {target_title}: "
-            f"{count} episode {'file' if count == 1 else 'files'} re-downloaded"
-        ),
-        data={
-            **result,
-            "episode_files": count,
-            "local_media_profiles": profile_count,
-        },
-    )
+    return result

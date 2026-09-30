@@ -139,7 +139,7 @@ def test_hls_download_rejects_live_playlist(tmp_path, monkeypatch):
 
 def test_hls_cleanup_removes_owned_companion_assets(tmp_path):
     from dailywire_downloader import hls_asset_marker, hls_asset_root
-    from task_manager.tasks.helpers.downloads.download_files import (
+    from dailywire_downloader.storage.artifacts import (
         remove_download_artifacts,
     )
 
@@ -158,7 +158,7 @@ def test_hls_cleanup_removes_owned_companion_assets(tmp_path):
 
 def test_hls_cleanup_preserves_unowned_similarly_named_directory(tmp_path):
     from dailywire_downloader import hls_asset_root
-    from task_manager.tasks.helpers.downloads.download_files import (
+    from dailywire_downloader.storage.artifacts import (
         remove_download_artifacts,
     )
 

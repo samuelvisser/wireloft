@@ -116,137 +116,63 @@ def remux_to_mp4(
 
 
 def embed_thumbnail(
-        media_path: str,
-        thumbnail_path: str,
-        *,
-        audio_only: bool,
-        ffmpeg_path: str = "ffmpeg",
-        should_cancel: Optional[CancelCheck] = None,
+    media_path: str, thumbnail_path: str, *, audio_only: bool,
+    ffmpeg_path: str = "ffmpeg", should_cancel: Optional[CancelCheck] = None,
 ) -> None:
-    """Attach an image as cover artwork without re-encoding existing media streams."""
-    if not ffmpeg_available(ffmpeg_path):
-        raise FfmpegNotFoundError(
-            f"ffmpeg binary '{ffmpeg_path}' not found on PATH; install ffmpeg or choose a thumbnail mode that does not embed artwork"
-        )
-
-    suffix = Path(media_path).suffix.lower()
-    muxer = {
-        ".mp4": "mp4",
-        ".m4a": "mp4",
-        ".m4v": "mp4",
-        ".mp3": "mp3",
-        ".mkv": "matroska",
-    }.get(suffix)
-    if muxer is None:
-        raise DownloadError(
-            f"Cannot embed a thumbnail into '{suffix or 'extensionless'}' media; "
-            "use sidecar thumbnails or an MP4, M4A, MP3, or MKV output"
-        )
-
-    # Existing video occupies v:0, while audio-only files have no video stream.
-    artwork_stream_index = 0 if audio_only else 1
-    part_path = media_path + ".thumbnail.part"
-    try:
-        command = [
-            ffmpeg_path, "-y",
-            "-i", media_path,
-            "-i", thumbnail_path,
-            "-map", "0",
-            "-map", "1:v:0",
-            "-c", "copy",
-            f"-c:v:{artwork_stream_index}", "mjpeg",
-            f"-disposition:v:{artwork_stream_index}", "attached_pic",
-        ]
-        if muxer == "mp4":
-            command += ["-movflags", "+faststart"]
-        command += ["-f", muxer, part_path]
-
-        result = (
-            _run_cancellable(command, should_cancel)
-            if should_cancel is not None
-            else subprocess.run(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-        )
-        if result.returncode != 0:
-            logger.error(
-                "ffmpeg thumbnail embedding failed (exit %s) for '%s' with '%s':\n%s",
-                result.returncode, media_path, thumbnail_path, result.stdout,
-            )
-            raise DownloadError(
-                f"ffmpeg thumbnail embedding failed (exit {result.returncode}): {_tail_lines(result.stdout)}"
-            )
-        os.replace(part_path, media_path)
-    except BaseException:
-        _remove_quietly(part_path)
-        raise
+    embed_media(media_path, thumbnail_path=thumbnail_path, audio_only=audio_only,
+                ffmpeg_path=ffmpeg_path, should_cancel=should_cancel)
 
 
 def embed_metadata(
-        media_path: str,
-        metadata: Mapping[str, str],
-        *,
-        ffmpeg_path: str = "ffmpeg",
-        should_cancel: Optional[CancelCheck] = None,
+    media_path: str, metadata: Mapping[str, str], *,
+    ffmpeg_path: str = "ffmpeg", should_cancel: Optional[CancelCheck] = None,
 ) -> None:
-    """Write container metadata without re-encoding any media streams."""
-    if not metadata:
+    embed_media(media_path, metadata=metadata, ffmpeg_path=ffmpeg_path,
+                should_cancel=should_cancel)
+
+
+def embed_media(
+    media_path: str, *, metadata: Mapping[str, str] | None = None,
+    thumbnail_path: str | None = None, audio_only: bool = False,
+    ffmpeg_path: str = "ffmpeg", should_cancel: Optional[CancelCheck] = None,
+) -> None:
+    """Apply artwork and metadata in one serialized stream-copy pass.
+
+    FFmpeg's growing output is not a time/progress estimate: faststart can still
+    rewrite a full file after that output has reached its apparent final size.
+    The coordinator reports this as an indeterminate activity until it returns.
+    """
+    if not metadata and thumbnail_path is None:
         return
     if not ffmpeg_available(ffmpeg_path):
-        raise FfmpegNotFoundError(
-            f"ffmpeg binary '{ffmpeg_path}' not found on PATH; install ffmpeg or disable embedded metadata"
-        )
-
+        raise FfmpegNotFoundError(f"ffmpeg binary '{ffmpeg_path}' not found on PATH")
     suffix = Path(media_path).suffix.lower()
-    muxer = {
-        ".mp4": "mp4",
-        ".m4a": "mp4",
-        ".m4v": "mp4",
-        ".mp3": "mp3",
-        ".mkv": "matroska",
-    }.get(suffix)
+    muxer = {".mp4": "mp4", ".m4a": "mp4", ".m4v": "mp4", ".mp3": "mp3", ".mkv": "matroska"}.get(suffix)
     if muxer is None:
-        raise DownloadError(
-            f"Cannot embed metadata into '{suffix or 'extensionless'}' media; "
-            "use NFO metadata or an MP4, M4A, MP3, or MKV output"
-        )
-
+        raise DownloadError(f"Cannot embed artwork or metadata into '{suffix}' media")
     part_path = media_path + ".metadata.part"
     try:
-        command = [
-            ffmpeg_path, "-y",
-            "-i", media_path,
-            "-map", "0",
-            "-c", "copy",
-        ]
-        for key, value in metadata.items():
+        command = [ffmpeg_path, "-y", "-i", media_path]
+        if thumbnail_path is not None:
+            command += ["-i", thumbnail_path]
+        command += ["-map", "0"]
+        if thumbnail_path is not None:
+            command += ["-map", "1:v:0"]
+        command += ["-c", "copy"]
+        if thumbnail_path is not None:
+            artwork_stream_index = 0 if audio_only else 1
+            command += [f"-c:v:{artwork_stream_index}", "mjpeg",
+                        f"-disposition:v:{artwork_stream_index}", "attached_pic"]
+        for key, value in (metadata or {}).items():
             if value:
                 command += ["-metadata", f"{key}={value}"]
         if muxer == "mp4":
-            command += ["-movflags", "+faststart+use_metadata_tags"]
+            command += ["-movflags", "+faststart+use_metadata_tags" if metadata else "+faststart"]
         command += ["-f", muxer, part_path]
-
-        result = (
-            _run_cancellable(command, should_cancel)
-            if should_cancel is not None
-            else subprocess.run(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-        )
+        result = (_run_cancellable(command, should_cancel) if should_cancel is not None
+                  else subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
         if result.returncode != 0:
-            logger.error(
-                "ffmpeg metadata embedding failed (exit %s) for '%s':\n%s",
-                result.returncode, media_path, result.stdout,
-            )
-            raise DownloadError(
-                f"ffmpeg metadata embedding failed (exit {result.returncode}): {_tail_lines(result.stdout)}"
-            )
+            raise DownloadError(f"ffmpeg embedding failed (exit {result.returncode}): {_tail_lines(result.stdout)}")
         os.replace(part_path, media_path)
     except BaseException:
         _remove_quietly(part_path)

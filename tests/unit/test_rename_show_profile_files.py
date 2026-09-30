@@ -2,17 +2,12 @@ from pathlib import Path
 
 import logging
 
-from task_manager.tasks.workers.rename_show_profile_files import service
+from backend.services import download_relocation as service
+from dailywire_downloader.storage.relocation import PathMove
 
 
 def _move(download_id: int, source: Path, destination: Path):
-    return service._Move(
-        download_id=download_id,
-        source=source,
-        destination=destination,
-        thumbnail_source=None,
-        thumbnail_destination=None,
-    )
+    return service.DownloadRelocation(download_id, source, destination, (PathMove(source, destination),), ())
 
 
 def test_existing_destination_is_skipped_with_warning(tmp_path, caplog):
@@ -22,7 +17,7 @@ def test_existing_destination_is_skipped_with_warning(tmp_path, caplog):
     destination.write_bytes(b"existing")
 
     with caplog.at_level(logging.WARNING):
-        remaining, skipped = service._skip_existing_destination_conflicts([
+        remaining, skipped = service.filter_relocation_conflicts([
             _move(7, source, destination),
         ])
 
@@ -46,7 +41,7 @@ def test_skipping_a_move_also_skips_moves_that_need_its_source_to_vacate(tmp_pat
         _move(2, second, occupied),
     ]
     with caplog.at_level(logging.WARNING):
-        remaining, skipped = service._skip_existing_destination_conflicts(moves)
+        remaining, skipped = service.filter_relocation_conflicts(moves)
 
     assert remaining == []
     assert {move.download_id for move in skipped} == {1, 2}
@@ -62,7 +57,7 @@ def test_internal_rename_cycle_is_not_treated_as_existing_destination_conflict(t
         _move(1, first, second),
         _move(2, second, first),
     ]
-    remaining, skipped = service._skip_existing_destination_conflicts(moves)
+    remaining, skipped = service.filter_relocation_conflicts(moves)
 
     assert remaining == moves
     assert skipped == []

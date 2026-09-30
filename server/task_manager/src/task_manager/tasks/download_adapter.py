@@ -1,0 +1,194 @@
+"""Application adapter for the standalone download coordinator.
+
+Workers do not implement download behavior. This adapter translates lifecycle
+snapshots into TaskRun reporting and atomically persists successful artifacts.
+"""
+from __future__ import annotations
+
+from dataclasses import asdict
+from datetime import datetime, timezone
+from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from backend.db.models import Episode
+from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBase
+from backend.services.download_plans import prepare_download_plan
+from backend.services.media_download_history import (
+    download_attempt_metadata, record_media_download_history,
+    record_media_download_history_if_exists, record_media_download_operation_history_once,
+)
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.media_download_history_types import MediaDownloadHistoryAction
+from config import get_settings
+from dailywire_api.pacing import RequestCancelled, request_context
+from dailywire_downloader import DownloadCancelled
+from dailywire_downloader.capacity import resources
+from dailywire_downloader.coordinator import execute_download_plan
+from dailywire_downloader.lifecycle import DownloadSnapshot, DownloadTracker
+from dailywire_downloader.transfer_context import transfer_context
+from task_manager.scheduler.operation_context import current_operation_ids
+from task_manager.scheduler.results import TaskResult
+from task_manager.tasks.media_download_operations import on_media_download_transfer_complete
+
+
+class DownloadProgressReporter:
+    """Persist one ordered snapshot; numeric TaskRun progress is transfer-only."""
+    def __init__(self, progress):
+        self.progress = progress
+        self.selected_format: str | None = None
+
+    def __call__(self, snapshot: DownloadSnapshot) -> None:
+        if self.progress is None:
+            return
+        media = next((stage for stage in snapshot.stages if stage.id == "media"), None)
+        fraction = media.fraction if media is not None else None
+        percent = min(99, int(100 * fraction)) if fraction is not None else 0
+        main = next(stage for stage in snapshot.stages if stage.id == snapshot.main_activity)
+        running = [stage for stage in snapshot.stages if stage.state in ("running", "waiting")]
+        # A blocked auxiliary fetch must not pause media that is still moving.
+        blocked = bool(running) and all(stage.wait is not None for stage in running)
+        wait = asdict(main.wait) if blocked and main.wait else None
+        message = main.code.replace("_", " ").capitalize()
+        if wait is not None:
+            from task_manager.scheduler.executor import request_wait_message
+            wait["message"] = request_wait_message(wait["reason"])
+            message = wait["message"]
+        metadata = {"download": asdict(snapshot), "selected_format": self.selected_format}
+        # The real executor supports atomic state+wait checkpoints. CLI sinks
+        # report the same structured facts without owning a scheduler wait state.
+        from task_manager.scheduler.executor import ProgressUpdater
+        if isinstance(self.progress, ProgressUpdater):
+            from task_manager.scheduler.executor import TaskCancellationRequested
+            try:
+                self.progress.set(percent, message, meta=metadata, wait_state=wait)
+            except TaskCancellationRequested as exc:
+                raise DownloadCancelled(str(exc)) from exc
+        else:
+            self.progress.set(percent, message, meta=metadata)
+
+
+def run_download(
+    session: Session, *, media_download_id: int, is_redownload: bool = False, progress=None,
+) -> TaskResult:
+    download = session.get(MediaDownloadBase, media_download_id)
+    if download is None:
+        raise DownloadCancelled("Media download was deleted before it started")
+    title = download.media.title
+    publish_status = getattr(download.media, "publish_status", None)
+    operation_ids = current_operation_ids()
+    run_id = getattr(progress, "run_id", None)
+    attempt = {"operation_ids": list(operation_ids)}
+    if run_id is not None:
+        attempt["task_run_id"] = int(run_id)
+    started = datetime.now(timezone.utc)
+    record_media_download_history(
+        session, media_download_id, MediaDownloadHistoryAction.STARTED,
+        metadata={**attempt, "is_redownload": is_redownload, "started_publish_status": publish_status}, occurred_at=started,
+    )
+    session.commit()
+    reporter = DownloadProgressReporter(progress)
+    tracker = DownloadTracker(reporter, progress if callable(progress) else None)
+    execution = None
+    committed = False
+    resources.media.configure(get_settings().download_settings.max_concurrent_downloads)
+    try:
+        with tracker:
+            def waiting(event):
+                tracker.wait("prepare", event.reason if event else None, event.until if event else None)
+            with request_context(observer=waiting, should_cancel=tracker.is_canceled), transfer_context(tracker.is_canceled, waiting):
+                plan = prepare_download_plan(session, media_download_id, tracker)
+            reporter.selected_format = plan.source.format_downloaded
+
+            def reserved(destination: str) -> None:
+                current = session.get(MediaDownloadBase, media_download_id)
+                if current is None:
+                    raise DownloadCancelled("Download was deleted before reserving its destination")
+                current.file_path = destination
+                session.commit()
+
+            execution = execute_download_plan(
+                plan, tracker=tracker, resources=resources,
+                on_destination_reserved=reserved,
+                on_media_transfer_complete=on_media_download_transfer_complete,
+            )
+            tracker.ensure_active()
+            # Stop concurrent reporting before entering the final transaction;
+            # no auxiliary thread owns a Session or writes past publication.
+            lifecycle = tracker.finish()
+            session.rollback()
+            session.expire_all()
+            download = session.get(MediaDownloadBase, media_download_id)
+            if download is None:
+                raise DownloadCancelled("Download was deleted during execution")
+            from task_manager.scheduler.executor import ProgressUpdater
+            identity = execution.identity
+            download.file_path = execution.result.path
+            download.assets.clear()
+            session.flush()
+            for asset in execution.assets:
+                suffix = Path(asset.path).name[len(Path(execution.result.path).stem):]
+                download.assets.append(MediaDownloadAsset(
+                    asset_key=asset.id, kind=asset.kind, path=asset.path, suffix=suffix,
+                    size_bytes=asset.identity.size_bytes, fingerprint=asset.identity.fingerprint,
+                ))
+            download.artifact_stat_dev, download.artifact_stat_ino = identity.stat_dev, identity.stat_ino
+            download.artifact_size_bytes, download.artifact_fingerprint = identity.size_bytes, identity.fingerprint
+            download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+            download.artifact_error = None
+            download.automatic_retry_suppressed = False
+            download.downloaded_bytes = execution.result.bytes_downloaded
+            download.format_downloaded = execution.format_downloaded
+            finished = datetime.now(timezone.utc)
+            download.downloaded_at = finished
+            if isinstance(download.media, Episode):
+                download.downloaded_publish_status = publish_status
+            result_data = {
+                "media_download_id": media_download_id, "is_redownload": is_redownload,
+                "file_path": execution.result.path, "downloaded_bytes": execution.result.bytes_downloaded,
+                "format_downloaded": execution.format_downloaded,
+                "thumbnail_path": download.thumbnail_path, "nfo_path": download.nfo_path,
+                "lifecycle": asdict(lifecycle),
+            }
+            record_media_download_history(
+                session, media_download_id, MediaDownloadHistoryAction.COMPLETED,
+                metadata=download_attempt_metadata(
+                    started_at=started, finished_at=finished, **attempt, **result_data,
+                    started_publish_status=publish_status, downloaded_publish_status=publish_status,
+                ), occurred_at=finished,
+            )
+            result = TaskResult(summary=f"Downloaded {title}", data=result_data)
+            if isinstance(progress, ProgressUpdater):
+                progress.complete_transactionally(session, result)
+            session.commit()
+            committed = True
+        return result
+    except BaseException as exc:
+        tracker.cancel(user_requested=isinstance(exc, (DownloadCancelled, RequestCancelled)))
+        tracker.stop_reporting()
+        session.rollback()
+        if execution is not None and not committed:
+            execution.rollback()
+        if not isinstance(exc, Exception):
+            raise
+        finished = datetime.now(timezone.utc)
+        metadata = download_attempt_metadata(
+            started_at=started, finished_at=finished, is_redownload=is_redownload,
+            **attempt, error=exc, lifecycle=asdict(tracker.snapshot()),
+        )
+        if isinstance(exc, (DownloadCancelled, RequestCancelled)):
+            entry = record_media_download_operation_history_once(
+                session, media_download_id, MediaDownloadHistoryAction.CANCELLED,
+                operation_ids=operation_ids, metadata=metadata, occurred_at=finished,
+            )
+        else:
+            entry = record_media_download_history_if_exists(
+                session, media_download_id, MediaDownloadHistoryAction.FAILED,
+                metadata=metadata, occurred_at=finished,
+            )
+        if entry is not None:
+            session.commit()
+        raise
+    finally:
+        if execution is not None:
+            execution.cleanup_workspace()

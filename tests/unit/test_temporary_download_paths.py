@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 
 def test_temporary_download_is_not_visible_at_destination_until_publish(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_paths import (
+    from dailywire_downloader.storage import (
         create_temporary_download_workspace,
         publish_temporary_download,
     )
@@ -37,7 +37,7 @@ def test_temporary_download_is_not_visible_at_destination_until_publish(tmp_path
 
 
 def test_temporary_publish_numbers_existing_exact_filename(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_paths import (
+    from dailywire_downloader.storage import (
         create_temporary_download_workspace,
         publish_temporary_download,
     )
@@ -60,7 +60,7 @@ def test_temporary_publish_numbers_existing_exact_filename(tmp_path):
 
 
 def test_temporary_publish_treats_extensions_as_distinct(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_paths import (
+    from dailywire_downloader.storage import (
         create_temporary_download_workspace,
         publish_temporary_download,
     )
@@ -79,7 +79,7 @@ def test_temporary_publish_treats_extensions_as_distinct(tmp_path):
 
 
 def test_temporary_publish_is_collision_safe_between_concurrent_workers(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_paths import (
+    from dailywire_downloader.storage import (
         create_temporary_download_workspace,
         publish_temporary_download,
     )
@@ -121,7 +121,7 @@ def test_temporary_publish_is_collision_safe_between_concurrent_workers(tmp_path
 
 
 def test_temporary_publish_copies_complete_file_when_staging_is_cross_filesystem(tmp_path, monkeypatch):
-    import task_manager.tasks.helpers.downloads.download_paths as download_paths
+    import dailywire_downloader.storage.temporary as download_paths
 
     destination = tmp_path / "downloads" / "Episode.m4a"
     workspace = download_paths.create_temporary_download_workspace(
@@ -158,7 +158,7 @@ def test_temporary_publish_copies_complete_file_when_staging_is_cross_filesystem
 
 
 def test_local_media_profile_mode_resolves_against_system_default(monkeypatch):
-    from task_manager.tasks.helpers.downloads.download_modes import effective_download_mode
+    from backend.services.download_options import effective_download_mode
     from config import get_settings
     from config.settings.submodels import DownloadMode
 
@@ -176,86 +176,21 @@ def test_local_media_profile_mode_resolves_against_system_default(monkeypatch):
     assert effective_download_mode(legacy_profile) is DownloadMode.TEMPORARY
 
 
-def test_episode_attempt_keeps_destination_absent_until_temporary_download_finishes(tmp_path, monkeypatch):
-    from config import get_settings
-    from config.settings.submodels import DownloadMode
-    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
-    from task_manager.tasks.workers.download_episode import service
-
-    settings = get_settings().download_settings
-    temporary_root = tmp_path / "temporary"
-    destination = tmp_path / "downloads" / "Episode.m4a"
-    monkeypatch.setattr(settings, "download_mode", DownloadMode.DIRECT)
-    monkeypatch.setattr(settings, "temporary_download_root", temporary_root)
-    monkeypatch.setattr(settings, "remux_video_to_mp4", False)
-    monkeypatch.setattr(
-        service,
-        "resolve_episode_output_path",
-        lambda *_args, **_kwargs: destination,
-    )
-    monkeypatch.setattr(
-        service,
-        "probe",
-        lambda _url: MediaInfo(
-            url="https://example.test/audio.m4a",
-            kind=MediaKind.DIRECT_FILE,
-            content_type="audio/mp4",
-        ),
-    )
-
-    pending_path = "/downloads/pending.ext"
-    profile = SimpleNamespace(
-        output_template="/downloads/{{ episode }}.ext",
-        preferred_format="format_audio_only",
-        download_mode="temporary",
-    )
-    download = SimpleNamespace(
-        local_media_profile=profile,
-        file_path=pending_path,
-    )
-    observed: dict[str, object] = {}
-
-    def fake_download_file(_url, dest_path, *, progress=None, should_cancel=None):
-        staged = Path(dest_path)
-        observed["staged"] = staged
+def test_plan_execution_keeps_destination_absent_until_temporary_download_finishes(tmp_path, monkeypatch):
+    from dailywire_downloader import coordinator
+    from dailywire_downloader.lifecycle import DownloadTracker
+    from dailywire_downloader.plan import build_download_plan, ResolvedDownloadSource
+    from dailywire_downloader.models import DownloadResult
+    destination = tmp_path / "library" / "Episode.m4a"
+    source = ResolvedDownloadSource("https://example.test/audio.m4a", "audio", False, False, "m4a", True)
+    def transfer(_url, path, **_kwargs):
         assert not destination.exists()
-        assert download.file_path == pending_path
-        assert temporary_root in staged.parents
-        staged.parent.mkdir(parents=True, exist_ok=True)
-        staged.write_bytes(b"complete media")
-        return DownloadResult(path=str(staged), bytes_downloaded=14)
-
-    monkeypatch.setattr(service, "download_file", fake_download_file)
-
-    class FakeSession:
-        commits = 0
-
-        def commit(self):
-            self.commits += 1
-
-    session = FakeSession()
-    owned_paths: list[str] = []
-    temporary_workspaces = []
-    result = service._attempt_download(
-        session,
-        download=download,
-        episode=SimpleNamespace(),
-        url="https://example.test/audio.m4a",
-        want_audio=True,
-        task_progress=None,
-        cancellation=None,
-        owned_paths=owned_paths,
-        temporary_workspaces=temporary_workspaces,
-    )
-
-    try:
-        assert result.file_path == str(destination)
-        assert destination.read_bytes() == b"complete media"
-        assert download.file_path == pending_path
-        assert owned_paths == [str(destination)]
-        assert session.commits == 0
-        assert observed["staged"] != destination
-        assert len(temporary_workspaces) == 1
-    finally:
-        for workspace in temporary_workspaces:
-            workspace.cleanup()
+        assert not destination.parent.exists()
+        Path(path).write_bytes(b"complete media")
+        return DownloadResult(path, 14)
+    monkeypatch.setattr(coordinator, "download_file", transfer)
+    with DownloadTracker() as tracker:
+        plan = build_download_plan(source=source, requested_destination=destination, temporary_root=tmp_path/"temp", download_mode="temporary", attempt_id=tracker.attempt_id)
+        execution = coordinator.execute_download_plan(plan, tracker=tracker)
+        assert Path(execution.result.path).read_bytes() == b"complete media"
+        execution.cleanup_workspace()

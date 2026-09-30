@@ -18,44 +18,19 @@ def _session() -> Session:
     return Session(engine)
 
 
-def _reset_pacing_state(client) -> None:
-    with client._pacing_condition:
-        client._pacing_next_ticket = 0
-        client._pacing_serving_ticket = 0
-        client._last_request_ns = None
-        client._ms_since_last_request = None
-        client._fast_requests = 0
-        client._pacing_condition.notify_all()
-
-
 def test_dailywire_slow_cooldown_notifies_current_execution(monkeypatch):
-    from dailywire_api.dw_api import client
-
-    monkeypatch.setattr(
-        client,
-        "get_settings",
-        lambda: SimpleNamespace(
-            dw_timeout=SimpleNamespace(
-                min_fast_request_ms=0,
-                max_fast_requests=0,
-                min_slow_request_ms=20,
-            )
-        ),
-    )
-
-    _reset_pacing_state(client)
-    try:
-        with client._pacing_condition:
-            client._last_request_ns = monotonic_ns()
-            client._fast_requests = 0
-
-        states: list[bool] = []
-        with client.slow_request_cooldown_observer(states.append):
-            client._wait_before_request()
-
-        assert states == [True, False]
-    finally:
-        _reset_pacing_state(client)
+    from dailywire_api import pacing
+    from time import monotonic, time
+    monkeypatch.setattr(pacing, "get_settings", lambda: SimpleNamespace(dw_timeout=SimpleNamespace(
+        min_fast_request_ms=0, max_fast_requests=0, min_slow_request_ms=20,
+    )))
+    pacer = pacing.RequestPacer()
+    pacer.last_request, pacer.last_request_wall = monotonic(), time()
+    states = []
+    with pacing.request_context(observer=states.append):
+        pacer.wait()
+    assert any(event and event.reason == "daily_wire_request_cooldown" for event in states)
+    assert states[-1] is None
 
 
 def test_task_operation_reports_worker_wait_state():

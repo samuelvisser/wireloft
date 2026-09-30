@@ -36,7 +36,7 @@ def get_catalog() -> DwCatalogRecord:
         tokens = DeviceAuthClient().get_token()
         client = MiddlewareClient(
             access_token=tokens.access_token if tokens else None,
-            pace_requests=False,
+            request_priority="interactive",
         )
         catalog = client.get_catalog()
         _catalog_cache = (monotonic(), catalog)
@@ -132,7 +132,7 @@ def get_catalog_movies(*, offset: int, limit: int, search: str | None) -> DwCata
         tokens = DeviceAuthClient().get_token()
         client = MovieMiddlewareClient(
             access_token=tokens.access_token if tokens else None,
-            pace_requests=False,
+            request_priority="interactive",
         )
         items = [
             _canonical_movie_summary(movie, client)

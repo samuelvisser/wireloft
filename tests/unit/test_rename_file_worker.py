@@ -30,7 +30,7 @@ def _library(
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
     from backend.types.show_types import EpisodeIdentifier, ShowType
-    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader.storage.identity import inspect_artifact
 
     show = Show(
         uuid="show-uuid",
@@ -265,7 +265,7 @@ def test_local_media_profile_rename_operation_targets_affected_episodes(tmp_path
 
 
 def test_rename_file_worker_moves_hls_companion_assets(monkeypatch, tmp_path):
-    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader.storage.identity import inspect_artifact
     from config import get_settings
     from dailywire_downloader import hls_asset_marker, hls_asset_root
     from task_manager.tasks.workers.rename_file_worker.service import run_rename_file_worker

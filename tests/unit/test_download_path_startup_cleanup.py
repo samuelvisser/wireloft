@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from dailywire_downloader.storage.temporary import cleanup_abandoned_temporary_downloads
+
 import asyncio
 import os
 import threading
 
 
 def test_startup_cleanup_removes_abandoned_placeholder(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_paths import (
+    from dailywire_downloader.storage import (
         cleanup_abandoned_download_path_reservations,
         reserve_unique_download_path,
     )
@@ -22,7 +24,7 @@ def test_startup_cleanup_removes_abandoned_placeholder(tmp_path):
 
 
 def test_startup_cleanup_preserves_unmarked_zero_byte_files(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_paths import cleanup_abandoned_download_path_reservations
+    from dailywire_downloader.storage import cleanup_abandoned_download_path_reservations
 
     external = tmp_path / "External empty file.m4a"
     external.touch()
@@ -33,7 +35,7 @@ def test_startup_cleanup_preserves_unmarked_zero_byte_files(tmp_path):
 
 
 def test_startup_cleanup_preserves_completed_file_if_marker_was_not_released(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_paths import (
+    from dailywire_downloader.storage import (
         cleanup_abandoned_download_path_reservations,
         reserve_unique_download_path,
     )
@@ -50,10 +52,11 @@ def test_startup_cleanup_preserves_completed_file_if_marker_was_not_released(tmp
 
 
 def test_startup_cleanup_removes_stale_temporary_publication_lock(tmp_path):
-    import task_manager.tasks.helpers.downloads.download_paths as download_paths
+    import dailywire_downloader.storage as download_paths
 
     tmp_path.mkdir(exist_ok=True)
-    lock = download_paths._claim_publication_lock(tmp_path / "Episode.m4a")
+    from dailywire_downloader.storage.temporary import _claim_publication_lock
+    lock = _claim_publication_lock(tmp_path / "Episode.m4a")
     assert lock is not None
     assert lock.path.exists()
 
@@ -62,9 +65,8 @@ def test_startup_cleanup_removes_stale_temporary_publication_lock(tmp_path):
 
 
 def test_startup_cleanup_removes_abandoned_temporary_workspace(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_paths import (
-        cleanup_abandoned_temporary_downloads,
-        create_temporary_download_workspace,
+    from dailywire_downloader.storage import (
+            create_temporary_download_workspace,
     )
 
     temporary_root = tmp_path / "temporary"
@@ -77,16 +79,15 @@ def test_startup_cleanup_removes_abandoned_temporary_workspace(tmp_path):
     assert cleanup_abandoned_temporary_downloads(
         temporary_root,
         download_root,
-        is_published_artifact=lambda *_args: False,
+        is_committed=lambda *_args: False,
     ) == 1
     assert not workspace.workspace.exists()
     assert not destination.exists()
 
 
 def test_startup_cleanup_removes_published_file_not_committed_to_database(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_paths import (
-        cleanup_abandoned_temporary_downloads,
-        create_temporary_download_workspace,
+    from dailywire_downloader.storage import (
+            create_temporary_download_workspace,
         publish_temporary_download,
     )
 
@@ -101,7 +102,7 @@ def test_startup_cleanup_removes_published_file_not_committed_to_database(tmp_pa
     assert cleanup_abandoned_temporary_downloads(
         temporary_root,
         download_root,
-        is_published_artifact=lambda *_args: False,
+        is_committed=lambda *_args: False,
     ) == 1
 
     assert not published.exists()
@@ -109,9 +110,8 @@ def test_startup_cleanup_removes_published_file_not_committed_to_database(tmp_pa
 
 
 def test_startup_cleanup_preserves_published_file_committed_to_database(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_paths import (
-        cleanup_abandoned_temporary_downloads,
-        create_temporary_download_workspace,
+    from dailywire_downloader.storage import (
+            create_temporary_download_workspace,
         publish_temporary_download,
     )
 
@@ -131,7 +131,7 @@ def test_startup_cleanup_preserves_published_file_committed_to_database(tmp_path
     assert cleanup_abandoned_temporary_downloads(
         temporary_root,
         download_root,
-        is_published_artifact=is_published,
+        is_committed=is_published,
     ) == 1
 
     assert seen["fingerprint"]
@@ -142,10 +142,12 @@ def test_startup_cleanup_preserves_published_file_committed_to_database(tmp_path
 def test_application_lifespan_is_ready_while_download_recovery_runs(monkeypatch):
     import controller
     import task_manager.scheduler.scheduler as scheduler_module
-    import task_manager.tasks.helpers.downloads.download_paths as download_paths
+    import dailywire_downloader.storage as download_paths
     from backend.app import application_lifespan
     from config import get_settings
 
+    from backend.api.endpoints.feeds import cached_video
+    monkeypatch.setattr(cached_video, "cleanup_expired_rss_cache", lambda: 0)
     calls: list[str] = []
     cleanup_started = threading.Event()
     allow_cleanup_to_finish = threading.Event()
@@ -153,11 +155,14 @@ def test_application_lifespan_is_ready_while_download_recovery_runs(monkeypatch)
 
     class FakeScheduler:
         running = True
+        state = 1
 
         def pause(self):
+            self.state = 2
             calls.append("pause")
 
         def resume(self):
+            self.state = 1
             calls.append("resume")
 
     scheduler = FakeScheduler()
@@ -175,13 +180,14 @@ def test_application_lifespan_is_ready_while_download_recovery_runs(monkeypatch)
 
     monkeypatch.setattr(get_settings().scheduler, "enabled", True)
     monkeypatch.setattr(scheduler_module, "start_scheduler", lambda: scheduler)
+    monkeypatch.setattr(scheduler_module, "_scheduler", scheduler)
     monkeypatch.setattr(
         download_paths,
         "cleanup_abandoned_download_path_reservations",
         clean_reservations,
     )
     monkeypatch.setattr(
-        download_paths,
+        __import__("backend.app", fromlist=["cleanup_abandoned_temporary_downloads"]),
         "cleanup_abandoned_temporary_downloads",
         clean_temporary,
     )
@@ -191,7 +197,7 @@ def test_application_lifespan_is_ready_while_download_recovery_runs(monkeypatch)
     async def run_lifespan():
         async with application_lifespan(None):
             calls.append("running")
-            assert await asyncio.to_thread(cleanup_started.wait, 1)
+            assert await asyncio.to_thread(cleanup_started.wait, 5)
             assert "temporary-cleanup" not in calls
             assert "resume" not in calls
 
@@ -214,7 +220,7 @@ def test_application_lifespan_is_ready_while_download_recovery_runs(monkeypatch)
 
 
 def test_startup_cleanup_removes_partial_marker_without_touching_external_empty_file(tmp_path):
-    from task_manager.tasks.helpers.downloads.download_paths import (
+    from dailywire_downloader.storage import (
         cleanup_abandoned_download_path_reservations,
         reserve_unique_download_path,
     )

@@ -1,7 +1,7 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useNavigate} from 'react-router-dom'
 
-import ProgressBar from '../components/common/ProgressBar'
+import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
 import {useLocalMediaProfiles, useMediaDownloadsView, useMovies, useShows} from '../lib/queries'
 import {ACTIVE_DOWNLOAD_STATUSES} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
@@ -79,8 +79,7 @@ export default function HomePage() {
                     {isLoading && !downloads ? <p>Loading downloads…</p> : active.length ? active.slice(0, 3).map((download) => (
                         <button className="operation-download" type="button" key={download.id} onClick={() => openDownload(download)}>
                             <span className="operation-icon"><FontAwesomeIcon icon={['fas', download.movieSlug ? 'clapperboard' : 'podcast']}/></span>
-                            <span className="operation-download-copy"><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small><ProgressBar value={download.progress} ariaLabel={`Progress for ${mediaTitle(download)}`}/></span>
-                            <span>{download.downloadStatus === 'pending' ? 'Queued' : download.downloadStatus === 'local_processing' ? 'Processing' : `${download.progress}%`}</span>
+                            <span className="operation-download-copy"><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small><DownloadProgressStatus download={download} compact details={false}/></span>
                         </button>
                     )) : <div className="operation-empty"><FontAwesomeIcon icon={['fas', 'check']}/><span>No active downloads</span></div>}
                 </section>

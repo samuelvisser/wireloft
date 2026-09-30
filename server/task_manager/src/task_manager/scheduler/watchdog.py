@@ -93,16 +93,38 @@ def reset_watchdog_state() -> None:
         _task_progress.clear()
 
 
+def download_execution_stalled(snapshot: dict, *, now: float, timeout_seconds: float) -> bool:
+    """Liveness, measured inactivity, and unmeasured work have separate limits."""
+    heartbeat = snapshot.get("heartbeat_at")
+    if not isinstance(heartbeat, (float, int)) or now - heartbeat >= timeout_seconds:
+        return True
+    for stage in snapshot.get("stages") or ():
+        if stage.get("state") != "running":
+            continue
+        if stage.get("phase") == "finishing" and stage.get("fraction") is None:
+            # A live FFmpeg process can legitimately keep the same percentage.
+            # Its bounded local-work deadline still catches an indefinite hang.
+            deadline = stage.get("deadline_at")
+            if deadline is not None and now >= deadline:
+                return True
+        else:
+            activity = stage.get("last_activity_at") or stage.get("started_at") or snapshot.get("started_at")
+            if activity is not None and now - activity >= timeout_seconds:
+                return True
+    return False
+
+
 def monitor_stalled_work(
         *,
         now: datetime | None = None,
         timeout_minutes: int | None = None,
 ) -> WatchdogResult:
-    """Cancel running tasks/operations whose percentage has stopped changing.
+    """Cancel stalled work using its own reporting semantics.
 
     APScheduler controls when jobs may start and how many may run concurrently,
     but it has no progress-aware runtime timeout. WireLoft samples RUNNING work
-    once per minute and remembers when each percentage last changed. Work that is
+    once per minute. Structured download/batch activity is authoritative; other
+    workers retain their generic percentage-based watchdog. Work that is
     merely queued, scheduled, waiting on an external dependency, or waiting for a
     retry is intentionally excluded.
 
@@ -117,7 +139,7 @@ def monitor_stalled_work(
         else int(get_settings().scheduler.stalled_task_timeout_minutes)
     )
     timeout = timedelta(minutes=configured_timeout)
-    reason = f"Canceled after {configured_timeout} minutes without progress"
+    reason = f"Canceled after {configured_timeout} minutes without progress or a processing deadline expired"
 
     session = get_session()
     try:
@@ -145,6 +167,40 @@ def monitor_stalled_work(
                 )
             )
         }
+        # Structured download runs are not monitored a second time through the
+        # generic integer percentage of their operation or their parent batch.
+        structured_stalled = set()
+        structured_runs = set()
+        for run_id, metadata in session.execute(select(TaskRun.id, TaskRun.meta).where(TaskRun.status == TaskStatus.RUNNING)):
+            report = (metadata or {}).get("_progress_meta") or {}
+            download = report.get("download")
+            batch = report.get("batch")
+            if isinstance(download, dict):
+                structured_runs.add(run_id)
+                if download_execution_stalled(download, now=current_time.timestamp(), timeout_seconds=timeout.total_seconds()):
+                    structured_stalled.add(run_id)
+            elif isinstance(batch, dict):
+                structured_runs.add(run_id)
+                # Children have their own activity/deadline watchdogs. A batch
+                # coordinator being alive must not synthesize child progress.
+                heartbeat = batch.get("heartbeat_at") or 0
+                if current_time.timestamp() - heartbeat >= timeout.total_seconds():
+                    structured_stalled.add(run_id)
+        structured_operation_ids = set()
+        stalled_operation_ids = set()
+        for operation_id, run_id in session.execute(
+            select(TaskOperationRun.operation_id, TaskOperationRun.task_run_id)
+            .join(TaskOperation, TaskOperation.id == TaskOperationRun.operation_id)
+            .where(TaskOperationRun.task_run_id.in_(structured_runs), TaskOperation.status == OperationStatus.RUNNING.value)
+        ):
+            structured_operation_ids.add(operation_id)
+            if run_id in structured_stalled:
+                stalled_operation_ids.add(operation_id)
+        for operation_id in structured_operation_ids:
+            current_operations.pop(operation_id, None)
+        for run_id in structured_runs:
+            current_tasks.pop(run_id, None)
+        standalone_stalled = structured_stalled - active_operation_run_ids
     finally:
         session.close()
 
@@ -161,6 +217,9 @@ def monitor_stalled_work(
             now=current_time,
             timeout=timeout,
         )
+
+    operation_ids = list(set(operation_ids) | stalled_operation_ids)
+    task_run_ids = list(set(task_run_ids) | standalone_stalled)
 
     operations_canceled = 0
     for operation_id in operation_ids:

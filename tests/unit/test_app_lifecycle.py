@@ -39,7 +39,7 @@ assert 'refresh_movie_extras' in {definition.key for definition in all_definitio
 def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_path):
     import backend.api.endpoints.feeds.cached_video as cached_video
     import backend.app as backend_app
-    import task_manager.tasks.helpers.downloads.download_paths as download_paths
+    import dailywire_downloader.storage as download_paths
 
     calls: list[str] = []
 

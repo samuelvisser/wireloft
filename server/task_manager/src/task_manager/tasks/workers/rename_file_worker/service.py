@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from backend.db.models.media_download import EpisodeMediaDownload
-from backend.services.media_download_history import record_media_download_history
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from backend.types.media_download_history_types import MediaDownloadHistoryAction
-from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.episode_download_scope import EpisodeDownloadScope
 from backend.utils.output_template import output_template_fields, resolve_episode_output_path
-from dailywire_downloader import hls_asset_marker, hls_asset_root
+from backend.services.download_relocation import plan_download_relocation, relocate_downloads
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
@@ -127,77 +122,12 @@ async def run_rename_file_worker(
             if resolved_source is not None and source == destination:
                 unchanged += 1
             elif resolved_source is not None:
-                if destination.exists():
-                    raise FileExistsError(
-                        f"Cannot rename '{source}' to '{destination}': destination already exists"
-                    )
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                thumbnail_source = Path(download.thumbnail_path) if download.thumbnail_path else None
-                thumbnail_destination = _planned_thumbnail_destination(download, destination)
-                nfo_source = Path(download.nfo_path) if download.nfo_path else None
-                nfo_destination = _planned_nfo_destination(download, destination)
-                for label, accessory_destination in (
-                    ("thumbnail", thumbnail_destination),
-                    ("NFO", nfo_destination),
-                ):
-                    if accessory_destination is not None and accessory_destination.exists():
-                        raise FileExistsError(
-                            f"Cannot rename {label} to '{accessory_destination}': destination already exists"
-                        )
-                _assert_hls_assets_can_move(source, destination)
-
-                shutil.move(str(source), str(destination))
-                hls_assets_moved = False
-                try:
-                    hls_assets_moved = _move_hls_assets_if_present(source, destination)
-                    _move_thumbnail_if_present(download, thumbnail_destination)
-                    _move_nfo_if_present(download, nfo_destination)
-                except BaseException:
-                    # Keep the media and its accessories together if a later move fails.
-                    _rollback_sidecar(thumbnail_source, thumbnail_destination)
-                    _rollback_sidecar(nfo_source, nfo_destination)
-                    if hls_assets_moved:
-                        _rollback_hls_assets(source, destination)
-                    if destination.exists() and not source.exists():
-                        shutil.move(str(destination), str(source))
-                    raise
-
-                _record_artifact_location(download, destination)
-                record_media_download_history(
-                    s,
-                    download.id,
-                    MediaDownloadHistoryAction.ARTIFACT_RENAMED,
-                    metadata={
-                        "old_path": str(source),
-                        "new_path": str(destination),
-                        "reason": "output_template_rename",
-                        "recovered": False,
-                    },
-                )
-                s.commit()
+                move = plan_download_relocation(download, source, destination)
+                relocate_downloads(s, [move])
                 renamed += 1
             elif destination.exists():
-                # A previous attempt can be interrupted after the filesystem move
-                # but before its database commit. Reconcile the sidecar in the same
-                # recovery pass so it remains beside the recovered media artifact.
-                thumbnail_destination = _planned_thumbnail_destination(download, destination)
-                nfo_destination = _planned_nfo_destination(download, destination)
-                _move_hls_assets_if_present(source, destination)
-                _move_thumbnail_if_present(download, thumbnail_destination)
-                _move_nfo_if_present(download, nfo_destination)
-                _record_artifact_location(download, destination)
-                record_media_download_history(
-                    s,
-                    download.id,
-                    MediaDownloadHistoryAction.ARTIFACT_RENAMED,
-                    metadata={
-                        "old_path": str(source),
-                        "new_path": str(destination),
-                        "reason": "output_template_rename",
-                        "recovered": True,
-                    },
-                )
-                s.commit()
+                move = plan_download_relocation(download, source, destination)
+                relocate_downloads(s, [move])
                 recovered += 1
             else:
                 raise FileNotFoundError(
@@ -228,125 +158,3 @@ async def run_rename_file_worker(
             "files_considered": total,
         },
     )
-
-
-
-def _assert_hls_assets_can_move(source: Path, destination: Path) -> None:
-    if source.suffix.lower() != ".m3u8":
-        return
-    source_marker = hls_asset_marker(source)
-    if not source_marker.is_file():
-        return
-    destination_assets = hls_asset_root(destination)
-    if destination_assets.exists():
-        raise FileExistsError(
-            f"Cannot rename HLS assets to '{destination_assets}': destination already exists"
-        )
-
-
-def _move_hls_assets_if_present(source: Path, destination: Path) -> bool:
-    if source.suffix.lower() != ".m3u8":
-        return False
-
-    source_assets = hls_asset_root(source)
-    destination_assets = hls_asset_root(destination)
-    source_marker = hls_asset_marker(source)
-    destination_marker = hls_asset_marker(destination)
-
-    if source_marker.is_file():
-        if destination_assets.exists():
-            raise FileExistsError(
-                f"Cannot rename HLS assets to '{destination_assets}': destination already exists"
-            )
-        destination_assets.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(source_assets), str(destination_assets))
-        return True
-
-    # Recovery after an interrupted rename can find the master at its new name
-    # while the companion directory was already moved before the database commit.
-    if destination_marker.is_file():
-        return False
-    return False
-
-
-def _rollback_hls_assets(source: Path, destination: Path) -> None:
-    source_assets = hls_asset_root(source)
-    destination_assets = hls_asset_root(destination)
-    if hls_asset_marker(destination).is_file() and not source_assets.exists():
-        shutil.move(str(destination_assets), str(source_assets))
-
-
-def _planned_thumbnail_destination(
-    download: EpisodeMediaDownload,
-    media_destination: Path,
-) -> Path | None:
-    if not download.thumbnail_path:
-        return None
-    suffix = Path(download.thumbnail_path).suffix
-    return media_destination.with_suffix(suffix) if suffix else None
-
-
-def _planned_nfo_destination(
-    download: EpisodeMediaDownload,
-    media_destination: Path,
-) -> Path | None:
-    return media_destination.with_suffix(".nfo") if download.nfo_path else None
-
-
-def _move_thumbnail_if_present(
-    download: EpisodeMediaDownload,
-    destination: Path | None,
-) -> None:
-    if not download.thumbnail_path or destination is None:
-        return
-
-    source = Path(download.thumbnail_path)
-    if source == destination:
-        return
-    if source.exists():
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(source), str(destination))
-        download.thumbnail_path = str(destination)
-    elif destination.exists():
-        download.thumbnail_path = str(destination)
-    else:
-        download.thumbnail_path = None
-
-
-def _move_nfo_if_present(
-    download: EpisodeMediaDownload,
-    destination: Path | None,
-) -> None:
-    if not download.nfo_path or destination is None:
-        return
-
-    source = Path(download.nfo_path)
-    if source == destination:
-        return
-    if source.exists():
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(source), str(destination))
-        download.nfo_path = str(destination)
-    elif destination.exists():
-        download.nfo_path = str(destination)
-    else:
-        download.nfo_path = None
-
-
-def _rollback_sidecar(source: Path | None, destination: Path | None) -> None:
-    if source is None or destination is None or source == destination:
-        return
-    if destination.exists() and not source.exists():
-        source.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(destination), str(source))
-
-
-def _record_artifact_location(download: EpisodeMediaDownload, path: Path) -> None:
-    identity = inspect_artifact(path)
-    download.file_path = str(path)
-    download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
-    download.artifact_error = None
-    download.artifact_stat_dev = identity.stat_dev
-    download.artifact_stat_ino = identity.stat_ino
-    download.artifact_size_bytes = identity.size_bytes
-    download.artifact_fingerprint = identity.fingerprint

@@ -143,7 +143,7 @@ def _completed_download(db_session, episode, lmp, profile, *, publish_status="pu
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
-    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader.storage.identity import inspect_artifact
     from config import get_settings
 
     file_path = get_settings().download_settings.download_root / f"{episode.slug}-{lmp.id}.m4a"

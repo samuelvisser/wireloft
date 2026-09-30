@@ -4,7 +4,7 @@ import os
 
 
 def test_artifact_identity_survives_rename(tmp_path):
-    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader.storage.identity import inspect_artifact
 
     original = tmp_path / "original.bin"
     renamed = tmp_path / "renamed.bin"
@@ -19,7 +19,7 @@ def test_artifact_identity_survives_rename(tmp_path):
 
 
 def test_artifact_fingerprint_distinguishes_same_size_content(tmp_path):
-    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader.storage.identity import inspect_artifact
 
     first = tmp_path / "first.bin"
     second = tmp_path / "second.bin"
@@ -34,7 +34,7 @@ def test_artifact_fingerprint_distinguishes_same_size_content(tmp_path):
 
 
 def test_large_artifact_fingerprint_samples_middle_and_end(tmp_path):
-    from backend.utils.artifact_identity import inspect_artifact
+    from dailywire_downloader.storage.identity import inspect_artifact
 
     sample_size = 64 * 1024
     original = tmp_path / "large.bin"

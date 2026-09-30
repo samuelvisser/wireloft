@@ -221,7 +221,7 @@ export default function LocalMediaProfilePage() {
                                             : redownloadOperation
                                                 ? 'A re-download operation is running for this profile.'
                                                 : undefined,
-                                    progress: renameOperation?.progress ?? undefined,
+                                    operation: renameOperation,
                                     controls: operationControls(renameOperation?.id, 'file rename'),
                                     onSelect: () => setRenameConfirm(true),
                                 },
@@ -240,7 +240,7 @@ export default function LocalMediaProfilePage() {
                                                 : statistics.managedMediaCount === 0
                                                     ? 'This Local Media Profile does not manage any downloads.'
                                                     : undefined,
-                                    progress: deleteDownloadsOperation?.progress ?? undefined,
+                                    operation: deleteDownloadsOperation,
                                     controls: operationControls(
                                         deleteDownloadsOperation?.id,
                                         'delete downloads',
@@ -261,7 +261,7 @@ export default function LocalMediaProfilePage() {
                                                 : statistics.managedMediaCount === 0
                                                     ? 'This Local Media Profile does not manage any downloads.'
                                                     : undefined,
-                                    progress: redownloadOperation?.progress ?? undefined,
+                                    operation: redownloadOperation,
                                     controls: operationControls(
                                         redownloadOperation?.id,
                                         're-download',
