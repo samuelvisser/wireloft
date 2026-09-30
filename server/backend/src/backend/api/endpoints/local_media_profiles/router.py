@@ -35,6 +35,7 @@ from .preview import router as preview_router
 from .service import (
     get_local_media_profile,
     get_local_media_profile_view,
+    get_local_media_profile_views_list,
     get_local_media_profiles_list,
 )
 
@@ -48,6 +49,13 @@ def local_media_profiles_list():
     """List Local Media Profiles of every type."""
     with db_session() as s:
         return get_local_media_profiles_list(s)
+
+
+@router.get("/as-view", response_model=list[LocalMediaProfileViewAPIRead])
+def local_media_profiles_view_list():
+    """List Local Media Profiles together with management statistics."""
+    with db_session() as s:
+        return get_local_media_profile_views_list(s)
 
 
 @router.get("/template/variables", response_model=list[LocalMediaProfileTemplateVariable])
