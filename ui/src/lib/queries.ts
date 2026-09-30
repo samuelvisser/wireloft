@@ -73,6 +73,19 @@ export function useLocalMediaProfiles() {
     return result
 }
 
+export function useLocalMediaProfilesView() {
+    return useQuery<LocalMediaProfileViewRead[], Error, LocalMediaProfileViewRead[], readonly ['localMediaProfilesView']>({
+        queryKey: ['localMediaProfilesView'] as const,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/local-media-profiles/as-view`,
+            LocalMediaProfileViewReadSchema.array(),
+            signal,
+        ),
+        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
+    })
+}
+
 export function useLocalMediaProfileView(slug?: string) {
     return useQuery<LocalMediaProfileViewRead, Error, LocalMediaProfileViewRead, readonly ['localMediaProfileView', string | undefined]>({
         queryKey: ['localMediaProfileView', slug] as const,
