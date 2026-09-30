@@ -29,6 +29,12 @@ class Episode(
     __table_args__ = (
         UniqueConstraint("show_id", "index", name="uq_episode_show_index"),
         UniqueConstraint("show_id", "episode_identifier", name="uq_unique_episode_identifier_per_show"),
+        Index(
+            "ix_media_items_episode_show_published_id",
+            "show_id",
+            "published_date",
+            "id",
+        ),
         PrimaryKeyConstraint("id", "show_id", name="pk_episodes"),
     )
 

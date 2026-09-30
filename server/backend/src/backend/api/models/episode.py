@@ -123,3 +123,14 @@ class EpisodeAPIReadView(_EpisodeIdentifierAPIOut):
     thumbnail_landscape_path: Optional[str]
     thumbnail_portrait_path: Optional[str]
     thumbnail_square_path: Optional[str]
+
+
+class EpisodeAPIReadViewPage(ResponseBase):
+    """One bounded page of compact episode rows for a show grid."""
+
+    items: list[EpisodeAPIReadView]
+    offset: int
+    limit: int
+    total: int
+    show_total: int
+    has_more: bool

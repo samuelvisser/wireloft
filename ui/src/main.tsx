@@ -45,12 +45,11 @@ async function bootstrap() {
     queryClient.setQueryData(['localMediaProfiles'], cachedProfiles)
   }
 
-  // A direct reload of a show route should get its local episode/season data before React mounts.
-  // Only that one show's episode cache is parsed here; all other shows remain idle/background work.
+  // A direct reload of a seasonal show should get its small cached season list before React mounts.
+  // Episode previews are read lazily by ShowPage so startup never parses unrelated episode data.
   hydrateCurrentShowRouteCache(queryClient)
 
-  // Persist episode/season query results regardless of whether they came from startup warming
-  // or a normal page-level background refresh.
+  // Persist small season-query results produced by normal foreground refreshes.
   installShowDataQueryPersistence(queryClient)
 
   // Warm the existing core cache without blocking the first render.
@@ -66,8 +65,7 @@ async function bootstrap() {
     </React.StrictMode>,
   )
 
-  // Episode lists can be large, so inspect/fetch them only after the first paint. The warmer
-  // checks each show's 24-hour timestamp and uses limited concurrency to avoid slowing the UI.
+  // Warm only the latest five episodes per stale show after first paint, with limited concurrency.
   scheduleShowDataCacheWarm(queryClient)
 }
 void bootstrap()

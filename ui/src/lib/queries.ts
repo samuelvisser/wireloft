@@ -1,10 +1,12 @@
 import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClient} from '@tanstack/react-query'
 import {useEffect, useMemo} from 'react'
-import {saveProfilesToStorage, saveShowsToStorage} from './cache'
+import {saveEpisodesToStorage, saveProfilesToStorage, saveShowsToStorage} from './cache'
 import {useFrontendPuller} from './puller'
 import {
     episodesQueryOptions,
+    fetchEpisodePage,
     seasonsQueryOptions,
+    SHOW_EPISODE_PREVIEW_SIZE,
     showQueryOptions,
     showsQueryOptions,
 } from './showQueryOptions'
@@ -279,6 +281,51 @@ export function useEpisodes(showSlug?: string, opts?: { limit?: number }) {
         ...episodesQueryOptions(showSlug, opts?.limit),
         enabled: !!showSlug,
     })
+}
+
+export function useEpisodePages(
+    showSlug?: string,
+    opts?: {
+        pageSize?: number
+        seasonId?: number | null
+        enabled?: boolean
+    },
+) {
+    const pageSize = opts?.pageSize ?? 25
+    const seasonId = opts?.seasonId
+    const result = useInfiniteQuery({
+        queryKey: ['episodes', showSlug, 'pages', seasonId ?? null, pageSize] as const,
+        enabled: !!showSlug && seasonId !== null && (opts?.enabled ?? true),
+        initialPageParam: 0,
+        queryFn: ({pageParam, signal}) => fetchEpisodePage(
+            showSlug!,
+            {
+                offset: pageParam,
+                limit: pageSize,
+                seasonId: seasonId ?? undefined,
+            },
+            signal,
+        ),
+        getNextPageParam: (lastPage) => (
+            lastPage.hasMore
+                ? lastPage.offset + lastPage.items.length
+                : undefined
+        ),
+        refetchOnMount: 'always',
+    })
+
+    const firstPage = result.data?.pages[0]
+    useEffect(() => {
+        if (!showSlug || seasonId !== undefined || firstPage === undefined) return
+        saveEpisodesToStorage(
+            showSlug,
+            firstPage.items.slice(0, SHOW_EPISODE_PREVIEW_SIZE),
+            Date.now(),
+            firstPage.showTotal,
+        )
+    }, [firstPage, seasonId, showSlug])
+
+    return result
 }
 
 export function useEpisode(episodeId?: string) {

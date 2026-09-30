@@ -1,6 +1,6 @@
 import {keepPreviousData, queryOptions, type QueryClient} from '@tanstack/react-query'
 
-import {EpisodeReadViewSchema} from '../types/schemas/episode'
+import {EpisodeReadViewPageSchema, EpisodeReadViewSchema} from '../types/schemas/episode'
 import {SeasonReadSchema} from '../types/schemas/season'
 import {ShowRead, ShowReadSchema} from '../types/schemas/show'
 
@@ -75,5 +75,38 @@ export function seasonsQueryOptions(showSlug: string | undefined) {
     ),
     placeholderData: keepPreviousData,
     refetchOnMount: 'always' as const,
+  })
+}
+
+
+export const SHOW_EPISODE_PREVIEW_SIZE = 5
+
+export async function fetchEpisodePage(
+  showSlug: string,
+  params: {offset: number; limit: number; seasonId?: number},
+  signal?: AbortSignal,
+) {
+  const query = new URLSearchParams({
+    offset: String(params.offset),
+    limit: String(params.limit),
+  })
+  if (params.seasonId !== undefined) {
+    query.set('season_id', String(params.seasonId))
+  }
+  return fetchParsed(
+    `${apiBase()}/episodes/as-view/by-show-slug/${encodeURIComponent(showSlug)}/page?${query}`,
+    EpisodeReadViewPageSchema,
+    signal,
+  )
+}
+
+export function episodePreviewQueryOptions(showSlug: string, limit: number) {
+  return queryOptions({
+    queryKey: ['episodes', showSlug, 'preview', limit] as const,
+    queryFn: ({signal}) => fetchEpisodePage(
+      showSlug,
+      {offset: 0, limit},
+      signal,
+    ),
   })
 }
