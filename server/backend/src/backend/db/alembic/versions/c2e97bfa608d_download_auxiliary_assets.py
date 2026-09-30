@@ -1,4 +1,4 @@
-"""Store published auxiliary files independently of their media type.
+"""Store download auxiliary files and generic operation dependencies.
 
 Revision ID: c2e97bfa608d
 Revises: e3a7d92b4c61
@@ -14,25 +14,76 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
-    op.create_table(
-        "download_batch_items",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("owner_key", sa.String(80), nullable=False),
-        sa.Column("owner_run_id", sa.Integer(), sa.ForeignKey("task_runs.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("owner_operation_id", sa.String(), sa.ForeignKey("task_operations.id", ondelete="CASCADE"), nullable=True),
-        sa.Column("media_download_id", sa.Integer(), nullable=False),
-        sa.Column("title", sa.Text(), nullable=False),
-        sa.Column("weight", sa.BigInteger(), nullable=False),
-        sa.Column("child_operation_id", sa.String(), sa.ForeignKey("task_operations.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("owns_operation", sa.Boolean(), nullable=False, server_default="0"),
-        sa.Column("prepared", sa.Boolean(), nullable=False, server_default="0"),
-        sa.Column("error", sa.Text(), nullable=True),
-        sa.UniqueConstraint("owner_key", "media_download_id", name="uq_download_batch_target"),
+def _upgrade_operation_dependencies() -> None:
+    op.add_column(
+        "task_operations",
+        sa.Column(
+            "completion_progress",
+            sa.Integer(),
+            nullable=True,
+            server_default=sa.text("0"),
+        ),
     )
-    op.create_index("ix_download_batch_items_owner_key", "download_batch_items", ["owner_key"])
-    op.create_index("ix_download_batch_items_owner_run_id", "download_batch_items", ["owner_run_id"])
-    op.create_index("ix_download_batch_items_owner_operation_id", "download_batch_items", ["owner_operation_id"])
+    op.execute(sa.text("""
+        UPDATE task_operations
+        SET completion_progress = CASE
+            WHEN status IN ('SUCCEEDED', 'FAILED', 'PARTIAL', 'CANCELED') THEN 100
+            ELSE COALESCE(progress, 0)
+        END
+    """))
+
+    op.create_table(
+        "task_operation_dependencies",
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column(
+            "parent_operation_id",
+            sa.String(length=36),
+            sa.ForeignKey("task_operations.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "child_operation_id",
+            sa.String(length=36),
+            sa.ForeignKey("task_operations.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+        sa.Column("slot_key", sa.String(length=255), nullable=False),
+        sa.Column("weight", sa.Float(), nullable=False, server_default=sa.text("1")),
+        sa.Column("required", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column("cancel_policy", sa.String(length=32), nullable=False, server_default="detach"),
+        sa.Column("context", sa.JSON(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+        ),
+        sa.UniqueConstraint(
+            "parent_operation_id",
+            "slot_key",
+            name="uq_task_operation_dependencies_parent_slot",
+        ),
+        sa.UniqueConstraint(
+            "parent_operation_id",
+            "child_operation_id",
+            name="uq_task_operation_dependencies_parent_child",
+        ),
+    )
+    op.create_index(
+        "ix_task_operation_dependencies_parent_operation_id",
+        "task_operation_dependencies",
+        ["parent_operation_id"],
+    )
+    op.create_index(
+        "ix_task_operation_dependencies_child_operation_id",
+        "task_operation_dependencies",
+        ["child_operation_id"],
+    )
+
+
+def upgrade():
+    _upgrade_operation_dependencies()
+
     assets = op.create_table(
         "media_download_assets",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
@@ -62,9 +113,20 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_table("download_batch_items")
     with op.batch_alter_table("media_downloads") as batch:
         batch.add_column(sa.Column("thumbnail_path", sa.String(), nullable=True))
         batch.add_column(sa.Column("nfo_path", sa.String(), nullable=True))
     op.execute(sa.text("UPDATE media_downloads SET thumbnail_path = (SELECT path FROM media_download_assets WHERE media_download_id = media_downloads.id AND asset_key = 'artwork'), nfo_path = (SELECT path FROM media_download_assets WHERE media_download_id = media_downloads.id AND asset_key = 'nfo')"))
     op.drop_table("media_download_assets")
+
+    op.drop_index(
+        "ix_task_operation_dependencies_child_operation_id",
+        table_name="task_operation_dependencies",
+    )
+    op.drop_index(
+        "ix_task_operation_dependencies_parent_operation_id",
+        table_name="task_operation_dependencies",
+    )
+    op.drop_table("task_operation_dependencies")
+    with op.batch_alter_table("task_operations") as batch:
+        batch.drop_column("completion_progress")

@@ -24,6 +24,7 @@ async def download_movie(
     *,
     resource_id: Optional[int] = None,
     is_redownload: bool = False,
+    prepare_existing_artifact: bool = False,
     progress=None,
 ):
     if resource_id is None:
@@ -35,5 +36,6 @@ async def download_movie(
                 session,
                 media_download_id=resource_id,
                 is_redownload=is_redownload,
+                prepare_existing_artifact=prepare_existing_artifact,
                 progress=progress,
             )

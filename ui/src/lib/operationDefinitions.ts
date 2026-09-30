@@ -343,6 +343,7 @@ export const frontendOperationDefinitions = {
     success: (operation) => {
       const profileName = contextString(operation, 'local_media_profile_name') || operation.title
       const count = resultNumber(operation, 'downloads_completed')
+        ?? resultNumber(operation, 'completed')
         ?? contextNumber(operation, 'downloads_requested')
         ?? 0
       return `Re-download finished for ${profileName}: ${count} ${plural(count, 'file')} re-downloaded`
@@ -370,8 +371,11 @@ export const frontendOperationDefinitions = {
     invalidate: invalidateShowDownloadDeletion,
     success: (operation) => {
       const showTitle = contextString(operation, 'show_title') || operation.title
-      const files = resultNumber(operation, 'episode_files') ?? 0
+      const files = resultNumber(operation, 'episode_files')
+        ?? resultNumber(operation, 'completed')
+        ?? 0
       const profiles = resultNumber(operation, 'local_media_profiles')
+        ?? contextNumber(operation, 'local_media_profiles_requested')
       const disabledProfiles = resultNumber(operation, 'download_profiles_disabled') ?? 0
       const profileDetail = profiles === undefined
         ? ''
@@ -389,8 +393,12 @@ export const frontendOperationDefinitions = {
     invalidate: invalidateShowFiles,
     success: (operation) => {
       const showTitle = contextString(operation, 'show_title') || operation.title
-      const files = resultNumber(operation, 'episode_files') ?? 0
+      const files = resultNumber(operation, 'episode_files')
+        ?? resultNumber(operation, 'completed')
+        ?? contextNumber(operation, 'downloads_requested')
+        ?? 0
       const profiles = resultNumber(operation, 'local_media_profiles')
+        ?? contextNumber(operation, 'local_media_profiles_requested')
       const profileDetail = profiles === undefined
         ? ''
         : ` using ${profiles} ${plural(profiles, 'Local Media Profile')}`
@@ -411,6 +419,7 @@ export const frontendOperationDefinitions = {
     success: (operation) => {
       const movieTitle = contextString(operation, 'movie_title') || operation.title
       const count = resultNumber(operation, 'downloads_completed')
+        ?? resultNumber(operation, 'completed')
         ?? contextNumber(operation, 'downloads_requested')
         ?? 0
       return `Re-download finished for ${movieTitle}: ${count} ${plural(count, 'file')} re-downloaded`
@@ -423,6 +432,7 @@ export const frontendOperationDefinitions = {
     invalidate: invalidateMediaDownloadCollection,
     success: (operation) => {
       const count = resultNumber(operation, 'downloads_completed')
+        ?? resultNumber(operation, 'completed')
         ?? contextNumber(operation, 'downloads_requested')
         ?? 0
       return `Retry finished for ${count} ${plural(count, 'download')}`

@@ -17,7 +17,6 @@ from task_manager.tasks.media_download_operations import (
     get_active_media_download_operation,
     prepare_media_download_artifact,
 )
-
 from task_manager.tasks.workers.download_attempt import serialize_download_attempt
 
 
@@ -84,14 +83,17 @@ def retry_media_download_action(
             acknowledge=True,
         )
 
-    with serialize_download_attempt(media_download_id), db_session() as s:
+    with db_session() as s:
         try:
-            download = retry_media_download(s, media_download_id)
+            download = s.get(MediaDownloadBase, media_download_id)
+            if download is None:
+                raise DownloadActionError("missing", "Media download not found")
             operation = create_media_download_operation(
                 s,
                 download,
                 source=source,
                 is_redownload=is_redownload,
+                prepare_existing_artifact=True,
             )
             dispatch_queued_media_download_operations(s)
             operation_id = operation.id

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 
 def _definition(session, key: str):
@@ -129,6 +130,13 @@ def _restart_scenario(task_database, monkeypatch):
         scheduler_module,
         "trigger_now",
         lambda **kwargs: dispatched.append(kwargs) or "job-id",
+    )
+    monkeypatch.setattr(
+        "task_manager.scheduler.registry.get_task",
+        lambda key: (
+            SimpleNamespace(recovery_dispatcher=None),
+            None,
+        ) if key == definition_key else (_ for _ in ()).throw(KeyError(key)),
     )
 
     payload = restart_operation(operation_id)
@@ -417,3 +425,200 @@ def test_executor_skips_retry_run_after_cancellation_request(task_database):
         assert canceled.finished_at is not None
     finally:
         session.close()
+
+
+
+def _dependency_cancel_scenario(task_database, monkeypatch, *, shared_parent: bool):
+    from task_manager.scheduler.operation_control import cancel_operation
+    from task_manager.scheduler.operations import (
+        OperationDependencySpec,
+        OperationTargetSpec,
+        add_operation_dependencies,
+        create_operation,
+        link_run_to_operations,
+        refresh_operations_for_run,
+    )
+    from task_manager.scheduler.types import (
+        OperationDependencyCancelPolicy,
+        TaskStatus,
+    )
+    import task_manager.scheduler.scheduler as scheduler_module
+
+    session = task_database()
+    definition = _definition(session, "test_dependency_cancel_worker")
+    child = create_operation(
+        session,
+        kind="media.download",
+        resource_type="media_download",
+        resource_id=77,
+        title="Child download",
+        targets=[
+            OperationTargetSpec(
+                task_key=definition.key,
+                resource_type="episode",
+                resource_id=77,
+            )
+        ],
+    )
+    run = _run(
+        session,
+        definition,
+        resource_id=77,
+        status=TaskStatus.RUNNING,
+        progress=31,
+    )
+    link_run_to_operations(
+        session,
+        run=run,
+        task_key=definition.key,
+        operation_ids=(child.id,),
+    )
+    refresh_operations_for_run(session, run.id)
+
+    parent = create_operation(
+        session,
+        kind="media_download.bulk_retry",
+        resource_type="media_download",
+        resource_id=None,
+        title="Parent batch",
+        targets=[],
+    )
+    add_operation_dependencies(
+        session,
+        parent.id,
+        [OperationDependencySpec(
+            child.id,
+            cancel_policy=OperationDependencyCancelPolicy.CANCEL_IF_EXCLUSIVE.value,
+        )],
+    )
+
+    other = None
+    if shared_parent:
+        other = create_operation(
+            session,
+            kind="movie.redownload_media",
+            resource_type="movie",
+            resource_id=5,
+            title="Other parent",
+            targets=[],
+        )
+        add_operation_dependencies(
+            session,
+            other.id,
+            [OperationDependencySpec(
+                child.id,
+                cancel_policy=OperationDependencyCancelPolicy.DETACH.value,
+            )],
+        )
+
+    parent_id, child_id, run_id = parent.id, child.id, run.id
+    other_id = other.id if other is not None else None
+    session.commit()
+    session.close()
+
+    canceled_jobs = []
+    monkeypatch.setattr(
+        scheduler_module,
+        "cancel_pending_operation_jobs",
+        lambda *, operation_id, run_ids=(): canceled_jobs.append(
+            (operation_id, set(run_ids))
+        ) or 0,
+    )
+    cancel_operation(parent_id)
+    return parent_id, child_id, run_id, canceled_jobs, other_id
+
+
+def test_canceling_parent_cancels_exclusive_owned_child_dependency(task_database, monkeypatch):
+    from task_manager.scheduler.db import TaskOperation, TaskRun
+    from task_manager.scheduler.operation_control import RUN_CANCEL_REQUESTED_META_KEY
+    from task_manager.scheduler.types import OperationStatus
+
+    parent_id, child_id, run_id, canceled_jobs, _ = _dependency_cancel_scenario(
+        task_database,
+        monkeypatch,
+        shared_parent=False,
+    )
+
+    session = task_database()
+    try:
+        parent = session.get(TaskOperation, parent_id)
+        child = session.get(TaskOperation, child_id)
+        run = session.get(TaskRun, run_id)
+        assert parent.status == OperationStatus.CANCELED.value
+        # A running media.download remains active while its worker cooperatively
+        # cleans up. The durable cancellation request prevents further work and
+        # the child becomes CANCELED when that worker exits.
+        assert child.status == OperationStatus.RUNNING.value
+        assert child.context["cancel_requested"] is True
+        assert run.meta[RUN_CANCEL_REQUESTED_META_KEY] is True
+        assert (parent_id, set()) in canceled_jobs
+        assert (child_id, {run_id}) in canceled_jobs
+    finally:
+        session.close()
+
+
+def test_canceling_parent_does_not_cancel_child_shared_with_another_active_parent(task_database, monkeypatch):
+    from task_manager.scheduler.db import TaskOperation, TaskRun
+    from task_manager.scheduler.operation_control import RUN_CANCEL_REQUESTED_META_KEY
+    from task_manager.scheduler.types import OperationStatus
+
+    parent_id, child_id, run_id, canceled_jobs, other_id = _dependency_cancel_scenario(
+        task_database,
+        monkeypatch,
+        shared_parent=True,
+    )
+
+    session = task_database()
+    try:
+        parent = session.get(TaskOperation, parent_id)
+        child = session.get(TaskOperation, child_id)
+        other = session.get(TaskOperation, other_id)
+        run = session.get(TaskRun, run_id)
+        assert parent.status == OperationStatus.CANCELED.value
+        assert child.status == OperationStatus.RUNNING.value
+        assert other.status == OperationStatus.RUNNING.value
+        assert not (run.meta or {}).get(RUN_CANCEL_REQUESTED_META_KEY, False)
+        assert (parent_id, set()) in canceled_jobs
+        assert all(operation_id != child_id for operation_id, _ in canceled_jobs)
+    finally:
+        session.close()
+
+
+def test_composite_operation_restart_requires_a_new_parent(task_database):
+    import pytest
+
+    from task_manager.scheduler.operation_control import restart_operation
+    from task_manager.scheduler.operations import (
+        OperationDependencySpec,
+        add_operation_dependencies,
+        create_operation,
+    )
+
+    session = task_database()
+    child = create_operation(
+        session,
+        kind="child",
+        resource_type="episode",
+        resource_id=1,
+        title="Child",
+        targets=[],
+    )
+    parent = create_operation(
+        session,
+        kind="parent",
+        resource_type="show",
+        resource_id=1,
+        title="Parent",
+        targets=[],
+    )
+    add_operation_dependencies(
+        session,
+        parent.id,
+        [OperationDependencySpec(child.id)],
+    )
+    parent_id = parent.id
+    session.commit()
+    session.close()
+
+    with pytest.raises(ValueError, match="new operation"):
+        restart_operation(parent_id)

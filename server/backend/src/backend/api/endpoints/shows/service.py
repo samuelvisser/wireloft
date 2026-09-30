@@ -21,6 +21,7 @@ from task_manager.scheduler.operations import (
 from task_manager.tasks.helpers.download_profiles import (
     disable_download_profiles_for_episode_scope,
 )
+from task_manager.tasks.media_download_operations import attach_redownload_dependencies
 
 from .events import ShowAdded
 from .operations import (
@@ -285,15 +286,22 @@ def request_show_episode_redownload(
             status_code=422,
             detail="This show has no previously downloaded episode media in the selected scope",
         )
-    return _queue_show_download_maintenance(
+    operation = create_operation(
         s,
-        scope,
         ShowRedownloadOperation(
             show,
             local_media_profile_id=local_media_profile_id,
             selected_profile_count=scope.local_media_profile_count,
+            download_count=len(scope.downloads),
         ),
     )
+    attach_redownload_dependencies(s, operation, tuple(scope.downloads))
+    s.flush()
+    return {
+        "queued": True,
+        "local_media_profiles_queued": scope.local_media_profile_count,
+        "operation_id": operation.id,
+    }
 
 
 def request_show_file_rename(

@@ -8,6 +8,7 @@ from backend.db.models import DownloadProfileBase, LocalMediaProfileBase, MediaD
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
+from task_manager.tasks.media_download_operations import attach_redownload_dependencies
 
 from .operations import (
     LocalMediaProfileDeleteDownloadsOperation,
@@ -96,14 +97,15 @@ def request_local_media_profile_redownload(
     if profile is None:
         raise HTTPException(status_code=404, detail="Media profile not found")
 
-    download_ids = tuple(s.scalars(
-        select(MediaDownloadBase.id)
+    downloads = tuple(s.scalars(
+        select(MediaDownloadBase)
         .where(
             MediaDownloadBase.local_media_profile_id == profile.id,
             MediaDownloadBase.artifact_status != MediaDownloadArtifactStatus.ABSENT.value,
         )
         .order_by(MediaDownloadBase.id.asc())
     ))
+    download_ids = tuple(download.id for download in downloads)
 
     operation = create_operation(
         s,
@@ -124,7 +126,7 @@ def request_local_media_profile_redownload(
             },
         )
     else:
-        queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
+        attach_redownload_dependencies(s, operation, downloads)
 
     s.flush()
     return {

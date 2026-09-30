@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from backend.api.endpoints.media_downloads.operations import bulk_retry_target
 from backend.db.models.media_item import Movie
 from task_manager.scheduler.operation_factory import OperationDefinition
-from task_manager.scheduler.operations import OperationTargetSpec
 
 
 _REFRESH_MOVIE_EXTRAS_TASK_KEY = "refresh_movie_extras"
@@ -32,11 +30,6 @@ class MovieRedownloadOperation(OperationDefinition[Movie]):
         self.media_download_ids = tuple(
             dict.fromkeys(int(download_id) for download_id in media_download_ids)
         )
-
-    def targets(self) -> tuple[OperationTargetSpec, ...]:
-        if not self.media_download_ids:
-            return ()
-        return (bulk_retry_target(self.media_download_ids),)
 
     def context(self) -> dict[str, object]:
         return {

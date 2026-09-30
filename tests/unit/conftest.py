@@ -31,6 +31,7 @@ def task_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     from task_manager.scheduler.db import (
         TaskDefinition,
         TaskOperation,
+        TaskOperationDependency,
         TaskOperationRun,
         TaskOperationTarget,
         TaskRun,
@@ -56,6 +57,7 @@ def task_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             TaskSchedule.__table__,
             TaskRun.__table__,
             TaskOperation.__table__,
+            TaskOperationDependency.__table__,
             TaskOperationTarget.__table__,
             TaskOperationRun.__table__,
         ],

@@ -22,6 +22,7 @@ from backend.services.movies import (
 from dailywire_api.records import DwMovieRecord
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
+from task_manager.tasks.media_download_operations import attach_redownload_dependencies
 
 from .operations import MovieExtrasRefreshOperation, MovieRedownloadOperation
 
@@ -55,9 +56,8 @@ def request_movie_redownload(s: Session, movie_slug: str) -> dict[str, bool | in
         raise HTTPException(status_code=404, detail="Movie not found")
 
     media_item_ids = [movie.id, *(extra.id for extra in movie.movie_extras)]
-    download_ids = tuple(
-        download_id
-        for (download_id,) in s.query(MediaDownloadBase.id)
+    downloads = tuple(
+        s.query(MediaDownloadBase)
         .filter(
             MediaDownloadBase.media_item_id.in_(media_item_ids),
             MediaDownloadBase.type.in_((MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value)),
@@ -66,6 +66,7 @@ def request_movie_redownload(s: Session, movie_slug: str) -> dict[str, bool | in
         .order_by(MediaDownloadBase.id.asc())
         .all()
     )
+    download_ids = tuple(download.id for download in downloads)
 
     operation = create_operation(
         s,
@@ -79,7 +80,7 @@ def request_movie_redownload(s: Session, movie_slug: str) -> dict[str, bool | in
             data={"downloads_requested": 0, "downloads_completed": 0},
         )
     else:
-        queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
+        attach_redownload_dependencies(s, operation, downloads)
 
     s.flush()
     return {

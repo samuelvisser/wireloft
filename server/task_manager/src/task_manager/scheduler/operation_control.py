@@ -11,12 +11,17 @@ from backend.db.core import get_session
 from task_manager.scheduler.db import (
     TaskDefinition,
     TaskOperation,
+    TaskOperationDependency,
     TaskOperationRun,
     TaskOperationTarget,
     TaskRun,
 )
 from task_manager.scheduler.transactional import queue_task_after_commit
-from task_manager.scheduler.types import OperationStatus, TaskStatus
+from task_manager.scheduler.types import (
+    OperationDependencyCancelPolicy,
+    OperationStatus,
+    TaskStatus,
+)
 
 
 if TYPE_CHECKING:
@@ -123,7 +128,26 @@ def cancel_operation(
         if operation.status not in _ACTIVE_OPERATION_STATUSES:
             raise ValueError("Only an active operation can be canceled")
 
-        completed = 0
+        completed = sum(
+            dependency.child_operation is None
+            or dependency.child_operation.status not in _ACTIVE_OPERATION_STATUSES
+            for dependency in operation.dependencies
+        )
+        dependent_children_to_cancel: set[str] = set()
+        for dependency in operation.dependencies:
+            child = dependency.child_operation
+            if (
+                child is not None
+                and child.status in _ACTIVE_OPERATION_STATUSES
+                and dependency.cancel_policy == OperationDependencyCancelPolicy.CANCEL_IF_EXCLUSIVE.value
+                and not _dependency_shared_with_other_active_parent(
+                    session,
+                    child.id,
+                    operation.id,
+                )
+            ):
+                dependent_children_to_cancel.add(child.id)
+
         for target in operation.targets:
             effective = _effective_run(target)
             if effective is not None and _task_status(effective.status) == TaskStatus.SUCCEEDED:
@@ -157,6 +181,8 @@ def cancel_operation(
         )
         now = datetime.now(timezone.utc)
         operation.status = OperationStatus.RUNNING.value if cleaning_up else OperationStatus.CANCELED.value
+        if not cleaning_up:
+            operation.completion_progress = 100
         if cleaning_up:
             operation.context = {**(operation.context or {}), "cancel_requested": True}
         operation.message = "Canceling download" if cleaning_up else reason
@@ -164,7 +190,7 @@ def cancel_operation(
             "summary": reason,
             "data": {
                 "completed": completed,
-                "total": len(operation.targets),
+                "total": len(operation.targets) + len(operation.dependencies),
             },
         }
         operation.error = None
@@ -191,6 +217,37 @@ def cancel_operation(
     for run_id in released_run_ids:
         release_scheduled_work_pause(owner_key=f"task-run:{run_id}")
     _run_terminal_callbacks(terminal_callbacks)
+
+    for child_operation_id in dependent_children_to_cancel:
+        # Another parent can attach to the same independently meaningful child
+        # after our transaction commits. Re-check exclusivity immediately before
+        # cascading so cancel_if_exclusive can never knowingly stop shared work.
+        check_session = get_session()
+        try:
+            child = check_session.get(TaskOperation, child_operation_id)
+            still_exclusive = (
+                child is not None
+                and child.status in _ACTIVE_OPERATION_STATUSES
+                and not _dependency_shared_with_other_active_parent(
+                    check_session,
+                    child_operation_id,
+                    operation_id,
+                )
+            )
+        finally:
+            check_session.close()
+        if not still_exclusive:
+            continue
+        try:
+            cancel_operation(
+                child_operation_id,
+                reason=f"Parent operation canceled: {reason}",
+                acknowledge=True,
+            )
+        except ValueError:
+            # The child may have reached a terminal state while the parent
+            # cancellation transaction was committing.
+            pass
 
     from task_manager.scheduler.operations import get_operation
     return get_operation(operation_id)
@@ -272,6 +329,10 @@ def restart_operation(operation_id: str) -> OperationSnapshot | None:
             return None
         if operation.status == OperationStatus.SUCCEEDED.value:
             raise ValueError("A completed operation does not need to be restarted")
+        if operation.dependencies:
+            raise ValueError(
+                "Composite operations are retried by starting a new operation"
+            )
         if not operation.targets:
             raise ValueError("This operation has no work to restart")
 
@@ -321,12 +382,12 @@ def restart_operation(operation_id: str) -> OperationSnapshot | None:
 
         operation.status = OperationStatus.QUEUED.value
         operation.progress = int((completed / len(operation.targets)) * 100)
-        context = {key: value for key, value in (operation.context or {}).items() if key != "cancel_requested"}
-        # Explicit restart is different from recovering an interrupted TaskRun.
-        # Coordinators can retain completed logical work while replacing failed
-        # children without sharing ownership with the prior running coordinator.
-        context["restart_generation"] = int(context.get("restart_generation", 0)) + 1
-        operation.context = context
+        operation.completion_progress = operation.progress
+        operation.context = {
+            key: value
+            for key, value in (operation.context or {}).items()
+            if key != "cancel_requested"
+        }
         operation.message = "Restarting"
         operation.result = None
         operation.error = None
@@ -415,6 +476,26 @@ def _run_shared_with_other_active_operation(
     ) is not None
 
 
+def _dependency_shared_with_other_active_parent(
+        session: Session,
+        child_operation_id: str,
+        parent_operation_id: str,
+) -> bool:
+    return session.scalar(
+        select(TaskOperationDependency.id)
+        .join(
+            TaskOperation,
+            TaskOperation.id == TaskOperationDependency.parent_operation_id,
+        )
+        .where(
+            TaskOperationDependency.child_operation_id == child_operation_id,
+            TaskOperationDependency.parent_operation_id != parent_operation_id,
+            TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
+        )
+        .limit(1)
+    ) is not None
+
+
 def _load_operation(session: Session, operation_id: str) -> TaskOperation | None:
     return session.scalar(
         select(TaskOperation)
@@ -422,7 +503,9 @@ def _load_operation(session: Session, operation_id: str) -> TaskOperation | None
         .options(
             selectinload(TaskOperation.targets)
             .selectinload(TaskOperationTarget.run_links)
-            .selectinload(TaskOperationRun.task_run)
+            .selectinload(TaskOperationRun.task_run),
+            selectinload(TaskOperation.dependencies)
+            .selectinload(TaskOperationDependency.child_operation),
         )
         .execution_options(populate_existing=True)
     )

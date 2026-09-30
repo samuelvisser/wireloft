@@ -9,24 +9,6 @@ from task_manager.scheduler.operations import OperationTargetSpec
 _BULK_ACTION_TASK_KEY = "media_download_bulk_action_worker"
 
 
-def bulk_retry_target(
-    media_download_ids: Sequence[int],
-    *,
-    slot_key: str = "bulk_retry",
-) -> OperationTargetSpec:
-    ids = tuple(dict.fromkeys(int(download_id) for download_id in media_download_ids))
-    return OperationTargetSpec(
-        task_key=_BULK_ACTION_TASK_KEY,
-        resource_type="media_download",
-        resource_id=None,
-        task_kwargs={
-            "media_download_ids": list(ids),
-            "action": "retry_bulk",
-        },
-        slot_key=slot_key,
-    )
-
-
 class _BulkMediaDownloadOperation(OperationDefinition[None]):
     resource_type = "media_download"
     action: str
@@ -41,7 +23,7 @@ class _BulkMediaDownloadOperation(OperationDefinition[None]):
 
     def targets(self) -> tuple[OperationTargetSpec, ...]:
         if self.action == "retry":
-            return (bulk_retry_target(self.media_download_ids),)
+            return ()
         return tuple(
             OperationTargetSpec(
                 task_key=_BULK_ACTION_TASK_KEY,

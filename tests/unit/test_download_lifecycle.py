@@ -7,7 +7,7 @@ from threading import Event
 import pytest
 
 from dailywire_downloader.errors import DownloadCancelled
-from dailywire_downloader.lifecycle import DownloadTracker
+from dailywire_downloader.lifecycle import DownloadTracker, download_completion_fraction
 from dailywire_downloader.models import DownloadProgress, DownloadResult
 from dailywire_downloader.plan import ResolvedDownloadSource, SidecarSpec, build_download_plan
 from dailywire_downloader.capacity import DownloadResources
@@ -48,6 +48,30 @@ def test_individual_progress_is_media_only_and_finishing_does_not_complete_attem
     assert snapshot.main_activity == "embed"
     assert next(stage for stage in snapshot.stages if stage.id == "media").fraction == 1
     assert next(stage for stage in snapshot.stages if stage.id == "embed").fraction is None
+
+
+def test_completion_progress_tracks_all_planned_work_separately_from_media_progress(tmp_path):
+    tracker = DownloadTracker()
+    value = plan(tmp_path, tracker, metadata_tags=(("title", "Example"),))
+    tracker.install(value)
+    tracker.start("media")
+    tracker.progress("media", DownloadProgress(50, 100))
+
+    transferring = tracker.snapshot()
+    assert next(stage for stage in transferring.stages if stage.id == "media").fraction == 0.5
+    transfer_completion = download_completion_fraction(transferring)
+    assert 0 < transfer_completion < 0.5
+
+    tracker.complete("media")
+    tracker.start("embed")
+    finishing = tracker.snapshot()
+    finish_completion = download_completion_fraction(finishing)
+
+    # The individual UI is already at the end of its measurable media transfer,
+    # but the operation completion value correctly leaves room for embedding and
+    # publication work used by a weighted parent operation.
+    assert next(stage for stage in finishing.stages if stage.id == "media").fraction == 1
+    assert transfer_completion < finish_completion < 1
 
 
 def test_sidecar_wait_does_not_replace_main_media_activity(tmp_path):

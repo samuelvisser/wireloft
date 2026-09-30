@@ -6,13 +6,12 @@ from backend.services.download_actions import (
 )
 from task_manager.scheduler.registry import task
 from task_manager.scheduler.results import TaskResult
-from task_manager.tasks.download_batch import run_download_batch
 
 
 @task(
     key="media_download_bulk_action_worker",
     title="Bulk download action",
-    description="Coordinates bulk retry, cancel, and artifact deletion actions.",
+    description="Coordinates bulk cancel and artifact deletion actions.",
     allowed_resource_types=("media_download",),
     default_max_retries=0,
     tracks_progress=True,
@@ -30,15 +29,8 @@ async def media_download_bulk_action_worker(
     if progress is not None:
         progress.raise_if_cancelled()
 
-    if action == "retry_bulk":
-        ids = media_download_ids or []
-        return await run_download_batch(ids, progress=progress)
-
     if media_download_id is None:
         raise ValueError(f"Bulk media download action '{action}' requires media_download_id")
-
-    if action == "retry":
-        return await run_download_batch([media_download_id], progress=progress)
 
     if action == "cancel":
         cancel_media_download_action(

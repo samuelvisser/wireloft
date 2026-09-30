@@ -38,6 +38,7 @@ def _make_download(session: Session, *, slug: str = "episode-1"):
         episode_identifier="ep.1",
         slug=slug,
         title="Operation Episode",
+        description="",
         duration=100.0,
         publish_status="published_final",
         sharing_url=f"https://example.test/episode/{slug}",
@@ -375,7 +376,9 @@ def test_deleting_parent_show_cascades_download_and_operation_graph():
 
 
 def test_deleting_parent_show_releases_reserved_download_queue_slot(monkeypatch):
-    import task_manager.tasks  # noqa: F401 - register download task metadata
+    from task_manager.tasks import load_all_tasks
+
+    load_all_tasks()
     from task_manager.scheduler.db import TaskDefinition, TaskOperationRun, TaskRun
     from task_manager.scheduler.registry import get_task
     from task_manager.scheduler.types import OperationSource, ResourceType, TaskStatus
@@ -454,6 +457,73 @@ def test_episode_with_any_media_download_can_only_be_removed_with_show():
         session.delete(show)
         session.commit()
         assert session.get(MediaDownloadBase, download_id) is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_redownload_dependencies_freeze_weights_and_preserve_child_ownership(monkeypatch):
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from task_manager.scheduler.operations import create_operation
+    from task_manager.scheduler.types import OperationDependencyCancelPolicy
+    from task_manager.tasks import media_download_operations
+
+    session, engine = _session()
+    try:
+        first = _make_download(session, slug="dependency-existing")
+        second = _make_download(session, slug="dependency-new-known")
+        third = _make_download(session, slug="dependency-new-unknown")
+        first.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        second.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        third.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        first.downloaded_bytes = 100
+        second.downloaded_bytes = 300
+        third.downloaded_bytes = None
+        first.downloaded_at = datetime.now(timezone.utc)
+        second.downloaded_at = datetime.now(timezone.utc)
+        third.downloaded_at = datetime.now(timezone.utc)
+
+        existing = media_download_operations.create_media_download_operation(
+            session,
+            first,
+        )
+        parent = create_operation(
+            session,
+            kind="media_download.bulk_retry",
+            resource_type="media_download",
+            resource_id=None,
+            title="Downloads",
+            targets=[],
+            context={"downloads_requested": 3},
+        )
+        monkeypatch.setattr(
+            media_download_operations,
+            "dispatch_queued_media_download_operations",
+            lambda _session: 0,
+        )
+
+        children = media_download_operations.attach_redownload_dependencies(
+            session,
+            parent,
+            (first, second, third),
+        )
+
+        assert children[0].id == existing.id
+        assert len(children) == 3
+        dependencies = list(parent.dependencies)
+        assert [dependency.weight for dependency in dependencies] == [100.0, 300.0, 200.0]
+        assert dependencies[0].cancel_policy == OperationDependencyCancelPolicy.DETACH.value
+        assert all(
+            dependency.cancel_policy == OperationDependencyCancelPolicy.CANCEL_IF_EXCLUSIVE.value
+            for dependency in dependencies[1:]
+        )
+        assert children[0].context["prepare_existing_artifact"] is False
+        assert all(
+            child.context["prepare_existing_artifact"] is True
+            for child in children[1:]
+        )
+        assert third.downloaded_bytes is None
+        assert third.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
     finally:
         session.close()
         engine.dispose()

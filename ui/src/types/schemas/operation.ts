@@ -15,6 +15,7 @@ export const TaskOperationReadSchema = z.looseObject({
   title: z.string(),
   status: z.string(),
   progress: z.int().nullable().optional(),
+  completionProgress: z.int().nullable().optional(),
   progressCurrent: z.int(),
   progressTotal: z.int(),
   message: z.string().nullable().optional(),

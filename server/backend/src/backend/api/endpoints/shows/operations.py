@@ -10,7 +10,6 @@ from task_manager.scheduler.operations import OperationTargetSpec
 _FETCH_EPISODES_TASK_KEY = "fetch_new_episodes"
 _REFRESH_METADATA_TASK_KEY = "refresh_episode_metadata"
 _RENAME_FILE_TASK_KEY = "rename_show_profile_files"
-_REDOWNLOAD_TASK_KEY = "redownload_show_episodes_worker"
 _DELETE_DOWNLOADS_TASK_KEY = "delete_show_downloads_worker"
 
 
@@ -146,4 +145,24 @@ class ShowDeleteDownloadsOperation(_ShowDownloadMaintenanceOperation):
 
 class ShowRedownloadOperation(_ShowDownloadMaintenanceOperation):
     kind = "show.redownload_episodes"
-    task = _REDOWNLOAD_TASK_KEY
+
+    def __init__(
+        self,
+        show: Show,
+        *,
+        local_media_profile_id: int | None,
+        selected_profile_count: int,
+        download_count: int,
+    ) -> None:
+        super().__init__(
+            show,
+            local_media_profile_id=local_media_profile_id,
+            selected_profile_count=selected_profile_count,
+        )
+        self.download_count = int(download_count)
+
+    def context(self) -> dict[str, object]:
+        return {
+            **super().context(),
+            "downloads_requested": self.download_count,
+        }
