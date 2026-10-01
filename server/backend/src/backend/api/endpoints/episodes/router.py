@@ -50,6 +50,13 @@ def episodes_by_show_list(show_slug: str, limit: int | None = None):
         return get_episodes_by_show_list(s, show_slug, limit)
 
 
+@router.get("/as-view/by-show-slug/{show_slug}", response_model=list[EpisodeAPIReadView])
+def episode_views_by_show_list(show_slug: str, limit: int | None = None):
+    """List compact episode fields."""
+    with db_session() as s:
+        return get_episode_views_by_show_list(s, show_slug, limit)
+
+
 @router.get("/as-view/by-show-slug/{show_slug}/page", response_model=EpisodeAPIReadViewPage)
 def episode_views_by_show_page(
         show_slug: str,

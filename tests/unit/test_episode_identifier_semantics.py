@@ -824,7 +824,7 @@ def test_compact_episode_view_includes_identifier_semantics():
     session.add_all([show, season, episode])
     session.commit()
 
-    [view] = get_episode_views_by_show_page(\n        session, show.slug, offset=0, limit=10,\n    ).items
+    [view] = get_episode_views_by_show_page(session, show.slug, offset=0, limit=10).items
 
     assert view.dw_episode_number == "12.05"
     assert view.episode_type == "ep-extra"

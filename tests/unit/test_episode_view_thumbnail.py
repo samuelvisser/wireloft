@@ -68,7 +68,7 @@ def test_episode_grid_view_uses_landscape_thumbnail():
         ))
         session.commit()
 
-        [episode] = get_episode_views_by_show_page(\n            session, show.slug, offset=0, limit=10,\n        ).items
+        [episode] = get_episode_views_by_show_page(session, show.slug, offset=0, limit=10).items
 
         assert episode.thumbnail_landscape_path == "landscape.jpg"
         assert not hasattr(episode, "thumbnail_portrait_path")
