@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import threading
+import time
+
 from sqlalchemy import create_engine, event, text
+from sqlalchemy.orm import sessionmaker
 
 
 def test_shared_sqlite_connections_enable_foreign_keys(tmp_path):
@@ -17,6 +21,56 @@ def test_shared_sqlite_connections_enable_foreign_keys(tmp_path):
             assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
     finally:
         engine.dispose()
+
+
+def test_write_intent_transaction_waits_for_existing_sqlite_writer(tmp_path):
+    from backend.db.core import (
+        _configure_sqlite_connection,
+        begin_write_transaction,
+    )
+
+    engine = create_engine(
+        f"sqlite:///{(tmp_path / 'writer-serialization.db').as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+    event.listen(engine, "connect", _configure_sqlite_connection)
+    sessions = sessionmaker(bind=engine)
+
+    with engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA journal_mode=WAL")
+
+    holder = sessions()
+    begin_write_transaction(holder)
+
+    entered = threading.Event()
+    completed = threading.Event()
+    errors: list[Exception] = []
+
+    def wait_for_writer_slot() -> None:
+        waiter = sessions()
+        entered.set()
+        try:
+            begin_write_transaction(waiter)
+            waiter.commit()
+        except Exception as exc:
+            errors.append(exc)
+        finally:
+            waiter.close()
+            completed.set()
+
+    thread = threading.Thread(target=wait_for_writer_slot)
+    thread.start()
+    assert entered.wait(timeout=1)
+    time.sleep(0.1)
+    assert not completed.is_set()
+
+    holder.commit()
+    holder.close()
+
+    assert completed.wait(timeout=2)
+    thread.join(timeout=1)
+    assert errors == []
+    engine.dispose()
 
 
 def test_integrity_migration_repairs_legacy_orphans(tmp_path):

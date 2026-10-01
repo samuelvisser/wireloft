@@ -11,7 +11,7 @@ from typing import Any, Optional
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import OperationalError
 
-from backend.db.core import get_session
+from backend.db.core import begin_write_transaction, get_session
 from task_manager.scheduler.db import *
 from .types import ResourceType, TaskStatus
 from .registry import get_task
@@ -171,6 +171,7 @@ class ProgressUpdater:
         try:
             for i in range(3):
                 try:
+                    begin_write_transaction(s)
                     row = s.execute(
                         select(TaskRun.status, TaskRun.meta).where(TaskRun.id == self.run_id)
                     ).one_or_none()
@@ -245,6 +246,7 @@ class ProgressUpdater:
                         self._cancel_reason = "Task resource was deleted"
                         raise TaskCancellationRequested(self._cancel_reason)
                     s.commit()
+                    begin_write_transaction(s)
                     refresh_operations_for_run(s, self.run_id)
                     s.commit()
                     return
@@ -289,6 +291,7 @@ class ProgressUpdater:
         try:
             for i in range(3):
                 try:
+                    begin_write_transaction(s)
                     current_meta = s.execute(
                         select(TaskRun.meta).where(TaskRun.id == self.run_id)
                     ).scalar_one_or_none()
@@ -325,6 +328,7 @@ class ProgressUpdater:
                         s.rollback()
                         return
                     s.commit()
+                    begin_write_transaction(s)
                     refresh_operations_for_run(s, self.run_id)
                     s.commit()
                     return
@@ -383,6 +387,7 @@ def _prepare_execution(
     """Persist the RUNNING attempt, then release its Session before worker code runs."""
     session = get_session()
     try:
+        begin_write_transaction(session)
         if operation_ids and not operation_ids_allow_execution(session, operation_ids):
             return None
 
@@ -397,6 +402,7 @@ def _prepare_execution(
                 _mark_run_canceled(run, run_cancel_reason(run))
                 run.finished_at = datetime.now(timezone.utc)
                 session.commit()
+                begin_write_transaction(session)
                 refresh_operations_for_run(session, run.id)
                 session.commit()
                 return None
@@ -458,6 +464,7 @@ def _prepare_execution(
 
         prepared_run_id = run.id
         session.commit()
+        begin_write_transaction(session)
         refresh_operations_for_run(session, prepared_run_id)
         session.commit()
         return _PreparedExecution(
@@ -482,6 +489,7 @@ def _finalize_execution(
     retry_at: datetime | None = None
     terminal_error: Exception | None = None
     try:
+        begin_write_transaction(session)
         run = session.get(TaskRun, prepared.run_id)
         if run is None:
             return None, None
@@ -537,6 +545,7 @@ def _finalize_execution(
             run.finished_at = None
 
         session.commit()
+        begin_write_transaction(session)
         refresh_operations_for_run(session, run.id)
         session.commit()
         return retry_at, terminal_error
