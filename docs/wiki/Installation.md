@@ -54,7 +54,7 @@ Local Media Profiles use paths beginning with `/downloads/`. WireLoft resolves t
 
 You can point Plex, Jellyfin, Audiobookshelf, or another media application at the appropriate folders inside the host's download directory.
 
-If you enable temporary download mode, also review **Temporary download folder**. It can remain on container-local storage when you only need a staging area, or you can point it at another suitable disk/mount.
+WireLoft uses temporary download mode by default. Its **Temporary download folder** defaults to container-local storage so remuxing and metadata processing stay off network media mounts. You can point it at another suitable local disk or mount if needed.
 
 ## Set your timezone
 

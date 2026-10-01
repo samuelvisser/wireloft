@@ -703,3 +703,124 @@ def test_redownload_dependencies_freeze_weights_and_preserve_child_ownership(mon
     finally:
         session.close()
         engine.dispose()
+
+
+def test_delete_unavailable_media_download_removes_record():
+    from backend.services.download_actions import delete_unavailable_media_download
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="delete-missing")
+        download.artifact_status = MediaDownloadArtifactStatus.MISSING.value
+        download.file_path = "/definitely/not/present/delete-missing.m4a"
+        download_id = download.id
+        session.commit()
+
+        delete_unavailable_media_download(session, download_id)
+        session.commit()
+
+        assert session.get(MediaDownloadBase, download_id) is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_delete_unavailable_media_download_removes_not_downloaded_record():
+    from backend.services.download_actions import delete_unavailable_media_download
+    from backend.db.models.media_download import MediaDownloadBase
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="delete-not-downloaded")
+        download.file_path = "/definitely/not/present/delete-not-downloaded.m4a"
+        download_id = download.id
+        session.commit()
+
+        delete_unavailable_media_download(session, download_id)
+        session.commit()
+
+        assert session.get(MediaDownloadBase, download_id) is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_delete_unavailable_media_download_rejects_not_downloaded_record_with_artifact(tmp_path):
+    import pytest
+
+    from backend.services.download_actions import DownloadActionError, delete_unavailable_media_download
+    from backend.db.models.media_download import MediaDownloadBase
+
+    session, engine = _session()
+    try:
+        artifact = tmp_path / "not-downloaded-but-present.m4a"
+        artifact.write_bytes(b"media")
+
+        download = _make_download(session, slug="delete-not-downloaded-present")
+        download.file_path = str(artifact)
+        download_id = download.id
+        session.commit()
+
+        with pytest.raises(DownloadActionError) as exc_info:
+            delete_unavailable_media_download(session, download_id)
+
+        assert exc_info.value.kind == "conflict"
+        assert session.get(MediaDownloadBase, download_id) is not None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_delete_unavailable_media_download_rejects_available_record():
+    import pytest
+
+    from backend.services.download_actions import DownloadActionError, delete_unavailable_media_download
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="delete-available")
+        download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        download_id = download.id
+        session.commit()
+
+        with pytest.raises(DownloadActionError) as exc_info:
+            delete_unavailable_media_download(session, download_id)
+
+        assert exc_info.value.kind == "conflict"
+        assert session.get(MediaDownloadBase, download_id) is not None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_delete_unavailable_media_download_rejects_restored_file(tmp_path):
+    import pytest
+
+    from backend.services.download_actions import DownloadActionError, delete_unavailable_media_download
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine = _session()
+    try:
+        restored = tmp_path / "restored.m4a"
+        restored.write_bytes(b"restored media")
+
+        download = _make_download(session, slug="delete-restored")
+        download.artifact_status = MediaDownloadArtifactStatus.MISSING.value
+        download.file_path = str(restored)
+        download_id = download.id
+        session.commit()
+
+        with pytest.raises(DownloadActionError) as exc_info:
+            delete_unavailable_media_download(session, download_id)
+
+        assert exc_info.value.kind == "conflict"
+        assert session.get(MediaDownloadBase, download_id) is not None
+        assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+    finally:
+        session.close()
+        engine.dispose()

@@ -12,6 +12,7 @@ from pydantic.alias_generators import to_camel
 from pydantic_core import PydanticCustomError
 
 from backend.api.models.base import RequestBase, ResponseBase
+from dailywire_downloader.storage import FilesystemStorageKind
 from config.settings.cron_validation import WorkerCronIntervalError, validate_worker_cron_settings
 from config.settings.settings import AppSettings
 from config.settings.submodels import (
@@ -422,8 +423,22 @@ class SettingsAPIUpdate(RequestBase):
         return values
 
 
+class FilesystemInspectionValue(ResponseBase):
+    path: str
+    mount_point: str | None = None
+    filesystem_type: str | None = None
+    storage_kind: FilesystemStorageKind
+
+
+class DownloadStorageInspectionValue(ResponseBase):
+    download_root: FilesystemInspectionValue
+    temporary_download_root: FilesystemInspectionValue
+    same_filesystem: bool | None = None
+
+
 class SettingsAPIRead(ResponseBase):
     values: SettingsValues
     configured_fields: list[SettingFieldPath]
     environment_overrides: dict[str, str]
+    download_storage: DownloadStorageInspectionValue
     updated_at: datetime | None = None

@@ -36,8 +36,8 @@ def test_plan_records_dependencies_for_parallel_assets_and_serial_media_mutation
     assert value.stage("publish:nfo").depends_on == ("publish", "acquire:nfo")
     assert value.stage("verify").depends_on == ("publish", "publish:artwork", "publish:nfo")
     assert value.stage("finalize").depends_on == ("verify",)
-    assert value.stage("remux").weight == pytest.approx(0.6)
-    assert value.stage("embed").weight == pytest.approx(0.6)
+    assert value.stage("remux").weight == pytest.approx(0.08)
+    assert value.stage("embed").weight == pytest.approx(0.08)
     assert value.stage("remux").deadline_seconds == 3600
     assert value.stage("embed").deadline_seconds == 3600
     assert value.stage("publish:nfo").deadline_seconds == 1800
@@ -133,3 +133,45 @@ def test_plan_rejects_invalid_work_weights(tmp_path, weight):
 def test_plan_rejects_invalid_deadlines(tmp_path, deadline):
     with pytest.raises(ValueError, match="deadlines"):
         replace(make_plan(tmp_path).stage("publish"), deadline_seconds=deadline)
+
+
+def test_plan_uses_network_processing_weights(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import dailywire_downloader.plan as plan_module
+    from dailywire_downloader.storage.filesystem import FilesystemStorageKind
+
+    monkeypatch.setattr(
+        plan_module,
+        "inspect_filesystem",
+        lambda _path: SimpleNamespace(storage_kind=FilesystemStorageKind.REMOTE),
+    )
+
+    value = make_plan(
+        tmp_path,
+        remux=True,
+        metadata_tags=(("title", "Movie"),),
+    )
+
+    assert value.stage("remux").weight == pytest.approx(0.55)
+    assert value.stage("embed").weight == pytest.approx(0.60)
+
+
+def test_cross_filesystem_publish_to_network_storage_uses_copy_weight(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import dailywire_downloader.plan as plan_module
+    from dailywire_downloader.storage.filesystem import FilesystemStorageKind
+
+    monkeypatch.setattr(plan_module, "publication_requires_copy", lambda *_args: True)
+
+    def inspect(path):
+        kind = FilesystemStorageKind.REMOTE if "library" in str(path) else FilesystemStorageKind.LOCAL
+        return SimpleNamespace(storage_kind=kind)
+
+    monkeypatch.setattr(plan_module, "inspect_filesystem", inspect)
+
+    value = make_plan(tmp_path)
+
+    assert value.publication_requires_copy is True
+    assert value.stage("publish").weight == pytest.approx(0.12)

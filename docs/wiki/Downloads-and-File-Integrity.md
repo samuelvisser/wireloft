@@ -61,11 +61,11 @@ WireLoft supports two ways of handling incomplete downloads.
 
 ### Save directly to downloads
 
-Download work happens in the destination area. This is the simpler option and is the system default.
+Download work happens in the destination area. This avoids a final publication copy, but remuxing and metadata embedding also happen on the destination filesystem.
 
 ### Save to temporary folder first
 
-Incomplete download and processing work stays in the configured temporary folder. The completed media is placed in its final library location only when it is ready.
+Incomplete download and processing work stays in the configured temporary folder. This is the system default. The completed media is placed in its final library location only when it is ready. In Docker, the default temporary folder is container-local so network-backed media libraries are only written during final publication.
 
 This is useful when a media server watches your final library and should never see partial files.
 

@@ -20,8 +20,8 @@ crypto:
   defaultSecretFile: /config/wl_secret.key
 
 downloadSettings:
-  # Default behavior for downloads: direct or temporary.
-  downloadMode: direct
+  # Stage downloads locally before publishing the completed media.
+  downloadMode: temporary
 
   # Thumbnail handling: no_thumbnail, embed, sidecar, or embed_and_sidecar.
   thumbnailMode: embed

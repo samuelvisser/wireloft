@@ -26,10 +26,10 @@ Movie profiles can use 4K, 1080p, or 720p video. The same profile can be used fo
 Each Local Media Profile can choose how downloads using it are written:
 
 - **System** — follow the current system-wide default from **Settings → Downloads**.
-- **Save directly to downloads** — perform the download in the destination area. This is the simplest and usually fastest option.
+- **Save directly to downloads** — perform the download and processing in the destination area. This avoids a final publication copy, but can be much slower when the destination is network storage.
 - **Save to temporary folder first** — keep incomplete download and processing work in the configured temporary folder, then place the completed file in the media library.
 
-Temporary mode is useful when Plex, Jellyfin, or another application actively watches the destination folder and you do not want it to see partly downloaded media.
+Temporary mode is the system default. It is useful both when Plex, Jellyfin, or another application actively watches the destination folder and when the media library is on network storage, because remuxing and metadata embedding can remain on local temporary storage.
 
 The temporary folder may be on different storage from the final library. Configure the system default and temporary location under [[Settings#downloads]].
 

@@ -68,19 +68,40 @@ export default function DownloadsSettingsTab({
     errorFor,
     isFieldExplicit,
     isFieldDirty,
+    downloadStorage,
 }: SettingsTabProps) {
-    const temporaryDownloadRoot = (
-        !isFieldExplicit('downloadSettings.temporaryDownloadRoot')
-        && !isFieldDirty('downloadSettings.temporaryDownloadRoot')
-    )
-        ? childPath(draft.downloadSettings.downloadRoot, '.wireloft-temp')
-        : draft.downloadSettings.temporaryDownloadRoot
+    const temporaryDownloadRoot = draft.downloadSettings.temporaryDownloadRoot
     const rssCacheRoot = (
         !isFieldExplicit('downloadSettings.rssCacheRoot')
         && !isFieldDirty('downloadSettings.rssCacheRoot')
     )
         ? childPath(draft.downloadSettings.downloadRoot, '.wireloft-rss-cache')
         : draft.downloadSettings.rssCacheRoot
+
+    const storageInspectionIsCurrent = ![
+        'downloadSettings.downloadRoot',
+        'downloadSettings.temporaryDownloadRoot',
+        'downloadSettings.downloadMode',
+    ].some((path) => isFieldDirty(path as Parameters<typeof isFieldDirty>[0]))
+    const downloadRootIsRemote = downloadStorage?.downloadRoot.storageKind === 'remote'
+    const temporaryRootIsRemote = downloadStorage?.temporaryDownloadRoot.storageKind === 'remote'
+    const temporarySharesRemoteFilesystem = (
+        draft.downloadSettings.downloadMode === 'temporary'
+        && downloadRootIsRemote
+        && temporaryRootIsRemote
+        && downloadStorage?.sameFilesystem === true
+    )
+
+    let storageAdvisory: string | null = null
+    if (storageInspectionIsCurrent) {
+        if (temporarySharesRemoteFilesystem) {
+            storageAdvisory = 'The temporary folder and download library are on the same network filesystem. Temporary mode therefore does not keep remuxing and metadata processing local. Use a local temporary folder to reduce repeated network I/O.'
+        } else if (draft.downloadSettings.downloadMode === 'temporary' && temporaryRootIsRemote) {
+            storageAdvisory = 'The temporary download folder appears to be on network storage. Remuxing and metadata embedding repeatedly read and rewrite the media in this folder, so local temporary storage can substantially improve processing performance.'
+        } else if (draft.downloadSettings.downloadMode === 'direct' && downloadRootIsRemote) {
+            storageAdvisory = 'The download storage appears to be a network filesystem. Direct mode performs remuxing and metadata embedding against that storage; temporary mode with a local temporary folder can substantially reduce network I/O.'
+        }
+    }
 
     return (
         <>
@@ -109,9 +130,15 @@ export default function DownloadsSettingsTab({
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.temporaryDownloadRoot = value
                     })}
-                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. Its default is .wireloft-temp inside the download root, but an explicit path can live elsewhere."
+                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. By default WireLoft uses local temporary storage so remuxing and metadata processing do not repeatedly read and rewrite a network media library."
                     wide
                 />
+                {storageAdvisory ? (
+                    <div className="settings-storage-advisory settings-field--wide" role="status">
+                        <strong>Storage performance</strong>
+                        <span>{storageAdvisory}</span>
+                    </div>
+                ) : null}
                 <TextField
                     id="settings-rss-cache-root"
                     label="RSS cache folder"

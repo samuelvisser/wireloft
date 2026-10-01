@@ -39,6 +39,28 @@ def test_bulk_cancel_media_download_operation_keeps_per_download_targets():
     ]
 
 
+def test_bulk_delete_unavailable_media_download_operation_keeps_per_download_targets():
+    from backend.api.endpoints.media_downloads.operations import (
+        BulkDeleteUnavailableMediaDownloadsOperation,
+    )
+
+    definition = BulkDeleteUnavailableMediaDownloadsOperation([8, 3, 8])
+    targets = definition.targets()
+
+    assert definition.kind == "media_download.bulk_delete_unavailable"
+    assert definition.resource_type == "media_download"
+    assert definition.resource_id is None
+    assert definition.context() == {"downloads_requested": 2}
+    assert [target.slot_key for target in targets] == ["media_download:8", "media_download:3"]
+    assert all(target.task_key == "media_download_bulk_action_worker" for target in targets)
+    assert all(target.resource_type == "media_download" for target in targets)
+    assert all(target.resource_id is None for target in targets)
+    assert [target.task_kwargs for target in targets] == [
+        {"media_download_id": 8, "action": "delete_unavailable"},
+        {"media_download_id": 3, "action": "delete_unavailable"},
+    ]
+
+
 @pytest.mark.parametrize(
     ("kind", "operation_type"),
     [

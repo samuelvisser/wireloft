@@ -1,4 +1,4 @@
-import type {SettingsFieldPath, SettingsValues} from '../../types/schemas/settings'
+import type {SettingsFieldPath, SettingsRead, SettingsValues} from '../../types/schemas/settings'
 
 
 export type UpdateSettingsDraft = (mutator: (next: SettingsValues) => void) => void
@@ -10,4 +10,5 @@ export type SettingsTabProps = {
     errorFor: (path: SettingsFieldPath) => string | undefined
     isFieldExplicit: (path: SettingsFieldPath) => boolean
     isFieldDirty: (path: SettingsFieldPath) => boolean
+    downloadStorage?: SettingsRead['downloadStorage']
 }
