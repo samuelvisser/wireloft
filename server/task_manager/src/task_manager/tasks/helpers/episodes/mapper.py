@@ -198,11 +198,10 @@ def _scan_seasons(
     require_member_exclusive = membership_plan != "FREE"
 
     for idx, season in enumerate(seasons_asc):
-        prefetched = prefetched_by_season.get(season.id)
-        eps = list(
-            prefetched
-            if season.id in prefetched_by_season
-            else fetch_all_episodes_paginated(
+        if season.id in prefetched_by_season:
+            eps = list(prefetched_by_season[season.id])
+        else:
+            eps = fetch_all_episodes_paginated(
                 client,
                 show.slug,
                 ByShowSeason(
@@ -212,7 +211,6 @@ def _scan_seasons(
                     order_by="CreatedAt_ASC",
                 ),
             )
-        )
         eps = list(dict.fromkeys(eps))
         eps.sort(key=lambda rec: (rec.published_date, rec.ep_number or 0, rec.ep_segment))
         eps = _resolve_trailer_candidates(
