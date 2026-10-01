@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import Enum as SAEnum, ForeignKey, Index, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -13,6 +13,11 @@ from task_manager.scheduler.types import ResourceType, TaskStatus
 if TYPE_CHECKING:
     from .TaskDefinition import TaskDefinition
     from .TaskOperationRun import TaskOperationRun
+
+
+TASK_RUN_WAIT_STATE_META_KEY = "_operation_wait_state"
+TASK_RUN_PROGRESS_META_KEY = "_progress_meta"
+TASK_RUN_COMPLETION_PROGRESS_META_KEY = "_completion_progress"
 
 
 class TaskRun(Base):
@@ -57,6 +62,41 @@ class TaskRun(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    @property
+    def wait_state(self) -> dict[str, Any] | None:
+        """Validated transient execution wait reported by the running worker.
+
+        TaskRuns own worker execution state. TaskOperations may aggregate and
+        surface this state, but they are not its source of truth.
+        """
+        if not isinstance(self.meta, dict):
+            return None
+        wait_state = self.meta.get(TASK_RUN_WAIT_STATE_META_KEY)
+        if not isinstance(wait_state, dict):
+            return None
+        reason = wait_state.get("reason")
+        if not isinstance(reason, str) or not reason:
+            return None
+        return wait_state
+
+    @property
+    def progress_metadata(self) -> dict[str, Any] | None:
+        """Structured live progress emitted by the worker, when present."""
+        if not isinstance(self.meta, dict):
+            return None
+        progress_meta = self.meta.get(TASK_RUN_PROGRESS_META_KEY)
+        return progress_meta if isinstance(progress_meta, dict) else None
+
+    @property
+    def reported_completion_progress(self) -> int | None:
+        """Worker-reported completion percentage used by aggregate operations."""
+        if not isinstance(self.meta, dict):
+            return None
+        value = self.meta.get(TASK_RUN_COMPLETION_PROGRESS_META_KEY)
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return None
+        return max(0, min(99, int(value)))
 
     def __repr__(self) -> str:
         return f"<TaskRun id={self.id} resource_type={self.resource_type} resource_id={self.resource_id} status={self.status} progress={self.progress} created_at={self.created_at} updated_at={self.updated_at}>"

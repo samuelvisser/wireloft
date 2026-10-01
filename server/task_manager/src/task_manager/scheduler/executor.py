@@ -13,6 +13,11 @@ from sqlalchemy.exc import OperationalError
 
 from backend.db.core import begin_write_transaction, get_session
 from task_manager.scheduler.db import *
+from task_manager.scheduler.db.TaskRun import (
+    TASK_RUN_COMPLETION_PROGRESS_META_KEY,
+    TASK_RUN_PROGRESS_META_KEY,
+    TASK_RUN_WAIT_STATE_META_KEY,
+)
 from .types import ResourceType, TaskStatus
 from .registry import get_task
 from .operation_context import operation_context
@@ -24,9 +29,6 @@ from .operation_control import (
     run_cancel_requested,
 )
 from .operations import (
-    TASK_RUN_COMPLETION_PROGRESS_META_KEY,
-    TASK_RUN_PROGRESS_META_KEY,
-    TASK_RUN_WAIT_STATE_META_KEY,
     link_run_to_operations,
     refresh_operations_for_run,
 )

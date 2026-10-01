@@ -245,7 +245,7 @@ def test_generic_non_download_executor_persists_follower_wait(task_database, mon
     from task_manager.scheduler import registry
     from task_manager.scheduler.db import TaskRun
     from task_manager.scheduler.executor import execute_task
-    from task_manager.scheduler.operations import TASK_RUN_WAIT_STATE_META_KEY
+    from task_manager.scheduler.db.TaskRun import TASK_RUN_WAIT_STATE_META_KEY
     policy(monkeypatch, slow=1000)
     pacer = pacing.RequestPacer()
     pacer.last_request, pacer.last_request_wall = monotonic(), time()
@@ -267,7 +267,7 @@ def test_generic_non_download_executor_persists_follower_wait(task_database, mon
             if observed:
                 break
             start.wait(.02)
-        assert observed, 'Both unrelated operations must report the shared cooldown'
+        assert observed, 'Both unrelated TaskRuns must report the shared cooldown'
         with pacer.condition:
             pacer.slow_cooldown_until = monotonic() - 1
             pacer.condition.notify_all()
