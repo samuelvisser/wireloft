@@ -13,6 +13,7 @@ def _install_task(
     function,
     default_max_retries: int = 3,
     pauses_scheduled_work: bool = False,
+    tracks_progress: bool = True,
 ):
     import task_manager.scheduler.registry as registry_module
 
@@ -24,6 +25,7 @@ def _install_task(
         allowed_resource_types=("show",),
         default_max_retries=default_max_retries,
         pauses_scheduled_work=pauses_scheduled_work,
+        tracks_progress=tracks_progress,
     )(function)
     registry_module.sync_registry_to_db()
     return decorated
@@ -73,6 +75,41 @@ def test_successful_task_persists_progress_and_terminal_state(task_database, mon
         assert run.finished_at is not None
         assert run.next_retry_at is None
         assert run.meta == {"inputs": {"slug": "stable-slug"}}
+
+
+def test_task_marked_without_progress_keeps_active_progress_indeterminate(task_database, monkeypatch):
+    from backend.db.core import get_session
+    from task_manager.scheduler.db import TaskRun
+    from task_manager.scheduler.executor import execute_task
+
+    observed_state = object()
+
+    async def worker(*, resource_id=None, progress=None):
+        nonlocal observed_state
+        progress.set(67, "Scanning files", completion_percent=67)
+        session = get_session()
+        try:
+            run = session.get(TaskRun, progress.run_id)
+            observed_state = (
+                run.progress,
+                dict(run.meta or {}),
+            ) if run is not None else object()
+        finally:
+            session.close()
+
+    _install_task(
+        monkeypatch,
+        key="test_no_progress",
+        function=worker,
+        tracks_progress=False,
+    )
+    execute_task(def_key="test_no_progress", resource_type="show", resource_id=0)
+
+    assert observed_state == (None, {})
+    with task_database() as session:
+        run = session.execute(select(TaskRun)).scalar_one()
+        assert run.status == "SUCCEEDED"
+        assert run.progress == 100
 
 
 def test_resource_type_is_forwarded_only_when_declared_and_never_persisted(task_database, monkeypatch):

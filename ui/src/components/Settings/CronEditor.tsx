@@ -1,8 +1,21 @@
 import {useEffect, useMemo, useState} from 'react'
+import {toast} from 'react-hot-toast'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {ReactNode} from 'react'
 import Select from 'react-select'
 import Switch from 'react-switch'
 
+import ProgressButton from '../common/ProgressButton'
+import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
+import CronTaskLedgerModal from './CronTaskLedgerModal'
+import type {TaskLedgerPageQuery} from '../../lib/taskLedger'
+import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
+import {
+    OperationControlError,
+    OperationStartError,
+    useControlOperation,
+    useStartOperation,
+} from '../../lib/operations'
 import './CronEditor.css'
 
 
@@ -17,6 +30,11 @@ type CronEditorProps = {
     enabledEnvironmentVariable?: string
     help?: ReactNode
     error?: string
+    runNow?: {
+        definition: FrontendOperationDefinition
+        job: string
+        ledger: Omit<TaskLedgerPageQuery, 'offset' | 'limit' | 'enabled'>
+    }
 }
 
 type CronMode = 'minutes' | 'hourly' | 'hours' | 'daily' | 'weekly' | 'monthly' | 'custom'
@@ -243,7 +261,18 @@ export default function CronEditor({
     enabledEnvironmentVariable,
     help = 'Schedules use WireLoft’s configured timezone.',
     error,
+    runNow,
 }: CronEditorProps) {
+    const startOperation = useStartOperation()
+    const controlOperation = useControlOperation()
+    const activeRunNowOperation = useActiveOperation(
+        runNow?.definition.kind ?? '',
+        runNow?.definition.resourceType,
+        runNow ? 0 : null,
+    )
+    const [startingRunNow, setStartingRunNow] = useState(false)
+    const [cancelingRunNow, setCancelingRunNow] = useState(false)
+    const [ledgerOpen, setLedgerOpen] = useState(false)
     const [mode, setMode] = useState<CronMode>(() => inferMode(value))
     const parsed = useMemo(() => parseCron(value), [value])
     const weekdayValues = useMemo(() => selectedWeekdays(parsed?.dayOfWeek), [parsed?.dayOfWeek])
@@ -255,6 +284,41 @@ export default function CronEditor({
     useEffect(() => {
         setMode(inferMode(value))
     }, [value])
+
+    const runNowOperation = async () => {
+        if (!runNow || startingRunNow) return
+        setStartingRunNow(true)
+        try {
+            const base = (window as any).appConfig?.API_URL || '/api'
+            await startOperation(
+                `${base}/settings/cron/${encodeURIComponent(runNow.job)}/run`,
+                {method: 'POST'},
+            )
+        } catch (runError) {
+            const detail = runError instanceof OperationStartError ? runError.message : undefined
+            toast.error(detail ? `Could not run ${runNow.definition.label}: ${detail}` : `Could not run ${runNow.definition.label}`)
+        } finally {
+            setStartingRunNow(false)
+        }
+    }
+
+    const cancelRunNowOperation = async () => {
+        if (!runNow || !activeRunNowOperation || cancelingRunNow) return
+        setCancelingRunNow(true)
+        try {
+            await controlOperation(activeRunNowOperation.id, 'cancel')
+            toast.success(`${runNow.definition.label} canceled`)
+        } catch (controlError) {
+            const detail = controlError instanceof OperationControlError ? controlError.message : undefined
+            toast.error(
+                detail
+                    ? `Could not cancel ${runNow.definition.label}: ${detail}`
+                    : `Could not cancel ${runNow.definition.label}`,
+            )
+        } finally {
+            setCancelingRunNow(false)
+        }
+    }
 
     const setStructuredMode = (nextMode: StructuredCronMode) => {
         setMode(nextMode)
@@ -283,22 +347,51 @@ export default function CronEditor({
         <div className="settings-field settings-field--wide cron-editor">
             <div className="cron-editor__heading">
                 <label htmlFor={`${id}-expression`}>{label}</label>
-                <div className="cron-editor__enabled">
-                    <span id={enabledLabelId}>Enabled</span>
-                    <Switch
-                        id={`${id}-enabled`}
-                        checked={enabled}
-                        disabled={enabledDisabled}
-                        onChange={onEnabledChange}
-                        onColor="#0ea5e9"
-                        offColor="#94a3b8"
-                        uncheckedIcon={false}
-                        checkedIcon={false}
-                        height={18}
-                        width={34}
-                        handleDiameter={14}
-                        aria-labelledby={enabledLabelId}
-                    />
+                <div className="cron-editor__heading-actions">
+                    {runNow ? (
+                        <ProgressButton
+                            definition={runNow.definition}
+                            resourceId={0}
+                            label="Run now"
+                            icon={['fas', 'play']}
+                            onClick={runNowOperation}
+                            starting={startingRunNow}
+                            primary={false}
+                            className="cron-editor__run-now"
+                            ariaLabel={`Run ${runNow.definition.label} now`}
+                            onCancel={activeRunNowOperation ? () => void cancelRunNowOperation() : undefined}
+                            cancelDisabled={cancelingRunNow}
+                            cancelLabel={`Cancel ${runNow.definition.label}`}
+                        />
+                    ) : null}
+                    {runNow ? (
+                        <button
+                            type="button"
+                            className="icon-btn cron-editor__ledger-button"
+                            onClick={() => setLedgerOpen(true)}
+                            title={`Open ${runNow.definition.label} log`}
+                            aria-label={`Open ${runNow.definition.label} log`}
+                        >
+                            <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+                        </button>
+                    ) : null}
+                    <div className="cron-editor__enabled">
+                        <span id={enabledLabelId}>Enabled</span>
+                        <Switch
+                            id={`${id}-enabled`}
+                            checked={enabled}
+                            disabled={enabledDisabled}
+                            onChange={onEnabledChange}
+                            onColor="#0ea5e9"
+                            offColor="#94a3b8"
+                            uncheckedIcon={false}
+                            checkedIcon={false}
+                            height={18}
+                            width={34}
+                            handleDiameter={14}
+                            aria-labelledby={enabledLabelId}
+                        />
+                    </div>
                 </div>
             </div>
             <div className="cron-editor__card">
@@ -468,6 +561,19 @@ export default function CronEditor({
                 <div className="settings-field__environment-note">
                     The cron expression is managed by environment variable <code>{environmentVariable}</code>. Change or remove that environment override and restart WireLoft to edit it here.
                 </div>
+            ) : null}
+            {runNow ? (
+                <CronTaskLedgerModal
+                    open={ledgerOpen}
+                    title={runNow.definition.label}
+                    definition={runNow.definition}
+                    query={runNow.ledger}
+                    starting={startingRunNow}
+                    canceling={cancelingRunNow}
+                    onClose={() => setLedgerOpen(false)}
+                    onRunNow={runNowOperation}
+                    onCancel={cancelRunNowOperation}
+                />
             ) : null}
         </div>
     )
