@@ -254,7 +254,7 @@ export default function EpisodePage() {
     const earlyDeleteDisabledReason = earlyDeleteStarting
         ? OPERATION_STARTING_MESSAGE
         : earlyDeleteOperation
-            ? 'An early delete is already running for this episode.'
+            ? 'An early delete is running for this episode.'
             : settingsQuery.error
                 ? 'WireLoft could not load the automatic deletion delay.'
                 : earlyDeleteAfterMinutes === undefined
@@ -345,7 +345,7 @@ export default function EpisodePage() {
                                     disabledReason: metadataRefreshStarting
                                         ? OPERATION_STARTING_MESSAGE
                                         : metadataRefreshOperation
-                                            ? 'A metadata refresh is already running for this episode.'
+                                            ? 'A metadata refresh is running for this episode.'
                                             : undefined,
                                     operation: metadataRefreshOperation,
                                     onSelect: () => void refreshMetadata(),

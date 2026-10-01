@@ -216,7 +216,7 @@ export default function LocalMediaProfilePage() {
                                     icon: ['fas', 'file-pen'],
                                     disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation),
                                     disabledReason: renameOperation
-                                        ? 'A file rename operation is already running for this profile.'
+                                        ? 'A file rename operation is running for this profile.'
                                         : deleteDownloadsOperation
                                             ? 'A delete downloads operation is running for this profile.'
                                             : redownloadOperation
@@ -233,7 +233,7 @@ export default function LocalMediaProfilePage() {
                                     separatorBefore: true,
                                     disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
                                     disabledReason: deleteDownloadsOperation
-                                        ? 'A delete downloads operation is already running for this profile.'
+                                        ? 'A delete downloads operation is running for this profile.'
                                         : renameOperation
                                             ? 'A file rename operation is running for this profile.'
                                             : redownloadOperation
@@ -254,7 +254,7 @@ export default function LocalMediaProfilePage() {
                                     tone: 'danger',
                                     disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
                                     disabledReason: redownloadOperation
-                                        ? 'A re-download operation is already running for this profile.'
+                                        ? 'A re-download operation is running for this profile.'
                                         : deleteDownloadsOperation
                                             ? 'A delete downloads operation is running for this profile.'
                                             : renameOperation
