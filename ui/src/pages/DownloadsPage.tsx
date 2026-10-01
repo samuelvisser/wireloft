@@ -16,6 +16,7 @@ import ProgressButton from '../components/common/ProgressButton'
 import {frontendOperationDefinitions} from '../lib/operationDefinitions'
 import {useControlOperation, useStartOperation} from '../lib/operations'
 import {useMediaDownloadsView} from '../lib/queries'
+import {useFilterChipPress} from '../lib/useFilterChipPress'
 import {MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {formatBytes} from '../utils/formatting'
@@ -43,7 +44,6 @@ const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
     {value: 'corrupted', label: 'Corrupted', statuses: ['corrupted']},
 ]
 
-const FILTER_DOUBLE_PRESS_WINDOW_MS = 500
 const DOWNLOAD_PAGE_SIZE = 50
 
 // Show everything by default except completed downloads.
@@ -147,7 +147,7 @@ export default function DownloadsPage() {
     const controlOperation = useControlOperation()
     const {data: downloads, error} = useMediaDownloadsView()
     const loadingDownloads = downloads === undefined && !error
-    const lastFilterPressRef = useRef<{value: string; timestamp: number} | null>(null)
+    const filterPress = useFilterChipPress()
     const loadMoreRef = useRef<HTMLDivElement | null>(null)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
     const [deleteRow, setDeleteRow] = useState<MediaDownloadViewRead | null>(null)
@@ -175,21 +175,11 @@ export default function DownloadsPage() {
     }
 
     const pressStatusFilter = (option: StatusFilterOption) => {
-        const now = Date.now()
-        const previousPress = lastFilterPressRef.current
-
-        // Detect consecutive clicks ourselves so the shortcut also works for touch-generated clicks.
-        if (
-            previousPress?.value === option.value
-            && now - previousPress.timestamp <= FILTER_DOUBLE_PRESS_WINDOW_MS
-        ) {
-            lastFilterPressRef.current = null
-            setStatusFilter(new Set(option.statuses))
-            return
-        }
-
-        lastFilterPressRef.current = {value: option.value, timestamp: now}
-        toggleStatusFilter(option)
+        filterPress.press(
+            option.value,
+            () => toggleStatusFilter(option),
+            () => setStatusFilter(new Set(option.statuses)),
+        )
     }
 
     const filteredDownloads = useMemo(
@@ -464,7 +454,7 @@ export default function DownloadsPage() {
                         type="button"
                         className="filter-chip-reset"
                         onClick={() => {
-                            lastFilterPressRef.current = null
+                            filterPress.reset()
                             setStatusFilter(new Set(DEFAULT_STATUS_FILTER))
                         }}
                     >

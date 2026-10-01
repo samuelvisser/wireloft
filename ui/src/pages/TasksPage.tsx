@@ -6,6 +6,7 @@ import {Column, DataTable} from '../components/DataTable/DataTable'
 import ProgressBar from '../components/common/ProgressBar'
 import PageSubtitle from '../components/common/PageSubtitle'
 import {useTaskLedgerInfinite} from '../lib/taskLedger'
+import {useFilterChipPress} from '../lib/useFilterChipPress'
 import type {TaskLedgerEntryRead} from '../types/schemas/task'
 import './TasksPage.css'
 
@@ -126,6 +127,7 @@ function setsEqual(left: Set<string>, right: Set<string>): boolean {
 
 export default function TasksPage() {
     const [statuses, setStatuses] = useState<Set<string>>(() => new Set(DEFAULT_STATUSES))
+    const filterPress = useFilterChipPress()
     const sentinelRef = useRef<HTMLDivElement | null>(null)
     const selectedStatuses = useMemo(() => [...statuses].sort(), [statuses])
     const query = useTaskLedgerInfinite({
@@ -162,6 +164,14 @@ export default function TasksPage() {
             else next.add(value)
             return next
         })
+    }
+
+    const pressStatus = (value: string) => {
+        filterPress.press(
+            value,
+            () => toggleStatus(value),
+            () => setStatuses(new Set([value])),
+        )
     }
 
     const columns: Column<TaskLedgerEntryRead>[] = [
@@ -250,7 +260,7 @@ export default function TasksPage() {
                             type="button"
                             className="filter-chip"
                             aria-pressed={statuses.has(option.value)}
-                            onClick={() => toggleStatus(option.value)}
+                            onClick={() => pressStatus(option.value)}
                         >
                             {option.label}
                         </button>
@@ -259,7 +269,10 @@ export default function TasksPage() {
                         <button
                             type="button"
                             className="filter-chip-reset"
-                            onClick={() => setStatuses(new Set(DEFAULT_STATUSES))}
+                            onClick={() => {
+                                filterPress.reset()
+                                setStatuses(new Set(DEFAULT_STATUSES))
+                            }}
                         >
                             Reset filters
                         </button>
