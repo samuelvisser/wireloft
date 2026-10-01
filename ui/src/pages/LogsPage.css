@@ -1,3 +1,9 @@
+.logs-view {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+}
+
 .logs-toolbar {
     display: flex;
     align-items: center;
@@ -121,6 +127,20 @@
 
 .logs-message.is-error {
     color: #fb7185;
+}
+
+
+@media (min-width: 901px) {
+    .logs-view {
+        height: calc(100vh - 48px);
+        height: calc(100dvh - 48px);
+    }
+
+    .logs-panel {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
+    }
 }
 
 @media (prefers-color-scheme: light) {
