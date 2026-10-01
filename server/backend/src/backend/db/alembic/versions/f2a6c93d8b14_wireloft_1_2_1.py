@@ -33,8 +33,8 @@ def _upgrade_show_assets() -> None:
     )
 
     # Profiles created before this setting existed should not suddenly start
-    # publishing artwork after an upgrade. New profiles remain NULL and inherit
-    # the enabled system default.
+    # publishing artwork after an upgrade. Change the setting to explicitly
+    # disallow downloading show assets for existing profiles.
     show_profiles = sa.table(
         "local_media_profiles_show",
         sa.column("download_show_assets", sa.Boolean()),
