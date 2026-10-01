@@ -176,8 +176,10 @@ def build_download_plan(
         raise ValueError("An asset cannot replace the primary media")
 
     copying = download_mode == "temporary" and publication_requires_copy(str(temporary_root), str(requested_destination))
-    # Work units are estimates for batch aggregation, not time estimates. One
-    # full-media pass is one unit. Tiny assets cannot dominate a movie's work.
+    # Work units are estimates for batch aggregation, not time estimates. The
+    # primary transfer is one unit; remux/embed are full-file passes but usually
+    # take about 60% as long, so each uses 0.6 units. Tiny assets cannot dominate
+    # a movie's work.
     media_bytes = max(1, source.expected_bytes or 100 * 1024 * 1024)
     stages = [
         StageSpec("prepare", "prepare", "preparing", weight=0.02),
@@ -195,7 +197,7 @@ def build_download_plan(
     media_ready = "media"
     if source.remux_to_mp4:
         stages.append(StageSpec(
-            "remux", "remux", "finishing", "processing",
+            "remux", "remux", "finishing", "processing", 0.6,
             depends_on=(media_ready,), deadline_seconds=3600,
         ))
         media_ready = "remux"
@@ -203,7 +205,7 @@ def build_download_plan(
         code = "embed_artwork_metadata" if metadata_tags and artwork_asset_id else "embed_artwork" if artwork_asset_id else "embed_metadata"
         dependencies = (media_ready,) + ((f"acquire:{artwork_asset_id}",) if artwork_asset_id else ())
         stages.append(StageSpec(
-            "embed", code, "finishing", "processing",
+            "embed", code, "finishing", "processing", 0.6,
             depends_on=dependencies, deadline_seconds=3600,
         ))
         media_ready = "embed"
