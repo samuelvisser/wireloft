@@ -296,7 +296,7 @@ export default function DownloadsPage() {
             })
             if (!r.ok) {
                 const {error: message} = await getErrorMessageFromResponse(r)
-                toast.error(message || 'Could not delete the missing download')
+                toast.error(message || 'Could not delete the download item')
                 return
             }
 
@@ -306,7 +306,7 @@ export default function DownloadsPage() {
             if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
             if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
         } catch {
-            toast.error('Could not delete the missing download')
+            toast.error('Could not delete the download item')
         } finally {
             setDeleteBusy(false)
         }
@@ -327,7 +327,7 @@ export default function DownloadsPage() {
                 ? 'Could not retry the selected downloads'
                 : action === 'cancel'
                     ? 'Could not cancel the selected downloads'
-                    : 'Could not delete the selected missing downloads'
+                    : 'Could not delete the selected download items'
             toast.error(actionError instanceof Error && actionError.message ? actionError.message : fallback)
         } finally {
             setBulkActionStarting(null)
@@ -477,7 +477,7 @@ export default function DownloadsPage() {
                     {(deletableDownloads.length > 0 || deleteUnavailableOperation || bulkActionStarting === 'delete-unavailable') && (
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_delete_unavailable']}
-                            label="Delete missing / not downloaded"
+                            label="Delete unavailable"
                             icon={['fas', 'trash']}
                             onClick={() => setBulkDeleteConfirmOpen(true)}
                             disabled={bulkOperationActive && !deleteUnavailableOperation && bulkActionStarting !== 'delete-unavailable'}
