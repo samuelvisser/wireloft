@@ -52,6 +52,6 @@ class BulkCancelMediaDownloadsOperation(_BulkMediaDownloadOperation):
     action = "cancel"
 
 
-class BulkDeleteMissingMediaDownloadsOperation(_BulkMediaDownloadOperation):
-    kind = "media_download.bulk_delete_missing"
-    action = "delete_missing"
+class BulkDeleteUnavailableMediaDownloadsOperation(_BulkMediaDownloadOperation):
+    kind = "media_download.bulk_delete_unavailable"
+    action = "delete_unavailable"

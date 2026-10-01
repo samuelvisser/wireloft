@@ -35,8 +35,8 @@ def delete_media_download_artifact_action(media_download_id: int, *, missing_ok:
     return _invoke(actions.delete_media_download_artifact_action, media_download_id, missing_ok=missing_ok)
 
 
-def delete_missing_media_download_action(media_download_id: int, *, missing_ok: bool = False) -> bool:
-    return _invoke(actions.delete_missing_media_download_action, media_download_id, missing_ok=missing_ok)
+def delete_unavailable_media_download_action(media_download_id: int, *, missing_ok: bool = False) -> bool:
+    return _invoke(actions.delete_unavailable_media_download_action, media_download_id, missing_ok=missing_ok)
 
 
 def queue_bulk_media_download_operation(
@@ -61,17 +61,23 @@ def queue_bulk_media_download_operation(
             detail=f"Media download {missing_ids[0]} not found",
         )
 
-    if operation.action == "delete_missing":
-        non_missing_ids = [
+    if operation.action == "delete_unavailable":
+        non_deletable_ids = [
             media_download_id
             for media_download_id in ids
             if downloads_by_id[media_download_id].artifact_status
-            != MediaDownloadArtifactStatus.MISSING.value
+            not in {
+                MediaDownloadArtifactStatus.ABSENT.value,
+                MediaDownloadArtifactStatus.MISSING.value,
+            }
         ]
-        if non_missing_ids:
+        if non_deletable_ids:
             raise HTTPException(
                 status_code=409,
-                detail=f"Media download {non_missing_ids[0]} is no longer missing",
+                detail=(
+                    f"Media download {non_deletable_ids[0]} has an available "
+                    "or corrupted artifact and cannot be deleted"
+                ),
             )
 
     queued_operation = create_operation(s, operation)

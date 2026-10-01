@@ -39,15 +39,15 @@ def test_bulk_cancel_media_download_operation_keeps_per_download_targets():
     ]
 
 
-def test_bulk_delete_missing_media_download_operation_keeps_per_download_targets():
+def test_bulk_delete_unavailable_media_download_operation_keeps_per_download_targets():
     from backend.api.endpoints.media_downloads.operations import (
-        BulkDeleteMissingMediaDownloadsOperation,
+        BulkDeleteUnavailableMediaDownloadsOperation,
     )
 
-    definition = BulkDeleteMissingMediaDownloadsOperation([8, 3, 8])
+    definition = BulkDeleteUnavailableMediaDownloadsOperation([8, 3, 8])
     targets = definition.targets()
 
-    assert definition.kind == "media_download.bulk_delete_missing"
+    assert definition.kind == "media_download.bulk_delete_unavailable"
     assert definition.resource_type == "media_download"
     assert definition.resource_id is None
     assert definition.context() == {"downloads_requested": 2}
@@ -56,8 +56,8 @@ def test_bulk_delete_missing_media_download_operation_keeps_per_download_targets
     assert all(target.resource_type == "media_download" for target in targets)
     assert all(target.resource_id is None for target in targets)
     assert [target.task_kwargs for target in targets] == [
-        {"media_download_id": 8, "action": "delete_missing"},
-        {"media_download_id": 3, "action": "delete_missing"},
+        {"media_download_id": 8, "action": "delete_unavailable"},
+        {"media_download_id": 3, "action": "delete_unavailable"},
     ]
 
 

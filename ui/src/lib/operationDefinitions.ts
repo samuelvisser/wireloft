@@ -466,26 +466,26 @@ export const frontendOperationDefinitions = {
       `Cancel all stopped after ${completedCount(operation)} of ${operation.progressTotal} downloads`
     ),
   },
-  'media_download.bulk_delete_missing': {
-    kind: 'media_download.bulk_delete_missing',
+  'media_download.bulk_delete_unavailable': {
+    kind: 'media_download.bulk_delete_unavailable',
     resourceType: 'media_download',
-    label: 'Delete missing downloads',
+    label: 'Delete unavailable download records',
     invalidate: invalidateMediaDownloadCollection,
     success: (operation) => {
       const count = resultNumber(operation, 'downloads_deleted') ?? operation.progressTotal
-      return `Deleted ${count} missing ${plural(count, 'download')}`
+      return `Deleted ${count} ${plural(count, 'download record')}`
     },
     partial: (operation) => {
       const count = resultNumber(operation, 'downloads_deleted') ?? completedCount(operation)
-      return `Deleted ${count} of ${operation.progressTotal} missing downloads`
+      return `Deleted ${count} of ${operation.progressTotal} unavailable download records`
     },
     canceled: (operation) => {
       const count = resultNumber(operation, 'downloads_deleted') ?? completedCount(operation)
-      return `Delete missing stopped after ${count} of ${operation.progressTotal} downloads`
+      return `Delete unavailable stopped after ${count} of ${operation.progressTotal} records`
     },
     failed: (operation) => operation.error
-      ? `Delete missing failed: ${operation.error}`
-      : 'Delete missing failed',
+      ? `Delete unavailable failed: ${operation.error}`
+      : 'Delete unavailable failed',
   },
   'media.download': {
     kind: 'media.download',

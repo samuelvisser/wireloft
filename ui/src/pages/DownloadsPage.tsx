@@ -29,7 +29,7 @@ type StatusFilterOption = {
     statuses: readonly string[]
 }
 
-type BulkAction = 'retry' | 'cancel' | 'delete-missing'
+type BulkAction = 'retry' | 'cancel' | 'delete-unavailable'
 
 const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
     {value: 'not_downloaded', label: 'Not downloaded', statuses: ['not_downloaded']},
@@ -108,6 +108,11 @@ function isCancellableDownload(row: MediaDownloadViewRead): boolean {
     return row.presentation.canCancel
 }
 
+function isDeletableDownload(row: MediaDownloadViewRead): boolean {
+    const status = String(row.downloadStatus)
+    return status === 'not_downloaded' || status === 'missing'
+}
+
 function defaultDownloadOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
     const leftStatus = String(left.downloadStatus)
     const rightStatus = String(right.downloadStatus)
@@ -152,7 +157,7 @@ export default function DownloadsPage() {
 
     const retryAllOperation = useActiveOperation('media_download.bulk_retry', 'media_download')
     const cancelAllOperation = useActiveOperation('media_download.bulk_cancel', 'media_download')
-    const deleteMissingOperation = useActiveOperation('media_download.bulk_delete_missing', 'media_download')
+    const deleteUnavailableOperation = useActiveOperation('media_download.bulk_delete_unavailable', 'media_download')
 
     const toggleStatusFilter = (option: StatusFilterOption) => {
         setStatusFilter((prev) => {
@@ -198,24 +203,24 @@ export default function DownloadsPage() {
         () => filteredDownloads.filter(isCancellableDownload),
         [filteredDownloads],
     )
-    const missingDownloads = useMemo(
-        () => filteredDownloads.filter((row) => String(row.downloadStatus) === 'missing'),
+    const deletableDownloads = useMemo(
+        () => filteredDownloads.filter(isDeletableDownload),
         [filteredDownloads],
     )
 
     const bulkOperationActive = Boolean(
         retryAllOperation
         || cancelAllOperation
-        || deleteMissingOperation
+        || deleteUnavailableOperation
         || bulkActionStarting,
     )
     const showActionRow = Boolean(
         retryableDownloads.length
         || cancellableDownloads.length
-        || missingDownloads.length
+        || deletableDownloads.length
         || retryAllOperation
         || cancelAllOperation
-        || deleteMissingOperation,
+        || deleteUnavailableOperation,
     )
 
     const prioritize = async (row: MediaDownloadViewRead) => {
@@ -280,7 +285,7 @@ export default function DownloadsPage() {
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
     }
 
-    const deleteMissing = async () => {
+    const deleteUnavailable = async () => {
         if (!deleteRow || deleteBusy) return
         setDeleteBusy(true)
         try {
@@ -406,7 +411,7 @@ export default function DownloadsPage() {
                         Every episode and movie download shows up here, one row per Local Media Profile.
                         Running downloads report live progress; failed ones show the error and can be retried.
                         Records without a file or active queue item are marked Not downloaded and can also be retried.
-                        Download records are persistent history; records whose files are confirmed missing can be deleted individually or in bulk.
+                        Download records are persistent history; Not downloaded and Missing records can be deleted individually or in bulk when no artifact is available.
                     </p>
                 </PageSubtitle>
             </div>
@@ -469,20 +474,20 @@ export default function DownloadsPage() {
                             cancelLabel="Stop cancel all"
                         />
                     )}
-                    {(missingDownloads.length > 0 || deleteMissingOperation || bulkActionStarting === 'delete-missing') && (
+                    {(deletableDownloads.length > 0 || deleteUnavailableOperation || bulkActionStarting === 'delete-unavailable') && (
                         <ProgressButton
-                            definition={frontendOperationDefinitions['media_download.bulk_delete_missing']}
-                            label="Delete missing"
+                            definition={frontendOperationDefinitions['media_download.bulk_delete_unavailable']}
+                            label="Delete missing / not downloaded"
                             icon={['fas', 'trash']}
                             onClick={() => setBulkDeleteConfirmOpen(true)}
-                            disabled={bulkOperationActive && !deleteMissingOperation && bulkActionStarting !== 'delete-missing'}
+                            disabled={bulkOperationActive && !deleteUnavailableOperation && bulkActionStarting !== 'delete-unavailable'}
                             primary={false}
-                            starting={bulkActionStarting === 'delete-missing'}
-                            active={deleteMissingOperation !== undefined}
-                            ariaLabel={`Delete ${missingDownloads.length} visible missing downloads`}
-                            onCancel={deleteMissingOperation ? () => void cancelBulkOperation(deleteMissingOperation) : undefined}
-                            cancelDisabled={bulkControlBusy === deleteMissingOperation?.id}
-                            cancelLabel="Stop deleting missing downloads"
+                            starting={bulkActionStarting === 'delete-unavailable'}
+                            active={deleteUnavailableOperation !== undefined}
+                            ariaLabel={`Delete ${deletableDownloads.length} visible missing or not-downloaded records`}
+                            onCancel={deleteUnavailableOperation ? () => void cancelBulkOperation(deleteUnavailableOperation) : undefined}
+                            cancelDisabled={bulkControlBusy === deleteUnavailableOperation?.id}
+                            cancelLabel="Stop deleting unavailable download records"
                         />
                     )}
                 </div>
@@ -564,7 +569,7 @@ export default function DownloadsPage() {
                                 classes: 'btn',
                             })
                         }
-                        if (status === 'missing') {
+                        if (isDeletableDownload(row)) {
                             actions.push({
                                 onClick: () => setDeleteRow(row),
                                 icon: ['fas', 'trash'],
@@ -579,7 +584,7 @@ export default function DownloadsPage() {
             <DownloadLogDialog row={logRow} onClose={() => setLogRow(null)}/>
             <ConfirmDialog
                 open={bulkDeleteConfirmOpen}
-                title="Delete missing downloads"
+                title="Delete download records"
                 onDismiss={() => setBulkDeleteConfirmOpen(false)}
                 icon={['fas', 'trash']}
                 iconTone="danger"
@@ -587,20 +592,20 @@ export default function DownloadsPage() {
                     label: 'Delete',
                     onClick: async () => {
                         setBulkDeleteConfirmOpen(false)
-                        await startBulkAction('delete-missing', missingDownloads)
+                        await startBulkAction('delete-unavailable', deletableDownloads)
                     },
                     className: 'btn btn-danger',
                 }}
             >
                 <p>
-                    Delete {missingDownloads.length} visible missing {missingDownloads.length === 1 ? 'download' : 'downloads'}?
-                    WireLoft will recheck every file before deleting its download record.
-                    Records whose files have reappeared will be kept.
+                    Delete {deletableDownloads.length} visible Missing or Not downloaded {deletableDownloads.length === 1 ? 'record' : 'records'}?
+                    WireLoft will verify that no artifact is available before deleting each download record.
+                    Records with an available artifact will be kept.
                 </p>
             </ConfirmDialog>
             <ConfirmDialog
                 open={deleteRow !== null}
-                title="Delete missing download"
+                title="Delete download record"
                 onDismiss={() => {
                     if (!deleteBusy) setDeleteRow(null)
                 }}
@@ -608,7 +613,7 @@ export default function DownloadsPage() {
                 iconTone="danger"
                 confirmButton={{
                     label: deleteBusy ? 'Deleting…' : 'Delete',
-                    onClick: deleteMissing,
+                    onClick: deleteUnavailable,
                     className: 'btn btn-danger',
                     disabled: deleteBusy,
                     icon: deleteBusy ? ['fas', 'spinner'] : undefined,
@@ -619,7 +624,7 @@ export default function DownloadsPage() {
             >
                 <p>
                     Delete the download record for &quot;{deleteRow ? rowTitle(deleteRow) : ''}&quot;?
-                    WireLoft will verify that the file is still missing before removing its history record.
+                    WireLoft will verify that no artifact is available before removing its history record.
                 </p>
             </ConfirmDialog>
         </section>
