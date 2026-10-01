@@ -159,7 +159,12 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                                             <span>{item.label}</span>
                                             {presentation && <DownloadProgressActionItem presentation={presentation}/>}
                                         </button>
-                                        {presentation && <ProgressExplanation detail={presentation.detail}/>}
+                                        {presentation && (
+                                            <ProgressExplanation
+                                                detail={presentation.detail}
+                                                buttonClassName="action-menu-item-control"
+                                            />
+                                        )}
                                         {!!item.controls?.length && (
                                             <div className="action-menu-item-controls" aria-label={`${item.label} task controls`}>
                                                 {item.controls.map((control) => (

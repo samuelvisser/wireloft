@@ -12,7 +12,10 @@ const POPOVER_GAP = 6
 const VIEWPORT_GUTTER = 8
 const POPOVER_WIDTH = 260
 
-export default function ProgressExplanation({detail}: {detail: string}) {
+export default function ProgressExplanation({detail, buttonClassName = 'icon-btn'}: {
+    detail: string
+    buttonClassName?: string
+}) {
     const [open, setOpen] = useState(false)
     const [position, setPosition] = useState<PopoverPosition>({top: 0, left: 0})
     const id = useId()
@@ -88,7 +91,7 @@ export default function ProgressExplanation({detail}: {detail: string}) {
         <button
             ref={triggerRef}
             type="button"
-            className="icon-btn"
+            className={buttonClassName}
             aria-label="Progress details"
             aria-expanded={open}
             aria-controls={id}
