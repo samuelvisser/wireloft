@@ -3,6 +3,7 @@ import type {TaskOperationRead} from '../../types/schemas/operation'
 import type {ProgressPresentation} from '../../types/progress'
 import {presentOperationProgress} from '../../lib/operationProgress'
 import DownloadProgressActionItem from '../DownloadProgress/DownloadProgressActionItem'
+import ProgressFill from '../common/ProgressFill'
 import {useEffect, useId, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import './ActionMenu.css'
@@ -131,7 +132,12 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                                 >
                                     {item.separatorBefore && <div className="action-menu-separator" role="separator"/>}
                                     <div className="action-menu-item-row">
-                                        {!presentation && progress !== undefined && (
+                                        {presentation ? (
+                                            <ProgressFill
+                                                presentation={presentation}
+                                                className="action-menu-item-progress"
+                                            />
+                                        ) : progress !== undefined && (
                                             <span
                                                 className="action-menu-item-progress"
                                                 style={{width: `${progress}%`}}
