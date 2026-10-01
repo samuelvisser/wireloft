@@ -6,7 +6,7 @@ from typing import Optional, Sequence
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import false, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectin_polymorphic, selectinload
 
 from backend.db.models import DownloadProfileBase, Episode, PodcastDownloadProfile, Season, SeriesDownloadProfile
 from backend.db.models.media_download import EpisodeMediaDownload
@@ -26,6 +26,17 @@ from task_manager.tasks.media_download_operations import (
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
+def _download_profile_stmt():
+    """Load concrete profile subclasses without per-profile inheritance queries."""
+    return select(DownloadProfileBase).options(
+        selectin_polymorphic(
+            DownloadProfileBase,
+            [PodcastDownloadProfile, SeriesDownloadProfile],
+        ),
+        selectinload(SeriesDownloadProfile.seasons),
+    )
+
+
 def resolve_target_profiles(
         s: Session, *, resource_type: Optional[str], resource_id: Optional[int]
 ) -> Sequence[DownloadProfileBase]:
@@ -42,25 +53,25 @@ def resolve_target_profiles(
         return _enabled_profiles_for_show(s, resource_id)
 
     if resource_type in {"download_profile", "download_profile_series"} and resource_id:
-        profile = s.get(DownloadProfileBase, resource_id)
+        profile = s.scalars(
+            _download_profile_stmt().where(DownloadProfileBase.id == resource_id)
+        ).one_or_none()
         if profile is None or not profile.enable_profile:
             return []
         return [profile]
 
-    return list(
-        s.execute(
-            select(DownloadProfileBase).where(DownloadProfileBase.enable_profile.is_(True))
-        ).scalars()
-    )
+    return list(s.scalars(
+        _download_profile_stmt().where(DownloadProfileBase.enable_profile.is_(True))
+    ))
 
 
 def _enabled_profiles_for_show(s: Session, show_id: int) -> Sequence[DownloadProfileBase]:
-    return list(
-        s.execute(select(DownloadProfileBase).where(
+    return list(s.scalars(
+        _download_profile_stmt().where(
             DownloadProfileBase.show_id == show_id,
             DownloadProfileBase.enable_profile.is_(True),
-        )).scalars()
-    )
+        )
+    ))
 
 
 def _utc_now() -> datetime:
