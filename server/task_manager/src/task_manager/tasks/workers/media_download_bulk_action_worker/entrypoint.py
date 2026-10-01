@@ -3,6 +3,7 @@ from __future__ import annotations
 from backend.services.download_actions import (
     cancel_media_download_action,
     delete_media_download_artifact_action,
+    delete_unavailable_media_download_action,
 )
 from task_manager.scheduler.registry import task
 from task_manager.scheduler.results import TaskResult
@@ -11,7 +12,7 @@ from task_manager.scheduler.results import TaskResult
 @task(
     key="media_download_bulk_action_worker",
     title="Bulk download action",
-    description="Coordinates bulk cancel and artifact deletion actions.",
+    description="Coordinates bulk cancel, artifact deletion, and unavailable-record deletion actions.",
     allowed_resource_types=("media_download",),
     default_max_retries=0,
     tracks_progress=True,
@@ -58,6 +59,24 @@ async def media_download_bulk_action_worker(
                 "action": action,
                 "media_download_id": media_download_id,
                 "files_deleted": 1 if deleted else 0,
+            },
+        )
+
+    if action == "delete_unavailable":
+        deleted = delete_unavailable_media_download_action(
+            media_download_id,
+            missing_ok=True,
+        )
+        return TaskResult(
+            summary=(
+                f"Deleted download record {media_download_id}"
+                if deleted
+                else f"Download {media_download_id} no longer exists"
+            ),
+            data={
+                "action": action,
+                "media_download_id": media_download_id,
+                "downloads_deleted": 1 if deleted else 0,
             },
         )
 

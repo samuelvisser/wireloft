@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import os
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,6 +20,7 @@ from task_manager.tasks.media_download_operations import (
     prepare_media_download_artifact,
 )
 from task_manager.tasks.workers.download_attempt import serialize_download_attempt
+from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
 class DownloadActionError(ValueError):
@@ -171,6 +174,95 @@ def cancel_media_download_action(
 
     return payload
 
+
+_DELETABLE_MEDIA_DOWNLOAD_ARTIFACT_STATUSES = {
+    MediaDownloadArtifactStatus.ABSENT.value,
+    MediaDownloadArtifactStatus.MISSING.value,
+}
+
+
+def delete_unavailable_media_download(
+        session: Session,
+        media_download_id: int,
+) -> None:
+    """Delete a MediaDownload row only when no managed artifact is available."""
+    download = session.get(MediaDownloadBase, media_download_id)
+    if download is None:
+        raise DownloadActionError("missing", "Media download not found")
+    if get_active_media_download_operation(session, media_download_id) is not None:
+        raise DownloadActionError("conflict", "This download already has an active operation")
+    if download.artifact_status not in _DELETABLE_MEDIA_DOWNLOAD_ARTIFACT_STATUSES:
+        raise DownloadActionError(
+            "conflict",
+            "Only not-downloaded or missing downloads can be deleted",
+        )
+
+    # Refuse destructive changes when the filesystem cannot be checked. This is
+    # especially important for container mounts: an unavailable mount must not
+    # make an existing artifact look safely deletable.
+    try:
+        os.stat(download.file_path)
+    except FileNotFoundError:
+        recorded_path_exists = False
+    except OSError as exc:
+        raise DownloadActionError(
+            "conflict",
+            f"Could not verify that the download artifact is absent: {exc}",
+        ) from exc
+    else:
+        recorded_path_exists = True
+
+    if download.artifact_status == MediaDownloadArtifactStatus.MISSING.value:
+        # Reconcile immediately before deleting so a restored file or a
+        # same-directory rename wins over stale Missing state from the page.
+        current_path = resolve_media_download_file(session, download)
+        if (
+            recorded_path_exists
+            or current_path is not None
+            or download.artifact_status not in _DELETABLE_MEDIA_DOWNLOAD_ARTIFACT_STATUSES
+        ):
+            raise DownloadActionError(
+                "conflict",
+                "The download has an available artifact and cannot be deleted",
+            )
+    elif recorded_path_exists:
+        # ABSENT rows are intentionally outside the FileWatcher reconciliation
+        # set. A physical file at the planned output path still makes the record
+        # non-deletable even if the database says Not downloaded.
+        raise DownloadActionError(
+            "conflict",
+            "The download has an available artifact and cannot be deleted",
+        )
+
+    session.delete(download)
+    session.flush()
+
+
+def delete_unavailable_media_download_action(
+        media_download_id: int,
+        *,
+        missing_ok: bool = False,
+) -> bool:
+    """Delete one confirmed-unavailable MediaDownload row as a serialized user action."""
+    with serialize_download_attempt(media_download_id), db_session() as s:
+        try:
+            if s.get(MediaDownloadBase, media_download_id) is None:
+                if missing_ok:
+                    return False
+                raise DownloadActionError("missing", "Media download not found")
+
+            delete_unavailable_media_download(s, media_download_id)
+            s.commit()
+            return True
+        except DownloadActionError:
+            # A Missing-row recheck may have restored the artifact state or
+            # discovered a same-directory rename. Persist that reconciliation
+            # even though the destructive action itself is rejected.
+            s.commit()
+            raise
+        except Exception:
+            s.rollback()
+            raise
 
 
 def delete_media_download_artifact_action(

@@ -213,6 +213,26 @@
     line-height: 1.45;
 }
 
+.settings-storage-advisory {
+    display: grid;
+    gap: 4px;
+    padding: 12px 14px;
+    border: 1px solid rgba(217, 119, 6, 0.28);
+    border-radius: 10px;
+    background: rgba(245, 158, 11, 0.08);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.settings-storage-advisory strong {
+    color: var(--text);
+    font-size: 13px;
+}
+
+.settings-storage-advisory span {
+    color: var(--muted);
+}
+
 .settings-number-input {
     display: flex;
     align-items: stretch;
@@ -512,6 +532,11 @@
 
     .settings-section--danger {
         background: rgba(127, 29, 29, 0.13);
+    }
+
+    .settings-storage-advisory {
+        border-color: rgba(245, 158, 11, 0.28);
+        background: rgba(120, 53, 15, 0.18);
     }
 
     .settings-actions {
