@@ -318,17 +318,6 @@ export default function CronEditor({
                 <label htmlFor={`${id}-expression`}>{label}</label>
                 <div className="cron-editor__heading-actions">
                     {runNow ? (
-                        <button
-                            type="button"
-                            className="btn cron-editor__ledger-button"
-                            onClick={() => setLedgerOpen(true)}
-                            title={`Open ${runNow.definition.label} log`}
-                            aria-label={`Open ${runNow.definition.label} log`}
-                        >
-                            <FontAwesomeIcon icon={['fas', 'file-lines']}/>
-                        </button>
-                    ) : null}
-                    {runNow ? (
                         <ProgressButton
                             definition={runNow.definition}
                             resourceId={0}
@@ -340,6 +329,17 @@ export default function CronEditor({
                             className="cron-editor__run-now"
                             ariaLabel={`Run ${runNow.definition.label} now`}
                         />
+                    ) : null}
+                    {runNow ? (
+                        <button
+                            type="button"
+                            className="icon-btn cron-editor__ledger-button"
+                            onClick={() => setLedgerOpen(true)}
+                            title={`Open ${runNow.definition.label} log`}
+                            aria-label={`Open ${runNow.definition.label} log`}
+                        >
+                            <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+                        </button>
                     ) : null}
                     <div className="cron-editor__enabled">
                         <span id={enabledLabelId}>Enabled</span>
