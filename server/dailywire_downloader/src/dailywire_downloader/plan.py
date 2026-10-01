@@ -206,9 +206,7 @@ def build_download_plan(
     remux_weight, embed_weight = _processing_weights(processing_storage)
     publish_weight = _publication_weight(destination_storage, copying=copying)
 
-    # Work units are estimates for batch aggregation. Stream-copy stages are
-    # dominated by the filesystem hosting their media, so local staging is much
-    # lighter than processing directly on network storage.
+    # Work units are estimates for batch aggregation.
     media_bytes = max(1, source.expected_bytes or 100 * 1024 * 1024)
     stages = [
         StageSpec("prepare", "prepare", "preparing", weight=0.02),
@@ -239,7 +237,7 @@ def build_download_plan(
         ))
         media_ready = "embed"
     stages.append(StageSpec(
-        "publish", "publish_media", "finishing", "processing", publish_weight,
+        "publish", "publish_media", "finishing", "processing", weight=publish_weight,
         depends_on=(media_ready, *(f"acquire:{asset.id}" for asset in assets)),
         deadline_seconds=3600,
     ))
