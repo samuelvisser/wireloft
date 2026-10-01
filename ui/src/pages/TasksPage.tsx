@@ -234,8 +234,10 @@ export default function TasksPage() {
                 <h1 id="tasks-title">Tasks</h1>
                 <PageSubtitle summary={<>Background and user-triggered work performed by WireLoft.</>}>
                     <p>
-                        This ledger contains every task execution. Active tasks report percentage progress when available;
-                        otherwise their current activity is shown with an indeterminate indicator.
+                        This ledger contains every task execution. Active tasks report progress when available.
+                    </p>
+                    <p>
+                        Use this view to diagnose certain problems or track task progress.
                     </p>
                 </PageSubtitle>
             </div>
