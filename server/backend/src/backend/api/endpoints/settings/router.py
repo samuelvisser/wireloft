@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, status
 
+from backend.api.models.operations import TaskOperationAccepted
 from backend.api.models.settings import SettingsAPIRead, SettingsAPIUpdate
 from backend.app import db_session
 from backend.services.show_assets import request_show_asset_reconciliation
@@ -8,6 +9,7 @@ from .service import (
     SettingsPersistenceError,
     get_ui_settings,
     save_ui_settings,
+    run_cron_job_now,
 )
 
 
@@ -39,3 +41,23 @@ def settings_update(body: SettingsAPIUpdate):
             request_show_asset_reconciliation(session)
             session.commit()
     return result
+
+
+@router.post(
+    "/cron/{job}/run",
+    response_model=TaskOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def settings_cron_run(job: str):
+    """Run one configured cron job immediately as a TaskOperation."""
+    with db_session() as session:
+        try:
+            result = run_cron_job_now(session, job)
+            session.commit()
+            return result
+        except ValueError as exc:
+            session.rollback()
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception:
+            session.rollback()
+            raise

@@ -236,7 +236,66 @@ function invalidateMediaDownloadCollection(
   )
 }
 
+function invalidateEpisodeCronJob(
+  queryClient: QueryClient,
+  _operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['shows']}),
+    queryClient.invalidateQueries({queryKey: ['showsView']}),
+    queryClient.invalidateQueries({queryKey: ['episodes']}),
+  )
+}
+
+function invalidateEpisodeAndDownloadCronJob(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateEpisodeCronJob(queryClient, operation, invalidations)
+  invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+}
+
+function invalidateDownloadCronJob(
+  queryClient: QueryClient,
+  _operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+}
+
 export const frontendOperationDefinitions = {
+  'system.cron.find_episodes': {
+    kind: 'system.cron.find_episodes',
+    resourceType: 'system',
+    label: 'Find new episodes',
+    invalidate: invalidateEpisodeCronJob,
+  },
+  'system.cron.monitor_pending_episodes': {
+    kind: 'system.cron.monitor_pending_episodes',
+    resourceType: 'system',
+    label: 'Monitor pending episodes',
+    invalidate: invalidateEpisodeAndDownloadCronJob,
+  },
+  'system.cron.monitor_no_usable_media': {
+    kind: 'system.cron.monitor_no_usable_media',
+    resourceType: 'system',
+    label: 'Monitor episodes without usable media',
+    invalidate: invalidateEpisodeAndDownloadCronJob,
+  },
+  'system.cron.verify_downloads': {
+    kind: 'system.cron.verify_downloads',
+    resourceType: 'system',
+    label: 'Verify downloads',
+    invalidate: invalidateDownloadCronJob,
+  },
+  'system.cron.file_watcher': {
+    kind: 'system.cron.file_watcher',
+    resourceType: 'system',
+    label: 'File watcher',
+    invalidate: invalidateDownloadCronJob,
+  },
   'show.index': {
     kind: 'show.index',
     resourceType: 'show',

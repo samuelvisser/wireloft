@@ -6,6 +6,7 @@ import type {
     ThumbnailMode,
 } from '../../types/schemas/settings'
 import ReadMore from '../../utils/ReadMore'
+import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import CronEditor from './CronEditor'
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {
@@ -346,6 +347,7 @@ export default function DownloadsSettingsTab({
                 <CronEditor
                     id="settings-verify-downloads-cron"
                     label="Verify downloads schedule"
+                    runNow={{definition: frontendOperationDefinitions['system.cron.verify_downloads'], job: 'verify-downloads'}}
                     value={draft.downloadSettings.verifyDownloadsCron}
                     enabled={draft.downloadSettings.verifyDownloadsCronEnabled}
                     error={errorFor('downloadSettings.verifyDownloadsCron')}
@@ -371,6 +373,7 @@ export default function DownloadsSettingsTab({
                 <CronEditor
                     id="settings-file-watcher-cron"
                     label="File watcher schedule"
+                    runNow={{definition: frontendOperationDefinitions['system.cron.file_watcher'], job: 'file-watcher'}}
                     value={draft.fileWatcher.scanCron}
                     enabled={draft.fileWatcher.scanCronEnabled}
                     error={errorFor('fileWatcher.scanCron')}

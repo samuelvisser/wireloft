@@ -10,6 +10,7 @@ import {
 } from './SettingsControls'
 import ReadMore from "../../utils/ReadMore";
 import {formatDurationMinutes} from "../../utils/formatting";
+import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 
 export default function AutomationSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
 
@@ -88,6 +89,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                 <CronEditor
                     id="settings-find-episodes-cron"
                     label="Find new episodes"
+                    runNow={{definition: frontendOperationDefinitions['system.cron.find_episodes'], job: 'find-episodes'}}
                     value={draft.newEpisodeSchedule.findEpisodesCron}
                     enabled={draft.newEpisodeSchedule.findEpisodesCronEnabled}
                     error={errorFor('newEpisodeSchedule.findEpisodesCron')}
@@ -111,6 +113,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                 <CronEditor
                     id="settings-monitor-pending-episode-cron"
                     label="Monitor pending episodes"
+                    runNow={{definition: frontendOperationDefinitions['system.cron.monitor_pending_episodes'], job: 'monitor-pending-episodes'}}
                     value={draft.newEpisodeSchedule.monitorPendingEpisodeCron}
                     enabled={draft.newEpisodeSchedule.monitorPendingEpisodeCronEnabled}
                     error={errorFor('newEpisodeSchedule.monitorPendingEpisodeCron')}
@@ -142,6 +145,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                 <CronEditor
                     id="settings-monitor-no-usable-media-episode-cron"
                     label="Monitor episodes without usable media"
+                    runNow={{definition: frontendOperationDefinitions['system.cron.monitor_no_usable_media'], job: 'monitor-no-usable-media'}}
                     value={draft.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron}
                     enabled={draft.newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled}
                     error={errorFor('newEpisodeSchedule.monitorNoUsableMediaEpisodeCron')}

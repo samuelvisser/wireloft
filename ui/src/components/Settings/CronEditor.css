@@ -12,6 +12,18 @@
     font-weight: 700;
 }
 
+.cron-editor__heading-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cron-editor__run-now .progress-button {
+    min-height: 30px;
+    padding: 5px 10px;
+    font-size: 12px;
+}
+
 .cron-editor__enabled {
     display: inline-flex;
     align-items: center;
@@ -171,7 +183,12 @@
 
 @media (max-width: 680px) {
     .cron-editor__heading {
-        align-items: center;
+        align-items: flex-start;
+    }
+
+    .cron-editor__heading-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
     }
 
     .cron-editor__presets {

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from sqlalchemy import select
 from pydantic.alias_generators import to_snake
 from pydantic_settings import DotEnvSettingsSource, EnvSettingsSource
 from yaml.nodes import MappingNode, ScalarNode
@@ -20,7 +21,18 @@ from backend.api.models.settings import (
     SettingsValues,
     UI_SETTING_PATHS,
 )
+from backend.db.models import Episode
 from config import reload_settings
+from task_manager.scheduler.operation_factory import create_operation
+from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
+from task_manager.tasks.helpers.episodes.same_episode import PENDING_EPISODE_STATUSES
+from .operations import (
+    FileWatcherCronOperation,
+    FindEpisodesCronOperation,
+    MonitorNoUsableMediaCronOperation,
+    MonitorPendingEpisodesCronOperation,
+    VerifyDownloadsCronOperation,
+)
 from config.settings.base import get_config_path
 from config.settings.settings import (
     AppSettings,
@@ -351,3 +363,43 @@ def save_ui_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
             ) from exc
 
         return _response()
+
+
+_CRON_OPERATION_FACTORIES = {
+    "find-episodes": FindEpisodesCronOperation,
+    "monitor-no-usable-media": MonitorNoUsableMediaCronOperation,
+    "verify-downloads": VerifyDownloadsCronOperation,
+    "file-watcher": FileWatcherCronOperation,
+}
+
+
+def run_cron_job_now(session, job: str) -> dict[str, bool | str]:
+    """Run one Settings cron job immediately as a durable UI TaskOperation."""
+    if job == "monitor-pending-episodes":
+        episode_ids = tuple(
+            session.scalars(
+                select(Episode.id).where(Episode.publish_status.in_(PENDING_EPISODE_STATUSES))
+            )
+        )
+        operation = create_operation(
+            session,
+            MonitorPendingEpisodesCronOperation(episode_ids),
+        )
+        if not episode_ids:
+            complete_operation(
+                session,
+                operation.id,
+                summary="No pending episodes to monitor",
+                data={"episodes_requested": 0},
+            )
+            return {"queued": False, "operation_id": operation.id}
+    else:
+        factory = _CRON_OPERATION_FACTORIES.get(job)
+        if factory is None:
+            raise ValueError(f"Unknown cron job: {job}")
+        operation = create_operation(session, factory())
+
+    for target in operation.targets:
+        queue_operation_target_dispatch(session, operation.id, target.slot_key)
+
+    return {"queued": True, "operation_id": operation.id}
