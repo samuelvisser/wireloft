@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "6d4a8c1f2b90"
+HEAD_REVISION = "f2a6c93d8b14"
+WIRELOFT_1_2_REVISION = "6d4a8c1f2b90"
 PRE_HISTORY_HEAD_REVISION = "6d1e8f2a4c73"
 PRE_HISTORY_PARENT_REVISION = "d4a7c2e91b63"
 PREVIOUS_DEVELOPMENT_REVISION = "e5f1a2c7d903"
@@ -242,20 +243,13 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == PRE_HISTORY_HEAD_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_2_REVISION
     assert (
-        script.get_revision(PRE_HISTORY_HEAD_REVISION).down_revision
-        == PRE_HISTORY_PARENT_REVISION
+        script.get_revision(WIRELOFT_1_2_REVISION).down_revision
+        == "d8b4a1f6c203"
     )
-    assert script.get_revision(PRE_HISTORY_PARENT_REVISION).down_revision == "c80e4d9a6b21"
-    assert (
-        script.get_revision(PREVIOUS_DEVELOPMENT_REVISION).down_revision
-        == HISTORICAL_EPISODE_SCHEMA_REVISION
-    )
-    assert (
-        script.get_revision(HISTORICAL_EPISODE_SCHEMA_REVISION).down_revision
-        == OUTPUT_TEMPLATE_SPACING_REVISION
-    )
+    assert script.get_revision("d8b4a1f6c203").down_revision == WIRELOFT_1_0_REVISION
+    assert script.get_revision(WIRELOFT_1_0_REVISION).down_revision == BASE_REVISION
     assert script.get_revision(BASE_REVISION) is not None
 
 

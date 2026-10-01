@@ -4,7 +4,7 @@ WireLoft can save shared show artwork alongside your downloaded library. This is
 
 ## Enable or override
 
-**Settings / Downloads / Download show assets** controls the system default and is enabled by default. In a Show Local Media Profile, **Download show assets** has three choices: **System**, **Enabled**, or **Disabled**. New profiles inherit the system setting; profiles that existed before show artwork support are migrated to **Disabled** so an upgrade does not unexpectedly begin downloading artwork.
+**Settings / Downloads / Download show assets** controls the system default and is enabled by default. In a Show Local Media Profile, **Download show assets** has three choices: **System**, **Enabled**, or **Disabled**. New profiles inherit the system setting.
 
 The corresponding configuration value is:
 
@@ -13,7 +13,7 @@ downloadSettings:
   downloadShowAssets: true
 ```
 
-The help underneath the profile setting shows the resolved show root for the episode currently selected in the Jinja editor. It updates with unsaved template edits and the same editable test values as the episode path. Clearing a test value also clears it for the show-root preview. Both paths use the configured download root and filename restrictions. Previewing does not change saved show metadata, download artwork, or save custom indexes. When no episodes have been indexed, the built-in example can also preview both paths.
+The help text underneath the profile setting shows the resolved show root for the episode currently selected in the Jinja editor. It updates with unsaved template edits and the editable test values. Both paths use the configured download root and filename restrictions.
 
 ## Files and sources
 
@@ -26,7 +26,7 @@ WireLoft preserves native JPEG and PNG show artwork. JPEG sources are stored as 
 | `square.jpg` or `square.png` | Show square thumbnail |
 | `clearlogo.png` | Show logo |
 
-Missing artwork types are skipped. No arbitrary episode thumbnail is substituted for a show poster. Existing custom artwork in alternate formats is preserved rather than overwritten.
+Missing artwork types are skipped. Existing custom artwork in alternate formats is preserved.
 
 The corresponding fallback setting is:
 
@@ -53,8 +53,8 @@ Layouts that put different episode types in unrelated trees, omit a show-specifi
 
 ## Refresh and file safety
 
-Artwork reconciliation runs after indexing, relevant show/profile/settings changes, successful episode downloads, file renames, and at startup. Initial creation waits for at least one indexed episode. Normal episode scans also refresh available artwork URLs from the already-fetched show page. Existing managed images are checked again on reconciliation after a day, so unchanged URLs do not cause a download on every episode.
+Artwork reconciliation runs after indexing, relevant show/profile/settings changes, successful episode downloads, file renames, and at startup. Initial creation waits for at least one indexed episode. Normal episode scans also refresh available artwork URLs from the already-fetched show page. Existing managed images are checked again on reconciliation after a day.
 
-WireLoft tracks artwork ownership, upstream format and content hashes. It leaves pre-existing custom artwork, alternate image formats, and externally modified files untouched. If a managed upstream asset changes between JPEG and PNG, WireLoft safely publishes the new variant and removes the old managed variant only after the replacement is verified. Managed replacements are staged on the destination filesystem and published atomically. The destination filesystem must support hard links for safe, non-overwriting first publication; failures leave existing files untouched and are reported in task logs.
+WireLoft tracks artwork ownership, upstream format and content hashes. It leaves pre-existing custom artwork, alternate image formats, and externally modified files untouched. If a managed upstream asset changes between JPEG and PNG, WireLoft safely publishes the new variant and removes the old managed variant only after the replacement is verified. Managed replacements are staged on the destination filesystem and published atomically. Failures leave existing files untouched and are reported in task logs.
 
 When a template changes, WireLoft creates artwork in the new root. An old managed copy is removed only after a verified replacement exists and tracked media no longer needs the old location. Artwork still shared by another profile is retained. Disabling artwork or deleting a show/profile does not delete existing artwork files.
