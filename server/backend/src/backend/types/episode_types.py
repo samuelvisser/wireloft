@@ -1,4 +1,4 @@
-from enum import Enum, StrEnum
+from enum import StrEnum
 
 
 class EpisodeExtraType(StrEnum):
@@ -6,7 +6,7 @@ class EpisodeExtraType(StrEnum):
     TRAILER = "trailer"
 
 
-class EpisodePublishStatus(Enum):
+class EpisodePublishStatus(StrEnum):
     # Daily Wire explicitly reports the episode as scheduled.
     SCHEDULED = "scheduled"
 

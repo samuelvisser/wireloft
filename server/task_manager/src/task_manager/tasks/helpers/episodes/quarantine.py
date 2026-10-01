@@ -99,7 +99,7 @@ def vacated_canonical_identifiers_for_show(s: Session, show_id: int) -> set[str]
     episodes = list(s.scalars(
         select(Episode).where(
             Episode.show_id == show_id,
-            Episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value,
+            Episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA,
         )
     ))
     if not episodes:
