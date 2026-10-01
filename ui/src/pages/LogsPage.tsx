@@ -1,12 +1,25 @@
 import {useQuery} from '@tanstack/react-query'
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import Select from 'react-select'
 
 import PageSubtitle from '../components/common/PageSubtitle'
 import {ApplicationLogPageReadSchema} from '../types/schemas/log'
 import './LogsPage.css'
 
-const LEVELS = ['', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'] as const
+type LogLevelOption = {
+    value: string
+    label: string
+}
+
+const LEVEL_OPTIONS: readonly LogLevelOption[] = [
+    {value: '', label: 'All'},
+    {value: 'DEBUG', label: 'Debug'},
+    {value: 'INFO', label: 'Info'},
+    {value: 'WARNING', label: 'Warning'},
+    {value: 'ERROR', label: 'Error'},
+    {value: 'CRITICAL', label: 'Critical'},
+]
 
 function formatTimestamp(value: string): string {
     const date = new Date(value)
@@ -72,16 +85,19 @@ export default function LogsPage() {
                         placeholder="Search logs..."
                     />
                 </label>
-                <label className="logs-level">
-                    <span>Level</span>
-                    <select value={level} onChange={(event) => setLevel(event.target.value)}>
-                        {LEVELS.map((item) => (
-                            <option key={item || 'all'} value={item}>
-                                {item || 'All'}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                <div className="logs-level">
+                    <label htmlFor="logs-level-select">Level</label>
+                    <Select<LogLevelOption, false>
+                        inputId="logs-level-select"
+                        className="logs-level-select"
+                        classNamePrefix="select"
+                        options={LEVEL_OPTIONS}
+                        value={LEVEL_OPTIONS.find((option) => option.value === level) ?? LEVEL_OPTIONS[0]}
+                        onChange={(option) => setLevel(option?.value ?? '')}
+                        isSearchable={false}
+                        isClearable={false}
+                    />
+                </div>
                 <strong className="logs-count">{total.toLocaleString()} {total === 1 ? 'entry' : 'entries'}</strong>
             </div>
 

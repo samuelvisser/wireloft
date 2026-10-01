@@ -37,7 +37,11 @@
     font-size: 13px;
 }
 
-.logs-level select {
+.logs-level-select {
+    width: 8.5rem;
+}
+
+.logs-level-select .select__control {
     min-height: 40px;
 }
 
