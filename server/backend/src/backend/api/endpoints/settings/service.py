@@ -15,12 +15,15 @@ from pydantic_settings import DotEnvSettingsSource, EnvSettingsSource
 from yaml.nodes import MappingNode, ScalarNode
 
 from backend.api.models.settings import (
+    DownloadStorageInspectionValue,
+    FilesystemInspectionValue,
     SettingsAPIRead,
     SettingsAPIUpdate,
     SettingsValues,
     UI_SETTING_PATHS,
 )
 from config import reload_settings
+from dailywire_downloader.storage import inspect_filesystem, same_filesystem
 from config.settings.base import get_config_path
 from config.settings.settings import (
     AppSettings,
@@ -284,10 +287,32 @@ def _response() -> SettingsAPIRead:
     # environment variable.
     effective_settings = AppSettings()
 
+    download_settings = effective_settings.download_settings
+    download_root = inspect_filesystem(download_settings.download_root)
+    temporary_root = inspect_filesystem(download_settings.temporary_download_root)
+
     return SettingsAPIRead(
         values=SettingsValues.from_app_settings(effective_settings),
         configured_fields=_configured_fields(document),
         environment_overrides=_environment_overrides(),
+        download_storage=DownloadStorageInspectionValue(
+            download_root=FilesystemInspectionValue(
+                path=str(download_root.path),
+                mount_point=str(download_root.mount_point) if download_root.mount_point is not None else None,
+                filesystem_type=download_root.filesystem_type,
+                storage_kind=download_root.storage_kind,
+            ),
+            temporary_download_root=FilesystemInspectionValue(
+                path=str(temporary_root.path),
+                mount_point=str(temporary_root.mount_point) if temporary_root.mount_point is not None else None,
+                filesystem_type=temporary_root.filesystem_type,
+                storage_kind=temporary_root.storage_kind,
+            ),
+            same_filesystem=same_filesystem(
+                download_settings.download_root,
+                download_settings.temporary_download_root,
+            ),
+        ),
         updated_at=_file_timestamp(path),
     )
 

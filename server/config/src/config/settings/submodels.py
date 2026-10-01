@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import tempfile
 from enum import StrEnum
 from pathlib import Path
 from typing import Optional
@@ -365,7 +366,7 @@ class DownloadSettings(SubmodelBase):
         description="Directory on disk that the '/downloads/' prefix of output templates maps to",
     )
     download_mode: DownloadMode = Field(
-        default=DownloadMode.DIRECT,
+        default=DownloadMode.TEMPORARY,
         description="Whether downloads are written directly to their destination or staged in a temporary directory first",
     )
     thumbnail_mode: ThumbnailMode = Field(
@@ -385,7 +386,7 @@ class DownloadSettings(SubmodelBase):
         description="Format used when upstream show artwork is neither JPEG nor PNG",
     )
     temporary_download_root: Path = Field(
-        default_factory=lambda data: data["download_root"] / ".wireloft-temp",
+        default_factory=lambda: Path(tempfile.gettempdir()) / "wireloft-downloads",
         description="Directory used to stage complete downloads before publishing them to the download root",
     )
     rss_cache_root: Path = Field(

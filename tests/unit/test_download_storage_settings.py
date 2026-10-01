@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-def test_system_download_storage_defaults_to_direct_mode():
+def test_system_download_storage_defaults_to_local_temporary_mode():
     from backend.api.models.settings import SettingsValues
     from config.settings.settings import AppSettings
     from config.settings.submodels import (
@@ -13,13 +13,13 @@ def test_system_download_storage_defaults_to_direct_mode():
 
     settings = AppSettings()
 
-    assert settings.download_settings.download_mode is DownloadMode.DIRECT
+    assert settings.download_settings.download_mode is DownloadMode.TEMPORARY
     assert settings.download_settings.thumbnail_mode is ThumbnailMode.EMBED
     assert settings.download_settings.metadata_mode is MetadataMode.EMBED
     assert settings.download_settings.show_artwork_fallback_format is ShowArtworkFallbackFormat.JPG
-    assert (
-        settings.download_settings.temporary_download_root
-        == settings.download_settings.download_root / ".wireloft-temp"
+    assert settings.download_settings.temporary_download_root.name == "wireloft-downloads"
+    assert settings.download_settings.temporary_download_root != (
+        settings.download_settings.download_root / ".wireloft-temp"
     )
     assert (
         settings.download_settings.rss_cache_root
@@ -31,12 +31,12 @@ def test_system_download_storage_defaults_to_direct_mode():
         by_alias=True,
         mode="json",
     )
-    assert values["downloadSettings"]["downloadMode"] == "direct"
+    assert values["downloadSettings"]["downloadMode"] == "temporary"
     assert values["downloadSettings"]["thumbnailMode"] == "embed"
     assert values["downloadSettings"]["metadataMode"] == "embed"
     assert values["downloadSettings"]["showArtworkFallbackFormat"] == "jpg"
     assert values["downloadSettings"]["temporaryDownloadRoot"] == str(
-        settings.download_settings.download_root / ".wireloft-temp"
+        settings.download_settings.temporary_download_root
     )
     assert values["downloadSettings"]["rssCacheRoot"] == str(
         settings.download_settings.download_root / ".wireloft-rss-cache"
@@ -44,12 +44,13 @@ def test_system_download_storage_defaults_to_direct_mode():
     assert values["downloadSettings"]["rssCacheRetentionSeconds"] == 7 * 24 * 60 * 60
 
 
-def test_download_storage_default_factories_follow_download_root():
+def test_cache_default_follows_download_root_but_temporary_storage_does_not():
     from config.settings.submodels import DownloadSettings
 
     settings = DownloadSettings(download_root="/media")
 
-    assert settings.temporary_download_root.as_posix() == "/media/.wireloft-temp"
+    assert settings.temporary_download_root.name == "wireloft-downloads"
+    assert settings.temporary_download_root.as_posix() != "/media/.wireloft-temp"
     assert settings.rss_cache_root.as_posix() == "/media/.wireloft-rss-cache"
 
 

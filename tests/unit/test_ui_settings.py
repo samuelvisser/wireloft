@@ -138,7 +138,8 @@ def test_download_root_change_recomputes_unset_storage_defaults(tmp_path, monkey
     _point_settings_at(config_path, monkeypatch)
 
     current = get_ui_settings()
-    assert current.values.download_settings.temporary_download_root.as_posix() == "/media-one/.wireloft-temp"
+    original_temporary_root = current.values.download_settings.temporary_download_root
+    assert original_temporary_root.name == "wireloft-downloads"
     assert current.values.download_settings.rss_cache_root.as_posix() == "/media-one/.wireloft-rss-cache"
 
     values = current.values.model_copy(deep=True)
@@ -148,7 +149,7 @@ def test_download_root_change_recomputes_unset_storage_defaults(tmp_path, monkey
         changed_fields=["downloadSettings.downloadRoot"],
     ))
 
-    assert result.values.download_settings.temporary_download_root.as_posix() == "/media-two/.wireloft-temp"
+    assert result.values.download_settings.temporary_download_root == original_temporary_root
     assert result.values.download_settings.rss_cache_root.as_posix() == "/media-two/.wireloft-rss-cache"
 
     document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
@@ -277,3 +278,19 @@ def test_timezone_is_managed_by_tz_and_not_wl_timezone(tmp_path, monkeypatch):
     monkeypatch.delenv("TZ", raising=False)
     monkeypatch.delenv("WL_TIMEZONE", raising=False)
     reload_settings()
+
+
+def test_settings_response_includes_download_storage_inspection(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import get_ui_settings
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text("", encoding="utf-8")
+    _point_settings_at(config_path, monkeypatch)
+
+    current = get_ui_settings()
+
+    assert current.download_storage.download_root.path
+    assert current.download_storage.temporary_download_root.path
+    assert current.download_storage.download_root.storage_kind in {
+        "local", "remote", "shared_or_virtual", "unknown",
+    }

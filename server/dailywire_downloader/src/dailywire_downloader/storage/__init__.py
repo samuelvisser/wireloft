@@ -7,6 +7,13 @@ from .direct import (
     cleanup_abandoned_direct_download_path_reservations,
     reserve_unique_download_path,
 )
+from .filesystem import (
+    FilesystemInspection,
+    FilesystemStorageKind,
+    classify_filesystem_type,
+    inspect_filesystem,
+    same_filesystem,
+)
 from .temporary import (
     TemporaryDownloadFilesystemError,
     TemporaryDownloadWorkspace,
