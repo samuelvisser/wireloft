@@ -374,7 +374,11 @@ export default function DownloadsSettingsTab({
                 <CronEditor
                     id="settings-verify-downloads-cron"
                     label="Verify downloads schedule"
-                    runNow={{definition: frontendOperationDefinitions['system.cron.verify_downloads'], job: 'verify-downloads'}}
+                    runNow={{
+                        definition: frontendOperationDefinitions['system.cron.verify_downloads'],
+                        job: 'verify-downloads',
+                        ledger: {definitionKey: 'download_profile_worker', resourceType: 'download_profile', resourceId: 0},
+                    }}
                     value={draft.downloadSettings.verifyDownloadsCron}
                     enabled={draft.downloadSettings.verifyDownloadsCronEnabled}
                     error={errorFor('downloadSettings.verifyDownloadsCron')}
@@ -400,7 +404,11 @@ export default function DownloadsSettingsTab({
                 <CronEditor
                     id="settings-file-watcher-cron"
                     label="File watcher schedule"
-                    runNow={{definition: frontendOperationDefinitions['system.cron.file_watcher'], job: 'file-watcher'}}
+                    runNow={{
+                        definition: frontendOperationDefinitions['system.cron.file_watcher'],
+                        job: 'file-watcher',
+                        ledger: {definitionKey: 'file_watcher', resourceType: 'show', resourceId: 0},
+                    }}
                     value={draft.fileWatcher.scanCron}
                     enabled={draft.fileWatcher.scanCronEnabled}
                     error={errorFor('fileWatcher.scanCron')}

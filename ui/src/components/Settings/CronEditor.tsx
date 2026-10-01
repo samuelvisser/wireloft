@@ -1,10 +1,13 @@
 import {useEffect, useMemo, useState} from 'react'
 import {toast} from 'react-hot-toast'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {ReactNode} from 'react'
 import Select from 'react-select'
 import Switch from 'react-switch'
 
 import ProgressButton from '../common/ProgressButton'
+import CronTaskLedgerModal from './CronTaskLedgerModal'
+import type {TaskLedgerPageQuery} from '../../lib/taskLedger'
 import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import './CronEditor.css'
@@ -24,6 +27,7 @@ type CronEditorProps = {
     runNow?: {
         definition: FrontendOperationDefinition
         job: string
+        ledger: Omit<TaskLedgerPageQuery, 'offset' | 'limit' | 'enabled'>
     }
 }
 
@@ -255,6 +259,7 @@ export default function CronEditor({
 }: CronEditorProps) {
     const startOperation = useStartOperation()
     const [startingRunNow, setStartingRunNow] = useState(false)
+    const [ledgerOpen, setLedgerOpen] = useState(false)
     const [mode, setMode] = useState<CronMode>(() => inferMode(value))
     const parsed = useMemo(() => parseCron(value), [value])
     const weekdayValues = useMemo(() => selectedWeekdays(parsed?.dayOfWeek), [parsed?.dayOfWeek])
@@ -312,6 +317,17 @@ export default function CronEditor({
             <div className="cron-editor__heading">
                 <label htmlFor={`${id}-expression`}>{label}</label>
                 <div className="cron-editor__heading-actions">
+                    {runNow ? (
+                        <button
+                            type="button"
+                            className="btn cron-editor__ledger-button"
+                            onClick={() => setLedgerOpen(true)}
+                            title={`Open ${runNow.definition.label} log`}
+                            aria-label={`Open ${runNow.definition.label} log`}
+                        >
+                            <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+                        </button>
+                    ) : null}
                     {runNow ? (
                         <ProgressButton
                             definition={runNow.definition}
@@ -511,6 +527,17 @@ export default function CronEditor({
                 <div className="settings-field__environment-note">
                     The cron expression is managed by environment variable <code>{environmentVariable}</code>. Change or remove that environment override and restart WireLoft to edit it here.
                 </div>
+            ) : null}
+            {runNow ? (
+                <CronTaskLedgerModal
+                    open={ledgerOpen}
+                    title={runNow.definition.label}
+                    definition={runNow.definition}
+                    query={runNow.ledger}
+                    starting={startingRunNow}
+                    onClose={() => setLedgerOpen(false)}
+                    onRunNow={runNowOperation}
+                />
             ) : null}
         </div>
     )

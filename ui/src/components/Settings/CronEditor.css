@@ -18,6 +18,13 @@
     gap: 10px;
 }
 
+.cron-editor__ledger-button {
+    width: 30px;
+    min-width: 30px;
+    min-height: 30px;
+    padding: 0;
+}
+
 .cron-editor__run-now .progress-button {
     min-height: 30px;
     padding: 5px 10px;
