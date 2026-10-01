@@ -71,7 +71,7 @@ def runs(
 
 @router.get("/ledger", response_model=TaskLedgerPageRead)
 def ledger(
-        definition_key: str,
+        definition_key: str | None = None,
         resource_type: ResourceType | None = None,
         resource_id: list[int] | None = Query(default=None),
         status: list[TaskStatus] | None = Query(default=None),
@@ -81,7 +81,7 @@ def ledger(
         offset: int = Query(default=0, ge=0),
         limit: int = Query(default=50, ge=1, le=200),
 ):
-    """Return paginated durable TaskRun history for one task type."""
+    """Return paginated durable TaskRun history, optionally limited to one task type."""
     return list_ledger(
         definition_key=definition_key,
         resource_type=resource_type.value if resource_type is not None else None,

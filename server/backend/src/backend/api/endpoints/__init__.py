@@ -20,5 +20,6 @@ from .rss_stream_profiles import rss_stream_profile_router
 from .stream_profiles import stream_profile_router
 from .feeds import feeds_router
 from .custom_metadata import custom_metadata_router
+from .logs import logs_router
 
 from .meta_router import router as meta_router

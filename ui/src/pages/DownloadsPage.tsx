@@ -1,5 +1,5 @@
 import type {TaskOperationRead} from '../types/schemas/operation'
-import {useMemo, useRef, useState} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -44,6 +44,7 @@ const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
 ]
 
 const FILTER_DOUBLE_PRESS_WINDOW_MS = 500
+const DOWNLOAD_PAGE_SIZE = 50
 
 // Show everything by default except completed downloads.
 const DEFAULT_STATUS_FILTER = new Set(
@@ -147,6 +148,7 @@ export default function DownloadsPage() {
     const {data: downloads, error} = useMediaDownloadsView()
     const loadingDownloads = downloads === undefined && !error
     const lastFilterPressRef = useRef<{value: string; timestamp: number} | null>(null)
+    const loadMoreRef = useRef<HTMLDivElement | null>(null)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
     const [deleteRow, setDeleteRow] = useState<MediaDownloadViewRead | null>(null)
     const [deleteBusy, setDeleteBusy] = useState(false)
@@ -154,6 +156,7 @@ export default function DownloadsPage() {
     const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(DEFAULT_STATUS_FILTER))
     const [bulkActionStarting, setBulkActionStarting] = useState<BulkAction | null>(null)
     const [bulkControlBusy, setBulkControlBusy] = useState<string | null>(null)
+    const [visibleLimit, setVisibleLimit] = useState(DOWNLOAD_PAGE_SIZE)
 
     const retryAllOperation = useActiveOperation('media_download.bulk_retry', 'media_download')
     const cancelAllOperation = useActiveOperation('media_download.bulk_cancel', 'media_download')
@@ -195,6 +198,31 @@ export default function DownloadsPage() {
             .sort(defaultDownloadOrder),
         [downloads, statusFilter],
     )
+    const visibleDownloads = useMemo(
+        () => filteredDownloads.slice(0, visibleLimit),
+        [filteredDownloads, visibleLimit],
+    )
+
+    useEffect(() => {
+        setVisibleLimit(DOWNLOAD_PAGE_SIZE)
+    }, [statusFilter])
+
+    useEffect(() => {
+        const element = loadMoreRef.current
+        if (!element || visibleLimit >= filteredDownloads.length) return
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    setVisibleLimit((current) => Math.min(current + DOWNLOAD_PAGE_SIZE, filteredDownloads.length))
+                }
+            },
+            {rootMargin: '400px 0px'},
+        )
+        observer.observe(element)
+        return () => observer.disconnect()
+    }, [filteredDownloads.length, visibleLimit])
+
     const retryableDownloads = useMemo(
         () => filteredDownloads.filter((row) => isRetryableDownload(row) || isRedownloadableDownload(row)),
         [filteredDownloads],
@@ -418,8 +446,9 @@ export default function DownloadsPage() {
                     </p>
                 </PageSubtitle>
             </div>
-            <div className="filter-chip-group" role="group" aria-label="Filter downloads by status">
-                {STATUS_FILTER_OPTIONS.map((option) => (
+            <div className="downloads-filter-row">
+                <div className="filter-chip-group" role="group" aria-label="Filter downloads by status">
+                    {STATUS_FILTER_OPTIONS.map((option) => (
                     <button
                         key={option.value}
                         type="button"
@@ -429,8 +458,8 @@ export default function DownloadsPage() {
                     >
                         {option.label}
                     </button>
-                ))}
-                {!setsEqual(statusFilter, DEFAULT_STATUS_FILTER) && (
+                    ))}
+                    {!setsEqual(statusFilter, DEFAULT_STATUS_FILTER) && (
                     <button
                         type="button"
                         className="filter-chip-reset"
@@ -441,7 +470,11 @@ export default function DownloadsPage() {
                     >
                         Reset filters
                     </button>
-                )}
+                    )}
+                </div>
+                <strong className="downloads-view-count">
+                    {filteredDownloads.length.toLocaleString()} {filteredDownloads.length === 1 ? 'download' : 'downloads'}
+                </strong>
             </div>
             {showActionRow && (
                 <div className="downloads-action-row" role="group" aria-label="Actions for visible downloads">
@@ -499,7 +532,7 @@ export default function DownloadsPage() {
                 <DataTable<MediaDownloadViewRead>
                     ariaLabel="Media downloads"
                     columns={columns}
-                    data={filteredDownloads}
+                    data={visibleDownloads}
                     className="table downloads-table"
                     wrapperClassName="table-wrapper downloads-table-wrapper"
                     loading={loadingDownloads}
@@ -583,6 +616,13 @@ export default function DownloadsPage() {
                         return actions
                     }}
                 />
+                <div ref={loadMoreRef} className="infinite-scroll-sentinel" aria-hidden="true"/>
+                {visibleDownloads.length < filteredDownloads.length && (
+                    <div className="downloads-table-loading" role="status">
+                        <FontAwesomeIcon className="wl-progress-icon" icon={['fas', 'spinner']}/>
+                        Loading more downloads...
+                    </div>
+                )}
             </div>
             <DownloadLogDialog row={logRow} onClose={() => setLogRow(null)}/>
             <ConfirmDialog

@@ -161,3 +161,39 @@
     padding: 6px 0;
     color: var(--muted);
 }
+
+
+.downloads-filter-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.downloads-filter-row .filter-chip-group {
+    margin-bottom: 12px;
+}
+
+.downloads-view-count {
+    flex: 0 0 auto;
+    padding-top: 7px;
+    color: var(--muted);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.infinite-scroll-sentinel {
+    height: 1px;
+}
+
+@media (max-width: 640px) {
+    .downloads-filter-row {
+        display: block;
+    }
+
+    .downloads-view-count {
+        display: block;
+        margin: -4px 0 12px;
+        padding: 0;
+    }
+}

@@ -167,20 +167,28 @@ def test_task_models_follow_relationship_aliases():
 
     run = SimpleNamespace(
         id=10,
-        definition=SimpleNamespace(key="worker"),
+        definition=SimpleNamespace(key="worker", title="Worker"),
         resource_type="show",
         resource_id=3,
         status="SUCCEEDED",
+        progress=100,
         message="Done",
         last_error=None,
         meta={"inputs": {"refresh": True}},
         result={"summary": "Done"},
+        attempt_count=1,
+        max_retries=3,
+        next_retry_at=None,
         started_at=NOW,
         finished_at=NOW,
         runtime_ms=100,
+        created_at=NOW,
+        updated_at=NOW,
     )
 
     item = TaskLedgerEntryRead.model_validate(run)
 
     assert item.definition_key == "worker"
+    assert item.definition_title == "Worker"
+    assert item.progress == 100
     assert item.inputs == {"refresh": True}

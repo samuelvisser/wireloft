@@ -10,6 +10,8 @@ import App from './App'
 import HomePage from './pages/HomePage'
 import LocalMediaProfilesPage from './pages/LocalMediaProfilesPage'
 import SettingsPage from './pages/SettingsPage'
+import LogsPage from './pages/LogsPage'
+import TasksPage from './pages/TasksPage'
 import AddShowPage from './pages/show/AddShowPage'
 import AddLocalMediaProfilePage from './pages/local-media-profile/AddLocalMediaProfilePage'
 import EditLocalMediaProfilePage from './pages/local-media-profile/EditLocalMediaProfilePage'
@@ -53,6 +55,8 @@ export const router = createBrowserRouter(
       <Route path="downloads" element={<DownloadsPage />} />
       <Route path="local-media-profiles" element={<LocalMediaProfilesPage />} />
       <Route path="settings" element={<SettingsPage />} />
+      <Route path="logs" element={<LogsPage />} />
+      <Route path="tasks" element={<TasksPage />} />
       <Route path="add-show" element={<AddShowRoute />} />
       <Route path="add-local-media-profile" element={<AddLocalMediaProfilePage />} />
       <Route path="local-media-profile/:slug" element={<LocalMediaProfilePage />} />

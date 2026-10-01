@@ -8,6 +8,7 @@ export const TaskRunReadSchema = z.looseObject({
   resourceId: z.int(),
   status: z.string(),
   progress: z.int().nullable().optional(),
+  waitState: z.record(z.string(), z.unknown()).nullable().optional(),
   message: z.string().nullable().optional(),
   result: z.record(z.string(), z.unknown()).nullable().optional(),
   attemptCount: z.int(),
@@ -22,16 +23,23 @@ export type TaskRunRead = z.infer<typeof TaskRunReadSchema>;
 export const TaskLedgerEntryReadSchema = z.looseObject({
   id: z.int(),
   definitionKey: z.string(),
+  definitionTitle: z.string(),
   resourceType: z.string(),
   resourceId: z.int().nullable(),
   status: z.string(),
+  progress: z.int().nullable().optional(),
   message: z.string().nullable().optional(),
   lastError: z.string().nullable().optional(),
   inputs: z.record(z.string(), z.unknown()),
   result: z.record(z.string(), z.unknown()).nullable().optional(),
+  attemptCount: z.int(),
+  maxRetries: z.int(),
+  nextRetryAt: ApiDateTimeStringSchema.nullable().optional(),
   startedAt: ApiDateTimeStringSchema.nullable().optional(),
   finishedAt: ApiDateTimeStringSchema.nullable().optional(),
   runtimeMs: z.number().nullable().optional(),
+  createdAt: ApiDateTimeStringSchema,
+  updatedAt: ApiDateTimeStringSchema,
 });
 export type TaskLedgerEntryRead = z.infer<typeof TaskLedgerEntryReadSchema>;
 

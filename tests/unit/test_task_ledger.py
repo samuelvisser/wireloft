@@ -188,4 +188,20 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
     assert second.items[0].last_error == "boom"
     assert second.items[0].inputs == {"show_slug": "show-seven"}
 
+    all_succeeded = service.list_ledger(
+        definition_key=None,
+        statuses=[TaskStatus.SUCCEEDED.value],
+        order_by="started_at",
+        order="desc",
+        offset=0,
+        limit=20,
+    )
+    assert all_succeeded.total == 4
+    assert all_succeeded.has_more is False
+    assert all_succeeded.items[0].definition_key == "other_worker"
+    assert all_succeeded.items[0].definition_title == "Other"
+    assert all_succeeded.items[0].progress == 100
+    assert all_succeeded.items[0].attempt_count == 1
+    assert all_succeeded.items[0].created_at is not None
+
     engine.dispose()
