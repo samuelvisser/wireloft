@@ -28,10 +28,6 @@
     color: var(--muted);
 }
 
-.cron-editor__ledger-button:hover:not(:disabled) {
-    background: transparent;
-    color: var(--text);
-}
 
 .cron-editor__run-now .progress-button {
     min-height: 30px;
