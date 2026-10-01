@@ -1094,9 +1094,19 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
 .modal-wide {
   max-width: 720px;
 }
+.download-log-dialog {
+  max-height: calc(100dvh - 48px);
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.download-log-dialog > * {
+  min-width: 0;
+}
 .log-meta {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: max-content minmax(0, 1fr);
   column-gap: 12px;
   row-gap: 6px;
   margin: 0 0 16px;
@@ -1109,8 +1119,20 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
   font-weight: 500;
 }
 .log-meta dd {
+  min-width: 0;
   margin: 0;
+  overflow-wrap: anywhere;
   word-break: break-word;
+}
+.log-history-scroll {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.log-file-meta {
+  margin-bottom: 16px;
 }
 .log-section-label {
   margin-bottom: 4px;
@@ -1134,9 +1156,13 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 360px;
-  overflow: auto;
   margin-bottom: 16px;
+}
+.log-history-actions {
+  margin-bottom: 16px;
+}
+.log-dialog-actions {
+  flex: 0 0 auto;
 }
 .log-attempt {
   border: 1px solid #e2e8f0;

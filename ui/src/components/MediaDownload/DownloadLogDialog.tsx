@@ -54,7 +54,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
     return (
         <div className="modal-overlay" role="presentation" onClick={onClose}>
             <div
-                className="modal modal-wide"
+                className="modal modal-wide download-log-dialog"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="download-log-title"
@@ -82,55 +82,60 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                     </div>
                     {currentAttempt && <div><dt>Current attempt</dt><dd>{currentAttempt}</dd></div>}
                     {downloadedVersion && <div><dt>Version downloaded</dt><dd>{downloadedVersion}</dd></div>}
-                    <div><dt>File</dt><dd className="mono">{row.filePath}</dd></div>
                 </dl>
 
-                <p className="modal-text log-section-label">Download history</p>
-                {history.isLoading ? (
-                    <p className="modal-text">Loading…</p>
-                ) : history.isError ? (
-                    <p className="modal-text">Could not load download history.</p>
-                ) : entries.length === 0 ? (
-                    <p className="modal-text">No history recorded yet.</p>
-                ) : (
-                    <div className="log-attempts">
-                        {entries.map((entry) => (
-                            <div key={entry.id} className="log-attempt">
-                                <div className="log-attempt-header">
-                                    <span className={`log-attempt-status log-attempt-status-${entry.status}`}>
-                                        {MediaDownloadStatusReg.getLabelLoose(entry.status)}
-                                    </span>
-                                    <span className="log-attempt-type">{entry.label}</span>
-                                    <span className="log-attempt-time">
-                                        {formatDateTime(entry.occurredAt)}
-                                    </span>
-                                </div>
-                                <DownloadStageTimings value={entry.metadata.lifecycle}/>
-                                {(entry.duration || entry.detail) && (
-                                    <div className="log-attempt-details">
-                                        {entry.duration && <span>Duration: {entry.duration}</span>}
-                                        {entry.detail && <span>{entry.detail}</span>}
+                <div className="log-history-scroll">
+                    <dl className="log-meta log-file-meta">
+                        <div><dt>File</dt><dd className="mono">{row.filePath}</dd></div>
+                    </dl>
+
+                    <p className="modal-text log-section-label">Download history</p>
+                    {history.isLoading ? (
+                        <p className="modal-text">Loading…</p>
+                    ) : history.isError ? (
+                        <p className="modal-text">Could not load download history.</p>
+                    ) : entries.length === 0 ? (
+                        <p className="modal-text">No history recorded yet.</p>
+                    ) : (
+                        <div className="log-attempts">
+                            {entries.map((entry) => (
+                                <div key={entry.id} className="log-attempt">
+                                    <div className="log-attempt-header">
+                                        <span className={`log-attempt-status log-attempt-status-${entry.status}`}>
+                                            {MediaDownloadStatusReg.getLabelLoose(entry.status)}
+                                        </span>
+                                        <span className="log-attempt-type">{entry.label}</span>
+                                        <span className="log-attempt-time">
+                                            {formatDateTime(entry.occurredAt)}
+                                        </span>
                                     </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                )}
+                                    <DownloadStageTimings value={entry.metadata.lifecycle}/>
+                                    {(entry.duration || entry.detail) && (
+                                        <div className="log-attempt-details">
+                                            {entry.duration && <span>Duration: {entry.duration}</span>}
+                                            {entry.detail && <span>{entry.detail}</span>}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
-                {history.hasNextPage && (
-                    <div className="modal-actions">
-                        <button
-                            type="button"
-                            className="btn"
-                            disabled={history.isFetchingNextPage}
-                            onClick={() => void history.fetchNextPage()}
-                        >
-                            {history.isFetchingNextPage ? 'Loading…' : 'Load older history'}
-                        </button>
-                    </div>
-                )}
+                    {history.hasNextPage && (
+                        <div className="modal-actions log-history-actions">
+                            <button
+                                type="button"
+                                className="btn"
+                                disabled={history.isFetchingNextPage}
+                                onClick={() => void history.fetchNextPage()}
+                            >
+                                {history.isFetchingNextPage ? 'Loading…' : 'Load older history'}
+                            </button>
+                        </div>
+                    )}
+                </div>
 
-                <div className="modal-actions">
+                <div className="modal-actions log-dialog-actions">
                     <button type="button" className="btn" onClick={onClose}>Close</button>
                 </div>
             </div>
