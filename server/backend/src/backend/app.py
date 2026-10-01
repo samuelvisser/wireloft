@@ -137,10 +137,14 @@ async def _network_aware_http_exception_handler(
 
 
 def create_app() -> FastAPI:
+    from backend.logging_buffer import install_application_log_handler
+    settings = get_settings()
+    install_application_log_handler(settings.log_level)
+
     app = FastAPI(
         title="WireLoft API",
         summary="Internal API for WireLoft",
-        version=get_settings().app_version,
+        version=settings.app_version,
         lifespan=application_lifespan,
     )
 
@@ -230,6 +234,7 @@ def create_app() -> FastAPI:
         task_router,
         feeds_router,
         custom_metadata_router,
+        logs_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
@@ -265,5 +270,6 @@ def create_app() -> FastAPI:
     app.include_router(rss_stream_profile_router, prefix="/api")
     app.include_router(stream_profile_router, prefix="/api")
     app.include_router(task_router, prefix="/api")
+    app.include_router(logs_router, prefix="/api")
 
     return app

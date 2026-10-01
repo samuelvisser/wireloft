@@ -1,0 +1,133 @@
+.task-filter-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.task-filter-row .filter-chip-group {
+    margin-bottom: 12px;
+}
+
+.task-view-count {
+    flex: 0 0 auto;
+    padding-top: 7px;
+    color: var(--muted);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.task-name strong,
+.task-name small {
+    display: block;
+}
+
+.task-name small {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.task-progress-status {
+    display: grid;
+    min-width: 0;
+    gap: 5px;
+}
+
+.task-progress-heading,
+.task-progress-label {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+}
+
+.task-progress-label {
+    overflow: hidden;
+    font-size: 13px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.task-progress-status.is-succeeded .task-progress-label {
+    color: #178447;
+}
+
+.task-progress-status.is-failed .task-progress-label,
+.task-message.is-error {
+    color: var(--error);
+}
+
+.task-progress-status.is-canceled .task-progress-label {
+    color: var(--muted);
+}
+
+.task-message {
+    display: -webkit-box;
+    overflow: hidden;
+    line-height: 1.35;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.tasks-table td {
+    vertical-align: middle;
+}
+
+.tasks-table td:nth-child(3) {
+    min-width: 9rem;
+}
+
+.tasks-table-wrapper {
+    container-type: inline-size;
+}
+
+.task-table-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 14px 0 4px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.infinite-scroll-sentinel {
+    height: 1px;
+}
+
+@media (prefers-color-scheme: dark) {
+    .task-progress-status.is-succeeded .task-progress-label {
+        color: #75d99e;
+    }
+}
+
+@container (max-width: 52rem) {
+    .tasks-table th:nth-child(5),
+    .tasks-table td:nth-child(5) {
+        display: none;
+    }
+}
+
+@container (max-width: 43rem) {
+    .tasks-table th:nth-child(7),
+    .tasks-table td:nth-child(7) {
+        display: none;
+    }
+}
+
+@media (max-width: 640px) {
+    .task-filter-row {
+        display: block;
+    }
+
+    .task-view-count {
+        display: block;
+        margin: -4px 0 12px;
+        padding: 0;
+    }
+
+    .tasks-table-wrapper .task-progress-status {
+        min-width: min(15rem, 100%);
+    }
+}

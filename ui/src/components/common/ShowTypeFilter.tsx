@@ -1,4 +1,5 @@
 import {ShowTypeReg, ShowTypeValue} from '../../types/show'
+import {useFilterChipPress} from '../../lib/useFilterChipPress'
 
 const DEFAULT_SHOW_TYPE_FILTER = new Set<ShowTypeValue>(ShowTypeReg.values)
 
@@ -31,11 +32,21 @@ export default function ShowTypeFilter({
     onChange,
     ariaLabel = 'Filter shows by type',
 }: ShowTypeFilterProps) {
+    const filterPress = useFilterChipPress()
+
     const toggleType = (type: ShowTypeValue) => {
         const next = new Set(selectedTypes)
         if (next.has(type)) next.delete(type)
         else next.add(type)
         onChange(next)
+    }
+
+    const pressType = (type: ShowTypeValue) => {
+        filterPress.press(
+            type,
+            () => toggleType(type),
+            () => onChange(new Set([type])),
+        )
     }
 
     return (
@@ -46,7 +57,7 @@ export default function ShowTypeFilter({
                     type="button"
                     className="filter-chip"
                     aria-pressed={selectedTypes.has(option.value)}
-                    onClick={() => toggleType(option.value)}
+                    onClick={() => pressType(option.value)}
                 >
                     {option.label}
                 </button>
@@ -55,7 +66,10 @@ export default function ShowTypeFilter({
                 <button
                     type="button"
                     className="filter-chip-reset"
-                    onClick={() => onChange(createDefaultShowTypeFilter())}
+                    onClick={() => {
+                        filterPress.reset()
+                        onChange(createDefaultShowTypeFilter())
+                    }}
                 >
                     Reset filters
                 </button>

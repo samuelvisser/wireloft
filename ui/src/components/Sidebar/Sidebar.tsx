@@ -21,7 +21,15 @@ const items: NavItem[] = [
             { path: '/stream-profiles', label: 'Stream Profiles', icon: ['fas', 'rss'] },
         ]
     },
-    {path: '/settings', label: 'Settings', icon: ['fas', 'gear']},
+    {
+        label: 'Config',
+        icon: ['fas', 'sliders'],
+        children: [
+            {path: '/settings', label: 'Settings', icon: ['fas', 'gear']},
+            {path: '/tasks', label: 'Tasks', icon: ['fas', 'bars-progress']},
+            {path: '/logs', label: 'Log', icon: ['fas', 'file-lines']},
+        ],
+    },
 ]
 
 export default function Sidebar() {

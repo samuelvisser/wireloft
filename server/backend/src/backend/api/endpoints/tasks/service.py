@@ -130,7 +130,7 @@ def list_runs(
 def query_ledger(
     s: Session,
     *,
-    definition_key: str,
+    definition_key: str | None,
     resource_type: str | None = None,
     resource_ids: list[int] | None = None,
     statuses: list[str] | None = None,
@@ -141,7 +141,9 @@ def query_ledger(
     limit: int = 50,
 ) -> TaskLedgerPageRead:
     """Query paginated TaskRun history using a caller-owned database session."""
-    filters = [TaskDefinition.key == definition_key]
+    filters = []
+    if definition_key is not None:
+        filters.append(TaskDefinition.key == definition_key)
     if resource_type is not None:
         filters.append(TaskRun.resource_type == ResourceType(resource_type))
     if resource_ids:
@@ -151,13 +153,13 @@ def query_ledger(
     if started_after is not None:
         filters.append(TaskRun.started_at >= started_after)
 
-    total = int(
-        s.execute(
-            select(func.count(TaskRun.id))
-            .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
-            .where(*filters)
-        ).scalar_one()
-    )
+    count_stmt = select(func.count(TaskRun.id))
+    if definition_key is not None:
+        count_stmt = count_stmt.join(
+            TaskDefinition,
+            TaskDefinition.id == TaskRun.definition_id,
+        )
+    total = int(s.execute(count_stmt.where(*filters)).scalar_one())
 
     order_column = {
         "started_at": TaskRun.started_at,
@@ -167,11 +169,19 @@ def query_ledger(
     ordering = order_column.asc() if order == "asc" else order_column.desc()
     tie_breaker = TaskRun.id.asc() if order == "asc" else TaskRun.id.desc()
 
-    runs = s.scalars(
+    run_stmt = (
         select(TaskRun)
-        .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
         .options(joinedload(TaskRun.definition))
         .where(*filters)
+    )
+    if definition_key is not None:
+        run_stmt = run_stmt.join(
+            TaskDefinition,
+            TaskDefinition.id == TaskRun.definition_id,
+        )
+
+    runs = s.scalars(
+        run_stmt
         .order_by(ordering, tie_breaker)
         .offset(offset)
         .limit(limit)
@@ -189,7 +199,7 @@ def query_ledger(
 
 def list_ledger(
     *,
-    definition_key: str,
+    definition_key: str | None,
     resource_type: str | None = None,
     resource_ids: list[int] | None = None,
     statuses: list[str] | None = None,
