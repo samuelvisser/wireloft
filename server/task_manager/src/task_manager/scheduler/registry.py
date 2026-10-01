@@ -170,11 +170,7 @@ def get_task(key: str) -> Tuple[TaskMeta, Callable[..., Awaitable[Any]]]:
 
 
 def task_tracks_progress(key: str) -> bool:
-    """Return whether a registered task exposes determinate execution progress.
-
-    Unknown definitions keep the historical determinate behavior so durable
-    scheduler state created by older code remains conservative during recovery.
-    """
+    """Return whether a registered task exposes determinate execution progress."""
     registered = _REGISTRY.get(key)
     return True if registered is None else bool(registered[0].tracks_progress)
 

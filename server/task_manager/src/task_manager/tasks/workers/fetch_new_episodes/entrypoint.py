@@ -30,7 +30,7 @@ from .service import run_fetch_new_episodes
     description="Finds new episodes in all shows.",
     allowed_resource_types=("show",),
     default_max_retries=5,
-    tracks_progress=True,
+    tracks_progress=False,
 )
 async def fetch_new_episodes(
     *,
