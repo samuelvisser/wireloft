@@ -225,6 +225,7 @@ export default function DownloadsPage() {
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
+        if (row.showSlug) await qc.invalidateQueries({queryKey: ['showDownloads', row.showSlug]})
     }
 
     const retryRequest = async (row: MediaDownloadViewRead): Promise<string | null> => {
@@ -250,6 +251,7 @@ export default function DownloadsPage() {
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
+        if (row.showSlug) await qc.invalidateQueries({queryKey: ['showDownloads', row.showSlug]})
     }
 
     const cancel = async (row: MediaDownloadViewRead) => {
@@ -266,6 +268,7 @@ export default function DownloadsPage() {
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
+        if (row.showSlug) await qc.invalidateQueries({queryKey: ['showDownloads', row.showSlug]})
     }
 
     const startBulkAction = async (action: BulkAction, rows: MediaDownloadViewRead[]) => {

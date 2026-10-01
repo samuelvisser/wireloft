@@ -38,6 +38,7 @@ def media_downloads_list():
 def media_downloads_view(
         episode_slug: Optional[str] = None,
         movie_slug: Optional[str] = None,
+        show_slug: Optional[str] = None,
         status_filter: Optional[list[str]] = Query(default=None, alias="status"),
         limit: Optional[int] = None,
 ):
@@ -46,6 +47,7 @@ def media_downloads_view(
             s,
             episode_slug=episode_slug,
             movie_slug=movie_slug,
+            show_slug=show_slug,
             statuses=status_filter,
             limit=limit,
         )

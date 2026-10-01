@@ -132,10 +132,14 @@ function invalidateShowStructure(
 
 function invalidateShowFiles(
   queryClient: QueryClient,
-  _operation: TaskOperationRead,
+  operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
+  const showSlug = contextString(operation, 'show_slug')
   invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+  if (showSlug) {
+    invalidations.push(queryClient.invalidateQueries({queryKey: ['showDownloads', showSlug]}))
+  }
 }
 
 function invalidateShowDownloadDeletion(
@@ -200,6 +204,9 @@ function invalidateLocalMediaProfileFiles(
 ) {
   invalidations.push(
     queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+    queryClient.invalidateQueries({queryKey: ['episodeDownloads']}),
+    queryClient.invalidateQueries({queryKey: ['movieDownloads']}),
+    queryClient.invalidateQueries({queryKey: ['showDownloads']}),
     queryClient.invalidateQueries({queryKey: ['localMediaProfiles']}),
     queryClient.invalidateQueries({queryKey: ['localMediaProfile']}),
     queryClient.invalidateQueries({queryKey: ['localMediaProfileView']}),
@@ -224,6 +231,8 @@ function invalidateMediaDownload(
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
+  const episodeSlug = contextString(operation, 'episode_slug')
+  const showSlug = contextString(operation, 'show_slug')
   const movieSlug = contextString(operation, 'movie_slug')
 
   invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
@@ -232,10 +241,20 @@ function invalidateMediaDownload(
       queryClient.invalidateQueries({queryKey: ['mediaDownloadHistory', operation.resourceId]}),
     )
   }
+  if (episodeSlug) {
+    invalidations.push(
+      queryClient.invalidateQueries({queryKey: ['episodeDownloads', episodeSlug]}),
+    )
+  }
+  if (showSlug) {
+    invalidations.push(
+      queryClient.invalidateQueries({queryKey: ['showDownloads', showSlug]}),
+    )
+  }
   if (movieSlug) {
     invalidations.push(
+      queryClient.invalidateQueries({queryKey: ['movieDownloads', movieSlug]}),
       queryClient.invalidateQueries({queryKey: ['movies']}),
-      queryClient.invalidateQueries({queryKey: ['dailywireMovie', movieSlug]}),
     )
   }
 }
@@ -249,6 +268,7 @@ function invalidateMediaDownloadCollection(
     queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
     queryClient.invalidateQueries({queryKey: ['episodeDownloads']}),
     queryClient.invalidateQueries({queryKey: ['movieDownloads']}),
+    queryClient.invalidateQueries({queryKey: ['showDownloads']}),
     queryClient.invalidateQueries({queryKey: ['movies']}),
   )
 }

@@ -553,12 +553,55 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
     }
 }
 
-function useMediaDownloadPresentation() {
-    const domainQuery = useQuery<unknown[], Error, MediaDownloadDomainViewRead[], readonly ['mediaDownloadsView']>({
-        queryKey: ['mediaDownloadsView'] as const,
+type MediaDownloadScope =
+    | {kind: 'all'}
+    | {kind: 'episode'; slug?: string}
+    | {kind: 'movie'; slug?: string}
+    | {kind: 'show'; slug?: string}
+
+function mediaDownloadScopeKey(scope: MediaDownloadScope) {
+    switch (scope.kind) {
+        case 'episode':
+            return ['episodeDownloads', scope.slug] as const
+        case 'movie':
+            return ['movieDownloads', scope.slug] as const
+        case 'show':
+            return ['showDownloads', scope.slug] as const
+        default:
+            return ['mediaDownloadsView'] as const
+    }
+}
+
+function mediaDownloadScopeUrl(scope: MediaDownloadScope) {
+    const base = `${(window as any).appConfig.API_URL}/media-downloads/as-view`
+    if (scope.kind === 'all') return base
+
+    const params = new URLSearchParams()
+    if (scope.kind === 'episode' && scope.slug) params.set('episode_slug', scope.slug)
+    if (scope.kind === 'movie' && scope.slug) params.set('movie_slug', scope.slug)
+    if (scope.kind === 'show' && scope.slug) params.set('show_slug', scope.slug)
+    return `${base}?${params}`
+}
+
+function operationMatchesMediaDownloadScope(
+    operation: TaskOperationRead,
+    scope: MediaDownloadScope,
+) {
+    if (scope.kind === 'all') return true
+    if (!scope.slug) return false
+    if (scope.kind === 'episode') return contextString(operation, 'episode_slug') === scope.slug
+    if (scope.kind === 'movie') return contextString(operation, 'movie_slug') === scope.slug
+    return contextString(operation, 'show_slug') === scope.slug
+}
+
+function useMediaDownloadPresentation(scope: MediaDownloadScope) {
+    const enabled = scope.kind === 'all' || Boolean(scope.slug)
+    const domainQuery = useQuery({
+        queryKey: mediaDownloadScopeKey(scope),
+        enabled,
         queryFn: async ({signal}) => {
             const value = await fetchJSON<unknown[]>(
-                `${(window as any).appConfig.API_URL}/media-downloads/as-view`,
+                mediaDownloadScopeUrl(scope),
                 signal,
             )
             return MediaDownloadViewReadSchema.array().parse(value)
@@ -567,7 +610,9 @@ function useMediaDownloadPresentation() {
         refetchOnMount: 'always',
     })
     const {data: pullData} = useFrontendPuller()
-    const operations = pullData?.operations ?? []
+    const operations = (pullData?.operations ?? []).filter(
+        (operation) => operationMatchesMediaDownloadScope(operation, scope),
+    )
 
     const data = useMemo(() => {
         if (domainQuery.data === undefined && operations.length === 0) return undefined
@@ -594,25 +639,19 @@ function useMediaDownloadPresentation() {
 }
 
 export function useEpisodeDownloads(episodeSlug?: string) {
-    const query = useMediaDownloadPresentation()
-    const data = useMemo(
-        () => query.data?.filter((download) => download.episodeSlug === episodeSlug),
-        [episodeSlug, query.data],
-    )
-    return {...query, data}
+    return useMediaDownloadPresentation({kind: 'episode', slug: episodeSlug})
 }
 
 export function useMovieDownloads(movieSlug?: string) {
-    const query = useMediaDownloadPresentation()
-    const data = useMemo(
-        () => query.data?.filter((download) => download.movieSlug === movieSlug),
-        [movieSlug, query.data],
-    )
-    return {...query, data}
+    return useMediaDownloadPresentation({kind: 'movie', slug: movieSlug})
+}
+
+export function useShowDownloads(showSlug?: string) {
+    return useMediaDownloadPresentation({kind: 'show', slug: showSlug})
 }
 
 export function useMediaDownloadsView() {
-    return useMediaDownloadPresentation()
+    return useMediaDownloadPresentation({kind: 'all'})
 }
 
 type TaskLedgerQuery = {

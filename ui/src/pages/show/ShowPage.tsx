@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@awesome.me/kit-83fa1ac5a9/icons'
-import { useDownloadProfilesView, useEpisodePages, useMediaDownloadsView, useShow, useShowSeasons, useStreamProfilesView } from '../../lib/queries'
+import { useDownloadProfilesView, useEpisodePages, useShow, useShowDownloads, useShowSeasons, useStreamProfilesView } from '../../lib/queries'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
@@ -119,7 +119,7 @@ export default function ShowPage() {
     data: downloads,
     isLoading: downloadsLoading,
     error: downloadsError,
-  } = useMediaDownloadsView()
+  } = useShowDownloads(id)
   const { data: downloadProfiles } = useDownloadProfilesView()
   const { data: streamProfiles } = useStreamProfilesView()
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])

@@ -198,9 +198,11 @@ def _scan_seasons(
     require_member_exclusive = membership_plan != "FREE"
 
     for idx, season in enumerate(seasons_asc):
+        prefetched = prefetched_by_season.get(season.id)
         eps = list(
-            prefetched_by_season.get(season.id)
-            or fetch_all_episodes_paginated(
+            prefetched
+            if season.id in prefetched_by_season
+            else fetch_all_episodes_paginated(
                 client,
                 show.slug,
                 ByShowSeason(
@@ -288,4 +290,35 @@ def fetch_all_episodes_paginated(
         )
         if items:
             all_items.extend(items)
+    return all_items
+
+
+def fetch_episodes_until_slug(
+    client: MiddlewareClient,
+    show_slug: str,
+    by: ByShowSeason,
+    *,
+    stop_slug: str,
+) -> List[DwEpisodeRecord]:
+    """Fetch newest pages until the settled local cursor appears.
+
+    If the cursor disappeared or The Daily Wire changed pagination unexpectedly,
+    fall through to the end of the season. That preserves the old complete-scan
+    behavior for the exceptional case instead of silently truncating discovery.
+    """
+    items, next_page_url, has_next = client.get_episodes_paginated(show_slug, by)
+    all_items: List[DwEpisodeRecord] = list(items) if items else []
+
+    if any(item.slug == stop_slug for item in all_items):
+        return all_items
+
+    while has_next and next_page_url:
+        items, next_page_url, has_next = client.get_episodes_paginated(
+            show_slug,
+            ByNextPage(next_page_url=next_page_url),
+        )
+        if items:
+            all_items.extend(items)
+            if any(item.slug == stop_slug for item in items):
+                break
     return all_items

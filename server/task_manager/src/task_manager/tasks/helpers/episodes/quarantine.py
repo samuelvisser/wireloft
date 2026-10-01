@@ -90,16 +90,28 @@ def quarantine_episode_identifier(s: Session, episode: Episode) -> bool:
 
 
 def vacated_canonical_identifiers_for_show(s: Session, show_id: int) -> set[str]:
-    """Return currently free source-backed identifiers displaced by quarantine."""
-    episodes = list(s.scalars(select(Episode).where(Episode.show_id == show_id)))
-    occupied = {episode.episode_identifier for episode in episodes}
-    show_identifier_type = None
-    if episodes:
-        show_identifier_type = EpisodeIdentifier(episodes[0].show.episode_identifier)
+    """Return free source-backed identifiers displaced by quarantined episodes.
+
+    Most shows have no quarantined rows. Avoid materializing the show's complete
+    Episode history merely to discover that fact; only load the exceptional rows
+    and keep the occupied-identifier check scalar.
+    """
+    episodes = list(s.scalars(
+        select(Episode).where(
+            Episode.show_id == show_id,
+            Episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value,
+        )
+    ))
+    if not episodes:
+        return set()
+
+    occupied = set(s.scalars(
+        select(Episode.episode_identifier).where(Episode.show_id == show_id)
+    ))
+    show_identifier_type = EpisodeIdentifier(episodes[0].show.episode_identifier)
+
     vacated: set[str] = set()
     for episode in episodes:
-        if episode.publish_status != EpisodePublishStatus.NO_USABLE_MEDIA.value:
-            continue
         previous = episode.get_meta(PREVIOUS_IDENTIFIER_META_KEY)
         if not previous or previous in occupied:
             continue

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fastapi import HTTPException
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session, selectinload
 
 from backend.db.model_mapping import update_database_fields
 from backend.api.models.media_download import *
-from backend.db.models import Episode, LocalMediaProfileBase, Movie, MovieExtra
+from backend.db.models import Episode, LocalMediaProfileBase, Movie, MovieExtra, MovieExtraSource, Show
 from backend.db.models.media_download import (
     EpisodeMediaDownload,
     MediaDownloadBase,
@@ -77,33 +77,39 @@ def _latest_download_runs(s: Session, media_download_ids: list[int]) -> dict[int
 
 
 @dataclass(frozen=True)
+class _MediaContext:
+    slug: str
+    title: str
+
+
+@dataclass(frozen=True)
+class _EpisodeContext(_MediaContext):
+    episode_identifier: str
+
+
+@dataclass(frozen=True)
+class _ShowContext:
+    slug: str
+    title: str
+
+
+@dataclass(frozen=True)
+class _MovieExtraContext:
+    movie_extra_type: str
+
+
+@dataclass(frozen=True)
 class _MediaDownloadViewSource:
     download: MediaDownloadBase
     profile: LocalMediaProfileBase
     latest_run: TaskRun | None
     queue_position: int | None
-
-    @property
-    def media(self):
-        return self.download.media
-
-    @property
-    def episode(self) -> Episode | None:
-        return self.media if isinstance(self.media, Episode) else None
-
-    @property
-    def movie_extra(self) -> MovieExtra | None:
-        return self.media if isinstance(self.media, MovieExtra) else None
-
-    @property
-    def movie(self) -> Movie | None:
-        if isinstance(self.media, Movie):
-            return self.media
-        return self.movie_extra.movie if self.movie_extra is not None else None
-
-    @property
-    def show(self):
-        return self.episode.show if self.episode is not None else None
+    media: _MediaContext | None
+    episode: _EpisodeContext | None
+    show: _ShowContext | None
+    movie: _MediaContext | None
+    movie_extra: _MovieExtraContext | None
+    downloaded_publish_status: str | None
 
     @property
     def latest_task_is_redownload(self) -> Optional[bool]:
@@ -131,50 +137,159 @@ def get_media_downloads_view(
         *,
         episode_slug: Optional[str] = None,
         movie_slug: Optional[str] = None,
+        show_slug: Optional[str] = None,
         statuses: Optional[list[str]] = None,
         limit: Optional[int] = None,
 ) -> list[MediaDownloadAPIReadView]:
-    """Return persistent media-artifact state plus latest canonical TaskRun facts."""
+    """Return persistent artifact state without lazy-loading media context per row."""
+    episode_table = Episode.__table__
+    movie_table = Movie.__table__
+    movie_extra_table = MovieExtra.__table__
+    movie_extra_source_table = MovieExtraSource.__table__
+    show_table = Show.__table__
+    episode_download_table = EpisodeMediaDownload.__table__
+    parent_movie = movie_table.alias("media_download_parent_movie")
+
     stmt = (
-        select(MediaDownloadBase, LocalMediaProfileBase)
+        select(
+            MediaDownloadBase,
+            LocalMediaProfileBase,
+            episode_table.c.slug.label("episode_slug"),
+            episode_table.c.title.label("episode_title"),
+            episode_table.c.episode_identifier.label("episode_identifier"),
+            show_table.c.slug.label("show_slug"),
+            show_table.c.title.label("show_title"),
+            movie_table.c.slug.label("direct_movie_slug"),
+            movie_table.c.title.label("direct_movie_title"),
+            movie_extra_source_table.c.slug.label("movie_extra_slug"),
+            movie_extra_source_table.c.title.label("movie_extra_title"),
+            movie_extra_table.c.movie_extra_type.label("movie_extra_type"),
+            parent_movie.c.slug.label("parent_movie_slug"),
+            parent_movie.c.title.label("parent_movie_title"),
+            episode_download_table.c.downloaded_publish_status.label("downloaded_publish_status"),
+        )
         .join(
             LocalMediaProfileBase,
             LocalMediaProfileBase.id == MediaDownloadBase.local_media_profile_id,
         )
+        .outerjoin(
+            episode_table,
+            episode_table.c.id == MediaDownloadBase.media_item_id,
+        )
+        .outerjoin(
+            show_table,
+            show_table.c.id == episode_table.c.show_id,
+        )
+        .outerjoin(
+            movie_table,
+            movie_table.c.id == MediaDownloadBase.media_item_id,
+        )
+        .outerjoin(
+            movie_extra_table,
+            movie_extra_table.c.id == MediaDownloadBase.media_item_id,
+        )
+        .outerjoin(
+            movie_extra_source_table,
+            movie_extra_source_table.c.id == movie_extra_table.c.source_id,
+        )
+        .outerjoin(
+            parent_movie,
+            parent_movie.c.id == movie_extra_table.c.movie_id,
+        )
+        .outerjoin(
+            episode_download_table,
+            episode_download_table.c.id == MediaDownloadBase.id,
+        )
+        .options(selectinload(MediaDownloadBase.assets))
         .order_by(MediaDownloadBase.id.desc())
     )
+
     if statuses:
         stmt = stmt.where(MediaDownloadBase.artifact_status.in_(statuses))
     if episode_slug is not None:
-        stmt = (
-            stmt.join(Episode, Episode.id == MediaDownloadBase.media_item_id)
-            .where(Episode.slug == episode_slug)
-        )
-    if limit is not None and episode_slug is not None and movie_slug is None:
+        stmt = stmt.where(episode_table.c.slug == episode_slug)
+    if show_slug is not None:
+        stmt = stmt.where(show_table.c.slug == show_slug)
+    if movie_slug is not None:
+        stmt = stmt.where(or_(
+            movie_table.c.slug == movie_slug,
+            parent_movie.c.slug == movie_slug,
+        ))
+    if limit is not None:
         stmt = stmt.limit(limit)
 
     rows = list(s.execute(stmt))
-    latest_runs = _latest_download_runs(s, [download.id for download, _ in rows])
+    download_ids = [row[0].id for row in rows]
+    latest_runs = _latest_download_runs(s, download_ids)
     queue_positions = get_media_download_queue_positions(s)
 
     views: list[MediaDownloadAPIReadView] = []
-    for download, profile in rows:
+    for row in rows:
+        (
+            download,
+            profile,
+            episode_slug_value,
+            episode_title,
+            episode_identifier,
+            show_slug_value,
+            show_title,
+            direct_movie_slug,
+            direct_movie_title,
+            movie_extra_slug,
+            movie_extra_title,
+            movie_extra_type,
+            parent_movie_slug,
+            parent_movie_title,
+            downloaded_publish_status,
+        ) = row
+
+        episode = (
+            _EpisodeContext(
+                slug=episode_slug_value,
+                title=episode_title,
+                episode_identifier=episode_identifier,
+            )
+            if episode_slug_value is not None
+            else None
+        )
+        show = (
+            _ShowContext(slug=show_slug_value, title=show_title)
+            if show_slug_value is not None
+            else None
+        )
+
+        resolved_movie_slug = direct_movie_slug or parent_movie_slug
+        resolved_movie_title = direct_movie_title or parent_movie_title
+        movie = (
+            _MediaContext(slug=resolved_movie_slug, title=resolved_movie_title)
+            if resolved_movie_slug is not None
+            else None
+        )
+        movie_extra = (
+            _MovieExtraContext(movie_extra_type=movie_extra_type)
+            if movie_extra_slug is not None and movie_extra_type is not None
+            else None
+        )
+        media = episode or (
+            _MediaContext(slug=movie_extra_slug, title=movie_extra_title)
+            if movie_extra_slug is not None
+            else movie
+        )
+
         source = _MediaDownloadViewSource(
             download=download,
             profile=profile,
             latest_run=latest_runs.get(download.id),
             queue_position=queue_positions.get(download.id),
+            media=media,
+            episode=episode,
+            show=show,
+            movie=movie,
+            movie_extra=movie_extra,
+            downloaded_publish_status=downloaded_publish_status,
         )
-        if episode_slug is not None and source.episode is None:
-            continue
-        if movie_slug is not None and (
-            source.movie is None or source.movie.slug != movie_slug
-        ):
-            continue
-
         views.append(MediaDownloadAPIReadView.model_validate(source))
-        if limit is not None and len(views) >= limit:
-            break
+
     return views
 
 def get_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRead:

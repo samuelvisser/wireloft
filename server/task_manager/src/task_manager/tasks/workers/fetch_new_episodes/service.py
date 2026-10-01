@@ -22,6 +22,7 @@ from ...helpers.episodes.identifier import IdentifierMaxValues, identify_episode
 from ...helpers.episodes.mapper import (
     count_total_episodes,
     fetch_all_episodes_paginated,
+    fetch_episodes_until_slug,
     get_dw_episodes_since_ep,
 )
 from ...helpers.episodes.quarantine import vacated_canonical_identifiers_for_show
@@ -207,6 +208,9 @@ async def _fetch_show(
         .limit(1)
     ).scalar_one_or_none()
     latest_final_episode_id = latest_final_episode.id if latest_final_episode is not None else None
+    latest_final_episode_slug = latest_final_episode.slug if latest_final_episode is not None else None
+    latest_final_season_id = latest_final_episode.season_id if latest_final_episode is not None else None
+    vacated_identifiers = vacated_canonical_identifiers_for_show(s, show_id)
 
     monitor_requests: dict[int, dict] = {
         episode.id: _monitor_request_for_db_episode(show, episode)
@@ -249,19 +253,57 @@ async def _fetch_show(
         s.commit()
 
     dw_id_by_slug = {season.slug: season.dw_id for season in all_dw_seasons}
+    seasons_to_scan = list(show.seasons)
+    if latest_final_season_id is not None:
+        cursor_position = next(
+            (
+                index
+                for index, season in enumerate(seasons_to_scan)
+                if season.id == latest_final_season_id
+            ),
+            None,
+        )
+        if cursor_position is not None:
+            seasons_to_scan = seasons_to_scan[:cursor_position + 1]
+
     season_requests = [
         (season.id, season.slug, dw_id_by_slug.get(season.slug))
-        for season in show.seasons
+        for season in seasons_to_scan
     ]
     if not dry_run:
         s.rollback()
 
-    # Fetch complete remote season snapshots without touching the ORM. This is the
-    # largest I/O phase of discovery and may span several requests per season.
+    # Normal incremental scans only need records newer than the latest settled
+    # local episode. A first index or vacated-identifier recovery still uses the
+    # complete snapshot because it intentionally needs historical records.
+    full_history_scan = (
+        initial_index
+        or latest_final_episode_slug is None
+        or bool(vacated_identifiers)
+    )
     prefetched: dict[int, list[DwEpisodeRecord]] = {}
     for season_id, _season_slug, remote_id in season_requests:
         if remote_id is None:
             continue
+
+        if (
+            not full_history_scan
+            and season_id == latest_final_season_id
+            and latest_final_episode_slug is not None
+        ):
+            prefetched[season_id] = fetch_episodes_until_slug(
+                client,
+                show_slug,
+                ByShowSeason(
+                    season_dw_id=remote_id,
+                    membership_plan=membership_plan,
+                    page_size=50,
+                    order_by="CreatedAt_DESC",
+                ),
+                stop_slug=latest_final_episode_slug,
+            )
+            continue
+
         prefetched[season_id] = fetch_all_episodes_paginated(
             client,
             show_slug,
@@ -329,7 +371,7 @@ async def _fetch_show(
         progress_bounds=ProgressBounds(1, upper),
         order=RecordOrder.ASC,
         prefetched_by_season=prefetched,
-        vacated_identifiers=vacated_canonical_identifiers_for_show(s, show_id),
+        vacated_identifiers=vacated_identifiers,
         occupied_identifiers=occupied_identifiers,
     )
 
