@@ -51,6 +51,19 @@
     min-height: 40px;
 }
 
+.logs-pull-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--muted);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.logs-pull-toggle label {
+    cursor: pointer;
+}
+
 .logs-count {
     margin-left: auto;
     color: var(--muted);

@@ -2,9 +2,10 @@ import {useQuery} from '@tanstack/react-query'
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import Select from 'react-select'
+import Switch from 'react-switch'
 
 import PageSubtitle from '../components/common/PageSubtitle'
-import {ApplicationLogPageReadSchema} from '../types/schemas/log'
+import {ApplicationLogPageReadSchema, type ApplicationLogEntryRead} from '../types/schemas/log'
 import './LogsPage.css'
 
 type LogLevelOption = {
@@ -21,6 +22,11 @@ const LEVEL_OPTIONS: readonly LogLevelOption[] = [
     {value: 'CRITICAL', label: 'Critical'},
 ]
 
+function isPullRequestLog(entry: ApplicationLogEntryRead): boolean {
+    return entry.logger === 'uvicorn.access'
+        && /"\w+ \/api\/pull(?:\?|\s)/.test(entry.message)
+}
+
 function formatTimestamp(value: string): string {
     const date = new Date(value)
     return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
@@ -29,6 +35,7 @@ function formatTimestamp(value: string): string {
 export default function LogsPage() {
     const [level, setLevel] = useState('')
     const [search, setSearch] = useState('')
+    const [hidePullRequests, setHidePullRequests] = useState(true)
     const panelRef = useRef<HTMLDivElement | null>(null)
     const stickToBottomRef = useRef(true)
 
@@ -53,8 +60,13 @@ export default function LogsPage() {
         refetchOnMount: 'always',
     })
 
-    const items = logs.data?.items ?? []
-    const total = logs.data?.total ?? 0
+    const canShowPullRequests = level === '' || level === 'INFO'
+    const items = useMemo(() => {
+        const entries = logs.data?.items ?? []
+        if (!canShowPullRequests || !hidePullRequests) return entries
+        return entries.filter((entry) => !isPullRequestLog(entry))
+    }, [canShowPullRequests, hidePullRequests, logs.data?.items])
+    const total = items.length
 
     useEffect(() => {
         const panel = panelRef.current
@@ -98,6 +110,21 @@ export default function LogsPage() {
                         isClearable={false}
                     />
                 </div>
+                {canShowPullRequests && (
+                    <div className="logs-pull-toggle">
+                        <label id="logs-hide-pull-requests-label" htmlFor="logs-hide-pull-requests">Hide Pull requests</label>
+                        <Switch
+                            id="logs-hide-pull-requests"
+                            checked={hidePullRequests}
+                            onChange={setHidePullRequests}
+                            onColor="#0ea5e9"
+                            offColor="#94a3b8"
+                            uncheckedIcon={false}
+                            checkedIcon={false}
+                            aria-labelledby="logs-hide-pull-requests-label"
+                        />
+                    </div>
+                )}
                 <strong className="logs-count">{total.toLocaleString()} {total === 1 ? 'entry' : 'entries'}</strong>
             </div>
 
