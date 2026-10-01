@@ -7,6 +7,7 @@ import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 import FrontendPuller from '../src/lib/puller'
 import {presentDownloadProgress} from '../src/lib/downloadProgress'
 import {presentOperationProgress} from '../src/lib/operationProgress'
+import {invalidateForOperation} from '../src/lib/operationDefinitions'
 import {reconcileOperationSnapshots} from '../src/lib/operationSnapshots'
 import ProgressBar from '../src/components/common/ProgressBar'
 import DownloadProgressStatus from '../src/components/DownloadProgress/DownloadProgressStatus'
@@ -71,6 +72,19 @@ test('bulk has its own estimate and completion counts',()=>{
     const view=presentOperationProgress(operation({kind:'media.bulk_retry',progress:55,progressMeta:{batch:{requested:2,completed:1,finishing:1}}}))!
     assert.equal(view.percent,55);assert.equal(view.label,'~55%');assert.equal(view.estimated,true)
     assert.match(view.detail,/1\/2 complete; 1 finishing/)
+})
+test('media download completion invalidates cached history for that download', async()=>{
+    const client=new QueryClient()
+    const history50=['mediaDownloadHistory',1,50] as const
+    const history100=['mediaDownloadHistory',1,100] as const
+    const otherHistory=['mediaDownloadHistory',2,50] as const
+    client.setQueryData(history50,{items:[]})
+    client.setQueryData(history100,{items:[]})
+    client.setQueryData(otherHistory,{items:[]})
+    await invalidateForOperation(client,operation({status:'SUCCEEDED'}))
+    assert.equal(client.getQueryState(history50)?.isInvalidated,true)
+    assert.equal(client.getQueryState(history100)?.isInvalidated,true)
+    assert.equal(client.getQueryState(otherHistory)?.isInvalidated,false)
 })
 test('stale sequence is rejected but newer attempt and removals win',()=>{
     const previous={mode:'fast' as const,data:{operations:[active()]}}

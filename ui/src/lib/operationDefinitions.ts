@@ -204,6 +204,11 @@ function invalidateMediaDownload(
   const movieSlug = contextString(operation, 'movie_slug')
 
   invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+  if (operation.resourceId != null) {
+    invalidations.push(
+      queryClient.invalidateQueries({queryKey: ['mediaDownloadHistory', operation.resourceId]}),
+    )
+  }
   if (episodeSlug) {
     invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
   }

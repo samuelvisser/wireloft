@@ -496,7 +496,7 @@ export default function MoviePage() {
                                 icon: ['fas', 'rotate'],
                                 disabled: refreshingExtras,
                                 disabledReason: refreshExtrasOperation
-                                    ? 'A movie-extra refresh is already running.'
+                                    ? 'A movie-extra refresh is running.'
                                     : refreshingExtrasStarting
                                         ? 'This task is starting...'
                                         : undefined,
@@ -511,7 +511,7 @@ export default function MoviePage() {
                                 separatorBefore: true,
                                 disabled: redownloadBusy || !hasRedownloadableMedia,
                                 disabledReason: redownloadOperation
-                                    ? 'A re-download operation is already running for this movie.'
+                                    ? 'A re-download operation is running for this movie.'
                                     : !hasRedownloadableMedia
                                         ? 'This movie has no previously downloaded media.'
                                         : undefined,

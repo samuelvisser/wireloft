@@ -176,8 +176,7 @@ def build_download_plan(
         raise ValueError("An asset cannot replace the primary media")
 
     copying = download_mode == "temporary" and publication_requires_copy(str(temporary_root), str(requested_destination))
-    # Work units are estimates for batch aggregation, not time estimates. One
-    # full-media pass is one unit. Tiny assets cannot dominate a movie's work.
+    # Work units are estimates for batch aggregation, not time estimates.
     media_bytes = max(1, source.expected_bytes or 100 * 1024 * 1024)
     stages = [
         StageSpec("prepare", "prepare", "preparing", weight=0.02),
@@ -187,7 +186,7 @@ def build_download_plan(
         weight = max(0.002, (len(asset.content) if asset.content is not None else 512 * 1024) / media_bytes)
         stages.append(StageSpec(
             f"acquire:{asset.id}", "generate_sidecar" if asset.content is not None else "download_sidecar",
-            "transferring", "sidecar", weight, asset.id, depends_on=("prepare",),
+            "transferring", "sidecar", weight=weight, asset_id=asset.id, depends_on=("prepare",),
         ))
     # Dependencies and deadlines are policy, not runtime decisions. Auxiliary
     # acquisition depends only on preparation; a remux can overlap it, whereas
@@ -195,7 +194,7 @@ def build_download_plan(
     media_ready = "media"
     if source.remux_to_mp4:
         stages.append(StageSpec(
-            "remux", "remux", "finishing", "processing",
+            "remux", "remux", "finishing", "processing", weight=0.6,
             depends_on=(media_ready,), deadline_seconds=3600,
         ))
         media_ready = "remux"
@@ -203,7 +202,7 @@ def build_download_plan(
         code = "embed_artwork_metadata" if metadata_tags and artwork_asset_id else "embed_artwork" if artwork_asset_id else "embed_metadata"
         dependencies = (media_ready,) + ((f"acquire:{artwork_asset_id}",) if artwork_asset_id else ())
         stages.append(StageSpec(
-            "embed", code, "finishing", "processing",
+            "embed", code, "finishing", "processing", weight=0.6,
             depends_on=dependencies, deadline_seconds=3600,
         ))
         media_ready = "embed"

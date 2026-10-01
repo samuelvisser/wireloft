@@ -36,6 +36,8 @@ def test_plan_records_dependencies_for_parallel_assets_and_serial_media_mutation
     assert value.stage("publish:nfo").depends_on == ("publish", "acquire:nfo")
     assert value.stage("verify").depends_on == ("publish", "publish:artwork", "publish:nfo")
     assert value.stage("finalize").depends_on == ("verify",)
+    assert value.stage("remux").weight == pytest.approx(0.6)
+    assert value.stage("embed").weight == pytest.approx(0.6)
     assert value.stage("remux").deadline_seconds == 3600
     assert value.stage("embed").deadline_seconds == 3600
     assert value.stage("publish:nfo").deadline_seconds == 1800

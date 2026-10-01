@@ -313,7 +313,7 @@ export default function ShowPage() {
 
   const syncNow = async () => {
     if (syncBusy) {
-      toast(`A sync is already in progress for ${show.title}`)
+      toast(`A sync is in progress for ${show.title}`)
       return
     }
     setSyncStarting(true)
