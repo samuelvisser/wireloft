@@ -19,7 +19,7 @@ def _definition(session, key: str):
     return definition
 
 
-def _run(session, definition, *, resource_id: int, status, progress: int, inputs: dict | None = None):
+def _run(session, definition, *, resource_id: int, status, progress: int | None, inputs: dict | None = None):
     from task_manager.scheduler.db import TaskRun
     from task_manager.scheduler.types import ResourceType
 
@@ -326,6 +326,83 @@ def test_restart_operation_reports_restarted_progress(task_database, monkeypatch
     assert payload is not None
     assert payload.status in {OperationStatus.QUEUED.value, OperationStatus.RUNNING.value}
     assert payload.progress == 50
+
+
+def test_restart_single_non_progress_operation_stays_indeterminate(task_database, monkeypatch):
+    import task_manager.scheduler.registry as registry_module
+    import task_manager.scheduler.scheduler as scheduler_module
+    from task_manager.scheduler.operation_control import restart_operation
+    from task_manager.scheduler.operations import (
+        OperationTargetSpec,
+        create_operation,
+        link_run_to_operations,
+        refresh_operations_for_run,
+    )
+    from task_manager.scheduler.types import OperationStatus, TaskStatus
+
+    monkeypatch.setattr(registry_module, "_REGISTRY", {})
+
+    async def worker(*, resource_id=None, progress=None):
+        return None
+
+    registry_module.task(
+        key="opaque_restart_worker",
+        title="Opaque restart worker",
+        allowed_resource_types=("episode",),
+        tracks_progress=False,
+    )(worker)
+
+    session = task_database()
+    definition = _definition(session, "opaque_restart_worker")
+    operation = create_operation(
+        session,
+        kind="episode.opaque_restart",
+        resource_type="episode",
+        resource_id=17,
+        title="Opaque restart",
+        targets=[
+            OperationTargetSpec(
+                task_key=definition.key,
+                resource_type="episode",
+                resource_id=17,
+            )
+        ],
+    )
+    operation_id = operation.id
+    run = _run(
+        session,
+        definition,
+        resource_id=17,
+        status=TaskStatus.RUNNING,
+        progress=None,
+    )
+    link_run_to_operations(
+        session,
+        run=run,
+        task_key=definition.key,
+        operation_ids=(operation_id,),
+    )
+    refresh_operations_for_run(session, run.id)
+    assert operation.progress is None
+    session.commit()
+    session.close()
+
+    monkeypatch.setattr(
+        scheduler_module,
+        "cancel_pending_operation_jobs",
+        lambda **_kwargs: 0,
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "trigger_now",
+        lambda **_kwargs: "job-id",
+    )
+
+    payload = restart_operation(operation_id)
+    assert payload is not None
+    assert payload.status == OperationStatus.QUEUED.value
+    assert payload.progress is None
+    assert payload.completion_progress == 0
 
 
 def test_restart_operation_cancels_old_and_dispatches_unfinished(task_database, monkeypatch):

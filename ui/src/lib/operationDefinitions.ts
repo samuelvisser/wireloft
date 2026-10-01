@@ -273,7 +273,119 @@ function invalidateMediaDownloadCollection(
   )
 }
 
+function invalidateTaskLedgerDefinition(
+  queryClient: QueryClient,
+  definitionKey: string,
+  invalidations: InvalidationCollector,
+) {
+  invalidations.push(queryClient.invalidateQueries({queryKey: ['taskLedger', definitionKey]}))
+}
+
+function invalidateEpisodeCronJob(
+  queryClient: QueryClient,
+  _operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['shows']}),
+    queryClient.invalidateQueries({queryKey: ['showsView']}),
+    queryClient.invalidateQueries({queryKey: ['episodes']}),
+  )
+}
+
+function invalidateEpisodeAndDownloadCronJob(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateEpisodeCronJob(queryClient, operation, invalidations)
+  invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+}
+
+function invalidateDownloadCronJob(
+  queryClient: QueryClient,
+  _operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+}
+
+function invalidateFindEpisodesCron(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateEpisodeCronJob(queryClient, operation, invalidations)
+  invalidateTaskLedgerDefinition(queryClient, 'fetch_new_episodes', invalidations)
+}
+
+function invalidatePendingEpisodeCron(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateEpisodeAndDownloadCronJob(queryClient, operation, invalidations)
+  invalidateTaskLedgerDefinition(queryClient, 'monitor_pending_episode', invalidations)
+}
+
+function invalidateNoUsableMediaCron(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateEpisodeAndDownloadCronJob(queryClient, operation, invalidations)
+  invalidateTaskLedgerDefinition(queryClient, 'monitor_no_usable_media_episode', invalidations)
+}
+
+function invalidateVerifyDownloadsCron(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateDownloadCronJob(queryClient, operation, invalidations)
+  invalidateTaskLedgerDefinition(queryClient, 'download_profile_worker', invalidations)
+}
+
+function invalidateFileWatcherCron(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateDownloadCronJob(queryClient, operation, invalidations)
+  invalidateTaskLedgerDefinition(queryClient, 'file_watcher', invalidations)
+}
+
 export const frontendOperationDefinitions = {
+  'system.cron.find_episodes': {
+    kind: 'system.cron.find_episodes',
+    resourceType: 'system',
+    label: 'Find new episodes',
+    invalidate: invalidateFindEpisodesCron,
+  },
+  'system.cron.monitor_pending_episodes': {
+    kind: 'system.cron.monitor_pending_episodes',
+    resourceType: 'system',
+    label: 'Monitor pending episodes',
+    invalidate: invalidatePendingEpisodeCron,
+  },
+  'system.cron.monitor_no_usable_media': {
+    kind: 'system.cron.monitor_no_usable_media',
+    resourceType: 'system',
+    label: 'Monitor episodes without usable media',
+    invalidate: invalidateNoUsableMediaCron,
+  },
+  'system.cron.verify_downloads': {
+    kind: 'system.cron.verify_downloads',
+    resourceType: 'system',
+    label: 'Verify downloads',
+    invalidate: invalidateVerifyDownloadsCron,
+  },
+  'system.cron.file_watcher': {
+    kind: 'system.cron.file_watcher',
+    resourceType: 'system',
+    label: 'File watcher',
+    invalidate: invalidateFileWatcherCron,
+  },
   'show.index': {
     kind: 'show.index',
     resourceType: 'show',

@@ -194,7 +194,7 @@ def delete_unavailable_media_download(
     if download.artifact_status not in _DELETABLE_MEDIA_DOWNLOAD_ARTIFACT_STATUSES:
         raise DownloadActionError(
             "conflict",
-            "Only not-downloaded or missing downloads can be deleted",
+            "Only downloads without an available artifact can be deleted",
         )
 
     # Refuse destructive changes when the filesystem cannot be checked. This is

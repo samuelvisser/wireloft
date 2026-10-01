@@ -343,7 +343,7 @@ def restart_operation(operation_id: str) -> OperationSnapshot | None:
     Those targets remain QUEUED and the generic dispatcher is invoked after this
     transaction commits, so restart never bypasses the task's scheduling policy.
     """
-    from task_manager.scheduler.registry import get_task
+    from task_manager.scheduler.registry import get_task, task_tracks_progress
 
     session = get_session()
     cancelable_run_ids: set[int] = set()
@@ -407,8 +407,14 @@ def restart_operation(operation_id: str) -> OperationSnapshot | None:
         )
 
         operation.status = OperationStatus.QUEUED.value
-        operation.progress = int((completed / len(operation.targets)) * 100)
-        operation.completion_progress = operation.progress
+        completion_progress = int((completed / len(operation.targets)) * 100)
+        operation.progress = (
+            completion_progress
+            if len(operation.targets) > 1
+            or task_tracks_progress(operation.targets[0].task_key)
+            else None
+        )
+        operation.completion_progress = completion_progress
         operation.context = {
             key: value
             for key, value in (operation.context or {}).items()

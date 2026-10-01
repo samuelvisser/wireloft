@@ -61,6 +61,11 @@ def task(
     structured result without forcing the worker to know whether it was started
     by the UI, a cron schedule, or another worker.
 
+    ``tracks_progress=False`` declares that the task has no meaningful
+    percentage while it is active. Its TaskRun/TaskOperation progress remains
+    indeterminate until completion, while messages, waits and cancellation still
+    use the normal execution channel.
+
     ``pauses_scheduled_work`` routes the task through WireLoft's critical
     execution lane. Normal scheduler work remains paused from the first attempt
     through any retries until that TaskRun reaches a terminal state.
@@ -162,6 +167,12 @@ def on_event(event_name: str, resource_type: Optional[str] = None):
 
 def get_task(key: str) -> Tuple[TaskMeta, Callable[..., Awaitable[Any]]]:
     return _REGISTRY[key]
+
+
+def task_tracks_progress(key: str) -> bool:
+    """Return whether a registered task exposes determinate execution progress."""
+    registered = _REGISTRY.get(key)
+    return True if registered is None else bool(registered[0].tracks_progress)
 
 
 def all_definitions() -> list[TaskMeta]:
