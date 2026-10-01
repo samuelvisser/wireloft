@@ -15,6 +15,7 @@ from .service import run_file_watcher
 @on_cron(
     cron=get_settings().file_watcher.scan_cron,
     enabled=get_settings().file_watcher.scan_cron_enabled,
+    minimum_interval_ms=get_settings().dw_timeout.min_slow_request_ms,
     resource_type="show",
     resource_id=0,
     coalesce=True,

@@ -83,6 +83,40 @@ def test_disabled_cron_trigger_is_not_registered(monkeypatch):
     assert fake_scheduler.jobs == {}
 
 
+
+def test_cron_minimum_interval_policy_is_opt_in(monkeypatch):
+    import task_manager.scheduler.registry as registry_module
+    import task_manager.scheduler.scheduler as scheduler_module
+    from controller.app import setup_triggers_from_registry
+
+    monkeypatch.setattr(registry_module, "_REGISTRY", {})
+
+    @registry_module.on_cron("* * * * *", minimum_interval_ms=2 * 60 * 1000)
+    @registry_module.task(
+        key="test_paced_cron",
+        title="Paced cron",
+        allowed_resource_types=("show",),
+    )
+    async def paced(*, resource_id=None, progress=None):
+        return None
+
+    @registry_module.on_cron("* * * * *")
+    @registry_module.task(
+        key="test_unpaced_cron",
+        title="Unpaced cron",
+        allowed_resource_types=("show",),
+    )
+    async def unpaced(*, resource_id=None, progress=None):
+        return None
+
+    fake_scheduler = FakeScheduler()
+    monkeypatch.setattr(scheduler_module, "start_scheduler", lambda: fake_scheduler)
+
+    setup_triggers_from_registry()
+
+    assert any("test_unpaced_cron" in job_id for job_id in fake_scheduler.jobs)
+    assert not any("test_paced_cron" in job_id for job_id in fake_scheduler.jobs)
+
 def test_domain_events_preserve_task_operation_context_across_executor_thread():
     from task_manager.events.emitters import emit_event
     from task_manager.events.registry import WireloftEventLinker, wait_for_events

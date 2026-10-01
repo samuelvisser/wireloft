@@ -84,6 +84,12 @@ async def application_lifespan(app: FastAPI):
 
     settings = get_settings()
 
+    # Snapshot file/environment metadata and run settings diagnostics once at
+    # startup. Settings GET requests then serve this in-memory state; config.yml
+    # and environment changes intentionally take effect only after restart.
+    from backend.api.endpoints.settings.service import initialize_settings_runtime_state
+    initialize_settings_runtime_state()
+
     # Acquire the filesystem-recovery lease before controller startup so no
     # normal job can slip through while durable work is being restored. Critical
     # tasks (for example background migrations) use their own scheduler lane and

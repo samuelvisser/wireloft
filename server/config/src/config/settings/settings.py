@@ -5,12 +5,11 @@ import tomllib
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, computed_field, field_validator, model_validator
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import YamlConfigSettingsSource
 
 from config.config import PROJECT_ROOT
 from config.settings.base import SettingsBase, normalize_settings_source_keys
-from config.settings.cron_validation import validate_worker_cron_settings
 from config.settings.submodels import *
 
 
@@ -145,23 +144,6 @@ class AppSettings(SettingsBase):
                 "Must be a valid IANA timezone, such as Europe/Amsterdam"
             ) from exc
         return value
-
-    @model_validator(mode="after")
-    def _validate_worker_cron_minimums(self):
-        validate_worker_cron_settings(
-            min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
-            find_episodes_cron_enabled=self.new_episode_schedule.find_episodes_cron_enabled,
-            find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
-            monitor_pending_episode_cron_enabled=self.new_episode_schedule.monitor_pending_episode_cron_enabled,
-            monitor_pending_episode_cron=self.new_episode_schedule.monitor_pending_episode_cron,
-            monitor_no_usable_media_episode_cron_enabled=self.new_episode_schedule.monitor_no_usable_media_episode_cron_enabled,
-            monitor_no_usable_media_episode_cron=self.new_episode_schedule.monitor_no_usable_media_episode_cron,
-            verify_downloads_cron_enabled=self.download_settings.verify_downloads_cron_enabled,
-            verify_downloads_cron=self.download_settings.verify_downloads_cron,
-            file_watcher_scan_cron_enabled=self.file_watcher.scan_cron_enabled,
-            file_watcher_scan_cron=self.file_watcher.scan_cron,
-        )
-        return self
 
     @classmethod
     def settings_customise_sources(

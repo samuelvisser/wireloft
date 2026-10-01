@@ -26,8 +26,9 @@ def test_recurring_pending_monitor_disables_task_retries(monkeypatch):
         lambda: SimpleNamespace(
             new_episode_schedule=SimpleNamespace(
                 monitor_pending_episode_cron_enabled=True,
-                monitor_pending_episode_cron="*/1 * * * *",
+                monitor_pending_episode_cron="*/2 * * * *",
             ),
+            dw_timeout=SimpleNamespace(min_slow_request_ms=2 * 60 * 1000),
             timezone="Europe/Amsterdam",
         ),
     )

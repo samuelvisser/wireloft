@@ -112,8 +112,15 @@ def setup_triggers_from_registry() -> None:
     from task_manager.scheduler.registry import all_triggers
     from task_manager.scheduler.scheduler import start_scheduler
 
-    if not get_settings().scheduler.enabled:
+    settings = get_settings()
+    if not settings.scheduler.enabled:
         return
+
+    from config.settings.cron_validation import (
+        WorkerCronExpressionError,
+        WorkerCronIntervalError,
+        validate_worker_cron_interval,
+    )
 
     scheduler = start_scheduler()
 
@@ -125,10 +132,26 @@ def setup_triggers_from_registry() -> None:
             if trigger.trigger_type == "cron":
                 if not trigger.enabled:
                     continue
-                cron_trigger = CronTrigger.from_crontab(
-                    trigger.cron,
-                    timezone=get_settings().timezone,
-                )
+                try:
+                    if trigger.minimum_interval_ms is not None:
+                        validate_worker_cron_interval(
+                            trigger.cron,
+                            min_interval_ms=trigger.minimum_interval_ms,
+                            setting_name=task_key,
+                            field_path=("scheduler", "cron"),
+                        )
+                    cron_trigger = CronTrigger.from_crontab(
+                        trigger.cron,
+                        timezone=settings.timezone,
+                    )
+                except (WorkerCronExpressionError, WorkerCronIntervalError, TypeError, ValueError) as exc:
+                    logger.error(
+                        "Skipping invalid cron trigger for %s (%s): %s",
+                        task_key,
+                        trigger.cron,
+                        exc,
+                    )
+                    continue
                 job_id = f"auto-{task_key}-{trigger.resource_type}-{trigger.resource_id}-{index}"
                 scheduler.add_job(
                     execute_task,

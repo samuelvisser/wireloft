@@ -139,8 +139,11 @@ export default function SettingsPage() {
     }, [settingsQuery.data?.environmentOverrides])
 
     const errorFor = useCallback((path: SettingsFieldPath): string | undefined => {
-        return errorAtPath(errors, path)
-    }, [errors])
+        const formError = errorAtPath(errors, path)
+        if (formError) return formError
+        if (dirtyFields.includes(path)) return undefined
+        return settingsQuery.data?.validationIssues.find((issue) => issue.field === path)?.message
+    }, [dirtyFields, errors, settingsQuery.data?.validationIssues])
 
     const isFieldExplicit = useCallback((path: SettingsFieldPath): boolean => {
         return settingsQuery.data?.configuredFields.includes(path) === true
@@ -219,6 +222,24 @@ export default function SettingsPage() {
             </div>
 
             <div>
+                {settingsQuery.data.validationIssues.length > 0 ? (
+                    <div className="settings-validation-issues" role="alert">
+                        <strong>Configuration needs attention</strong>
+                        <p>
+                            WireLoft found settings validation problems during startup. Invalid automatic schedules
+                            were not started. Correct the source shown below, then restart WireLoft to restore those schedules.
+                        </p>
+                        <ul>
+                            {settingsQuery.data.validationIssues.map((issue) => (
+                                <li key={`${issue.field}:${issue.code}`}>
+                                    <span>{issue.message}</span>
+                                    <small>Source: <code>{issue.source}</code></small>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                ) : null}
+
                 {errors.root?.message ? (
                     <div className="form-error-card" role="alert" aria-live="polite">
                         {String(errors.root.message)}

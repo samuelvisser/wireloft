@@ -39,6 +39,7 @@ from .service import run_download_profile_worker
 @on_cron(
     cron=get_settings().download_settings.verify_downloads_cron,
     enabled=get_settings().download_settings.verify_downloads_cron_enabled,
+    minimum_interval_ms=get_settings().dw_timeout.min_slow_request_ms,
     resource_type="download_profile",
     resource_id=0,
     coalesce=True,

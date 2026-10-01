@@ -206,13 +206,19 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
 })
 
 const WORKER_CRON_MINIMUM_MESSAGE = 'This worker runs more often than the configured DailyWire slow-request delay. Increase this cron interval, or change DailyWire → Request pacing → Minimum slow-request delay.'
+const INVALID_CRON_MESSAGE = 'Enter a valid five-part cron expression.'
+
+const CRON_SERVER_ERRORS = {
+    cron_expression_invalid: INVALID_CRON_MESSAGE,
+    worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE,
+}
 
 export const SettingsServerErrors = createServerErrorMapper({
-    'values.newEpisodeSchedule.findEpisodesCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
-    'values.newEpisodeSchedule.monitorPendingEpisodeCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
-    'values.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
-    'values.downloadSettings.verifyDownloadsCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
-    'values.fileWatcher.scanCron': {worker_cron_interval_too_short: WORKER_CRON_MINIMUM_MESSAGE},
+    'values.newEpisodeSchedule.findEpisodesCron': CRON_SERVER_ERRORS,
+    'values.newEpisodeSchedule.monitorPendingEpisodeCron': CRON_SERVER_ERRORS,
+    'values.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron': CRON_SERVER_ERRORS,
+    'values.downloadSettings.verifyDownloadsCron': CRON_SERVER_ERRORS,
+    'values.fileWatcher.scanCron': CRON_SERVER_ERRORS,
 })
 
 export const SETTINGS_FIELD_PATHS = [
@@ -282,11 +288,20 @@ export const SettingsUpdateSchema = z.object({
 })
 export type SettingsUpdate = z.infer<typeof SettingsUpdateSchema>
 
+export const SettingsValidationIssueSchema = z.object({
+    field: SettingsFieldPathSchema,
+    code: z.enum(['cron_expression_invalid', 'worker_cron_interval_too_short']),
+    message: z.string(),
+    source: z.string(),
+})
+export type SettingsValidationIssue = z.infer<typeof SettingsValidationIssueSchema>
+
 export const SettingsReadSchema = z.object({
     values: SettingsValuesSchema,
     configuredFields: z.array(SettingsFieldPathSchema),
     environmentOverrides: z.record(z.string(), z.string()),
     downloadStorage: DownloadStorageInspectionSchema,
+    validationIssues: z.array(SettingsValidationIssueSchema),
     updatedAt: ApiDateTimeSchema.nullable(),
 })
 export type SettingsRead = z.infer<typeof SettingsReadSchema>

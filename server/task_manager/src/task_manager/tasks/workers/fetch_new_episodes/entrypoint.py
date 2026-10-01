@@ -20,6 +20,7 @@ from .service import run_fetch_new_episodes
 @on_cron(
     cron=get_settings().new_episode_schedule.find_episodes_cron,
     enabled=get_settings().new_episode_schedule.find_episodes_cron_enabled,
+    minimum_interval_ms=get_settings().dw_timeout.min_slow_request_ms,
     resource_type="show",
     resource_id=0,
     coalesce=True,

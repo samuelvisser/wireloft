@@ -22,6 +22,14 @@ def get_settings() -> AppSettings:
                 _SETTINGS = AppSettings()
     return _SETTINGS
 
+def replace_settings(settings: AppSettings) -> AppSettings:
+    """Install an already validated settings snapshot without rereading sources."""
+    global _SETTINGS
+    with _settings_lock:
+        _SETTINGS = settings
+        return _SETTINGS
+
+
 def reload_settings(*, overrides: dict | None = None) -> AppSettings:
     """
     Rebuild the settings instance (e.g., after changing config files).

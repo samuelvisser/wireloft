@@ -205,7 +205,7 @@ def test_settings_service_updates_existing_scalar_without_removing_inline_commen
     assert "logLevel: \"DEBUG\"  # keep this explanation" in text
 
 
-def test_environment_overrides_show_effective_values_and_cannot_be_saved(tmp_path, monkeypatch):
+def test_environment_overrides_are_snapshotted_until_settings_reload(tmp_path, monkeypatch):
     from backend.api.endpoints.settings.service import (
         SettingsManagedByEnvironmentError,
         get_ui_settings,
@@ -221,15 +221,22 @@ def test_environment_overrides_show_effective_values_and_cannot_be_saved(tmp_pat
         encoding="utf-8",
     )
     monkeypatch.delenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", raising=False)
-
-    # Prime the process-wide registry with the config.yml value, then add the
-    # deployment override. The Settings response must still show the effective
-    # environment value rather than the cached/configured value.
     _point_settings_at(config_path, monkeypatch)
-    monkeypatch.setenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", "8")
 
-    current = get_ui_settings()
+    initial = get_ui_settings()
     path = "downloadSettings.maxConcurrentDownloads"
+    assert initial.values.download_settings.max_concurrent_downloads == 3
+    assert path not in initial.environment_overrides
+
+    # Runtime environment changes are intentionally ignored until settings are
+    # reloaded (normally a WireLoft restart).
+    monkeypatch.setenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", "8")
+    unchanged = get_ui_settings()
+    assert unchanged.values.download_settings.max_concurrent_downloads == 3
+    assert path not in unchanged.environment_overrides
+
+    reload_settings()
+    current = get_ui_settings()
     assert current.values.download_settings.max_concurrent_downloads == 8
     assert current.environment_overrides[path] == "WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS"
 
@@ -245,7 +252,7 @@ def test_environment_overrides_show_effective_values_and_cannot_be_saved(tmp_pat
     reload_settings()
 
 
-def test_timezone_is_managed_by_tz_and_not_wl_timezone(tmp_path, monkeypatch):
+def test_timezone_is_managed_by_tz_after_settings_reload(tmp_path, monkeypatch):
     from backend.api.endpoints.settings.service import (
         SettingsManagedByEnvironmentError,
         get_ui_settings,
@@ -264,6 +271,11 @@ def test_timezone_is_managed_by_tz_and_not_wl_timezone(tmp_path, monkeypatch):
     assert "timezone" not in without_tz.environment_overrides
 
     monkeypatch.setenv("TZ", "Europe/Amsterdam")
+    still_without_tz = get_ui_settings()
+    assert still_without_tz.values.timezone == "America/Nome"
+    assert "timezone" not in still_without_tz.environment_overrides
+
+    reload_settings()
     with_tz = get_ui_settings()
     assert with_tz.values.timezone == "Europe/Amsterdam"
     assert with_tz.environment_overrides["timezone"] == "TZ"
@@ -294,3 +306,112 @@ def test_settings_response_includes_download_storage_inspection(tmp_path, monkey
     assert current.download_storage.download_root.storage_kind in {
         "local", "remote", "shared_or_virtual", "unknown",
     }
+
+
+def test_external_yaml_changes_wait_for_settings_reload(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import get_ui_settings
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text("logLevel: INFO\n", encoding="utf-8")
+    _point_settings_at(config_path, monkeypatch)
+
+    assert get_ui_settings().values.log_level == "INFO"
+
+    config_path.write_text("logLevel: DEBUG\n", encoding="utf-8")
+    assert get_ui_settings().values.log_level == "INFO"
+
+    reload_settings()
+    assert get_ui_settings().values.log_level == "DEBUG"
+
+
+def test_startup_cron_validation_issue_is_exposed_and_clears_after_save(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import get_ui_settings, save_ui_settings
+    from backend.api.models.settings import SettingsAPIUpdate
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        "newEpisodeSchedule:\n"
+        "  monitorPendingEpisodeCron: \"* * * * *\"\n",
+        encoding="utf-8",
+    )
+    _point_settings_at(config_path, monkeypatch)
+
+    current = get_ui_settings()
+    issue = next(
+        issue
+        for issue in current.validation_issues
+        if issue.field == "newEpisodeSchedule.monitorPendingEpisodeCron"
+    )
+    assert issue.code == "worker_cron_interval_too_short"
+    assert issue.source == "config.yml"
+
+    values = current.values.model_copy(deep=True)
+    values.new_episode_schedule.monitor_pending_episode_cron = "*/2 * * * *"
+    result = save_ui_settings(SettingsAPIUpdate(
+        values=values,
+        changed_fields=["newEpisodeSchedule.monitorPendingEpisodeCron"],
+    ))
+
+    assert not result.validation_issues
+
+
+def test_settings_save_parses_yaml_once_for_multiple_changes(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings import service
+    from backend.api.models.settings import SettingsAPIUpdate
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        "scheduler:\n"
+        "  maxWorkers: 15\n"
+        "  defaultMaxRetries: 3\n",
+        encoding="utf-8",
+    )
+    _point_settings_at(config_path, monkeypatch)
+
+    current = service.get_ui_settings()
+    values = current.values.model_copy(deep=True)
+    values.scheduler.max_workers = 17
+    values.scheduler.default_max_retries = 5
+
+    calls = 0
+    original_compose = service.yaml.compose
+
+    def counting_compose(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original_compose(*args, **kwargs)
+
+    monkeypatch.setattr(service.yaml, "compose", counting_compose)
+    service.save_ui_settings(SettingsAPIUpdate(
+        values=values,
+        changed_fields=[
+            "scheduler.maxWorkers",
+            "scheduler.defaultMaxRetries",
+        ],
+    ))
+
+    assert calls == 1
+
+
+def test_settings_get_uses_cached_runtime_state(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings import service
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text("logLevel: INFO\n", encoding="utf-8")
+    _point_settings_at(config_path, monkeypatch)
+
+    first = service.get_ui_settings()
+
+    def should_not_read_config(_path):
+        raise AssertionError("Settings GET must not reread config.yml")
+
+    def should_not_read_environment():
+        raise AssertionError("Settings GET must not rescan environment sources")
+
+    monkeypatch.setattr(service, "_load_config_document", should_not_read_config)
+    monkeypatch.setattr(service, "_environment_sources", should_not_read_environment)
+
+    second = service.get_ui_settings()
+
+    assert second.values == first.values
+    assert second.configured_fields == first.configured_fields

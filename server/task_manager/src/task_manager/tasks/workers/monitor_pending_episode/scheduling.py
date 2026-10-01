@@ -9,6 +9,11 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
 from config import get_settings
+from config.settings.cron_validation import (
+    WorkerCronExpressionError,
+    WorkerCronIntervalError,
+    validate_worker_cron_interval,
+)
 from task_manager.events.registry import WireloftEventLinker
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.executor import execute_task
@@ -33,12 +38,26 @@ def schedule_episode_monitor(*, resource_id: int) -> str | None:
         logger.info("Pending episode monitor cron is disabled; not scheduling episode %s", resource_id)
         return None
 
+    try:
+        validate_worker_cron_interval(
+            settings.new_episode_schedule.monitor_pending_episode_cron,
+            min_interval_ms=settings.dw_timeout.min_slow_request_ms,
+            setting_name="Monitor pending episodes",
+            field_path=("new_episode_schedule", "monitor_pending_episode_cron"),
+        )
+        trigger = CronTrigger.from_crontab(
+            settings.new_episode_schedule.monitor_pending_episode_cron,
+            timezone=settings.timezone,
+        )
+    except (WorkerCronExpressionError, WorkerCronIntervalError, TypeError, ValueError) as exc:
+        logger.error(
+            "Cannot schedule pending episode monitor because its cron is invalid: %s",
+            exc,
+        )
+        return None
+
     scheduler = start_scheduler()
     job_id = monitor_job_id(resource_id)
-    trigger = CronTrigger.from_crontab(
-        settings.new_episode_schedule.monitor_pending_episode_cron,
-        timezone=settings.timezone,
-    )
     scheduler.add_job(
         execute_task,
         trigger=trigger,

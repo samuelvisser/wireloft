@@ -6,14 +6,18 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from apscheduler.triggers.cron import CronTrigger
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 from pydantic_core import PydanticCustomError
 
 from backend.api.models.base import RequestBase, ResponseBase
 from dailywire_downloader.storage import FilesystemStorageKind
-from config.settings.cron_validation import WorkerCronIntervalError, validate_worker_cron_settings
+from config.settings.cron_validation import (
+    CronExpressionError,
+    WorkerCronExpressionError,
+    validate_cron_expression,
+    worker_cron_validation_errors,
+)
 from config.settings.settings import AppSettings
 from config.settings.submodels import (
     DownloadMode,
@@ -153,14 +157,6 @@ class _SettingsValueModel(BaseModel):
     )
 
 
-def _validate_cron_expression(value: str) -> str:
-    try:
-        CronTrigger.from_crontab(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("Enter a valid five-part cron expression") from exc
-    return value
-
-
 def _validate_http_url(value: str) -> str:
     try:
         parsed = urlparse(value)
@@ -249,11 +245,6 @@ class TrackNewEpisodeScheduleValue(_SettingsValueModel):
     monitor_no_usable_media_episode_cron: str = Field(min_length=1)
     metadata_refresh_intervals: str = Field(min_length=1)
 
-    _validate_find_episodes_cron = field_validator("find_episodes_cron")(_validate_cron_expression)
-    _validate_monitor_pending_episode_cron = field_validator("monitor_pending_episode_cron")(_validate_cron_expression)
-    _validate_monitor_no_usable_media_episode_cron = field_validator(
-        "monitor_no_usable_media_episode_cron"
-    )(_validate_cron_expression)
     _validate_metadata_refresh_intervals = field_validator(
         "metadata_refresh_intervals"
     )(normalize_metadata_refresh_intervals)
@@ -284,7 +275,6 @@ class DownloadSettingsValue(_SettingsValueModel):
     remux_video_to_mp4: bool
     ffmpeg_path: str = Field(min_length=1)
 
-    _validate_verify_downloads_cron = field_validator("verify_downloads_cron")(_validate_cron_expression)
     _validate_download_root = field_validator(
         "download_root", mode="before"
     )(_validate_non_empty_path)
@@ -302,7 +292,6 @@ class FileWatcherSettingsValue(_SettingsValueModel):
     scan_cron: str = Field(min_length=1)
     verify_file_size: bool
 
-    _validate_scan_cron = field_validator("scan_cron")(_validate_cron_expression)
 
 
 class SettingsValues(_SettingsValueModel):
@@ -340,44 +329,6 @@ class SettingsValues(_SettingsValueModel):
         except (ValueError, ZoneInfoNotFoundError) as exc:
             raise ValueError("Enter a valid IANA timezone, such as Europe/Amsterdam") from exc
         return value
-
-    @model_validator(mode="after")
-    def _validate_worker_cron_minimums(self):
-        try:
-            validate_worker_cron_settings(
-                min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
-                find_episodes_cron_enabled=self.new_episode_schedule.find_episodes_cron_enabled,
-                find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
-                monitor_pending_episode_cron_enabled=self.new_episode_schedule.monitor_pending_episode_cron_enabled,
-                monitor_pending_episode_cron=self.new_episode_schedule.monitor_pending_episode_cron,
-                monitor_no_usable_media_episode_cron_enabled=self.new_episode_schedule.monitor_no_usable_media_episode_cron_enabled,
-                monitor_no_usable_media_episode_cron=self.new_episode_schedule.monitor_no_usable_media_episode_cron,
-                verify_downloads_cron_enabled=self.download_settings.verify_downloads_cron_enabled,
-                verify_downloads_cron=self.download_settings.verify_downloads_cron,
-                file_watcher_scan_cron_enabled=self.file_watcher.scan_cron_enabled,
-                file_watcher_scan_cron=self.file_watcher.scan_cron,
-            )
-        except WorkerCronIntervalError as exc:
-            value: Any = self
-            for segment in exc.field_path:
-                value = getattr(value, segment)
-            alias_path = tuple(to_camel(segment) for segment in exc.field_path)
-            error_type = PydanticCustomError(
-                "worker_cron_interval_too_short",
-                "{message}",
-                {"message": str(exc)},
-            )
-            raise ValidationError.from_exception_data(
-                self.__class__.__name__,
-                [
-                    {
-                        "type": error_type,
-                        "loc": alias_path,
-                        "input": value,
-                    }
-                ],
-            ) from exc
-        return self
 
     @classmethod
     def from_app_settings(cls, settings: AppSettings) -> "SettingsValues":
@@ -422,6 +373,104 @@ class SettingsAPIUpdate(RequestBase):
             raise ValueError("changedFields must not contain duplicates")
         return values
 
+    @model_validator(mode="after")
+    def _validate_worker_crons(self):
+        changed = set(self.changed_fields)
+        validate_all_intervals = "dwTimeout.minSlowRequestMs" in changed
+        enable_fields = {
+            "newEpisodeSchedule.findEpisodesCron": "newEpisodeSchedule.findEpisodesCronEnabled",
+            "newEpisodeSchedule.monitorPendingEpisodeCron": "newEpisodeSchedule.monitorPendingEpisodeCronEnabled",
+            "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron": "newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled",
+            "downloadSettings.verifyDownloadsCron": "downloadSettings.verifyDownloadsCronEnabled",
+            "fileWatcher.scanCron": "fileWatcher.scanCronEnabled",
+        }
+        cron_values = {
+            "newEpisodeSchedule.findEpisodesCron": self.values.new_episode_schedule.find_episodes_cron,
+            "newEpisodeSchedule.monitorPendingEpisodeCron": self.values.new_episode_schedule.monitor_pending_episode_cron,
+            "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron": self.values.new_episode_schedule.monitor_no_usable_media_episode_cron,
+            "downloadSettings.verifyDownloadsCron": self.values.download_settings.verify_downloads_cron,
+            "fileWatcher.scanCron": self.values.file_watcher.scan_cron,
+        }
+
+        line_errors = []
+        invalid_changed_fields: set[str] = set()
+        for field, expression in cron_values.items():
+            if field not in changed:
+                continue
+            try:
+                validate_cron_expression(expression)
+            except CronExpressionError:
+                invalid_changed_fields.add(field)
+                line_errors.append({
+                    "type": PydanticCustomError(
+                        "cron_expression_invalid",
+                        "{message}",
+                        {"message": "Enter a valid five-part cron expression"},
+                    ),
+                    "loc": ("values", *field.split(".")),
+                    "input": expression,
+                })
+
+        policy_errors = worker_cron_validation_errors(
+            min_slow_request_ms=self.values.dw_timeout.min_slow_request_ms,
+            find_episodes_cron_enabled=self.values.new_episode_schedule.find_episodes_cron_enabled,
+            find_episodes_cron=self.values.new_episode_schedule.find_episodes_cron,
+            monitor_pending_episode_cron_enabled=self.values.new_episode_schedule.monitor_pending_episode_cron_enabled,
+            monitor_pending_episode_cron=self.values.new_episode_schedule.monitor_pending_episode_cron,
+            monitor_no_usable_media_episode_cron_enabled=self.values.new_episode_schedule.monitor_no_usable_media_episode_cron_enabled,
+            monitor_no_usable_media_episode_cron=self.values.new_episode_schedule.monitor_no_usable_media_episode_cron,
+            verify_downloads_cron_enabled=self.values.download_settings.verify_downloads_cron_enabled,
+            verify_downloads_cron=self.values.download_settings.verify_downloads_cron,
+            file_watcher_scan_cron_enabled=self.values.file_watcher.scan_cron_enabled,
+            file_watcher_scan_cron=self.values.file_watcher.scan_cron,
+        )
+
+        for error in policy_errors:
+            field = ".".join(to_camel(segment) for segment in error.field_path)
+            if field in invalid_changed_fields:
+                continue
+
+            directly_affected = field in changed or enable_fields[field] in changed
+            if isinstance(error, WorkerCronExpressionError):
+                if not directly_affected:
+                    continue
+                error_type = PydanticCustomError(
+                    "cron_expression_invalid",
+                    "{message}",
+                    {"message": str(error)},
+                )
+            else:
+                if not validate_all_intervals and not directly_affected:
+                    continue
+                error_type = PydanticCustomError(
+                    "worker_cron_interval_too_short",
+                    "{message}",
+                    {"message": str(error)},
+                )
+
+            value: Any = self.values
+            for segment in error.field_path:
+                value = getattr(value, segment)
+            line_errors.append({
+                "type": error_type,
+                "loc": ("values", *(to_camel(segment) for segment in error.field_path)),
+                "input": value,
+            })
+
+        if line_errors:
+            raise ValidationError.from_exception_data(
+                self.__class__.__name__,
+                line_errors,
+            )
+        return self
+
+
+class SettingsValidationIssueValue(ResponseBase):
+    field: SettingFieldPath
+    code: Literal["cron_expression_invalid", "worker_cron_interval_too_short"]
+    message: str
+    source: str
+
 
 class FilesystemInspectionValue(ResponseBase):
     path: str
@@ -441,4 +490,5 @@ class SettingsAPIRead(ResponseBase):
     configured_fields: list[SettingFieldPath]
     environment_overrides: dict[str, str]
     download_storage: DownloadStorageInspectionValue
+    validation_issues: list[SettingsValidationIssueValue] = Field(default_factory=list)
     updated_at: datetime | None = None

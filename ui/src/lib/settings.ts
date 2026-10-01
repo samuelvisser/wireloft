@@ -54,7 +54,7 @@ export function useSettings() {
             })
             return readSettings(response, 'Failed to load settings')
         },
-        refetchOnMount: 'always',
+        staleTime: Infinity,
     })
 }
 

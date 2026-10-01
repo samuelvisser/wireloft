@@ -26,6 +26,7 @@ class TriggerMeta:
     resource_type: Optional[str] = None  # Resource type for the trigger
     resource_id: Optional[int] = None  # Resource ID (0 = global, None = passed via event)
     coalesce: bool = True  # Whether to coalesce multiple pending jobs
+    minimum_interval_ms: Optional[int] = None  # Optional policy minimum for this cron trigger
 
 
 @dataclass
@@ -115,6 +116,7 @@ def on_cron(
     resource_id: int = 0,
     coalesce: bool = True,
     enabled: bool = True,
+    minimum_interval_ms: Optional[int] = None,
 ):
     """Decorator to add a cron-based trigger to a task.
 
@@ -124,6 +126,7 @@ def on_cron(
         resource_id: Resource ID to run on
         coalesce: Whether to coalesce multiple pending jobs
         enabled: Whether this cron trigger should be registered
+        minimum_interval_ms: Optional minimum interval enforced before registration
     """
     def decorator(fn: Callable[..., Awaitable[Any]]):
         if not hasattr(fn, '_task_meta'):
@@ -136,6 +139,7 @@ def on_cron(
             resource_type=resource_type,
             resource_id=resource_id,
             coalesce=coalesce,
+            minimum_interval_ms=minimum_interval_ms,
         )
         fn._task_meta.triggers.append(trigger)
         return fn
