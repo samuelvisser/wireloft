@@ -16,7 +16,7 @@ For most installations, the defaults are a good balance between keeping content 
 | Tracked files on disk | Every 10 minutes |
 | Stalled task timeout | 20 minutes without progress |
 
-All of these can be adjusted from **Settings**, but there is usually no need to make them more aggressive. Each cron-based schedule can also be disabled independently from its cron editor without removing its configured expression.
+All of these can be adjusted from **Settings**, but there is usually no need to make them more aggressive.
 
 ## Finding new episodes
 
