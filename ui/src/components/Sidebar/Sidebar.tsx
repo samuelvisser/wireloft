@@ -23,11 +23,11 @@ const items: NavItem[] = [
     },
     {
         label: 'Config',
-        icon: ['fas', 'gear'],
+        icon: ['fas', 'sliders'],
         children: [
-            {path: '/settings', label: 'Settings', icon: ['fas', 'sliders']},
+            {path: '/settings', label: 'Settings', icon: ['fas', 'gear']},
+            {path: '/tasks', label: 'Tasks', icon: ['fas', 'bars-progress']},
             {path: '/logs', label: 'Log', icon: ['fas', 'file-lines']},
-            {path: '/tasks', label: 'Tasks', icon: ['fas', 'list']},
         ],
     },
 ]

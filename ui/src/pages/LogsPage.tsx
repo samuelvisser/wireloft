@@ -81,7 +81,7 @@ export default function LogsPage() {
                 <PageSubtitle summary={<>Application-wide WireLoft log output.</>}>
                     <p>
                         Logs from the backend, scheduler, task workers, downloads and web server are collected here.
-                        The most recent 20,000 records from the current server process are retained.
+                        The latest 20,000 records from the current server process are retained.
                     </p>
                 </PageSubtitle>
             </div>
