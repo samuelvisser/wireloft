@@ -98,9 +98,9 @@ def get_download_profile_episodes(
     if not allowed_types:
         return []
 
-    eligible_statuses = [EpisodePublishStatus.PUBLISHED_FINAL.value]
+    eligible_statuses = [EpisodePublishStatus.PUBLISHED_FINAL]
     if is_podcast and profile.download_with_countdown:
-        eligible_statuses.append(EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value)
+        eligible_statuses.append(EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN)
 
     published_at = func.coalesce(Episode.published_date, Episode.went_live_date)
     stmt = select(Episode).where(
