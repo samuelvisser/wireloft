@@ -19,6 +19,7 @@ from task_manager.scheduler.db import (
     TaskRun,
 )
 from task_manager.scheduler.operation_control import operation_cancel_requested, run_cancel_requested
+from task_manager.scheduler.registry import task_tracks_progress
 from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import (
     OperationDependencyCancelPolicy,
@@ -477,6 +478,32 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
     return _refresh_direct_operation(operation)
 
 
+def _target_tracks_progress(target: TaskOperationTarget) -> bool:
+    return task_tracks_progress(target.task_key)
+
+
+def _direct_progress_is_determinate(targets: Sequence[TaskOperationTarget]) -> bool:
+    # Multiple opaque tasks still provide useful aggregate completion progress:
+    # 3/10 finished is determinate even when none of the individual workers can
+    # report an in-task percentage.
+    return len(targets) > 1 or any(_target_tracks_progress(target) for target in targets)
+
+
+def _composite_progress_is_determinate(
+        targets: Sequence[TaskOperationTarget],
+        dependencies: Sequence[TaskOperationDependency],
+) -> bool:
+    total_units = len(targets) + len(dependencies)
+    if total_units > 1:
+        return True
+    if targets:
+        return _target_tracks_progress(targets[0])
+    if dependencies:
+        child = dependencies[0].child_operation
+        return child is None or child.progress is not None
+    return False
+
+
 def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
     targets = list(operation.targets)
     if not targets:
@@ -497,7 +524,9 @@ def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
         if _task_status(run.status) not in _TERMINAL_TASK_STATUSES
         and _run_reports_worker_progress(run)
     ]
-    if worker_progress_runs:
+    if not _direct_progress_is_determinate(targets) and len(terminal_runs) < total:
+        operation.progress = None
+    elif worker_progress_runs:
         progress_total = 0
         for run in effective_runs:
             if run is None:
@@ -620,8 +649,13 @@ def _refresh_composite_operation(operation: TaskOperation) -> TaskOperation:
         completed_weight += float(dependency.weight) * fraction
 
     aggregate_progress = int(100 * completed_weight / total_weight) if total_weight else 0
-    operation.progress = max(0, min(100, aggregate_progress))
-    operation.completion_progress = operation.progress
+    aggregate_progress = max(0, min(100, aggregate_progress))
+    operation.progress = (
+        aggregate_progress
+        if _composite_progress_is_determinate(targets, dependencies)
+        else None
+    )
+    operation.completion_progress = aggregate_progress
 
     starts = [
         run.started_at for run in effective_runs

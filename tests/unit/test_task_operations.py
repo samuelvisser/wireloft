@@ -39,7 +39,7 @@ def _run(
         *,
         resource_type,
         resource_id: int,
-        progress: int = 0,
+        progress: int | None = 0,
         status=None,
         inputs: dict | None = None,
 ):
@@ -107,6 +107,66 @@ def test_operation_coalesces_onto_compatible_automatic_run():
         association = session.query(TaskOperationRun).one()
         assert association.operation_id == operation.id
         assert association.task_run_id == run.id
+    finally:
+        session.close()
+
+
+def test_single_non_progress_target_operation_is_indeterminate(monkeypatch):
+    import task_manager.scheduler.registry as registry_module
+    from task_manager.scheduler.operations import OperationTargetSpec, create_operation, refresh_operation
+    from task_manager.scheduler.types import OperationStatus, ResourceType, TaskStatus
+
+    monkeypatch.setattr(registry_module, "_REGISTRY", {})
+
+    async def worker(*, resource_id=None, progress=None):
+        return None
+
+    registry_module.task(
+        key="opaque_worker",
+        title="Opaque worker",
+        allowed_resource_types=("show",),
+        tracks_progress=False,
+    )(worker)
+
+    session = _session()
+    try:
+        definition = _definition(session, "opaque_worker")
+        run = _run(
+            session,
+            definition,
+            resource_type=ResourceType.SHOW,
+            resource_id=42,
+            progress=None,
+        )
+
+        operation = create_operation(
+            session,
+            kind="system.opaque",
+            resource_type="show",
+            resource_id=42,
+            title="Opaque work",
+            targets=[
+                OperationTargetSpec(
+                    task_key=definition.key,
+                    resource_type="show",
+                    resource_id=42,
+                )
+            ],
+        )
+
+        assert operation.status == OperationStatus.RUNNING.value
+        assert operation.progress is None
+        assert operation.completion_progress == 0
+
+        run.status = TaskStatus.SUCCEEDED
+        run.progress = 100
+        run.finished_at = datetime.now(timezone.utc)
+        session.flush()
+        refresh_operation(session, operation.id)
+
+        assert operation.status == OperationStatus.SUCCEEDED.value
+        assert operation.progress == 100
+        assert operation.completion_progress == 100
     finally:
         session.close()
 
@@ -394,6 +454,88 @@ def test_multi_target_operation_falls_back_to_completed_targets_without_worker_p
 
         assert operation.status == OperationStatus.RUNNING.value
         assert operation.progress == 50
+    finally:
+        session.close()
+
+
+def test_multi_target_non_progress_operation_uses_completed_target_progress(monkeypatch):
+    import task_manager.scheduler.registry as registry_module
+    from task_manager.scheduler.operations import (
+        OperationTargetSpec,
+        create_operation,
+        link_run_to_operations,
+        refresh_operation,
+    )
+    from task_manager.scheduler.types import OperationStatus, ResourceType, TaskStatus
+
+    monkeypatch.setattr(registry_module, "_REGISTRY", {})
+
+    async def worker(*, resource_id=None, progress=None):
+        return None
+
+    registry_module.task(
+        key="opaque_batch_worker",
+        title="Opaque batch worker",
+        allowed_resource_types=("episode",),
+        tracks_progress=False,
+    )(worker)
+
+    session = _session()
+    try:
+        definition = _definition(session, "opaque_batch_worker")
+        operation = create_operation(
+            session,
+            kind="show.opaque_batch",
+            resource_type="show",
+            resource_id=5,
+            title="Opaque batch",
+            targets=[
+                OperationTargetSpec(
+                    task_key=definition.key,
+                    resource_type="episode",
+                    resource_id=episode_id,
+                    slot_key=f"episode:{episode_id}",
+                )
+                for episode_id in (101, 102)
+            ],
+        )
+
+        finished = _run(
+            session,
+            definition,
+            resource_type=ResourceType.EPISODE,
+            resource_id=101,
+            progress=100,
+            status=TaskStatus.SUCCEEDED,
+        )
+        finished.finished_at = datetime.now(timezone.utc)
+        active = _run(
+            session,
+            definition,
+            resource_type=ResourceType.EPISODE,
+            resource_id=102,
+            progress=None,
+        )
+        link_run_to_operations(
+            session,
+            run=finished,
+            task_key=definition.key,
+            operation_ids=(operation.id,),
+            operation_slot="episode:101",
+        )
+        link_run_to_operations(
+            session,
+            run=active,
+            task_key=definition.key,
+            operation_ids=(operation.id,),
+            operation_slot="episode:102",
+        )
+
+        refresh_operation(session, operation.id)
+
+        assert operation.status == OperationStatus.RUNNING.value
+        assert operation.progress == 50
+        assert operation.completion_progress == 50
     finally:
         session.close()
 
