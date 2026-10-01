@@ -202,6 +202,7 @@ export default function SettingsPage() {
         errorFor,
         isFieldExplicit,
         isFieldDirty,
+        downloadStorage: settingsQuery.data.downloadStorage,
     }
 
     return (

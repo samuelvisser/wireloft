@@ -13,6 +13,7 @@ from typing import Literal
 from uuid import uuid4
 
 from .errors import DownloadError
+from .storage.filesystem import FilesystemStorageKind, inspect_filesystem
 
 Phase = Literal["preparing", "transferring", "finishing", "complete"]
 Resource = Literal["none", "media", "sidecar", "processing"]
@@ -146,6 +147,29 @@ def publication_requires_copy(temporary_root: str, destination: str) -> bool:
         return True
 
 
+def _processing_weights(storage_kind: FilesystemStorageKind) -> tuple[float, float]:
+    """Estimate stream-copy work from the filesystem that hosts intermediate media."""
+    if storage_kind is FilesystemStorageKind.LOCAL:
+        return 0.08, 0.08
+    if storage_kind is FilesystemStorageKind.REMOTE:
+        return 0.55, 0.60
+    if storage_kind is FilesystemStorageKind.SHARED_OR_VIRTUAL:
+        return 0.20, 0.20
+    return 0.60, 0.60
+
+
+def _publication_weight(storage_kind: FilesystemStorageKind, *, copying: bool) -> float:
+    if not copying:
+        return 0.01
+    if storage_kind is FilesystemStorageKind.REMOTE:
+        return 0.12
+    if storage_kind is FilesystemStorageKind.LOCAL:
+        return 0.08
+    if storage_kind is FilesystemStorageKind.SHARED_OR_VIRTUAL:
+        return 0.12
+    return 0.25
+
+
 def build_download_plan(
     *,
     source: ResolvedDownloadSource,
@@ -176,7 +200,15 @@ def build_download_plan(
         raise ValueError("An asset cannot replace the primary media")
 
     copying = download_mode == "temporary" and publication_requires_copy(str(temporary_root), str(requested_destination))
-    # Work units are estimates for batch aggregation, not time estimates.
+    processing_path = Path(temporary_root) if download_mode == "temporary" else Path(requested_destination).parent
+    processing_storage = inspect_filesystem(processing_path).storage_kind
+    destination_storage = inspect_filesystem(Path(requested_destination).parent).storage_kind
+    remux_weight, embed_weight = _processing_weights(processing_storage)
+    publish_weight = _publication_weight(destination_storage, copying=copying)
+
+    # Work units are estimates for batch aggregation. Stream-copy stages are
+    # dominated by the filesystem hosting their media, so local staging is much
+    # lighter than processing directly on network storage.
     media_bytes = max(1, source.expected_bytes or 100 * 1024 * 1024)
     stages = [
         StageSpec("prepare", "prepare", "preparing", weight=0.02),
@@ -194,7 +226,7 @@ def build_download_plan(
     media_ready = "media"
     if source.remux_to_mp4:
         stages.append(StageSpec(
-            "remux", "remux", "finishing", "processing", weight=0.6,
+            "remux", "remux", "finishing", "processing", weight=remux_weight,
             depends_on=(media_ready,), deadline_seconds=3600,
         ))
         media_ready = "remux"
@@ -202,12 +234,12 @@ def build_download_plan(
         code = "embed_artwork_metadata" if metadata_tags and artwork_asset_id else "embed_artwork" if artwork_asset_id else "embed_metadata"
         dependencies = (media_ready,) + ((f"acquire:{artwork_asset_id}",) if artwork_asset_id else ())
         stages.append(StageSpec(
-            "embed", code, "finishing", "processing", weight=0.6,
+            "embed", code, "finishing", "processing", weight=embed_weight,
             depends_on=dependencies, deadline_seconds=3600,
         ))
         media_ready = "embed"
     stages.append(StageSpec(
-        "publish", "publish_media", "finishing", "processing", 1.0 if copying else 0.01,
+        "publish", "publish_media", "finishing", "processing", publish_weight,
         depends_on=(media_ready, *(f"acquire:{asset.id}" for asset in assets)),
         deadline_seconds=3600,
     ))

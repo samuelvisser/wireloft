@@ -83,8 +83,8 @@ These settings are available under **Settings → Downloads**.
 | Setting | Environment variable | Default | What it does |
 | --- | --- | --- | --- |
 | `downloadSettings.downloadRoot` | `WL_DOWNLOAD_SETTINGS__DOWNLOAD_ROOT` | `<project>/downloads` | Root directory used for paths beginning with `/downloads/`. In the supplied Docker layout, set/use `/downloads` to target the mounted media volume. |
-| `downloadSettings.downloadMode` | `WL_DOWNLOAD_SETTINGS__DOWNLOAD_MODE` | `direct` | System default: `direct` or `temporary`. Local Media Profiles can inherit or override it. |
-| `downloadSettings.temporaryDownloadRoot` | `WL_DOWNLOAD_SETTINGS__TEMPORARY_DOWNLOAD_ROOT` | `<download root>/.wireloft-temp` | Staging directory used by temporary download mode. When omitted, its default follows the download root; an explicit value stays independent. |
+| `downloadSettings.downloadMode` | `WL_DOWNLOAD_SETTINGS__DOWNLOAD_MODE` | `temporary` | System default: stage downloads in the temporary folder before publishing them. Local Media Profiles can inherit or override it. |
+| `downloadSettings.temporaryDownloadRoot` | `WL_DOWNLOAD_SETTINGS__TEMPORARY_DOWNLOAD_ROOT` | system temp directory (`/tmp/wireloft-downloads` in Docker) | Staging directory used by temporary download mode. Keeping this on local storage avoids repeated remux/metadata I/O against a network media library. |
 | `downloadSettings.rssCacheRoot` | `WL_DOWNLOAD_SETTINGS__RSS_CACHE_ROOT` | `<download root>/.wireloft-rss-cache` | Root for media cached while fulfilling RSS requests. When omitted, its default follows the download root; an explicit value stays independent. |
 | `downloadSettings.rssCacheRetentionSeconds` | `WL_DOWNLOAD_SETTINGS__RSS_CACHE_RETENTION_SECONDS` | `604800` (7 days) | Retains cached RSS media for this long since it was last served. Expired files are cleaned at startup and while new cache entries are prepared. |
 | `downloadSettings.maxConcurrentDownloads` | `WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS` | `5` | Maximum primary-media transfers running at once. Their slots are released while post-processing continues. |
@@ -98,7 +98,7 @@ These settings are available under **Settings → Downloads**.
 
 ### Direct versus temporary mode
 
-**Direct** is the simple default. **Temporary** keeps incomplete download/processing work in the temporary folder and publishes the completed media into the final library at the end.
+**Temporary** is the default. It keeps incomplete download and processing work in the local temporary folder and publishes the completed media into the final library at the end. This is especially useful when `/downloads` is SMB, NFS, or other network storage because remuxing and metadata embedding otherwise rewrite the full media file across the network. **Direct** writes and processes media in the destination instead.
 
 Temporary mode is useful when a media server watches the destination and should never see partial files. See [[Downloads-and-File-Integrity]] and [[Local-Media-Profiles]].
 
