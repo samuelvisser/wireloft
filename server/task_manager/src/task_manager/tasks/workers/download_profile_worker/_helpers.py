@@ -93,13 +93,19 @@ def get_download_profile_episodes(
     Apply the stable profile predicates in SQL so large shows do not materialize
     thousands of Episode ORM objects merely to discard nearly all of them.
     """
-    is_podcast = isinstance(profile, PodcastDownloadProfile)
+    podcast_profile = (
+        profile if isinstance(profile, PodcastDownloadProfile) else None
+    )
+    series_profile = (
+        profile if isinstance(profile, SeriesDownloadProfile) else None
+    )
+
     allowed_types = set(profile.ep_id_type_list)
     if not allowed_types:
         return []
 
     eligible_statuses = [EpisodePublishStatus.PUBLISHED_FINAL]
-    if is_podcast and profile.download_with_countdown:
+    if podcast_profile is not None and podcast_profile.download_with_countdown:
         eligible_statuses.append(EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN)
 
     published_at = func.coalesce(Episode.published_date, Episode.went_live_date)
@@ -109,20 +115,29 @@ def get_download_profile_episodes(
         _episode_identifier_type_predicate(allowed_types),
     )
 
-    needs_global_podcast_scope = is_podcast and profile.download_episode_count > 0
+    needs_global_podcast_scope = (
+        podcast_profile is not None
+        and podcast_profile.download_episode_count > 0
+    )
     if only_episode is not None and not needs_global_podcast_scope:
         stmt = stmt.where(Episode.id == only_episode.id)
 
-    if is_podcast and profile.download_days_in_past > 0:
-        cutoff = _utc_now() - timedelta(days=profile.download_days_in_past)
+    if (
+        podcast_profile is not None
+        and podcast_profile.download_days_in_past > 0
+    ):
+        cutoff = _utc_now() - timedelta(days=podcast_profile.download_days_in_past)
         # Preserve the old behavior where an episode with no publication instant
         # was not rejected by the days-in-past rule alone.
         stmt = stmt.where(or_(published_at.is_(None), published_at >= cutoff))
 
-    if is_podcast and profile.download_starting_from is not None:
+    if (
+        podcast_profile is not None
+        and podcast_profile.download_starting_from is not None
+    ):
         wireloft_timezone = ZoneInfo(get_settings().timezone)
         local_start = datetime.combine(
-            profile.download_starting_from,
+            podcast_profile.download_starting_from,
             time.min,
             tzinfo=wireloft_timezone,
         )
@@ -132,14 +147,16 @@ def get_download_profile_episodes(
             published_at >= utc_start,
         )
 
-    if isinstance(profile, SeriesDownloadProfile):
-        allowed_season_ids = {season.id for season in profile.seasons}
+    if series_profile is not None:
+        allowed_season_ids = {season.id for season in series_profile.seasons}
         season_predicates = []
         if allowed_season_ids:
             season_predicates.append(Episode.season_id.in_(allowed_season_ids))
 
-        if profile.include_upcoming_seasons and profile.seasons:
-            max_chosen_season_index = max(season.index for season in profile.seasons)
+        if series_profile.include_upcoming_seasons and series_profile.seasons:
+            max_chosen_season_index = max(
+                season.index for season in series_profile.seasons
+            )
             season_predicates.append(
                 Episode.season.has(Season.index > max_chosen_season_index)
             )
@@ -148,11 +165,14 @@ def get_download_profile_episodes(
             return []
         stmt = stmt.where(or_(*season_predicates))
 
-    if is_podcast and profile.download_episode_count > 0:
+    if (
+        podcast_profile is not None
+        and podcast_profile.download_episode_count > 0
+    ):
         stmt = (
             stmt
             .order_by(published_at.desc(), Episode.id.desc())
-            .limit(profile.download_episode_count)
+            .limit(podcast_profile.download_episode_count)
         )
 
     eligible = list(s.scalars(stmt))
