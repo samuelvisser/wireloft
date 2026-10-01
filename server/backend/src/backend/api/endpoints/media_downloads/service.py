@@ -184,6 +184,29 @@ def get_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRe
     return MediaDownloadAPIRead.model_validate(item)
 
 
+def delete_missing_media_download(s: Session, media_download_id: int) -> None:
+    """Delete a persistent download record only when its artifact is still missing."""
+    download: Optional[MediaDownloadBase] = s.get(MediaDownloadBase, media_download_id)
+    if download is None:
+        raise HTTPException(status_code=404, detail="Media download not found")
+
+    _assert_no_active_attempt(s, download)
+    if download.artifact_status != MediaDownloadArtifactStatus.MISSING.value:
+        raise HTTPException(status_code=409, detail="Only missing downloads can be deleted")
+
+    # Reconcile once more immediately before deletion. This protects a file that
+    # was restored or renamed after the Downloads page last refreshed.
+    current_path = resolve_media_download_file(s, download)
+    if current_path is not None or download.artifact_status != MediaDownloadArtifactStatus.MISSING.value:
+        raise HTTPException(
+            status_code=409,
+            detail="The download is no longer missing and cannot be deleted",
+        )
+
+    s.delete(download)
+    s.flush()
+
+
 def _assert_no_active_attempt(s: Session, download: MediaDownloadBase) -> None:
     if get_active_media_download_operation(s, download.id) is not None:
         raise HTTPException(status_code=409, detail="This download already has an active operation")

@@ -703,3 +703,78 @@ def test_redownload_dependencies_freeze_weights_and_preserve_child_ownership(mon
     finally:
         session.close()
         engine.dispose()
+
+
+def test_delete_missing_media_download_removes_record():
+    from backend.api.endpoints.media_downloads.service import delete_missing_media_download
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="delete-missing")
+        download.artifact_status = MediaDownloadArtifactStatus.MISSING.value
+        download.file_path = "/definitely/not/present/delete-missing.m4a"
+        download_id = download.id
+        session.commit()
+
+        delete_missing_media_download(session, download_id)
+        session.commit()
+
+        assert session.get(MediaDownloadBase, download_id) is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_delete_missing_media_download_rejects_non_missing_record():
+    import pytest
+    from fastapi import HTTPException
+
+    from backend.api.endpoints.media_downloads.service import delete_missing_media_download
+    from backend.db.models.media_download import MediaDownloadBase
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="delete-not-missing")
+        download_id = download.id
+        session.commit()
+
+        with pytest.raises(HTTPException) as exc_info:
+            delete_missing_media_download(session, download_id)
+
+        assert exc_info.value.status_code == 409
+        assert session.get(MediaDownloadBase, download_id) is not None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_delete_missing_media_download_rejects_restored_file(tmp_path):
+    import pytest
+    from fastapi import HTTPException
+
+    from backend.api.endpoints.media_downloads.service import delete_missing_media_download
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine = _session()
+    try:
+        restored = tmp_path / "restored.m4a"
+        restored.write_bytes(b"restored media")
+
+        download = _make_download(session, slug="delete-restored")
+        download.artifact_status = MediaDownloadArtifactStatus.MISSING.value
+        download.file_path = str(restored)
+        download_id = download.id
+        session.commit()
+
+        with pytest.raises(HTTPException) as exc_info:
+            delete_missing_media_download(session, download_id)
+
+        assert exc_info.value.status_code == 409
+        assert session.get(MediaDownloadBase, download_id) is not None
+        assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+    finally:
+        session.close()
+        engine.dispose()

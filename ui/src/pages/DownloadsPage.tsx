@@ -8,6 +8,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {Column, DataTable, DataTableAction} from '../components/DataTable/DataTable'
 import DownloadLogDialog from '../components/MediaDownload/DownloadLogDialog'
+import ConfirmDialog from '../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../components/OperationNotifier/OperationNotifier'
 import PageSubtitle from '../components/common/PageSubtitle'
 import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
@@ -142,6 +143,8 @@ export default function DownloadsPage() {
     const loadingDownloads = downloads === undefined && !error
     const lastFilterPressRef = useRef<{value: string; timestamp: number} | null>(null)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
+    const [deleteRow, setDeleteRow] = useState<MediaDownloadViewRead | null>(null)
+    const [deleteBusy, setDeleteBusy] = useState(false)
     const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(DEFAULT_STATUS_FILTER))
     const [bulkActionStarting, setBulkActionStarting] = useState<BulkAction | null>(null)
     const [bulkControlBusy, setBulkControlBusy] = useState<string | null>(null)
@@ -268,6 +271,33 @@ export default function DownloadsPage() {
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
     }
 
+    const deleteMissing = async () => {
+        if (!deleteRow || deleteBusy) return
+        setDeleteBusy(true)
+        try {
+            const base = (window as any).appConfig.API_URL
+            const r = await fetch(`${base}/media-downloads/${deleteRow.id}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            })
+            if (!r.ok) {
+                const {error: message} = await getErrorMessageFromResponse(r)
+                toast.error(message || 'Could not delete the missing download')
+                return
+            }
+
+            const row = deleteRow
+            setDeleteRow(null)
+            await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
+            if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
+            if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
+        } catch {
+            toast.error('Could not delete the missing download')
+        } finally {
+            setDeleteBusy(false)
+        }
+    }
+
     const startBulkAction = async (action: BulkAction, rows: MediaDownloadViewRead[]) => {
         if (!rows.length || bulkOperationActive) return
         setBulkActionStarting(action)
@@ -365,7 +395,7 @@ export default function DownloadsPage() {
                         Every episode and movie download shows up here, one row per Local Media Profile.
                         Running downloads report live progress; failed ones show the error and can be retried.
                         Records without a file or active queue item are marked Not downloaded and can also be retried.
-                        Download records are persistent history and cannot be deleted individually.
+                        Download records are persistent history; records whose files are confirmed missing can be deleted individually.
                     </p>
                 </PageSubtitle>
             </div>
@@ -507,11 +537,43 @@ export default function DownloadsPage() {
                                 classes: 'btn',
                             })
                         }
+                        if (status === 'missing') {
+                            actions.push({
+                                onClick: () => setDeleteRow(row),
+                                icon: ['fas', 'trash'],
+                                text: 'Delete',
+                                classes: 'btn btn-danger',
+                            })
+                        }
                         return actions
                     }}
                 />
             </div>
             <DownloadLogDialog row={logRow} onClose={() => setLogRow(null)}/>
+            <ConfirmDialog
+                open={deleteRow !== null}
+                title="Delete missing download"
+                onDismiss={() => {
+                    if (!deleteBusy) setDeleteRow(null)
+                }}
+                icon={['fas', 'trash']}
+                iconTone="danger"
+                confirmButton={{
+                    label: deleteBusy ? 'Deleting…' : 'Delete',
+                    onClick: deleteMissing,
+                    className: 'btn btn-danger',
+                    disabled: deleteBusy,
+                    icon: deleteBusy ? ['fas', 'spinner'] : undefined,
+                    iconSpin: deleteBusy,
+                }}
+                cancelButton={{disabled: deleteBusy}}
+                dismissOnOverlayClick={!deleteBusy}
+            >
+                <p>
+                    Delete the download record for &quot;{deleteRow ? rowTitle(deleteRow) : ''}&quot;?
+                    WireLoft will verify that the file is still missing before removing its history record.
+                </p>
+            </ConfirmDialog>
         </section>
     )
 }

@@ -163,6 +163,18 @@ def media_downloads_detail(media_download_id: int):
         return get_media_download(s, media_download_id)
 
 
+@router.delete("/{media_download_id}", status_code=status.HTTP_204_NO_CONTENT)
+def media_downloads_delete(media_download_id: int):
+    """Delete a persistent MediaDownload row after confirming its artifact is missing."""
+    with db_session() as s:
+        try:
+            delete_missing_media_download(s, media_download_id)
+            s.commit()
+        except Exception:
+            s.rollback()
+            raise
+
+
 @router.patch("/{media_download_id}", response_model=MediaDownloadAPIRead)
 def media_downloads_update(media_download_id: int, body: MediaDownloadAPIUpdate):
     with db_session() as s:
