@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import AliasChoices, AliasPath, Field
+from pydantic import AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -97,10 +97,7 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
     )
     downloaded_publish_status: Optional[str] = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "downloaded_publish_status",
-            AliasPath("download", "downloaded_publish_status"),
-        ),
+        validation_alias=AliasPath("download", "downloaded_publish_status"),
     )
 
     queue_position: Optional[int] = None
