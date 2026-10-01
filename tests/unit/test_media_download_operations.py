@@ -747,6 +747,27 @@ def test_delete_unavailable_media_download_removes_not_downloaded_record():
         engine.dispose()
 
 
+def test_delete_unavailable_media_download_removes_cancelled_record():
+    from backend.services.download_actions import delete_unavailable_media_download
+    from backend.db.models.media_download import MediaDownloadBase
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="delete-cancelled")
+        download.file_path = "/definitely/not/present/delete-cancelled.m4a"
+        download.automatic_retry_suppressed = True
+        download_id = download.id
+        session.commit()
+
+        delete_unavailable_media_download(session, download_id)
+        session.commit()
+
+        assert session.get(MediaDownloadBase, download_id) is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_delete_unavailable_media_download_rejects_not_downloaded_record_with_artifact(tmp_path):
     import pytest
 

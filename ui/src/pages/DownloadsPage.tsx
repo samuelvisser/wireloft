@@ -110,7 +110,7 @@ function isCancellableDownload(row: MediaDownloadViewRead): boolean {
 
 function isDeletableDownload(row: MediaDownloadViewRead): boolean {
     const status = String(row.downloadStatus)
-    return status === 'not_downloaded' || status === 'missing'
+    return status === 'not_downloaded' || status === 'missing' || status === 'cancelled'
 }
 
 function defaultDownloadOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
@@ -411,7 +411,7 @@ export default function DownloadsPage() {
                         Every episode and movie download shows up here, one row per Local Media Profile.
                         Running downloads report live progress; failed ones show the error and can be retried.
                         Records without a file or active queue item are marked Not downloaded and can also be retried.
-                        Download records are persistent history; Not downloaded and Missing records can be deleted individually or in bulk when no artifact is available.
+                        Download records are persistent history; Not downloaded, Missing, and Cancelled records can be deleted individually or in bulk when no artifact is available.
                     </p>
                 </PageSubtitle>
             </div>
@@ -484,7 +484,7 @@ export default function DownloadsPage() {
                             primary={false}
                             starting={bulkActionStarting === 'delete-unavailable'}
                             active={deleteUnavailableOperation !== undefined}
-                            ariaLabel={`Delete ${deletableDownloads.length} visible missing or not-downloaded records`}
+                            ariaLabel={`Delete ${deletableDownloads.length} visible unavailable download records`}
                             onCancel={deleteUnavailableOperation ? () => void cancelBulkOperation(deleteUnavailableOperation) : undefined}
                             cancelDisabled={bulkControlBusy === deleteUnavailableOperation?.id}
                             cancelLabel="Stop deleting unavailable download records"
@@ -598,7 +598,7 @@ export default function DownloadsPage() {
                 }}
             >
                 <p>
-                    Delete {deletableDownloads.length} visible Missing or Not downloaded {deletableDownloads.length === 1 ? 'record' : 'records'}?
+                    Delete {deletableDownloads.length} visible Missing, Not downloaded, or Cancelled {deletableDownloads.length === 1 ? 'record' : 'records'}?
                     WireLoft will verify that no artifact is available before deleting each download record.
                     Records with an available artifact will be kept.
                 </p>
