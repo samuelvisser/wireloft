@@ -1,10 +1,10 @@
 import {presentDownloadProgress} from './downloadProgress'
 import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClient} from '@tanstack/react-query'
 import {useEffect, useMemo} from 'react'
-import {saveEpisodesToStorage, saveProfilesToStorage, saveShowsToStorage} from './cache'
+import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveShowsToStorage} from './cache'
 import {useFrontendPuller} from './puller'
 import {
-    episodesQueryOptions,
+    episodeQueryKeys,
     fetchEpisodePage,
     seasonsQueryOptions,
     SHOW_EPISODE_PREVIEW_SIZE,
@@ -290,13 +290,6 @@ export function useShow(id?: string) {
     })
 }
 
-export function useEpisodes(showSlug?: string, opts?: { limit?: number }) {
-    return useQuery({
-        ...episodesQueryOptions(showSlug, opts?.limit),
-        enabled: !!showSlug,
-    })
-}
-
 export function useEpisodePages(
     showSlug?: string,
     opts?: {
@@ -308,7 +301,7 @@ export function useEpisodePages(
     const pageSize = opts?.pageSize ?? 36
     const seasonId = opts?.seasonId
     const result = useInfiniteQuery({
-        queryKey: ['episodes', showSlug, 'pages', seasonId ?? null, pageSize] as const,
+        queryKey: episodeQueryKeys.pages(showSlug, seasonId ?? null, pageSize),
         enabled: !!showSlug && seasonId !== null && (opts?.enabled ?? true),
         initialPageParam: 0,
         queryFn: ({pageParam, signal}) => fetchEpisodePage(
@@ -331,7 +324,7 @@ export function useEpisodePages(
     const firstPage = result.data?.pages[0]
     useEffect(() => {
         if (!showSlug || seasonId !== undefined || firstPage === undefined) return
-        saveEpisodesToStorage(
+        saveEpisodePreviewToStorage(
             showSlug,
             firstPage.items.slice(0, SHOW_EPISODE_PREVIEW_SIZE),
             Date.now(),

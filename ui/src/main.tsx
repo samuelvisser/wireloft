@@ -65,7 +65,7 @@ async function bootstrap() {
     </React.StrictMode>,
   )
 
-  // Warm only the latest five episodes per stale show after first paint, with limited concurrency.
+  // Warm only the bounded recent-episode preview per stale show after first paint.
   scheduleShowDataCacheWarm(queryClient)
 }
 void bootstrap()

@@ -775,7 +775,7 @@ def test_compact_episode_view_includes_identifier_semantics():
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
-    from backend.api.endpoints.episodes.service import get_episode_views_by_show_list
+    from backend.api.endpoints.episodes.service import get_episode_views_by_show_page
     from backend.db import Base
     from backend.db.models import Episode, Season, Show
     from backend.types.show_types import EpisodeIdentifier, ShowType
@@ -824,7 +824,7 @@ def test_compact_episode_view_includes_identifier_semantics():
     session.add_all([show, season, episode])
     session.commit()
 
-    [view] = get_episode_views_by_show_list(session, show.slug)
+    [view] = get_episode_views_by_show_page(\n        session, show.slug, offset=0, limit=10,\n    ).items
 
     assert view.dw_episode_number == "12.05"
     assert view.episode_type == "ep-extra"

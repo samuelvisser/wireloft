@@ -1,10 +1,10 @@
 import {QueryClient} from '@tanstack/react-query'
 
 import {
-  getEpisodesCacheFetchedAt,
+  getEpisodePreviewFetchedAt,
   getSeasonsCacheFetchedAt,
   loadSeasonsFromStorage,
-  saveEpisodesToStorage,
+  saveEpisodePreviewToStorage,
   saveSeasonsToStorage,
   saveShowsToStorage,
 } from './cache'
@@ -70,13 +70,13 @@ export function hydrateCachedSeasonQueries(queryClient: QueryClient, shows: Show
 }
 
 async function warmEpisodes(queryClient: QueryClient, show: ShowRead) {
-  const cachedAt = getEpisodesCacheFetchedAt(show.slug)
+  const cachedAt = getEpisodePreviewFetchedAt(show.slug)
   if (cachedAt !== undefined && isFresh(cachedAt)) return
 
   const options = episodePreviewQueryOptions(show.slug, SHOW_EPISODE_PREVIEW_SIZE)
   const page = await queryClient.fetchQuery({...options, staleTime: 0})
   const fetchedAt = queryClient.getQueryState(options.queryKey)?.dataUpdatedAt ?? Date.now()
-  saveEpisodesToStorage(show.slug, page.items, fetchedAt, page.showTotal)
+  saveEpisodePreviewToStorage(show.slug, page.items, fetchedAt, page.showTotal)
 }
 
 async function warmSeasons(queryClient: QueryClient, show: ShowRead) {
@@ -184,7 +184,7 @@ function scheduleAfterFirstPaint(run: () => void) {
   }
 }
 
-/** Start after first paint and warm only five episodes per stale show with two workers. */
+/** Start after first paint and warm only the bounded episode preview for each stale show. */
 export function scheduleShowDataCacheWarm(queryClient: QueryClient): void {
   const run = () => {
     void warmShowDataCache(queryClient)

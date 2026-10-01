@@ -1,5 +1,5 @@
 // Lightweight browser persistence for data that materially improves cold-page loads.
-// Show caches retain only a compact five-episode preview; full show histories are paged from the
+// Show caches retain only a bounded compact episode preview; full show histories are paged from the
 // local API as the user scrolls. Episode detail pages still fetch the complete episode record.
 
 import {LocalMediaProfileRead, LocalMediaProfileReadSchema} from "../types/schemas/local_media_profile";
@@ -30,7 +30,7 @@ type MemoryEntry<T> = {
   total?: number
 }
 
-const episodeMemoryCache = new Map<string, MemoryEntry<EpisodeReadView[]>>()
+const episodePreviewMemoryCache = new Map<string, MemoryEntry<EpisodeReadView[]>>()
 const seasonMemoryCache = new Map<string, MemoryEntry<SeasonRead[]>>()
 
 function safeJsonParse(raw: string | null): unknown | undefined {
@@ -149,11 +149,11 @@ export function saveShowsToStorage(data: ShowRead[] | undefined) {
   safeSetItem(KEY_SHOWS, JSON.stringify(data))
 }
 
-/** Return a persisted show-grid episode list synchronously so ShowPage can paint before revalidation. */
-export function loadEpisodesFromStorage(showSlug?: string): EpisodeReadView[] | undefined {
+/** Return the persisted recent-episode preview so ShowPage can paint before revalidation. */
+export function loadEpisodePreviewFromStorage(showSlug?: string): EpisodeReadView[] | undefined {
   if (!showSlug) return undefined
 
-  const memory = episodeMemoryCache.get(showSlug)
+  const memory = episodePreviewMemoryCache.get(showSlug)
   if (memory) return memory.data
 
   const metadata = parseCacheMetadata(safeGetItem(episodesMetadataKey(showSlug)))
@@ -161,7 +161,7 @@ export function loadEpisodesFromStorage(showSlug?: string): EpisodeReadView[] | 
 
   const cached = parseStored(safeGetItem(episodesStorageKey(showSlug)), EpisodeReadViewSchema.array())
   if (cached !== undefined) {
-    episodeMemoryCache.set(showSlug, {
+    episodePreviewMemoryCache.set(showSlug, {
       data: cached,
       fetchedAt: metadata.fetchedAt,
       total: metadata.total,
@@ -172,32 +172,32 @@ export function loadEpisodesFromStorage(showSlug?: string): EpisodeReadView[] | 
   return undefined
 }
 
-export function getEpisodesCacheFetchedAt(showSlug: string): number | undefined {
-  const memory = episodeMemoryCache.get(showSlug)
+export function getEpisodePreviewFetchedAt(showSlug: string): number | undefined {
+  const memory = episodePreviewMemoryCache.get(showSlug)
   if (memory) return memory.fetchedAt > 0 ? memory.fetchedAt : undefined
 
   return parseCacheMetadata(safeGetItem(episodesMetadataKey(showSlug)))?.fetchedAt
 }
 
-export function getEpisodesCacheTotal(showSlug: string): number | undefined {
-  const memory = episodeMemoryCache.get(showSlug)
+export function getEpisodePreviewTotal(showSlug: string): number | undefined {
+  const memory = episodePreviewMemoryCache.get(showSlug)
   if (memory?.total !== undefined) return memory.total
 
   return parseCacheMetadata(safeGetItem(episodesMetadataKey(showSlug)))?.total
 }
 
-export function saveEpisodesToStorage(
+export function saveEpisodePreviewToStorage(
   showSlug: string,
   data: EpisodeReadView[] | undefined,
   fetchedAt?: number,
   total?: number,
 ) {
   if (data === undefined) {
-    removeEpisodesFromStorage(showSlug)
+    removeEpisodePreviewFromStorage(showSlug)
     return
   }
 
-  const existing = episodeMemoryCache.get(showSlug)
+  const existing = episodePreviewMemoryCache.get(showSlug)
   const effectiveFetchedAt = fetchedAt ?? existing?.fetchedAt ?? Date.now()
   const effectiveTotal = total ?? existing?.total
   if (
@@ -206,7 +206,7 @@ export function saveEpisodesToStorage(
     && existing.total === effectiveTotal
   ) return
 
-  episodeMemoryCache.set(showSlug, {
+  episodePreviewMemoryCache.set(showSlug, {
     data,
     fetchedAt: effectiveFetchedAt,
     total: effectiveTotal,
@@ -221,8 +221,8 @@ export function saveEpisodesToStorage(
   }
 }
 
-export function removeEpisodesFromStorage(showSlug: string) {
-  episodeMemoryCache.delete(showSlug)
+export function removeEpisodePreviewFromStorage(showSlug: string) {
+  episodePreviewMemoryCache.delete(showSlug)
   safeRemoveItem(episodesStorageKey(showSlug))
   safeRemoveItem(episodesMetadataKey(showSlug))
 }

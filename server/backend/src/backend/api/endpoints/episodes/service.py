@@ -74,22 +74,6 @@ def _episode_view_stmt(show_slug: str, season_id: int | None = None):
     return stmt.order_by(Episode.published_date.desc(), Episode.id.desc())
 
 
-def get_episode_views_by_show_list(
-        s: Session,
-        show_slug: str,
-        limit: int | None = None,
-) -> list[EpisodeAPIReadView]:
-    """Return compact rows for internal callers that still need a simple list."""
-    stmt = _episode_view_stmt(show_slug)
-    if limit is not None:
-        stmt = stmt.limit(limit)
-
-    return [
-        EpisodeAPIReadView.model_validate(row)
-        for row in s.execute(stmt).mappings().all()
-    ]
-
-
 def get_episode_views_by_show_page(
         s: Session,
         show_slug: str,

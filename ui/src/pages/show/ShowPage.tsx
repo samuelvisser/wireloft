@@ -16,7 +16,8 @@ import ShowSyncLogModal from '../../components/ShowSyncLogModal/ShowSyncLogModal
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {OperationControlError, type OperationControlAction, useControlOperation, useStartOperation} from '../../lib/operations'
 import {PreferredFormatReg} from '../../types/local_media_profile'
-import {getEpisodesCacheTotal, loadEpisodesFromStorage, removeEpisodesFromStorage} from '../../lib/cache'
+import {getEpisodePreviewTotal, loadEpisodePreviewFromStorage, removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
+import {episodeQueryKeys} from '../../lib/showQueryOptions'
 import './ShowPage.css'
 
 library.add(fas)
@@ -87,30 +88,30 @@ export default function ShowPage() {
     enabled: Boolean(show) && (!isSeasonal || selectedSeasonId !== null),
   })
 
-  const cachedEpisodes = useMemo(() => loadEpisodesFromStorage(id), [id])
-  const cachedTotal = useMemo(
-    () => id ? getEpisodesCacheTotal(id) : undefined,
+  const cachedPreviewEpisodes = useMemo(() => loadEpisodePreviewFromStorage(id), [id])
+  const cachedShowTotal = useMemo(
+    () => id ? getEpisodePreviewTotal(id) : undefined,
     [id],
   )
-  const cachedViewEpisodes = useMemo(() => {
-    if (!cachedEpisodes) return []
-    if (!isSeasonal) return cachedEpisodes
+  const cachedPreviewEpisodesForView = useMemo(() => {
+    if (!cachedPreviewEpisodes) return []
+    if (!isSeasonal) return cachedPreviewEpisodes
     if (selectedSeasonId === null) return []
-    return cachedEpisodes
+    return cachedPreviewEpisodes
       .filter((episode) => episode.seasonId === selectedSeasonId)
       .sort((a, b) => a.index - b.index)
-  }, [cachedEpisodes, isSeasonal, selectedSeasonId])
+  }, [cachedPreviewEpisodes, isSeasonal, selectedSeasonId])
   const fetchedEpisodes = useMemo(
     () => episodePagesData?.pages.flatMap((page) => page.items) ?? [],
     [episodePagesData],
   )
-  const episodes = episodePagesData !== undefined ? fetchedEpisodes : cachedViewEpisodes
+  const episodes = episodePagesData !== undefined ? fetchedEpisodes : cachedPreviewEpisodesForView
   const firstEpisodePage = episodePagesData?.pages[0]
-  const total = firstEpisodePage?.showTotal ?? cachedTotal ?? episodes.length
-  const displayedTotal = firstEpisodePage?.total ?? episodes.length
+  const total = firstEpisodePage?.showTotal ?? cachedShowTotal ?? episodes.length
+  const displayedTotal = firstEpisodePage?.total
   const episodesInitialLoading = (
     episodePagesData === undefined
-    && cachedViewEpisodes.length === 0
+    && cachedPreviewEpisodesForView.length === 0
     && episodesLoading
   )
 
@@ -360,13 +361,22 @@ export default function ShowPage() {
       toast.error(friendly)
       return
     }
-    removeEpisodesFromStorage(id)
+    removeEpisodePreviewFromStorage(id)
+    removeSeasonsFromStorage(id)
     setConfirm(false)
+
     await Promise.all([
-      qc.invalidateQueries({ queryKey: ['shows'] }),
-      qc.invalidateQueries({ queryKey: ['showsView'] }),
-      qc.invalidateQueries({ queryKey: ['show', id] }),
-      qc.invalidateQueries({ queryKey: ['episodes', id] }),
+      qc.cancelQueries({queryKey: ['show', id]}),
+      qc.cancelQueries({queryKey: ['seasons', id]}),
+      qc.cancelQueries({queryKey: episodeQueryKeys.forShow(id)}),
+    ])
+    qc.removeQueries({queryKey: ['show', id]})
+    qc.removeQueries({queryKey: ['seasons', id]})
+    qc.removeQueries({queryKey: episodeQueryKeys.forShow(id)})
+
+    await Promise.all([
+      qc.invalidateQueries({queryKey: ['shows']}),
+      qc.invalidateQueries({queryKey: ['showsView']}),
     ])
     navigate('/library?type=shows')
   }
@@ -551,9 +561,11 @@ export default function ShowPage() {
                 </option>
               ))}
             </select>
-            <span className="show-season-count">
-              {displayedTotal} {displayedTotal === 1 ? 'episode' : 'episodes'}
-            </span>
+            {displayedTotal !== undefined && (
+              <span className="show-season-count">
+                {displayedTotal} {displayedTotal === 1 ? 'episode' : 'episodes'}
+              </span>
+            )}
           </div>
         )}
 

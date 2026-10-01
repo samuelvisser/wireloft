@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 def test_episode_grid_view_uses_landscape_thumbnail():
     import backend.db.models  # noqa: F401
-    from backend.api.endpoints.episodes.service import get_episode_views_by_show_list
+    from backend.api.endpoints.episodes.service import get_episode_views_by_show_page
     from backend.db import Base
     from backend.db.models import Season, Show
     from backend.db.models.media_item import Episode
@@ -68,7 +68,7 @@ def test_episode_grid_view_uses_landscape_thumbnail():
         ))
         session.commit()
 
-        [episode] = get_episode_views_by_show_list(session, show.slug)
+        [episode] = get_episode_views_by_show_page(\n            session, show.slug, offset=0, limit=10,\n        ).items
 
         assert episode.thumbnail_landscape_path == "landscape.jpg"
         assert not hasattr(episode, "thumbnail_portrait_path")

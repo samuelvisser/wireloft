@@ -1,6 +1,6 @@
 import {keepPreviousData, queryOptions, type QueryClient} from '@tanstack/react-query'
 
-import {EpisodeReadViewPageSchema, EpisodeReadViewSchema} from '../types/schemas/episode'
+import {EpisodeReadViewPageSchema} from '../types/schemas/episode'
 import {SeasonReadSchema} from '../types/schemas/season'
 import {ShowRead, ShowReadSchema} from '../types/schemas/show'
 
@@ -49,22 +49,6 @@ export function showQueryOptions(id: string | undefined, queryClient: QueryClien
   })
 }
 
-export function episodesQueryOptions(showSlug: string | undefined, limit?: number) {
-  return queryOptions({
-    queryKey: ['episodes', showSlug, limit] as const,
-    queryFn: ({signal}) => {
-      const params = limit ? `?limit=${limit}` : ''
-      return fetchParsed(
-        `${apiBase()}/episodes/as-view/by-show-slug/${encodeURIComponent(showSlug!)}${params}`,
-        EpisodeReadViewSchema.array(),
-        signal,
-      )
-    },
-    placeholderData: keepPreviousData,
-    refetchOnMount: 'always' as const,
-  })
-}
-
 export function seasonsQueryOptions(showSlug: string | undefined) {
   return queryOptions({
     queryKey: ['seasons', showSlug] as const,
@@ -80,6 +64,20 @@ export function seasonsQueryOptions(showSlug: string | undefined) {
 
 
 export const SHOW_EPISODE_PREVIEW_SIZE = 15
+
+export const episodeQueryKeys = {
+  all: ['episodes'] as const,
+  forShow: (showSlug: string | undefined) => ['episodes', showSlug] as const,
+  pages: (
+    showSlug: string | undefined,
+    seasonId: number | null,
+    pageSize: number,
+  ) => ['episodes', showSlug, 'pages', seasonId, pageSize] as const,
+  preview: (
+    showSlug: string | undefined,
+    limit: number,
+  ) => ['episodes', showSlug, 'preview', limit] as const,
+}
 
 export async function fetchEpisodePage(
   showSlug: string,
@@ -102,7 +100,7 @@ export async function fetchEpisodePage(
 
 export function episodePreviewQueryOptions(showSlug: string, limit: number) {
   return queryOptions({
-    queryKey: ['episodes', showSlug, 'preview', limit] as const,
+    queryKey: episodeQueryKeys.preview(showSlug, limit),
     queryFn: ({signal}) => fetchEpisodePage(
       showSlug,
       {offset: 0, limit},
