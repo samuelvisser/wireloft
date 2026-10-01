@@ -18,6 +18,7 @@ from task_manager.tasks.media_download_operations import (
     prepare_media_download_artifact,
 )
 from task_manager.tasks.workers.download_attempt import serialize_download_attempt
+from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
 class DownloadActionError(ValueError):
@@ -171,6 +172,61 @@ def cancel_media_download_action(
 
     return payload
 
+
+def delete_missing_media_download(
+        session: Session,
+        media_download_id: int,
+) -> None:
+    """Delete a MediaDownload row only after its missing artifact is rechecked."""
+    download = session.get(MediaDownloadBase, media_download_id)
+    if download is None:
+        raise DownloadActionError("missing", "Media download not found")
+    if get_active_media_download_operation(session, media_download_id) is not None:
+        raise DownloadActionError("conflict", "This download already has an active operation")
+    if download.artifact_status != MediaDownloadArtifactStatus.MISSING.value:
+        raise DownloadActionError("conflict", "Only missing downloads can be deleted")
+
+    # Reconcile immediately before deleting so a restored or renamed file wins
+    # over stale Missing state from the Downloads page.
+    current_path = resolve_media_download_file(session, download)
+    if (
+        current_path is not None
+        or download.artifact_status != MediaDownloadArtifactStatus.MISSING.value
+    ):
+        raise DownloadActionError(
+            "conflict",
+            "The download is no longer missing and cannot be deleted",
+        )
+
+    session.delete(download)
+    session.flush()
+
+
+def delete_missing_media_download_action(
+        media_download_id: int,
+        *,
+        missing_ok: bool = False,
+) -> bool:
+    """Delete one confirmed-missing MediaDownload row as a serialized user action."""
+    with serialize_download_attempt(media_download_id), db_session() as s:
+        try:
+            if s.get(MediaDownloadBase, media_download_id) is None:
+                if missing_ok:
+                    return False
+                raise DownloadActionError("missing", "Media download not found")
+
+            delete_missing_media_download(s, media_download_id)
+            s.commit()
+            return True
+        except DownloadActionError:
+            # The recheck may have restored the artifact state or discovered a
+            # same-directory rename. Persist that reconciliation even though the
+            # destructive action itself is rejected.
+            s.commit()
+            raise
+        except Exception:
+            s.rollback()
+            raise
 
 
 def delete_media_download_artifact_action(

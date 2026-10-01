@@ -706,7 +706,7 @@ def test_redownload_dependencies_freeze_weights_and_preserve_child_ownership(mon
 
 
 def test_delete_missing_media_download_removes_record():
-    from backend.api.endpoints.media_downloads.service import delete_missing_media_download
+    from backend.services.download_actions import delete_missing_media_download
     from backend.db.models.media_download import MediaDownloadBase
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
@@ -729,9 +729,8 @@ def test_delete_missing_media_download_removes_record():
 
 def test_delete_missing_media_download_rejects_non_missing_record():
     import pytest
-    from fastapi import HTTPException
 
-    from backend.api.endpoints.media_downloads.service import delete_missing_media_download
+    from backend.services.download_actions import DownloadActionError, delete_missing_media_download
     from backend.db.models.media_download import MediaDownloadBase
 
     session, engine = _session()
@@ -740,10 +739,10 @@ def test_delete_missing_media_download_rejects_non_missing_record():
         download_id = download.id
         session.commit()
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(DownloadActionError) as exc_info:
             delete_missing_media_download(session, download_id)
 
-        assert exc_info.value.status_code == 409
+        assert exc_info.value.kind == "conflict"
         assert session.get(MediaDownloadBase, download_id) is not None
     finally:
         session.close()
@@ -752,9 +751,8 @@ def test_delete_missing_media_download_rejects_non_missing_record():
 
 def test_delete_missing_media_download_rejects_restored_file(tmp_path):
     import pytest
-    from fastapi import HTTPException
 
-    from backend.api.endpoints.media_downloads.service import delete_missing_media_download
+    from backend.services.download_actions import DownloadActionError, delete_missing_media_download
     from backend.db.models.media_download import MediaDownloadBase
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
@@ -769,10 +767,10 @@ def test_delete_missing_media_download_rejects_restored_file(tmp_path):
         download_id = download.id
         session.commit()
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(DownloadActionError) as exc_info:
             delete_missing_media_download(session, download_id)
 
-        assert exc_info.value.status_code == 409
+        assert exc_info.value.kind == "conflict"
         assert session.get(MediaDownloadBase, download_id) is not None
         assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
     finally:

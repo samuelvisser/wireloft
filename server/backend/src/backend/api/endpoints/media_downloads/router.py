@@ -4,12 +4,14 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from .actions import (
     cancel_media_download_action,
+    delete_missing_media_download_action,
     queue_bulk_media_download_operation,
     retry_media_download_action,
 )
 from .history import get_media_download_history
 from .operations import (
     BulkCancelMediaDownloadsOperation,
+    BulkDeleteMissingMediaDownloadsOperation,
     BulkRetryMediaDownloadsOperation,
 )
 from .service import *
@@ -83,6 +85,18 @@ def media_downloads_bulk_cancel(body: MediaDownloadBulkActionAPIRequest):
     """Cancel the exact active rows selected by the Downloads page."""
     return _queue_bulk_operation(
         BulkCancelMediaDownloadsOperation(body.media_download_ids)
+    )
+
+
+@router.post(
+    "/bulk/delete-missing",
+    response_model=MediaDownloadBulkOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def media_downloads_bulk_delete_missing(body: MediaDownloadBulkActionAPIRequest):
+    """Delete the exact missing rows selected by the Downloads page."""
+    return _queue_bulk_operation(
+        BulkDeleteMissingMediaDownloadsOperation(body.media_download_ids)
     )
 
 
@@ -166,13 +180,7 @@ def media_downloads_detail(media_download_id: int):
 @router.delete("/{media_download_id}", status_code=status.HTTP_204_NO_CONTENT)
 def media_downloads_delete(media_download_id: int):
     """Delete a persistent MediaDownload row after confirming its artifact is missing."""
-    with db_session() as s:
-        try:
-            delete_missing_media_download(s, media_download_id)
-            s.commit()
-        except Exception:
-            s.rollback()
-            raise
+    delete_missing_media_download_action(media_download_id)
 
 
 @router.patch("/{media_download_id}", response_model=MediaDownloadAPIRead)

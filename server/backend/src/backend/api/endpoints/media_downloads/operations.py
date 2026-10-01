@@ -50,3 +50,8 @@ class BulkRetryMediaDownloadsOperation(_BulkMediaDownloadOperation):
 class BulkCancelMediaDownloadsOperation(_BulkMediaDownloadOperation):
     kind = "media_download.bulk_cancel"
     action = "cancel"
+
+
+class BulkDeleteMissingMediaDownloadsOperation(_BulkMediaDownloadOperation):
+    kind = "media_download.bulk_delete_missing"
+    action = "delete_missing"
