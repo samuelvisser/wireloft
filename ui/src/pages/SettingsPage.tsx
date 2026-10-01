@@ -1,6 +1,7 @@
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useQueryClient} from '@tanstack/react-query'
 import {useCallback, useEffect, useMemo, useState} from 'react'
+import {useSearchParams} from 'react-router-dom'
 import {type FieldErrors, type FieldPath, useForm} from 'react-hook-form'
 import toast from 'react-hot-toast'
 
@@ -73,8 +74,13 @@ function errorAtPath(errors: FieldErrors<SettingsValues>, path: SettingsFieldPat
 export default function SettingsPage() {
     const settingsQuery = useSettings()
     const queryClient = useQueryClient()
-    const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+    const [params, setParams] = useSearchParams()
     const [baseline, setBaseline] = useState<SettingsValues | null>(null)
+    const activeTab = SETTINGS_TABS.find((tab) => tab.id === params.get('tab'))?.id ?? 'general'
+
+    const chooseTab = (tab: SettingsTab) => {
+        setParams({tab}, {replace: true})
+    }
 
     const form = useForm<SettingsValues>({
         resolver: zodResolver(SettingsFormSchema),
@@ -235,7 +241,7 @@ export default function SettingsPage() {
                             role="tab"
                             aria-selected={activeTab === tab.id}
                             aria-controls={`settings-panel-${tab.id}`}
-                            onClick={() => setActiveTab(tab.id)}
+                            onClick={() => chooseTab(tab.id)}
                         >
                             <span>{tab.label}</span>
                             <small>{tab.description}</small>
