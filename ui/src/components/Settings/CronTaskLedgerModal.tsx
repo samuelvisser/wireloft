@@ -13,8 +13,10 @@ type Props = {
     definition: FrontendOperationDefinition
     query: Omit<TaskLedgerPageQuery, 'offset' | 'limit' | 'enabled'>
     starting: boolean
+    canceling: boolean
     onClose: () => void
     onRunNow: () => void | Promise<void>
+    onCancel: () => void | Promise<void>
 }
 
 const PAGE_SIZE = 10
@@ -82,8 +84,10 @@ export default function CronTaskLedgerModal({
     definition,
     query,
     starting,
+    canceling,
     onClose,
     onRunNow,
+    onCancel,
 }: Props) {
     const [page, setPage] = useState(1)
 
@@ -197,6 +201,9 @@ export default function CronTaskLedgerModal({
                             icon={['fas', 'play']}
                             onClick={() => void onRunNow()}
                             starting={starting}
+                            onCancel={() => void onCancel()}
+                            cancelDisabled={canceling}
+                            cancelLabel={`Cancel ${definition.label}`}
                         />
                     </div>
                 </div>

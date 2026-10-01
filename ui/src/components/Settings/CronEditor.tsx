@@ -6,10 +6,16 @@ import Select from 'react-select'
 import Switch from 'react-switch'
 
 import ProgressButton from '../common/ProgressButton'
+import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import CronTaskLedgerModal from './CronTaskLedgerModal'
 import type {TaskLedgerPageQuery} from '../../lib/taskLedger'
 import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
-import {OperationStartError, useStartOperation} from '../../lib/operations'
+import {
+    OperationControlError,
+    OperationStartError,
+    useControlOperation,
+    useStartOperation,
+} from '../../lib/operations'
 import './CronEditor.css'
 
 
@@ -258,7 +264,14 @@ export default function CronEditor({
     runNow,
 }: CronEditorProps) {
     const startOperation = useStartOperation()
+    const controlOperation = useControlOperation()
+    const activeRunNowOperation = useActiveOperation(
+        runNow?.definition.kind ?? '',
+        runNow?.definition.resourceType,
+        runNow ? 0 : null,
+    )
     const [startingRunNow, setStartingRunNow] = useState(false)
+    const [cancelingRunNow, setCancelingRunNow] = useState(false)
     const [ledgerOpen, setLedgerOpen] = useState(false)
     const [mode, setMode] = useState<CronMode>(() => inferMode(value))
     const parsed = useMemo(() => parseCron(value), [value])
@@ -286,6 +299,24 @@ export default function CronEditor({
             toast.error(detail ? `Could not run ${runNow.definition.label}: ${detail}` : `Could not run ${runNow.definition.label}`)
         } finally {
             setStartingRunNow(false)
+        }
+    }
+
+    const cancelRunNowOperation = async () => {
+        if (!runNow || !activeRunNowOperation || cancelingRunNow) return
+        setCancelingRunNow(true)
+        try {
+            await controlOperation(activeRunNowOperation.id, 'cancel')
+            toast.success(`${runNow.definition.label} canceled`)
+        } catch (controlError) {
+            const detail = controlError instanceof OperationControlError ? controlError.message : undefined
+            toast.error(
+                detail
+                    ? `Could not cancel ${runNow.definition.label}: ${detail}`
+                    : `Could not cancel ${runNow.definition.label}`,
+            )
+        } finally {
+            setCancelingRunNow(false)
         }
     }
 
@@ -328,6 +359,9 @@ export default function CronEditor({
                             primary={false}
                             className="cron-editor__run-now"
                             ariaLabel={`Run ${runNow.definition.label} now`}
+                            onCancel={activeRunNowOperation ? () => void cancelRunNowOperation() : undefined}
+                            cancelDisabled={cancelingRunNow}
+                            cancelLabel={`Cancel ${runNow.definition.label}`}
                         />
                     ) : null}
                     {runNow ? (
@@ -535,8 +569,10 @@ export default function CronEditor({
                     definition={runNow.definition}
                     query={runNow.ledger}
                     starting={startingRunNow}
+                    canceling={cancelingRunNow}
                     onClose={() => setLedgerOpen(false)}
                     onRunNow={runNowOperation}
+                    onCancel={cancelRunNowOperation}
                 />
             ) : null}
         </div>
