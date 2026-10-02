@@ -132,23 +132,29 @@ def setup_triggers_from_registry() -> None:
             if trigger.trigger_type == "cron":
                 if not trigger.enabled:
                     continue
+
+                cron = trigger.cron
+                if cron is None:
+                    logger.error("Skipping cron trigger without an expression for %s", task_key)
+                    continue
+
                 try:
                     if trigger.minimum_interval_ms is not None:
                         validate_worker_cron_interval(
-                            trigger.cron,
+                            cron,
                             min_interval_ms=trigger.minimum_interval_ms,
                             setting_name=task_key,
                             field_path=("scheduler", "cron"),
                         )
                     cron_trigger = CronTrigger.from_crontab(
-                        trigger.cron,
+                        cron,
                         timezone=settings.timezone,
                     )
                 except (WorkerCronExpressionError, WorkerCronIntervalError, TypeError, ValueError) as exc:
                     logger.error(
                         "Skipping invalid cron trigger for %s (%s): %s",
                         task_key,
-                        trigger.cron,
+                        cron,
                         exc,
                     )
                     continue

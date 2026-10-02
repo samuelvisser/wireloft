@@ -6,7 +6,7 @@ from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import computed_field
-from pydantic_settings import YamlConfigSettingsSource
+from pydantic_settings import DotEnvSettingsSource, EnvSettingsSource, YamlConfigSettingsSource
 
 from config.settings.base import SettingsBase, normalize_settings_source_keys
 from config.settings.submodels import *
@@ -59,6 +59,18 @@ def environment_settings_source_data(source, settings_cls) -> dict[str, Any]:
         data["timezone"] = timezone
 
     return data
+
+
+def environment_settings_source_documents(
+    settings_cls: type[SettingsBase],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Resolve environment and dotenv source documents for a settings model."""
+    environment_source = EnvSettingsSource(settings_cls=settings_cls)
+    dotenv_source = DotEnvSettingsSource(settings_cls=settings_cls)
+    return (
+        environment_settings_source_data(environment_source, settings_cls),
+        environment_settings_source_data(dotenv_source, settings_cls),
+    )
 
 
 class AppSettings(SettingsBase):

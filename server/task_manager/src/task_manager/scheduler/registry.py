@@ -11,9 +11,11 @@ from task_manager.scheduler.db import TaskDefinition
 
 
 logger = logging.getLogger(__name__)
-_REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[Any]]]] = {}
+TaskCallable = Callable[..., Awaitable[Any]]
+_REGISTRY: Dict[str, Tuple[TaskMeta, TaskCallable]] = {}
 TerminalCallback = Callable[..., None]
 RecoveryDispatcher = Callable[[], None]
+_TASK_META_ATTRIBUTE = "_task_meta"
 
 
 @dataclass
@@ -42,6 +44,17 @@ class TaskMeta:
     terminal_callback: Optional[TerminalCallback] = None
     recovery_dispatcher: Optional[RecoveryDispatcher] = None
     triggers: List[TriggerMeta] = field(default_factory=list)
+
+
+def _attach_task_meta(fn: TaskCallable, meta: TaskMeta) -> None:
+    setattr(fn, _TASK_META_ATTRIBUTE, meta)
+
+
+def _registered_task_meta(fn: TaskCallable, decorator_name: str) -> TaskMeta:
+    meta = getattr(fn, _TASK_META_ATTRIBUTE, None)
+    if not isinstance(meta, TaskMeta):
+        raise ValueError(f"@{decorator_name} must be used after @task decorator")
+    return meta
 
 
 def task(
@@ -87,7 +100,7 @@ def task(
     state has been restored, preserving the queue's own concurrency policy.
     """
 
-    def decorator(fn: Callable[..., Awaitable[Any]]):
+    def decorator(fn: TaskCallable):
         meta = TaskMeta(
             key=key,
             title=title,
@@ -103,8 +116,9 @@ def task(
         )
         _REGISTRY[key] = (meta, fn)
 
-        # Allow chaining with trigger decorators
-        fn._task_meta = meta
+        # Allow chaining with trigger decorators without relying on an
+        # undeclared callable attribute in static type checking.
+        _attach_task_meta(fn, meta)
         return fn
 
     return decorator
@@ -128,9 +142,8 @@ def on_cron(
         enabled: Whether this cron trigger should be registered
         minimum_interval_ms: Optional minimum interval enforced before registration
     """
-    def decorator(fn: Callable[..., Awaitable[Any]]):
-        if not hasattr(fn, '_task_meta'):
-            raise ValueError(f"@on_cron must be used after @task decorator")
+    def decorator(fn: TaskCallable):
+        meta = _registered_task_meta(fn, "on_cron")
 
         trigger = TriggerMeta(
             trigger_type='cron',
@@ -141,7 +154,7 @@ def on_cron(
             coalesce=coalesce,
             minimum_interval_ms=minimum_interval_ms,
         )
-        fn._task_meta.triggers.append(trigger)
+        meta.triggers.append(trigger)
         return fn
 
     return decorator
@@ -154,22 +167,21 @@ def on_event(event_name: str, resource_type: Optional[str] = None):
         event_name: Name of the event to listen for (e.g., "show.added", "episode.published_final")
         resource_type: Optional resource type filter
     """
-    def decorator(fn: Callable[..., Awaitable[Any]]):
-        if not hasattr(fn, '_task_meta'):
-            raise ValueError(f"@on_event must be used after @task decorator")
+    def decorator(fn: TaskCallable):
+        meta = _registered_task_meta(fn, "on_event")
 
         trigger = TriggerMeta(
             trigger_type='event',
             event_name=event_name,
             resource_type=resource_type,
         )
-        fn._task_meta.triggers.append(trigger)
+        meta.triggers.append(trigger)
         return fn
 
     return decorator
 
 
-def get_task(key: str) -> Tuple[TaskMeta, Callable[..., Awaitable[Any]]]:
+def get_task(key: str) -> Tuple[TaskMeta, TaskCallable]:
     return _REGISTRY[key]
 
 

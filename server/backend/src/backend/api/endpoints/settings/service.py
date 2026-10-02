@@ -13,7 +13,6 @@ from typing import Any, cast
 
 import yaml
 from pydantic.alias_generators import to_camel, to_snake
-from pydantic_settings import DotEnvSettingsSource, EnvSettingsSource
 from sqlalchemy import select
 from yaml.nodes import MappingNode, ScalarNode
 
@@ -40,7 +39,7 @@ from config.settings.cron_validation import (
 from config.settings.settings import (
     AppSettings,
     TIMEZONE_ENVIRONMENT_VARIABLE,
-    environment_settings_source_data,
+    environment_settings_source_documents,
 )
 from dailywire_downloader.storage import inspect_filesystem
 from task_manager.scheduler.operation_factory import create_operation
@@ -158,20 +157,13 @@ def _environment_variable_name(path: str) -> str:
     return "WL_" + "__".join(to_snake(segment).upper() for segment in path.split("."))
 
 
-def _source_document(source) -> dict[str, Any]:
-    try:
-        return environment_settings_source_data(source, AppSettings)
-    except Exception:
-        logger.exception("Failed to inspect a settings environment source")
-        return {}
-
-
 def _environment_sources() -> tuple[dict[str, Any], dict[str, Any]]:
     """Snapshot environment settings once for the lifetime of the settings registry."""
-    return (
-        _source_document(EnvSettingsSource(AppSettings)),
-        _source_document(DotEnvSettingsSource(AppSettings)),
-    )
+    try:
+        return environment_settings_source_documents(AppSettings)
+    except Exception:
+        logger.exception("Failed to inspect settings environment sources")
+        return {}, {}
 
 
 def _environment_overrides(

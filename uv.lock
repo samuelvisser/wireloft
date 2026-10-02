@@ -81,10 +81,13 @@ dependencies = [
     { name = "cryptography" },
     { name = "dailywire-api" },
     { name = "dailywire-authorisation" },
+    { name = "dailywire-downloader" },
     { name = "fastapi" },
     { name = "jinja2" },
     { name = "psutil" },
     { name = "pydantic" },
+    { name = "pydantic-core" },
+    { name = "pyyaml" },
     { name = "sqlalchemy" },
     { name = "task-manager" },
     { name = "uvicorn" },
@@ -98,10 +101,13 @@ requires-dist = [
     { name = "cryptography", specifier = ">=43.0.1" },
     { name = "dailywire-api", editable = "server/dailywire_api" },
     { name = "dailywire-authorisation", editable = "server/dailywire_authorisation" },
+    { name = "dailywire-downloader", editable = "server/dailywire_downloader" },
     { name = "fastapi", specifier = ">=0.118.0" },
     { name = "jinja2", specifier = ">=3.1,<4" },
     { name = "psutil", specifier = ">=6.1.1" },
     { name = "pydantic", specifier = ">=2.11.9" },
+    { name = "pydantic-core", specifier = ">=2.33,<3" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "sqlalchemy", specifier = ">=2.0.43" },
     { name = "task-manager", editable = "server/task_manager" },
     { name = "uvicorn", specifier = ">=0.37.0" },
@@ -208,6 +214,7 @@ name = "controller"
 version = "0.2.2"
 source = { editable = "server/controller" }
 dependencies = [
+    { name = "apscheduler" },
     { name = "backend" },
     { name = "config" },
     { name = "requests" },
@@ -217,6 +224,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "apscheduler", specifier = ">=3.11.0,<4.0" },
     { name = "backend", editable = "server/backend" },
     { name = "config", editable = "server/config" },
     { name = "requests", specifier = ">=2.32.3,<3.0" },

@@ -27,7 +27,7 @@ def replace_settings(settings: AppSettings) -> AppSettings:
     global _SETTINGS
     with _settings_lock:
         _SETTINGS = settings
-        return _SETTINGS
+        return settings
 
 
 def reload_settings(*, overrides: dict | None = None) -> AppSettings:
