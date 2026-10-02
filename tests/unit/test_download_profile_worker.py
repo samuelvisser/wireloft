@@ -315,7 +315,7 @@ def test_download_delay_uses_trusted_monitored_live_end(db_session, monkeypatch)
     )
     track_monitor_publication_timing(
         episode,
-        old_status=EpisodePublishStatus.SCHEDULED.value,
+        old_status=EpisodePublishStatus.LIVE.value,
         new_status=EpisodePublishStatus.LIVE,
     )
     track_monitor_publication_timing(

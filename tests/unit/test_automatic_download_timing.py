@@ -26,12 +26,18 @@ def test_monitor_timing_uses_first_trusted_exit_from_live():
     live_ended = went_live + timedelta(hours=1)
     became_final = live_ended + timedelta(minutes=2)
 
+    # Seeing the transition into LIVE is not enough; discovery may have found
+    # the episode only at this poll.
     track_monitor_publication_timing(
         episode,
         old_status=EpisodePublishStatus.SCHEDULED.value,
         new_status=EpisodePublishStatus.LIVE,
         observed_at=went_live,
     )
+    assert episode.get_meta(AUTOMATIC_DOWNLOAD_DELAY_META_KEY) is None
+
+    # A subsequent LIVE -> LIVE poll proves this monitor is actively following
+    # the episode during the live phase.
     track_monitor_publication_timing(
         episode,
         old_status=EpisodePublishStatus.LIVE.value,
@@ -70,6 +76,32 @@ def test_monitor_timing_uses_first_trusted_exit_from_live():
         observed_at=became_final + timedelta(minutes=2),
     )
     assert episode.get_meta(AUTOMATIC_DOWNLOAD_DELAY_META_KEY) == marker
+
+
+def test_monitor_timing_does_not_trust_first_observed_live_transition():
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.helpers.episodes.automatic_download_timing import (
+        AUTOMATIC_DOWNLOAD_DELAY_META_KEY,
+        track_monitor_publication_timing,
+    )
+
+    episode = _EpisodeStub()
+    went_live = datetime(2026, 10, 2, 8, 0, tzinfo=timezone.utc)
+
+    track_monitor_publication_timing(
+        episode,
+        old_status=EpisodePublishStatus.DELAYED.value,
+        new_status=EpisodePublishStatus.LIVE,
+        observed_at=went_live,
+    )
+    track_monitor_publication_timing(
+        episode,
+        old_status=EpisodePublishStatus.LIVE.value,
+        new_status=EpisodePublishStatus.PUBLISHED_FINAL,
+        observed_at=went_live + timedelta(minutes=2),
+    )
+
+    assert episode.get_meta(AUTOMATIC_DOWNLOAD_DELAY_META_KEY) is None
 
 
 def test_monitor_timing_falls_back_when_live_entry_was_not_observed():

@@ -11,10 +11,6 @@ AUTOMATIC_DOWNLOAD_DELAY_META_KEY = "ep_status.automatic_download_delay"
 MONITOR_LIVE_SESSION_META_KEY = "ep_status.monitor_live_session"
 
 _MONITOR_SESSION_ID = uuid4().hex
-_LIVE_ENTRY_STATUSES = frozenset({
-    EpisodePublishStatus.SCHEDULED.value,
-    EpisodePublishStatus.DELAYED.value,
-})
 _POST_LIVE_STATUSES = frozenset({
     EpisodePublishStatus.DW_PROCESSING,
     EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
@@ -36,20 +32,22 @@ def track_monitor_publication_timing(
 ) -> None:
     """Track publication timing only when this monitor witnessed the live lifecycle.
 
-    A persisted LIVE row does not prove WireLoft was actually running when the
-    episode went live; it may simply have survived a restart. The process-scoped
-    session token deliberately loses that trust across restarts.
+    Discovery may miss the SCHEDULED/DELAYED -> LIVE transition because new
+    episodes are indexed less frequently than pending episodes are monitored.
+    Instead, trust begins only after the monitor observes LIVE while the persisted
+    episode is already LIVE. That LIVE -> LIVE poll proves this process was
+    actively following the episode during its live phase.
 
-    Once this monitor session has witnessed SCHEDULED/DELAYED -> LIVE, the first
-    LIVE -> processing/countdown/final transition in the same process is accurate
-    to roughly the monitor interval and safely marks when the live stream ended.
-    Otherwise Download Profiles fall back to The Daily Wire's publishedAt.
+    A later LIVE -> processing/countdown/final transition in the same process is
+    therefore accurate to roughly the pending-monitor interval and safely marks
+    when the live stream ended. Without that LIVE -> LIVE proof, Download Profiles
+    fall back to The Daily Wire's publishedAt.
     """
     current = observed_at or datetime.now(timezone.utc)
 
     if (
-        new_status is EpisodePublishStatus.LIVE
-        and old_status in _LIVE_ENTRY_STATUSES
+        old_status == EpisodePublishStatus.LIVE.value
+        and new_status is EpisodePublishStatus.LIVE
     ):
         episode.set_meta(
             MONITOR_LIVE_SESSION_META_KEY,
@@ -57,10 +55,7 @@ def track_monitor_publication_timing(
         )
         return
 
-    if (
-        old_status != EpisodePublishStatus.LIVE.value
-        or new_status is EpisodePublishStatus.LIVE
-    ):
+    if old_status != EpisodePublishStatus.LIVE.value:
         return
 
     live_session = episode.get_meta(MONITOR_LIVE_SESSION_META_KEY)
