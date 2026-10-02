@@ -5,10 +5,9 @@ import tomllib
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, computed_field, field_validator
+from pydantic import computed_field
 from pydantic_settings import YamlConfigSettingsSource
 
-from config.config import PROJECT_ROOT
 from config.settings.base import SettingsBase, normalize_settings_source_keys
 from config.settings.submodels import *
 

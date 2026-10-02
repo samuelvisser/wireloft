@@ -24,7 +24,7 @@ const LEVEL_OPTIONS: readonly LogLevelOption[] = [
 
 function isPullRequestLog(entry: ApplicationLogEntryRead): boolean {
     return entry.logger === 'uvicorn.access'
-        && /"\w+ \/api\/pull(?:\?|\s)/.test(entry.message)
+        && /"\w+ \/api\/pull[?\s]/.test(entry.message)
 }
 
 function formatTimestamp(value: string): string {
