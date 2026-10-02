@@ -1,5 +1,6 @@
 import {keepPreviousData, type InfiniteData, useInfiniteQuery, useQuery} from '@tanstack/react-query'
 import {TaskLedgerPageReadSchema, type TaskLedgerPageRead} from '../types/schemas/task'
+import {usePageActive} from './pageActivity'
 
 export type TaskLedgerPageQuery = {
   definitionKey?: string
@@ -98,6 +99,7 @@ export function useTaskLedgerInfinite({
   limit = 100,
   enabled = true,
 }: Omit<TaskLedgerPageQuery, 'offset'>) {
+  const pageActive = usePageActive()
   const resourceIds = normalizeResourceIds(resourceId)
   const statuses = normalizeStatuses(status)
   const startedAfterValue = normalizeStartedAfter(startedAfter)
@@ -123,9 +125,11 @@ export function useTaskLedgerInfinite({
     number
   >({
     queryKey,
-    enabled: enabled && (definitionKey === undefined || definitionKey.length > 0),
+    enabled: pageActive && enabled && (definitionKey === undefined || definitionKey.length > 0),
     initialPageParam: 0,
     refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    refetchIntervalInBackground: false,
     refetchInterval: (query) => {
       const pageCount = query.state.data?.pages.length ?? 0
       return pageCount <= 2 ? 3000 : false

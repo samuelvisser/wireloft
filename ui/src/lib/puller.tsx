@@ -5,7 +5,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useSyncExternalStore,
 } from 'react'
 import {type QueryClient, useQuery} from '@tanstack/react-query'
 import {
@@ -13,6 +12,7 @@ import {
   type FrontendPullData,
   type FrontendPullRead,
 } from '../types/schemas/puller'
+import {usePageActive} from './pageActivity'
 
 
 export const FRONTEND_PULLER_QUERY_KEY = ['frontendPuller'] as const
@@ -40,21 +40,6 @@ class FrontendPullError extends Error {
 
 const FrontendPullerContext = createContext<FrontendPullerContextValue | null>(null)
 
-function isForeground() {
-  return document.visibilityState === 'visible' && document.hasFocus()
-}
-
-function subscribeToForeground(onChange: () => void) {
-  window.addEventListener('focus', onChange)
-  window.addEventListener('blur', onChange)
-  document.addEventListener('visibilitychange', onChange)
-  return () => {
-    window.removeEventListener('focus', onChange)
-    window.removeEventListener('blur', onChange)
-    document.removeEventListener('visibilitychange', onChange)
-  }
-}
-
 async function fetchFrontendPuller(signal?: AbortSignal): Promise<FrontendPullRead> {
   const base = (window as any).appConfig?.API_URL || '/api'
   const response = await fetch(base + '/pull', {credentials: 'include', signal})
@@ -67,11 +52,11 @@ export function refreshFrontendPuller(queryClient: QueryClient) {
 }
 
 export default function FrontendPuller({children, onUnauthorized}: FrontendPullerProps) {
-  const foreground = useSyncExternalStore(subscribeToForeground, isForeground, () => false)
+  const pageActive = usePageActive()
   const query = useQuery({
     queryKey: FRONTEND_PULLER_QUERY_KEY,
     queryFn: ({signal}) => fetchFrontendPuller(signal),
-    enabled: foreground,
+    enabled: pageActive,
     structuralSharing: (previous, incoming) => reconcileOperationSnapshots(
       previous as FrontendPullRead | undefined, incoming as FrontendPullRead,
     ),
