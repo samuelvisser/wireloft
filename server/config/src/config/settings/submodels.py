@@ -356,6 +356,14 @@ class DownloadSettings(SubmodelBase):
         ge=1,
         description="Maximum number of download attempts",
     )
+    automatic_episode_download_delay_minutes: int = Field(
+        default=10,
+        ge=0,
+        description=(
+            "Minimum minutes after The Daily Wire's publishedAt before Download Profiles "
+            "may automatically download an episode"
+        ),
+    )
     download_timeout_seconds: int = Field(
         default=600,
         ge=1,

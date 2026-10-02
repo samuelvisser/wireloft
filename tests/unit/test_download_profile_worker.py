@@ -130,6 +130,13 @@ def db_session(monkeypatch, tmp_path):
     Base.metadata.create_all(engine)
     session = Session(engine)
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+    # Keep existing profile tests focused on their own admission rules. Tests for
+    # the global publication delay opt in explicitly below.
+    monkeypatch.setattr(
+        get_settings().download_settings,
+        "automatic_episode_download_delay_minutes",
+        0,
+    )
     yield session
     session.close()
     engine.dispose()
@@ -184,6 +191,45 @@ def test_download_profile_worker_runs_after_show_indexing():
     assert "show.added" not in event_names
 
 
+def test_episode_trigger_schedules_recheck_when_publication_delay_is_active(db_session, monkeypatch):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from config import get_settings
+    from task_manager.tasks.workers.download_profile_worker import service
+
+    monkeypatch.setattr(
+        get_settings().download_settings,
+        "automatic_episode_download_delay_minutes",
+        10,
+    )
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="fresh",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=_now(),
+        index=1,
+    )
+    _make_podcast_profile(db_session, show, lmp)
+    scheduled = Mock()
+    monkeypatch.setattr(service, "schedule_delayed_episode_download", scheduled)
+
+    asyncio.run(service.run_download_profile_worker(
+        db_session,
+        resource_type="episode",
+        resource_id=episode.id,
+    ))
+
+    scheduled.assert_called_once()
+    assert scheduled.call_args.kwargs["episode_id"] == episode.id
+    assert scheduled.call_args.kwargs["run_at"] > _now()
+    assert db_session.query(EpisodeMediaDownload).count() == 0
+
+
 def test_podcast_profile_filters_by_type_status_and_countdown(db_session):
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
@@ -200,6 +246,157 @@ def test_podcast_profile_filters_by_type_status_and_countdown(db_session):
     assert {e.slug for e in get_download_profile_episodes(db_session, profile)} == {final_ep.slug}
     profile.download_with_countdown = True
     assert {e.slug for e in get_download_profile_episodes(db_session, profile)} == {final_ep.slug, countdown_ep.slug}
+
+
+def test_download_profile_waits_for_post_publication_delay(db_session, monkeypatch):
+    from config import get_settings
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    monkeypatch.setattr(
+        get_settings().download_settings,
+        "automatic_episode_download_delay_minutes",
+        10,
+    )
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    now = _now()
+    aged = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="aged",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=now - timedelta(minutes=15),
+        index=1,
+    )
+    _make_episode(
+        db_session,
+        show,
+        season,
+        slug="fresh",
+        ep_id="ep.2",
+        status="published_final",
+        published_at=now - timedelta(minutes=5),
+        index=2,
+    )
+    profile = _make_podcast_profile(db_session, show, lmp)
+
+    assert [episode.slug for episode in get_download_profile_episodes(db_session, profile)] == [aged.slug]
+
+
+def test_download_delay_uses_observed_publication_transition(db_session, monkeypatch):
+    from config import get_settings
+    from task_manager.tasks.helpers.episodes.events import AUTOMATIC_DOWNLOAD_DELAY_META_KEY
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    monkeypatch.setattr(
+        get_settings().download_settings,
+        "automatic_episode_download_delay_minutes",
+        10,
+    )
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="final-after-live",
+        ep_id="ep.1",
+        status="published_final",
+        # A live episode can have been published for an hour before the final
+        # VOD transition is observed.
+        published_at=_now() - timedelta(hours=1),
+        index=1,
+    )
+    episode.set_meta(
+        AUTOMATIC_DOWNLOAD_DELAY_META_KEY,
+        f"published_final:{_now().isoformat()}",
+    )
+    profile = _make_podcast_profile(db_session, show, lmp)
+    db_session.commit()
+
+    assert get_download_profile_episodes(db_session, profile) == []
+
+def test_download_delay_does_not_backfill_outside_episode_count_scope(db_session, monkeypatch):
+    from config import get_settings
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    monkeypatch.setattr(
+        get_settings().download_settings,
+        "automatic_episode_download_delay_minutes",
+        10,
+    )
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    now = _now()
+    _make_episode(
+        db_session,
+        show,
+        season,
+        slug="older",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=now - timedelta(minutes=20),
+        index=1,
+    )
+    _make_episode(
+        db_session,
+        show,
+        season,
+        slug="fresh",
+        ep_id="ep.2",
+        status="published_final",
+        published_at=now - timedelta(minutes=5),
+        index=2,
+    )
+    profile = _make_podcast_profile(
+        db_session,
+        show,
+        lmp,
+        download_episode_count=1,
+    )
+
+    assert get_download_profile_episodes(db_session, profile) == []
+
+
+def test_download_delay_does_not_remove_recent_artifact_from_retention_scope(db_session, monkeypatch):
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from config import get_settings
+    from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
+
+    monkeypatch.setattr(
+        get_settings().download_settings,
+        "automatic_episode_download_delay_minutes",
+        10,
+    )
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="fresh",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=_now() - timedelta(minutes=5),
+        index=1,
+    )
+    profile = _make_podcast_profile(
+        db_session,
+        show,
+        lmp,
+        download_episode_count=1,
+        delete_older_episodes=True,
+    )
+    existing = _completed_download(db_session, episode, lmp, profile)
+
+    assert cleanup_older_episodes(db_session, profile) == 0
+    assert existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
 
 
 def test_podcast_profile_respects_days_in_past_window(db_session):

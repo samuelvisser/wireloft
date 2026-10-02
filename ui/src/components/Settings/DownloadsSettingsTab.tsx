@@ -300,6 +300,18 @@ export default function DownloadsSettingsTab({
                 title="Download processing"
                 description="Limits and retry behaviour for downloads started by WireLoft."
             >
+                <DurationField
+                    id="settings-automatic-episode-download-delay"
+                    label="Automatic episode download delay"
+                    value={draft.downloadSettings.automaticEpisodeDownloadDelayMinutes}
+                    backendUnit="minutes"
+                    error={errorFor('downloadSettings.automaticEpisodeDownloadDelayMinutes')}
+                    environmentVariable={environmentVariableFor('downloadSettings.automaticEpisodeDownloadDelayMinutes')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.automaticEpisodeDownloadDelayMinutes = value
+                    })}
+                    help="Minimum time after an episode becomes published before Download Profiles may automatically download it. WireLoft also restarts this clock when a live or countdown episode transitions to its final VOD. Manual downloads are not delayed; event-triggered downloads are rechecked automatically when the delay expires."
+                />
                 <NumberField
                     id="settings-download-concurrency"
                     label="Concurrent downloads"

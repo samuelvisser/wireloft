@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
@@ -8,6 +10,7 @@ from task_manager.events.transactional import queue_event
 
 
 EPISODE_IDENTIFIER_CHANGED_EVENT = "episode.identifier_changed"
+AUTOMATIC_DOWNLOAD_DELAY_META_KEY = "ep_status.automatic_download_delay"
 _EPISODE_WAS_PUBLISHED_META_KEY = "ep_status.was_published"
 _PUBLISHED_STATUSES = frozenset({
     EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value,
@@ -100,6 +103,29 @@ def _remember_episode_was_published(
         episode.set_meta(_EPISODE_WAS_PUBLISHED_META_KEY, "1")
 
 
+def _mark_automatic_download_delay_start(
+        episode: Episode,
+        *,
+        old_status: str | None,
+        new_status: EpisodePublishStatus,
+) -> None:
+    """Remember when an automatically downloadable publication phase began.
+
+    Daily Wire's publishedAt may predate final VOD availability by the full
+    duration of a live episode. Persisting the observed state transition gives
+    Download Profiles a second, safer clock without adding episode schema state.
+    """
+    if old_status == new_status.value or new_status.value not in _PUBLISHED_STATUSES:
+        return
+    observed_at = datetime.now(timezone.utc)
+    # Include the timestamp in the value so returning to the same status after a
+    # regression still dirties the metadata row and refreshes its updated_at.
+    episode.set_meta(
+        AUTOMATIC_DOWNLOAD_DELAY_META_KEY,
+        f"{new_status.value}:{observed_at.isoformat()}",
+    )
+
+
 def queue_episode_status_events(
         s: Session,
         *,
@@ -126,6 +152,12 @@ def queue_episode_status_events(
         old_status,
         new_status.value,
     )
+    if not was_created:
+        _mark_automatic_download_delay_start(
+            episode,
+            old_status=old_status,
+            new_status=new_status,
+        )
 
     event_data = episode_event_payload(
         episode=episode,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -16,11 +17,13 @@ from task_manager.tasks.media_download_operations import (
 )
 
 from ._helpers import (
+    automatic_episode_download_ready_at,
     cleanup_older_episodes,
     ensure_episode_download,
     get_download_profile_episodes,
     resolve_target_profiles,
 )
+from .scheduling import schedule_delayed_episode_download
 
 
 async def run_download_profile_worker(
@@ -48,6 +51,29 @@ async def run_download_profile_worker(
         return
 
     only_episode_id = resource_id if resource_type == "episode" and resource_id is not None else None
+    if only_episode_id is not None:
+        episode = s.get(Episode, only_episode_id)
+        if episode is None:
+            s.rollback()
+            update_progress(progress, 100, f"Episode {only_episode_id} no longer exists")
+            return
+
+        ready_at = automatic_episode_download_ready_at(episode)
+        now = datetime.now(timezone.utc)
+        if ready_at is not None and ready_at > now:
+            s.rollback()
+            schedule_delayed_episode_download(
+                episode_id=only_episode_id,
+                run_at=ready_at,
+            )
+            update_progress(
+                progress,
+                100,
+                f"Automatic download deferred until {ready_at.isoformat()}",
+            )
+            return
+        s.rollback()
+
     created = 0
     total = len(profile_ids)
 
