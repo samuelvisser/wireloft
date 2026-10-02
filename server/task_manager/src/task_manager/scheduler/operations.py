@@ -28,11 +28,6 @@ from task_manager.scheduler.types import (
     TaskStatus,
 )
 
-
-TASK_RUN_WAIT_STATE_META_KEY = "_operation_wait_state"
-TASK_RUN_PROGRESS_META_KEY = "_progress_meta"
-TASK_RUN_COMPLETION_PROGRESS_META_KEY = "_completion_progress"
-
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
@@ -563,13 +558,13 @@ def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
                 state
                 for run in reversed(linked_runs)
                 if _task_status(run.status) not in _TERMINAL_TASK_STATUSES
-                for state in (_run_wait_state(run),)
+                for state in (run.wait_state,)
                 if state is not None
             ),
             None,
         )
         active_runs = [run for run in linked_runs if _task_status(run.status) not in _TERMINAL_TASK_STATUSES]
-        all_blocked = active_runs and all(_run_wait_state(run) is not None for run in active_runs)
+        all_blocked = active_runs and all(run.wait_state is not None for run in active_runs)
         running_runs = [
             run for run in active_runs
             if _task_status(run.status) == TaskStatus.RUNNING
@@ -699,7 +694,7 @@ def _refresh_composite_operation(operation: TaskOperation) -> TaskOperation:
             for child in active_children
         )
         all_blocked = bool(active_direct or active_children) and all(
-            _run_wait_state(run) is not None for run in active_direct
+            run.wait_state is not None for run in active_direct
         ) and all(
             child.status in {OperationStatus.QUEUED.value, OperationStatus.WAITING.value}
             for child in active_children
@@ -962,16 +957,15 @@ def _operation_progress_meta(
         return None
     if len(effective_runs) != 1:
         active = [run for run in effective_runs if run is not None and _task_status(run.status) not in _TERMINAL_TASK_STATUSES]
-        waits = [_run_wait_state(run) for run in active]
+        waits = [run.wait_state for run in active]
         return {"wait_state": waits[0]} if waits and all(waits) else None
     run = effective_runs[0]
-    if run is None or not isinstance(run.meta, dict):
+    if run is None:
         return None
-    progress_meta = run.meta.get(TASK_RUN_PROGRESS_META_KEY)
-    result = dict(progress_meta) if isinstance(progress_meta, dict) else {}
+    result = dict(run.progress_metadata or {})
     if run_cancel_requested(run):
         result["canceling"] = True
-    wait_state = _run_wait_state(run)
+    wait_state = run.wait_state
     if wait_state is not None:
         result["wait_state"] = wait_state
     return result or None
@@ -1093,25 +1087,11 @@ def _run_reports_worker_progress(run: TaskRun) -> bool:
 def _run_completion_progress(run: TaskRun) -> int:
     if _task_status(run.status) in _TERMINAL_TASK_STATUSES:
         return 100
-    if isinstance(run.meta, dict):
-        value = run.meta.get(TASK_RUN_COMPLETION_PROGRESS_META_KEY)
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return max(0, min(99, int(value)))
+    if run.reported_completion_progress is not None:
+        return run.reported_completion_progress
     if _run_reports_worker_progress(run):
         return max(0, min(99, int(run.progress or 0)))
     return 0
-
-
-def _run_wait_state(run: TaskRun) -> dict[str, Any] | None:
-    if not isinstance(run.meta, dict):
-        return None
-    wait_state = run.meta.get(TASK_RUN_WAIT_STATE_META_KEY)
-    if not isinstance(wait_state, dict):
-        return None
-    reason = wait_state.get("reason")
-    if not isinstance(reason, str) or not reason:
-        return None
-    return wait_state
 
 
 def _link_target_to_run(session: Session, target: TaskOperationTarget, run: TaskRun) -> None:
