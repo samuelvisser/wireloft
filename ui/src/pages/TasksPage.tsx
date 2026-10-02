@@ -1,6 +1,8 @@
+import {useQuery} from '@tanstack/react-query'
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
+import Select from 'react-select'
 
 import {Column, DataTable} from '../components/DataTable/DataTable'
 import ProgressBar from '../components/common/ProgressBar'
@@ -8,13 +10,20 @@ import PageSubtitle from '../components/common/PageSubtitle'
 import {useTaskLedgerInfinite} from '../lib/taskLedger'
 import {useFilterChipPress} from '../lib/useFilterChipPress'
 import {waitingPresentation} from '../lib/progressPresentation'
-import type {TaskLedgerEntryRead} from '../types/schemas/task'
+import {TaskDefinitionReadSchema, type TaskLedgerEntryRead} from '../types/schemas/task'
 import './TasksPage.css'
 
 type TaskStatusFilter = {
     value: string
     label: string
 }
+
+type TaskDefinitionOption = {
+    value: string
+    label: string
+}
+
+const ALL_TASKS_OPTION: TaskDefinitionOption = {value: '', label: 'All'}
 
 const STATUS_FILTERS: TaskStatusFilter[] = [
     {value: 'SCHEDULED', label: 'Scheduled'},
@@ -112,11 +121,34 @@ function setsEqual(left: Set<string>, right: Set<string>): boolean {
 }
 
 export default function TasksPage() {
+    const [definitionKey, setDefinitionKey] = useState('')
     const [statuses, setStatuses] = useState<Set<string>>(() => new Set(DEFAULT_STATUSES))
     const filterPress = useFilterChipPress()
     const sentinelRef = useRef<HTMLDivElement | null>(null)
     const selectedStatuses = useMemo(() => [...statuses].sort(), [statuses])
+    const definitions = useQuery({
+        queryKey: ['taskDefinitions'],
+        queryFn: async ({signal}) => {
+            const response = await fetch(
+                `${(window as any).appConfig.API_URL}/tasks/definitions`,
+                {signal, credentials: 'include'},
+            )
+            if (!response.ok) throw new Error(`HTTP ${response.status}`)
+            return TaskDefinitionReadSchema.array().parse(await response.json())
+        },
+        staleTime: Infinity,
+    })
+    const definitionOptions = useMemo<TaskDefinitionOption[]>(
+        () => [
+            ALL_TASKS_OPTION,
+            ...(definitions.data ?? [])
+                .map((definition) => ({value: definition.key, label: definition.title}))
+                .sort((left, right) => left.label.localeCompare(right.label)),
+        ],
+        [definitions.data],
+    )
     const query = useTaskLedgerInfinite({
+        definitionKey: definitionKey || undefined,
         status: selectedStatuses,
         limit: 100,
         enabled: statuses.size > 0,
@@ -236,6 +268,21 @@ export default function TasksPage() {
                         Use this view to diagnose certain problems or track task progress.
                     </p>
                 </PageSubtitle>
+            </div>
+
+            <div className="task-definition-filter">
+                <label htmlFor="tasks-definition-select">Task</label>
+                <Select<TaskDefinitionOption, false>
+                    inputId="tasks-definition-select"
+                    className="task-definition-select"
+                    classNamePrefix="select"
+                    options={definitionOptions}
+                    value={definitionOptions.find((option) => option.value === definitionKey) ?? ALL_TASKS_OPTION}
+                    onChange={(option) => setDefinitionKey(option?.value ?? '')}
+                    isSearchable={false}
+                    isClearable={false}
+                    isLoading={definitions.isPending}
+                />
             </div>
 
             <div className="task-filter-row">

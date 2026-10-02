@@ -1,3 +1,20 @@
+.task-definition-filter {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 12px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.task-definition-select {
+    width: min(24rem, 100%);
+}
+
+.task-definition-select .select__control {
+    min-height: 40px;
+}
+
 .task-filter-row {
     display: flex;
     align-items: flex-start;
