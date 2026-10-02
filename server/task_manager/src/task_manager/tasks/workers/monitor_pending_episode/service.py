@@ -312,10 +312,8 @@ async def run_monitor_pending_episode(
             )
 
     # Media inspection can itself fetch HLS manifests. Keep that I/O outside the
-    # ORM transaction as well, then reload current rows before applying the result.
+    # ORM transaction, then reload current rows before recording trusted facts.
     observed = observe_episode_detail(detail)
-    resolved = resolve_episode_status(detail, snapshot=observed)
-    new_status = resolved.status
 
     episode, show = _reload_episode_and_show(
         s,
@@ -333,6 +331,24 @@ async def run_monitor_pending_episode(
         s.commit()
         return EpisodePublishStatus(old_status)
 
+    # Safe timestamps describe what The Daily Wire was actually observed doing,
+    # never a WireLoft age-based fallback. Recording the observation first also
+    # lets this same poll's safe_live_ended guide status fallback timing.
+    track_monitor_publication_timing(
+        episode,
+        old_status=old_status,
+        new_status=observed.status,
+    )
+    publication_timing_reference = episode.safe_live_ended
+    if publication_timing_reference is None:
+        publication_timing_reference = detail.published_date
+    resolved = resolve_episode_status(
+        detail,
+        publication_timing_reference=publication_timing_reference,
+        snapshot=observed,
+    )
+    new_status = resolved.status
+
     update_episode_from_dailywire(episode, detail)
     if new_status is EpisodePublishStatus.NO_USABLE_MEDIA:
         mark_episode_no_usable_media(
@@ -343,8 +359,13 @@ async def run_monitor_pending_episode(
     else:
         episode.publish_status = new_status.value
         clear_episode_no_usable_media_tracking(episode)
+
+    if new_status is not EpisodePublishStatus.NO_USABLE_MEDIA:
+        final_publication_time = episode.safe_published_final
+        if final_publication_time is None:
+            final_publication_time = episode.published_date
         episode.metadata_is_final = (
-            metadata_watch_expired(episode.published_date)
+            metadata_watch_expired(final_publication_time)
             if new_status is EpisodePublishStatus.PUBLISHED_FINAL
             else False
         )

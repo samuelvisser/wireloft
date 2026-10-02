@@ -194,6 +194,7 @@ def test_download_profile_worker_runs_after_show_indexing():
 
 def test_episode_trigger_creates_visible_delayed_download_operation(db_session, monkeypatch):
     from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.types.episode_types import EpisodePublishStatus
     from config import get_settings
     from task_manager.scheduler.db import TaskOperation, TaskRun
     from task_manager.scheduler.operations import operation_admission_wait_state
@@ -215,9 +216,24 @@ def test_episode_trigger_creates_visible_delayed_download_operation(db_session, 
         slug="fresh",
         ep_id="ep.1",
         status="published_final",
-        published_at=_now(),
+        published_at=_now() - timedelta(hours=1),
         index=1,
     )
+    from task_manager.tasks.helpers.episodes.trusted_publication_timing import (
+        track_monitor_publication_timing,
+    )
+    track_monitor_publication_timing(
+        episode,
+        old_status=EpisodePublishStatus.DW_PROCESSING.value,
+        new_status=EpisodePublishStatus.DW_PROCESSING,
+    )
+    track_monitor_publication_timing(
+        episode,
+        old_status=EpisodePublishStatus.DW_PROCESSING.value,
+        new_status=EpisodePublishStatus.PUBLISHED_FINAL,
+    )
+    assert episode.safe_published_final is not None
+
     _make_podcast_profile(db_session, show, lmp)
     dispatch = Mock(return_value=0)
     monkeypatch.setattr(service, "dispatch_queued_media_download_operations", dispatch)
@@ -293,7 +309,7 @@ def test_download_profile_waits_for_post_publication_delay(db_session, monkeypat
     assert [episode.slug for episode in get_download_profile_episodes(db_session, profile)] == [aged.slug]
 
 
-def test_download_delay_uses_trusted_monitored_live_end(db_session, monkeypatch):
+def test_countdown_download_delay_uses_safe_live_ended(db_session, monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from config import get_settings
     from task_manager.tasks.helpers.episodes.trusted_publication_timing import (
@@ -313,10 +329,9 @@ def test_download_delay_uses_trusted_monitored_live_end(db_session, monkeypatch)
         db_session,
         show,
         season,
-        slug="final-after-live",
+        slug="countdown-after-live",
         ep_id="ep.1",
-        status="published_final",
-        # The Daily Wire timestamp may already be old when the live stream ends.
+        status="published_with_countdown",
         published_at=_now() - timedelta(hours=1),
         index=1,
     )
@@ -328,13 +343,106 @@ def test_download_delay_uses_trusted_monitored_live_end(db_session, monkeypatch)
     track_monitor_publication_timing(
         episode,
         old_status=EpisodePublishStatus.LIVE.value,
+        new_status=EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+    )
+    profile = _make_podcast_profile(
+        db_session,
+        show,
+        lmp,
+        download_with_countdown=True,
+    )
+    db_session.commit()
+
+    assert episode.safe_live_ended is not None
+    assert episode.safe_published_final is None
+    assert get_download_profile_episodes(db_session, profile) == []
+
+
+def test_final_download_delay_uses_safe_published_final(db_session, monkeypatch):
+    from backend.types.episode_types import EpisodePublishStatus
+    from config import get_settings
+    from task_manager.tasks.helpers.episodes.trusted_publication_timing import (
+        track_monitor_publication_timing,
+    )
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    monkeypatch.setattr(
+        get_settings().download_settings,
+        "automatic_episode_download_delay_minutes",
+        10,
+    )
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="final-after-processing",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=_now() - timedelta(hours=1),
+        index=1,
+    )
+    track_monitor_publication_timing(
+        episode,
+        old_status=EpisodePublishStatus.DW_PROCESSING.value,
+        new_status=EpisodePublishStatus.DW_PROCESSING,
+    )
+    track_monitor_publication_timing(
+        episode,
+        old_status=EpisodePublishStatus.DW_PROCESSING.value,
         new_status=EpisodePublishStatus.PUBLISHED_FINAL,
     )
     profile = _make_podcast_profile(db_session, show, lmp)
     db_session.commit()
 
+    assert episode.safe_published_final is not None
     assert get_download_profile_episodes(db_session, profile) == []
 
+
+def test_final_download_falls_back_instead_of_using_safe_live_ended(db_session, monkeypatch):
+    from backend.types.episode_types import EpisodePublishStatus
+    from config import get_settings
+    from task_manager.tasks.helpers.episodes.trusted_publication_timing import (
+        track_monitor_publication_timing,
+    )
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    monkeypatch.setattr(
+        get_settings().download_settings,
+        "automatic_episode_download_delay_minutes",
+        10,
+    )
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="final-with-only-live-end",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=_now() - timedelta(hours=1),
+        index=1,
+    )
+    track_monitor_publication_timing(
+        episode,
+        old_status=EpisodePublishStatus.LIVE.value,
+        new_status=EpisodePublishStatus.LIVE,
+    )
+    track_monitor_publication_timing(
+        episode,
+        old_status=EpisodePublishStatus.LIVE.value,
+        new_status=EpisodePublishStatus.DW_PROCESSING,
+    )
+    profile = _make_podcast_profile(db_session, show, lmp)
+    db_session.commit()
+
+    assert episode.safe_live_ended is not None
+    assert episode.safe_published_final is None
+    assert get_download_profile_episodes(db_session, profile) == [episode]
 
 def test_download_delay_falls_back_to_dailywire_timestamp_without_trusted_monitor(db_session, monkeypatch):
     from config import get_settings

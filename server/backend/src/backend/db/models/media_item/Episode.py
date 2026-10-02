@@ -11,6 +11,12 @@ from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.MediaContentMetadataMixin import MediaContentMetadataMixin
 from backend.utils.episode import EpisodeIdentifierInfo
+from backend.utils.episode_publication_timing import (
+    TRUSTED_LIVE_ENDED_META_KEY,
+    TRUSTED_PUBLISHED_FINAL_META_KEY,
+    safe_live_ended_from_meta,
+    safe_published_final_from_meta,
+)
 from backend.utils.episode_slug import is_no_show_today_slug
 
 if TYPE_CHECKING:
@@ -79,6 +85,20 @@ class Episode(
     # Relationships
     show: Mapped["Show"] = relationship(back_populates="episodes")
     season: Mapped["Season"] = relationship(back_populates="episodes")
+
+    @property
+    def safe_live_ended(self) -> datetime | None:
+        """Trusted observed end of LIVE, or None when WireLoft cannot prove it."""
+        return safe_live_ended_from_meta(
+            self.get_meta(TRUSTED_LIVE_ENDED_META_KEY)
+        )
+
+    @property
+    def safe_published_final(self) -> datetime | None:
+        """Trusted observed transition to PUBLISHED_FINAL, or None if unknown."""
+        return safe_published_final_from_meta(
+            self.get_meta(TRUSTED_PUBLISHED_FINAL_META_KEY)
+        )
 
     @property
     def episode_identifier_info(self) -> EpisodeIdentifierInfo:

@@ -149,14 +149,20 @@ def observe_episode_detail(
 def resolve_episode_status(
     detail: DwEpisodeDetailRecord,
     *,
+    publication_timing_reference: datetime | None,
     current_status: str | EpisodePublishStatus | None = None,
     now: datetime | None = None,
     snapshot: EpisodeRemoteSnapshot | None = None,
 ) -> EpisodeRemoteSnapshot:
-    """Apply WireLoft's allowed transitions and safety timers to one snapshot."""
+    """Apply transition policy using the publication clock selected by the caller.
+
+    Episode-aware callers should prefer a safe Episode timestamp and explicitly
+    fall back to The Daily Wire's timestamp. Record-only callers pass the Daily
+    Wire timestamp directly.
+    """
     snapshot = snapshot or observe_episode_detail(detail)
     current = _normalize_status(current_status)
-    age_minutes = _minutes_since(detail.published_date, now=now)
+    age_minutes = _minutes_since(publication_timing_reference, now=now)
     timing = get_settings().episode_status_timing
 
     # Daily Wire directly exposes these states (or, for delayed, the stable slug
@@ -171,7 +177,9 @@ def resolve_episode_status(
         return snapshot
 
     # The processing signature is useful only for a bounded window after the
-    # Daily Wire release timestamp. It becomes quarantine evidence when stale.
+    # caller-selected publication timing reference. Episode-aware automations may
+    # supply safe_live_ended; record-only callers deliberately fall back to The
+    # Daily Wire's published timestamp.
     if (
         snapshot.status is EpisodePublishStatus.DW_PROCESSING
         and age_minutes is not None
@@ -229,4 +237,7 @@ def is_published_final(episode: DwEpisodeRecord) -> bool:
 
 def get_publish_status_from_dw_detail(detail: DwEpisodeDetailRecord) -> EpisodePublishStatus:
     """Compatibility wrapper returning only the resolved lifecycle status."""
-    return resolve_episode_status(detail).status
+    return resolve_episode_status(
+        detail,
+        publication_timing_reference=detail.published_date,
+    ).status

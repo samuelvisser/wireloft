@@ -21,16 +21,16 @@ def metadata_job_id(episode_id: int, offset_seconds: int) -> str:
 
 
 def schedule_remaining_metadata_checks(
-    *, episode_id: int, published_date: datetime | None, now: datetime | None = None,
+    *, episode_id: int, publication_time: datetime | None, now: datetime | None = None,
 ) -> list[str]:
-    if published_date is None:
+    if publication_time is None:
         return []
     scheduler = start_scheduler()
-    published_at = ensure_utc(published_date)
+    publication_at = ensure_utc(publication_time)
     current = ensure_utc(now or datetime.now(timezone.utc))
     job_ids: list[str] = []
     for offset_seconds in metadata_refresh_offsets_seconds():
-        run_at = published_at + timedelta(seconds=offset_seconds)
+        run_at = publication_at + timedelta(seconds=offset_seconds)
         if run_at <= current:
             continue
         job_id = metadata_job_id(episode_id, offset_seconds)

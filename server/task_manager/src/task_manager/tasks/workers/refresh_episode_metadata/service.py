@@ -26,6 +26,7 @@ from ...helpers.episodes.metadata import (
 from ...helpers.episodes.no_show import is_no_show_today_slug
 from ...helpers.episodes.same_episode import PENDING_EPISODE_STATUSES
 from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
+from ...helpers.episodes.trusted_publication_timing import invalidate_safe_publication_timing
 from ...helpers.episodes.unusable_media import NoUsableMediaReason, mark_episode_no_usable_media
 from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
 from .scheduling import remove_episode_metadata_jobs, schedule_remaining_metadata_checks
@@ -96,7 +97,11 @@ async def run_refresh_episode_metadata(
             return True
 
     now = datetime.now(timezone.utc)
-    if refresh and metadata_watch_expired(episode.published_date, now=now):
+    metadata_publication_time = episode.safe_published_final
+    if metadata_publication_time is None:
+        metadata_publication_time = episode.published_date
+
+    if refresh and metadata_watch_expired(metadata_publication_time, now=now):
         episode.metadata_is_final = True
         s.commit()
         remove_episode_metadata_jobs(episode.id)
@@ -104,12 +109,12 @@ async def run_refresh_episode_metadata(
 
     pending_jobs = schedule_remaining_metadata_checks(
         episode_id=episode.id,
-        published_date=episode.published_date,
+        publication_time=metadata_publication_time,
         now=now,
     )
     if refresh:
         s.commit()
-    if not pending_jobs and metadata_watch_expired(episode.published_date, now=now):
+    if not pending_jobs and metadata_watch_expired(metadata_publication_time, now=now):
         trigger_now(
             def_key=_TASK_KEY,
             resource_type="episode",
@@ -186,6 +191,10 @@ def _refresh_episode_from_dailywire(
     if detail is None:
         new_status = EpisodePublishStatus.NO_USABLE_MEDIA
         mark_episode_no_usable_media(s, episode, reason=NoUsableMediaReason.NOT_FOUND)
+        invalidate_safe_publication_timing(
+            episode,
+            published_final=True,
+        )
         queue_episode_status_events(
             s,
             episode=episode,
@@ -200,9 +209,13 @@ def _refresh_episode_from_dailywire(
     # Observe before mutating the row. A transient HLS/network failure therefore
     # raises and leaves the final episode untouched for normal task retry.
     observed = observe_episode_detail(detail)
+    publication_timing_reference = episode.safe_live_ended
+    if publication_timing_reference is None:
+        publication_timing_reference = detail.published_date
     resolved = resolve_episode_status(
         detail,
         current_status=old_status,
+        publication_timing_reference=publication_timing_reference,
         snapshot=observed,
     )
     new_status = resolved.status
@@ -214,6 +227,10 @@ def _refresh_episode_from_dailywire(
             s,
             episode,
             reason=_no_usable_reason(detail, observed.status),
+        )
+        invalidate_safe_publication_timing(
+            episode,
+            published_final=True,
         )
         queue_episode_status_events(
             s,
@@ -228,6 +245,15 @@ def _refresh_episode_from_dailywire(
     if new_status.value in PENDING_EPISODE_STATUSES:
         # Explicit scheduled/delayed/live evidence is authoritative even after a
         # row previously reached final. Transfer it back to pending monitoring.
+        invalidate_safe_publication_timing(
+            episode,
+            published_final=True,
+            live_ended=new_status in {
+                EpisodePublishStatus.SCHEDULED,
+                EpisodePublishStatus.DELAYED,
+                EpisodePublishStatus.LIVE,
+            },
+        )
         episode.publish_status = new_status.value
         episode.metadata_is_final = False
         queue_episode_status_events(

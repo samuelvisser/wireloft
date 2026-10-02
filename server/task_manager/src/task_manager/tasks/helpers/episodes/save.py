@@ -138,7 +138,11 @@ def resolve_dw_episodes(
                 reason = NoUsableMediaReason.NOT_FOUND
             else:
                 observed = observe_episode_detail(detail)
-                snapshot = resolve_episode_status(detail, snapshot=observed)
+                snapshot = resolve_episode_status(
+                    detail,
+                    publication_timing_reference=detail.published_date,
+                    snapshot=observed,
+                )
                 record = detail
                 status = snapshot.status
                 detail_resolved = True
