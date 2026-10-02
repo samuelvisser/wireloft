@@ -80,6 +80,8 @@
     background: #172131;
     color: #d7e1ef;
     font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 }
 
 .log-entry {
@@ -93,6 +95,10 @@
 .log-entry time,
 .log-logger {
     color: #8fa2b8;
+}
+
+.log-entry time {
+    white-space: nowrap;
 }
 
 .log-level {
@@ -189,11 +195,28 @@
 
 @media (max-width: 520px) {
     .log-entry {
-        grid-template-columns: max-content 4.3rem;
+        grid-template-columns: minmax(0, 1fr) max-content;
+        grid-template-areas:
+            "timestamp level"
+            "message message";
+        column-gap: 10px;
+        row-gap: 2px;
+        padding-top: 6px;
+        padding-bottom: 6px;
+    }
+
+    .log-entry time {
+        grid-area: timestamp;
+        min-width: 0;
+    }
+
+    .log-level {
+        grid-area: level;
+        justify-self: end;
     }
 
     .log-message {
-        grid-column: 1 / -1;
-        padding-bottom: 3px;
+        grid-area: message;
+        padding-bottom: 0;
     }
 }
