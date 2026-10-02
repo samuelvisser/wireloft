@@ -159,33 +159,36 @@ def monitor_stalled_work(
             )
         )
         current_tasks = {
-            run_id: _percent(progress)
-            for run_id, progress in session.execute(
-                select(TaskRun.id, TaskRun.progress).where(
+            run.id: _percent(run.progress)
+            for run in session.scalars(
+                select(TaskRun).where(
                     TaskRun.status.in_(_ACTIVE_TASK_STATUSES),
                     TaskRun.id.not_in(active_operation_run_ids),
                 )
             )
+            if run.wait_state is None
         }
         # Structured download runs are not monitored a second time through the
         # generic integer percentage of their operation or their parent batch.
         structured_stalled = set()
         structured_runs = set()
-        for run_id, metadata in session.execute(select(TaskRun.id, TaskRun.meta).where(TaskRun.status == TaskStatus.RUNNING)):
-            report = (metadata or {}).get("_progress_meta") or {}
+        for run in session.scalars(select(TaskRun).where(TaskRun.status == TaskStatus.RUNNING)):
+            if run.wait_state is not None:
+                continue
+            report = run.progress_metadata or {}
             download = report.get("download")
             batch = report.get("batch")
             if isinstance(download, dict):
-                structured_runs.add(run_id)
+                structured_runs.add(run.id)
                 if download_execution_stalled(download, now=current_time.timestamp(), timeout_seconds=timeout.total_seconds()):
-                    structured_stalled.add(run_id)
+                    structured_stalled.add(run.id)
             elif isinstance(batch, dict):
-                structured_runs.add(run_id)
+                structured_runs.add(run.id)
                 # Children have their own activity/deadline watchdogs. A batch
                 # coordinator being alive must not synthesize child progress.
                 heartbeat = batch.get("heartbeat_at") or 0
                 if current_time.timestamp() - heartbeat >= timeout.total_seconds():
-                    structured_stalled.add(run_id)
+                    structured_stalled.add(run.id)
         structured_operation_ids = set()
         stalled_operation_ids = set()
         for operation_id, run_id in session.execute(

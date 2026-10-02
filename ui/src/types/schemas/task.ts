@@ -1,6 +1,13 @@
 import {z} from "zod";
 import {ApiDateTimeStringSchema} from './datetime'
 
+export const TaskRunWaitStateReadSchema = z.looseObject({
+  reason: z.string(),
+  message: z.string().nullable().optional(),
+  until: z.number().nullable().optional(),
+});
+export type TaskRunWaitStateRead = z.infer<typeof TaskRunWaitStateReadSchema>;
+
 export const TaskRunReadSchema = z.looseObject({
   id: z.int(),
   definitionKey: z.string(),
@@ -8,7 +15,7 @@ export const TaskRunReadSchema = z.looseObject({
   resourceId: z.int(),
   status: z.string(),
   progress: z.int().nullable().optional(),
-  waitState: z.record(z.string(), z.unknown()).nullable().optional(),
+  waitState: TaskRunWaitStateReadSchema.nullable().optional(),
   message: z.string().nullable().optional(),
   result: z.record(z.string(), z.unknown()).nullable().optional(),
   attemptCount: z.int(),
@@ -28,6 +35,7 @@ export const TaskLedgerEntryReadSchema = z.looseObject({
   resourceId: z.int().nullable(),
   status: z.string(),
   progress: z.int().nullable().optional(),
+  waitState: TaskRunWaitStateReadSchema.nullable().optional(),
   message: z.string().nullable().optional(),
   lastError: z.string().nullable().optional(),
   inputs: z.record(z.string(), z.unknown()),

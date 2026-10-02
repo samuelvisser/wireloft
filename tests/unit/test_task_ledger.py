@@ -11,6 +11,7 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
     from backend.api.endpoints.tasks import service
     from backend.db import Base
     from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.db.TaskRun import TASK_RUN_WAIT_STATE_META_KEY
     from task_manager.scheduler.types import ResourceType, TaskStatus
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
@@ -104,7 +105,14 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
             status=TaskStatus.RUNNING,
             progress=50,
             message="still running",
-            meta={"inputs": {}},
+            meta={
+                "inputs": {},
+                TASK_RUN_WAIT_STATE_META_KEY: {
+                    "reason": "daily_wire_request_cooldown",
+                    "message": "Waiting for The Daily Wire request cooldown",
+                    "until": base.timestamp() + 600,
+                },
+            },
             result=None,
             attempt_count=1,
             max_retries=2,
@@ -187,6 +195,19 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
     assert [item.message for item in second.items] == ["direct failure"]
     assert second.items[0].last_error == "boom"
     assert second.items[0].inputs == {"show_slug": "show-seven"}
+
+    waiting = service.list_ledger(
+        definition_key="fetch_new_episodes",
+        statuses=[TaskStatus.RUNNING.value],
+        order_by="started_at",
+        order="desc",
+        offset=0,
+        limit=20,
+    )
+    assert waiting.total == 1
+    assert waiting.items[0].wait_state is not None
+    assert waiting.items[0].wait_state.reason == "daily_wire_request_cooldown"
+    assert waiting.items[0].wait_state.message == "Waiting for The Daily Wire request cooldown"
 
     all_succeeded = service.list_ledger(
         definition_key=None,

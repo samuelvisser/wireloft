@@ -1,6 +1,7 @@
 import type {TaskOperationRead} from '../types/schemas/operation'
 import type {ProgressPresentation} from '../types/progress'
-import {ACTIVE_OPERATION_STATUSES, presentDownloadProgress, waitingPresentation, workingPresentation} from './downloadProgress'
+import {ACTIVE_OPERATION_STATUSES, presentDownloadProgress} from './downloadProgress'
+import {waitingPresentation, workingPresentation} from './progressPresentation'
 
 export function presentOperationProgress(operation?: TaskOperationRead, starting = false): ProgressPresentation | undefined {
     if (starting && !operation) return workingPresentation('Starting')

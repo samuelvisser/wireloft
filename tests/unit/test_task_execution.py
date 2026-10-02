@@ -35,7 +35,7 @@ def test_successful_task_persists_progress_and_terminal_state(task_database, mon
     from backend.db.core import get_session
     from task_manager.scheduler.db import TaskRun
     from task_manager.scheduler.executor import execute_task
-    from task_manager.scheduler.operations import TASK_RUN_PROGRESS_META_KEY
+    from task_manager.scheduler.db.TaskRun import TASK_RUN_PROGRESS_META_KEY
 
     reported_meta = None
 
