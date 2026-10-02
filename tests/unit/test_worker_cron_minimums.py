@@ -7,6 +7,7 @@ from config.settings.cron_validation import (
     CronExpressionError,
     minimum_cron_interval_seconds,
     validate_cron_expression,
+    worker_cron_specs,
     worker_cron_validation_errors,
 )
 from config.settings.settings import AppSettings
@@ -14,22 +15,6 @@ from config.settings.settings import AppSettings
 
 def _settings_document() -> dict:
     return AppSettings(timezone="UTC").model_dump(mode="python")
-
-
-def _worker_kwargs(settings: AppSettings) -> dict:
-    return {
-        "min_slow_request_ms": settings.dw_timeout.min_slow_request_ms,
-        "find_episodes_cron_enabled": settings.new_episode_schedule.find_episodes_cron_enabled,
-        "find_episodes_cron": settings.new_episode_schedule.find_episodes_cron,
-        "monitor_pending_episode_cron_enabled": settings.new_episode_schedule.monitor_pending_episode_cron_enabled,
-        "monitor_pending_episode_cron": settings.new_episode_schedule.monitor_pending_episode_cron,
-        "monitor_no_usable_media_episode_cron_enabled": settings.new_episode_schedule.monitor_no_usable_media_episode_cron_enabled,
-        "monitor_no_usable_media_episode_cron": settings.new_episode_schedule.monitor_no_usable_media_episode_cron,
-        "verify_downloads_cron_enabled": settings.download_settings.verify_downloads_cron_enabled,
-        "verify_downloads_cron": settings.download_settings.verify_downloads_cron,
-        "file_watcher_scan_cron_enabled": settings.file_watcher.scan_cron_enabled,
-        "file_watcher_scan_cron": settings.file_watcher.scan_cron,
-    }
 
 
 @pytest.mark.parametrize(
@@ -68,6 +53,22 @@ def test_static_cron_analyzer_rejects_invalid_expressions(expression):
         validate_cron_expression(expression)
 
 
+def test_worker_cron_registry_resolves_settings_and_enable_fields():
+    settings = AppSettings(timezone="UTC")
+
+    specs = {spec.field_path: spec for spec in worker_cron_specs(settings)}
+
+    find_episodes = specs[("new_episode_schedule", "find_episodes_cron")]
+    assert find_episodes.expression == settings.new_episode_schedule.find_episodes_cron
+    assert find_episodes.enabled is settings.new_episode_schedule.find_episodes_cron_enabled
+    assert find_episodes.enabled_field_path == (
+        "new_episode_schedule",
+        "find_episodes_cron_enabled",
+    )
+
+    assert len(specs) == 5
+
+
 def test_runtime_settings_no_longer_repeat_worker_policy_validation():
     values = _settings_document()
     values["new_episode_schedule"]["monitor_pending_episode_cron"] = "* * * * *"
@@ -83,7 +84,7 @@ def test_startup_worker_validation_reports_too_fast_cron():
     values["new_episode_schedule"]["monitor_pending_episode_cron"] = "* * * * *"
     settings = AppSettings.model_validate(values)
 
-    errors = worker_cron_validation_errors(**_worker_kwargs(settings))
+    errors = worker_cron_validation_errors(settings)
 
     matching = [
         error
@@ -101,7 +102,7 @@ def test_disabled_worker_cron_skips_minimum_interval_validation():
     values["new_episode_schedule"]["find_episodes_cron"] = "* * * * *"
     settings = AppSettings.model_validate(values)
 
-    errors = worker_cron_validation_errors(**_worker_kwargs(settings))
+    errors = worker_cron_validation_errors(settings)
 
     assert not any(
         error.field_path == ("new_episode_schedule", "find_episodes_cron")
@@ -116,7 +117,7 @@ def test_disabled_invalid_cron_is_not_a_startup_issue():
     values["new_episode_schedule"]["find_episodes_cron"] = "banana * * * *"
     settings = AppSettings.model_validate(values)
 
-    errors = worker_cron_validation_errors(**_worker_kwargs(settings))
+    errors = worker_cron_validation_errors(settings)
 
     assert not any(
         error.field_path == ("new_episode_schedule", "find_episodes_cron")

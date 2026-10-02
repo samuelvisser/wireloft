@@ -16,6 +16,7 @@ from config.settings.cron_validation import (
     CronExpressionError,
     WorkerCronExpressionError,
     validate_cron_expression,
+    worker_cron_specs,
     worker_cron_validation_errors,
 )
 from config.settings.settings import AppSettings
@@ -173,6 +174,10 @@ def _validate_non_empty_path(value: Any) -> Any:
     if isinstance(value, str) and not value.strip():
         raise ValueError("Path cannot be empty")
     return value
+
+
+def _api_setting_path(path: tuple[str, ...]) -> str:
+    return ".".join(to_camel(segment) for segment in path)
 
 
 class CryptoFileSettingsValue(_SettingsValueModel):
@@ -380,28 +385,17 @@ class SettingsAPIUpdate(RequestBase):
     def _validate_worker_crons(self):
         changed = set(self.changed_fields)
         validate_all_intervals = "dwTimeout.minSlowRequestMs" in changed
-        enable_fields = {
-            "newEpisodeSchedule.findEpisodesCron": "newEpisodeSchedule.findEpisodesCronEnabled",
-            "newEpisodeSchedule.monitorPendingEpisodeCron": "newEpisodeSchedule.monitorPendingEpisodeCronEnabled",
-            "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron": "newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled",
-            "downloadSettings.verifyDownloadsCron": "downloadSettings.verifyDownloadsCronEnabled",
-            "fileWatcher.scanCron": "fileWatcher.scanCronEnabled",
-        }
-        cron_values = {
-            "newEpisodeSchedule.findEpisodesCron": self.values.new_episode_schedule.find_episodes_cron,
-            "newEpisodeSchedule.monitorPendingEpisodeCron": self.values.new_episode_schedule.monitor_pending_episode_cron,
-            "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron": self.values.new_episode_schedule.monitor_no_usable_media_episode_cron,
-            "downloadSettings.verifyDownloadsCron": self.values.download_settings.verify_downloads_cron,
-            "fileWatcher.scanCron": self.values.file_watcher.scan_cron,
-        }
+        specs = worker_cron_specs(self.values)
+        specs_by_path = {spec.field_path: spec for spec in specs}
 
         line_errors = []
         invalid_changed_fields: set[str] = set()
-        for field, expression in cron_values.items():
+        for spec in specs:
+            field = _api_setting_path(spec.field_path)
             if field not in changed:
                 continue
             try:
-                validate_cron_expression(expression)
+                validate_cron_expression(spec.expression)
             except CronExpressionError:
                 invalid_changed_fields.add(field)
                 line_errors.append({
@@ -411,29 +405,21 @@ class SettingsAPIUpdate(RequestBase):
                         {"message": "Enter a valid five-part cron expression"},
                     ),
                     "loc": ("values", *field.split(".")),
-                    "input": expression,
+                    "input": spec.expression,
                 })
 
-        policy_errors = worker_cron_validation_errors(
-            min_slow_request_ms=self.values.dw_timeout.min_slow_request_ms,
-            find_episodes_cron_enabled=self.values.new_episode_schedule.find_episodes_cron_enabled,
-            find_episodes_cron=self.values.new_episode_schedule.find_episodes_cron,
-            monitor_pending_episode_cron_enabled=self.values.new_episode_schedule.monitor_pending_episode_cron_enabled,
-            monitor_pending_episode_cron=self.values.new_episode_schedule.monitor_pending_episode_cron,
-            monitor_no_usable_media_episode_cron_enabled=self.values.new_episode_schedule.monitor_no_usable_media_episode_cron_enabled,
-            monitor_no_usable_media_episode_cron=self.values.new_episode_schedule.monitor_no_usable_media_episode_cron,
-            verify_downloads_cron_enabled=self.values.download_settings.verify_downloads_cron_enabled,
-            verify_downloads_cron=self.values.download_settings.verify_downloads_cron,
-            file_watcher_scan_cron_enabled=self.values.file_watcher.scan_cron_enabled,
-            file_watcher_scan_cron=self.values.file_watcher.scan_cron,
-        )
+        policy_errors = worker_cron_validation_errors(self.values)
 
         for error in policy_errors:
-            field = ".".join(to_camel(segment) for segment in error.field_path)
+            spec = specs_by_path[error.field_path]
+            field = _api_setting_path(spec.field_path)
             if field in invalid_changed_fields:
                 continue
 
-            directly_affected = field in changed or enable_fields[field] in changed
+            directly_affected = (
+                field in changed
+                or _api_setting_path(spec.enabled_field_path) in changed
+            )
             if isinstance(error, WorkerCronExpressionError):
                 if not directly_affected:
                     continue
@@ -456,7 +442,7 @@ class SettingsAPIUpdate(RequestBase):
                 value = getattr(value, segment)
             line_errors.append({
                 "type": error_type,
-                "loc": ("values", *(to_camel(segment) for segment in error.field_path)),
+                "loc": ("values", *field.split(".")),
                 "input": value,
             })
 
