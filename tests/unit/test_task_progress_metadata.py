@@ -30,6 +30,7 @@ def _operation(*, status: str, targets: list[object]):
         title="Download",
         status=status,
         progress=25,
+        completion_progress=25,
         message="Running",
         result=None,
         context=None,
@@ -40,6 +41,7 @@ def _operation(*, status: str, targets: list[object]):
         created_at=None,
         updated_at=None,
         targets=targets,
+        dependencies=[],
     )
 
 
@@ -48,13 +50,12 @@ def _target(run):
 
 
 def test_task_operation_exposes_progress_metadata_only_for_active_single_target():
-    from task_manager.scheduler.operations import (
-        TASK_RUN_PROGRESS_META_KEY,
-        _operation_snapshot,
-    )
+    from task_manager.scheduler.db import TaskRun
+    from task_manager.scheduler.db.TaskRun import TASK_RUN_PROGRESS_META_KEY
+    from task_manager.scheduler.operations import _operation_snapshot
     from task_manager.scheduler.types import TaskStatus
 
-    run = SimpleNamespace(
+    run = TaskRun(
         id=1,
         status=TaskStatus.RUNNING,
         progress=25,

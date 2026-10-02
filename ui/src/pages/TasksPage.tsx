@@ -7,6 +7,7 @@ import ProgressBar from '../components/common/ProgressBar'
 import PageSubtitle from '../components/common/PageSubtitle'
 import {useTaskLedgerInfinite} from '../lib/taskLedger'
 import {useFilterChipPress} from '../lib/useFilterChipPress'
+import {waitingPresentation} from '../lib/progressPresentation'
 import type {TaskLedgerEntryRead} from '../types/schemas/task'
 import './TasksPage.css'
 
@@ -66,53 +67,38 @@ function statusLabel(row: TaskLedgerEntryRead): string {
     return row.status.toLowerCase().replace(/^./, (character) => character.toUpperCase())
 }
 
-function waitLabel(waitState: Record<string, unknown> | null | undefined): string | null {
-    if (!waitState) return null
-    const reason = typeof waitState.reason === 'string' ? waitState.reason : ''
-    const labels: Record<string, string> = {
-        daily_wire_request_cooldown: 'Cooldown',
-        daily_wire_request_queue: 'API queue',
-        request_spacing: 'Waiting',
-        upstream_retry: 'Retry wait',
-        retry_backoff: 'Retry wait',
-        download_capacity: 'Queued',
-        sidecar_capacity: 'Asset queue',
-        processing_capacity: 'Processing queue',
-        custom_indexes: 'Preparing',
-        previous_attempt: 'Restarting',
-    }
-    return labels[reason] || 'Waiting'
+function taskMessage(row: TaskLedgerEntryRead): string | null {
+    return row.lastError || row.waitState?.message || row.message || null
 }
 
 function TaskStatus({row}: {row: TaskLedgerEntryRead}) {
     const active = ACTIVE_STATUSES.has(row.status)
-    const wait = active ? waitLabel(row.waitState) : null
+    const wait = active && row.waitState
+        ? waitingPresentation(row.waitState.reason, row.waitState.message, row.progress ?? null)
+        : null
     const hasProgress = active && !wait && row.progress != null
-    const waitMessage = typeof row.waitState?.message === 'string' ? row.waitState.message : null
-    const text = wait
-        ? wait
-        : row.status === 'RUNNING' && !hasProgress
-            ? (row.message || 'Working')
-            : statusLabel(row)
+    const text = row.status === 'RUNNING' && !hasProgress
+        ? (row.message || 'Working')
+        : statusLabel(row)
 
     return (
         <span className={`task-progress-status is-${row.status.toLowerCase().replace(/_/g, '-')}`}>
             <span className="task-progress-heading">
                 <span className="task-progress-label">
                     <FontAwesomeIcon
-                        icon={statusIcon(row.status)}
-                        className={active && !hasProgress ? 'wl-progress-icon' : undefined}
+                        icon={wait?.icon ?? statusIcon(row.status)}
+                        className={active && !hasProgress && !wait ? 'wl-progress-icon' : undefined}
                         aria-hidden="true"
                     />
-                    {hasProgress ? `${row.progress}%` : text}
+                    {wait?.label ?? (hasProgress ? `${row.progress}%` : text)}
                 </span>
             </span>
             {active && (
                 <ProgressBar
-                    value={hasProgress ? row.progress : null}
-                    mode={hasProgress ? 'determinate' : wait ? 'waiting' : row.status === 'RUNNING' ? 'indeterminate' : 'waiting'}
+                    value={wait?.percent ?? (hasProgress ? row.progress : null)}
+                    mode={wait?.mode ?? (hasProgress ? 'determinate' : row.status === 'RUNNING' ? 'indeterminate' : 'waiting')}
                     ariaLabel={`${row.definitionTitle} progress`}
-                    detail={waitMessage || row.message || statusLabel(row)}
+                    detail={wait?.detail ?? row.message ?? statusLabel(row)}
                 />
             )}
         </span>
@@ -205,11 +191,11 @@ export default function TasksPage() {
             header: 'Message',
             cell: (row) => (
                 <span className={row.lastError ? 'task-message is-error' : 'task-message'}>
-                    {row.lastError || row.message || '—'}
+                    {taskMessage(row) || '—'}
                 </span>
             ),
             dataLabel: 'Message',
-            sortAccessor: (row) => row.lastError || row.message,
+            sortAccessor: taskMessage,
         },
         {
             header: 'Attempts',

@@ -1,5 +1,6 @@
 import {DownloadExecutionSchema} from '../../types/schemas/download_execution'
-import {activityLabel, waitingPresentation} from '../../lib/downloadProgress'
+import {activityLabel} from '../../lib/downloadProgress'
+import {waitingPresentation} from '../../lib/progressPresentation'
 
 function duration(seconds: number): string {
     return seconds < 60 ? `${Math.max(0, seconds).toFixed(1)} s` : `${Math.floor(seconds / 60)} m ${Math.round(seconds % 60)} s`

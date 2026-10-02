@@ -35,9 +35,10 @@ def test_dailywire_slow_cooldown_notifies_current_execution(monkeypatch):
 
 def test_task_operation_reports_worker_wait_state():
     from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.db.TaskRun import TASK_RUN_WAIT_STATE_META_KEY
     from task_manager.scheduler.operations import (
-        TASK_RUN_WAIT_STATE_META_KEY,
         OperationTargetSpec,
+        _operation_snapshot,
         create_operation,
         refresh_operation,
     )
@@ -98,11 +99,18 @@ def test_task_operation_reports_worker_wait_state():
             }
         }
         session.flush()
+        assert run.wait_state == {
+            "reason": "daily_wire_request_cooldown",
+            "message": "Waiting for Daily Wire request cooldown. Will resume soon.",
+        }
         refresh_operation(session, operation.id)
 
         assert operation.status == OperationStatus.WAITING.value
         assert operation.progress == 35
         assert operation.message == "Waiting for Daily Wire request cooldown. Will resume soon."
+        snapshot = _operation_snapshot(operation)
+        assert snapshot.progress_meta is not None
+        assert snapshot.progress_meta["wait_state"] == run.wait_state
 
         run.meta = None
         session.flush()

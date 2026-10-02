@@ -170,18 +170,23 @@ def test_task_models_follow_relationship_aliases():
         definition=SimpleNamespace(key="worker", title="Worker"),
         resource_type="show",
         resource_id=3,
-        status="SUCCEEDED",
-        progress=100,
+        status="RUNNING",
+        progress=35,
+        wait_state={
+            "reason": "daily_wire_request_queue",
+            "message": "Waiting for a turn to request The Daily Wire",
+            "until": None,
+        },
         message="Done",
         last_error=None,
         meta={"inputs": {"refresh": True}},
-        result={"summary": "Done"},
+        result=None,
         attempt_count=1,
         max_retries=3,
         next_retry_at=None,
         started_at=NOW,
-        finished_at=NOW,
-        runtime_ms=100,
+        finished_at=None,
+        runtime_ms=None,
         created_at=NOW,
         updated_at=NOW,
     )
@@ -190,5 +195,8 @@ def test_task_models_follow_relationship_aliases():
 
     assert item.definition_key == "worker"
     assert item.definition_title == "Worker"
-    assert item.progress == 100
+    assert item.progress == 35
+    assert item.wait_state is not None
+    assert item.wait_state.reason == "daily_wire_request_queue"
+    assert item.wait_state.message == "Waiting for a turn to request The Daily Wire"
     assert item.inputs == {"refresh": True}
