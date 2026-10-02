@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import lru_cache
 import re
+from typing import Any
 
 
 _CALENDAR_CYCLE_START = date(2000, 1, 1)
@@ -97,7 +98,7 @@ class _ParsedCron:
 SettingPath = tuple[str, ...]
 
 
-def _setting_value(settings: object, path: SettingPath) -> object:
+def _setting_value(settings: object, path: SettingPath) -> Any:
     value = settings
     for segment in path:
         value = getattr(value, segment)
