@@ -166,8 +166,12 @@ export default function EpisodePage() {
     const [earlyDeleteConfirm, setEarlyDeleteConfirm] = useState(false)
     const [earlyDeleteStarting, setEarlyDeleteStarting] = useState(false)
 
-    const {data: show, isLoading, error} = useShow(showId)
-    const {data: episode, isLoading: isLoadingEpisode} = useEpisode(episodeId)
+    const {data: show, isPending: isShowPending, isFetching: isShowFetching, error} = useShow(showId)
+    const {
+        data: episode,
+        isPending: isEpisodePending,
+        isFetching: isEpisodeFetching,
+    } = useEpisode(episodeId)
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads} = useEpisodeDownloads(episodeId)
     const settingsQuery = useSettings()
@@ -197,7 +201,7 @@ export default function EpisodePage() {
         )
     }
 
-    if (isLoading && !show) return null
+    if (!show && (isShowPending || isShowFetching)) return null
 
     if (!show) {
         return (
@@ -211,7 +215,7 @@ export default function EpisodePage() {
         )
     }
 
-    if (isLoadingEpisode && !episode) return null
+    if (!episode && (isEpisodePending || isEpisodeFetching)) return null
 
     if (!episode) {
         return (
