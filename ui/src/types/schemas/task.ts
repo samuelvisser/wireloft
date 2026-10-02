@@ -1,6 +1,16 @@
 import {z} from "zod";
 import {ApiDateTimeStringSchema} from './datetime'
 
+export const TaskDefinitionReadSchema = z.looseObject({
+  id: z.int(),
+  key: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  allowedResourceTypes: z.array(z.string()).nullable(),
+  defaultMaxRetries: z.int().nullable(),
+});
+export type TaskDefinitionRead = z.infer<typeof TaskDefinitionReadSchema>;
+
 export const TaskRunWaitStateReadSchema = z.looseObject({
   reason: z.string(),
   message: z.string().nullable().optional(),

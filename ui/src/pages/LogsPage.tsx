@@ -5,6 +5,7 @@ import Select from 'react-select'
 import Switch from 'react-switch'
 
 import PageSubtitle from '../components/common/PageSubtitle'
+import {usePageActive} from '../lib/pageActivity'
 import {ApplicationLogPageReadSchema, type ApplicationLogEntryRead} from '../types/schemas/log'
 import './LogsPage.css'
 
@@ -36,6 +37,7 @@ export default function LogsPage() {
     const [level, setLevel] = useState('')
     const [search, setSearch] = useState('')
     const [hidePullRequests, setHidePullRequests] = useState(true)
+    const pageActive = usePageActive()
     const panelRef = useRef<HTMLDivElement | null>(null)
     const stickToBottomRef = useRef(true)
 
@@ -56,8 +58,11 @@ export default function LogsPage() {
             if (!response.ok) throw new Error(`HTTP ${response.status}`)
             return ApplicationLogPageReadSchema.parse(await response.json())
         },
+        enabled: pageActive,
         refetchInterval: 2000,
         refetchOnMount: 'always',
+        refetchOnWindowFocus: false,
+        refetchIntervalInBackground: false,
     })
 
     const canShowPullRequests = level === '' || level === 'INFO'
