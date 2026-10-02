@@ -56,7 +56,6 @@ from .operations import (
 
 logger = logging.getLogger(__name__)
 _SETTINGS_FILE_LOCK = threading.RLock()
-_SETTINGS_STATE_LOCK = threading.RLock()
 _MISSING = object()
 
 
@@ -81,7 +80,28 @@ class _SettingsRuntimeState:
     updated_at: datetime | None
 
 
-_SETTINGS_STATE: _SettingsRuntimeState | None = None
+class _SettingsRuntimeRegistry:
+    """Thread-safe owner of the Settings UI runtime snapshot."""
+
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._state: _SettingsRuntimeState | None = None
+
+    def get(self) -> _SettingsRuntimeState:
+        with self._lock:
+            settings = get_settings()
+            if self._state is None or self._state.settings is not settings:
+                self._state = _build_runtime_state(settings)
+            return self._state
+
+    def install(self, state: _SettingsRuntimeState) -> None:
+        """Publish AppSettings and its UI snapshot as one runtime transition."""
+        with self._lock:
+            replace_settings(state.settings)
+            self._state = state
+
+
+_SETTINGS_RUNTIME = _SettingsRuntimeRegistry()
 
 
 def _file_timestamp(path: Path) -> datetime | None:
@@ -504,21 +524,11 @@ def _build_runtime_state(settings: AppSettings) -> _SettingsRuntimeState:
 
 def initialize_settings_runtime_state() -> None:
     """Prime Settings UI metadata and diagnostics once during application startup."""
-    global _SETTINGS_STATE
-    settings = get_settings()
-    with _SETTINGS_STATE_LOCK:
-        if _SETTINGS_STATE is not None and _SETTINGS_STATE.settings is settings:
-            return
-        _SETTINGS_STATE = _build_runtime_state(settings)
+    _SETTINGS_RUNTIME.get()
 
 
 def _runtime_state() -> _SettingsRuntimeState:
-    settings = get_settings()
-    with _SETTINGS_STATE_LOCK:
-        if _SETTINGS_STATE is None or _SETTINGS_STATE.settings is not settings:
-            initialize_settings_runtime_state()
-        assert _SETTINGS_STATE is not None
-        return _SETTINGS_STATE
+    return _SETTINGS_RUNTIME.get()
 
 
 def _response(state: _SettingsRuntimeState) -> SettingsAPIRead:
@@ -538,8 +548,6 @@ def get_ui_settings() -> SettingsAPIRead:
 
 
 def save_ui_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
-    global _SETTINGS_STATE
-
     with _SETTINGS_FILE_LOCK:
         state = _runtime_state()
         path = get_config_path()
@@ -609,9 +617,7 @@ def save_ui_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
                 validation_issues=validation_issues,
                 updated_at=_file_timestamp(path),
             )
-            with _SETTINGS_STATE_LOCK:
-                replace_settings(effective_settings)
-                _SETTINGS_STATE = next_state
+            _SETTINGS_RUNTIME.install(next_state)
 
             logging.getLogger().setLevel(
                 getattr(logging, effective_settings.log_level, logging.INFO)
@@ -626,9 +632,7 @@ def save_ui_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
                     _atomic_write(path, previous_content)
                 elif not previous_file_existed:
                     path.unlink(missing_ok=True)
-                with _SETTINGS_STATE_LOCK:
-                    replace_settings(state.settings)
-                    _SETTINGS_STATE = state
+                _SETTINGS_RUNTIME.install(state)
             except Exception:
                 logger.exception("Failed to restore the previous config.yml")
 
