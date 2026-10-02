@@ -5,10 +5,11 @@ from datetime import datetime, time, timedelta, timezone
 from typing import Optional, Sequence
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import false, func, or_, select
+from sqlalchemy import exists, false, func, or_, select
 from sqlalchemy.orm import Session, selectin_polymorphic, selectinload
 
 from backend.db.models import DownloadProfileBase, Episode, PodcastDownloadProfile, Season, SeriesDownloadProfile
+from backend.db.models.Metadata import Metadata
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
@@ -17,6 +18,11 @@ from backend.types.media_types import MediaType
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
+from task_manager.tasks.helpers.episodes.automatic_download_timing import (
+    AUTOMATIC_DOWNLOAD_DELAY_META_KEY,
+    is_trusted_automatic_download_delay_value,
+)
+from task_manager.tasks.helpers.episodes.metadata import ensure_utc
 from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
@@ -78,6 +84,37 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def automatic_episode_download_ready_at(episode: Episode) -> datetime | None:
+    """Return the earliest instant an automatic episode download may start."""
+    delay_minutes = (
+        get_settings().download_settings.automatic_episode_download_delay_minutes
+    )
+    if delay_minutes <= 0:
+        return None
+
+    clocks: list[datetime] = []
+    if episode.published_date is not None:
+        clocks.append(ensure_utc(episode.published_date))
+
+    transition = next(
+        (
+            item
+            for item in episode.meta_items
+            if (
+                item.key == AUTOMATIC_DOWNLOAD_DELAY_META_KEY
+                and is_trusted_automatic_download_delay_value(item.value)
+            )
+        ),
+        None,
+    )
+    if transition is not None and transition.updated_at is not None:
+        clocks.append(ensure_utc(transition.updated_at))
+
+    if not clocks:
+        return None
+    return max(clocks) + timedelta(minutes=delay_minutes)
+
+
 def _episode_identifier_type_predicate(allowed_types: set[str]):
     patterns = {
         "ep": "ep.%",
@@ -98,11 +135,17 @@ def get_download_profile_episodes(
         profile: DownloadProfileBase,
         *,
         only_episode: Optional[Episode] = None,
+        apply_automatic_download_delay: bool = True,
 ) -> list[Episode]:
     """Episodes a Download Profile currently wants represented by artifacts.
 
     Apply the stable profile predicates in SQL so large shows do not materialize
     thousands of Episode ORM objects merely to discard nearly all of them.
+
+    Automatic downloads also observe the configured post-publication delay. The
+    delay is applied after a Podcast Download Profile's episode-count scope is
+    selected so a newly published episode does not temporarily backfill an older
+    episode outside that scope.
     """
     podcast_profile = (
         profile if isinstance(profile, PodcastDownloadProfile) else None
@@ -125,13 +168,6 @@ def get_download_profile_episodes(
         Episode.publish_status.in_(eligible_statuses),
         _episode_identifier_type_predicate(allowed_types),
     )
-
-    needs_global_podcast_scope = (
-        podcast_profile is not None
-        and podcast_profile.download_episode_count > 0
-    )
-    if only_episode is not None and not needs_global_podcast_scope:
-        stmt = stmt.where(Episode.id == only_episode.id)
 
     if (
         podcast_profile is not None
@@ -176,22 +212,49 @@ def get_download_profile_episodes(
             return []
         stmt = stmt.where(or_(*season_predicates))
 
-    if (
+    needs_global_podcast_scope = (
         podcast_profile is not None
         and podcast_profile.download_episode_count > 0
-    ):
-        stmt = (
-            stmt
+    )
+    if needs_global_podcast_scope:
+        scoped_episode_ids = (
+            stmt.with_only_columns(Episode.id)
             .order_by(published_at.desc(), Episode.id.desc())
             .limit(podcast_profile.download_episode_count)
         )
+        stmt = select(Episode).where(Episode.id.in_(scoped_episode_ids))
 
-    eligible = list(s.scalars(stmt))
+    if only_episode is not None:
+        stmt = stmt.where(Episode.id == only_episode.id)
 
-    if only_episode is not None and needs_global_podcast_scope:
-        eligible = [episode for episode in eligible if episode.id == only_episode.id]
+    if apply_automatic_download_delay:
+        delay_minutes = (
+            get_settings().download_settings.automatic_episode_download_delay_minutes
+        )
+        if delay_minutes > 0:
+            cutoff = _utc_now() - timedelta(minutes=delay_minutes)
+            recent_trusted_monitor_transition = exists(
+                select(Metadata.id).where(
+                    Metadata.parent_table == Episode.__tablename__,
+                    Metadata.parent_id == Episode.id,
+                    Metadata.key == AUTOMATIC_DOWNLOAD_DELAY_META_KEY,
+                    Metadata.value.like("monitor:%"),
+                    Metadata.updated_at > cutoff,
+                )
+            )
+            # Daily Wire's publishedAt is the normal clock and remains the only
+            # clock after startup/backfill. A later WireLoft timestamp participates
+            # only when the pending monitor proved it followed the live lifecycle
+            # continuously from the transition into LIVE.
+            stmt = stmt.where(
+                or_(Episode.published_date.is_(None), Episode.published_date <= cutoff),
+                ~recent_trusted_monitor_transition,
+            )
 
-    return eligible
+    if needs_global_podcast_scope:
+        stmt = stmt.order_by(published_at.desc(), Episode.id.desc())
+
+    return list(s.scalars(stmt))
 
 
 @dataclass(frozen=True)
@@ -201,6 +264,7 @@ class DownloadAction:
     media_download_id: int
     needs_operation: bool
     is_redownload: bool = False
+    prepare_existing_artifact: bool | None = None
 
     @property
     def needs_trigger(self) -> bool:
@@ -208,7 +272,13 @@ class DownloadAction:
         return self.needs_operation
 
 
-def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: Episode) -> DownloadAction:
+def ensure_episode_download(
+        s: Session,
+        profile: DownloadProfileBase,
+        episode: Episode,
+        *,
+        defer_artifact_preparation: bool = False,
+) -> DownloadAction:
     """Reconcile one desired episode artifact without encoding worker state on it."""
     existing: Optional[EpisodeMediaDownload] = (
         s.query(EpisodeMediaDownload)
@@ -276,10 +346,29 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         if not _wants_redownload(profile, episode, existing):
             s.flush()
             return DownloadAction(existing.id, False)
+        if defer_artifact_preparation:
+            s.flush()
+            return DownloadAction(
+                existing.id,
+                True,
+                is_redownload=True,
+                prepare_existing_artifact=True,
+            )
         prepare_media_download_artifact(s, existing)
         existing.file_path = target_path
         s.flush()
         return DownloadAction(existing.id, True, is_redownload=True)
+
+    if defer_artifact_preparation:
+        needs_preparation = (
+            existing.artifact_status != MediaDownloadArtifactStatus.ABSENT.value
+        )
+        s.flush()
+        return DownloadAction(
+            existing.id,
+            True,
+            prepare_existing_artifact=needs_preparation,
+        )
 
     prepare_media_download_artifact(s, existing)
     existing.file_path = target_path
@@ -310,7 +399,14 @@ def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) 
 def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
     """Reconcile artifacts that have fallen outside a podcast retention limit."""
     if profile.download_episode_count > 0:
-        kept_episode_ids = {episode.id for episode in get_download_profile_episodes(s, profile)}
+        kept_episode_ids = {
+            episode.id
+            for episode in get_download_profile_episodes(
+                s,
+                profile,
+                apply_automatic_download_delay=False,
+            )
+        }
         stmt = select(EpisodeMediaDownload).where(
             EpisodeMediaDownload.download_profile_id == profile.id,
         )

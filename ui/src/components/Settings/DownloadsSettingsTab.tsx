@@ -300,6 +300,18 @@ export default function DownloadsSettingsTab({
                 title="Download processing"
                 description="Limits and retry behaviour for downloads started by WireLoft."
             >
+                <DurationField
+                    id="settings-automatic-episode-download-delay"
+                    label="Automatic episode download delay"
+                    value={draft.downloadSettings.automaticEpisodeDownloadDelayMinutes}
+                    backendUnit="minutes"
+                    error={errorFor('downloadSettings.automaticEpisodeDownloadDelayMinutes')}
+                    environmentVariable={environmentVariableFor('downloadSettings.automaticEpisodeDownloadDelayMinutes')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.automaticEpisodeDownloadDelayMinutes = value
+                    })}
+                    help="Minimum time after an episode becomes published before Download Profiles may automatically download it. If WireLoft observes the episode as LIVE on consecutive monitor polls, it instead uses the later observed end of the live stream as the safer clock. After a restart or startup backfill, it falls back to The Daily Wire's published timestamp. Download Profiles create the download operation immediately and show it as Delayed while this timer is running. Manual downloads are not delayed."
+                />
                 <NumberField
                     id="settings-download-concurrency"
                     label="Concurrent downloads"

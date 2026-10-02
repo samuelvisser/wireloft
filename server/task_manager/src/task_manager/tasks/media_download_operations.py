@@ -35,9 +35,13 @@ from task_manager.scheduler.operations import (
     OperationDependencySpec,
     OperationTargetSpec,
     add_operation_dependencies,
+    clear_operation_admission_wait,
     create_operation,
     link_run_to_operations,
+    operation_admission_wait_state,
     operation_target_needs_dispatch,
+    refresh_operation,
+    set_operation_admission_wait,
 )
 from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import (
@@ -52,7 +56,11 @@ from task_manager.tasks.workers.file_watcher.service import resolve_media_downlo
 
 logger = logging.getLogger(__name__)
 MEDIA_DOWNLOAD_OPERATION_KIND = "media.download"
+MEDIA_DOWNLOAD_PUBLICATION_DELAY_REASON = "publication_delay"
+MEDIA_DOWNLOAD_PUBLICATION_DELAY_MESSAGE = "Waiting for the post-publication download delay"
+_PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY = "publication_delay_bypassed"
 _DOWNLOAD_TASK_KEYS = ("download_episode", "download_movie")
+_DELAY_DISPATCH_JOB_PREFIX = "media-download-delay"
 _ACTIVE_OPERATION_STATUSES = (
     OperationStatus.QUEUED.value,
     OperationStatus.RUNNING.value,
@@ -252,6 +260,7 @@ def create_media_download_operation(
     source: str = OperationSource.SYSTEM.value,
     is_redownload: bool = False,
     prepare_existing_artifact: bool | None = None,
+    not_before: datetime | None = None,
 ) -> TaskOperation:
     """Create the canonical execution operation for one MediaDownload attempt.
 
@@ -262,11 +271,40 @@ def create_media_download_operation(
     """
     existing = get_active_media_download_operation(session, download.id)
     if existing is not None:
-        if (
-            source == OperationSource.UI.value
-            and existing.status == OperationStatus.QUEUED.value
+        # Explicit requests bypass an automatic post-publication admission wait.
+        # They still reuse the same operation so one artifact cannot gain two
+        # concurrent attempts merely because the user clicked Download.
+        if source != OperationSource.SYSTEM.value:
+            existing.context = {
+                **(existing.context or {}),
+                _PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY: True,
+            }
+            clear_operation_admission_wait(existing)
+            refresh_operation(session, existing.id)
+            if existing.status == OperationStatus.QUEUED.value:
+                _prioritize_queued_operation(session, existing)
+        elif (
+            not (
+                isinstance(existing.context, dict)
+                and existing.context.get(_PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY) is True
+            )
+            and existing.targets
+            and operation_target_needs_dispatch(
+                session,
+                existing.id,
+                existing.targets[0].slot_key,
+            )
         ):
-            _prioritize_queued_operation(session, existing)
+            if not_before is not None and not_before > datetime.now(timezone.utc):
+                set_operation_admission_wait(
+                    existing,
+                    reason=MEDIA_DOWNLOAD_PUBLICATION_DELAY_REASON,
+                    message=MEDIA_DOWNLOAD_PUBLICATION_DELAY_MESSAGE,
+                    until=not_before,
+                )
+            else:
+                clear_operation_admission_wait(existing)
+            refresh_operation(session, existing.id)
         return existing
 
     should_prepare_existing = (
@@ -303,6 +341,18 @@ def create_media_download_operation(
             prepare_existing_artifact=should_prepare_existing,
         ),
     )
+    if (
+        source == OperationSource.SYSTEM.value
+        and not_before is not None
+        and not_before > datetime.now(timezone.utc)
+    ):
+        set_operation_admission_wait(
+            operation,
+            reason=MEDIA_DOWNLOAD_PUBLICATION_DELAY_REASON,
+            message=MEDIA_DOWNLOAD_PUBLICATION_DELAY_MESSAGE,
+            until=not_before,
+        )
+        refresh_operation(session, operation.id)
     record_media_download_history(
         session,
         download.id,
@@ -318,6 +368,47 @@ def create_media_download_operation(
         and operation.status == OperationStatus.QUEUED.value
     ):
         _prioritize_queued_operation(session, operation)
+    session.flush()
+    return operation
+
+
+def set_media_download_operation_not_before(
+    session: Session,
+    media_download_id: int,
+    not_before: datetime | None,
+) -> TaskOperation | None:
+    """Synchronize an automatic operation's pre-execution publication wait.
+
+    Only SYSTEM operations without a TaskRun reservation are mutable here.
+    Explicit UI/API work bypasses the automatic delay, and an operation that has
+    already claimed a download slot must never be moved back behind admission.
+    """
+    operation = get_active_media_download_operation(session, media_download_id)
+    if operation is None or operation.source != OperationSource.SYSTEM.value:
+        return operation
+    if (
+        isinstance(operation.context, dict)
+        and operation.context.get(_PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY) is True
+    ):
+        return operation
+    if not operation.targets:
+        return operation
+
+    target = operation.targets[0]
+    if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
+        return operation
+
+    if not_before is not None and not_before > datetime.now(timezone.utc):
+        set_operation_admission_wait(
+            operation,
+            reason=MEDIA_DOWNLOAD_PUBLICATION_DELAY_REASON,
+            message=MEDIA_DOWNLOAD_PUBLICATION_DELAY_MESSAGE,
+            until=not_before,
+        )
+    else:
+        clear_operation_admission_wait(operation)
+
+    refresh_operation(session, operation.id)
     session.flush()
     return operation
 
@@ -521,6 +612,13 @@ def restart_media_download_operation(operation_id: str):
         media_download_id = int(operation.resource_id)
         was_active = operation.status in _ACTIVE_OPERATION_STATUSES
         metadata = _history_metadata_for_operation(session, operation)
+        if operation_admission_wait_state(operation) is not None:
+            operation.context = {
+                **(operation.context or {}),
+                _PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY: True,
+            }
+            clear_operation_admission_wait(operation)
+            session.commit()
     finally:
         session.close()
 
@@ -707,6 +805,52 @@ def get_media_download_queue_positions(session: Session) -> dict[int, int]:
     return positions
 
 
+def _schedule_delayed_media_download_dispatch(
+        operation_id: str,
+        *,
+        run_at: datetime,
+) -> None:
+    """Wake the constrained download queue when one admission wait expires."""
+    from apscheduler.triggers.date import DateTrigger
+    from task_manager.scheduler.scheduler import start_scheduler
+
+    scheduler = start_scheduler()
+    scheduler.add_job(
+        on_media_download_task_terminal,
+        trigger=DateTrigger(run_date=run_at),
+        kwargs={"operation_ids": (operation_id,)},
+        id=f"{_DELAY_DISPATCH_JOB_PREFIX}-{operation_id}",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=None,
+    )
+
+
+def _refresh_waiting_media_download_operations(session: Session) -> None:
+    """Refresh admission waits and recreate their wakeups after restarts."""
+    waiting = list(
+        session.scalars(
+            select(TaskOperation).where(
+                TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
+                TaskOperation.status == OperationStatus.WAITING.value,
+            )
+        )
+    )
+    for operation in waiting:
+        wait_state = operation_admission_wait_state(operation)
+        if wait_state is None:
+            refresh_operation(session, operation.id)
+            continue
+
+        until = wait_state.get("until")
+        if isinstance(until, (int, float)) and not isinstance(until, bool):
+            _schedule_delayed_media_download_dispatch(
+                operation.id,
+                run_at=datetime.fromtimestamp(float(until), tz=timezone.utc),
+            )
+
+
 def dispatch_queued_media_download_operations(
     session: Session,
     *,
@@ -720,6 +864,7 @@ def dispatch_queued_media_download_operations(
     it can never override maxConcurrentDownloads.
     """
     _hold_download_dispatch_lock_until_transaction_end(session)
+    _refresh_waiting_media_download_operations(session)
 
     available = remaining_media_download_budget(session)
     effective_budget = available if budget is None else min(max(0, int(budget)), available)

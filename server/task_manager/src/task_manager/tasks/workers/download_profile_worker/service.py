@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -13,9 +14,11 @@ from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.media_download_operations import (
     create_media_download_operation,
     dispatch_queued_media_download_operations,
+    set_media_download_operation_not_before,
 )
 
 from ._helpers import (
+    automatic_episode_download_ready_at,
     cleanup_older_episodes,
     ensure_episode_download,
     get_download_profile_episodes,
@@ -76,9 +79,30 @@ async def run_download_profile_worker(
                 update_progress(progress, 100, f"Episode {only_episode_id} no longer exists")
                 return
 
-        for episode in get_download_profile_episodes(s, profile, only_episode=only_episode):
-            action = ensure_episode_download(s, profile, episode)
+        for episode in get_download_profile_episodes(
+            s,
+            profile,
+            only_episode=only_episode,
+            apply_automatic_download_delay=False,
+        ):
+            ready_at = automatic_episode_download_ready_at(episode)
+            delayed = (
+                ready_at is not None
+                and ready_at > datetime.now(timezone.utc)
+            )
+            action = ensure_episode_download(
+                s,
+                profile,
+                episode,
+                defer_artifact_preparation=delayed,
+            )
+
             if not action.needs_operation:
+                set_media_download_operation_not_before(
+                    s,
+                    action.media_download_id,
+                    ready_at if delayed else None,
+                )
                 continue
 
             download = s.get(MediaDownloadBase, action.media_download_id)
@@ -89,6 +113,8 @@ async def run_download_profile_worker(
                 download,
                 source=OperationSource.SYSTEM.value,
                 is_redownload=action.is_redownload,
+                prepare_existing_artifact=action.prepare_existing_artifact,
+                not_before=ready_at if delayed else None,
             )
             created += 1
 

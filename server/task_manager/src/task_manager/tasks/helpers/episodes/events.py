@@ -126,7 +126,6 @@ def queue_episode_status_events(
         old_status,
         new_status.value,
     )
-
     event_data = episode_event_payload(
         episode=episode,
         show=show,

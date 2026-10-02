@@ -89,6 +89,7 @@ These settings are available under **Settings → Downloads**.
 | `downloadSettings.rssCacheRetentionSeconds` | `WL_DOWNLOAD_SETTINGS__RSS_CACHE_RETENTION_SECONDS` | `604800` (7 days) | Retains cached RSS media for this long since it was last served. Expired files are cleaned at startup and while new cache entries are prepared. |
 | `downloadSettings.maxConcurrentDownloads` | `WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS` | `5` | Maximum primary-media transfers running at once. Their slots are released while post-processing continues. |
 | `downloadSettings.maxDownloadAttempts` | `WL_DOWNLOAD_SETTINGS__MAX_DOWNLOAD_ATTEMPTS` | `3` | Automatic attempts before a download is left failed. |
+| `downloadSettings.automaticEpisodeDownloadDelayMinutes` | `WL_DOWNLOAD_SETTINGS__AUTOMATIC_EPISODE_DOWNLOAD_DELAY_MINUTES` | `10` | Minimum time before Download Profiles may automatically download a published episode. Manual downloads are not delayed. |
 | `downloadSettings.downloadTimeoutSeconds` | `WL_DOWNLOAD_SETTINGS__DOWNLOAD_TIMEOUT_SECONDS` | `600` | Timeout for one download attempt. |
 | `downloadSettings.filenameRestrictionMode` | `WL_DOWNLOAD_SETTINGS__FILENAME_RESTRICTION_MODE` | `windows` | Filename compatibility: `unrestricted`, `windows`, or `restricted`. |
 | `downloadSettings.remuxVideoToMp4` | `WL_DOWNLOAD_SETTINGS__REMUX_VIDEO_TO_MP4` | `true` | Repackage compatible downloaded video into MP4 without re-encoding. |
@@ -259,6 +260,7 @@ downloadSettings:
   temporaryDownloadRoot: /tmp/wireloft-downloads
   rssCacheRoot: /tmp/wireloft-rss-cache
   maxConcurrentDownloads: 3
+  automaticEpisodeDownloadDelayMinutes: 10
   filenameRestrictionMode: windows
 
 scheduler:
