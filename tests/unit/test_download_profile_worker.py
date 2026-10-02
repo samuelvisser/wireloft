@@ -296,7 +296,7 @@ def test_download_profile_waits_for_post_publication_delay(db_session, monkeypat
 def test_download_delay_uses_trusted_monitored_live_end(db_session, monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from config import get_settings
-    from task_manager.tasks.helpers.episodes.automatic_download_timing import (
+    from task_manager.tasks.helpers.episodes.trusted_publication_timing import (
         track_monitor_publication_timing,
     )
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes

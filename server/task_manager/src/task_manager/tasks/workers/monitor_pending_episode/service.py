@@ -13,7 +13,7 @@ from task_manager.events.transactional import queue_event
 
 from ._helpers import save_status_metadata
 from .scheduling import queue_monitor_completion_if_settled
-from ...helpers.episodes.automatic_download_timing import track_monitor_publication_timing
+from ...helpers.episodes.trusted_publication_timing import track_monitor_publication_timing
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.episodes.mapper import fetch_all_episodes_paginated

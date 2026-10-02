@@ -18,8 +18,8 @@ from backend.types.media_types import MediaType
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
-from task_manager.tasks.helpers.episodes.automatic_download_timing import (
-    AUTOMATIC_DOWNLOAD_DELAY_META_KEY,
+from task_manager.tasks.helpers.episodes.trusted_publication_timing import (
+    TRUSTED_LIVE_ENDED_META_KEY,
     is_trusted_automatic_download_delay_value,
 )
 from task_manager.tasks.helpers.episodes.metadata import ensure_utc
@@ -101,7 +101,7 @@ def automatic_episode_download_ready_at(episode: Episode) -> datetime | None:
             item
             for item in episode.meta_items
             if (
-                item.key == AUTOMATIC_DOWNLOAD_DELAY_META_KEY
+                item.key == TRUSTED_LIVE_ENDED_META_KEY
                 and is_trusted_automatic_download_delay_value(item.value)
             )
         ),
@@ -237,7 +237,7 @@ def get_download_profile_episodes(
                 select(Metadata.id).where(
                     Metadata.parent_table == Episode.__tablename__,
                     Metadata.parent_id == Episode.id,
-                    Metadata.key == AUTOMATIC_DOWNLOAD_DELAY_META_KEY,
+                    Metadata.key == TRUSTED_LIVE_ENDED_META_KEY,
                     Metadata.value.like("monitor:%"),
                     Metadata.updated_at > cutoff,
                 )

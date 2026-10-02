@@ -58,8 +58,8 @@ def set_operation_admission_wait(
     """Persist a pre-execution wait owned by the high-level operation.
 
     Admission waits are orchestration state: no worker has started yet, so they
-    deliberately live on TaskOperation rather than inventing a placeholder
-    TaskRun. Once admitted, ordinary TaskRun wait_state reporting takes over.
+    deliberately live on TaskOperation. Once admitted, ordinary TaskRun
+    wait_state reporting takes over.
     """
     if not reason:
         raise ValueError("Operation admission wait reason cannot be empty")

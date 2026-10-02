@@ -360,8 +360,7 @@ class DownloadSettings(SubmodelBase):
         default=10,
         ge=0,
         description=(
-            "Minimum minutes after the best available publication timing before Download "
-            "Profiles may automatically download an episode"
+            "Minimum minutes after the best available publication timing before Download Profiles may automatically download an episode"
         ),
     )
     download_timeout_seconds: int = Field(
