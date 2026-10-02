@@ -1,5 +1,5 @@
-import {keepPreviousData, useInfiniteQuery, useQuery} from '@tanstack/react-query'
-import {TaskLedgerPageReadSchema} from '../types/schemas/task'
+import {keepPreviousData, type InfiniteData, useInfiniteQuery, useQuery} from '@tanstack/react-query'
+import {TaskLedgerPageReadSchema, type TaskLedgerPageRead} from '../types/schemas/task'
 
 export type TaskLedgerPageQuery = {
   definitionKey?: string
@@ -63,7 +63,7 @@ export function useTaskLedgerPage({
     enabled: enabled && (definitionKey === undefined || definitionKey.length > 0),
     placeholderData: keepPreviousData,
     refetchOnMount: 'always',
-    queryFn: async ({signal}) => {
+    queryFn: async ({signal}): Promise<TaskLedgerPageRead> => {
       const params = new URLSearchParams({
         order_by: orderBy,
         order,
@@ -102,19 +102,27 @@ export function useTaskLedgerInfinite({
   const statuses = normalizeStatuses(status)
   const startedAfterValue = normalizeStartedAfter(startedAfter)
 
-  return useInfiniteQuery({
-    queryKey: [
-      'taskLedger',
-      definitionKey ?? null,
-      resourceType,
-      resourceIds,
-      statuses,
-      startedAfterValue,
-      orderBy,
-      order,
-      limit,
-      'infinite',
-    ] as const,
+  const queryKey = [
+    'taskLedger',
+    definitionKey ?? null,
+    resourceType,
+    resourceIds,
+    statuses,
+    startedAfterValue,
+    orderBy,
+    order,
+    limit,
+    'infinite',
+  ] as const
+
+  return useInfiniteQuery<
+    TaskLedgerPageRead,
+    Error,
+    InfiniteData<TaskLedgerPageRead, number>,
+    typeof queryKey,
+    number
+  >({
+    queryKey,
     enabled: enabled && (definitionKey === undefined || definitionKey.length > 0),
     initialPageParam: 0,
     refetchOnMount: 'always',
@@ -122,7 +130,7 @@ export function useTaskLedgerInfinite({
       const pageCount = query.state.data?.pages.length ?? 0
       return pageCount <= 2 ? 3000 : false
     },
-    queryFn: async ({pageParam, signal}) => {
+    queryFn: async ({pageParam, signal}): Promise<TaskLedgerPageRead> => {
       const params = new URLSearchParams({
         order_by: orderBy,
         order,
