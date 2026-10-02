@@ -264,6 +264,7 @@ class DownloadAction:
     media_download_id: int
     needs_operation: bool
     is_redownload: bool = False
+    prepare_existing_artifact: bool | None = None
 
     @property
     def needs_trigger(self) -> bool:
@@ -271,7 +272,13 @@ class DownloadAction:
         return self.needs_operation
 
 
-def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: Episode) -> DownloadAction:
+def ensure_episode_download(
+        s: Session,
+        profile: DownloadProfileBase,
+        episode: Episode,
+        *,
+        defer_artifact_preparation: bool = False,
+) -> DownloadAction:
     """Reconcile one desired episode artifact without encoding worker state on it."""
     existing: Optional[EpisodeMediaDownload] = (
         s.query(EpisodeMediaDownload)
@@ -339,10 +346,29 @@ def ensure_episode_download(s: Session, profile: DownloadProfileBase, episode: E
         if not _wants_redownload(profile, episode, existing):
             s.flush()
             return DownloadAction(existing.id, False)
+        if defer_artifact_preparation:
+            s.flush()
+            return DownloadAction(
+                existing.id,
+                True,
+                is_redownload=True,
+                prepare_existing_artifact=True,
+            )
         prepare_media_download_artifact(s, existing)
         existing.file_path = target_path
         s.flush()
         return DownloadAction(existing.id, True, is_redownload=True)
+
+    if defer_artifact_preparation:
+        needs_preparation = (
+            existing.artifact_status != MediaDownloadArtifactStatus.ABSENT.value
+        )
+        s.flush()
+        return DownloadAction(
+            existing.id,
+            True,
+            prepare_existing_artifact=needs_preparation,
+        )
 
     prepare_media_download_artifact(s, existing)
     existing.file_path = target_path

@@ -14,6 +14,7 @@ from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.media_download_operations import (
     create_media_download_operation,
     dispatch_queued_media_download_operations,
+    set_media_download_operation_not_before,
 )
 
 from ._helpers import (
@@ -23,7 +24,6 @@ from ._helpers import (
     get_download_profile_episodes,
     resolve_target_profiles,
 )
-from .scheduling import schedule_delayed_episode_download
 
 
 async def run_download_profile_worker(
@@ -51,29 +51,6 @@ async def run_download_profile_worker(
         return
 
     only_episode_id = resource_id if resource_type == "episode" and resource_id is not None else None
-    if only_episode_id is not None:
-        episode = s.get(Episode, only_episode_id)
-        if episode is None:
-            s.rollback()
-            update_progress(progress, 100, f"Episode {only_episode_id} no longer exists")
-            return
-
-        ready_at = automatic_episode_download_ready_at(episode)
-        now = datetime.now(timezone.utc)
-        if ready_at is not None and ready_at > now:
-            s.rollback()
-            schedule_delayed_episode_download(
-                episode_id=only_episode_id,
-                run_at=ready_at,
-            )
-            update_progress(
-                progress,
-                100,
-                f"Automatic download deferred until {ready_at.isoformat()}",
-            )
-            return
-        s.rollback()
-
     created = 0
     total = len(profile_ids)
 
@@ -102,9 +79,30 @@ async def run_download_profile_worker(
                 update_progress(progress, 100, f"Episode {only_episode_id} no longer exists")
                 return
 
-        for episode in get_download_profile_episodes(s, profile, only_episode=only_episode):
-            action = ensure_episode_download(s, profile, episode)
+        for episode in get_download_profile_episodes(
+            s,
+            profile,
+            only_episode=only_episode,
+            apply_automatic_download_delay=False,
+        ):
+            ready_at = automatic_episode_download_ready_at(episode)
+            delayed = (
+                ready_at is not None
+                and ready_at > datetime.now(timezone.utc)
+            )
+            action = ensure_episode_download(
+                s,
+                profile,
+                episode,
+                defer_artifact_preparation=delayed,
+            )
+
             if not action.needs_operation:
+                set_media_download_operation_not_before(
+                    s,
+                    action.media_download_id,
+                    ready_at if delayed else None,
+                )
                 continue
 
             download = s.get(MediaDownloadBase, action.media_download_id)
@@ -115,6 +113,8 @@ async def run_download_profile_worker(
                 download,
                 source=OperationSource.SYSTEM.value,
                 is_redownload=action.is_redownload,
+                prepare_existing_artifact=action.prepare_existing_artifact,
+                not_before=ready_at if delayed else None,
             )
             created += 1
 

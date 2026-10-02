@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -191,9 +192,12 @@ def test_download_profile_worker_runs_after_show_indexing():
     assert "show.added" not in event_names
 
 
-def test_episode_trigger_schedules_recheck_when_publication_delay_is_active(db_session, monkeypatch):
+def test_episode_trigger_creates_visible_delayed_download_operation(db_session, monkeypatch):
     from backend.db.models.media_download import EpisodeMediaDownload
     from config import get_settings
+    from task_manager.scheduler.db import TaskOperation, TaskRun
+    from task_manager.scheduler.operations import operation_admission_wait_state
+    from task_manager.scheduler.types import OperationStatus
     from task_manager.tasks.workers.download_profile_worker import service
 
     monkeypatch.setattr(
@@ -215,8 +219,8 @@ def test_episode_trigger_schedules_recheck_when_publication_delay_is_active(db_s
         index=1,
     )
     _make_podcast_profile(db_session, show, lmp)
-    scheduled = Mock()
-    monkeypatch.setattr(service, "schedule_delayed_episode_download", scheduled)
+    dispatch = Mock(return_value=0)
+    monkeypatch.setattr(service, "dispatch_queued_media_download_operations", dispatch)
 
     asyncio.run(service.run_download_profile_worker(
         db_session,
@@ -224,10 +228,13 @@ def test_episode_trigger_schedules_recheck_when_publication_delay_is_active(db_s
         resource_id=episode.id,
     ))
 
-    scheduled.assert_called_once()
-    assert scheduled.call_args.kwargs["episode_id"] == episode.id
-    assert scheduled.call_args.kwargs["run_at"] > _now()
-    assert db_session.query(EpisodeMediaDownload).count() == 0
+    download = db_session.query(EpisodeMediaDownload).one()
+    operation = db_session.query(TaskOperation).one()
+    assert operation.resource_id == download.id
+    assert operation.status == OperationStatus.WAITING.value
+    assert operation_admission_wait_state(operation)["reason"] == "publication_delay"
+    assert db_session.query(TaskRun).count() == 0
+    dispatch.assert_called_once()
 
 
 def test_podcast_profile_filters_by_type_status_and_countdown(db_session):
@@ -535,6 +542,54 @@ def test_ensure_episode_download_respects_user_retry_suppression(db_session):
     action = ensure_episode_download(db_session, profile, episode)
     assert action.needs_operation is False
     assert download.automatic_retry_suppressed is True
+
+
+def test_delayed_final_redownload_keeps_countdown_artifact_until_execution(db_session):
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="ep-delayed-final",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=_now(),
+        index=1,
+    )
+    profile = _make_podcast_profile(
+        db_session,
+        show,
+        lmp,
+        download_with_countdown=True,
+        redownload_final=True,
+    )
+    existing = _completed_download(
+        db_session,
+        episode,
+        lmp,
+        profile,
+        publish_status="published_with_countdown",
+    )
+    existing_path = existing.file_path
+
+    action = ensure_episode_download(
+        db_session,
+        profile,
+        episode,
+        defer_artifact_preparation=True,
+    )
+
+    assert action.needs_operation is True
+    assert action.is_redownload is True
+    assert action.prepare_existing_artifact is True
+    assert existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+    assert existing.file_path == existing_path
+    assert Path(existing_path).exists()
 
 
 def test_ensure_episode_download_redownloads_countdown_artifact_when_final(db_session):

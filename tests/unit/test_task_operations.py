@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -67,6 +67,71 @@ def _run(
     session.add(run)
     session.flush()
     return run
+
+
+def test_operation_admission_wait_is_waiting_until_deadline():
+    from task_manager.scheduler.operations import (
+        OperationTargetSpec,
+        operation_admission_wait_state,
+        refresh_operation,
+        set_operation_admission_wait,
+        create_operation,
+    )
+    from task_manager.scheduler.types import OperationStatus
+
+    session = _session()
+    try:
+        definition = _definition(session)
+        operation = create_operation(
+            session,
+            kind="test.delayed",
+            resource_type="show",
+            resource_id=42,
+            title="Delayed work",
+            targets=[
+                OperationTargetSpec(
+                    task_key=definition.key,
+                    resource_type="show",
+                    resource_id=42,
+                )
+            ],
+        )
+        future = datetime.now(timezone.utc) + timedelta(minutes=2)
+        set_operation_admission_wait(
+            operation,
+            reason="test_delay",
+            message="Intentionally delayed",
+            until=future,
+        )
+        refresh_operation(session, operation.id)
+
+        assert operation.status == OperationStatus.WAITING.value
+        assert operation.message == "Intentionally delayed"
+        assert operation_admission_wait_state(operation) is not None
+        from task_manager.scheduler.operations import _operation_snapshot
+        snapshot = _operation_snapshot(operation)
+        assert snapshot.progress_meta == {
+            "wait_state": {
+                "reason": "test_delay",
+                "message": "Intentionally delayed",
+                "until": future.timestamp(),
+            }
+        }
+        assert not operation.run_links
+
+        set_operation_admission_wait(
+            operation,
+            reason="test_delay",
+            message="Expired",
+            until=datetime.now(timezone.utc) - timedelta(seconds=1),
+        )
+        refresh_operation(session, operation.id)
+
+        assert operation.status == OperationStatus.QUEUED.value
+        assert operation_admission_wait_state(operation) is None
+        assert "_admission_wait_state" not in (operation.context or {})
+    finally:
+        session.close()
 
 
 def test_operation_coalesces_onto_compatible_automatic_run():

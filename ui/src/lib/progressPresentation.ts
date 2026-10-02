@@ -11,6 +11,7 @@ const WAITS: Record<string, [string, string]> = {
     processing_capacity: ['Processing queue', 'Waiting for a local processing slot.'],
     custom_indexes: ['Preparing...', 'Waiting for Custom Index assignments.'],
     previous_attempt: ['Restarting', 'Waiting for the previous download to stop and clean up.'],
+    publication_delay: ['Delayed', 'Waiting for the post-publication safety delay before downloading.'],
 }
 
 export function waitingPresentation(

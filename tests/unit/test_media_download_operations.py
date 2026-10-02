@@ -146,6 +146,189 @@ def test_media_download_operation_is_the_live_execution_owner():
         engine.dispose()
 
 
+def test_system_download_operation_waits_without_reserving_capacity(monkeypatch):
+    from config import get_settings
+    from task_manager.scheduler.db import TaskRun
+    from task_manager.scheduler.operations import operation_admission_wait_state
+    from task_manager.scheduler.types import OperationSource, OperationStatus
+    from task_manager.tasks import media_download_operations
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="publication-wait")
+        ready_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+        operation = media_download_operations.create_media_download_operation(
+            session,
+            download,
+            source=OperationSource.SYSTEM.value,
+            not_before=ready_at,
+        )
+
+        scheduled: list[tuple[str, datetime]] = []
+        monkeypatch.setattr(
+            media_download_operations,
+            "_schedule_delayed_media_download_dispatch",
+            lambda operation_id, *, run_at: scheduled.append((operation_id, run_at)),
+        )
+
+        dispatched = media_download_operations.dispatch_queued_media_download_operations(session)
+
+        assert operation.status == OperationStatus.WAITING.value
+        assert operation_admission_wait_state(operation)["reason"] == "publication_delay"
+        assert session.query(TaskRun).count() == 0
+        assert dispatched == 0
+        assert scheduled == [(operation.id, ready_at)]
+        assert media_download_operations.remaining_media_download_budget(session) == (
+            get_settings().download_settings.max_concurrent_downloads
+        )
+        session.commit()
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_expired_publication_wait_enters_normal_download_queue(monkeypatch):
+    from task_manager.scheduler.db import TaskRun
+    from task_manager.scheduler.types import OperationSource, OperationStatus, TaskStatus
+    from task_manager.tasks import media_download_operations
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="publication-ready")
+        operation = media_download_operations.create_media_download_operation(
+            session,
+            download,
+            source=OperationSource.SYSTEM.value,
+            not_before=datetime.now(timezone.utc) + timedelta(minutes=10),
+        )
+        media_download_operations.set_media_download_operation_not_before(
+            session,
+            download.id,
+            datetime.now(timezone.utc) - timedelta(seconds=1),
+        )
+        monkeypatch.setattr(
+            media_download_operations,
+            "queue_task_after_commit",
+            lambda *args, **kwargs: None,
+        )
+
+        dispatched = media_download_operations.dispatch_queued_media_download_operations(session)
+
+        assert operation.status == OperationStatus.QUEUED.value
+        assert dispatched == 1
+        run = session.query(TaskRun).one()
+        assert run.status == TaskStatus.SCHEDULED
+        session.commit()
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_explicit_download_releases_automatic_publication_wait():
+    from task_manager.scheduler.operations import operation_admission_wait_state
+    from task_manager.scheduler.types import OperationSource, OperationStatus
+    from task_manager.tasks.media_download_operations import create_media_download_operation
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="manual-bypass")
+        background = create_media_download_operation(
+            session,
+            download,
+            source=OperationSource.SYSTEM.value,
+            not_before=datetime.now(timezone.utc) + timedelta(minutes=10),
+        )
+        assert background.status == OperationStatus.WAITING.value
+
+        manual = create_media_download_operation(
+            session,
+            download,
+            source=OperationSource.UI.value,
+        )
+
+        assert manual.id == background.id
+        assert manual.status == OperationStatus.QUEUED.value
+        assert manual.prioritized_at is not None
+        assert operation_admission_wait_state(manual) is None
+
+        # A concurrent automatic profile reconciliation cannot re-apply the
+        # safety delay after the user explicitly chose to start the download.
+        create_media_download_operation(
+            session,
+            download,
+            source=OperationSource.SYSTEM.value,
+            not_before=datetime.now(timezone.utc) + timedelta(minutes=10),
+        )
+        assert manual.status == OperationStatus.QUEUED.value
+        assert operation_admission_wait_state(manual) is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_operation_restart_bypasses_publication_wait(monkeypatch):
+    from task_manager.scheduler.operations import OperationSnapshot, operation_admission_wait_state
+    from task_manager.scheduler.types import OperationSource, OperationStatus
+    from task_manager.tasks import media_download_operations
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="restart-bypass")
+        operation = media_download_operations.create_media_download_operation(
+            session,
+            download,
+            source=OperationSource.SYSTEM.value,
+            not_before=datetime.now(timezone.utc) + timedelta(minutes=10),
+        )
+        operation_id = operation.id
+        session.commit()
+
+        restarted = OperationSnapshot(
+            id=operation_id,
+            kind="media.download",
+            source="SYSTEM",
+            resource_type="media_download",
+            resource_id=download.id,
+            title=operation.title,
+            status=OperationStatus.QUEUED.value,
+            progress=0,
+            completion_progress=0,
+            progress_current=0,
+            progress_total=1,
+            message="Restarting",
+            result=None,
+            context=operation.context,
+            progress_meta=None,
+            error=None,
+            notification_seen_at=None,
+            started_at=None,
+            finished_at=None,
+            created_at=None,
+            updated_at=None,
+        )
+        monkeypatch.setattr(
+            media_download_operations,
+            "get_session",
+            lambda: Session(engine),
+        )
+        monkeypatch.setattr(
+            media_download_operations,
+            "restart_task_operation",
+            lambda _operation_id: restarted,
+        )
+
+        media_download_operations.restart_media_download_operation(operation_id)
+
+        session.expire_all()
+        operation = session.get(type(operation), operation_id)
+        assert operation is not None
+        assert operation_admission_wait_state(operation) is None
+        assert operation.context["publication_delay_bypassed"] is True
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_operation_history_dedupes_per_task_run_not_forever():
     from backend.db.models.media_download import MediaDownloadHistory
     from backend.services.media_download_history import (

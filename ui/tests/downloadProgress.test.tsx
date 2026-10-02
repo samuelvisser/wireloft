@@ -55,6 +55,10 @@ test('global cooldown is not flattened into 0%',()=>{
     const view=presentDownloadProgress(undefined,operation({status:'WAITING',progressMeta:{wait_state:{reason:'daily_wire_request_cooldown'}}}))
     assert.equal(view.mode,'waiting');assert.equal(view.label,'Cooldown...');assert.equal(view.percent,null)
 })
+test('post-publication wait is presented as delayed',()=>{
+    const view=presentDownloadProgress(undefined,operation({status:'WAITING',progressMeta:{wait_state:{reason:'publication_delay'}}}))
+    assert.equal(view.mode,'waiting');assert.equal(view.label,'Delayed...');assert.equal(view.percent,null)
+})
 test('sidecar wait does not hide an active media transfer',()=>{
     const snapshot=execution();snapshot.stages[1].wait={reason:'upstream_retry'} as any
     const view=presentDownloadProgress(undefined,operation({progressMeta:{download:snapshot}}))
