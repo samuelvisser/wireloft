@@ -45,6 +45,87 @@ _ACTIVE_TASK_STATUSES = {
     TaskStatus.RETRY_SCHEDULED,
 }
 
+OPERATION_ADMISSION_WAIT_CONTEXT_KEY = "_admission_wait_state"
+
+
+def set_operation_admission_wait(
+        operation: TaskOperation,
+        *,
+        reason: str,
+        message: str | None = None,
+        until: datetime | None = None,
+) -> None:
+    """Persist a pre-execution wait owned by the high-level operation.
+
+    Admission waits are orchestration state: no worker has started yet, so they
+    deliberately live on TaskOperation rather than inventing a placeholder
+    TaskRun. Once admitted, ordinary TaskRun wait_state reporting takes over.
+    """
+    if not reason:
+        raise ValueError("Operation admission wait reason cannot be empty")
+
+    wait_state: dict[str, Any] = {"reason": reason}
+    if message:
+        wait_state["message"] = message
+    if until is not None:
+        normalized = (
+            until.replace(tzinfo=timezone.utc)
+            if until.tzinfo is None
+            else until.astimezone(timezone.utc)
+        )
+        wait_state["until"] = normalized.timestamp()
+
+    operation.context = {
+        **(operation.context or {}),
+        OPERATION_ADMISSION_WAIT_CONTEXT_KEY: wait_state,
+    }
+
+
+def clear_operation_admission_wait(operation: TaskOperation) -> None:
+    context = dict(operation.context or {})
+    context.pop(OPERATION_ADMISSION_WAIT_CONTEXT_KEY, None)
+    operation.context = context or None
+
+
+def operation_admission_wait_state(
+        operation: TaskOperation,
+        *,
+        now: datetime | None = None,
+) -> dict[str, Any] | None:
+    """Return the active pre-execution wait, ignoring waits whose deadline passed."""
+    if not isinstance(operation.context, dict):
+        return None
+    value = operation.context.get(OPERATION_ADMISSION_WAIT_CONTEXT_KEY)
+    if not isinstance(value, dict):
+        return None
+
+    reason = value.get("reason")
+    if not isinstance(reason, str) or not reason:
+        return None
+
+    wait_state: dict[str, Any] = {"reason": reason}
+    message = value.get("message")
+    if isinstance(message, str) and message:
+        wait_state["message"] = message
+
+    until = value.get("until")
+    if until is not None:
+        if isinstance(until, bool) or not isinstance(until, (int, float)):
+            return None
+        current = now or datetime.now(timezone.utc)
+        if float(until) <= current.timestamp():
+            return None
+        wait_state["until"] = float(until)
+
+    return wait_state
+
+
+def _has_operation_admission_wait(operation: TaskOperation) -> bool:
+    return (
+        isinstance(operation.context, dict)
+        and OPERATION_ADMISSION_WAIT_CONTEXT_KEY in operation.context
+    )
+
 
 @dataclass(frozen=True)
 class OperationTargetSpec:
@@ -540,8 +621,16 @@ def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
         operation.started_at = min(starts)
 
     if not linked_runs:
-        operation.status = OperationStatus.QUEUED.value
-        operation.message = "Queued"
+        admission_wait = operation_admission_wait_state(operation)
+        if admission_wait is not None:
+            operation.status = OperationStatus.WAITING.value
+            message = admission_wait.get("message")
+            operation.message = message if isinstance(message, str) and message else "Waiting"
+        else:
+            if _has_operation_admission_wait(operation):
+                clear_operation_admission_wait(operation)
+            operation.status = OperationStatus.QUEUED.value
+            operation.message = "Queued"
         operation.finished_at = None
         return operation
 
@@ -961,7 +1050,8 @@ def _operation_progress_meta(
         return {"wait_state": waits[0]} if waits and all(waits) else None
     run = effective_runs[0]
     if run is None:
-        return None
+        admission_wait = operation_admission_wait_state(operation)
+        return {"wait_state": admission_wait} if admission_wait is not None else None
     result = dict(run.progress_metadata or {})
     if run_cancel_requested(run):
         result["canceling"] = True
