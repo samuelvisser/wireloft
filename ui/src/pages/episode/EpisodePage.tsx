@@ -26,6 +26,110 @@ library.add(fas)
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
 
+function EpisodePageSkeleton() {
+    return (
+        <section
+            className="view episode-view episode-page-skeleton"
+            aria-label="Loading episode"
+            aria-busy="true"
+        >
+            <article className="episode-details" aria-hidden="true">
+                <div className="episode-page-skeleton-block episode-page-skeleton-breadcrumb"/>
+                <div className="episode-page-skeleton-block episode-page-skeleton-cover"/>
+                <div className="episode-page-skeleton-header">
+                    <div className="episode-page-skeleton-block episode-page-skeleton-title"/>
+                    <div className="episode-page-skeleton-meta">
+                        <div className="episode-page-skeleton-block episode-page-skeleton-meta-item"/>
+                        <div className="episode-page-skeleton-block episode-page-skeleton-meta-item episode-page-skeleton-meta-item-wide"/>
+                    </div>
+                </div>
+                <div className="episode-page-skeleton-description">
+                    <div className="episode-page-skeleton-block episode-page-skeleton-section-title"/>
+                    <div className="episode-page-skeleton-block episode-page-skeleton-line"/>
+                    <div className="episode-page-skeleton-block episode-page-skeleton-line episode-page-skeleton-line-medium"/>
+                    <div className="episode-page-skeleton-block episode-page-skeleton-line episode-page-skeleton-line-short"/>
+                </div>
+            </article>
+
+            <style type="text/css">{`
+                .episode-page-skeleton { padding-top: 0; }
+                .episode-page-skeleton .episode-details { width: min(100%, 980px); margin: 0 auto; }
+                .episode-page-skeleton-block {
+                    background: #e5e7eb;
+                    animation: episode-page-skeleton-pulse 1.5s ease-in-out infinite;
+                }
+                .episode-page-skeleton-breadcrumb {
+                    width: min(32%, 220px);
+                    height: 13px;
+                    margin-bottom: 14px;
+                    border-radius: 5px;
+                }
+                .episode-page-skeleton-cover {
+                    width: 100%;
+                    aspect-ratio: 16 / 9;
+                    border-radius: 10px;
+                }
+                .episode-page-skeleton-header { margin-top: 20px; }
+                .episode-page-skeleton-title {
+                    width: min(72%, 600px);
+                    height: 34px;
+                    border-radius: 7px;
+                }
+                .episode-page-skeleton-meta {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    margin-top: 14px;
+                }
+                .episode-page-skeleton-meta-item {
+                    width: 76px;
+                    height: 14px;
+                    border-radius: 5px;
+                }
+                .episode-page-skeleton-meta-item-wide { width: 150px; }
+                .episode-page-skeleton-description {
+                    margin-top: 24px;
+                    padding-top: 20px;
+                    border-top: 1px solid var(--border-color, #e2e2e2);
+                }
+                .episode-page-skeleton-section-title {
+                    width: 150px;
+                    height: 17px;
+                    margin-bottom: 11px;
+                    border-radius: 5px;
+                }
+                .episode-page-skeleton-line {
+                    width: min(100%, 850px);
+                    height: 14px;
+                    margin-top: 8px;
+                    border-radius: 5px;
+                }
+                .episode-page-skeleton-line-medium { width: min(88%, 750px); }
+                .episode-page-skeleton-line-short { width: min(64%, 540px); }
+                @keyframes episode-page-skeleton-pulse {
+                    0%, 100% { opacity: 0.55; }
+                    50% { opacity: 1; }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    .episode-page-skeleton-block { animation: none; }
+                }
+                @media (prefers-color-scheme: dark) {
+                    .episode-page-skeleton-block { background: rgba(148, 163, 184, 0.22); }
+                }
+                @media (max-width: 720px) {
+                    .episode-page-skeleton .episode-details { width: 100%; }
+                    .episode-page-skeleton-breadcrumb { margin-bottom: 12px; }
+                    .episode-page-skeleton-cover { border-radius: 8px; }
+                    .episode-page-skeleton-header { margin-top: 14px; }
+                    .episode-page-skeleton-title { height: 27px; }
+                    .episode-page-skeleton-meta { gap: 9px; margin-top: 10px; }
+                    .episode-page-skeleton-description { margin-top: 18px; padding-top: 16px; }
+                }
+            `}</style>
+        </section>
+    )
+}
+
 function ProfileDownloadRow({
                                 profile,
                                 download,
@@ -201,7 +305,7 @@ export default function EpisodePage() {
         )
     }
 
-    if (!show && (isShowPending || isShowFetching)) return null
+    if (!show && (isShowPending || isShowFetching)) return <EpisodePageSkeleton/>
 
     if (!show) {
         return (
@@ -215,7 +319,7 @@ export default function EpisodePage() {
         )
     }
 
-    if (!episode && (isEpisodePending || isEpisodeFetching)) return null
+    if (!episode && (isEpisodePending || isEpisodeFetching)) return <EpisodePageSkeleton/>
 
     if (!episode) {
         return (
