@@ -310,7 +310,7 @@ export default function DownloadsSettingsTab({
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.automaticEpisodeDownloadDelayMinutes = value
                     })}
-                    help="Minimum time after an episode becomes published before Download Profiles may automatically download it. WireLoft also restarts this clock when a live or countdown episode transitions to its final VOD. Manual downloads are not delayed; event-triggered downloads are rechecked automatically when the delay expires."
+                    help="Minimum time after an episode becomes published before Download Profiles may automatically download it. If WireLoft continuously monitored an episode from the transition into LIVE, it instead uses the observed end of the live stream as the safer clock. After a restart or startup backfill, it falls back to The Daily Wire's published timestamp. Manual downloads are not delayed."
                 />
                 <NumberField
                     id="settings-download-concurrency"

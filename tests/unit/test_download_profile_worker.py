@@ -286,9 +286,12 @@ def test_download_profile_waits_for_post_publication_delay(db_session, monkeypat
     assert [episode.slug for episode in get_download_profile_episodes(db_session, profile)] == [aged.slug]
 
 
-def test_download_delay_uses_observed_publication_transition(db_session, monkeypatch):
+def test_download_delay_uses_trusted_monitored_live_end(db_session, monkeypatch):
+    from backend.types.episode_types import EpisodePublishStatus
     from config import get_settings
-    from task_manager.tasks.helpers.episodes.events import AUTOMATIC_DOWNLOAD_DELAY_META_KEY
+    from task_manager.tasks.helpers.episodes.automatic_download_timing import (
+        track_monitor_publication_timing,
+    )
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
     monkeypatch.setattr(
@@ -306,19 +309,53 @@ def test_download_delay_uses_observed_publication_transition(db_session, monkeyp
         slug="final-after-live",
         ep_id="ep.1",
         status="published_final",
-        # A live episode can have been published for an hour before the final
-        # VOD transition is observed.
+        # The Daily Wire timestamp may already be old when the live stream ends.
         published_at=_now() - timedelta(hours=1),
         index=1,
     )
-    episode.set_meta(
-        AUTOMATIC_DOWNLOAD_DELAY_META_KEY,
-        f"published_final:{_now().isoformat()}",
+    track_monitor_publication_timing(
+        episode,
+        old_status=EpisodePublishStatus.SCHEDULED.value,
+        new_status=EpisodePublishStatus.LIVE,
+    )
+    track_monitor_publication_timing(
+        episode,
+        old_status=EpisodePublishStatus.LIVE.value,
+        new_status=EpisodePublishStatus.PUBLISHED_FINAL,
     )
     profile = _make_podcast_profile(db_session, show, lmp)
     db_session.commit()
 
     assert get_download_profile_episodes(db_session, profile) == []
+
+
+def test_download_delay_falls_back_to_dailywire_timestamp_without_trusted_monitor(db_session, monkeypatch):
+    from config import get_settings
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    monkeypatch.setattr(
+        get_settings().download_settings,
+        "automatic_episode_download_delay_minutes",
+        10,
+    )
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="startup-backfill",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=_now() - timedelta(hours=3),
+        index=1,
+    )
+    profile = _make_podcast_profile(db_session, show, lmp)
+    db_session.commit()
+
+    assert get_download_profile_episodes(db_session, profile) == [episode]
+
 
 def test_download_delay_does_not_backfill_outside_episode_count_scope(db_session, monkeypatch):
     from config import get_settings

@@ -86,37 +86,6 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
     assert payload["new_episode_identifier"] == "ep.2500"
 
 
-def test_published_transition_starts_automatic_download_delay(monkeypatch):
-    from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.helpers.episodes import events
-
-    episode, metadata = _fake_episode(status=EpisodePublishStatus.PUBLISHED_FINAL.value)
-    monkeypatch.setattr(events, "queue_event", Mock())
-
-    events.queue_episode_status_events(
-        object(),
-        episode=episode,
-        show=episode.show,
-        old_status=EpisodePublishStatus.LIVE.value,
-        new_status=EpisodePublishStatus.PUBLISHED_FINAL,
-        was_created=False,
-    )
-
-    marker = metadata[events.AUTOMATIC_DOWNLOAD_DELAY_META_KEY]
-    assert marker is not None
-    assert marker.startswith("published_final:")
-
-    events.queue_episode_status_events(
-        object(),
-        episode=episode,
-        show=episode.show,
-        old_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
-        new_status=EpisodePublishStatus.PUBLISHED_FINAL,
-        was_created=False,
-    )
-    assert metadata[events.AUTOMATIC_DOWNLOAD_DELAY_META_KEY] == marker
-
-
 def test_identifier_change_is_handled_by_rename_worker():
     from task_manager.tasks.helpers.episodes.events import EPISODE_IDENTIFIER_CHANGED_EVENT
     from task_manager.tasks.workers.download_profile_worker import download_profile_worker

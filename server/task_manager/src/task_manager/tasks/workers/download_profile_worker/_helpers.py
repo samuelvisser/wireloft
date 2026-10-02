@@ -18,7 +18,10 @@ from backend.types.media_types import MediaType
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
-from task_manager.tasks.helpers.episodes.events import AUTOMATIC_DOWNLOAD_DELAY_META_KEY
+from task_manager.tasks.helpers.episodes.automatic_download_timing import (
+    AUTOMATIC_DOWNLOAD_DELAY_META_KEY,
+    is_trusted_automatic_download_delay_value,
+)
 from task_manager.tasks.helpers.episodes.metadata import ensure_utc
 from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
@@ -90,15 +93,17 @@ def automatic_episode_download_ready_at(episode: Episode) -> datetime | None:
         return None
 
     clocks: list[datetime] = []
-    published_at = episode.published_date or episode.went_live_date
-    if published_at is not None:
-        clocks.append(ensure_utc(published_at))
+    if episode.published_date is not None:
+        clocks.append(ensure_utc(episode.published_date))
 
     transition = next(
         (
             item
             for item in episode.meta_items
-            if item.key == AUTOMATIC_DOWNLOAD_DELAY_META_KEY
+            if (
+                item.key == AUTOMATIC_DOWNLOAD_DELAY_META_KEY
+                and is_trusted_automatic_download_delay_value(item.value)
+            )
         ),
         None,
     )
@@ -228,20 +233,22 @@ def get_download_profile_episodes(
         )
         if delay_minutes > 0:
             cutoff = _utc_now() - timedelta(minutes=delay_minutes)
-            recent_publication_transition = exists(
+            recent_trusted_monitor_transition = exists(
                 select(Metadata.id).where(
                     Metadata.parent_table == Episode.__tablename__,
                     Metadata.parent_id == Episode.id,
                     Metadata.key == AUTOMATIC_DOWNLOAD_DELAY_META_KEY,
+                    Metadata.value.like("monitor:%"),
                     Metadata.updated_at > cutoff,
                 )
             )
-            # The Daily Wire publication timestamp protects episodes first seen as
-            # already-published, while the persisted transition marker protects
-            # live/countdown -> final handoffs whose publishedAt may be much older.
+            # Daily Wire's publishedAt is the normal clock and remains the only
+            # clock after startup/backfill. A later WireLoft timestamp participates
+            # only when the pending monitor proved it followed the live lifecycle
+            # continuously from the transition into LIVE.
             stmt = stmt.where(
-                or_(published_at.is_(None), published_at <= cutoff),
-                ~recent_publication_transition,
+                or_(Episode.published_date.is_(None), Episode.published_date <= cutoff),
+                ~recent_trusted_monitor_transition,
             )
 
     if needs_global_podcast_scope:
