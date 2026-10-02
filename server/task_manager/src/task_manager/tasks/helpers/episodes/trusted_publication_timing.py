@@ -64,6 +64,10 @@ def track_monitor_publication_timing(
 ) -> None:
     """Persist only publication timestamps the current monitor can prove.
 
+    Saves episode metadata regarding its publication timing. As The Daily Wire-provided
+    publication timestamp sometimes is not accurate to its actual publication, for
+    WireLoft automations, this trusted timing might be used instead.
+
     safe_live_ended requires a LIVE -> LIVE observation before the episode
     leaves LIVE. This avoids treating first discovery of an already-live episode
     as proof that WireLoft observed the live phase continuously.

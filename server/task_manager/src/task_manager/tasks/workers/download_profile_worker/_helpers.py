@@ -87,15 +87,14 @@ def automatic_episode_download_ready_at(episode: Episode) -> datetime | None:
     if delay_minutes <= 0:
         return None
 
-    if episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
+    if episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL:
         publication_time = episode.safe_published_final
-    elif episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value:
+    elif episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
         publication_time = episode.safe_live_ended
     else:
         publication_time = None
 
-    # Safe timestamps deliberately never contain a fallback. Call sites choose
-    # explicitly when The Daily Wire's less precise publishedAt is acceptable.
+    # Safe timestamps deliberately never contain a fallback
     if publication_time is None and episode.published_date is not None:
         publication_time = ensure_utc(episode.published_date)
 
