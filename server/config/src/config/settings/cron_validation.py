@@ -94,12 +94,77 @@ class _ParsedCron:
     weekdays: _CronField
 
 
+SettingPath = tuple[str, ...]
+
+
+def _setting_value(settings: object, path: SettingPath) -> object:
+    value = settings
+    for segment in path:
+        value = getattr(value, segment)
+    return value
+
+
 @dataclass(frozen=True)
-class _WorkerCronSpec:
-    enabled: bool
+class WorkerCronDefinition:
+    """Declarative link between one worker cron and the settings tree."""
+
     setting_name: str
     field_path: tuple[str, str]
+
+    @property
+    def enabled_field_path(self) -> tuple[str, str]:
+        section, field = self.field_path
+        return section, f"{field}_enabled"
+
+    def resolve(self, settings: object) -> "WorkerCronSpec":
+        return WorkerCronSpec(
+            definition=self,
+            enabled=bool(_setting_value(settings, self.enabled_field_path)),
+            expression=str(_setting_value(settings, self.field_path)),
+        )
+
+
+@dataclass(frozen=True)
+class WorkerCronSpec:
+    definition: WorkerCronDefinition
+    enabled: bool
     expression: str
+
+    @property
+    def setting_name(self) -> str:
+        return self.definition.setting_name
+
+    @property
+    def field_path(self) -> tuple[str, str]:
+        return self.definition.field_path
+
+    @property
+    def enabled_field_path(self) -> tuple[str, str]:
+        return self.definition.enabled_field_path
+
+
+WORKER_CRON_DEFINITIONS: tuple[WorkerCronDefinition, ...] = (
+    WorkerCronDefinition(
+        setting_name="Find episodes",
+        field_path=("new_episode_schedule", "find_episodes_cron"),
+    ),
+    WorkerCronDefinition(
+        setting_name="Monitor pending episodes",
+        field_path=("new_episode_schedule", "monitor_pending_episode_cron"),
+    ),
+    WorkerCronDefinition(
+        setting_name="Monitor no-usable-media episodes",
+        field_path=("new_episode_schedule", "monitor_no_usable_media_episode_cron"),
+    ),
+    WorkerCronDefinition(
+        setting_name="Verify downloads",
+        field_path=("download_settings", "verify_downloads_cron"),
+    ),
+    WorkerCronDefinition(
+        setting_name="File watcher scan",
+        field_path=("file_watcher", "scan_cron"),
+    ),
+)
 
 
 def _invalid_cron() -> CronExpressionError:
@@ -356,82 +421,25 @@ def validate_worker_cron_interval(
         )
 
 
-def _worker_cron_specs(
-    *,
-    find_episodes_cron_enabled: bool,
-    find_episodes_cron: str,
-    monitor_pending_episode_cron_enabled: bool,
-    monitor_pending_episode_cron: str,
-    monitor_no_usable_media_episode_cron_enabled: bool,
-    monitor_no_usable_media_episode_cron: str,
-    verify_downloads_cron_enabled: bool,
-    verify_downloads_cron: str,
-    file_watcher_scan_cron_enabled: bool,
-    file_watcher_scan_cron: str,
-) -> tuple[_WorkerCronSpec, ...]:
-    return (
-        _WorkerCronSpec(
-            find_episodes_cron_enabled,
-            "Find episodes",
-            ("new_episode_schedule", "find_episodes_cron"),
-            find_episodes_cron,
-        ),
-        _WorkerCronSpec(
-            monitor_pending_episode_cron_enabled,
-            "Monitor pending episodes",
-            ("new_episode_schedule", "monitor_pending_episode_cron"),
-            monitor_pending_episode_cron,
-        ),
-        _WorkerCronSpec(
-            monitor_no_usable_media_episode_cron_enabled,
-            "Monitor no-usable-media episodes",
-            ("new_episode_schedule", "monitor_no_usable_media_episode_cron"),
-            monitor_no_usable_media_episode_cron,
-        ),
-        _WorkerCronSpec(
-            verify_downloads_cron_enabled,
-            "Verify downloads",
-            ("download_settings", "verify_downloads_cron"),
-            verify_downloads_cron,
-        ),
-        _WorkerCronSpec(
-            file_watcher_scan_cron_enabled,
-            "File watcher scan",
-            ("file_watcher", "scan_cron"),
-            file_watcher_scan_cron,
-        ),
+def worker_cron_specs(settings: object) -> tuple[WorkerCronSpec, ...]:
+    """Resolve all worker cron definitions from an AppSettings-like model."""
+    return tuple(
+        definition.resolve(settings)
+        for definition in WORKER_CRON_DEFINITIONS
     )
 
 
 def worker_cron_validation_errors(
-    *,
-    min_slow_request_ms: int,
-    find_episodes_cron_enabled: bool,
-    find_episodes_cron: str,
-    monitor_pending_episode_cron_enabled: bool,
-    monitor_pending_episode_cron: str,
-    monitor_no_usable_media_episode_cron_enabled: bool,
-    monitor_no_usable_media_episode_cron: str,
-    verify_downloads_cron_enabled: bool,
-    verify_downloads_cron: str,
-    file_watcher_scan_cron_enabled: bool,
-    file_watcher_scan_cron: str,
+    settings: object,
 ) -> tuple[WorkerCronExpressionError | WorkerCronIntervalError, ...]:
-    """Return every cron validation problem so startup can surface them together."""
+    """Return every active worker cron problem for a settings model."""
+    min_slow_request_ms = int(
+        _setting_value(settings, ("dw_timeout", "min_slow_request_ms"))
+    )
+    required_seconds = max(0, min_slow_request_ms) / 1000.0
     errors: list[WorkerCronExpressionError | WorkerCronIntervalError] = []
 
-    for spec in _worker_cron_specs(
-        find_episodes_cron_enabled=find_episodes_cron_enabled,
-        find_episodes_cron=find_episodes_cron,
-        monitor_pending_episode_cron_enabled=monitor_pending_episode_cron_enabled,
-        monitor_pending_episode_cron=monitor_pending_episode_cron,
-        monitor_no_usable_media_episode_cron_enabled=monitor_no_usable_media_episode_cron_enabled,
-        monitor_no_usable_media_episode_cron=monitor_no_usable_media_episode_cron,
-        verify_downloads_cron_enabled=verify_downloads_cron_enabled,
-        verify_downloads_cron=verify_downloads_cron,
-        file_watcher_scan_cron_enabled=file_watcher_scan_cron_enabled,
-        file_watcher_scan_cron=file_watcher_scan_cron,
-    ):
+    for spec in worker_cron_specs(settings):
         if not spec.enabled:
             continue
 
@@ -447,7 +455,6 @@ def worker_cron_validation_errors(
             )
             continue
 
-        required_seconds = max(0, min_slow_request_ms) / 1000.0
         if minimum_seconds + 1e-9 < required_seconds:
             errors.append(
                 WorkerCronIntervalError(
@@ -459,9 +466,3 @@ def worker_cron_validation_errors(
             )
 
     return tuple(errors)
-
-
-def validate_worker_cron_settings(**kwargs) -> None:
-    errors = worker_cron_validation_errors(**kwargs)
-    if errors:
-        raise errors[0]

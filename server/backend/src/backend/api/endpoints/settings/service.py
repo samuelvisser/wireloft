@@ -436,22 +436,6 @@ def _download_storage(settings: AppSettings) -> DownloadStorageInspectionValue:
     )
 
 
-def _worker_cron_kwargs(settings: AppSettings) -> dict[str, Any]:
-    return {
-        "min_slow_request_ms": settings.dw_timeout.min_slow_request_ms,
-        "find_episodes_cron_enabled": settings.new_episode_schedule.find_episodes_cron_enabled,
-        "find_episodes_cron": settings.new_episode_schedule.find_episodes_cron,
-        "monitor_pending_episode_cron_enabled": settings.new_episode_schedule.monitor_pending_episode_cron_enabled,
-        "monitor_pending_episode_cron": settings.new_episode_schedule.monitor_pending_episode_cron,
-        "monitor_no_usable_media_episode_cron_enabled": settings.new_episode_schedule.monitor_no_usable_media_episode_cron_enabled,
-        "monitor_no_usable_media_episode_cron": settings.new_episode_schedule.monitor_no_usable_media_episode_cron,
-        "verify_downloads_cron_enabled": settings.download_settings.verify_downloads_cron_enabled,
-        "verify_downloads_cron": settings.download_settings.verify_downloads_cron,
-        "file_watcher_scan_cron_enabled": settings.file_watcher.scan_cron_enabled,
-        "file_watcher_scan_cron": settings.file_watcher.scan_cron,
-    }
-
-
 def _validation_issues(
     settings: AppSettings,
     *,
@@ -461,7 +445,7 @@ def _validation_issues(
     issues: list[SettingsValidationIssueValue] = []
     configured = set(configured_fields)
 
-    for error in worker_cron_validation_errors(**_worker_cron_kwargs(settings)):
+    for error in worker_cron_validation_errors(settings):
         field = cast(
             SettingFieldPath,
             ".".join(to_camel(segment) for segment in error.field_path),
