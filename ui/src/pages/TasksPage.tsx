@@ -125,7 +125,10 @@ export default function TasksPage() {
     const [statuses, setStatuses] = useState<Set<string>>(() => new Set(DEFAULT_STATUSES))
     const filterPress = useFilterChipPress()
     const sentinelRef = useRef<HTMLDivElement | null>(null)
-    const selectedStatuses = useMemo(() => [...statuses].sort(), [statuses])
+    const selectedStatuses = useMemo(
+        () => setsEqual(statuses, DEFAULT_STATUSES) ? undefined : [...statuses].sort(),
+        [statuses],
+    )
     const definitions = useQuery({
         queryKey: ['taskDefinitions'],
         queryFn: async ({signal}) => {
@@ -279,7 +282,7 @@ export default function TasksPage() {
                     options={definitionOptions}
                     value={definitionOptions.find((option) => option.value === definitionKey) ?? ALL_TASKS_OPTION}
                     onChange={(option) => setDefinitionKey(option?.value ?? '')}
-                    isSearchable={false}
+                    isSearchable
                     isClearable={false}
                     isLoading={definitions.isPending}
                 />
