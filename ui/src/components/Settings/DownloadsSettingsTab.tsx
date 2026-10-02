@@ -321,10 +321,10 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.automaticEpisodeDownloadDelayMinutes = value
                     })}
                     help={
-                        <ReadMore summary={<span>Delay before automatically downloading published episodes</span>}>
+                        <ReadMore summary={<span>Delay before automatically downloading published episodes.</span>}>
                             <p>
-                                Sometimes when an episode just has been published, its length is mere minutes even for hours long
-                                episodes. Presumably, The Daily Wire is still processing it on their end while their API reports
+                                Sometimes when an episode has just been published, its length is mere minutes even for hours long
+                                episodes. Presumably, The Daily Wire is still processing it on their end even while their API reports
                                 it as fully ready.
                             </p>
                             <p>

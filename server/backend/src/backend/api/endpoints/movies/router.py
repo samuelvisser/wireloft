@@ -59,7 +59,7 @@ def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
             operation = create_media_download_operation(
                 s,
                 download,
-                source=OperationSource.UI.value,
+                source=OperationSource.UI,
             )
             dispatch_queued_media_download_operations(s)
             result = {
@@ -91,7 +91,7 @@ def movie_extra_download_create(movie_slug: str, movie_extra_slug: str, body: Mo
             operation = create_media_download_operation(
                 s,
                 download,
-                source=OperationSource.UI.value,
+                source=OperationSource.UI,
             )
             dispatch_queued_media_download_operations(s)
             result = {

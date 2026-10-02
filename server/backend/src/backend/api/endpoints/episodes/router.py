@@ -28,7 +28,7 @@ def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
             operation = create_media_download_operation(
                 s,
                 download,
-                source=OperationSource.UI.value,
+                source=OperationSource.UI,
             )
             dispatch_queued_media_download_operations(s)
             result = {

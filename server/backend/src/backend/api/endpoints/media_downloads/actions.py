@@ -22,7 +22,7 @@ def _invoke(action, *args, **kwargs):
         raise HTTPException(status_code=404 if exc.kind == "missing" else 409, detail=str(exc)) from exc
 
 
-def retry_media_download_action(media_download_id: int, *, source: str = OperationSource.UI.value, reuse_matching_active: bool = False) -> str:
+def retry_media_download_action(media_download_id: int, *, source: str = OperationSource.UI, reuse_matching_active: bool = False) -> str:
     return _invoke(actions.retry_media_download_action, media_download_id, source=source, reuse_matching_active=reuse_matching_active)
 
 

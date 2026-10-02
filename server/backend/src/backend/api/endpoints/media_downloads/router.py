@@ -1,6 +1,4 @@
-from typing import Optional
-
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 
 from .actions import (
     cancel_media_download_action,

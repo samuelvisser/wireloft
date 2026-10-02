@@ -52,7 +52,7 @@ def retry_media_download(session: Session, media_download_id: int) -> MediaDownl
 def retry_media_download_action(
         media_download_id: int,
         *,
-        source: str = OperationSource.UI.value,
+        source: str = OperationSource.UI,
         reuse_matching_active: bool = False,
 ) -> str:
     """Replace one download attempt and return the new media.download operation ID."""
