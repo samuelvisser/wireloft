@@ -20,6 +20,7 @@ import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import {formatDate, formatDurationMinutes} from "../../utils/formatting";
+import './EpisodePage.css'
 
 // Ensure icons from the kit are registered (idempotent)
 library.add(fas)
@@ -51,81 +52,6 @@ function EpisodePageSkeleton() {
                 </div>
             </article>
 
-            <style type="text/css">{`
-                .episode-page-skeleton { padding-top: 0; }
-                .episode-page-skeleton .episode-details { width: min(100%, 980px); margin: 0 auto; }
-                .episode-page-skeleton-block {
-                    background: #e5e7eb;
-                    animation: episode-page-skeleton-pulse 1.5s ease-in-out infinite;
-                }
-                .episode-page-skeleton-breadcrumb {
-                    width: min(32%, 220px);
-                    height: 13px;
-                    margin-bottom: 14px;
-                    border-radius: 5px;
-                }
-                .episode-page-skeleton-cover {
-                    width: 100%;
-                    aspect-ratio: 16 / 9;
-                    border-radius: 10px;
-                }
-                .episode-page-skeleton-header { margin-top: 20px; }
-                .episode-page-skeleton-title {
-                    width: min(72%, 600px);
-                    height: 34px;
-                    border-radius: 7px;
-                }
-                .episode-page-skeleton-meta {
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                    margin-top: 14px;
-                }
-                .episode-page-skeleton-meta-item {
-                    width: 76px;
-                    height: 14px;
-                    border-radius: 5px;
-                }
-                .episode-page-skeleton-meta-item-wide { width: 150px; }
-                .episode-page-skeleton-description {
-                    margin-top: 24px;
-                    padding-top: 20px;
-                    border-top: 1px solid var(--border-color, #e2e2e2);
-                }
-                .episode-page-skeleton-section-title {
-                    width: 150px;
-                    height: 17px;
-                    margin-bottom: 11px;
-                    border-radius: 5px;
-                }
-                .episode-page-skeleton-line {
-                    width: min(100%, 850px);
-                    height: 14px;
-                    margin-top: 8px;
-                    border-radius: 5px;
-                }
-                .episode-page-skeleton-line-medium { width: min(88%, 750px); }
-                .episode-page-skeleton-line-short { width: min(64%, 540px); }
-                @keyframes episode-page-skeleton-pulse {
-                    0%, 100% { opacity: 0.55; }
-                    50% { opacity: 1; }
-                }
-                @media (prefers-reduced-motion: reduce) {
-                    .episode-page-skeleton-block { animation: none; }
-                }
-                @media (prefers-color-scheme: dark) {
-                    .episode-page-skeleton-block { background: rgba(148, 163, 184, 0.22); }
-                }
-                @media (max-width: 720px) {
-                    .episode-page-skeleton .episode-details { width: 100%; }
-                    .episode-page-skeleton-breadcrumb { margin-bottom: 12px; }
-                    .episode-page-skeleton-cover { border-radius: 8px; }
-                    .episode-page-skeleton-header { margin-top: 14px; }
-                    .episode-page-skeleton-title { height: 27px; }
-                    .episode-page-skeleton-meta { gap: 9px; margin-top: 10px; }
-                    .episode-page-skeleton-description { margin-top: 18px; padding-top: 16px; }
-                }
-            `}</style>
         </section>
     )
 }
@@ -538,67 +464,6 @@ export default function EpisodePage() {
                 </ConfirmDialog>
             )}
 
-            <style type="text/css">{`
-        .episode-view { padding-top: 0; }
-        .episode-details { width: min(100%, 980px); margin: 0 auto; }
-        .episode-breadcrumb { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; color: var(--muted, #777); font-size: 0.9rem; }
-        .episode-breadcrumb a { color: inherit; text-decoration: none; }
-        .episode-breadcrumb a:hover { color: var(--link-color, #66267a); text-decoration: underline; }
-        .episode-breadcrumb svg { width: 9px; opacity: 0.6; }
-        .episode-cover { position: relative; overflow: hidden; border-radius: 10px; background: #111827; }
-        .episode-cover img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
-        .episode-live-badge { position: absolute; top: 18px; right: 18px; display: inline-flex; align-items: center; gap: 8px; padding: 9px 15px; border-radius: 999px; background: var(--error, #d64545); color: #fff; box-shadow: 0 2px 10px rgb(0 0 0 / 30%); font-size: 0.95rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
-        .episode-live-badge::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-        .episode-header { margin-top: 20px; }
-        .episode-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-        .episode-title-row .action-menu { flex: 0 0 auto; }
-        .episode-title-text { min-width: 0; margin: 0; font-size: clamp(1.5rem, 3vw, 2.15rem); line-height: 1.18; letter-spacing: -0.025em; }
-        .episode-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; color: var(--muted, #6b7280); font-size: 0.9rem; }
-        .episode-status, .episode-summary-item { display: inline-flex; align-items: center; gap: 7px; }
-        .episode-status.is-live { color: var(--error, #d64545); font-weight: 600; text-transform: uppercase; }
-        .episode-status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-        .episode-summary-separator { width: 1px; height: 18px; background: var(--border-color, #d9d9d9); }
-        .episode-description { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-color, #e2e2e2); }
-        .episode-description h2 { margin: 0 0 8px; font-size: 1.05rem; }
-        .episode-description p { margin: 0; max-width: 850px; line-height: 1.55; white-space: pre-line; }
-        .episode-downloads { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-color, #e2e2e2); }
-        .episode-downloads h2 { font-size: 1.05rem; margin: 0 0 8px; }
-        .download-row { display: flex; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--divider, #e2e2e2); }
-        .download-row-info { min-width: 200px; }
-        .download-row-name { font-weight: 600; }
-        .download-row-format { color: var(--muted, #777); font-size: 0.9rem; }
-        .download-row-state { flex: 1; min-width: 0; }
-        .download-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; flex: 0 0 auto; }
-        .download-row-actions > .icon-btn,
-        .download-row-actions .wl-progress-explanation > .icon-btn { width: 30px; height: 30px; }
-        .download-row-progress { display: flex; align-items: center; gap: 10px; }
-        .download-row-progress .progress { flex: 1; max-width: 380px; }
-        .download-row-progress-label { min-width: 60px; color: var(--muted, #777); }
-        .download-row-done { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-        .download-row-redownload { padding: 5px 8px; font-size: 0.85rem; }
-        .download-row-path { flex-basis: 100%; color: var(--muted, #777); font-size: 0.85rem; margin-top: 4px; }
-        .download-row-error { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-        .download-state-ok { color: #2fa84f; }
-        .download-state-error { color: var(--error, #d64545); }
-        @media (max-width: 720px) {
-          .episode-details { width: 100%; }
-          .episode-breadcrumb { margin-bottom: 12px; font-size: 0.82rem; }
-          .episode-cover { border-radius: 8px; }
-          .episode-live-badge { top: 10px; right: 10px; padding: 7px 11px; font-size: 0.8rem; }
-          .episode-header { margin-top: 14px; }
-          .episode-title-row { gap: 10px; }
-          .episode-title-text { font-size: 1.4rem; }
-          .episode-summary { gap: 9px; margin-top: 10px; font-size: 0.8rem; }
-          .episode-summary-separator { height: 16px; }
-          .episode-description { margin-top: 18px; padding-top: 16px; }
-          .episode-description p { font-size: 0.95rem; }
-          .episode-downloads { margin-top: 18px; padding-top: 16px; }
-          .download-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px 12px; }
-          .download-row-info { grid-column: 1 / -1; min-width: 0; }
-          .download-row-state { min-width: 0; width: 100%; }
-          .download-row-actions { align-self: center; }
-        }
-      `}</style>
         </section>
     )
 }
