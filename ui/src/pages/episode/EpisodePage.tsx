@@ -197,16 +197,7 @@ export default function EpisodePage() {
         )
     }
 
-    if (isLoading && !show) {
-        return (
-            <section className="view episode-view">
-                <div className="view-header">
-                    <h1>Episode</h1>
-                </div>
-                <p>Loading episode...</p>
-            </section>
-        )
-    }
+    if (isLoading && !show) return null
 
     if (!show) {
         return (
@@ -220,16 +211,7 @@ export default function EpisodePage() {
         )
     }
 
-    if (isLoadingEpisode && !episode) {
-        return (
-            <section className="view episode-view">
-                <div className="view-header">
-                    <h1>Episode</h1>
-                </div>
-                <p>Loading episode...</p>
-            </section>
-        )
-    }
+    if (isLoadingEpisode && !episode) return null
 
     if (!episode) {
         return (
