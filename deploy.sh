@@ -129,6 +129,47 @@ FULL_IMAGE="$REGISTRY/$GHCR_USER/$IMAGE_NAME"
 TOKEN_FILE="${GHCR_TOKEN_FILE:-$HOME/.config/wireloft/ghcr_token}"
 NPMRC="ui/.npmrc"
 
+ensure_docker_running() {
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "Docker CLI not found. Install Docker Desktop before deploying." >&2
+        exit 1
+    fi
+
+    if docker info >/dev/null 2>&1; then
+        return
+    fi
+
+    echo "Docker is not running. Starting Docker Desktop..."
+
+    if docker desktop --help >/dev/null 2>&1; then
+        if docker desktop start --timeout 120 >/dev/null 2>&1 \
+            && docker info >/dev/null 2>&1; then
+            return
+        fi
+    fi
+
+    if [ "$(uname -s)" != "Darwin" ] || ! command -v open >/dev/null 2>&1; then
+        echo "Docker is not running and Docker Desktop could not be started automatically." >&2
+        exit 1
+    fi
+
+    if ! open -g -a Docker; then
+        echo "Could not start Docker Desktop." >&2
+        exit 1
+    fi
+
+    local deadline=$((SECONDS + 120))
+    while [ "$SECONDS" -lt "$deadline" ]; do
+        if docker info >/dev/null 2>&1; then
+            return
+        fi
+        sleep 2
+    done
+
+    echo "Docker Desktop started, but the Docker daemon did not become available." >&2
+    exit 1
+}
+
 resolve_token() {
     if [ -n "${GHCR_TOKEN:-}" ]; then
         return
@@ -168,6 +209,7 @@ if [ ! -f "$NPMRC" ]; then
     exit 1
 fi
 
+ensure_docker_running
 resolve_token
 
 echo "Building $FULL_IMAGE with Font Awesome Pro icons for tags: ${TAGS[*]} ..."
