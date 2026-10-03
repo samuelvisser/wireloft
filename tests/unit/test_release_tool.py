@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import importlib.util
 from pathlib import Path
 import sys
@@ -50,8 +51,27 @@ def test_module_version_replacement_preserves_quote_style():
     ) == "__version__ = '2.0.0'\n"
 
 
-def test_release_container_tags_include_semver_aliases_and_latest():
-    assert release_tool.container_tags("2.3.4") == ["2.3.4", "2.3", "2", "latest"]
+def test_release_container_version_tags():
+    assert release_tool.container_version_tags("2.3.4") == ["2.3.4", "2.3", "2"]
+
+
+def test_publish_delegates_container_tagging_to_deploy(monkeypatch):
+    calls: list[tuple[str, ...]] = []
+
+    monkeypatch.setattr(release_tool, "verify_publish_state", lambda: None)
+    monkeypatch.setattr(release_tool, "tags_to_publish", lambda: ([], "v2.3.4"))
+    monkeypatch.setattr(release_tool, "push_release_tags", lambda *_args: None)
+
+    def fake_run(*args: str, **_kwargs):
+        calls.append(args)
+
+    monkeypatch.setattr(release_tool, "run", fake_run)
+
+    release_tool.publish_release(argparse.Namespace(skip_container=False, yes=True))
+
+    assert [call for call in calls if call[0] == "./deploy.sh"] == [
+        ("./deploy.sh", "--tag-level", "main", "2.3.4", "2.3", "2")
+    ]
 
 
 def test_application_release_tag_is_pushed_separately(monkeypatch):
