@@ -349,6 +349,11 @@
     overflow: hidden;
 }
 
+/* Open disclosures must not clip React Select menus that extend beyond the card. */
+.settings-disclosure[open] {
+    overflow: visible;
+}
+
 .settings-disclosure > summary {
     display: flex;
     align-items: center;

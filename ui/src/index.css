@@ -1383,6 +1383,11 @@ div[class$="-clearIndicator"] { color: var(--muted) !important; }
 div[class$="-menu"] { background: var(--bg) !important; color: var(--text) !important; border-radius: 6px !important; overflow: hidden; }
 div[class$="-menu-list"] { background: var(--bg) !important; }
 /* Option states */
+.select__menu {
+  /* Keep dropdowns above later cards, tables, and other normal page content. */
+  z-index: 30 !important;
+}
+
 div[class$="-option"] { background: transparent !important; color: var(--text) !important; }
 div[class$="-option"][aria-selected="true"] { background: #0ea5e9 !important; color: #ffffff !important; }
 /* Disabled option: visually indicate and prevent hover/active highlight */
