@@ -6,12 +6,12 @@
   />
 </p>
 
-<h2 align="center">Higly polished self-hosted Daily Wire media manager</h2>
+<h2 align="center">Higly polished self-hosted Local Media Manager and RSS generator for The Daily Wire</h2>
 
 
 <p align="center">
   <img
-    src="docs/assets/screenshots/1.2.2-home-screen.png"
+    src="docs/assets/screenshots/1.2.2-library.png"
     alt="WireLoft Home Screen"
     width="700"
   />
@@ -19,7 +19,7 @@
 
 <p align="center">
   <img
-    src="docs/assets/screenshots/1.2.2-library.png"
+    src="docs/assets/screenshots/1.2.2-movie-page.png"
     alt="WireLoft Library"
     width="340"
   />
