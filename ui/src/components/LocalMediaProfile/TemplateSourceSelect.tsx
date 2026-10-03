@@ -7,7 +7,6 @@ import type {
     LocalMediaProfileTemplateSource,
     LocalMediaProfileTemplateSourceMode,
 } from '../../lib/localMediaProfileTemplateSources'
-import {createSelectRegistry} from '../../utils/selectRegistry'
 import './TemplateSourceSelect.css'
 
 type Props = {
@@ -73,20 +72,8 @@ export default function TemplateSourceSelect({
     onLoadMore,
     onLoadPrevious,
 }: Props) {
-    const sourceReg = useMemo(() => {
-        const spec: Record<string, {label: string}> = {}
-        const values: string[] = []
-        for (const source of sources) {
-            spec[source.id] = {label: optionForSource(source, mode).label}
-            values.push(source.id)
-        }
-        return createSelectRegistry('LocalMediaProfileTemplateSource', spec, values)
-    }, [mode, sources])
-    const optionPresentation = useMemo(
-        () => new Map(sources.map((source) => {
-            const option = optionForSource(source, mode)
-            return [source.id, {selectedLabel: option.selectedLabel, group: option.group}]
-        })),
+    const options = useMemo(
+        () => sources.map((source) => optionForSource(source, mode)),
         [mode, sources],
     )
     const selectedOption = useMemo(
@@ -102,8 +89,7 @@ export default function TemplateSourceSelect({
         <LazySearchSelect
             inputId="template-example-source"
             className="template-source-select"
-            registry={sourceReg}
-            optionPresentation={optionPresentation}
+            options={options}
             value={selectedOption}
             isLoading={isLoading}
             hasMore={hasMore}

@@ -120,6 +120,11 @@ default changes dynamically based on certain conditions.
 
 Make sure to use this structure for any form adjustments and especially any new forms.
 
+### React Select
+Whenever you add a Select component anywhere, always use ReactSelect, or components using it like SimpleSelect. 
+Enable search only if there are a lot of items. Keep most select components simple (SimpleSelect). 
+Select options should always be build with a SelectRegistry.
+
 ## Wiki
 When making big changes, you are allowed to update the WireLoft Wiki, too. 
 However, keep in mind that the Wiki’s goal is user-facing: it should tell users things 
