@@ -1,4 +1,46 @@
-# WireLoft
+<p align="center">  
+  <img 
+    src="docs/assets/logos/logo-wide-wireloft.png" 
+    alt="WireLoft Logo"
+    width="500" 
+  />
+</p>
+
+<h2 align="center">Higly polished self-hosted Daily Wire media manager</h2>
+
+
+<p align="center">
+  <img
+    src="docs/assets/screenshots/1.2.2-home-screen.png"
+    alt="WireLoft Home Screen"
+    width="700"
+  />
+</p>
+
+<p align="center">
+  <img
+    src="docs/assets/screenshots/1.2.2-library.png"
+    alt="WireLoft Library"
+    width="340"
+  />
+  &nbsp;
+  <img
+    src="docs/assets/screenshots/1.2.2-episode.png"
+    alt="WireLoft Episode"
+    width="340"
+  />
+</p>
+
+
+
+
+
+
+
+
+
+
+
 
 ## What it does
 
