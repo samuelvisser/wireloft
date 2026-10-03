@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, StrEnum
 
 
 class TaskStatus(str, Enum):
@@ -21,7 +21,7 @@ class OperationStatus(str, Enum):
     CANCELED = "CANCELED"
 
 
-class OperationSource(str, Enum):
+class OperationSource(StrEnum):
     UI = "UI"
     API = "API"
     SYSTEM = "SYSTEM"

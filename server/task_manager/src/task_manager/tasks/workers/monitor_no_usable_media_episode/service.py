@@ -251,6 +251,7 @@ async def run_monitor_no_usable_media_episode(
 
         is_target = episode_id == episode.id
         episode_slug = episode.slug
+        safe_live_ended = episode.safe_live_ended
         require_member_exclusive = _membership(episode.show)
         s.rollback()
 
@@ -314,7 +315,14 @@ async def run_monitor_no_usable_media_episode(
             # reacquiring the ORM row so the connection stays available to API
             # traffic during that external request.
             observed = observe_episode_detail(detail, inspect_static_media=True)
-            resolved = resolve_episode_status(detail, snapshot=observed)
+            publication_timing_reference = safe_live_ended
+            if publication_timing_reference is None:
+                publication_timing_reference = detail.published_date
+            resolved = resolve_episode_status(
+                detail,
+                publication_timing_reference=publication_timing_reference,
+                snapshot=observed,
+            )
             episode = s.get(Episode, candidate_id)
             if episode is None:
                 continue

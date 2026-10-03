@@ -204,6 +204,7 @@ def test_monitor_releases_database_transaction_before_external_requests(db_sessi
         audio_url=None,
         publish_status="PUBLISHED",
         is_downloadable=True,
+        published_date=datetime.now(timezone.utc) - timedelta(hours=6),
     )
 
     class FakeAuthClient:
@@ -233,7 +234,7 @@ def test_monitor_releases_database_transaction_before_external_requests(db_sessi
     monkeypatch.setattr(
         service,
         "resolve_episode_status",
-        lambda _detail, *, snapshot: SimpleNamespace(status=EpisodePublishStatus.NO_USABLE_MEDIA),
+        lambda _detail, **_kwargs: SimpleNamespace(status=EpisodePublishStatus.NO_USABLE_MEDIA),
     )
 
     asyncio.run(
@@ -256,6 +257,7 @@ def test_monitor_keeps_expired_episode_when_daily_wire_still_returns_it(db_sessi
     detail = SimpleNamespace(
         slug=episode.slug, title=episode.title, duration=5.0, video_url=None, audio_url=None,
         publish_status="PUBLISHED", is_downloadable=True,
+        published_date=datetime.now(timezone.utc) - timedelta(hours=6),
     )
     class FakeClient:
         def __init__(self, access_token=None): pass
@@ -281,6 +283,7 @@ def test_force_delete_still_requires_fresh_404(db_session, monkeypatch):
     detail = SimpleNamespace(
         slug=episode.slug, title=episode.title, duration=5.0, video_url=None, audio_url=None,
         publish_status="PUBLISHED", is_downloadable=True,
+        published_date=datetime.now(timezone.utc) - timedelta(hours=6),
     )
     class FakeClient:
         def __init__(self, access_token=None): pass
@@ -305,7 +308,10 @@ def test_force_delete_reports_recovery_and_new_status(db_session, monkeypatch):
     episode = _make_episode(db_session, show)
     _mark_missing(db_session, episode, hours_ago=1)
     episode_id = episode.id
-    detail = SimpleNamespace(slug=episode.slug)
+    detail = SimpleNamespace(
+        slug=episode.slug,
+        published_date=datetime.now(timezone.utc) - timedelta(hours=6),
+    )
 
     class FakeClient:
         def __init__(self, access_token=None): pass
@@ -324,7 +330,7 @@ def test_force_delete_reports_recovery_and_new_status(db_session, monkeypatch):
     monkeypatch.setattr(
         service,
         "resolve_episode_status",
-        lambda _detail, *, snapshot: SimpleNamespace(status=EpisodePublishStatus.PUBLISHED_FINAL),
+        lambda _detail, **_kwargs: SimpleNamespace(status=EpisodePublishStatus.PUBLISHED_FINAL),
     )
     monkeypatch.setattr(service, "update_episode_from_dailywire", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "reconcile_episode_identifier", lambda *_args, **_kwargs: None)

@@ -28,21 +28,21 @@ def metadata_refresh_offsets_seconds() -> tuple[int, ...]:
     )
 
 
-def metadata_watch_deadline(published_date: datetime | None) -> datetime | None:
-    if published_date is None:
+def metadata_watch_deadline(publication_time: datetime | None) -> datetime | None:
+    if publication_time is None:
         return None
-    return ensure_utc(published_date) + timedelta(
+    return ensure_utc(publication_time) + timedelta(
         seconds=metadata_refresh_offsets_seconds()[-1]
     )
 
 
 def metadata_watch_expired(
-        published_date: datetime | None,
+        publication_time: datetime | None,
         *,
         now: datetime | None = None,
 ) -> bool:
-    """Whether the last configured metadata refresh offset has already passed."""
-    deadline = metadata_watch_deadline(published_date)
+    """Whether the last refresh offset from the selected publication clock passed."""
+    deadline = metadata_watch_deadline(publication_time)
     if deadline is None:
         return True
     current = ensure_utc(now or datetime.now(timezone.utc))

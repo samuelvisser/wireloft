@@ -90,7 +90,37 @@ def test_countdown_timeout_only_advances_current_countdown_snapshot(monkeypatch)
     )
     observed = status.observe_episode_detail(detail)
     assert observed.status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
-    assert status.resolve_episode_status(detail, snapshot=observed).status is EpisodePublishStatus.PUBLISHED_FINAL
+    assert status.resolve_episode_status(
+        detail,
+        publication_timing_reference=detail.published_date,
+        snapshot=observed,
+    ).status is EpisodePublishStatus.PUBLISHED_FINAL
+
+
+def test_countdown_timeout_can_use_explicit_safe_live_reference(monkeypatch):
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.helpers.episodes import status
+
+    monkeypatch.setattr(status, "get_settings", _timing_settings)
+    monkeypatch.setattr(status, "get_vod_info", lambda _url: SimpleNamespace(seconds=3600))
+    now = datetime(2026, 10, 2, 12, tzinfo=timezone.utc)
+    detail = _episode_detail(
+        slug="episode-safe-live-clock",
+        published_at=now - timedelta(hours=4),
+        downloadable=False,
+    )
+    observed = status.observe_episode_detail(detail)
+    assert observed.status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
+
+    # The Daily Wire timestamp alone would trip the 180-minute fallback. A
+    # trusted live-end observation explicitly selected by the caller must not.
+    resolved = status.resolve_episode_status(
+        detail,
+        publication_timing_reference=now - timedelta(minutes=10),
+        now=now,
+        snapshot=observed,
+    )
+    assert resolved.status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
 
 
 def test_dw_processing_uses_short_metadata_long_hls_and_times_out(monkeypatch):
@@ -109,8 +139,14 @@ def test_dw_processing_uses_short_metadata_long_hls_and_times_out(monkeypatch):
         published_at=datetime.now(timezone.utc) - timedelta(minutes=61),
     )
     assert status.observe_episode_detail(recent).status is EpisodePublishStatus.DW_PROCESSING
-    assert status.resolve_episode_status(recent).status is EpisodePublishStatus.DW_PROCESSING
-    assert status.resolve_episode_status(stale).status is EpisodePublishStatus.NO_USABLE_MEDIA
+    assert status.resolve_episode_status(
+        recent,
+        publication_timing_reference=recent.published_date,
+    ).status is EpisodePublishStatus.DW_PROCESSING
+    assert status.resolve_episode_status(
+        stale,
+        publication_timing_reference=stale.published_date,
+    ).status is EpisodePublishStatus.NO_USABLE_MEDIA
 
 
 def test_transition_policy_reuses_the_single_hls_observation(monkeypatch):
@@ -126,7 +162,11 @@ def test_transition_policy_reuses_the_single_hls_observation(monkeypatch):
     )
 
     observed = status.observe_episode_detail(detail)
-    resolved = status.resolve_episode_status(detail, snapshot=observed)
+    resolved = status.resolve_episode_status(
+        detail,
+        publication_timing_reference=detail.published_date,
+        snapshot=observed,
+    )
 
     assert resolved.status is EpisodePublishStatus.DW_PROCESSING
     get_vod_info.assert_called_once_with(detail.video_url)

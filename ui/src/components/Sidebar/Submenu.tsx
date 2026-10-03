@@ -26,18 +26,22 @@ export default function Submenu({label, icon, items}: SubmenuProps) {
   const location = useLocation()
   const allPaths = useMemo(() => flattenPaths(items), [items])
   const isAnyActive = useMemo(() => allPaths.some(p => location.pathname.startsWith(p)), [allPaths, location.pathname])
-  const [open, setOpen] = useState<boolean>(isAnyActive)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const toggleRef = useRef<HTMLButtonElement | null>(null)
 
   // Track whether we are in the header (mobile) layout
   const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' ? window.matchMedia('(max-width: 900px)').matches : false)
+  const [open, setOpen] = useState<boolean>(() => isAnyActive && !isMobile)
   const [fixedTop, setFixedTop] = useState<number>(0)
 
-  // Keep active submenus expanded in the persistent desktop sidebar. On mobile,
-  // selecting a child should be allowed to collapse the dropdown after navigation.
+  // Keep active submenus expanded in the persistent desktop sidebar. Mobile
+  // dropdowns should always start collapsed, including after a page reload.
   useEffect(() => {
-    if (isAnyActive && !isMobile) setOpen(true)
+    if (isMobile) {
+      setOpen(false)
+    } else if (isAnyActive) {
+      setOpen(true)
+    }
   }, [isAnyActive, isMobile])
 
   // Keep isMobile in sync with viewport

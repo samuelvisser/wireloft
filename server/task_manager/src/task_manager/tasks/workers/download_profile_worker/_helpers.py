@@ -5,11 +5,10 @@ from datetime import datetime, time, timedelta, timezone
 from typing import Optional, Sequence
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import exists, false, func, or_, select
+from sqlalchemy import false, func, or_, select
 from sqlalchemy.orm import Session, selectin_polymorphic, selectinload
 
 from backend.db.models import DownloadProfileBase, Episode, PodcastDownloadProfile, Season, SeriesDownloadProfile
-from backend.db.models.Metadata import Metadata
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
@@ -18,10 +17,6 @@ from backend.types.media_types import MediaType
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
-from task_manager.tasks.helpers.episodes.automatic_download_timing import (
-    AUTOMATIC_DOWNLOAD_DELAY_META_KEY,
-    is_trusted_automatic_download_delay_value,
-)
 from task_manager.tasks.helpers.episodes.metadata import ensure_utc
 from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
@@ -85,34 +80,27 @@ def _utc_now() -> datetime:
 
 
 def automatic_episode_download_ready_at(episode: Episode) -> datetime | None:
-    """Return the earliest instant an automatic episode download may start."""
+    """Return when this episode may start an automatic download."""
     delay_minutes = (
         get_settings().download_settings.automatic_episode_download_delay_minutes
     )
     if delay_minutes <= 0:
         return None
 
-    clocks: list[datetime] = []
-    if episode.published_date is not None:
-        clocks.append(ensure_utc(episode.published_date))
+    if episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL:
+        publication_time = episode.safe_published_final
+    elif episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
+        publication_time = episode.safe_live_ended
+    else:
+        publication_time = None
 
-    transition = next(
-        (
-            item
-            for item in episode.meta_items
-            if (
-                item.key == AUTOMATIC_DOWNLOAD_DELAY_META_KEY
-                and is_trusted_automatic_download_delay_value(item.value)
-            )
-        ),
-        None,
-    )
-    if transition is not None and transition.updated_at is not None:
-        clocks.append(ensure_utc(transition.updated_at))
+    # Safe timestamps deliberately never contain a fallback
+    if publication_time is None and episode.published_date is not None:
+        publication_time = ensure_utc(episode.published_date)
 
-    if not clocks:
+    if publication_time is None:
         return None
-    return max(clocks) + timedelta(minutes=delay_minutes)
+    return publication_time + timedelta(minutes=delay_minutes)
 
 
 def _episode_identifier_type_predicate(allowed_types: set[str]):
@@ -227,34 +215,22 @@ def get_download_profile_episodes(
     if only_episode is not None:
         stmt = stmt.where(Episode.id == only_episode.id)
 
-    if apply_automatic_download_delay:
-        delay_minutes = (
-            get_settings().download_settings.automatic_episode_download_delay_minutes
-        )
-        if delay_minutes > 0:
-            cutoff = _utc_now() - timedelta(minutes=delay_minutes)
-            recent_trusted_monitor_transition = exists(
-                select(Metadata.id).where(
-                    Metadata.parent_table == Episode.__tablename__,
-                    Metadata.parent_id == Episode.id,
-                    Metadata.key == AUTOMATIC_DOWNLOAD_DELAY_META_KEY,
-                    Metadata.value.like("monitor:%"),
-                    Metadata.updated_at > cutoff,
-                )
-            )
-            # Daily Wire's publishedAt is the normal clock and remains the only
-            # clock after startup/backfill. A later WireLoft timestamp participates
-            # only when the pending monitor proved it followed the live lifecycle
-            # continuously from the transition into LIVE.
-            stmt = stmt.where(
-                or_(Episode.published_date.is_(None), Episode.published_date <= cutoff),
-                ~recent_trusted_monitor_transition,
-            )
-
     if needs_global_podcast_scope:
         stmt = stmt.order_by(published_at.desc(), Episode.id.desc())
 
-    return list(s.scalars(stmt))
+    episodes = list(s.scalars(stmt))
+    if not apply_automatic_download_delay:
+        return episodes
+
+    now = _utc_now()
+    return [
+        episode
+        for episode in episodes
+        if (
+            (ready_at := automatic_episode_download_ready_at(episode)) is None
+            or ready_at <= now
+        )
+    ]
 
 
 @dataclass(frozen=True)

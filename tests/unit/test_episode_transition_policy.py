@@ -62,6 +62,7 @@ def test_final_episode_does_not_regress_to_inferred_countdown(monkeypatch):
 
     resolved = status.resolve_episode_status(
         detail,
+        publication_timing_reference=detail.published_date,
         current_status=EpisodePublishStatus.PUBLISHED_FINAL,
         snapshot=observed,
     )
@@ -78,6 +79,7 @@ def test_authoritative_live_can_move_final_episode_back_to_pending():
     observed = status.observe_episode_detail(detail)
     resolved = status.resolve_episode_status(
         detail,
+        publication_timing_reference=detail.published_date,
         current_status=EpisodePublishStatus.PUBLISHED_FINAL,
         snapshot=observed,
     )
@@ -95,6 +97,7 @@ def test_unusable_remote_snapshot_can_move_final_episode_to_quarantine(monkeypat
     observed = status.observe_episode_detail(detail)
     resolved = status.resolve_episode_status(
         detail,
+        publication_timing_reference=detail.published_date,
         current_status=EpisodePublishStatus.PUBLISHED_FINAL,
         snapshot=observed,
     )

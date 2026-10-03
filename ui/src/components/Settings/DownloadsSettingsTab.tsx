@@ -62,14 +62,14 @@ function childPath(root: string, name: string) {
 }
 
 export default function DownloadsSettingsTab({
-    draft,
-    updateDraft,
-    environmentVariableFor,
-    errorFor,
-    isFieldExplicit,
-    isFieldDirty,
-    downloadStorage,
-}: SettingsTabProps) {
+                                                 draft,
+                                                 updateDraft,
+                                                 environmentVariableFor,
+                                                 errorFor,
+                                                 isFieldExplicit,
+                                                 isFieldDirty,
+                                                 downloadStorage,
+                                             }: SettingsTabProps) {
     const temporaryDownloadRoot = draft.downloadSettings.temporaryDownloadRoot
     const rssCacheRoot = (
         !isFieldExplicit('downloadSettings.rssCacheRoot')
@@ -154,7 +154,9 @@ export default function DownloadsSettingsTab({
                                 By default, the cache lives in <code>.wireloft-rss-cache</code> inside the download root.
                             </p>
                             <p>
-                                You may explicitly place it anywhere WireLoft can write, including container-local storage such as <code>/tmp/wireloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the container is recreated.
+                                You may explicitly place it anywhere WireLoft can write, including container-local storage such
+                                as <code>/tmp/wireloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the
+                                container is recreated.
                             </p>
                         </ReadMore>
                     }
@@ -186,16 +188,22 @@ export default function DownloadsSettingsTab({
                     help={
                         <ReadMore summary="Choose whether incomplete downloads are written in their destination or staged elsewhere first.">
                             <p>
-                                <strong>Save directly to downloads</strong> writes temporary files next to the final media file and reserves the final filename while downloading.
+                                <strong>Save directly to downloads</strong> writes temporary files next to the final media file and reserves the final
+                                filename while downloading.
                             </p>
                             <p>
-                                <strong>Save to temporary folder first</strong> keeps all download and remux work in the temporary folder. Only after the media is complete does WireLoft choose an unused final filename and publish it to the destination.
+                                <strong>Save to temporary folder first</strong> keeps all download and remux work in the temporary folder. Only after
+                                the media is complete does WireLoft choose an unused final filename and publish it to the destination.
                             </p>
                             <p>
-                                The temporary folder may be on a different filesystem from the media library, including local storage while the library itself is on SMB, NFS, or another network mount. If a cross-filesystem copy is required, WireLoft copies the already-complete media to a hidden <code>.part</code> publication file on the destination filesystem and only then renames it to the final media filename.
+                                The temporary folder may be on a different filesystem from the media library, including local storage while the
+                                library itself is on SMB, NFS, or another network mount. If a cross-filesystem copy is required, WireLoft copies the
+                                already-complete media to a hidden <code>.part</code> publication file on the destination filesystem and only then
+                                renames it to the final media filename.
                             </p>
                             <p>
-                                Temporary mode is particularly useful when the destination folder is used by a media server and you do not want it to pick up partly downloaded or empty media files.
+                                Temporary mode is particularly useful when the destination folder is used by a media server and you do not want it to
+                                pick up partly downloaded or empty media files.
                             </p>
                             <p>Local Media Profiles default to System and can override this setting individually.</p>
                         </ReadMore>
@@ -237,7 +245,8 @@ export default function DownloadsSettingsTab({
                     help={
                         <ReadMore summary="Choose how WireLoft stores metadata for downloaded media.">
                             <p><strong>No metadata</strong> leaves the downloaded media without WireLoft-generated metadata.</p>
-                            <p><strong>Embed in media</strong> writes metadata such as titles, dates and available episode or movie details into supported media containers.</p>
+                            <p><strong>Embed in media</strong> writes metadata such as titles, dates and available episode or movie details into
+                                supported media containers.</p>
                             <p><strong>Download as NFO</strong> writes a same-basename NFO file beside the downloaded media.</p>
                             <p><strong>Both embed and download</strong> does both.</p>
                             <p>Local Media Profiles default to System and can override this setting individually.</p>
@@ -282,7 +291,8 @@ export default function DownloadsSettingsTab({
                     help={
                         <ReadMore summary={<span>Choose filename restriction mode to ensure filesystem compatibility.</span>}>
                             <p>
-                                <strong>Minimal restrictions</strong> preserves Unicode and ordinary punctuation while preventing path-breaking characters
+                                <strong>Minimal restrictions</strong> preserves Unicode and ordinary punctuation while preventing path-breaking
+                                characters
                             </p>
                             <p>
                                 <strong>Windows-compatible</strong> removes characters Windows does not allow in filenames, plus ensures reserved
@@ -310,7 +320,19 @@ export default function DownloadsSettingsTab({
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.automaticEpisodeDownloadDelayMinutes = value
                     })}
-                    help="Minimum time after an episode becomes published before Download Profiles may automatically download it. If WireLoft observes the episode as LIVE on consecutive monitor polls, it instead uses the later observed end of the live stream as the safer clock. After a restart or startup backfill, it falls back to The Daily Wire's published timestamp. Download Profiles create the download operation immediately and show it as Delayed while this timer is running. Manual downloads are not delayed."
+                    help={
+                        <ReadMore summary={<span>Delay before automatically downloading published episodes.</span>}>
+                            <p>
+                                Sometimes when an episode has just been published, its length is mere minutes even for hours long
+                                episodes. Presumably, The Daily Wire is still processing it on their end even while their API reports
+                                it as fully ready.
+                            </p>
+                            <p>
+                                This delay is therefore applied to download profiles trying to download an episode that just published.
+                                If you want to disable this delay completely, just set its value to 0.
+                            </p>
+                        </ReadMore>
+                    }
                 />
                 <NumberField
                     id="settings-download-concurrency"

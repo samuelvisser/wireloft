@@ -257,7 +257,7 @@ def create_media_download_operation(
     session: Session,
     download: MediaDownloadBase,
     *,
-    source: str = OperationSource.SYSTEM.value,
+    source: str = OperationSource.SYSTEM,
     is_redownload: bool = False,
     prepare_existing_artifact: bool | None = None,
     not_before: datetime | None = None,
@@ -274,7 +274,7 @@ def create_media_download_operation(
         # Explicit requests bypass an automatic post-publication admission wait.
         # They still reuse the same operation so one artifact cannot gain two
         # concurrent attempts merely because the user clicked Download.
-        if source != OperationSource.SYSTEM.value:
+        if source != OperationSource.SYSTEM:
             existing.context = {
                 **(existing.context or {}),
                 _PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY: True,
