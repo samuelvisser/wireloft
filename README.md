@@ -54,7 +54,7 @@ WireLoft is not meant to be used for consuming the content itself; it downloads,
 * Supports audio-only downloads for a podcast-like experience.
 * Intelligently helps you avoid downloading the countdown timer shown before live show episodes begin.
 * Optionally, delete old show content from your server automatically.
-* Create a private RSS feed for a show's episodes for use in your favorite podcast app.
+* Create a private RSS feed for a show's (premium) episodes for use in your favorite podcast app.
 
 ## Running with Docker
 
