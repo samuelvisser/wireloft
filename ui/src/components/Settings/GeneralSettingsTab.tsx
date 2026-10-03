@@ -1,4 +1,5 @@
 import type {SettingsValues} from '../../types/schemas/settings'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {
     DurationField,
@@ -6,6 +7,14 @@ import {
     SettingsSection,
     TextField,
 } from './SettingsControls'
+
+const LogLevelReg = createSelectRegistry('LogLevel', {
+    DEBUG: {label: 'DEBUG'},
+    INFO: {label: 'INFO'},
+    WARNING: {label: 'WARNING'},
+    ERROR: {label: 'ERROR'},
+    CRITICAL: {label: 'CRITICAL'},
+})
 
 export default function GeneralSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
     return (
@@ -27,7 +36,7 @@ export default function GeneralSettingsTab({draft, updateDraft, environmentVaria
                     id="settings-log-level"
                     label="Log level"
                     value={draft.logLevel}
-                    options={['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']}
+                    registry={LogLevelReg}
                     error={errorFor('logLevel')}
                     environmentVariable={environmentVariableFor('logLevel')}
                     onChange={(value) => updateDraft((next) => {

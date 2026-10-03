@@ -11,6 +11,7 @@ import {useTaskLedgerInfinite} from '../lib/taskLedger'
 import {useFilterChipPress} from '../lib/useFilterChipPress'
 import {waitingPresentation} from '../lib/progressPresentation'
 import {TaskDefinitionReadSchema, type TaskLedgerEntryRead} from '../types/schemas/task'
+import {createSelectRegistry} from '../utils/selectRegistry'
 import './TasksPage.css'
 
 type TaskStatusFilter = {
@@ -22,8 +23,6 @@ type TaskDefinitionOption = {
     value: string
     label: string
 }
-
-const ALL_TASKS_OPTION: TaskDefinitionOption = {value: '', label: 'All'}
 
 const STATUS_FILTERS: TaskStatusFilter[] = [
     {value: 'SCHEDULED', label: 'Scheduled'},
@@ -141,15 +140,17 @@ export default function TasksPage() {
         },
         staleTime: Infinity,
     })
-    const definitionOptions = useMemo<TaskDefinitionOption[]>(
-        () => [
-            ALL_TASKS_OPTION,
-            ...(definitions.data ?? [])
-                .map((definition) => ({value: definition.key, label: definition.title}))
-                .sort((left, right) => left.label.localeCompare(right.label)),
-        ],
-        [definitions.data],
-    )
+    const definitionReg = useMemo(() => {
+        const spec: Record<string, {label: string}> = {'': {label: 'All'}}
+        const values = ['']
+        const sortedDefinitions = [...(definitions.data ?? [])]
+            .sort((left, right) => left.title.localeCompare(right.title))
+        for (const definition of sortedDefinitions) {
+            spec[definition.key] = {label: definition.title}
+            values.push(definition.key)
+        }
+        return createSelectRegistry('TaskDefinitionFilter', spec, values)
+    }, [definitions.data])
     const query = useTaskLedgerInfinite({
         definitionKey: definitionKey || undefined,
         status: selectedStatuses,
@@ -279,8 +280,8 @@ export default function TasksPage() {
                     inputId="tasks-definition-select"
                     className="task-definition-select"
                     classNamePrefix="select"
-                    options={definitionOptions}
-                    value={definitionOptions.find((option) => option.value === definitionKey) ?? ALL_TASKS_OPTION}
+                    options={definitionReg.options}
+                    value={definitionReg.options.find((option) => option.value === definitionKey) ?? definitionReg.options[0]}
                     onChange={(option) => setDefinitionKey(option?.value ?? '')}
                     isSearchable
                     isClearable={false}

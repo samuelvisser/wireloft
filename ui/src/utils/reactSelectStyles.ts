@@ -17,13 +17,15 @@ export const selectStyles: StylesConfig<any, boolean> = {
   }),
   menu: (base) => ({
     ...base,
-    backgroundColor: 'var(--bg)',
+    backgroundColor: 'var(--select-menu-bg)',
     color: 'var(--text)',
-    zIndex: 5,
+    border: '1px solid var(--select-menu-border)',
+    boxShadow: 'var(--select-menu-shadow)',
+    zIndex: 30,
   }),
   menuList: (base) => ({
     ...base,
-    backgroundColor: 'var(--bg)'
+    backgroundColor: 'var(--select-menu-bg)'
   }),
   option: (base, state) => ({
     ...base,

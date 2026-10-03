@@ -42,11 +42,13 @@ git pull --ff-only
 `publish` refuses to run unless the worktree is clean and local `main` exactly matches `origin/main`. It then:
 
 1. determines which Python packages need a tag;
-2. builds the release container once and pushes `MAJOR.MINOR.PATCH`, `MAJOR.MINOR`, `MAJOR`, and `latest` aliases to GHCR;
+2. passes `MAJOR.MINOR.PATCH`, `MAJOR.MINOR`, and `MAJOR` explicitly to `./deploy.sh --tag-level main`; the main level contributes the channel aliases `latest`, `pre-release`, `develop`, and `test`;
 3. creates annotated package tags for changed packages (or an initial baseline tag for packages that have never been tagged);
 4. creates the application tag `vMAJOR.MINOR.PATCH`;
 5. pushes package tags atomically;
 6. pushes the application tag separately so GitHub always receives a dedicated `v*` tag push event.
+
+`deploy.sh` accepts `--tag-level main|pre-release|develop|test`. Levels cascade through their sibling channel tags: `main` publishes `latest`, `pre-release`, `develop`, and `test`; `pre-release` publishes `pre-release`, `develop`, and `test`; `develop` publishes `develop` and `test`; and `test` publishes only `test`. Positional tags are added to that set. When neither a tag level nor positional tags are supplied, the level is inferred from the current branch. Version-derived tags remain the release tool's responsibility.
 
 The separate application tag push triggers `.github/workflows/release.yml`. The workflow verifies that the tag matches the version in the root `pyproject.toml` and creates a draft GitHub Release with generated notes. Review and edit those notes in GitHub, then publish the Release manually when it is ready.
 

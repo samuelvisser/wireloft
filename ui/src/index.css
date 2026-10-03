@@ -9,6 +9,9 @@
   --sidebar-hover: rgba(255, 255, 255, 0.08);
   --sidebar-active: rgba(255, 255, 255, 0.14);
   --divider: rgba(255, 255, 255, 0.12);
+  --select-menu-bg: #ffffff;
+  --select-menu-border: rgba(100, 116, 139, 0.24);
+  --select-menu-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -16,6 +19,9 @@
     --bg: #0b1220;
     --text: #e2e8f0;
     --muted: #94a3b8;
+    --select-menu-bg: #172235;
+    --select-menu-border: #43516a;
+    --select-menu-shadow: 0 16px 38px rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -1380,9 +1386,21 @@ div[class$="-indicators"] svg { color: var(--muted) !important; fill: currentCol
 div[class$="-dropdownIndicator"] { color: var(--muted) !important; }
 div[class$="-clearIndicator"] { color: var(--muted) !important; }
 /* Menu */
-div[class$="-menu"] { background: var(--bg) !important; color: var(--text) !important; border-radius: 6px !important; overflow: hidden; }
-div[class$="-menu-list"] { background: var(--bg) !important; }
+div[class$="-menu"] {
+  background: var(--select-menu-bg) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--select-menu-border) !important;
+  border-radius: 6px !important;
+  box-shadow: var(--select-menu-shadow) !important;
+  overflow: hidden;
+}
+div[class$="-menu-list"] { background: var(--select-menu-bg) !important; }
 /* Option states */
+.select__menu {
+  /* Keep dropdowns above later cards, tables, and other normal page content. */
+  z-index: 30 !important;
+}
+
 div[class$="-option"] { background: transparent !important; color: var(--text) !important; }
 div[class$="-option"][aria-selected="true"] { background: #0ea5e9 !important; color: #ffffff !important; }
 /* Disabled option: visually indicate and prevent hover/active highlight */

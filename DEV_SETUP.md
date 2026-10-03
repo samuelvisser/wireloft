@@ -74,9 +74,17 @@ never copied into the image.
 ## Publishing a release image
 `./deploy.sh [tag]` intentionally builds with Font Awesome Pro icons and pushes
 the image to `ghcr.io/samuelvisser/wireloft`. Because releases use the paid
-icon set, `ui/.npmrc` is required for this command. The image is tagged
-`latest`, `develop`, or `test` according to the current branch unless an
-explicit tag is supplied.
+icon set, `ui/.npmrc` is required for this command. You can select the
+automatic channel tag explicitly with
+`./deploy.sh --tag-level main|pre-release|develop|test`. If no tag level is
+given, it is inferred from the current branch: `main`, `pre-release/*`,
+`develop`, or `test` for any other branch. Levels cascade through their
+channel aliases: `main` publishes `latest`, `pre-release`, `develop`, and
+`test`; `pre-release` publishes `pre-release`, `develop`, and `test`;
+`develop` publishes `develop` and `test`; and `test` publishes only
+`test`. Positional tags are added to that set, or used exactly as supplied
+when no level is selected. Version-derived aliases are supplied by
+`release.py`; `deploy.sh` does not read or parse the application version.
 
 It needs a GitHub personal access token with `write:packages` scope to log
 in to ghcr.io, picked up in order from: the `GHCR_TOKEN` env var, a local

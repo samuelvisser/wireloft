@@ -7,11 +7,31 @@ type OptionMeta = {
 
 type SelectRegistrySpec<T extends string> = Record<T, OptionMeta>;
 
-export type SelectRegistry = ReturnType<typeof createSelectRegistry>;
+/**
+ * A select registry with an optionally preserved value union.
+ *
+ * Omitting T intentionally erases the concrete value union for generic consumers
+ * such as SimpleSelect. Using `string` here would incorrectly require callbacks
+ * like meta() and getLabel() to accept every possible string.
+ */
+export type SelectRegistry<T extends string = any> = ReturnType<typeof createSelectRegistry<T>>;
 
-export function createSelectRegistry<const T extends string>(name: string, spec: SelectRegistrySpec<T>) {
-    // Values are the keys of the spec, in declaration order
-    const values = Object.keys(spec) as T[];
+export function createSelectRegistry<const T extends string>(
+    name: string,
+    spec: SelectRegistrySpec<T>,
+    orderedValues?: readonly T[],
+) {
+    // Object.keys moves integer-like keys ahead of other keys. Dynamic registries can
+    // provide their source order explicitly so a ReactSelect keeps the caller's order.
+    const declaredValues = Object.keys(spec) as T[];
+    const requestedValues = orderedValues ? [...new Set(orderedValues)] : undefined;
+    const orderedSet = new Set(requestedValues ?? []);
+    const values = requestedValues
+        ? [
+            ...requestedValues.filter((value) => Object.prototype.hasOwnProperty.call(spec, value)),
+            ...declaredValues.filter((value) => !orderedSet.has(value)),
+        ]
+        : declaredValues;
 
     // Maps for quick lookup
     const valueSet = new Set<T>(values);

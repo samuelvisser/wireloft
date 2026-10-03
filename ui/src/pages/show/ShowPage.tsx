@@ -18,6 +18,8 @@ import {OperationControlError, type OperationControlAction, useControlOperation,
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import {getEpisodePreviewTotal, loadEpisodePreviewFromStorage, removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
 import {episodeQueryKeys} from '../../lib/showQueryOptions'
+import SimpleSelect from '../../components/common/SimpleSelect'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 import './ShowPage.css'
 
 library.add(fas)
@@ -62,6 +64,16 @@ export default function ShowPage() {
     if (seasonsPlaceholder) return []
     return [...(seasonsData ?? [])].sort((a, b) => b.index - a.index)
   }, [seasonsData, seasonsPlaceholder])
+  const seasonReg = useMemo(() => {
+    const spec: Record<string, {label: string}> = {}
+    const values: string[] = []
+    for (const season of seasons) {
+      const value = String(season.id)
+      spec[value] = {label: season.name?.trim() || `Season ${season.index}`}
+      values.push(value)
+    }
+    return createSelectRegistry('ShowSeason', spec, values)
+  }, [seasons])
 
   useEffect(() => {
     if (!isSeasonal || seasons.length === 0) {
@@ -548,19 +560,14 @@ export default function ShowPage() {
         {isSeasonal && seasons.length > 0 && (
           <div className="show-season-filter" aria-label="Season selection">
             <label htmlFor="show-season">Season</label>
-            <select
-              id="show-season"
-              className="input show-season-select"
-              value={selectedSeasonId === null ? '' : String(selectedSeasonId)}
-              onChange={(event) => setSelectedSeasonId(Number(event.target.value))}
-            >
-              {selectedSeasonId === null && <option value="" disabled>Select a season</option>}
-              {seasons.map((season) => (
-                <option key={season.id} value={String(season.id)}>
-                  {season.name?.trim() || `Season ${season.index}`}
-                </option>
-              ))}
-            </select>
+            <SimpleSelect
+              inputId="show-season"
+              className="show-season-select"
+              registry={seasonReg}
+              value={selectedSeasonId === null ? null : String(selectedSeasonId)}
+              onChange={(value) => setSelectedSeasonId(Number(value))}
+              placeholder="Select a season"
+            />
             {displayedTotal !== undefined && (
               <span className="show-season-count">
                 {displayedTotal} {displayedTotal === 1 ? 'episode' : 'episodes'}

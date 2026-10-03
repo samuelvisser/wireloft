@@ -9,6 +9,7 @@ import RssStreamProfileForm from './RssStreamProfileForm'
 import StreamProfileAdvisory, {type StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
 import {MediaTypeReg} from "../../types/stream_profile";
+import {createSelectRegistry} from '../../utils/selectRegistry'
 
 export type StreamProfileMode = 'rss' | 'base'
 
@@ -18,9 +19,12 @@ type UIOption = { value: string; label: string }
 
 const DEFAULT_STREAM_EPISODE_TYPES = ['ep', 'aux']
 const STANDARD_VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p'])
-const STREAM_PREFERRED_FORMAT_OPTIONS = PreferredFormatReg.options.filter(
-    (option) => option.value !== 'format_hls'
-)
+const StreamPreferredFormatReg = createSelectRegistry('StreamPreferredFormat', {
+    format_4k: {label: PreferredFormatReg.getLabel('format_4k')},
+    format_1080p: {label: PreferredFormatReg.getLabel('format_1080p')},
+    format_720p: {label: PreferredFormatReg.getLabel('format_720p')},
+    format_audio_only: {label: PreferredFormatReg.getLabel('format_audio_only')},
+})
 
 function sameEpisodeTypes(a: readonly string[], b: readonly string[]) {
     return a.length === b.length && a.every((value) => b.includes(value))
@@ -304,8 +308,8 @@ export default function StreamProfileForm({
                             <Select
                                 inputId="sp-preferred-format"
                                 classNamePrefix="select"
-                                options={STREAM_PREFERRED_FORMAT_OPTIONS}
-                                value={STREAM_PREFERRED_FORMAT_OPTIONS.find(o => o.value === field.value) ?? null}
+                                options={StreamPreferredFormatReg.options}
+                                value={StreamPreferredFormatReg.options.find(o => o.value === field.value) ?? null}
                                 onChange={(opt) => field.onChange((opt as any)?.value ?? null)}
                                 onBlur={field.onBlur}
                                 aria-invalid={!!errors.preferredFormat}

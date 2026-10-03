@@ -6,6 +6,7 @@ import type {
     ThumbnailMode,
 } from '../../types/schemas/settings'
 import ReadMore from '../../utils/ReadMore'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import CronEditor from './CronEditor'
 import type {SettingsTabProps} from './SettingsTabTypes'
@@ -19,40 +20,35 @@ import {
     ToggleField,
 } from './SettingsControls'
 
-const FILENAME_RESTRICTION_MODES = ['unrestricted', 'windows', 'restricted'] as const
-const FILENAME_RESTRICTION_LABELS = {
-    unrestricted: 'Minimal restrictions',
-    windows: 'Windows-compatible filenames',
-    restricted: 'Restricted filenames',
-} satisfies Record<FilenameRestrictionMode, string>
+const FilenameRestrictionModeReg = createSelectRegistry('FilenameRestrictionMode', {
+    unrestricted: {label: 'Minimal restrictions'},
+    windows: {label: 'Windows-compatible filenames'},
+    restricted: {label: 'Restricted filenames'},
+})
 
-const DOWNLOAD_MODES = ['direct', 'temporary'] as const
-const DOWNLOAD_MODE_LABELS = {
-    direct: 'Save directly to downloads',
-    temporary: 'Save to temporary folder first',
-} satisfies Record<DownloadMode, string>
+const DownloadModeReg = createSelectRegistry('DownloadMode', {
+    direct: {label: 'Save directly to downloads'},
+    temporary: {label: 'Save to temporary folder first'},
+})
 
-const THUMBNAIL_MODES = ['no_thumbnail', 'embed', 'sidecar', 'embed_and_sidecar'] as const
-const THUMBNAIL_MODE_LABELS = {
-    no_thumbnail: 'No thumbnail',
-    embed: 'Embed in media',
-    sidecar: 'Download besides media',
-    embed_and_sidecar: 'Both embed and download',
-} satisfies Record<ThumbnailMode, string>
+const ThumbnailModeReg = createSelectRegistry('ThumbnailMode', {
+    no_thumbnail: {label: 'No thumbnail'},
+    embed: {label: 'Embed in media'},
+    sidecar: {label: 'Download besides media'},
+    embed_and_sidecar: {label: 'Both embed and download'},
+})
 
-const METADATA_MODES = ['no_metadata', 'embed', 'nfo', 'embed_and_nfo'] as const
-const METADATA_MODE_LABELS = {
-    no_metadata: 'No metadata',
-    embed: 'Embed in media',
-    nfo: 'Download as NFO',
-    embed_and_nfo: 'Both embed and download',
-} satisfies Record<MetadataMode, string>
+const MetadataModeReg = createSelectRegistry('MetadataMode', {
+    no_metadata: {label: 'No metadata'},
+    embed: {label: 'Embed in media'},
+    nfo: {label: 'Download as NFO'},
+    embed_and_nfo: {label: 'Both embed and download'},
+})
 
-const SHOW_ARTWORK_FALLBACK_FORMATS = ['jpg', 'png'] as const
-const SHOW_ARTWORK_FALLBACK_FORMAT_LABELS = {
-    jpg: 'JPEG',
-    png: 'PNG',
-} satisfies Record<ShowArtworkFallbackFormat, string>
+const ShowArtworkFallbackFormatReg = createSelectRegistry('ShowArtworkFallbackFormat', {
+    jpg: {label: 'JPEG'},
+    png: {label: 'PNG'},
+})
 
 function childPath(root: string, name: string) {
     const trimmedRoot = root.trim()
@@ -178,8 +174,7 @@ export default function DownloadsSettingsTab({
                     id="settings-download-mode"
                     label="Default download behavior"
                     value={draft.downloadSettings.downloadMode}
-                    options={DOWNLOAD_MODES}
-                    optionLabels={DOWNLOAD_MODE_LABELS}
+                    registry={DownloadModeReg}
                     error={errorFor('downloadSettings.downloadMode')}
                     environmentVariable={environmentVariableFor('downloadSettings.downloadMode')}
                     onChange={(value) => updateDraft((next) => {
@@ -213,8 +208,7 @@ export default function DownloadsSettingsTab({
                     id="settings-thumbnail-mode"
                     label="Default thumbnail behavior"
                     value={draft.downloadSettings.thumbnailMode}
-                    options={THUMBNAIL_MODES}
-                    optionLabels={THUMBNAIL_MODE_LABELS}
+                    registry={ThumbnailModeReg}
                     error={errorFor('downloadSettings.thumbnailMode')}
                     environmentVariable={environmentVariableFor('downloadSettings.thumbnailMode')}
                     onChange={(value) => updateDraft((next) => {
@@ -235,8 +229,7 @@ export default function DownloadsSettingsTab({
                     id="settings-metadata-mode"
                     label="Default metadata behavior"
                     value={draft.downloadSettings.metadataMode}
-                    options={METADATA_MODES}
-                    optionLabels={METADATA_MODE_LABELS}
+                    registry={MetadataModeReg}
                     error={errorFor('downloadSettings.metadataMode')}
                     environmentVariable={environmentVariableFor('downloadSettings.metadataMode')}
                     onChange={(value) => updateDraft((next) => {
@@ -268,8 +261,7 @@ export default function DownloadsSettingsTab({
                     id="settings-show-artwork-fallback-format"
                     label="Show artwork fallback format"
                     value={draft.downloadSettings.showArtworkFallbackFormat}
-                    options={SHOW_ARTWORK_FALLBACK_FORMATS}
-                    optionLabels={SHOW_ARTWORK_FALLBACK_FORMAT_LABELS}
+                    registry={ShowArtworkFallbackFormatReg}
                     error={errorFor('downloadSettings.showArtworkFallbackFormat')}
                     environmentVariable={environmentVariableFor('downloadSettings.showArtworkFallbackFormat')}
                     onChange={(value) => updateDraft((next) => {
@@ -281,8 +273,7 @@ export default function DownloadsSettingsTab({
                     id="settings-filename-restriction-mode"
                     label="Filename restrictions"
                     value={draft.downloadSettings.filenameRestrictionMode}
-                    options={FILENAME_RESTRICTION_MODES}
-                    optionLabels={FILENAME_RESTRICTION_LABELS}
+                    registry={FilenameRestrictionModeReg}
                     error={errorFor('downloadSettings.filenameRestrictionMode')}
                     environmentVariable={environmentVariableFor('downloadSettings.filenameRestrictionMode')}
                     onChange={(value) => updateDraft((next) => {

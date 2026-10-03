@@ -253,7 +253,11 @@
 }
 
 .settings-select {
-    appearance: auto;
+    width: 100%;
+}
+
+.settings-select .select__control {
+    min-height: 42px;
 }
 
 .settings-field__help {
@@ -343,6 +347,11 @@
 
 .settings-disclosure {
     overflow: hidden;
+}
+
+/* Open disclosures must not clip React Select menus that extend beyond the card. */
+.settings-disclosure[open] {
+    overflow: visible;
 }
 
 .settings-disclosure > summary {

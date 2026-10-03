@@ -2,6 +2,8 @@ import {Controller, UseFormReturn} from 'react-hook-form'
 
 import {useSettings} from '../../lib/settings'
 import ReadMore from '../../utils/ReadMore'
+import {createSelectRegistry} from '../../utils/selectRegistry'
+import SimpleSelect from '../common/SimpleSelect'
 
 const THUMBNAIL_MODE_LABELS = {
     no_thumbnail: 'No thumbnail',
@@ -31,6 +33,26 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
     const systemMetadataModeLabel = !settings
         ? 'Loading system setting…'
         : METADATA_MODE_LABELS[settings.values.downloadSettings.metadataMode]
+
+    const downloadModeReg = createSelectRegistry('LocalMediaProfileDownloadMode', {
+        system: {label: `System (${systemDownloadModeLabel})`},
+        direct: {label: 'Save directly to downloads'},
+        temporary: {label: 'Save to temporary folder first'},
+    })
+    const thumbnailModeReg = createSelectRegistry('LocalMediaProfileThumbnailMode', {
+        system: {label: `System (${systemThumbnailModeLabel})`},
+        no_thumbnail: {label: 'No thumbnail'},
+        embed: {label: 'Embed in media'},
+        sidecar: {label: 'Download besides media'},
+        embed_and_sidecar: {label: 'Both embed and download'},
+    })
+    const metadataModeReg = createSelectRegistry('LocalMediaProfileMetadataMode', {
+        system: {label: `System (${systemMetadataModeLabel})`},
+        no_metadata: {label: 'No metadata'},
+        embed: {label: 'Embed in media'},
+        nfo: {label: 'Download as NFO'},
+        embed_and_nfo: {label: 'Both embed and download'},
+    })
 
     return (
         <>
@@ -69,19 +91,15 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                     control={control}
                     name="downloadMode"
                     render={({field}) => (
-                        <select
-                            id="local-media-download-mode"
-                            className="input"
+                        <SimpleSelect
+                            inputId="local-media-download-mode"
+                            registry={downloadModeReg}
                             value={field.value ?? 'system'}
                             onChange={field.onChange}
                             onBlur={field.onBlur}
                             aria-invalid={!!errors.downloadMode}
                             aria-describedby={errors.downloadMode ? 'local-media-download-mode-errors' : 'local-media-download-mode-help'}
-                        >
-                            <option value="system">System ({systemDownloadModeLabel})</option>
-                            <option value="direct">Save directly to downloads</option>
-                            <option value="temporary">Save to temporary folder first</option>
-                        </select>
+                        />
                     )}
                 />
                 {errors.downloadMode && (
@@ -115,21 +133,15 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                     control={control}
                     name="thumbnailMode"
                     render={({field}) => (
-                        <select
-                            id="local-media-thumbnail-mode"
-                            className="input"
+                        <SimpleSelect
+                            inputId="local-media-thumbnail-mode"
+                            registry={thumbnailModeReg}
                             value={field.value ?? 'system'}
                             onChange={field.onChange}
                             onBlur={field.onBlur}
                             aria-invalid={!!errors.thumbnailMode}
                             aria-describedby={errors.thumbnailMode ? 'local-media-thumbnail-mode-errors' : 'local-media-thumbnail-mode-help'}
-                        >
-                            <option value="system">System ({systemThumbnailModeLabel})</option>
-                            <option value="no_thumbnail">No thumbnail</option>
-                            <option value="embed">Embed in media</option>
-                            <option value="sidecar">Download besides media</option>
-                            <option value="embed_and_sidecar">Both embed and download</option>
-                        </select>
+                        />
                     )}
                 />
                 {errors.thumbnailMode && (
@@ -154,21 +166,15 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                     control={control}
                     name="metadataMode"
                     render={({field}) => (
-                        <select
-                            id="local-media-metadata-mode"
-                            className="input"
+                        <SimpleSelect
+                            inputId="local-media-metadata-mode"
+                            registry={metadataModeReg}
                             value={field.value ?? 'system'}
                             onChange={field.onChange}
                             onBlur={field.onBlur}
                             aria-invalid={!!errors.metadataMode}
                             aria-describedby={errors.metadataMode ? 'local-media-metadata-mode-errors' : 'local-media-metadata-mode-help'}
-                        >
-                            <option value="system">System ({systemMetadataModeLabel})</option>
-                            <option value="no_metadata">No metadata</option>
-                            <option value="embed">Embed in media</option>
-                            <option value="nfo">Download as NFO</option>
-                            <option value="embed_and_nfo">Both embed and download</option>
-                        </select>
+                        />
                     )}
                 />
                 {errors.metadataMode && (
