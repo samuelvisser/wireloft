@@ -7,8 +7,7 @@
 </p>
 
 <h2 align="center">Higly polished self-hosted Local Media Manager and RSS generator for The Daily Wire</h2>
-
-
+    
 <p align="center">
   <img
     src="docs/assets/screenshots/1.2.2-library.png"
@@ -31,17 +30,6 @@
   />
 </p>
 
-
-
-
-
-
-
-
-
-
-
-
 ## What it does
 
 WireLoft is an easy-to-use, highly polished self-hosted app for managing (premium) media from The Daily Wire. 
@@ -50,11 +38,12 @@ It is built for self-hosting nerds who want to enjoy premium shows from The Dail
 
 WireLoft is highly customizable to fit your exact needs. You can automatically download audio for every item in a show while downloading video only for full episodes, do it the other way around, or configure something entirely different. You can simply index a show, stream its contents directly from The Daily Wire's servers to your favorite podcast app, download every episode, or download only the subset you are interested in. Whatever you want.
 
-WireLoft works with movies hosted by The Daily Wire as well. Download any movie you have access to and enjoy it through your local media server, such as Jellyfin or Plex, or simply watch it locally. Despite all of these options, WireLoft is designed to remain easy to install and use: launch the Docker container, open the Web UI, and add any Daily Wire show or movie.
+WireLoft works with movies hosted by The Daily Wire as well. Download any movie you have access to and enjoy it through your local media server, such as Jellyfin or Plex, or simply watch it locally.
 
 This project was inspired by [Pinchflat](https://github.com/kieraneglin/pinchflat), an awesome project that allows you to automatically download videos from YouTube channels and playlists. WireLoft takes that concept to The Daily Wire and expands on it greatly. In addition to automatically managing shows, WireLoft supports individual episodes and movies, making it a true one-stop shop for all things The Daily Wire.
 
-WireLoft is not meant to be used for consuming the content itself; it downloads, organizes, or streams it for you. For downloaded content, use a self-hosted media server such as Plex or Jellyfin for video, or Audiobookshelf for podcasts and audio. Streaming works with most podcast apps and works inside WireLoft natively.
+WireLoft is not meant to be used for consuming the content itself; it downloads, organizes, or streams it for you. For downloaded content, use a self-hosted media server such as Plex or Jellyfin for video, or Audiobookshelf for podcasts and audio. Streaming works with most podcast apps and works inside WireLoft natively. Despite all of these options, WireLoft is designed to remain easy to install and use: launch the Docker container, open the Web UI, and add any Daily Wire show or movie.
+
 
 ## Features
 
