@@ -7,7 +7,14 @@ type OptionMeta = {
 
 type SelectRegistrySpec<T extends string> = Record<T, OptionMeta>;
 
-export type SelectRegistry = ReturnType<typeof createSelectRegistry>;
+/**
+ * A select registry with an optionally preserved value union.
+ *
+ * Omitting T intentionally erases the concrete value union for generic consumers
+ * such as SimpleSelect. Using `string` here would incorrectly require callbacks
+ * like meta() and getLabel() to accept every possible string.
+ */
+export type SelectRegistry<T extends string = any> = ReturnType<typeof createSelectRegistry<T>>;
 
 export function createSelectRegistry<const T extends string>(
     name: string,
