@@ -55,11 +55,15 @@ fi
 append_tag() {
     local candidate="$1"
     local existing
-    for existing in "${TAGS[@]}"; do
-        if [ "$existing" = "$candidate" ]; then
-            return
-        fi
-    done
+
+    if [ "${#TAGS[@]}" -gt 0 ]; then
+        for existing in "${TAGS[@]}"; do
+            if [ "$existing" = "$candidate" ]; then
+                return
+            fi
+        done
+    fi
+
     TAGS+=("$candidate")
 }
 
@@ -113,9 +117,11 @@ elif [ "${#EXPLICIT_TAGS[@]}" -eq 0 ]; then
     esac
 fi
 
-for explicit_tag in "${EXPLICIT_TAGS[@]}"; do
-    append_tag "$explicit_tag"
-done
+if [ "${#EXPLICIT_TAGS[@]}" -gt 0 ]; then
+    for explicit_tag in "${EXPLICIT_TAGS[@]}"; do
+        append_tag "$explicit_tag"
+    done
+fi
 
 GIT_REVISION="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
 
