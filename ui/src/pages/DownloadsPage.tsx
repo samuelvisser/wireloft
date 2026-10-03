@@ -1,6 +1,6 @@
 import type {TaskOperationRead} from '../types/schemas/operation'
 import {useEffect, useMemo, useRef, useState} from 'react'
-import {useNavigate} from 'react-router-dom'
+import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {library} from '@fortawesome/fontawesome-svg-core'
@@ -17,6 +17,13 @@ import {frontendOperationDefinitions} from '../lib/operationDefinitions'
 import {useControlOperation, useStartOperation} from '../lib/operations'
 import {useMediaDownloadsView} from '../lib/queries'
 import {useFilterChipPress} from '../lib/useFilterChipPress'
+import {
+    DEFAULT_DOWNLOAD_STATUS_FILTER,
+    DOWNLOAD_STATUS_FILTER_OPTIONS,
+    DownloadStatusFilterOption,
+    downloadStatusFilterFromSearchParams,
+    downloadStatusFiltersToSearchParams,
+} from '../lib/downloadStatusFilters'
 import {MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {formatBytes} from '../utils/formatting'
@@ -24,34 +31,9 @@ import {getErrorMessageFromResponse} from '../utils/helpers'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
 import './DownloadsPage.css'
 
-type StatusFilterOption = {
-    value: string
-    label: string
-    statuses: readonly string[]
-}
-
 type BulkAction = 'retry' | 'cancel' | 'delete-unavailable'
 
-const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
-    {value: 'not_downloaded', label: 'Not downloaded', statuses: ['not_downloaded']},
-    {value: 'pending', label: 'Queued', statuses: ['pending']},
-    {value: 'downloading', label: 'Downloading', statuses: ['downloading', 'preparing', 'waiting', 'canceling']},
-    {value: 'downloaded', label: 'Downloaded', statuses: ['downloaded', 'redownloaded']},
-    {value: 'local_processing', label: 'Processing', statuses: ['local_processing']},
-    {value: 'cancelled', label: 'Cancelled', statuses: ['cancelled']},
-    {value: 'error', label: 'Error', statuses: ['error']},
-    {value: 'missing', label: 'Missing', statuses: ['missing']},
-    {value: 'corrupted', label: 'Corrupted', statuses: ['corrupted']},
-]
-
 const DOWNLOAD_PAGE_SIZE = 50
-
-// Show everything by default except completed downloads.
-const DEFAULT_STATUS_FILTER = new Set(
-    STATUS_FILTER_OPTIONS
-        .filter((option) => option.value !== 'downloaded')
-        .flatMap((option) => option.statuses),
-)
 
 function formatDateTime(value: Date | null | undefined): string {
     if (!value) return '—'
@@ -142,6 +124,7 @@ function defaultDownloadOrder(left: MediaDownloadViewRead, right: MediaDownloadV
 
 export default function DownloadsPage() {
     const navigate = useNavigate()
+    const [searchParams, setSearchParams] = useSearchParams()
     const qc = useQueryClient()
     const startOperation = useStartOperation()
     const controlOperation = useControlOperation()
@@ -153,7 +136,9 @@ export default function DownloadsPage() {
     const [deleteRow, setDeleteRow] = useState<MediaDownloadViewRead | null>(null)
     const [deleteBusy, setDeleteBusy] = useState(false)
     const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
-    const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(DEFAULT_STATUS_FILTER))
+    const [statusFilter, setStatusFilter] = useState<Set<string>>(
+        () => downloadStatusFilterFromSearchParams(searchParams),
+    )
     const [bulkActionStarting, setBulkActionStarting] = useState<BulkAction | null>(null)
     const [bulkControlBusy, setBulkControlBusy] = useState<string | null>(null)
     const [visibleLimit, setVisibleLimit] = useState(DOWNLOAD_PAGE_SIZE)
@@ -162,23 +147,26 @@ export default function DownloadsPage() {
     const cancelAllOperation = useActiveOperation('media_download.bulk_cancel', 'media_download')
     const deleteUnavailableOperation = useActiveOperation('media_download.bulk_delete_unavailable', 'media_download')
 
-    const toggleStatusFilter = (option: StatusFilterOption) => {
-        setStatusFilter((prev) => {
-            const next = new Set(prev)
-            const enabled = option.statuses.every((status) => next.has(status))
-            for (const status of option.statuses) {
-                if (enabled) next.delete(status)
-                else next.add(status)
-            }
-            return next
-        })
+    const applyStatusFilter = (next: Set<string>, replace = false) => {
+        setStatusFilter(next)
+        setSearchParams(downloadStatusFiltersToSearchParams(next), {replace})
     }
 
-    const pressStatusFilter = (option: StatusFilterOption) => {
+    const toggleStatusFilter = (option: DownloadStatusFilterOption) => {
+        const next = new Set(statusFilter)
+        const enabled = option.statuses.every((status) => next.has(status))
+        for (const status of option.statuses) {
+            if (enabled) next.delete(status)
+            else next.add(status)
+        }
+        applyStatusFilter(next)
+    }
+
+    const pressStatusFilter = (option: DownloadStatusFilterOption) => {
         filterPress.press(
             option.value,
             () => toggleStatusFilter(option),
-            () => setStatusFilter(new Set(option.statuses)),
+            () => applyStatusFilter(new Set(option.statuses)),
         )
     }
 
@@ -192,6 +180,11 @@ export default function DownloadsPage() {
         () => filteredDownloads.slice(0, visibleLimit),
         [filteredDownloads, visibleLimit],
     )
+
+    useEffect(() => {
+        const next = downloadStatusFilterFromSearchParams(searchParams)
+        setStatusFilter((current) => setsEqual(current, next) ? current : next)
+    }, [searchParams])
 
     useEffect(() => {
         setVisibleLimit(DOWNLOAD_PAGE_SIZE)
@@ -438,7 +431,7 @@ export default function DownloadsPage() {
             </div>
             <div className="downloads-filter-row">
                 <div className="filter-chip-group" role="group" aria-label="Filter downloads by status">
-                    {STATUS_FILTER_OPTIONS.map((option) => (
+                    {DOWNLOAD_STATUS_FILTER_OPTIONS.map((option) => (
                     <button
                         key={option.value}
                         type="button"
@@ -449,13 +442,13 @@ export default function DownloadsPage() {
                         {option.label}
                     </button>
                     ))}
-                    {!setsEqual(statusFilter, DEFAULT_STATUS_FILTER) && (
+                    {!setsEqual(statusFilter, DEFAULT_DOWNLOAD_STATUS_FILTER) && (
                     <button
                         type="button"
                         className="filter-chip-reset"
                         onClick={() => {
                             filterPress.reset()
-                            setStatusFilter(new Set(DEFAULT_STATUS_FILTER))
+                            applyStatusFilter(new Set(DEFAULT_DOWNLOAD_STATUS_FILTER), true)
                         }}
                     >
                         Reset filters

@@ -3,6 +3,7 @@ import {useNavigate} from 'react-router-dom'
 
 import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
 import {useLocalMediaProfiles, useMediaDownloadsView, useMovies, useShows} from '../lib/queries'
+import {downloadsUrlForStatusFilters} from '../lib/downloadStatusFilters'
 import {ACTIVE_DOWNLOAD_STATUSES} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
@@ -65,9 +66,9 @@ export default function HomePage() {
             </div>
 
             <div className="operation-stats" aria-label="WireLoft status summary">
-                <button type="button" onClick={() => navigate('/downloads')}><span>Active</span><strong>{active.filter((item) => item.downloadStatus !== 'pending').length}</strong></button>
-                <button type="button" onClick={() => navigate('/downloads')}><span>Queued</span><strong>{active.filter((item) => item.downloadStatus === 'pending').length}</strong></button>
-                <button type="button" onClick={() => navigate('/downloads')}><span>Failed</span><strong>{problems.length}</strong></button>
+                <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('downloading', 'local_processing'))}><span>Active</span><strong>{active.filter((item) => item.downloadStatus !== 'pending').length}</strong></button>
+                <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('pending'))}><span>Queued</span><strong>{active.filter((item) => item.downloadStatus === 'pending').length}</strong></button>
+                <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('error', 'missing', 'corrupted'))}><span>Failed</span><strong>{problems.length}</strong></button>
                 <button type="button" onClick={() => navigate('/library')}><span>Library</span><strong>{(shows?.length || 0) + (movies?.length || 0)}</strong></button>
             </div>
 
