@@ -16,24 +16,13 @@
   />
 </p>
 
-<table align="center" width="700">
-  <tr>
-    <td width="50%">
-      <img
-        src="docs/assets/screenshots/1.2.2-movie-page.png"
-        alt="WireLoft Library"
-        width="100%"
-      />
-    </td>
-    <td width="50%">
-      <img
-        src="docs/assets/screenshots/1.2.2-episode.png"
-        alt="WireLoft Episode"
-        width="100%"
-      />
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img
+    src="docs/readme-secondary-screenshots-1.2.2.svg"
+    alt="WireLoft movie and episode views"
+    width="700"
+  />
+</p>
 
 ## What it does
 
