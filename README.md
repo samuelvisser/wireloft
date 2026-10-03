@@ -36,7 +36,10 @@ WireLoft works with movies hosted by The Daily Wire as well. Download any movie 
 
 This project was inspired by [Pinchflat](https://github.com/kieraneglin/pinchflat), an awesome project that allows you to automatically download videos from YouTube channels and playlists. WireLoft takes that concept to The Daily Wire and expands on it greatly. In addition to automatically managing shows, WireLoft supports individual episodes and movies, making it a true one-stop shop for all things The Daily Wire.
 
-WireLoft is not meant to be used for consuming the content itself; it downloads, organizes, or streams it for you. For downloaded content, use a self-hosted media server such as Plex or Jellyfin for video, or Audiobookshelf for podcasts and audio. Streaming works with most podcast apps and works inside WireLoft natively. Despite all of these options, WireLoft is designed to remain easy to install and use: launch the Docker container, open the Web UI, and add any Daily Wire show or movie.
+WireLoft is not meant to be used for consuming the content itself; it downloads, organizes, or streams it for you. For downloaded content, use a self-hosted media server such as Plex or Jellyfin for video, or Audiobookshelf for podcasts and audio. For RSS, use the WireLoft- generated RSS stream in you favorite podcast app and consume the content there.  
+Despite everything it offers, WireLoft is designed to remain easy to install and use: launch the Docker container, open the Web UI, and everything will explain itself. My philosophy with this software is to
+allow basically any configuration you can think of, but help you through advisory messages where needed how your setup could improve, usually even with a button to apply it automatically. This keeps you
+in control while not throwing you in the dark.
 
 
 ## Features
