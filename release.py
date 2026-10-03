@@ -373,9 +373,9 @@ def tag_exists(tag: str) -> bool:
     return bool(git("tag", "--list", tag))
 
 
-def container_tags(version: str) -> list[str]:
+def container_version_tags(version: str) -> list[str]:
     major, minor, _patch = parse_semver(version)
-    return [version, f"{major}.{minor}", str(major), "latest"]
+    return [version, f"{major}.{minor}", str(major)]
 
 
 def verify_publish_state() -> None:
@@ -426,10 +426,10 @@ def push_release_tags(package_tags: list[str], app_release_tag: str) -> None:
 
 def publish_release(args: argparse.Namespace) -> None:
     verify_publish_state()
-    _app_name, app_version = read_project(ROOT / "pyproject.toml")
     package_tags, app_release_tag = tags_to_publish()
     tags = [*package_tags, app_release_tag]
-    image_tags = container_tags(app_version)
+    app_version = app_release_tag.removeprefix("v")
+    image_tags = container_version_tags(app_version)
 
     if package_tags:
         print("Package Git tags to publish:")
@@ -441,7 +441,7 @@ def publish_release(args: argparse.Namespace) -> None:
     print(f"  {app_release_tag}")
     if not args.skip_container:
         print("GHCR image tags to publish:")
-        for tag in image_tags:
+        for tag in [*image_tags, "latest"]:
             print(f"  ghcr.io/samuelvisser/wireloft:{tag}")
 
     if not args.yes:
@@ -451,7 +451,13 @@ def publish_release(args: argparse.Namespace) -> None:
             return
 
     if not args.skip_container:
-        run("./deploy.sh", *image_tags, capture_output=False)
+        run(
+            "./deploy.sh",
+            "--tag-level",
+            "main",
+            *image_tags,
+            capture_output=False,
+        )
 
     created: list[str] = []
     try:
@@ -491,7 +497,7 @@ def build_parser() -> argparse.ArgumentParser:
     publish.add_argument(
         "--skip-container",
         action="store_true",
-        help="Do not build/push the versioned and latest GHCR image tags.",
+        help="Do not run deploy.sh to build/push the GHCR image.",
     )
     publish.add_argument("--yes", action="store_true", help="Skip the final publish confirmation.")
     return parser

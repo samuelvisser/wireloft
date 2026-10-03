@@ -2,7 +2,8 @@
 # Build the WireLoft image and push it to GitHub Container Registry.
 #
 # Usage:
-#   ./deploy.sh [tag ...]    # explicit tags, or defaults by branch when omitted
+#   ./deploy.sh [--tag-level main|pre-release|develop|test] [tag ...]
+#   Positional tags are added to the selected/inferred tag level.
 
 set -euo pipefail
 
@@ -13,36 +14,110 @@ IMAGE_NAME="wireloft"
 REGISTRY="ghcr.io"
 GHCR_USER="${GHCR_USER:-samuelvisser}"
 CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || true)"
-MANUAL_TAGS=("$@")
-APP_VERSION="$(python3 - <<'PY_VERSION'
-import tomllib
-from pathlib import Path
+TAG_LEVEL=""
+EXPLICIT_TAGS=()
 
-with Path("pyproject.toml").open("rb") as file:
-    print(tomllib.load(file)["project"]["version"])
-PY_VERSION
-)"
-GIT_REVISION="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
-
-if [ "${#MANUAL_TAGS[@]}" -gt 0 ]; then
-    TAG="${MANUAL_TAGS[0]}"
-    TAGS=("${MANUAL_TAGS[@]}")
-else
-    case "$CURRENT_BRANCH" in
-        main)
-            TAG="latest"
-            TAGS=("latest" "develop" "test")
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --tag-level)
+            if [ "$#" -lt 2 ]; then
+                echo "--tag-level requires one of: main, pre-release, develop, test." >&2
+                exit 2
+            fi
+            TAG_LEVEL="$2"
+            shift 2
             ;;
-        develop)
-            TAG="develop"
-            TAGS=("develop" "test")
+        --tag-level=*)
+            TAG_LEVEL="${1#*=}"
+            shift
+            ;;
+        --)
+            shift
+            EXPLICIT_TAGS+=("$@")
+            break
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 2
             ;;
         *)
-            TAG="test"
-            TAGS=("test")
+            EXPLICIT_TAGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+IMAGE_VERSION="${WIRELOFT_VERSION:-development}"
+if [ "${#EXPLICIT_TAGS[@]}" -gt 0 ] && [ -z "${WIRELOFT_VERSION:-}" ]; then
+    IMAGE_VERSION="${EXPLICIT_TAGS[0]}"
+fi
+
+append_tag() {
+    local candidate="$1"
+    local existing
+    for existing in "${TAGS[@]}"; do
+        if [ "$existing" = "$candidate" ]; then
+            return
+        fi
+    done
+    TAGS+=("$candidate")
+}
+
+add_tag_level() {
+    local level="$1"
+
+    case "$level" in
+        main)
+            append_tag "latest"
+            append_tag "pre-release"
+            append_tag "develop"
+            append_tag "test"
+            ;;
+        pre-release)
+            append_tag "pre-release"
+            append_tag "develop"
+            append_tag "test"
+            ;;
+        develop)
+            append_tag "develop"
+            append_tag "test"
+            ;;
+        test)
+            append_tag "test"
+            ;;
+        *)
+            echo "Invalid tag level '$level'. Expected one of: main, pre-release, develop, test." >&2
+            exit 2
+            ;;
+    esac
+}
+
+TAGS=()
+
+if [ -n "$TAG_LEVEL" ]; then
+    add_tag_level "$TAG_LEVEL"
+elif [ "${#EXPLICIT_TAGS[@]}" -eq 0 ]; then
+    case "$CURRENT_BRANCH" in
+        main)
+            add_tag_level "main"
+            ;;
+        pre-release/*)
+            add_tag_level "pre-release"
+            ;;
+        develop)
+            add_tag_level "develop"
+            ;;
+        *)
+            add_tag_level "test"
             ;;
     esac
 fi
+
+for explicit_tag in "${EXPLICIT_TAGS[@]}"; do
+    append_tag "$explicit_tag"
+done
+
+GIT_REVISION="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
 
 FULL_IMAGE="$REGISTRY/$GHCR_USER/$IMAGE_NAME"
 TOKEN_FILE="${GHCR_TOKEN_FILE:-$HOME/.config/wireloft/ghcr_token}"
@@ -89,11 +164,11 @@ fi
 
 resolve_token
 
-echo "Building $FULL_IMAGE:$TAG with Font Awesome Pro icons ..."
+echo "Building $FULL_IMAGE with Font Awesome Pro icons for tags: ${TAGS[*]} ..."
 docker build \
     -f .docker/Dockerfile \
     --build-arg WIRELOFT_PRO_ICONS=true \
-    --build-arg WIRELOFT_VERSION="$APP_VERSION" \
+    --build-arg WIRELOFT_VERSION="$IMAGE_VERSION" \
     --build-arg WIRELOFT_REVISION="$GIT_REVISION" \
     --secret id=npmrc,src="$NPMRC" \
     -t "$IMAGE_NAME" \
