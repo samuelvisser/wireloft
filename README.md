@@ -20,13 +20,12 @@
   <img
     src="docs/assets/screenshots/1.2.2-movie-page.png"
     alt="WireLoft Library"
-    width="340"
+    width="49%"
   />
-  &nbsp;
   <img
     src="docs/assets/screenshots/1.2.2-episode.png"
     alt="WireLoft Episode"
-    width="340"
+    width="49%"
   />
 </p>
 
