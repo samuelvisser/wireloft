@@ -1,27 +1,58 @@
-<p align="center">  
-  <img 
-    src="docs/assets/logos/logo-wide-wireloft-black.png" 
-    alt="WireLoft Logo"
-    width="500" 
-  />
+<p align="center">
+  <picture>
+    <source
+      media="(prefers-color-scheme: dark)"
+      srcset="docs/assets/logos/logo-wide-wireloft-white.png"
+    >
+    <source
+      media="(prefers-color-scheme: light)"
+      srcset="docs/assets/logos/logo-wide-wireloft-black.png"
+    >
+    <img
+      src="docs/assets/logos/logo-wide-wireloft-black.png"
+      alt="WireLoft Logo"
+      width="500"
+    >
+  </picture>
 </p>
 
 <h2 align="center">Higly polished self-hosted Local Media Manager and RSS generator for The Daily Wire</h2>
-    
+
+
 <p align="center">
-  <img
-    src="docs/assets/screenshots/1.2.2-library.png"
-    alt="WireLoft Home Screen"
-    width="700"
-  />
+  <picture>
+    <source
+      media="(prefers-color-scheme: dark)"
+      srcset="docs/assets/screenshots/1.2.2-library-dark.png"
+    >
+    <source
+      media="(prefers-color-scheme: light)"
+      srcset="docs/assets/screenshots/1.2.2-library-light.png"
+    >
+    <img
+      src="docs/assets/screenshots/1.2.2-library-light.png"
+      alt="WireLoft Home Screen"
+      width="700"
+    >
+  </picture>
 </p>
 
 <p align="center">
-  <img
-    src="docs/assets/screenshots/1.2.2-readme-screenshot-row.png"
-    alt="WireLoft movie and episode views"
-    width="700"
-  />
+  <picture>
+    <source
+      media="(prefers-color-scheme: dark)"
+      srcset="docs/assets/screenshots/1.2.2-collection-movie-episode-dark.png"
+    >
+    <source
+      media="(prefers-color-scheme: light)"
+      srcset="docs/assets/screenshots/1.2.2-collection-movie-episode-light.png"
+    >
+    <img
+      src="docs/assets/screenshots/1.2.2-collection-movie-episode-light.png"
+      alt="WireLoft Home Screen"
+      width="700"
+    >
+  </picture>
 </p>
 
 ## What it does
