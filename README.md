@@ -44,14 +44,17 @@ in control while not throwing you in the dark.
 
 ## Features
 
-* Fully featured, easy-to-use Web UI for navigation and configuration.
-* Download series, podcasts, and movies with configurable settings for each.
-* Download multiple versions of the same episode automatically. For example, download both a video and an audio version of an episode.
-* Download premium episodes and movies using your The Daily Wire subscription.
-* Supports audio-only downloads for a podcast-like experience.
-* Intelligently helps you avoid downloading the countdown timer shown before live show episodes begin.
-* Optionally, delete old show content from your server automatically.
-* Create a private RSS feed for a show's (premium) episodes for use in your favorite podcast app.
+- Fully featured, easy-to-use Web UI for navigation and configuration.
+- Download series, podcasts, movies, and premium content using your The Daily Wire subscription.
+- Create multiple media profiles for the same show — for example, automatically maintain separate video and audio versions.
+- Organize your library exactly how you want with configurable naming, directory structures, and powerful Jinja templates.
+- Automatically embed metadata and artwork, generate NFO files, and download show assets for media servers such as Jellyfin and Plex.
+- Intelligently handles live episodes, avoiding countdown footage and waiting for the proper published version when appropriate.
+- Create private audio or video RSS feeds for your shows and use them in your favorite podcast app.
+- Stream live episodes through RSS, with stable episode URLs that can seamlessly transition to locally downloaded media once available.
+- Automatically discover, download, refresh, and clean up media in the background.
+- Configure automatic retention rules to remove older content from your server.
+
 
 ## Running with Docker
 
