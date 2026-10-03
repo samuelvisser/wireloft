@@ -45,6 +45,11 @@
 
 .logs-level-select {
     width: 8.5rem;
+    font-size: 16px;
+}
+
+.logs-level-select input {
+    font-size: 16px !important;
 }
 
 .logs-level-select .select__control {

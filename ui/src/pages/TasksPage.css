@@ -9,6 +9,11 @@
 
 .task-definition-select {
     width: min(24rem, 100%);
+    font-size: 16px;
+}
+
+.task-definition-select input {
+    font-size: 16px !important;
 }
 
 .task-definition-select .select__control {
