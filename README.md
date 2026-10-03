@@ -16,18 +16,24 @@
   />
 </p>
 
-<p align="center">
-  <img
-    src="docs/assets/screenshots/1.2.2-movie-page.png"
-    alt="WireLoft Library"
-    width="49%"
-  />
-  <img
-    src="docs/assets/screenshots/1.2.2-episode.png"
-    alt="WireLoft Episode"
-    width="49%"
-  />
-</p>
+<table align="center" width="700">
+  <tr>
+    <td width="50%">
+      <img
+        src="docs/assets/screenshots/1.2.2-movie-page.png"
+        alt="WireLoft Library"
+        width="100%"
+      />
+    </td>
+    <td width="50%">
+      <img
+        src="docs/assets/screenshots/1.2.2-episode.png"
+        alt="WireLoft Episode"
+        width="100%"
+      />
+    </td>
+  </tr>
+</table>
 
 ## What it does
 
