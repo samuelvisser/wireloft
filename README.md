@@ -1,6 +1,6 @@
 <p align="center">  
   <img 
-    src="docs/assets/logos/logo-wide-wireloft.png" 
+    src="docs/assets/logos/logo-wide-wireloft-black.png" 
     alt="WireLoft Logo"
     width="500" 
   />
