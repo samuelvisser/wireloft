@@ -5,6 +5,8 @@ import toast from 'react-hot-toast'
 import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
+import SimpleSelect from '../common/SimpleSelect'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 
 export type ActionConfirmDialogueLocalMediaProfile = {
     id: number
@@ -51,6 +53,22 @@ export default function ActionConfirmDialogue({
     const [starting, setStarting] = useState(false)
     const [localMediaProfileId, setLocalMediaProfileId] = useState('')
     const localMediaProfileKey = localMediaProfiles.map((profile) => profile.id).join(',')
+    const localMediaProfileOptions: Record<string, {label: string}> = {}
+    const localMediaProfileValues: string[] = []
+    if (localMediaProfiles.length > 1) {
+        localMediaProfileOptions.all = {label: 'All Local Media Profiles'}
+        localMediaProfileValues.push('all')
+    }
+    for (const profile of localMediaProfiles) {
+        const value = String(profile.id)
+        localMediaProfileOptions[value] = {label: profile.label}
+        localMediaProfileValues.push(value)
+    }
+    const localMediaProfileReg = createSelectRegistry(
+        'ActionConfirmLocalMediaProfile',
+        localMediaProfileOptions,
+        localMediaProfileValues,
+    )
 
     useEffect(() => {
         if (!open || !scope_by_local_media_profile) return
@@ -124,22 +142,13 @@ export default function ActionConfirmDialogue({
             {scope_by_local_media_profile && (
                 <div className="form-row">
                     <label htmlFor={selectorId}>Local Media Profile</label>
-                    <select
-                        id={selectorId}
-                        className="input"
+                    <SimpleSelect
+                        inputId={selectorId}
+                        registry={localMediaProfileReg}
                         value={localMediaProfileId}
-                        disabled={starting}
-                        onChange={(event) => setLocalMediaProfileId(event.target.value)}
-                    >
-                        {localMediaProfiles.length > 1 && (
-                            <option value="all">All Local Media Profiles</option>
-                        )}
-                        {localMediaProfiles.map((profile) => (
-                            <option key={profile.id} value={String(profile.id)}>
-                                {profile.label}
-                            </option>
-                        ))}
-                    </select>
+                        isDisabled={starting}
+                        onChange={setLocalMediaProfileId}
+                    />
                 </div>
             )}
         </ConfirmDialog>

@@ -3,6 +3,7 @@ import Select from 'react-select'
 import {useMemo} from 'react'
 import {SeasonDetachedOut} from "../../types/schemas/season";
 import ReadMore from "../../utils/ReadMore";
+import {createSelectRegistry} from "../../utils/selectRegistry";
 
 export type SeasonItem = SeasonDetachedOut
 
@@ -15,41 +16,41 @@ type Props = {
 // Special value to represent the boolean includeUpcomingSeasons inside the select UI
 const INCLUDE_UPCOMING_VALUE = '__include_upcoming__'
 
-type SeasonOption = { value: string; label: string; season: SeasonItem }
-type IncludeOption = { value: typeof INCLUDE_UPCOMING_VALUE; label: string }
-type UIOption = SeasonOption | IncludeOption
+type UIOption = {value: string; label: string}
 
 export default function SeriesDownloadProfileForm({form, seasons}: Props) {
     const {control, setValue, watch, formState: {errors}} = form
 
-    // Prepare season options
-    const seasonOptions: SeasonOption[] = useMemo(
-        () => seasons.map((s) => ({
-            value: s.slug,
-            label: s.name,
-            season: s
-        })).reverse(), [seasons]
+    const seasonReg = useMemo(() => {
+        const spec: Record<string, {label: string}> = {
+            [INCLUDE_UPCOMING_VALUE]: {label: 'Include upcoming seasons'},
+        }
+        const values = [INCLUDE_UPCOMING_VALUE]
+        for (const season of [...seasons].reverse()) {
+            spec[season.slug] = {label: season.name}
+            values.push(season.slug)
+        }
+        return createSelectRegistry('DownloadProfileSeason', spec, values)
+    }, [seasons])
+    const seasonsBySlug = useMemo(
+        () => new Map(seasons.map((season) => [season.slug, season])),
+        [seasons],
     )
-
-    const includeUpcomingOption: IncludeOption = {
-        value: INCLUDE_UPCOMING_VALUE,
-        label: 'Include upcoming seasons'
-    }
 
     // Build the select value from form state (multi select + special include option)
     const selectedSeasons: SeasonItem[] = watch('seasons') || []
     const selectedInclude: boolean = watch('includeUpcomingSeasons') || false
 
     const selectValue: UIOption[] = useMemo(() => {
-        const vals: UIOption[] = selectedSeasons
-            .map((s) => ({
-                value: s.slug,
-                label: s.name,
-                season: s
-            }))
-        if (selectedInclude) vals.push(includeUpcomingOption)
-        return vals
-    }, [selectedSeasons, selectedInclude, includeUpcomingOption])
+        const selectedOptions = selectedSeasons
+            .map((season) => seasonReg.options.find((option) => option.value === season.slug))
+            .filter((option): option is UIOption => option !== undefined)
+        const includeUpcomingOption = seasonReg.options.find(
+            (option) => option.value === INCLUDE_UPCOMING_VALUE,
+        )
+        if (selectedInclude && includeUpcomingOption) selectedOptions.push(includeUpcomingOption)
+        return selectedOptions
+    }, [seasonReg, selectedInclude, selectedSeasons])
 
     // When the user changes the multiselect, persist SeasonItem[] to the form
     const handleSelectChange = (opts: readonly UIOption[] | null) => {
@@ -57,11 +58,11 @@ export default function SeriesDownloadProfileForm({form, seasons}: Props) {
 
         const include = arr.some((o) => o.value === INCLUDE_UPCOMING_VALUE)
 
-        // Map chosen UI options back to full SeasonItem objects using the prepared option list
+        // Map chosen registry values back to the full SeasonItem objects saved by the form.
         const chosenSeasons: SeasonItem[] = arr
-            .filter((o): o is SeasonOption => o.value !== INCLUDE_UPCOMING_VALUE)
-            .map((o) => o.season)
-            .filter(Boolean)
+            .filter((option) => option.value !== INCLUDE_UPCOMING_VALUE)
+            .map((option) => seasonsBySlug.get(option.value))
+            .filter((season): season is SeasonItem => season !== undefined)
 
         setValue('includeUpcomingSeasons', include, {shouldDirty: true, shouldValidate: true})
         setValue('seasons', chosenSeasons, {shouldDirty: true, shouldValidate: true})
@@ -91,10 +92,7 @@ export default function SeriesDownloadProfileForm({form, seasons}: Props) {
                         <Select
                             inputId="season-select"
                             isMulti
-                            options={[
-                                includeUpcomingOption,
-                                ...seasonOptions
-                            ]}
+                            options={seasonReg.options}
                             value={selectValue}
                             onChange={handleSelectChange as any}
                             closeMenuOnSelect={false}

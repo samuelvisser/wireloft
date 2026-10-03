@@ -1,8 +1,8 @@
 import {Controller, type UseFormReturn} from 'react-hook-form'
-import Select from 'react-select'
-
 import type {LocalMediaProfilePreviewState} from '../../lib/localMediaProfilePreview'
 import ReadMore from "../../utils/ReadMore";
+import {createSelectRegistry} from "../../utils/selectRegistry";
+import SimpleSelect from "../common/SimpleSelect";
 
 export default function ShowAssetsField({form, preview}: {
     form: UseFormReturn<any>
@@ -10,11 +10,11 @@ export default function ShowAssetsField({form, preview}: {
 }) {
     const {control, formState: {errors}} = form
     const root = preview.result?.showRoot
-    const options = [
-        {value: 'system', label: root ? `System (${root.systemEnabled ? 'enabled' : 'disabled'})` : 'System'},
-        {value: 'enabled', label: 'Enabled'},
-        {value: 'disabled', label: 'Disabled'},
-    ]
+    const showAssetsReg = createSelectRegistry('ShowAssetsMode', {
+        system: {label: root ? `System (${root.systemEnabled ? 'enabled' : 'disabled'})` : 'System'},
+        enabled: {label: 'Enabled'},
+        disabled: {label: 'Disabled'},
+    })
     const fieldError = errors.downloadShowAssets
     const showRootSummary = preview.error
         ? preview.error
@@ -36,16 +36,14 @@ export default function ShowAssetsField({form, preview}: {
                 control={control}
                 name="downloadShowAssets"
                 render={({field}) => (
-                    <Select
+                    <SimpleSelect
                         inputId="mp-show-assets"
                         ref={field.ref}
                         name={field.name}
-                        classNamePrefix="select"
-                        options={options}
-                        value={options.find(({value}) => value === (field.value == null ? 'system' : field.value ? 'enabled' : 'disabled'))}
-                        onChange={(option) => field.onChange(option?.value === 'enabled' ? true : option?.value === 'disabled' ? false : null)}
+                        registry={showAssetsReg}
+                        value={field.value == null ? 'system' : field.value ? 'enabled' : 'disabled'}
+                        onChange={(value) => field.onChange(value === 'enabled' ? true : value === 'disabled' ? false : null)}
                         onBlur={field.onBlur}
-                        isClearable={false}
                         aria-invalid={!!fieldError}
                         aria-describedby={`mp-show-assets-help${fieldError ? ' mp-show-assets-error' : ''}`}
                     />

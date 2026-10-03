@@ -26,6 +26,8 @@ import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {MovieRead, MovieReadSchema} from '../../types/schemas/movie'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
+import SimpleSelect from '../../components/common/SimpleSelect'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 import './MoviePage.css'
 
 type MovieExtraSummary = {
@@ -124,6 +126,16 @@ export default function MoviePage() {
         () => profiles?.filter((profile) => profile.type === 'movie') || [],
         [profiles],
     )
+    const videoProfileReg = useMemo(() => {
+        const spec: Record<string, {label: string}> = {}
+        const values: string[] = []
+        for (const profile of videoProfiles) {
+            const value = String(profile.id)
+            spec[value] = {label: profile.name}
+            values.push(value)
+        }
+        return createSelectRegistry('MovieLocalMediaProfile', spec, values)
+    }, [videoProfiles])
     const [profileId, setProfileId] = useState('')
     const [submitting, setSubmitting] = useState<string | null>(null)
     const [addingMovie, setAddingMovie] = useState(false)
@@ -540,9 +552,12 @@ export default function MoviePage() {
                     {videoProfiles.length ? (
                         <>
                             <label htmlFor="movie-profile">Local Media Profile</label>
-                            <select id="movie-profile" className="input" value={profileId} onChange={(event) => setProfileId(event.target.value)}>
-                                {videoProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
-                            </select>
+                            <SimpleSelect
+                                inputId="movie-profile"
+                                registry={videoProfileReg}
+                                value={profileId}
+                                onChange={setProfileId}
+                            />
                             {movie.isDownloadable ? (
                                 <MovieDownloadControl
                                     download={movieDownload}

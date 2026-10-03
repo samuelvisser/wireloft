@@ -1,27 +1,23 @@
 import {useQuery} from '@tanstack/react-query'
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import Select from 'react-select'
 import Switch from 'react-switch'
 
 import PageSubtitle from '../components/common/PageSubtitle'
+import SimpleSelect from '../components/common/SimpleSelect'
 import {usePageActive} from '../lib/pageActivity'
 import {ApplicationLogPageReadSchema, type ApplicationLogEntryRead} from '../types/schemas/log'
+import {createSelectRegistry} from '../utils/selectRegistry'
 import './LogsPage.css'
 
-type LogLevelOption = {
-    value: string
-    label: string
-}
-
-const LEVEL_OPTIONS: readonly LogLevelOption[] = [
-    {value: '', label: 'All'},
-    {value: 'DEBUG', label: 'Debug'},
-    {value: 'INFO', label: 'Info'},
-    {value: 'WARNING', label: 'Warning'},
-    {value: 'ERROR', label: 'Error'},
-    {value: 'CRITICAL', label: 'Critical'},
-]
+const LogLevelReg = createSelectRegistry('LogLevelFilter', {
+    '': {label: 'All'},
+    DEBUG: {label: 'Debug'},
+    INFO: {label: 'Info'},
+    WARNING: {label: 'Warning'},
+    ERROR: {label: 'Error'},
+    CRITICAL: {label: 'Critical'},
+})
 
 function isPullRequestLog(entry: ApplicationLogEntryRead): boolean {
     return entry.logger === 'uvicorn.access'
@@ -104,15 +100,12 @@ export default function LogsPage() {
                 </label>
                 <div className="logs-level">
                     <label htmlFor="logs-level-select">Level</label>
-                    <Select<LogLevelOption, false>
+                    <SimpleSelect
                         inputId="logs-level-select"
                         className="logs-level-select"
-                        classNamePrefix="select"
-                        options={LEVEL_OPTIONS}
-                        value={LEVEL_OPTIONS.find((option) => option.value === level) ?? LEVEL_OPTIONS[0]}
-                        onChange={(option) => setLevel(option?.value ?? '')}
-                        isSearchable={false}
-                        isClearable={false}
+                        registry={LogLevelReg}
+                        value={level}
+                        onChange={setLevel}
                     />
                 </div>
                 {canShowPullRequests && (

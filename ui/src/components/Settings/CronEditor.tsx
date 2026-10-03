@@ -10,6 +10,7 @@ import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import CronTaskLedgerModal from './CronTaskLedgerModal'
 import type {TaskLedgerPageQuery} from '../../lib/taskLedger'
 import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 import {
     OperationControlError,
     OperationStartError,
@@ -50,17 +51,17 @@ type ParsedCron = {
 
 const EMPTY_CRON_VALUE = '_'
 
-const WEEKDAYS = [
-    {value: '1', label: 'Monday'},
-    {value: '2', label: 'Tuesday'},
-    {value: '3', label: 'Wednesday'},
-    {value: '4', label: 'Thursday'},
-    {value: '5', label: 'Friday'},
-    {value: '6', label: 'Saturday'},
-    {value: '0', label: 'Sunday'},
-] as const
+const WeekdayReg = createSelectRegistry('CronWeekday', {
+    '1': {label: 'Monday'},
+    '2': {label: 'Tuesday'},
+    '3': {label: 'Wednesday'},
+    '4': {label: 'Thursday'},
+    '5': {label: 'Friday'},
+    '6': {label: 'Saturday'},
+    '0': {label: 'Sunday'},
+}, ['1', '2', '3', '4', '5', '6', '0'])
 
-type WeekdayOption = (typeof WEEKDAYS)[number]
+type WeekdayOption = (typeof WeekdayReg.options)[number]
 
 const MODES: ReadonlyArray<{value: CronMode; label: string}> = [
     {value: 'minutes', label: 'Every X minutes'},
@@ -86,13 +87,13 @@ function isNumberOrEmpty(value: string) {
 function isWeekdayList(value: string): boolean {
     const values = value.split(',')
     if (!values.length || new Set(values).size !== values.length) return false
-    return values.every((weekday) => WEEKDAYS.some((option) => option.value === weekday))
+    return values.every((weekday) => WeekdayReg.options.some((option) => option.value === weekday))
 }
 
 function selectedWeekdays(value: string | undefined): WeekdayOption[] {
     if (!value || !isWeekdayList(value)) return []
     const selected = new Set(value.split(','))
-    return WEEKDAYS.filter((weekday) => selected.has(weekday.value))
+    return WeekdayReg.options.filter((weekday) => selected.has(weekday.value))
 }
 
 function describeWeekdays(value: string): string {
@@ -495,7 +496,7 @@ export default function CronEditor({
                                     isDisabled={disabled}
                                     closeMenuOnSelect={false}
                                     hideSelectedOptions={false}
-                                    options={WEEKDAYS}
+                                    options={WeekdayReg.options}
                                     value={weekdayValues}
                                     placeholder="Select one or more days"
                                     getOptionValue={(option) => option.value}

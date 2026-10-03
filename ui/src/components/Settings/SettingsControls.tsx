@@ -2,6 +2,8 @@ import type {ReactNode} from 'react'
 import Switch from 'react-switch'
 import TimeInterval from '../../utils/TimeInterval'
 import type {TimeUnit} from '../../utils/TimeInterval'
+import SimpleSelect from '../common/SimpleSelect'
+import type {SelectRegistry} from '../../utils/selectRegistry'
 
 
 export function SettingsSection({
@@ -247,8 +249,7 @@ export function SelectField({
     id,
     label,
     value,
-    options,
-    optionLabels,
+    registry,
     onChange,
     help,
     error,
@@ -257,8 +258,7 @@ export function SelectField({
     id: string
     label: string
     value: string
-    options: readonly string[]
-    optionLabels?: Partial<Record<string, string>>
+    registry: SelectRegistry
     onChange: (value: string) => void
     help?: ReactNode
     error?: string
@@ -267,19 +267,16 @@ export function SelectField({
     const errorId = `${id}-errors`
     return (
         <FieldShell label={label} htmlFor={id} help={help} environmentVariable={environmentVariable}>
-            <select
-                id={id}
-                className="input settings-input settings-select"
+            <SimpleSelect
+                inputId={id}
+                className="settings-select"
+                registry={registry}
                 value={value}
-                disabled={Boolean(environmentVariable)}
+                isDisabled={Boolean(environmentVariable)}
                 aria-invalid={Boolean(error)}
                 aria-describedby={error ? errorId : undefined}
-                onChange={(event) => onChange(event.target.value)}
-            >
-                {options.map((option) => (
-                    <option key={option} value={option}>{optionLabels?.[option] ?? option}</option>
-                ))}
-            </select>
+                onChange={onChange}
+            />
             {error ? (
                 <div id={errorId} className="error" role="alert" aria-live="polite">
                     {error}

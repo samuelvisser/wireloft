@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
 import Select, {components, type GroupBase, type MenuListProps} from 'react-select'
+import type {SelectRegistry} from '../../utils/selectRegistry'
 
 export type LazySearchSelectOption = {
     value: string
@@ -8,11 +9,17 @@ export type LazySearchSelectOption = {
     group?: string
 }
 
+export type LazySearchSelectOptionPresentation = {
+    selectedLabel?: string
+    group?: string
+}
+
 type Props = {
     inputId: string
     className?: string
     classNamePrefix?: string
-    options: LazySearchSelectOption[]
+    registry: SelectRegistry
+    optionPresentation?: ReadonlyMap<string, LazySearchSelectOptionPresentation>
     value: LazySearchSelectOption | null
     isLoading: boolean
     hasMore: boolean
@@ -32,7 +39,8 @@ export default function LazySearchSelect({
     inputId,
     className,
     classNamePrefix = 'select',
-    options,
+    registry,
+    optionPresentation,
     value,
     isLoading,
     hasMore,
@@ -168,6 +176,14 @@ export default function LazySearchSelect({
         const timer = window.setTimeout(() => onSearchChangeRef.current(inputValue), debounceMs)
         return () => window.clearTimeout(timer)
     }, [debounceMs, inputValue])
+
+    const options = useMemo<LazySearchSelectOption[]>(
+        () => registry.options.map((option) => ({
+            ...option,
+            ...optionPresentation?.get(option.value),
+        })),
+        [optionPresentation, registry],
+    )
 
     const groupedOptions = useMemo<readonly (LazySearchSelectOption | GroupBase<LazySearchSelectOption>)[]>(() => {
         const groups = new Map<string, LazySearchSelectOption[]>()

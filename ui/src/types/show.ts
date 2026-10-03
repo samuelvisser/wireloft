@@ -21,14 +21,16 @@ export type EpisodeIdentifierValue = (typeof EpisodeIdentifierReg)["values"][num
 /** Build a select registry for Shows from an array (no memoization). */
 export function buildShowSelectRegistry(shows: readonly ShowRead[] | undefined | null): SelectRegistry {
     const spec: Record<string, { label: string }> = {}
+    const values: string[] = []
     if (Array.isArray(shows)) {
         for (const s of shows) {
-            const id = s.id
+            const id = String(s.id)
             const name = s.title
-            spec[String(id)] = {label: String(name)}
+            spec[id] = {label: String(name)}
+            values.push(id)
         }
     }
-    return createSelectRegistry('Show', spec as any)
+    return createSelectRegistry('Show', spec, values)
 }
 
 /** React hook: memoized select registry for Shows */

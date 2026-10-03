@@ -1,13 +1,20 @@
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
+import {createSelectRegistry} from '../../utils/selectRegistry'
+import SimpleSelect from '../common/SimpleSelect'
 
 type Props = {
     form: UseFormReturn<any>
     mode?: 'create' | 'update'
 }
 
-type LimitMode = 'none' | 'date' | 'episodes'
+const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
+    none: {label: 'No limits'},
+    date: {label: 'Date'},
+    episodes: {label: 'Number of episodes'},
+})
+type LimitMode = (typeof LimitModeReg)['values'][number]
 
 export default function PodcastDownloadProfileForm({form}: Props) {
     const {control, register, watch, setValue, formState: {errors}} = form
@@ -126,16 +133,12 @@ export default function PodcastDownloadProfileForm({form}: Props) {
 
             <div className="form-row">
                 <label htmlFor="download-limit-mode">Limit by</label>
-                <select
-                    id="download-limit-mode"
-                    className="input"
+                <SimpleSelect
+                    inputId="download-limit-mode"
+                    registry={LimitModeReg}
                     value={limitMode}
-                    onChange={(event) => updateLimitMode(event.target.value as LimitMode)}
-                >
-                    <option value="none">No limits</option>
-                    <option value="date">Date</option>
-                    <option value="episodes">Number of episodes</option>
-                </select>
+                    onChange={(value) => updateLimitMode(value as LimitMode)}
+                />
                 <div className="help">
                     Choose whether to use no rolling limit, a rolling date window, or only the latest number of episodes.
                 </div>

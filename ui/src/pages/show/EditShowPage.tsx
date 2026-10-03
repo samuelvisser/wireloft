@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import ShowForm, { ShowFormValue, defaultShowFormValue } from '../../components/ShowForm'
 import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
 import { useQueryClient } from '@tanstack/react-query'
 import {useShow} from '../../lib/queries'
+import SimpleSelect from '../../components/common/SimpleSelect'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 
 type RouteParams = { id?: string }
 
@@ -29,6 +31,15 @@ export default function EditShowPage() {
   type LocalMediaProfileName = { id: string; name: string }
   const [profiles, setProfiles] = useState<LocalMediaProfileName[] | null>(null)
   const [profilesError, setProfilesError] = useState<string | null>(null)
+  const profileReg = useMemo(() => {
+    const spec: Record<string, {label: string}> = {}
+    const values: string[] = []
+    for (const profile of profiles ?? []) {
+      spec[profile.id] = {label: profile.name}
+      values.push(profile.id)
+    }
+    return createSelectRegistry('EditShowLocalMediaProfile', spec, values)
+  }, [profiles])
 
   useEffect(() => {
     if (!id || !show || show.slug !== id || initializedShowId.current === id) return
@@ -146,23 +157,14 @@ export default function EditShowPage() {
 
         <div className="form-row">
           <label htmlFor="media-profile">Media Profile</label>
-          <select
-            id="media-profile"
-            className="input"
+          <SimpleSelect
+            inputId="media-profile"
+            registry={profileReg}
             value={form.localMediaProfileId}
-            onChange={(e) => setForm({ ...form, localMediaProfileId: e.target.value })}
-            disabled
-          >
-            {profiles === null ? (
-              <option>Loading profiles...</option>
-            ) : profiles.length === 0 ? (
-              <option>{profilesError ?? 'No profiles found'}</option>
-            ) : (
-              profiles.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))
-            )}
-          </select>
+            onChange={(value) => setForm({ ...form, localMediaProfileId: value })}
+            isDisabled
+            placeholder={profiles === null ? 'Loading profiles...' : profilesError ?? 'No profiles found'}
+          />
         </div>
 
         <ShowForm

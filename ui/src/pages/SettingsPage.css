@@ -253,7 +253,11 @@
 }
 
 .settings-select {
-    appearance: auto;
+    width: 100%;
+}
+
+.settings-select .select__control {
+    min-height: 42px;
 }
 
 .settings-field__help {

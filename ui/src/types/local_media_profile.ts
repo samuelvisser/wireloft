@@ -49,16 +49,21 @@ export function buildLocalMediaProfileSelectRegistry(
     showType?: ShowLocalMediaProfileContext,
 ): SelectRegistry{
     const spec: Record<string, { label: string }> = {}
+    const values: string[] = []
     if (Array.isArray(mediaProfiles)) {
         for (const p of mediaProfiles) {
             if (type && p.type !== type) continue
             if (type === 'show' && showType && !isShowLocalMediaProfileAvailableFor(p, showType)) continue
             const id = (p as any).id
             const name = (p as any).name ?? String(id)
-            if (typeof id === 'number') spec[String(id)] = {label: String(name)}
+            if (typeof id === 'number') {
+                const value = String(id)
+                spec[value] = {label: String(name)}
+                values.push(value)
+            }
         }
     }
-    return createSelectRegistry('LocalMediaProfile', spec as any)
+    return createSelectRegistry('LocalMediaProfile', spec, values)
 }
 
 /** React hook: memoized select registry for Local Media Profiles */
