@@ -46,7 +46,7 @@ in control while not throwing you in the dark.
 
 - Fully featured, easy-to-use Web UI for navigation and configuration.
 - Download series, podcasts, movies, and premium content using your The Daily Wire subscription.
-- Create multiple media profiles for the same show — for example, automatically maintain separate video and audio versions.
+- Create multiple media profiles for the same show — for example, automatically maintain separate video and audio downloads.
 - Organize your library exactly how you want with configurable naming, directory structures, and powerful Jinja templates.
 - Automatically embed metadata and artwork, generate NFO files, and download show assets for media servers such as Jellyfin and Plex.
 - Intelligently handles live episodes, avoiding countdown footage and waiting for the proper published version when appropriate.
