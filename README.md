@@ -18,7 +18,7 @@
 
 <p align="center">
   <img
-    src="docs/readme-secondary-screenshots-1.2.2.svg"
+    src="docs/assets/screenshots/1.2.2-readme-screenshot-row.png"
     alt="WireLoft movie and episode views"
     width="700"
   />
