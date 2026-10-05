@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def _session() -> Session:
+def _session(*, autoflush: bool = True) -> Session:
     # Import both model collections before create_all so every FK referenced by
     # the scheduler and operation tables is present in Base.metadata.
     import backend.db.models  # noqa: F401
@@ -15,7 +15,7 @@ def _session() -> Session:
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
-    return Session(engine)
+    return Session(engine, autoflush=autoflush)
 
 
 def _definition(session: Session, key: str = "test_worker"):
@@ -79,7 +79,7 @@ def test_operation_admission_wait_is_waiting_until_deadline():
     )
     from task_manager.scheduler.types import OperationStatus
 
-    session = _session()
+    session = _session(autoflush=False)
     try:
         definition = _definition(session)
         operation = create_operation(

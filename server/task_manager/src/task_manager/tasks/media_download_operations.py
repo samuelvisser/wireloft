@@ -361,6 +361,11 @@ def create_media_download_operation(
             "operation_id": operation.id,
             "source": source,
             "is_redownload": bool(is_redownload),
+            **(
+                {"publication_delay_not_before": not_before.isoformat()}
+                if not_before is not None
+                else {}
+            ),
         },
     )
     if (
