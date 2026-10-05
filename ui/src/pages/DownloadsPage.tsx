@@ -15,8 +15,8 @@ import {frontendOperationDefinitions} from '../lib/operationDefinitions'
 import {useControlOperation, useStartOperation} from '../lib/operations'
 import {useMediaDownloadsView} from '../lib/queries'
 import {useFilterChipPress} from '../lib/useFilterChipPress'
-import {
 import {faIcon} from '../icons/faIcon'
+import {
     DEFAULT_DOWNLOAD_STATUS_FILTER,
     DOWNLOAD_STATUS_FILTER_OPTIONS,
     DownloadStatusFilterOption,
