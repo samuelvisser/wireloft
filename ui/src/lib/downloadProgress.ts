@@ -4,6 +4,7 @@ import type {DownloadPresentation, ProgressPresentation} from '../types/progress
 import {DownloadExecutionSchema, type DownloadExecution, type DownloadStage} from '../types/schemas/download_execution'
 import {formatBytes} from '../utils/formatting'
 import {waitingPresentation, workingPresentation} from './progressPresentation'
+import {faIcon} from '../icons/faIcon'
 
 export const ACTIVE_OPERATION_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
 
@@ -32,7 +33,7 @@ function terminal(status: string, label: string, detail: string, outcome?: Progr
     const iconName = outcome === 'success' ? 'circle-check' : outcome === 'error' ? 'triangle-exclamation' : 'download'
     return {
         status, mode: 'terminal', active: false, percent: null, label, detail, outcome,
-        icon: ['fas', iconName],
+        icon: faIcon('fas', outcome === 'success' ? 'circle-check' : outcome === 'error' ? 'triangle-exclamation' : 'download'),
         canCancel: false, canRetry: status !== 'not_downloaded',
     }
 }
@@ -66,7 +67,7 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
                         ? `${formatBytes(media?.bytes_received ?? 0)} downloaded; total size unknown`
                         : `${media?.bytes_received?.toLocaleString() || '0'} bytes received; total size unknown`
             if (transferPercent !== null) return {status: 'downloading', mode: 'determinate', active: true, percent: transferPercent,
-                label: `${transferPercent}%`, detail: `Primary media transfer: ${basis}.`, icon: ['fas', 'download'], secondary,
+                label: `${transferPercent}%`, detail: `Primary media transfer: ${basis}.`, icon: faIcon('fas', 'download'), secondary,
                 canCancel: true, canRetry: true}
             return {status: 'downloading', ...workingPresentation('Downloading', basis), secondary}
         }

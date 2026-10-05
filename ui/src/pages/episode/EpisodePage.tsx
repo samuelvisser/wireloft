@@ -3,8 +3,6 @@ import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {library} from '@fortawesome/fontawesome-svg-core'
-import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
 import {useSettings} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
@@ -21,9 +19,8 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import {formatDate, formatDurationMinutes} from "../../utils/formatting";
 import './EpisodePage.css'
+import {faIcon} from '../../icons/faIcon'
 
-// Ensure icons from the kit are registered (idempotent)
-library.add(fas)
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
 
@@ -135,7 +132,7 @@ function ProfileDownloadRow({
                         disabled={busy}
                         aria-label={`Download ${profile.name}`}
                     >
-                        <FontAwesomeIcon icon={['fas', 'download']}/>
+                        <FontAwesomeIcon icon={faIcon('fas', 'download')}/>
                         Download
                     </button>}
             </div>
@@ -155,7 +152,7 @@ function ProfileDownloadRow({
                             title="Cancel download"
                             aria-label={`Cancel download for ${profile.name}`}
                         >
-                            <FontAwesomeIcon icon={['fas', 'ban']}/>
+                            <FontAwesomeIcon icon={faIcon('fas', 'ban')}/>
                         </button>
                     )}
                     {!download.presentation.active && download.presentation.canRetry && (
@@ -169,7 +166,7 @@ function ProfileDownloadRow({
                                 ? `Re-download ${profile.name}`
                                 : `Retry download for ${profile.name}`}
                         >
-                            <FontAwesomeIcon icon={['fas', 'rotate-right']}/>
+                            <FontAwesomeIcon icon={faIcon('fas', 'rotate-right')}/>
                         </button>
                     )}
                     <button
@@ -179,7 +176,7 @@ function ProfileDownloadRow({
                         title="View log"
                         aria-label={`View log for ${profile.name}`}
                     >
-                        <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+                        <FontAwesomeIcon icon={faIcon('fas', 'file-lines')}/>
                     </button>
                 </div>
             )}
@@ -338,7 +335,7 @@ export default function EpisodePage() {
             <article className="episode-details" aria-label="Episode details">
                 <nav className="episode-breadcrumb" aria-label="Breadcrumb">
                     <Link to="/library">Library</Link>
-                    <FontAwesomeIcon icon={['fas', 'chevron-right']} aria-hidden="true"/>
+                    <FontAwesomeIcon icon={faIcon('fas', 'chevron-right')} aria-hidden="true"/>
                     <Link to={`/show/${showId}`}>{show.title}</Link>
                 </nav>
 
@@ -356,7 +353,7 @@ export default function EpisodePage() {
                             items={[
                                 {
                                     label: 'Refresh metadata',
-                                    icon: ['fas', 'arrows-rotate'],
+                                    icon: faIcon('fas', 'arrows-rotate'),
                                     disabled: metadataRefreshBusy,
                                     disabledReason: metadataRefreshStarting
                                         ? OPERATION_STARTING_MESSAGE
@@ -368,7 +365,7 @@ export default function EpisodePage() {
                                 },
                                 ...(earlyDeleteAvailable ? [{
                                     label: 'Early Delete',
-                                    icon: ['fas', 'trash'] as [string, string],
+                                    icon: faIcon('fas', 'trash') as [string, string],
                                     tone: 'danger' as const,
                                     separatorBefore: true,
                                     disabled: earlyDeleteDisabledReason !== undefined,
@@ -386,14 +383,14 @@ export default function EpisodePage() {
                         </span>
                         <span className="episode-summary-separator" aria-hidden="true"/>
                         <span className="episode-summary-item">
-                            <FontAwesomeIcon icon={['fas', 'calendar']} aria-hidden="true"/>
+                            <FontAwesomeIcon icon={faIcon('fas', 'calendar')} aria-hidden="true"/>
                             <span>Released {formatDate(episode.publishedDate)}</span>
                         </span>
                         {latestDownloadedAt && (
                             <>
                                 <span className="episode-summary-separator" aria-hidden="true"/>
                                 <span className="episode-summary-item">
-                                    <FontAwesomeIcon icon={['fas', 'circle-down']} aria-hidden="true"/>
+                                    <FontAwesomeIcon icon={faIcon('fas', 'circle-down')} aria-hidden="true"/>
                                     <span>Downloaded {formatDate(latestDownloadedAt)}</span>
                                 </span>
                             </>
@@ -440,7 +437,7 @@ export default function EpisodePage() {
                     onDismiss={() => {
                         if (!earlyDeleteBusy) setEarlyDeleteConfirm(false)
                     }}
-                    icon={['fas', 'trash']}
+                    icon={faIcon('fas', 'trash')}
                     iconTone="danger"
                     dismissOnOverlayClick={!earlyDeleteBusy}
                     cancelButton={{disabled: earlyDeleteBusy}}

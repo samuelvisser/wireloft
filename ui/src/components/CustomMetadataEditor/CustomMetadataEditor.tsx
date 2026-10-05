@@ -3,6 +3,7 @@ import {zodResolver} from '@hookform/resolvers/zod'
 import {useFieldArray, useForm} from 'react-hook-form'
 import {useQueryClient, type QueryKey} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import {faIcon} from '../../icons/faIcon'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {useCustomMetadataFields} from '../../lib/customMetadataFields'
@@ -273,7 +274,7 @@ export default function CustomMetadataEditor({
                 open={confirmRemoval !== null}
                 title="Remove metadata field?"
                 onDismiss={() => setConfirmRemoval(null)}
-                icon={['fas', 'triangle-exclamation']}
+                icon={faIcon('fas', 'triangle-exclamation')}
                 iconTone="danger"
                 confirmButton={{
                     label: 'Remove field',

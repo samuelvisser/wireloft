@@ -1,4 +1,5 @@
 import type {ProgressPresentation} from '../types/progress'
+import {faIcon} from '../icons/faIcon'
 
 const WAITS: Record<string, [string, string]> = {
     daily_wire_request_cooldown: ['Cooldown', 'Waiting for The Daily Wire request cooldown. The operation will resume automatically.'],
@@ -26,7 +27,7 @@ export function waitingPresentation(
         percent,
         label: `${value?.[0] || 'Waiting'}...`,
         detail: detail || value?.[1] || 'Waiting for a dependency.',
-        icon: ['fas', 'clock'],
+        icon: faIcon('fas', 'clock'),
         canCancel: true,
         canRetry: true,
     }
@@ -44,7 +45,7 @@ export function workingPresentation(
         label: `${label}...`,
         compactLabel: `${compactLabel}...`,
         detail,
-        icon: ['fas', 'spinner'],
+        icon: faIcon('fas', 'spinner'),
         canCancel: true,
         canRetry: true,
     }

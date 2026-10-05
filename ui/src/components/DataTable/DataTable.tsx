@@ -1,6 +1,7 @@
 import {CSSProperties, HTMLAttributes, ReactNode, useId, useMemo, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
+import {faIcon} from '../../icons/faIcon'
 
 export type Column<T> = {
     id?: string
@@ -152,7 +153,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                         }
                         const isSorted = sortState?.id === id
                         const direction = isSorted ? sortState!.direction : undefined
-                        const sortIcon = direction === 'asc' ? (['fas', 'sort-up'] as const) : direction === 'desc' ? (['fas', 'sort-down'] as const) : (['fas', 'sort'] as const)
+                        const sortIcon = direction === 'asc' ? (faIcon('fas', 'sort-up')) : direction === 'desc' ? (faIcon('fas', 'sort-down')) : (faIcon('fas', 'sort'))
                         return (
                             <th key={id} scope="col" style={style} aria-sort={direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none'}>
                                 <button type="button" className="th-sort-btn" onClick={() => toggleSort(id)}>
@@ -271,7 +272,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                                     </span>
                                     <FontAwesomeIcon
                                         className="mobile-data-chevron"
-                                        icon={(isExpanded ? ['fas', 'chevron-up'] : ['fas', 'chevron-down']) as IconProp}
+                                        icon={(isExpanded ? faIcon('fas', 'chevron-up') : faIcon('fas', 'chevron-down')) as IconProp}
                                         aria-hidden="true"
                                     />
                                 </button>

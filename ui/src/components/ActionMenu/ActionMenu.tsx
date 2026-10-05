@@ -7,6 +7,7 @@ import ProgressFill from '../common/ProgressFill'
 import {useEffect, useId, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import './ActionMenu.css'
+import {faIcon} from '../../icons/faIcon'
 
 export type ActionMenuControl = {
     label: string
@@ -111,7 +112,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                 onClick={() => setOpen((value) => !value)}
             >
                 <span>{label}</span>
-                <FontAwesomeIcon className="action-menu-caret" icon={['fas', 'chevron-down'] as any} aria-hidden="true"/>
+                <FontAwesomeIcon className="action-menu-caret" icon={faIcon('fas', 'chevron-down')} aria-hidden="true"/>
             </button>
 
             {open && (

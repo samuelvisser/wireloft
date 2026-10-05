@@ -1,4 +1,5 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {faIcon} from '../../icons/faIcon'
 
 export type MediaType = 'shows' | 'movies'
 
@@ -20,11 +21,11 @@ export default function MediaTypeTabs({
     return (
         <div className="media-type-tabs browse-type-tabs" role="tablist" aria-label={ariaLabel}>
             <button type="button" role="tab" aria-selected={activeType === 'shows'} onClick={() => onChange('shows')}>
-                <FontAwesomeIcon icon={['fas', 'tv']}/> Shows
+                <FontAwesomeIcon icon={faIcon('fas', 'tv')}/> Shows
                 {showCount !== undefined && <span>{showCount}</span>}
             </button>
             <button type="button" role="tab" aria-selected={activeType === 'movies'} onClick={() => onChange('movies')}>
-                <FontAwesomeIcon icon={['fas', 'clapperboard']}/> Movies
+                <FontAwesomeIcon icon={faIcon('fas', 'clapperboard')}/> Movies
                 {movieCount !== undefined && <span>{movieCount}</span>}
             </button>
         </div>

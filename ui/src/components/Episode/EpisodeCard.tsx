@@ -4,6 +4,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useNavigate} from 'react-router-dom'
 import {EpisodeReadView} from '../../types/schemas/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
+import {faIcon} from '../../icons/faIcon'
 
 // Beyond this many downloads for one episode, collapse the rest into a "+N" pill
 // instead of letting icons overflow the thumbnail.
@@ -73,7 +74,7 @@ function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }
         return (
             <span className="status-group">
                 <span className="status status-none" title="No downloads on disk">
-                    <FontAwesomeIcon icon={['fas', 'floppy-disk-circle-xmark'] as any}/>
+                    <FontAwesomeIcon icon={faIcon('fas', 'floppy-disk-circle-xmark')}/>
                 </span>
             </span>
         )

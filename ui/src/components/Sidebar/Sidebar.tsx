@@ -1,33 +1,30 @@
 import {NavLink} from 'react-router-dom'
-import {library} from '@fortawesome/fontawesome-svg-core'
-import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import Footer from './Footer'
 import Navbar from './Navbar'
 import type { NavItem } from './navTypes'
+import {faIcon} from '../../icons/faIcon'
 
-// Register the kit's solid icon pack so we can reference icons by [prefix, name]
-library.add(fas)
 
 const items: NavItem[] = [
-    {path: '/', label: 'Home', icon: ['fas', 'house'], end: true},
-    {path: '/library', label: 'Library', icon: ['fas', 'book-open']},
-    {path: '/downloads', label: 'Downloads', icon: ['fas', 'circle-down']},
+    {path: '/', label: 'Home', icon: faIcon('fas', 'house'), end: true},
+    {path: '/library', label: 'Library', icon: faIcon('fas', 'book-open')},
+    {path: '/downloads', label: 'Downloads', icon: faIcon('fas', 'circle-down')},
     {
         label: 'Profiles',
-        icon: ['fas', 'layer-group'],
+        icon: faIcon('fas', 'layer-group'),
         children: [
-            { path: '/local-media-profiles', label: 'Local Media Profiles', icon: ['fas', 'clapperboard'] },
-            { path: '/download-profiles', label: 'Download Profiles', icon: ['fas', 'download'] },
-            { path: '/stream-profiles', label: 'Stream Profiles', icon: ['fas', 'rss'] },
+            { path: '/local-media-profiles', label: 'Local Media Profiles', icon: faIcon('fas', 'clapperboard') },
+            { path: '/download-profiles', label: 'Download Profiles', icon: faIcon('fas', 'download') },
+            { path: '/stream-profiles', label: 'Stream Profiles', icon: faIcon('fas', 'rss') },
         ]
     },
     {
         label: 'Config',
-        icon: ['fas', 'sliders'],
+        icon: faIcon('fas', 'sliders'),
         children: [
-            {path: '/settings', label: 'Settings', icon: ['fas', 'gear']},
-            {path: '/tasks', label: 'Tasks', icon: ['fas', 'bars-progress']},
-            {path: '/logs', label: 'Log', icon: ['fas', 'file-lines']},
+            {path: '/settings', label: 'Settings', icon: faIcon('fas', 'gear')},
+            {path: '/tasks', label: 'Tasks', icon: faIcon('fas', 'bars-progress')},
+            {path: '/logs', label: 'Log', icon: faIcon('fas', 'file-lines')},
         ],
     },
 ]

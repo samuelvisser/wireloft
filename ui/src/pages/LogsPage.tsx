@@ -2,6 +2,7 @@ import {useQuery} from '@tanstack/react-query'
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import Switch from 'react-switch'
+import {faIcon} from '../icons/faIcon'
 
 import PageSubtitle from '../components/common/PageSubtitle'
 import SimpleSelect from '../components/common/SimpleSelect'
@@ -90,7 +91,7 @@ export default function LogsPage() {
             <div className="logs-toolbar">
                 <label className="logs-search">
                     <span className="sr-only">Search logs</span>
-                    <FontAwesomeIcon icon={['fas', 'magnifying-glass']} aria-hidden="true"/>
+                    <FontAwesomeIcon icon={faIcon('fas', 'magnifying-glass')} aria-hidden="true"/>
                     <input
                         type="search"
                         value={search}
@@ -139,7 +140,7 @@ export default function LogsPage() {
             >
                 {logs.isPending ? (
                     <div className="logs-message">
-                        <FontAwesomeIcon className="wl-progress-icon" icon={['fas', 'spinner']}/>
+                        <FontAwesomeIcon className="wl-progress-icon" icon={faIcon('fas', 'spinner')}/>
                         Loading logs...
                     </div>
                 ) : logs.error ? (

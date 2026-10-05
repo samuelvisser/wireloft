@@ -1,3 +1,4 @@
+import {faIcon} from '../icons/faIcon'
 // Icon/label lookups for the raw snake_case status strings the backend sends
 // (Episode.publishStatus, MediaDownload.downloadStatus) - not the display-label
 // TS enums in types/episode.ts / types/media_download.ts, which hold pretty
@@ -7,34 +8,34 @@
 export function statusIcon(status: string) {
     switch (status) {
         case 'scheduled':
-            return ['fas', 'clock'] as const
+            return faIcon('fas', 'clock')
         case 'delayed':
-            return ['fas', 'clock-rotate-left'] as const
+            return faIcon('fas', 'clock-rotate-left')
         case 'live':
-            return ['fas', 'circle-video'] as const
+            return faIcon('fas', 'circle-video')
         case 'no_usable_media':
-            return ['fas', 'circle-exclamation'] as const
+            return faIcon('fas', 'circle-exclamation')
         case 'dw_processing':
         case 'local_processing':
-            return ['fas', 'spinner'] as const
+            return faIcon('fas', 'spinner')
         case 'published_with_countdown':
         case 'published_final':
-            return ['fas', 'circle-play'] as const
+            return faIcon('fas', 'circle-play')
         case 'downloaded':
         case 'redownloaded':
-            return ['fas', 'circle-check'] as const
+            return faIcon('fas', 'circle-check')
         case 'not_downloaded':
-            return ['fas', 'floppy-disk-circle-xmark'] as const
+            return faIcon('fas', 'floppy-disk-circle-xmark')
         case 'pending':
-            return ['fas', 'clock'] as const
+            return faIcon('fas', 'clock')
         case 'downloading':
-            return ['fas', 'circle-down'] as const
+            return faIcon('fas', 'circle-down')
         case 'error':
         case 'missing':
         case 'corrupted':
-            return ['fas', 'circle-exclamation'] as const
+            return faIcon('fas', 'circle-exclamation')
         default:
-            return ['fas', 'circle-exclamation'] as const
+            return faIcon('fas', 'circle-exclamation')
     }
 }
 

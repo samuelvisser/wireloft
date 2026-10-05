@@ -2,6 +2,7 @@ import type {TaskOperationRead} from '../types/schemas/operation'
 import type {ProgressPresentation} from '../types/progress'
 import {ACTIVE_OPERATION_STATUSES, presentDownloadProgress} from './downloadProgress'
 import {waitingPresentation, workingPresentation} from './progressPresentation'
+import {faIcon} from '../icons/faIcon'
 
 export function presentOperationProgress(operation?: TaskOperationRead, starting = false): ProgressPresentation | undefined {
     if (starting && !operation) return workingPresentation('Starting')
@@ -19,5 +20,5 @@ export function presentOperationProgress(operation?: TaskOperationRead, starting
         : operation.message || 'Operation in progress.'
     return {mode: 'determinate', active: true, percent, label: `${isBatch ? '~' : ''}${percent}%`, detail,
         secondary: batch ? `${batch.completed || 0}/${batch.requested || 0} complete` : undefined,
-        estimated: isBatch, icon: ['fas', 'spinner'], canCancel: true, canRetry: false}
+        estimated: isBatch, icon: faIcon('fas', 'spinner'), canCancel: true, canRetry: false}
 }

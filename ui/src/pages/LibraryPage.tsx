@@ -1,6 +1,7 @@
 import {useEffect, useMemo, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useSearchParams} from 'react-router-dom'
+import {faIcon} from '../icons/faIcon'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import ShowIndexingProgress from '../components/ShowIndexingProgress/ShowIndexingProgress'
@@ -94,7 +95,7 @@ export default function LibraryPage() {
                     <p className="view-description">Shows and movies indexed by WireLoft.</p>
                 </div>
                 <button className="btn btn-primary" onClick={() => navigate(browseUrl)}>
-                    <FontAwesomeIcon icon={['fas', 'compass']}/>
+                    <FontAwesomeIcon icon={faIcon('fas', 'compass')}/>
                     Browse Daily Wire
                 </button>
             </div>
@@ -123,7 +124,7 @@ export default function LibraryPage() {
                 <div className="form-error-card" role="alert">{error.message}</div>
             ) : !hasShows && !hasMovies ? (
                 <div className="library-empty">
-                    <FontAwesomeIcon icon={['fas', 'book-open']}/>
+                    <FontAwesomeIcon icon={faIcon('fas', 'book-open')}/>
                     <h2>Your library is empty</h2>
                     <p>Browse Daily Wire to add a show or movie.</p>
                     <button className="btn btn-primary" onClick={() => navigate(browseUrl)}>Browse Daily Wire</button>
@@ -138,7 +139,7 @@ export default function LibraryPage() {
                             return (
                                 <Link className="show-summary-card library-show-card" to={`/show/${show.slug}`} key={show.slug} role="listitem">
                                     <span className="show-summary-art">
-                                        {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={['fas', 'podcast']}/></span>}
+                                        {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={faIcon('fas', 'podcast')}/></span>}
                                     </span>
                                     <div className="show-summary-copy">
                                         <span className="show-summary-title">{show.title}</span>
@@ -152,14 +153,14 @@ export default function LibraryPage() {
                                             className="library-show-indexing"
                                         />
                                     </div>
-                                    <FontAwesomeIcon icon={['fas', 'chevron-right']} aria-hidden="true"/>
+                                    <FontAwesomeIcon icon={faIcon('fas', 'chevron-right')} aria-hidden="true"/>
                                 </Link>
                             )
                         })}
                     </div>
                 ) : (
                     <div className="catalog-empty">
-                        <FontAwesomeIcon icon={['fas', 'filter']}/>
+                        <FontAwesomeIcon icon={faIcon('fas', 'filter')}/>
                         <p>No shows match the selected filters.</p>
                     </div>
                 )
@@ -179,14 +180,14 @@ export default function LibraryPage() {
                                 <span className="movie-poster-art">
                                     {image
                                         ? <img src={image} alt="" loading="lazy" decoding="async"/>
-                                        : <FontAwesomeIcon icon={['fas', 'clapperboard']}/>
+                                        : <FontAwesomeIcon icon={faIcon('fas', 'clapperboard')}/>
                                     }
                                     {status === 'downloaded' || status === 'redownloaded' ? (
-                                        <span className="movie-state is-complete" aria-label="Downloaded"><FontAwesomeIcon icon={['fas', 'check']}/></span>
+                                        <span className="movie-state is-complete" aria-label="Downloaded"><FontAwesomeIcon icon={faIcon('fas', 'check')}/></span>
                                     ) : status === 'downloading' || status === 'pending' ? (
-                                        <span className="movie-state is-active" aria-label="Downloading"><FontAwesomeIcon icon={['fas', 'circle-down']}/></span>
+                                        <span className="movie-state is-active" aria-label="Downloading"><FontAwesomeIcon icon={faIcon('fas', 'circle-down')}/></span>
                                     ) : status === 'error' ? (
-                                        <span className="movie-state is-error" aria-label="Download failed"><FontAwesomeIcon icon={['fas', 'triangle-exclamation']}/></span>
+                                        <span className="movie-state is-error" aria-label="Download failed"><FontAwesomeIcon icon={faIcon('fas', 'triangle-exclamation')}/></span>
                                     ) : null}
                                 </span>
                                 <span className="movie-poster-title">{movie.title}</span>

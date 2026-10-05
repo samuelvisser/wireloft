@@ -7,6 +7,7 @@
     "build:free-icons": "npm --prefix ui run build:free-icons",
     "build:pro-icons": "npm --prefix ui run build:pro-icons",
     "preview": "npm --prefix ui run preview",
-    "format": "npm --prefix ui run format"
+    "format": "npm --prefix ui run format",
+    "postinstall": "npm --prefix ui ci --registry=https://registry.npmjs.org"
   }
 }

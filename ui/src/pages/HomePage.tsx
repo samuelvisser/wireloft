@@ -1,5 +1,6 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useNavigate} from 'react-router-dom'
+import {faIcon} from '../icons/faIcon'
 
 import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
 import {useLocalMediaProfiles, useMediaDownloadsView, useMovies, useShows} from '../lib/queries'
@@ -53,12 +54,12 @@ export default function HomePage() {
                     <p className="view-description">What WireLoft is doing now and anything that needs your attention.</p>
                 </div>
                 <button className="btn btn-primary" onClick={() => navigate('/browse')}>
-                    <FontAwesomeIcon icon={['fas', 'plus']}/> Add media
+                    <FontAwesomeIcon icon={faIcon('fas', 'plus')}/> Add media
                 </button>
             </div>
 
             <div className={`system-health ${hasAttention ? 'needs-attention' : 'is-healthy'}`}>
-                <FontAwesomeIcon icon={['fas', hasAttention ? 'triangle-exclamation' : 'circle-check']}/>
+                <FontAwesomeIcon icon={faIcon('fas', hasAttention ? 'triangle-exclamation' : 'circle-check')}/>
                 <div>
                     <strong>{hasAttention ? 'WireLoft needs attention' : 'WireLoft is running normally'}</strong>
                     <small>{hasAttention ? attentionSummary : 'No download, metadata or profile problems detected'}</small>
@@ -79,30 +80,30 @@ export default function HomePage() {
                     <div className="operation-section-header"><h2 id="active-downloads-title">Downloading now</h2><button type="button" onClick={() => navigate('/downloads')}>All downloads</button></div>
                     {isLoading && !downloads ? <p>Loading downloads…</p> : active.length ? active.slice(0, 3).map((download) => (
                         <button className="operation-download" type="button" key={download.id} onClick={() => openDownload(download)}>
-                            <span className="operation-icon"><FontAwesomeIcon icon={['fas', download.movieSlug ? 'clapperboard' : 'podcast']}/></span>
+                            <span className="operation-icon"><FontAwesomeIcon icon={faIcon('fas', download.movieSlug ? 'clapperboard' : 'podcast')}/></span>
                             <span className="operation-download-copy"><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small><DownloadProgressStatus download={download} compact details={false}/></span>
                         </button>
-                    )) : <div className="operation-empty"><FontAwesomeIcon icon={['fas', 'check']}/><span>No active downloads</span></div>}
+                    )) : <div className="operation-empty"><FontAwesomeIcon icon={faIcon('fas', 'check')}/><span>No active downloads</span></div>}
                 </section>
 
                 <section className="operation-section" aria-labelledby="attention-title">
                     <div className="operation-section-header"><h2 id="attention-title">Needs attention</h2></div>
                     {profiles?.length === 0 && (
                         <button className="operation-alert" type="button" onClick={() => navigate('/add-local-media-profile')}>
-                            <FontAwesomeIcon icon={['fas', 'folder-plus']}/><span><strong>No Local Media Profile</strong><small>Create one before downloading episodes or movies.</small></span><span>Fix</span>
+                            <FontAwesomeIcon icon={faIcon('fas', 'folder-plus')}/><span><strong>No Local Media Profile</strong><small>Create one before downloading episodes or movies.</small></span><span>Fix</span>
                         </button>
                     )}
                     {metadataProblems.slice(0, 3).map((movie) => (
                         <button className="operation-alert" type="button" key={`movie-metadata-${movie.id}`} onClick={() => navigate(`/movie/${movie.slug}`)}>
-                            <FontAwesomeIcon icon={['fas', 'triangle-exclamation']}/><span><strong>{movie.title} metadata</strong><small>{movie.releaseDateLookupError || 'TMDB release-date lookup failed. Open the movie to retry.'}</small></span><span>View</span>
+                            <FontAwesomeIcon icon={faIcon('fas', 'triangle-exclamation')}/><span><strong>{movie.title} metadata</strong><small>{movie.releaseDateLookupError || 'TMDB release-date lookup failed. Open the movie to retry.'}</small></span><span>View</span>
                         </button>
                     ))}
                     {problems.slice(0, 3).map((download) => (
                         <button className="operation-alert" type="button" key={download.id} onClick={() => openDownload(download)}>
-                            <FontAwesomeIcon icon={['fas', 'triangle-exclamation']}/><span><strong>{mediaTitle(download)}</strong><small>{download.errorMessage || `Download is ${download.downloadStatus}`}</small></span><span>View</span>
+                            <FontAwesomeIcon icon={faIcon('fas', 'triangle-exclamation')}/><span><strong>{mediaTitle(download)}</strong><small>{download.errorMessage || `Download is ${download.downloadStatus}`}</small></span><span>View</span>
                         </button>
                     ))}
-                    {!hasAttention && <div className="operation-empty"><FontAwesomeIcon icon={['fas', 'circle-check']}/><span>Nothing needs attention</span></div>}
+                    {!hasAttention && <div className="operation-empty"><FontAwesomeIcon icon={faIcon('fas', 'circle-check')}/><span>Nothing needs attention</span></div>}
                 </section>
             </div>
 
@@ -110,7 +111,7 @@ export default function HomePage() {
                 <div className="operation-section-header"><h2 id="recent-title">Recently completed</h2><button type="button" onClick={() => navigate('/downloads')}>View history</button></div>
                 {complete.length ? complete.map((download) => (
                     <button className="recent-download" type="button" key={download.id} onClick={() => openDownload(download)}>
-                        <FontAwesomeIcon icon={['fas', 'circle-check']}/><span><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small></span><time>{download.finishedAt?.toLocaleString() || ''}</time>
+                        <FontAwesomeIcon icon={faIcon('fas', 'circle-check')}/><span><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small></span><time>{download.finishedAt?.toLocaleString() || ''}</time>
                     </button>
                 )) : <div className="operation-empty"><span>No completed downloads yet</span></div>}
             </section>

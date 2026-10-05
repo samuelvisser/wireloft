@@ -3,9 +3,7 @@ import {useEffect, useMemo, useRef, useState} from 'react'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import {library} from '@fortawesome/fontawesome-svg-core'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {Column, DataTable, DataTableAction} from '../components/DataTable/DataTable'
 import DownloadLogDialog from '../components/MediaDownload/DownloadLogDialog'
 import ConfirmDialog from '../components/ConfirmDialog/ConfirmDialog'
@@ -18,6 +16,7 @@ import {useControlOperation, useStartOperation} from '../lib/operations'
 import {useMediaDownloadsView} from '../lib/queries'
 import {useFilterChipPress} from '../lib/useFilterChipPress'
 import {
+import {faIcon} from '../icons/faIcon'
     DEFAULT_DOWNLOAD_STATUS_FILTER,
     DOWNLOAD_STATUS_FILTER_OPTIONS,
     DownloadStatusFilterOption,
@@ -71,8 +70,6 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
     return true
 }
 
-// Ensure icons from the kit are registered (idempotent)
-library.add(fas)
 
 function StatusCell({row}: {row: MediaDownloadViewRead}) {
     return <DownloadProgressStatus download={row} compact/>
@@ -465,7 +462,7 @@ export default function DownloadsPage() {
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_retry']}
                             label="Retry all"
-                            icon={['fas', 'rotate-right']}
+                            icon={faIcon('fas', 'rotate-right')}
                             onClick={() => void startBulkAction('retry', retryableDownloads)}
                             disabled={bulkOperationActive && !retryAllOperation && bulkActionStarting !== 'retry'}
                             primary={false}
@@ -481,7 +478,7 @@ export default function DownloadsPage() {
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_cancel']}
                             label="Cancel all"
-                            icon={['fas', 'ban']}
+                            icon={faIcon('fas', 'ban')}
                             onClick={() => void startBulkAction('cancel', cancellableDownloads)}
                             disabled={bulkOperationActive && !cancelAllOperation && bulkActionStarting !== 'cancel'}
                             primary={false}
@@ -497,7 +494,7 @@ export default function DownloadsPage() {
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_delete_unavailable']}
                             label="Delete unavailable"
-                            icon={['fas', 'trash']}
+                            icon={faIcon('fas', 'trash')}
                             onClick={() => setBulkDeleteConfirmOpen(true)}
                             disabled={bulkOperationActive && !deleteUnavailableOperation && bulkActionStarting !== 'delete-unavailable'}
                             primary={false}
@@ -521,7 +518,7 @@ export default function DownloadsPage() {
                     loading={loadingDownloads}
                     loadingMessage={
                         <span className="downloads-table-loading" role="status" aria-label="Loading downloads">
-                            <FontAwesomeIcon icon={['fas', 'spinner']} spin aria-hidden="true"/>
+                            <FontAwesomeIcon icon={faIcon('fas', 'spinner')} spin aria-hidden="true"/>
                         </span>
                     }
                     error={error}
@@ -553,7 +550,7 @@ export default function DownloadsPage() {
                         const actions: DataTableAction<MediaDownloadViewRead>[] = [
                             {
                                 onClick: (r) => setLogRow(r),
-                                icon: ['fas', 'file-lines'],
+                                icon: faIcon('fas', 'file-lines'),
                                 text: 'View log',
                                 classes: 'btn',
                             },
@@ -561,21 +558,21 @@ export default function DownloadsPage() {
                         if (status === 'not_downloaded') {
                             actions.push({
                                 onClick: () => void retry(row),
-                                icon: ['fas', 'download'],
+                                icon: faIcon('fas', 'download'),
                                 text: 'Download',
                                 classes: 'btn',
                             })
                         } else if (status === 'pending') {
                             actions.push({
                                 onClick: () => void prioritize(row),
-                                icon: ['fas', 'arrow-up'],
+                                icon: faIcon('fas', 'arrow-up'),
                                 text: 'Prioritize',
                                 classes: 'btn',
                             })
                         } else if (isRetryableDownload(row) || isRedownloadableDownload(row)) {
                             actions.push({
                                 onClick: () => void retry(row),
-                                icon: ['fas', 'rotate-right'],
+                                icon: faIcon('fas', 'rotate-right'),
                                 text: isRedownloadableDownload(row) ? 'Re-download' : 'Retry',
                                 classes: 'btn',
                             })
@@ -583,7 +580,7 @@ export default function DownloadsPage() {
                         if (isCancellableDownload(row)) {
                             actions.push({
                                 onClick: () => void cancel(row),
-                                icon: ['fas', 'ban'],
+                                icon: faIcon('fas', 'ban'),
                                 text: 'Cancel',
                                 classes: 'btn',
                             })
@@ -591,7 +588,7 @@ export default function DownloadsPage() {
                         if (isDeletableDownload(row)) {
                             actions.push({
                                 onClick: () => setDeleteRow(row),
-                                icon: ['fas', 'trash'],
+                                icon: faIcon('fas', 'trash'),
                                 text: 'Delete',
                                 classes: 'btn btn-danger',
                             })
@@ -602,7 +599,7 @@ export default function DownloadsPage() {
                 <div ref={loadMoreRef} className="infinite-scroll-sentinel" aria-hidden="true"/>
                 {visibleDownloads.length < filteredDownloads.length && (
                     <div className="downloads-table-loading" role="status">
-                        <FontAwesomeIcon className="wl-progress-icon" icon={['fas', 'spinner']}/>
+                        <FontAwesomeIcon className="wl-progress-icon" icon={faIcon('fas', 'spinner')}/>
                         Loading more downloads...
                     </div>
                 )}
@@ -612,7 +609,7 @@ export default function DownloadsPage() {
                 open={bulkDeleteConfirmOpen}
                 title="Delete download records"
                 onDismiss={() => setBulkDeleteConfirmOpen(false)}
-                icon={['fas', 'trash']}
+                icon={faIcon('fas', 'trash')}
                 iconTone="danger"
                 confirmButton={{
                     label: 'Delete',
@@ -635,14 +632,14 @@ export default function DownloadsPage() {
                 onDismiss={() => {
                     if (!deleteBusy) setDeleteRow(null)
                 }}
-                icon={['fas', 'trash']}
+                icon={faIcon('fas', 'trash')}
                 iconTone="danger"
                 confirmButton={{
                     label: deleteBusy ? 'Deleting…' : 'Delete',
                     onClick: deleteUnavailable,
                     className: 'btn btn-danger',
                     disabled: deleteBusy,
-                    icon: deleteBusy ? ['fas', 'spinner'] : undefined,
+                    icon: deleteBusy ? faIcon('fas', 'spinner') : undefined,
                     iconSpin: deleteBusy,
                 }}
                 cancelButton={{disabled: deleteBusy}}

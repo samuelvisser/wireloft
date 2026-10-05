@@ -9,6 +9,7 @@ import StreamProfileForm from '../../components/StreamProfile/StreamProfileForm'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {RssStreamProfileUpdateIn, RssStreamProfileUpdateSchema} from '../../types/schemas/rss_stream_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
+import {faIcon} from '../../icons/faIcon'
 
 
 type RouteParams = { type?: 'rss'; id?: string }
@@ -172,12 +173,12 @@ export default function EditStreamProfilePage() {
                 open={regenerateConfirmOpen}
                 title="Regenerate RSS feed URL"
                 onDismiss={() => setRegenerateConfirmOpen(false)}
-                icon={['fas', 'rotate']}
+                icon={faIcon('fas', 'rotate')}
                 iconTone="danger"
                 confirmButton={{
                     label: 'Regenerate URL',
                     onClick: regenerateToken,
-                    icon: ['fas', 'rotate'],
+                    icon: faIcon('fas', 'rotate'),
                     className: 'btn btn-danger',
                 }}
             >
