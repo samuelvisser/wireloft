@@ -490,10 +490,7 @@ def _refresh_operation_tree(
         operation_ids: Iterable[str],
 ) -> dict[str, TaskOperation]:
     """Refresh operations and every transitive parent dependency exactly once."""
-    # Production sessions disable autoflush. The loaders below deliberately use
-    # populate_existing=True, so pending operation/context changes must be
-    # persisted first or the refresh can overwrite them with the previous DB
-    # values (for example, erasing a newly attached admission wait).
+    # Flush here before populate_existing=True would reset it
     session.flush()
 
     queue = list(dict.fromkeys(str(value) for value in operation_ids if value))
