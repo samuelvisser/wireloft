@@ -121,6 +121,9 @@ function invalidateShowStructure(
   invalidations: InvalidationCollector,
 ) {
   invalidateShowEpisodeData(queryClient, operation, invalidations)
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['recentlyIndexedEpisodes']}),
+  )
   const showSlug = contextString(operation, 'show_slug')
   if (!showSlug) return
 
@@ -290,6 +293,7 @@ function invalidateEpisodeCronJob(
     queryClient.invalidateQueries({queryKey: ['shows']}),
     queryClient.invalidateQueries({queryKey: ['showsView']}),
     queryClient.invalidateQueries({queryKey: ['episodes']}),
+    queryClient.invalidateQueries({queryKey: ['recentlyIndexedEpisodes']}),
   )
 }
 

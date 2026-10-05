@@ -131,3 +131,77 @@ def test_episode_view_page_is_bounded_and_season_filtered():
         assert second_page.has_more is False
 
     engine.dispose()
+
+
+
+def test_recently_indexed_episode_views_use_index_time_and_limit():
+    import backend.db.models  # noqa: F401
+
+    from backend.api.endpoints.episodes.service import get_recently_indexed_episodes
+    from backend.db import Base
+    from backend.db.models import Season, Show
+    from backend.types.show_types import EpisodeIdentifier, ShowType
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        show = Show(
+            uuid="show-recent-indexing",
+            slug="recent-indexing-show",
+            title="Recent Indexing Show",
+            description=None,
+            sharing_url="https://example.test/show",
+            membership_level="FREE",
+            type=ShowType.SERIES.value,
+            episode_identifier=EpisodeIdentifier.SEASONAL.value,
+            author_name="Host",
+            author_slug="host",
+        )
+        session.add(show)
+        session.flush()
+
+        season = Season(show_id=show.id, index=1, slug="season-1", name="Season 1")
+        session.add(season)
+        session.flush()
+
+        oldest = _episode(
+            show=show,
+            season=season,
+            index=1,
+            slug="indexed-oldest",
+            published=datetime(2026, 4, 3),
+        )
+        newest = _episode(
+            show=show,
+            season=season,
+            index=2,
+            slug="indexed-newest",
+            published=datetime(2026, 4, 1),
+        )
+        middle = _episode(
+            show=show,
+            season=season,
+            index=3,
+            slug="indexed-middle",
+            published=datetime(2026, 4, 2),
+        )
+        oldest.created_at = datetime(2026, 4, 1, 10, 0)
+        newest.created_at = datetime(2026, 4, 3, 10, 0)
+        middle.created_at = datetime(2026, 4, 2, 10, 0)
+        session.add_all([oldest, newest, middle])
+        session.commit()
+
+        recent = get_recently_indexed_episodes(session, limit=2)
+
+        assert [item.slug for item in recent] == ["indexed-newest", "indexed-middle"]
+        assert [item.show_title for item in recent] == [
+            "Recent Indexing Show",
+            "Recent Indexing Show",
+        ]
+        assert [item.show_slug for item in recent] == [
+            "recent-indexing-show",
+            "recent-indexing-show",
+        ]
+
+    engine.dispose()

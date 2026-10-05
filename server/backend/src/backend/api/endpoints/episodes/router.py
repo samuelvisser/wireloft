@@ -75,6 +75,15 @@ def episode_views_by_show_page(
         )
 
 
+@router.get("/as-view/recently-indexed", response_model=list[EpisodeIndexedActivityAPIRead])
+def recently_indexed_episode_views(
+        limit: int = Query(default=7, ge=1, le=50),
+):
+    """Return the most recently indexed episodes for activity surfaces."""
+    with db_session() as s:
+        return get_recently_indexed_episodes(s, limit=limit)
+
+
 @router.post("", response_model=EpisodeAPIRead, status_code=status.HTTP_201_CREATED)
 def episode_create(body: EpisodeAPICreate):
     """

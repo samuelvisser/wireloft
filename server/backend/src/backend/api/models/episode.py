@@ -134,3 +134,14 @@ class EpisodeAPIReadViewPage(ResponseBase):
     total: int
     show_total: int
     has_more: bool
+
+
+class EpisodeIndexedActivityAPIRead(ResponseBase):
+    """Compact episode record used by the Home page activity feed."""
+
+    id: int
+    title: str
+    slug: str
+    show_title: str
+    show_slug: str
+    indexed_at: datetime

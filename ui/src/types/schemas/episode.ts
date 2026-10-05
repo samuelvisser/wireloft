@@ -87,3 +87,14 @@ export const EpisodeReadViewPageSchema = z.object({
     hasMore: z.boolean(),
 })
 export type EpisodeReadViewPage = z.infer<typeof EpisodeReadViewPageSchema>
+
+
+export const EpisodeIndexedActivityReadSchema = z.object({
+    id: z.int(),
+    title: z.string(),
+    slug: z.string(),
+    showTitle: z.string(),
+    showSlug: z.string(),
+    indexedAt: ApiDateTimeSchema,
+})
+export type EpisodeIndexedActivityRead = z.infer<typeof EpisodeIndexedActivityReadSchema>

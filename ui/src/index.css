@@ -1952,6 +1952,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .operation-empty { min-height: 64px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); border: 1px dashed rgba(100,116,139,.3); border-radius: 11px; }
 .recent-activity { margin-top: 28px; }
 .recent-download > svg { color: #22a95e; }
+.recent-indexed-episode > svg { color: #3b82f6; }
 .recent-download time { color: var(--muted); font-size: 11px; }
 
 @media (prefers-color-scheme: dark) {
@@ -1974,6 +1975,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   .compact-switch { align-self: flex-start; }
   .catalog-show-grid { grid-template-columns: 1fr; }
   .movie-detail-layout, .operations-grid { grid-template-columns: 1fr; }
+  .operations-grid > .mobile-empty-section { display: none; }
   .movie-extra-grid { grid-template-columns: 1fr; }
   .movie-hero { min-height: 330px; padding: 24px 16px; }
   .operation-stats { grid-template-columns: repeat(2, minmax(0,1fr)); }

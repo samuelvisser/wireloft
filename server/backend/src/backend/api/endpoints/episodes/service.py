@@ -130,6 +130,33 @@ def get_episode_views_by_show_page(
     )
 
 
+def get_recently_indexed_episodes(
+        s: Session,
+        *,
+        limit: int,
+) -> list[EpisodeIndexedActivityAPIRead]:
+    """Return the newest episode records by the time WireLoft indexed them."""
+    rows = s.execute(
+        select(
+            Episode.id.label("id"),
+            Episode.title.label("title"),
+            Episode.slug.label("slug"),
+            Episode.created_at.label("indexed_at"),
+            Show.title.label("show_title"),
+            Show.slug.label("show_slug"),
+        )
+        .select_from(Episode)
+        .join(Show, Episode.show_id == Show.id)
+        .order_by(Episode.created_at.desc(), Episode.id.desc())
+        .limit(limit)
+    ).mappings().all()
+
+    return [
+        EpisodeIndexedActivityAPIRead.model_validate(row)
+        for row in rows
+    ]
+
+
 def get_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
     episode = (
         s.query(Episode)

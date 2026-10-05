@@ -23,7 +23,12 @@ import {DownloadProfileRead, DownloadProfileReadSchema} from "../types/schemas/d
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {StreamProfileRead, StreamProfileReadSchema, StreamProfileReadView, StreamProfileReadViewSchema} from "../types/schemas/stream_profile_base";
 import {ShowRead, ShowReadView, ShowReadViewSchema} from "../types/schemas/show";
-import {EpisodeRead, EpisodeReadSchema} from "../types/schemas/episode";
+import {
+    EpisodeIndexedActivityRead,
+    EpisodeIndexedActivityReadSchema,
+    EpisodeRead,
+    EpisodeReadSchema,
+} from "../types/schemas/episode";
 import {RssStreamProfileRead, RssStreamProfileReadSchema} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
@@ -345,6 +350,24 @@ export function useEpisode(episodeId?: string) {
             signal,
         ),
         placeholderData: keepPreviousData,
+    })
+}
+
+export function useRecentlyIndexedEpisodes(limit = 7) {
+    return useQuery<
+        EpisodeIndexedActivityRead[],
+        Error,
+        EpisodeIndexedActivityRead[],
+        readonly ['recentlyIndexedEpisodes', number]
+    >({
+        queryKey: ['recentlyIndexedEpisodes', limit] as const,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/episodes/as-view/recently-indexed?limit=${limit}`,
+            EpisodeIndexedActivityReadSchema.array(),
+            signal,
+        ),
+        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
     })
 }
 

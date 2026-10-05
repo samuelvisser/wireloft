@@ -1,16 +1,29 @@
+import {useMemo} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useNavigate} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
 
 import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
-import {useLocalMediaProfiles, useMediaDownloadsView, useMovies, useShows} from '../lib/queries'
+import {
+    useLocalMediaProfiles,
+    useMediaDownloadsView,
+    useMovies,
+    useRecentlyIndexedEpisodes,
+    useShows,
+} from '../lib/queries'
 import {downloadsUrlForStatusFilters} from '../lib/downloadStatusFilters'
 import {ACTIVE_DOWNLOAD_STATUSES} from '../types/media_download'
+import {EpisodeIndexedActivityRead} from '../types/schemas/episode'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
 
 const PROBLEMS = new Set(['error', 'missing', 'corrupted'])
 const COMPLETE = new Set(['downloaded', 'redownloaded'])
+const RECENT_ACTIVITY_LIMIT = 7
+
+type RecentActivityItem =
+    | {kind: 'download'; occurredAt: Date; download: MediaDownloadViewRead}
+    | {kind: 'episode-indexed'; occurredAt: Date; episode: EpisodeIndexedActivityRead}
 
 function mediaTitle(download: MediaDownloadViewRead) {
     return download.mediaTitle || download.movieTitle || download.episodeTitle || 'Unknown media'
@@ -29,16 +42,43 @@ export default function HomePage() {
     const {data: movies} = useMovies()
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads, isLoading, error} = useMediaDownloadsView()
+    const {data: indexedEpisodes} = useRecentlyIndexedEpisodes(RECENT_ACTIVITY_LIMIT)
     const active = downloads?.filter((download) => ACTIVE_DOWNLOAD_STATUSES.has(String(download.downloadStatus))) || []
     const problems = downloads?.filter((download) => PROBLEMS.has(String(download.downloadStatus))) || []
     const metadataProblems = movies?.filter((movie) => movie.releaseDateLookupStatus === 'error') || []
-    const complete = downloads?.filter((download) => COMPLETE.has(String(download.downloadStatus))).slice(0, 4) || []
     const hasAttention = problems.length > 0 || metadataProblems.length > 0 || profiles?.length === 0
+    const activeSectionIsEmpty = !isLoading && downloads !== undefined && active.length === 0
+    const attentionSectionIsEmpty = downloads !== undefined
+        && movies !== undefined
+        && profiles !== undefined
+        && !hasAttention
     const attentionSummary = [
         problems.length ? `${problems.length} download problem${problems.length === 1 ? '' : 's'}` : null,
         metadataProblems.length ? `${metadataProblems.length} movie metadata problem${metadataProblems.length === 1 ? '' : 's'}` : null,
         profiles?.length === 0 ? 'No Local Media Profiles' : null,
     ].filter(Boolean).join(' • ')
+    const recentActivity = useMemo(() => {
+        const activity: RecentActivityItem[] = []
+
+        for (const download of downloads ?? []) {
+            if (!COMPLETE.has(String(download.downloadStatus))) continue
+            const occurredAt = download.finishedAt ?? download.downloadedAt
+            if (!occurredAt) continue
+            activity.push({kind: 'download', occurredAt, download})
+        }
+
+        for (const episode of indexedEpisodes ?? []) {
+            activity.push({
+                kind: 'episode-indexed',
+                occurredAt: episode.indexedAt,
+                episode,
+            })
+        }
+
+        return activity
+            .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
+            .slice(0, RECENT_ACTIVITY_LIMIT)
+    }, [downloads, indexedEpisodes])
 
     const openDownload = (download: MediaDownloadViewRead) => {
         if (download.movieSlug) navigate(`/movie/${download.movieSlug}`)
@@ -76,7 +116,10 @@ export default function HomePage() {
             {error && <div className="form-error-card" role="alert">Could not load download status: {error.message}</div>}
 
             <div className="operations-grid">
-                <section className="operation-section" aria-labelledby="active-downloads-title">
+                <section
+                    className={`operation-section${activeSectionIsEmpty ? ' mobile-empty-section' : ''}`}
+                    aria-labelledby="active-downloads-title"
+                >
                     <div className="operation-section-header"><h2 id="active-downloads-title">Downloading now</h2><button type="button" onClick={() => navigate('/downloads')}>All downloads</button></div>
                     {isLoading && !downloads ? <p>Loading downloads…</p> : active.length ? active.slice(0, 3).map((download) => (
                         <button className="operation-download" type="button" key={download.id} onClick={() => openDownload(download)}>
@@ -86,7 +129,10 @@ export default function HomePage() {
                     )) : <div className="operation-empty"><FontAwesomeIcon icon={faIcon('fas', 'check')}/><span>No active downloads</span></div>}
                 </section>
 
-                <section className="operation-section" aria-labelledby="attention-title">
+                <section
+                    className={`operation-section${attentionSectionIsEmpty ? ' mobile-empty-section' : ''}`}
+                    aria-labelledby="attention-title"
+                >
                     <div className="operation-section-header"><h2 id="attention-title">Needs attention</h2></div>
                     {profiles?.length === 0 && (
                         <button className="operation-alert" type="button" onClick={() => navigate('/add-local-media-profile')}>
@@ -108,12 +154,29 @@ export default function HomePage() {
             </div>
 
             <section className="operation-section recent-activity" aria-labelledby="recent-title">
-                <div className="operation-section-header"><h2 id="recent-title">Recently completed</h2><button type="button" onClick={() => navigate('/downloads')}>View history</button></div>
-                {complete.length ? complete.map((download) => (
-                    <button className="recent-download" type="button" key={download.id} onClick={() => openDownload(download)}>
-                        <FontAwesomeIcon icon={faIcon('fas', 'circle-check')}/><span><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small></span><time>{download.finishedAt?.toLocaleString() || ''}</time>
-                    </button>
-                )) : <div className="operation-empty"><span>No completed downloads yet</span></div>}
+                <div className="operation-section-header"><h2 id="recent-title">Recent activity</h2><button type="button" onClick={() => navigate('/downloads')}>View downloads</button></div>
+                {recentActivity.length ? recentActivity.map((activity) => {
+                    if (activity.kind === 'download') {
+                        const {download} = activity
+                        return (
+                            <button className="recent-download" type="button" key={`download-${download.id}`} onClick={() => openDownload(download)}>
+                                <FontAwesomeIcon icon={faIcon('fas', 'circle-check')}/><span><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small></span><time>{activity.occurredAt.toLocaleString()}</time>
+                            </button>
+                        )
+                    }
+
+                    const {episode} = activity
+                    return (
+                        <button
+                            className="recent-download recent-indexed-episode"
+                            type="button"
+                            key={`episode-indexed-${episode.id}`}
+                            onClick={() => navigate(`/show/${episode.showSlug}/episode/${episode.slug}`)}
+                        >
+                            <FontAwesomeIcon icon={faIcon('fas', 'circle-plus')}/><span><strong>{episode.title}</strong><small>{episode.showTitle} • Indexed</small></span><time>{activity.occurredAt.toLocaleString()}</time>
+                        </button>
+                    )
+                }) : <div className="operation-empty"><span>No recent activity yet</span></div>}
             </section>
         </section>
     )
