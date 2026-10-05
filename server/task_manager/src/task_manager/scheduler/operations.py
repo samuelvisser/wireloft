@@ -490,6 +490,9 @@ def _refresh_operation_tree(
         operation_ids: Iterable[str],
 ) -> dict[str, TaskOperation]:
     """Refresh operations and every transitive parent dependency exactly once."""
+    # Flush here before populate_existing=True would reset it
+    session.flush()
+
     queue = list(dict.fromkeys(str(value) for value in operation_ids if value))
     visited: set[str] = set()
     refreshed: dict[str, TaskOperation] = {}

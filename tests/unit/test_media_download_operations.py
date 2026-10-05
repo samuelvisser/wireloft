@@ -63,7 +63,7 @@ def _make_download(session: Session, *, slug: str = "episode-1"):
     return download
 
 
-def _session():
+def _session(*, autoflush: bool = True):
     import backend.db.models  # noqa: F401
     import task_manager.scheduler.db  # noqa: F401
     from backend.db import Base
@@ -71,7 +71,7 @@ def _session():
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
-    session = Session(engine)
+    session = Session(engine, autoflush=autoflush)
     session.add(TaskDefinition(
         key="download_episode",
         title="Download episode media",
@@ -148,12 +148,13 @@ def test_media_download_operation_is_the_live_execution_owner():
 
 def test_system_download_operation_waits_without_reserving_capacity(monkeypatch):
     from config import get_settings
+    from backend.db.models.media_download import MediaDownloadHistory
     from task_manager.scheduler.db import TaskRun
     from task_manager.scheduler.operations import operation_admission_wait_state
     from task_manager.scheduler.types import OperationSource, OperationStatus
     from task_manager.tasks import media_download_operations
 
-    session, engine = _session()
+    session, engine = _session(autoflush=False)
     try:
         download = _make_download(session, slug="publication-wait")
         ready_at = datetime.now(timezone.utc) + timedelta(minutes=10)
@@ -178,6 +179,11 @@ def test_system_download_operation_waits_without_reserving_capacity(monkeypatch)
         assert session.query(TaskRun).count() == 0
         assert dispatched == 0
         assert scheduled == [(operation.id, ready_at)]
+        history = session.query(MediaDownloadHistory).filter_by(
+            media_download_id=download.id,
+            action="queued",
+        ).one()
+        assert history.event_metadata["publication_delay_not_before"] == ready_at.isoformat()
         assert media_download_operations.remaining_media_download_budget(session) == (
             get_settings().download_settings.max_concurrent_downloads
         )
