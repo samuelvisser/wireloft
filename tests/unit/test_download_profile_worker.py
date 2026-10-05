@@ -181,7 +181,7 @@ def _completed_download(db_session, episode, lmp, profile, *, publish_status="pu
 # ---------- profile scope ----------
 
 def test_download_profile_worker_uses_dedicated_scoped_event():
-    from task_manager.tasks.helpers.download_profiles import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
+    from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
     from task_manager.tasks.workers.download_profile_worker import download_profile_worker
 
     event_names = {

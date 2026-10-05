@@ -16,7 +16,6 @@ from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from dailywire_authorisation import DeviceAuthClient
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.results import TaskResult
-from ...helpers.download_profiles import request_download_profile_run
 from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.episodes.metadata import METADATA_REFRESH_REQUESTED_EVENT, update_episode_from_dailywire
@@ -144,15 +143,6 @@ def _recover_episode(
         new_status=resolved.status,
         was_created=False,
     )
-    if resolved.status in {
-        EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
-        EpisodePublishStatus.PUBLISHED_FINAL,
-    }:
-        request_download_profile_run(
-            s,
-            resource_type="episode",
-            resource_id=episode.id,
-        )
     if resolved.status.value in PENDING_EPISODE_STATUSES:
         queue_event(
             s,

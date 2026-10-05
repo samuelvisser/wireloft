@@ -6,7 +6,7 @@ from config import get_settings
 from controller.db_utils import db_session
 from backend.utils.custom_index import CustomIndexNotReadyError
 from task_manager.tasks.helpers.custom_index_readiness import request_missing_index_repair
-from task_manager.tasks.helpers.download_profiles import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
+from .event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 from task_manager.scheduler.registry import on_cron, on_event, task
 from task_manager.tasks.media_download_operations import on_media_download_task_terminal
 from .service import run_download_profile_worker
@@ -48,9 +48,8 @@ async def download_profile_worker(
     ``resource_id`` is polymorphic: an episode id for an episode-scoped request,
     a show id (checks the whole show's profiles), a specific download_profile id,
     or 0/None for a global sweep across every enabled profile (cron or app.startup).
-    ``resource_type`` defines which one it is. Domain call sites request scoped
-    runs through the Download Profile-only event rather than subscribing this worker
-    directly to broader episode/show/profile lifecycle events.
+    ``resource_type`` defines which one it is. The Download Profile event adapter
+    translates normal committed domain events into the scoped worker-only request.
 
     Profile enablement only controls admission of new automatic downloads. Once
     a ``media.download`` operation is queued, the terminal callback gives the

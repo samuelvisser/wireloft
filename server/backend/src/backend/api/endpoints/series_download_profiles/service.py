@@ -14,7 +14,6 @@ from backend.types.season_types import SeasonType
 from backend.utils.season_ordering import season_type_from_name
 from backend.utils.local_media_profiles import require_local_media_profile_type
 from task_manager.events.transactional import queue_event
-from task_manager.tasks.helpers.download_profiles import request_download_profile_run
 
 
 def get_series_download_profiles_list(s: Session) -> list[SeriesDownloadProfileAPIRead]:
@@ -133,11 +132,6 @@ def create_download_profile_series(s: Session, body: SeriesDownloadProfileAPICre
         "show_id": item.show_id,
         "profile_type": item.type,
     })
-    request_download_profile_run(
-        s,
-        resource_type="download_profile",
-        resource_id=item.id,
-    )
 
     return SeriesDownloadProfileAPIRead.model_validate(item)
 
@@ -174,11 +168,6 @@ def update_download_profile_series(s: Session, download_profile_series_id: int, 
         "show_id": item.show_id,
         "profile_type": item.type,
     })
-    request_download_profile_run(
-        s,
-        resource_type="download_profile",
-        resource_id=item.id,
-    )
 
     return SeriesDownloadProfileAPIRead.model_validate(item)
 

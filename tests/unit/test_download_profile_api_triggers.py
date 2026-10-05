@@ -80,7 +80,7 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
     from backend.types.download_profile_types import EpIdType
     from backend.types.show_types import ShowType
     from task_manager.events.registry import WireloftEventLinker, wait_for_events
-    from task_manager.tasks.helpers.download_profiles import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
+    from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
     show = _make_show(db_session, slug="podcast", show_type=ShowType.PODCAST.value)
     media_profile = _make_local_media_profile(db_session, slug="podcast-audio")
@@ -164,7 +164,7 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
     from backend.types.download_profile_types import EpIdType
     from backend.types.show_types import ShowType
     from task_manager.events.registry import WireloftEventLinker, wait_for_events
-    from task_manager.tasks.helpers.download_profiles import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
+    from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
     show = _make_show(db_session, slug="series", show_type=ShowType.SERIES.value)
     media_profile = _make_local_media_profile(db_session, slug="series-video")
@@ -238,7 +238,7 @@ def test_download_profile_events_are_discarded_on_rollback(db_session):
     from backend.types.download_profile_types import EpIdType
     from backend.types.show_types import ShowType
     from task_manager.events.registry import wait_for_events
-    from task_manager.tasks.helpers.download_profiles import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
+    from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
     show = _make_show(db_session, slug="rolled-back", show_type=ShowType.PODCAST.value)
     media_profile = _make_local_media_profile(db_session, slug="rolled-back-audio")
@@ -267,7 +267,7 @@ def test_download_profile_events_are_discarded_on_rollback(db_session):
 
 
 def test_download_profile_worker_subscribes_only_to_dedicated_run_event():
-    from task_manager.tasks.helpers.download_profiles import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
+    from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
     from task_manager.tasks.workers.download_profile_worker import download_profile_worker
 
     event_names = {
@@ -304,7 +304,7 @@ def test_download_profile_run_event_dispatches_exact_scope_to_worker(
     from controller.app import setup_triggers_from_registry
     from task_manager.events.emitters import emit_event
     from task_manager.events.registry import wait_for_events
-    from task_manager.tasks.helpers.download_profiles import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
+    from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
     download_profile_task = registry_module.get_task("download_profile_worker")
     monkeypatch.setattr(
@@ -345,37 +345,3 @@ def test_download_profile_run_event_dispatches_exact_scope_to_worker(
         resource_type=resource_type,
         resource_id=resource_id,
     )
-
-
-def test_show_indexed_queues_one_show_scoped_download_profile_run(monkeypatch):
-    from task_manager.tasks.workers.fetch_new_episodes import service
-
-    queued_events = []
-    requested_runs = []
-    monkeypatch.setattr(
-        service,
-        "queue_event",
-        lambda _session, event_name, data: queued_events.append((event_name, data)),
-    )
-    monkeypatch.setattr(
-        service,
-        "request_download_profile_run",
-        lambda _session, **kwargs: requested_runs.append(kwargs),
-    )
-
-    show = SimpleNamespace(id=12, slug="test-show")
-    service._queue_show_indexed(object(), show=show, indexed_count=3)
-
-    assert queued_events == [(
-        service.SHOW_INDEXED_EVENT,
-        {
-            "resource_id": 12,
-            "id": 12,
-            "slug": "test-show",
-            "indexed_count": 3,
-        },
-    )]
-    assert requested_runs == [{
-        "resource_type": "show",
-        "resource_id": 12,
-    }]
