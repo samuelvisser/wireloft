@@ -5,6 +5,7 @@ import {ShowRead} from '../types/schemas/show'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import {EpisodeIdentifierReg, ShowTypeReg} from "../types/show";
+import {faIcon} from '../icons/faIcon'
 
 export default function ShowsPage() {
     const navigate = useNavigate()
@@ -68,13 +69,13 @@ export default function ShowsPage() {
                     actions={(s) => [
                         {
                             onClick: () => navigate(`/edit-show/${s.slug}`),
-                            icon: ['fas', 'pen-to-square'],
+                            icon: faIcon('fas', 'pen-to-square'),
                             text: 'Edit',
                             classes: 'btn',
                         },
                         {
                             onClick: () => confirmRef.current?.open(s),
-                            icon: ['fas', 'trash'],
+                            icon: faIcon('fas', 'trash'),
                             text: 'Delete',
                             classes: 'btn btn-danger',
                         },

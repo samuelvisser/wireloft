@@ -1,6 +1,6 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faGithub } from '@fortawesome/free-brands-svg-icons'
 import {getCurrentAppVersion} from "../../utils/helpers";
+import {faIcon} from '../../icons/faIcon'
 
 interface FooterProps {
   wrapperClass: string
@@ -33,7 +33,7 @@ export default function Footer({ wrapperClass }: FooterProps) {
           className="footer-link"
         >
           <span className="icon" aria-hidden>
-            <FontAwesomeIcon icon={faGithub} />
+            <FontAwesomeIcon icon={faIcon('fab', 'github')} />
           </span>
           <span>Github</span>
         </a>
@@ -45,7 +45,7 @@ export default function Footer({ wrapperClass }: FooterProps) {
             style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
           >
             <span className="icon" aria-hidden>
-              <FontAwesomeIcon icon={["fas", "right-from-bracket"]} />
+              <FontAwesomeIcon icon={faIcon('fas', 'right-from-bracket')} />
             </span>
             <span>Logout</span>
           </button>

@@ -38,9 +38,9 @@ This is useful when you want to begin archiving a show from a particular date wi
 
 ### Delete older episodes
 
-When a rolling Date or Number of episodes limit is active, **Delete older episodes** can also remove downloaded files that fall outside that window.
+When a rolling Date or Number of episodes limit is active, **Delete older episodes** can also remove downloaded files that fall outside that window. When retention removes an episode, its download record and download history are removed as well, so it no longer appears on the Downloads page.
 
-Leave it disabled if you only want the limit to control which new episodes are selected while keeping older files already on disk.
+Leave it disabled if you only want the limit to control which new episodes are selected while keeping older files already on disk. Planned downloads that never produced a file are still discarded once they fall outside the active Number of episodes window.
 
 ### Countdown and final versions
 

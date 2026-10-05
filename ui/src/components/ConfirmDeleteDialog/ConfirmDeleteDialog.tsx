@@ -1,6 +1,7 @@
 import {forwardRef, useCallback, useImperativeHandle, useState} from 'react'
 import {QueryKey, useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
+import {faIcon} from '../../icons/faIcon'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 
@@ -91,7 +92,7 @@ const ConfirmDeleteDialog = forwardRef<ConfirmDeleteDialogRef, ConfirmDeleteDial
             open
             title={title}
             onDismiss={close}
-            icon={['fas', 'trash']}
+            icon={faIcon('fas', 'trash')}
             iconTone="danger"
             confirmButton={{
                 label: 'Delete',

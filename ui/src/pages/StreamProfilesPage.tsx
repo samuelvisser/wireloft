@@ -10,6 +10,7 @@ import {PreferredFormatReg} from "../types/local_media_profile";
 import PageSubtitle from "../components/common/PageSubtitle";
 import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
 import {RssStreamProfileUpdateSchema} from '../types/schemas/rss_stream_profile'
+import {faIcon} from '../icons/faIcon'
 
 export default function StreamProfilesPage() {
     const navigate = useNavigate()
@@ -130,13 +131,13 @@ export default function StreamProfilesPage() {
                     actions={(p) => [
                         {
                             onClick: () => navigate(`/edit-stream-profile/${p.type}/${p.id}`, {state: p}),
-                            icon: ['fas', 'pen-to-square'],
+                            icon: faIcon('fas', 'pen-to-square'),
                             text: 'Edit',
                             classes: 'btn',
                         },
                         {
                             onClick: () => confirmRef.current?.open(p),
-                            icon: ['fas', 'trash'],
+                            icon: faIcon('fas', 'trash'),
                             text: 'Delete',
                             classes: 'btn btn-danger',
                         },

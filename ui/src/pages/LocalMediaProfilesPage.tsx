@@ -9,6 +9,7 @@ import {
     PreferredFormatReg,
     ShowLocalMediaProfileScopeReg,
 } from "../types/local_media_profile";
+import {faIcon} from '../icons/faIcon'
 import DataTable, { Column } from '../components/DataTable/DataTable';
 import ConfirmDeleteDialog, { ConfirmDeleteDialogRef } from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import PageSubtitle from "../components/common/PageSubtitle";
@@ -28,8 +29,8 @@ function getAvailableForLabel(profile: LocalMediaProfileRead) {
 export default function LocalMediaProfilesPage() {
     const navigate = useNavigate()
     const onAdd = useCallback(() => navigate('/add-local-media-profile'), [navigate])
-    const editIcon: IconProp = ['fas', 'pen-to-square']
-    const deleteIcon: IconProp = ['fas', 'trash']
+    const editIcon: IconProp = faIcon('fas', 'pen-to-square')
+    const deleteIcon: IconProp = faIcon('fas', 'trash')
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 

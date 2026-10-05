@@ -4,6 +4,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {ReactNode} from 'react'
 import Select from 'react-select'
 import Switch from 'react-switch'
+import {faIcon} from '../../icons/faIcon'
 
 import ProgressButton from '../common/ProgressButton'
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
@@ -354,7 +355,7 @@ export default function CronEditor({
                             definition={runNow.definition}
                             resourceId={0}
                             label="Run now"
-                            icon={['fas', 'play']}
+                            icon={faIcon('fas', 'play')}
                             onClick={runNowOperation}
                             starting={startingRunNow}
                             primary={false}
@@ -373,7 +374,7 @@ export default function CronEditor({
                             title={`Open ${runNow.definition.label} log`}
                             aria-label={`Open ${runNow.definition.label} log`}
                         >
-                            <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+                            <FontAwesomeIcon icon={faIcon('fas', 'file-lines')}/>
                         </button>
                     ) : null}
                     <div className="cron-editor__enabled">

@@ -12,6 +12,7 @@ import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {ShowRead} from '../../types/schemas/show'
 import OnboardingMovieProfileStep from './OnboardingMovieProfileStep'
 import './Onboarding.css'
+import {faIcon} from '../../icons/faIcon'
 
 
 type OnboardingStep = 'welcome' | 'dailywire' | 'security' | 'browse' | 'show' | 'movie-profile' | 'movie'
@@ -141,7 +142,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                     <ol className="onboarding-progress" aria-label="Onboarding progress">
                         {STEP_LABELS.map((label, index) => (
                             <li key={label} className={index === progress ? 'is-active' : index < progress ? 'is-complete' : ''}>
-                                <span>{index < progress ? <FontAwesomeIcon icon={['fas', 'check']}/> : index + 1}</span>
+                                <span>{index < progress ? <FontAwesomeIcon icon={faIcon('fas', 'check')}/> : index + 1}</span>
                                 <small>{label}</small>
                             </li>
                         ))}
@@ -165,7 +166,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                     <p>Bring your Daily Wire library home.</p>
                     <button className="btn btn-primary onboarding-primary-action" type="button" onClick={() => setStep('dailywire')}>
                         Continue
-                        <FontAwesomeIcon icon={['fas', 'arrow-right']}/>
+                        <FontAwesomeIcon icon={faIcon('fas', 'arrow-right')}/>
                     </button>
                 </main>
             )}
@@ -210,8 +211,8 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                     <div className={`onboarding-security-card${adminPasswordConfigured ? ' is-configured' : ''}`}>
                         <div className="onboarding-security-icon" aria-hidden="true">
                             {adminPasswordConfigured
-                                ? <FontAwesomeIcon icon={['fas', 'shield-halved']}/>
-                                : <FontAwesomeIcon icon={['fas', 'triangle-exclamation']}/>}
+                                ? <FontAwesomeIcon icon={faIcon('fas', 'shield-halved')}/>
+                                : <FontAwesomeIcon icon={faIcon('fas', 'triangle-exclamation')}/>}
                         </div>
                         <div>
                             <strong>{adminPasswordConfigured ? 'Administrator authentication is configured' : 'Administrator authentication is not configured yet'}</strong>
@@ -299,7 +300,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         type="button"
                         onClick={() => setStep('movie-profile')}
                     >
-                        <FontAwesomeIcon icon={['fas', 'arrow-left']}/> Back to profile
+                        <FontAwesomeIcon icon={faIcon('fas', 'arrow-left')}/> Back to profile
                     </button>
                     <Routes>
                         <Route path="/movie/:slug" element={<MoviePage/>}/>

@@ -12,6 +12,7 @@ import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
 import {ShowTypeReg} from "../types/show";
 import {PodcastDownloadProfileUpdateSchema} from '../types/schemas/podcast_download_profile'
 import {SeriesDownloadProfileUpdateSchema} from '../types/schemas/series_download_profile'
+import {faIcon} from '../icons/faIcon'
 
 export default function DownloadProfilesPage() {
     const navigate = useNavigate()
@@ -129,13 +130,13 @@ export default function DownloadProfilesPage() {
                     actions={(p) => [
                         {
                             onClick: () => navigate(`/edit-download-profile/${p.type}/${p.id}`, {state: p}),
-                            icon: ['fas', 'pen-to-square'],
+                            icon: faIcon('fas', 'pen-to-square'),
                             text: 'Edit',
                             classes: 'btn',
                         },
                         {
                             onClick: () => confirmRef.current?.open(p),
-                            icon: ['fas', 'trash'],
+                            icon: faIcon('fas', 'trash'),
                             text: 'Delete',
                             classes: 'btn btn-danger',
                         },

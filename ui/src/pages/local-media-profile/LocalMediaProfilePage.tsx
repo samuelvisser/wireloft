@@ -3,6 +3,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useQueryClient} from '@tanstack/react-query'
 import {useNavigate, useParams} from 'react-router-dom'
 import toast from 'react-hot-toast'
+import {faIcon} from '../../icons/faIcon'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
@@ -119,13 +120,13 @@ export default function LocalMediaProfilePage() {
         return [
             ...(restartable ? [{
                 label: `Restart ${label}`,
-                icon: ['fas', 'rotate-right'] as const,
+                icon: faIcon('fas', 'rotate-right'),
                 disabled: controlsBusy,
                 onSelect: () => void controlTaskOperation(operationId, 'restart', label),
             }] : []),
             {
                 label: `Cancel ${label}`,
-                icon: ['fas', 'xmark'] as const,
+                icon: faIcon('fas', 'xmark'),
                 tone: 'danger' as const,
                 disabled: controlsBusy,
                 onSelect: () => void controlTaskOperation(operationId, 'cancel', label),
@@ -196,7 +197,7 @@ export default function LocalMediaProfilePage() {
                             className="btn"
                             onClick={() => navigate(`/edit-local-media-profile/${encodeURIComponent(profile.slug)}`)}
                         >
-                            <FontAwesomeIcon icon={['fas', 'pen-to-square'] as any} aria-hidden="true"/>
+                            <FontAwesomeIcon icon={faIcon('fas', 'pen-to-square')} aria-hidden="true"/>
                             <span>Edit</span>
                         </button>
                         <button
@@ -206,14 +207,14 @@ export default function LocalMediaProfilePage() {
                             title={actionBusy ? 'Wait for the active profile action to finish first' : undefined}
                             onClick={() => setDeleteProfileConfirm(true)}
                         >
-                            <FontAwesomeIcon icon={['fas', 'trash'] as any} aria-hidden="true"/>
+                            <FontAwesomeIcon icon={faIcon('fas', 'trash')} aria-hidden="true"/>
                             <span>Delete</span>
                         </button>
                         <ActionMenu
                             items={[
                                 {
                                     label: 'Rename all managed files',
-                                    icon: ['fas', 'file-pen'],
+                                    icon: faIcon('fas', 'file-pen'),
                                     disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation),
                                     disabledReason: renameOperation
                                         ? 'A file rename operation is running for this profile.'
@@ -228,7 +229,7 @@ export default function LocalMediaProfilePage() {
                                 },
                                 {
                                     label: 'Delete all downloads',
-                                    icon: ['fas', 'trash'],
+                                    icon: faIcon('fas', 'trash'),
                                     tone: 'danger',
                                     separatorBefore: true,
                                     disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
@@ -250,7 +251,7 @@ export default function LocalMediaProfilePage() {
                                 },
                                 {
                                     label: 'Delete and re-download all media',
-                                    icon: ['fas', 'arrows-rotate'],
+                                    icon: faIcon('fas', 'arrows-rotate'),
                                     tone: 'danger',
                                     disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
                                     disabledReason: redownloadOperation
@@ -325,7 +326,7 @@ export default function LocalMediaProfilePage() {
                 resourceLabel={profile.name}
                 title="Rename all managed files"
                 onDismiss={() => setRenameConfirm(false)}
-                icon={['fas', 'file-pen']}
+                icon={faIcon('fas', 'file-pen')}
                 confirmLabel="Rename files"
                 disabled={Boolean(deleteDownloadsOperation || redownloadOperation)}
             >
@@ -342,7 +343,7 @@ export default function LocalMediaProfilePage() {
                 resourceLabel={profile.name}
                 title="Delete all downloads"
                 onDismiss={() => setDeleteDownloadsConfirm(false)}
-                icon={['fas', 'trash']}
+                icon={faIcon('fas', 'trash')}
                 iconTone="danger"
                 confirmLabel="Delete downloads"
                 disabled={Boolean(renameOperation || redownloadOperation)}
@@ -366,7 +367,7 @@ export default function LocalMediaProfilePage() {
                 resourceLabel={profile.name}
                 title="Delete and re-download all media"
                 onDismiss={() => setRedownloadConfirm(false)}
-                icon={['fas', 'arrows-rotate']}
+                icon={faIcon('fas', 'arrows-rotate')}
                 iconTone="danger"
                 confirmLabel="Delete and re-download"
                 disabled={Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)}
@@ -383,7 +384,7 @@ export default function LocalMediaProfilePage() {
                 onDismiss={() => {
                     if (!deletingProfile) setDeleteProfileConfirm(false)
                 }}
-                icon={['fas', 'trash']}
+                icon={faIcon('fas', 'trash')}
                 iconTone="danger"
                 dismissOnOverlayClick={!deletingProfile}
                 cancelButton={{disabled: deletingProfile}}

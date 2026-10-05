@@ -2,6 +2,7 @@ import {useCallback, useEffect, useId, useLayoutEffect, useRef, useState} from '
 import {createPortal} from 'react-dom'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import './ProgressVisual.css'
+import {faIcon} from '../../icons/faIcon'
 
 type PopoverPosition = {
     top: number
@@ -100,7 +101,7 @@ export default function ProgressExplanation({detail, buttonClassName = 'icon-btn
                 setOpen(value => !value)
             }}
         >
-            <FontAwesomeIcon icon={['fas', 'circle-info']}/>
+            <FontAwesomeIcon icon={faIcon('fas', 'circle-info')}/>
         </button>
         {popover}
     </span>

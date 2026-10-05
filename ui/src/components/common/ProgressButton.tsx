@@ -1,6 +1,7 @@
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {ReactNode} from 'react'
+import {faIcon} from '../../icons/faIcon'
 
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
@@ -128,7 +129,7 @@ export default function ProgressButton({
                             title={retry.label || `Retry ${definition.label.toLocaleLowerCase()}`}
                             aria-label={retry.label || `Retry ${definition.label.toLocaleLowerCase()}`}
                         >
-                            <FontAwesomeIcon icon={['fas', 'rotate-right']}/>
+                            <FontAwesomeIcon icon={faIcon('fas', 'rotate-right')}/>
                         </button>
                     )}
                     {showCancel && (
@@ -140,7 +141,7 @@ export default function ProgressButton({
                             title={cancelLabel || `Cancel ${definition.label.toLocaleLowerCase()}`}
                             aria-label={cancelLabel || `Cancel ${definition.label.toLocaleLowerCase()}`}
                         >
-                            <FontAwesomeIcon icon={['fas', 'xmark']}/>
+                            <FontAwesomeIcon icon={faIcon('fas', 'xmark')}/>
                         </button>
                     )}
                 </span>

@@ -1,4 +1,5 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {faIcon} from '../../icons/faIcon'
 
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import ProgressBar from '../common/ProgressBar'
@@ -27,7 +28,7 @@ export default function ShowIndexingProgress({showId, className}: Props) {
                 <span>
                     {progress == null ? 'Indexing…' : `Indexing… ${progress}%`}
                 </span>
-                {progress == null && <FontAwesomeIcon icon={['fas', 'spinner']} spin aria-hidden="true"/>}
+                {progress == null && <FontAwesomeIcon icon={faIcon('fas', 'spinner')} spin aria-hidden="true"/>}
             </div>
             {progress != null && <ProgressBar value={progress} ariaLabel="Indexing progress"/>}
         </div>

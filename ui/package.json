@@ -7,9 +7,8 @@
     "dev": "vite",
     "dev:pro-icons": "vite --mode pro-icons",
     "build": "npm run build:free-icons",
-    "validate:free-icons": "node scripts/validate-free-icon-fallbacks.mjs",
-    "build:free-icons": "npm run validate:free-icons && tsc --noEmit && vite build --mode free-icons",
-    "build:pro-icons": "npm run validate:free-icons && tsc --noEmit && vite build --mode pro-icons",
+    "build:free-icons": "tsc --noEmit && vite build --mode free-icons",
+    "build:pro-icons": "tsc --noEmit && vite build --mode pro-icons",
     "preview": "vite preview",
     "format": "prettier --write .",
     "test:download-progress": "node scripts/test-download-progress.mjs"

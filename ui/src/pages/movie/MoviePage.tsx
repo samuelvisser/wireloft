@@ -3,6 +3,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import {faIcon} from '../../icons/faIcon'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
@@ -66,7 +67,7 @@ function MovieDownloadControl({download, label, downloadedLabel, progressLabel, 
             disabled={disabled} controlBusy={controlBusy} primary={primary}/>
         {download && <button type="button" className="icon-btn movie-download-log-button" onClick={() => onOpenLog(download.id)}
                              title="View download log" aria-label={`View download log for ${progressLabel}`}>
-            <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+            <FontAwesomeIcon icon={faIcon('fas', 'file-lines')}/>
         </button>}
     </div>
 }
@@ -390,13 +391,13 @@ export default function MoviePage() {
         return [
             ...(restartable ? [{
                 label: `Restart ${label}`,
-                icon: ['fas', 'rotate-right'] as const,
+                icon: faIcon('fas', 'rotate-right'),
                 disabled: controlsBusy,
                 onSelect: () => void controlTaskOperation(operationId, 'restart', label),
             }] : []),
             {
                 label: `Cancel ${label}`,
-                icon: ['fas', 'xmark'] as const,
+                icon: faIcon('fas', 'xmark'),
                 tone: 'danger' as const,
                 disabled: controlsBusy,
                 onSelect: () => void controlTaskOperation(operationId, 'cancel', label),
@@ -455,7 +456,7 @@ export default function MoviePage() {
             <div className="movie-hero" style={hero ? {backgroundImage: `linear-gradient(0deg, var(--bg) 0%, rgba(9,18,33,.15) 72%), url(${hero})`} : undefined}>
                 <div>
                     <div className="movie-kicker-row">
-                        <span className="movie-kicker"><FontAwesomeIcon icon={['fas', 'clapperboard']}/> Movie</span>
+                        <span className="movie-kicker"><FontAwesomeIcon icon={faIcon('fas', 'clapperboard')}/> Movie</span>
                         {isUpcoming && <span className="movie-upcoming-badge">Upcoming</span>}
                     </div>
                     <h1 id="movie-title">{movie.title}</h1>
@@ -469,35 +470,35 @@ export default function MoviePage() {
             <div className="movie-detail-actions">
                 {featuredTrailer?.sharingUrl && (
                     <a className="btn btn-secondary" href={featuredTrailer.sharingUrl} target="_blank" rel="noreferrer">
-                        <FontAwesomeIcon icon={['fas', 'play']}/> Watch trailer
+                        <FontAwesomeIcon icon={faIcon('fas', 'play')}/> Watch trailer
                     </a>
                 )}
                 {movie.sharingUrl && (
                     <a className="btn" href={movie.sharingUrl} target="_blank" rel="noreferrer">
-                        <FontAwesomeIcon icon={['fas', 'arrow-up-right-from-square']}/> Open on Daily Wire
+                        <FontAwesomeIcon icon={faIcon('fas', 'arrow-up-right-from-square')}/> Open on Daily Wire
                     </a>
                 )}
                 {localMovies && !localMovie && (
                     <button type="button" className="btn btn-primary" onClick={() => void addMovie()} disabled={addingMovie || submitting !== null}>
-                        <FontAwesomeIcon icon={['fas', 'plus']}/>
+                        <FontAwesomeIcon icon={faIcon('fas', 'plus')}/>
                         {addingMovie ? 'Adding to WireLoft…' : 'Add to WireLoft'}
                     </button>
                 )}
                 {localMovie && slug && (
                     <Link className="btn" to={`/edit-movie/${encodeURIComponent(slug)}`}>
-                        <FontAwesomeIcon icon={['fas', 'pen-to-square']} />
+                        <FontAwesomeIcon icon={faIcon('fas', 'pen-to-square')} />
                         <span>Edit</span>
                     </Link>
                 )}
                 {localMovie?.releaseDateLookupStatus === 'error' && (
                     <button type="button" className="btn" onClick={() => void retryReleaseMetadata()} disabled={retryingMetadata}>
-                        <FontAwesomeIcon icon={['fas', 'rotate']}/>
+                        <FontAwesomeIcon icon={faIcon('fas', 'rotate')}/>
                         {retryingMetadata ? 'Retrying TMDB…' : 'Retry TMDB lookup'}
                     </button>
                 )}
                 {localMovie && (
                     <button type="button" className="btn btn-danger" onClick={() => setConfirmDelete(true)}>
-                        <FontAwesomeIcon icon={['fas', 'trash']}/> Delete
+                        <FontAwesomeIcon icon={faIcon('fas', 'trash')}/> Delete
                     </button>
                 )}
                 {localMovie && (
@@ -505,7 +506,7 @@ export default function MoviePage() {
                         items={[
                             {
                                 label: 'Refresh extras',
-                                icon: ['fas', 'rotate'],
+                                icon: faIcon('fas', 'rotate'),
                                 disabled: refreshingExtras,
                                 disabledReason: refreshExtrasOperation
                                     ? 'A movie-extra refresh is running.'
@@ -518,7 +519,7 @@ export default function MoviePage() {
                             },
                             {
                                 label: 'Delete and re-download all media',
-                                icon: ['fas', 'arrows-rotate'],
+                                icon: faIcon('fas', 'arrows-rotate'),
                                 tone: 'danger',
                                 separatorBefore: true,
                                 disabled: redownloadBusy || !hasRedownloadableMedia,
@@ -628,7 +629,7 @@ export default function MoviePage() {
                                     <div className="movie-extra-art">
                                         {thumbnail
                                             ? <img src={thumbnail} alt=""/>
-                                            : <FontAwesomeIcon icon={['fas', 'film']}/>
+                                            : <FontAwesomeIcon icon={faIcon('fas', 'film')}/>
                                         }
                                         <span>{movieExtraTypeLabel(extra.movieExtraType)}</span>
                                     </div>
@@ -642,7 +643,7 @@ export default function MoviePage() {
                                         <div className="movie-extra-actions">
                                             {extra.sharingUrl && (
                                                 <a className="btn btn-icon" href={extra.sharingUrl} target="_blank" rel="noreferrer" aria-label={`Watch ${extra.title}`} title="Watch on Daily Wire">
-                                                    <FontAwesomeIcon icon={['fas', 'play']}/>
+                                                    <FontAwesomeIcon icon={faIcon('fas', 'play')}/>
                                                 </a>
                                             )}
                                             <MovieDownloadControl
@@ -690,7 +691,7 @@ export default function MoviePage() {
                 resourceLabel={movie.title}
                 title="Delete and re-download all media"
                 onDismiss={() => setRedownloadConfirm(false)}
-                icon={['fas', 'arrows-rotate']}
+                icon={faIcon('fas', 'arrows-rotate')}
                 iconTone="danger"
                 confirmLabel="Delete and re-download"
                 disabled={redownloadBusy || !hasRedownloadableMedia}
@@ -708,7 +709,7 @@ export default function MoviePage() {
                 onDismiss={() => {
                     if (!deleting) setConfirmDelete(false)
                 }}
-                icon={['fas', 'trash']}
+                icon={faIcon('fas', 'trash')}
                 iconTone="danger"
                 dismissOnOverlayClick={!deleting}
                 cancelButton={{disabled: deleting}}

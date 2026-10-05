@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {faIcon} from '../../icons/faIcon'
 
 import ProgressButton from '../common/ProgressButton'
 import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
@@ -123,7 +124,7 @@ export default function CronTaskLedgerModal({
             >
                 <div className="modal-header cron-task-ledger-header">
                     <div className="modal-icon" aria-hidden>
-                        <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+                        <FontAwesomeIcon icon={faIcon('fas', 'file-lines')}/>
                     </div>
                     <div>
                         <h2 id="cron-task-ledger-title" className="modal-title">{title} log</h2>
@@ -198,7 +199,7 @@ export default function CronTaskLedgerModal({
                             definition={definition}
                             resourceId={0}
                             label="Run now"
-                            icon={['fas', 'play']}
+                            icon={faIcon('fas', 'play')}
                             onClick={() => void onRunNow()}
                             starting={starting}
                             onCancel={() => void onCancel()}

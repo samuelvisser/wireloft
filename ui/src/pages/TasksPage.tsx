@@ -3,6 +3,7 @@ import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import Select from 'react-select'
+import {faIcon} from '../icons/faIcon'
 
 import {Column, DataTable} from '../components/DataTable/DataTable'
 import ProgressBar from '../components/common/ProgressBar'
@@ -62,12 +63,12 @@ function resourceLabel(row: TaskLedgerEntryRead): string {
 }
 
 function statusIcon(status: string): IconProp {
-    if (status === 'SUCCEEDED') return ['fas', 'circle-check']
-    if (status === 'FAILED') return ['fas', 'triangle-exclamation']
-    if (status === 'CANCELED') return ['fas', 'circle-xmark']
-    if (status === 'RETRY_SCHEDULED') return ['fas', 'clock-rotate-left']
-    if (status === 'SCHEDULED' || status === 'QUEUED') return ['fas', 'clock']
-    return ['fas', 'spinner']
+    if (status === 'SUCCEEDED') return faIcon('fas', 'circle-check')
+    if (status === 'FAILED') return faIcon('fas', 'triangle-exclamation')
+    if (status === 'CANCELED') return faIcon('fas', 'circle-xmark')
+    if (status === 'RETRY_SCHEDULED') return faIcon('fas', 'clock-rotate-left')
+    if (status === 'SCHEDULED' || status === 'QUEUED') return faIcon('fas', 'clock')
+    return faIcon('fas', 'spinner')
 }
 
 function statusLabel(row: TaskLedgerEntryRead): string {
@@ -340,7 +341,7 @@ export default function TasksPage() {
                 <div ref={sentinelRef} className="infinite-scroll-sentinel" aria-hidden="true"/>
                 {query.isFetchingNextPage && (
                     <div className="task-table-loading">
-                        <FontAwesomeIcon className="wl-progress-icon" icon={['fas', 'spinner']}/>
+                        <FontAwesomeIcon className="wl-progress-icon" icon={faIcon('fas', 'spinner')}/>
                         Loading more tasks...
                     </div>
                 )}
