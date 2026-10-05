@@ -16,6 +16,7 @@ from dailywire_api.dw_api.client import ByShowSeason, MiddlewareClient
 from dailywire_api.records import DwEpisodeRecord, DwSeasonRecord
 from dailywire_authorisation import DeviceAuthClient
 from task_manager.events.transactional import queue_event
+from ...helpers.download_profiles import request_download_profile_run
 from ._helpers import get_latest_ep_index, get_season_from_list_by_id, get_shows
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier import IdentifierMaxValues, identify_episodes_in_season
@@ -493,6 +494,11 @@ def _queue_show_indexed(s: Session, *, show: Show, indexed_count: int) -> None:
         "slug": show.slug,
         "indexed_count": indexed_count,
     })
+    request_download_profile_run(
+        s,
+        resource_type="show",
+        resource_id=show.id,
+    )
 
 
 def _completion_message(indexed_count: int, monitor_count: int) -> str:

@@ -16,6 +16,7 @@ from task_manager.events.transactional import queue_event
 from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
 from task_manager.scheduler.executor import trigger_now
 from task_manager.scheduler.types import OperationStatus
+from ...helpers.download_profiles import request_download_profile_run
 from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.episodes.metadata import (
@@ -264,6 +265,12 @@ def _refresh_episode_from_dailywire(
             new_status=new_status,
             was_created=False,
         )
+        if new_status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
+            request_download_profile_run(
+                s,
+                resource_type="episode",
+                resource_id=episode.id,
+            )
         queue_event(
             s,
             MONITOR_REQUESTED_EVENT,

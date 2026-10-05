@@ -12,6 +12,7 @@ from backend.db.models.download_profile import PodcastDownloadProfile
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.utils.local_media_profiles import require_local_media_profile_type
 from task_manager.events.transactional import queue_event
+from task_manager.tasks.helpers.download_profiles import request_download_profile_run
 
 
 def get_podcast_download_profiles_list(s: Session) -> list[PodcastDownloadProfileAPIRead]:
@@ -53,6 +54,11 @@ def create_download_profile_podcast(s: Session, body: PodcastDownloadProfileAPIC
         "show_id": item.show_id,
         "profile_type": item.type,
     })
+    request_download_profile_run(
+        s,
+        resource_type="download_profile",
+        resource_id=item.id,
+    )
 
     return PodcastDownloadProfileAPIRead.model_validate(item)
 
@@ -83,6 +89,11 @@ def update_download_profile_podcast(s: Session, download_profile_id: int, body: 
         "show_id": item.show_id,
         "profile_type": item.type,
     })
+    request_download_profile_run(
+        s,
+        resource_type="download_profile",
+        resource_id=item.id,
+    )
 
     return PodcastDownloadProfileAPIRead.model_validate(item)
 

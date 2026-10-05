@@ -13,6 +13,7 @@ from task_manager.events.transactional import queue_event
 
 from ._helpers import save_status_metadata
 from .scheduling import queue_monitor_completion_if_settled
+from ...helpers.download_profiles import request_download_profile_run
 from ...helpers.episodes.trusted_publication_timing import track_monitor_publication_timing
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
@@ -406,6 +407,18 @@ async def run_monitor_pending_episode(
         new_status=new_status,
         was_created=False,
     )
+    if (
+        old_status != new_status.value
+        and new_status in {
+            EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+            EpisodePublishStatus.PUBLISHED_FINAL,
+        }
+    ):
+        request_download_profile_run(
+            s,
+            resource_type="episode",
+            resource_id=episode.id,
+        )
     queue_monitor_completion_if_settled(
         s,
         episode=episode,

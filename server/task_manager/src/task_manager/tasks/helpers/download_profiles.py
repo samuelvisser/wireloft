@@ -1,11 +1,36 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from backend.db.models import DownloadProfileBase
 from backend.utils.episode_download_scope import EpisodeDownloadScope
 from task_manager.events.transactional import queue_event
+
+
+DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT = "download_profile.run_requested"
+DownloadProfileRunResourceType = Literal["download_profile", "show", "episode"]
+_DOWNLOAD_PROFILE_RUN_RESOURCE_TYPES = frozenset({"download_profile", "show", "episode"})
+
+
+def request_download_profile_run(
+        s: Session,
+        *,
+        resource_type: DownloadProfileRunResourceType,
+        resource_id: int,
+) -> None:
+    """Queue one explicitly scoped Download Profile worker run after commit."""
+    if resource_type not in _DOWNLOAD_PROFILE_RUN_RESOURCE_TYPES:
+        raise ValueError(f"Unsupported Download Profile run resource type: {resource_type}")
+    if resource_id <= 0:
+        raise ValueError("A scoped Download Profile run requires a positive resource id")
+
+    queue_event(s, DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT, {
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+    })
 
 
 def _lock_download_profile(s: Session, profile_id: int) -> DownloadProfileBase | None:
@@ -84,6 +109,11 @@ def disable_download_profiles_for_episode_scope(
             "show_id": profile.show_id,
             "profile_type": profile.type,
         })
+        request_download_profile_run(
+            s,
+            resource_type="download_profile",
+            resource_id=profile.id,
+        )
 
     s.flush()
     return disabled

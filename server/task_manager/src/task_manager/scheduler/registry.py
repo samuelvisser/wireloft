@@ -25,7 +25,7 @@ class TriggerMeta:
     cron: Optional[str] = None  # For cron triggers (actual cron expression)
     enabled: bool = True  # Whether this trigger should be registered
     event_name: Optional[str] = None  # For event triggers
-    resource_type: Optional[str] = None  # Resource type for the trigger
+    resource_type: Optional[str] = None  # Fixed resource type, or event payload when None
     resource_id: Optional[int] = None  # Resource ID (0 = global, None = passed via event)
     coalesce: bool = True  # Whether to coalesce multiple pending jobs
     minimum_interval_ms: Optional[int] = None  # Optional policy minimum for this cron trigger
@@ -165,7 +165,8 @@ def on_event(event_name: str, resource_type: Optional[str] = None):
 
     Args:
         event_name: Name of the event to listen for (e.g., "show.added", "episode.published_final")
-        resource_type: Optional resource type filter
+        resource_type: Fixed resource type. When omitted, use the event payload's
+            resource_type (falling back to "show" for older unscoped events).
     """
     def decorator(fn: TaskCallable):
         meta = _registered_task_meta(fn, "on_event")

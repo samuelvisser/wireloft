@@ -13,6 +13,7 @@ from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
 from task_manager.events.transactional import queue_event
+from task_manager.tasks.helpers.download_profiles import request_download_profile_run
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
     create_operation,
@@ -300,8 +301,18 @@ def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> Epi
 
         if body.publish_status == EpisodePublishStatus.PUBLISHED_FINAL:
             queue_event(s, "episode.published_final", event_data)
+            request_download_profile_run(
+                s,
+                resource_type="episode",
+                resource_id=episode.id,
+            )
         elif body.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
             queue_event(s, "episode.published_with_countdown", event_data)
+            request_download_profile_run(
+                s,
+                resource_type="episode",
+                resource_id=episode.id,
+            )
 
     request_show_custom_index_reconciliation(s, episode.show_id)
     return EpisodeAPIRead.model_validate(episode)
