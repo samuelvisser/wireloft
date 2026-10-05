@@ -328,6 +328,9 @@ async function compileFontAwesome({proIcons, files}) {
   ].join('\n')
 }
 
+/**
+ * @returns {import('vite').Plugin}
+ */
 export function fontAwesomeCompiler({proIcons = false} = {}) {
   let compiledSource = null
   let watchedFiles = []
