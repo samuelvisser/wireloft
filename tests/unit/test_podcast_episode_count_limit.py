@@ -196,11 +196,7 @@ def test_episode_count_cleanup_removes_available_and_absent_artifacts_outside_li
         row.media_item_id: row
         for row in db_session.query(EpisodeMediaDownload).all()
     }
-    assert set(rows) == {episodes[0].id, episodes[1].id, episodes[2].id}
-    assert rows[episodes[0].id].artifact_status == MediaDownloadArtifactStatus.ABSENT.value
-    assert rows[episodes[0].id].download_profile_id is None
-    assert rows[episodes[1].id].artifact_status == MediaDownloadArtifactStatus.ABSENT.value
-    assert rows[episodes[1].id].download_profile_id is None
+    assert set(rows) == {episodes[2].id}
     assert rows[episodes[2].id].download_profile_id == profile.id
 
 
@@ -249,8 +245,6 @@ def test_episode_count_cleanup_keeps_available_files_when_delete_older_is_off(db
         row.media_item_id: row
         for row in db_session.query(EpisodeMediaDownload).all()
     }
-    assert set(rows) == {completed_episode.id, absent_episode.id}
+    assert set(rows) == {completed_episode.id}
     assert rows[completed_episode.id].artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
     assert rows[completed_episode.id].download_profile_id == profile.id
-    assert rows[absent_episode.id].artifact_status == MediaDownloadArtifactStatus.ABSENT.value
-    assert rows[absent_episode.id].download_profile_id is None

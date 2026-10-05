@@ -373,7 +373,7 @@ def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) 
 
 
 def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
-    """Reconcile artifacts that have fallen outside a podcast retention limit."""
+    """Remove downloads that have fallen outside a podcast retention limit."""
     if profile.download_episode_count > 0:
         kept_episode_ids = {
             episode.id
@@ -415,10 +415,13 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
 
     for row in rows:
         if profile.delete_older_episodes:
-            # Retention removes only the current artifact. MediaDownload identity
-            # and historical facts remain durable after the first successful file.
             prepare_media_download_artifact(s, row)
-        row.download_profile_id = None
+
+        # Retention cleanup is the end of this managed download's lifetime.
+        # Deleting the MediaDownload also cascades its download history and
+        # auxiliary asset records, so cleaned episodes disappear from Downloads
+        # instead of remaining as misleading "Not downloaded" entries.
+        s.delete(row)
 
     if rows:
         s.flush()
