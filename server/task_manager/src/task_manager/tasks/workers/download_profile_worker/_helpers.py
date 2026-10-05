@@ -418,9 +418,6 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
             prepare_media_download_artifact(s, row)
 
         # Retention cleanup is the end of this managed download's lifetime.
-        # Deleting the MediaDownload also cascades its download history and
-        # auxiliary asset records, so cleaned episodes disappear from Downloads
-        # instead of remaining as misleading "Not downloaded" entries.
         s.delete(row)
 
     if rows:
