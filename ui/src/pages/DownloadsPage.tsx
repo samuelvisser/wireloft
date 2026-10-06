@@ -89,8 +89,7 @@ function isCancellableDownload(row: MediaDownloadViewRead): boolean {
 }
 
 function isDeletableDownload(row: MediaDownloadViewRead): boolean {
-    const status = String(row.downloadStatus)
-    return status === 'not_downloaded' || status === 'missing' || status === 'cancelled'
+    return row.artifactStatus === 'absent' || row.artifactStatus === 'missing'
 }
 
 function defaultDownloadOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
@@ -422,7 +421,7 @@ export default function DownloadsPage() {
                         Every episode and movie download shows up here, one row per Local Media Profile.
                         Running downloads report live progress; failed ones show the error and can be retried.
                         Records without a file or active queue item are marked Not downloaded and can also be retried.
-                        Download records are persistent history; Not downloaded, Missing, and Cancelled records can be deleted individually or in bulk when no artifact is available.
+                        Download records are persistent history; any record whose artifact is Absent or Missing can be deleted individually or in bulk, regardless of its download status.
                     </p>
                 </PageSubtitle>
             </div>
@@ -621,7 +620,7 @@ export default function DownloadsPage() {
                 }}
             >
                 <p>
-                    Delete {deletableDownloads.length} visible Missing, Not downloaded, or Cancelled {deletableDownloads.length === 1 ? 'record' : 'records'}?
+                    Delete {deletableDownloads.length} visible {deletableDownloads.length === 1 ? 'record' : 'records'} whose artifact is Absent or Missing?
                     WireLoft will verify that no artifact is available before deleting each download record.
                     Records with an available artifact will be kept.
                 </p>
