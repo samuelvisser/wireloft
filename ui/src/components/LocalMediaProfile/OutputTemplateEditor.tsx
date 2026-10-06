@@ -91,6 +91,11 @@ function filterCompletion(label: string, detail: string, info: string): Completi
 
 const wireloftFilterCompletionOptions: Completion[] = [
     filterCompletion(
+        'strftime',
+        'strftime(format)',
+        'Format a WireLoft date or time value using Python strftime directives.',
+    ),
+    filterCompletion(
         'regex_replace',
         'regex_replace(pattern, replacement, count=0)',
         'Replace regex matches. count=0 replaces all matches.',
