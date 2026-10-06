@@ -107,6 +107,8 @@ def _presentation(entry: MediaDownloadHistory) -> tuple[str, str, str | None]:
     if action == MediaDownloadHistoryAction.CANCELLED:
         reason = metadata.get("reason")
         return "Download cancelled", "cancelled", str(reason) if reason else None
+    if action == MediaDownloadHistoryAction.INTERRUPTED:
+        return "Canceled due to premature shutdown", "cancelled", None
     if action == MediaDownloadHistoryAction.ARTIFACT_REMOVED:
         path = metadata.get("file_path")
         return "Previous file removed", "not_downloaded", str(path) if path else None

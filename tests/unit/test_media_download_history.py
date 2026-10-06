@@ -63,6 +63,24 @@ def test_failed_download_history_keeps_error_and_attempt_duration():
     assert entry.metadata["error_type"] == "DownloadError"
 
 
+def test_interrupted_download_history_shows_premature_shutdown():
+    from backend.api.endpoints.media_downloads.history import _MediaDownloadHistoryViewSource
+    from backend.api.models.media_download_history import MediaDownloadHistoryEntryRead
+
+    entry = MediaDownloadHistoryEntryRead.model_validate(
+        _MediaDownloadHistoryViewSource(_entry("interrupted", {
+            "duration_ms": 42_000,
+            "is_redownload": False,
+            "reason": "Canceled due to premature shutdown",
+        }))
+    )
+
+    assert entry.label == "Canceled due to premature shutdown"
+    assert entry.status == "cancelled"
+    assert entry.duration == "42.0 s"
+    assert entry.detail is None
+
+
 def test_download_attempt_metadata_uses_elapsed_wall_time():
     from backend.services.media_download_history import download_attempt_metadata
 

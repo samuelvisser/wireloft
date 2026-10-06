@@ -14,6 +14,7 @@ class MediaDownloadHistoryAction(StrEnum):
     FAILED = "failed"
     CANCEL_REQUESTED = "cancel_requested"
     CANCELLED = "cancelled"
+    INTERRUPTED = "interrupted"
     ARTIFACT_REMOVED = "artifact_removed"
     ARTIFACT_MISSING = "artifact_missing"
     ARTIFACT_CORRUPTED = "artifact_corrupted"
