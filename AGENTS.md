@@ -155,7 +155,7 @@ The backend is started with: `backend-api run` and the frontend is started with 
 If your environment is not able to run any of these tests, you can skip this step.
 
 ## Font Awesome pro and free icon versions
-WireLoft uses Font Awesome 7 for both its public Free icon packs and its paid kit. Access to the paid kit is not required for normal development, automated agents, CI, or public contributors.
+WireLoft uses Font Awesome for both its public Free icon packs and its paid kit. Access to the paid kit is not required for normal development, automated agents, CI, or public contributors.
 
 Do not replace or remove an intended Pro icon merely because the paid kit is unavailable in your environment. Application code must reference icons through `ui/src/icons/faIcon.ts`; do not import Font Awesome icon packs directly or register icon families in feature code. The Vite compiler in `ui/scripts/font-awesome-compiler.mjs` scans those references, validates them, and bundles only the icon definitions WireLoft uses.
 
