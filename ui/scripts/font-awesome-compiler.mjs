@@ -299,10 +299,17 @@ async function compileFontAwesome({proIcons, files}) {
   let fallbackCount = 0
 
   if (proIcons) {
-    const byPrefixAndName = await loadProIcons()
+    const [byPrefixAndName, freeIcons] = await Promise.all([loadProIcons(), loadFreeIcons()])
     for (const key of [...references.keys()].sort()) {
       const {prefix, iconName} = parseReference(key, 'source reference')
-      definitions.push(resolveProDefinition(byPrefixAndName, prefix, iconName, references))
+
+      // Font Awesome Brands are Free and have no paid variant. Resolve them
+      // from the public Brands package in both build modes so a stale Kit
+      // package snapshot cannot make an otherwise valid brand icon disappear.
+      const freeBrand = prefix === 'fab' ? freeIcons.get('fab')?.get(iconName) : undefined
+      definitions.push(
+        freeBrand ?? resolveProDefinition(byPrefixAndName, prefix, iconName, references),
+      )
     }
   } else {
     const [freeIcons, fallbacks] = await Promise.all([loadFreeIcons(), loadFallbacks()])

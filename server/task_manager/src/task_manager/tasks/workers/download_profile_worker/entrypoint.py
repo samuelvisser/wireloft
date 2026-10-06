@@ -6,31 +6,14 @@ from config import get_settings
 from controller.db_utils import db_session
 from backend.utils.custom_index import CustomIndexNotReadyError
 from task_manager.tasks.helpers.custom_index_readiness import request_missing_index_repair
+from .event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 from task_manager.scheduler.registry import on_cron, on_event, task
 from task_manager.tasks.media_download_operations import on_media_download_task_terminal
-from ..fetch_new_episodes.service import SHOW_INDEXED_EVENT
 from .service import run_download_profile_worker
 
 
 @on_event(
-    event_name=SHOW_INDEXED_EVENT,
-    resource_type="show",
-)
-@on_event(
-    event_name="download_profile.added",
-    resource_type="download_profile",
-)
-@on_event(
-    event_name="download_profile.updated",
-    resource_type="download_profile",
-)
-@on_event(
-    event_name="episode.published_final",
-    resource_type="episode",
-)
-@on_event(
-    event_name="episode.published_with_countdown",
-    resource_type="episode",
+    event_name=DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT,
 )
 @on_event(
     event_name="app.startup",
@@ -62,11 +45,11 @@ async def download_profile_worker(
     """
     Ensures the episodes requested by enabled Download Profiles are downloaded.
 
-    ``resource_id`` is polymorphic: an episode id when triggered by an episode
-    publish event, a show id (checks the whole show's profiles), a specific
-    download_profile id, or 0/None for a global sweep across every enabled profile
-    (cron, app.startup, or a manual "show"/"download_profile" trigger).
-    ``resource_type`` defines which one it is.
+    ``resource_id`` is polymorphic: an episode id for an episode-scoped request,
+    a show id (checks the whole show's profiles), a specific download_profile id,
+    or 0/None for a global sweep across every enabled profile (cron or app.startup).
+    ``resource_type`` defines which one it is. The Download Profile event adapter
+    translates normal committed domain events into the scoped worker-only request.
 
     Profile enablement only controls admission of new automatic downloads. Once
     a ``media.download`` operation is queued, the terminal callback gives the

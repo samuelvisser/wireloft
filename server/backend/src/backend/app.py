@@ -241,10 +241,7 @@ def create_app() -> FastAPI:
     # Public auth endpoints
     app.include_router(auth_router, prefix="/api")
 
-    # Podcast feed endpoints: intentionally mounted outside /api (and thus
-    # outside the auth middleware below) so feed URLs keep working in podcast
-    # apps even when local auth is enabled. Secured instead by an unguessable
-    # per-profile token baked into the URL - see backend.api.endpoints.feeds.
+    # Keep podcast feed endpoints outside of /api to prevent authentication
     app.include_router(feeds_router)
 
     # Protected API endpoints (shielded by middleware above)

@@ -80,11 +80,13 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
     from backend.types.download_profile_types import EpIdType
     from backend.types.show_types import ShowType
     from task_manager.events.registry import WireloftEventLinker, wait_for_events
+    from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
     show = _make_show(db_session, slug="podcast", show_type=ShowType.PODCAST.value)
     media_profile = _make_local_media_profile(db_session, slug="podcast-audio")
 
     added = _capture_event("download_profile.added")
+    requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
     created = create_download_profile_podcast(
         db_session,
         PodcastDownloadProfileAPICreate(
@@ -109,9 +111,14 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
         "show_id": show.id,
         "profile_type": "podcast",
     }]
+    assert requested == [{
+        "resource_type": "download_profile",
+        "resource_id": created.id,
+    }]
 
     WireloftEventLinker.remove_all()
     updated = _capture_event("download_profile.updated")
+    requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
     result = update_download_profile_podcast(
         db_session,
         created.id,
@@ -137,6 +144,10 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
         "show_id": show.id,
         "profile_type": "podcast",
     }]
+    assert requested == [{
+        "resource_type": "download_profile",
+        "resource_id": created.id,
+    }]
 
 
 def test_series_profile_create_and_update_fire_transactional_events(db_session):
@@ -153,6 +164,7 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
     from backend.types.download_profile_types import EpIdType
     from backend.types.show_types import ShowType
     from task_manager.events.registry import WireloftEventLinker, wait_for_events
+    from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
     show = _make_show(db_session, slug="series", show_type=ShowType.SERIES.value)
     media_profile = _make_local_media_profile(db_session, slug="series-video")
@@ -162,6 +174,7 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
     season_input = SeasonAPIRequestDetached(name=season.name, slug=season.slug)
 
     added = _capture_event("download_profile.added")
+    requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
     created = create_download_profile_series(
         db_session,
         SeriesDownloadProfileAPICreate(
@@ -183,9 +196,14 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
         "show_id": show.id,
         "profile_type": "series",
     }]
+    assert requested == [{
+        "resource_type": "download_profile",
+        "resource_id": created.id,
+    }]
 
     WireloftEventLinker.remove_all()
     updated = _capture_event("download_profile.updated")
+    requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
     result = update_download_profile_series(
         db_session,
         created.id,
@@ -208,6 +226,10 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
         "show_id": show.id,
         "profile_type": "series",
     }]
+    assert requested == [{
+        "resource_type": "download_profile",
+        "resource_id": created.id,
+    }]
 
 
 def test_download_profile_events_are_discarded_on_rollback(db_session):
@@ -216,10 +238,12 @@ def test_download_profile_events_are_discarded_on_rollback(db_session):
     from backend.types.download_profile_types import EpIdType
     from backend.types.show_types import ShowType
     from task_manager.events.registry import wait_for_events
+    from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
     show = _make_show(db_session, slug="rolled-back", show_type=ShowType.PODCAST.value)
     media_profile = _make_local_media_profile(db_session, slug="rolled-back-audio")
     added = _capture_event("download_profile.added")
+    requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
 
     create_download_profile_podcast(
         db_session,
@@ -239,9 +263,11 @@ def test_download_profile_events_are_discarded_on_rollback(db_session):
     wait_for_events()
 
     assert added == []
+    assert requested == []
 
 
-def test_download_profile_worker_subscribes_to_profile_write_events():
+def test_download_profile_worker_subscribes_only_to_dedicated_run_event():
+    from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
     from task_manager.tasks.workers.download_profile_worker import download_profile_worker
 
     event_names = {
@@ -250,12 +276,27 @@ def test_download_profile_worker_subscribes_to_profile_write_events():
         if trigger.trigger_type == "event"
     }
 
-    assert "show.indexed" in event_names
-    assert "download_profile.added" in event_names
-    assert "download_profile.updated" in event_names
+    assert DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT in event_names
+    assert "show.indexed" not in event_names
+    assert "download_profile.added" not in event_names
+    assert "download_profile.updated" not in event_names
+    assert "episode.published_final" not in event_names
+    assert "episode.published_with_countdown" not in event_names
 
 
-def test_download_profile_event_dispatches_exact_profile_to_worker(monkeypatch):
+@pytest.mark.parametrize(
+    ("resource_type", "resource_id"),
+    (
+        ("download_profile", 91),
+        ("show", 12),
+        ("episode", 501),
+    ),
+)
+def test_download_profile_run_event_dispatches_exact_scope_to_worker(
+        monkeypatch,
+        resource_type,
+        resource_id,
+):
     import task_manager.scheduler.executor as executor_module
     import task_manager.scheduler.registry as registry_module
     import task_manager.scheduler.scheduler as scheduler_module
@@ -263,6 +304,7 @@ def test_download_profile_event_dispatches_exact_profile_to_worker(monkeypatch):
     from controller.app import setup_triggers_from_registry
     from task_manager.events.emitters import emit_event
     from task_manager.events.registry import wait_for_events
+    from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
     download_profile_task = registry_module.get_task("download_profile_worker")
     monkeypatch.setattr(
@@ -292,16 +334,14 @@ def test_download_profile_event_dispatches_exact_profile_to_worker(monkeypatch):
     monkeypatch.setattr(scheduler_module, "start_scheduler", lambda: fake_scheduler)
 
     setup_triggers_from_registry()
-    emit_event("download_profile.updated", {
-        "resource_id": 91,
-        "id": 91,
-        "show_id": 12,
-        "profile_type": "podcast",
+    emit_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT, {
+        "resource_type": resource_type,
+        "resource_id": resource_id,
     })
     wait_for_events()
 
     trigger_now.assert_called_once_with(
         def_key="download_profile_worker",
-        resource_type="download_profile",
-        resource_id=91,
+        resource_type=resource_type,
+        resource_id=resource_id,
     )

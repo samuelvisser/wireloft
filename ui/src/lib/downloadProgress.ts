@@ -30,7 +30,6 @@ export function activityLabel(stage: Pick<DownloadStage, 'code' | 'asset_id'>): 
 }
 
 function terminal(status: string, label: string, detail: string, outcome?: ProgressPresentation['outcome']): DownloadPresentation {
-    const iconName = outcome === 'success' ? 'circle-check' : outcome === 'error' ? 'triangle-exclamation' : 'download'
     return {
         status, mode: 'terminal', active: false, percent: null, label, detail, outcome,
         icon: faIcon('fas', outcome === 'success' ? 'circle-check' : outcome === 'error' ? 'triangle-exclamation' : 'download'),

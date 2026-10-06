@@ -6,14 +6,14 @@ import {faIcon} from '../../icons/faIcon'
 
 
 const items: NavItem[] = [
-    {path: '/', label: 'Home', icon: faIcon('fas', 'house'), end: true},
-    {path: '/library', label: 'Library', icon: faIcon('fas', 'book-open')},
+    {path: '/', label: 'Home', icon: faIcon('fass', 'house'), end: true},
+    {path: '/library', label: 'Library', icon: faIcon('fas', 'books')},
     {path: '/downloads', label: 'Downloads', icon: faIcon('fas', 'circle-down')},
     {
         label: 'Profiles',
         icon: faIcon('fas', 'layer-group'),
         children: [
-            { path: '/local-media-profiles', label: 'Local Media Profiles', icon: faIcon('fas', 'clapperboard') },
+            { path: '/local-media-profiles', label: 'Local Media Profiles', icon: faIcon('fass', 'file-lines') },
             { path: '/download-profiles', label: 'Download Profiles', icon: faIcon('fas', 'download') },
             { path: '/stream-profiles', label: 'Stream Profiles', icon: faIcon('fas', 'rss') },
         ]
@@ -24,7 +24,7 @@ const items: NavItem[] = [
         children: [
             {path: '/settings', label: 'Settings', icon: faIcon('fas', 'gear')},
             {path: '/tasks', label: 'Tasks', icon: faIcon('fas', 'bars-progress')},
-            {path: '/logs', label: 'Log', icon: faIcon('fas', 'file-lines')},
+            {path: '/logs', label: 'Log', icon: faIcon('fas', 'rectangle-history')},
         ],
     },
 ]

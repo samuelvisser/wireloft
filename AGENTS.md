@@ -76,19 +76,6 @@ Legacy identifiers may appear in the migration file itself and in migration-spec
 fixtures needed to verify that migration, but not in normal application code. Treat legacy data
 compatibility as a one-time migration concern rather than a permanent application-code concern.
 
-### Migration squashing
-When releasing a new version of WireLoft, I will often ask you to merge all migrations after the last
-migration in the previous official release into one, making it one big migration from the previous
-WireLoft version into the next. When I ask you to do this, please make sure the new merged migration 
-file uses the same version number as the last pre-merge migration did. In this way, my testing 
-environments that have been upgrading through these smaller upgrades, will know they are already 
-up-to-date and do not require an update even if the migration file merged everything together.
-
-I often like to merge Alembic migrations for updates, but keep background migrations separate. Though
-I might change how I do this for any particular release, if I ask you to prepare for a new release
-and did not ask you to merge migrations, please always ask me whether I want that. I might just simply
-have forgotten to ask you.
-
 ## API model boundaries
 WireLoft uses Pydantic as the API mapping and serialization boundary. Keep that boundary declarative:
 - Prefer `model_validate()`, `from_attributes`, field aliases/`AliasPath`, discriminated unions, and small typed
@@ -155,8 +142,34 @@ The backend is started with: `backend-api run` and the frontend is started with 
 If your environment is not able to run any of these tests, you can skip this step.
 
 ## Font Awesome pro and free icon versions
-WireLoft uses a paid Font Awesome kit for its full icon set, but access to that kit is not required for normal development, automated agents, CI, or public contributors.
+WireLoft uses Font Awesome for both its public Free icon packs and its paid kit. Access to the paid kit is not required for normal development, automated agents, CI, or public contributors.
 
 Do not replace or remove an intended Pro icon merely because the paid kit is unavailable in your environment. Application code must reference icons through `ui/src/icons/faIcon.ts`; do not import Font Awesome icon packs directly or register icon families in feature code. The Vite compiler in `ui/scripts/font-awesome-compiler.mjs` scans those references, validates them, and bundles only the icon definitions WireLoft uses.
 
 Keep both `faIcon()` arguments statically analyzable: use literal strings or conditional expressions whose branches are literal strings. When a Pro icon has no automatic Font Awesome Free equivalent, add a prefix-qualified mapping to `ui/src/icons/freeIconFallbacks.json`.
+
+## Releasing a new version
+Whenever we are about to release a new version, keep the following in mind.
+
+### AGENT branches cleanup
+All branches created by agents, for example `codex/*` branches, usually need a cleanup before a release.
+
+When I ask you to clean them up, first up create a list of all the branches already merged into develop along with a command to delete those from origin.
+
+Next, give me a list of branches who's functionality is available in develop, even if not its exact code. Give me a command to delete those too.
+
+For the remaining branches, tell me what changed in them compared to develop, and how much they are ahead of and behind develop. I will then decide what to
+do with those.
+
+### Migration squashing
+When releasing a new version of WireLoft, I will often ask you to merge all migrations after the last
+migration in the previous official release into one, making it one big migration from the previous
+WireLoft version into the next. When I ask you to do this, please make sure the new merged migration 
+file uses the same version number as the last pre-merge migration did. In this way, my testing 
+environments that have been upgrading through these smaller upgrades, will know they are already 
+up-to-date and do not require an update even if the migration file merged everything together.
+
+I often like to merge Alembic migrations for updates, but keep background migrations separate. Though
+I might change how I do this for any particular release, if I ask you to prepare for a new release
+and did not ask you to merge migrations, please always ask me whether I want that. I might just simply
+have forgotten to ask you.
