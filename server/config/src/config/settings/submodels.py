@@ -360,7 +360,13 @@ class DownloadSettings(SubmodelBase):
         default=10,
         ge=0,
         description=(
-            "Minimum minutes after the best available publication timing before Download Profiles may automatically download an episode"
+            "Minimum minutes after the selected publication timing before Download Profiles may automatically download an episode"
+        ),
+    )
+    ensure_safe_delay: bool = Field(
+        default=False,
+        description=(
+            "For automatic Download Profile delays, prefer a trusted final-publication timestamp and otherwise delay from WireLoft's first recorded final observation"
         ),
     )
     download_timeout_seconds: int = Field(

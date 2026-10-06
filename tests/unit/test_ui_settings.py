@@ -51,6 +51,16 @@ def test_settings_api_contract_excludes_admin_and_literal_secrets():
     assert "secret_key" not in CryptoFileSettingsValue.model_fields
 
 
+def test_ensure_safe_delay_defaults_disabled_and_is_exposed_in_settings_api():
+    from backend.api.models.settings import SettingsValues
+
+    settings = AppSettings()
+    values = SettingsValues.from_app_settings(settings)
+
+    assert settings.download_settings.ensure_safe_delay is False
+    assert values.download_settings.ensure_safe_delay is False
+
+
 def test_settings_api_rejects_unexpected_admin_auth():
     from backend.api.models.settings import SettingsValues
 
@@ -96,6 +106,34 @@ def test_settings_service_only_writes_changed_fields_and_preserves_other_yaml(tm
     assert "downloadSettings.maxConcurrentDownloads" in result.configured_fields
     assert result.values.download_settings.max_concurrent_downloads == 9
     assert not (tmp_path / "ui-settings.yml").exists()
+
+
+def test_ensure_safe_delay_setting_round_trips_through_config(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import get_ui_settings, save_ui_settings
+    from backend.api.models.settings import SettingsAPIUpdate
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        "downloadSettings:\n"
+        "  downloadRoot: /downloads\n",
+        encoding="utf-8",
+    )
+    _point_settings_at(config_path, monkeypatch)
+
+    current = get_ui_settings()
+    assert current.values.download_settings.ensure_safe_delay is False
+
+    values = current.values.model_copy(deep=True)
+    values.download_settings.ensure_safe_delay = True
+    result = save_ui_settings(SettingsAPIUpdate(
+        values=values,
+        changed_fields=["downloadSettings.ensureSafeDelay"],
+    ))
+
+    document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert document["downloadSettings"]["ensureSafeDelay"] is True
+    assert result.values.download_settings.ensure_safe_delay is True
+    assert "downloadSettings.ensureSafeDelay" in result.configured_fields
 
 
 def test_cron_enable_setting_is_written_as_its_own_yaml_field(tmp_path, monkeypatch):

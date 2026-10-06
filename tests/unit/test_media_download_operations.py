@@ -230,11 +230,17 @@ def test_expired_publication_wait_enters_normal_download_queue(monkeypatch):
         engine.dispose()
 
 
-def test_explicit_download_releases_automatic_publication_wait():
+def test_explicit_download_releases_automatic_publication_wait(monkeypatch):
+    from config import get_settings
     from task_manager.scheduler.operations import operation_admission_wait_state
     from task_manager.scheduler.types import OperationSource, OperationStatus
     from task_manager.tasks.media_download_operations import create_media_download_operation
 
+    monkeypatch.setattr(
+        get_settings().download_settings,
+        "ensure_safe_delay",
+        True,
+    )
     session, engine = _session()
     try:
         download = _make_download(session, slug="manual-bypass")

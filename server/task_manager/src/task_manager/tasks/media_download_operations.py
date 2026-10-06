@@ -84,13 +84,25 @@ _DOWNLOAD_DISPATCH_TRANSACTION_KEY = "wireloft.media_download_dispatch_transacti
 
 
 def automatic_episode_download_ready_at(episode: Episode) -> datetime | None:
-    """Return when an automatic episode download may start."""
-    delay_minutes = get_settings().download_settings.automatic_episode_download_delay_minutes
+    """Return when an automatic Download Profile episode download may start."""
+    download_settings = get_settings().download_settings
+    delay_minutes = download_settings.automatic_episode_download_delay_minutes
     if delay_minutes <= 0:
         return None
 
     if episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
-        publication_time = best_effort_published_date(episode)
+        if download_settings.ensure_safe_delay:
+            publication_time = (
+                episode.safe_published_final
+                or episode.recorded_published_final
+            )
+            if publication_time is None:
+                # Rows finalized before WireLoft started recording this audit fact
+                # retain the ordinary best-effort behavior rather than becoming
+                # permanently undispatchable.
+                publication_time = best_effort_published_date(episode)
+        else:
+            publication_time = best_effort_published_date(episode)
     elif episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value:
         publication_time = episode.safe_live_ended
         if publication_time is None and episode.published_date is not None:

@@ -406,6 +406,110 @@ def test_final_download_delay_uses_safe_published_final(db_session, monkeypatch)
     assert get_download_profile_episodes(db_session, profile) == []
 
 
+def test_ensure_safe_delay_uses_recorded_final_when_safe_final_is_missing(db_session, monkeypatch):
+    from backend.utils.episode_publication_timing import record_published_final_observation
+    from config import get_settings
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    settings = get_settings().download_settings
+    monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+    monkeypatch.setattr(settings, "ensure_safe_delay", False)
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="safe-delay-recorded-final",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=_now() - timedelta(hours=1),
+        index=1,
+    )
+    record_published_final_observation(
+        episode,
+        observed_at=_now() - timedelta(minutes=2),
+    )
+    profile = _make_podcast_profile(db_session, show, lmp)
+    db_session.commit()
+
+    assert episode.safe_published_final is None
+    assert get_download_profile_episodes(db_session, profile) == [episode]
+
+    monkeypatch.setattr(settings, "ensure_safe_delay", True)
+    assert get_download_profile_episodes(db_session, profile) == []
+
+
+def test_ensure_safe_delay_prefers_safe_final_over_recorded_final(db_session, monkeypatch):
+    from backend.utils.episode_publication_timing import (
+        RECORDED_PUBLISHED_FINAL_META_KEY,
+        TRUSTED_PUBLISHED_FINAL_META_KEY,
+        encode_recorded_published_final,
+        encode_safe_published_final,
+    )
+    from config import get_settings
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    settings = get_settings().download_settings
+    monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+    monkeypatch.setattr(settings, "ensure_safe_delay", True)
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    now = _now()
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="safe-delay-safe-final-wins",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=now - timedelta(hours=1),
+        index=1,
+    )
+    episode.set_meta(
+        TRUSTED_PUBLISHED_FINAL_META_KEY,
+        encode_safe_published_final(now - timedelta(minutes=15)),
+    )
+    episode.set_meta(
+        RECORDED_PUBLISHED_FINAL_META_KEY,
+        encode_recorded_published_final(now - timedelta(minutes=2)),
+    )
+    profile = _make_podcast_profile(db_session, show, lmp)
+    db_session.commit()
+
+    assert get_download_profile_episodes(db_session, profile) == [episode]
+
+
+def test_ensure_safe_delay_does_not_apply_when_download_delay_is_zero(db_session, monkeypatch):
+    from backend.utils.episode_publication_timing import record_published_final_observation
+    from config import get_settings
+    from task_manager.tasks.media_download_operations import automatic_episode_download_ready_at
+
+    settings = get_settings().download_settings
+    monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 0)
+    monkeypatch.setattr(settings, "ensure_safe_delay", True)
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="safe-delay-disabled-by-zero",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=_now() - timedelta(hours=1),
+        index=1,
+    )
+    record_published_final_observation(episode, observed_at=_now())
+
+    assert automatic_episode_download_ready_at(episode) is None
+
+
 def test_final_download_delay_uses_last_known_pending_after_monitor_restart(db_session, monkeypatch):
     from backend.utils.episode_publication_timing import (
         LAST_KNOWN_PENDING_META_KEY,

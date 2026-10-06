@@ -157,10 +157,16 @@ def test_metadata_refresh_timing_explicitly_prefers_safe_final(monkeypatch, has_
     ]
 
 
-def test_metadata_refresh_timing_uses_last_known_pending_when_later(monkeypatch):
+def test_metadata_refresh_timing_ignores_ensure_safe_delay_setting(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
+    from config import get_settings
     from task_manager.tasks.workers.refresh_episode_metadata import service
 
+    monkeypatch.setattr(
+        get_settings().download_settings,
+        "ensure_safe_delay",
+        True,
+    )
     dailywire_published = datetime(2026, 10, 2, 8, tzinfo=timezone.utc)
     last_known_pending = datetime(2026, 10, 2, 9, tzinfo=timezone.utc)
     episode = SimpleNamespace(
