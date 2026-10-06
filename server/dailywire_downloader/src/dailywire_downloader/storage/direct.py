@@ -8,7 +8,14 @@ from dataclasses import dataclass
 from itertools import count
 from pathlib import Path
 
-from .helpers import _numbered_candidate, _unlink_if_identity, _write_all
+from .claims import DownloadPathClaimJournal, DownloadPathClaimType
+from .helpers import (
+    _numbered_candidate,
+    _path_exists,
+    _path_is_within,
+    _unlink_if_identity,
+    _write_all,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +52,9 @@ def _clear_empty_placeholder(path: Path, identity: tuple[int, int] | None) -> bo
 
     if not stat.S_ISREG(current.st_mode) or current.st_size != 0:
         return True
-    if identity is not None and (current.st_dev, current.st_ino) != identity:
+    if identity is None:
+        return True
+    if (current.st_dev, current.st_ino) != identity:
         return True
 
     try:
@@ -68,19 +77,31 @@ class DownloadPathReservation:
     stat_ino: int
     marker_stat_dev: int
     marker_stat_ino: int
+    path_claims: DownloadPathClaimJournal | None = None
+    recovery_record_id: str | None = None
 
     def release_if_unclaimed(self) -> None:
         """Remove our placeholder if no completed file replaced it, then release its marker."""
         if not _clear_empty_placeholder(self.path, (self.stat_dev, self.stat_ino)):
             return
-        _unlink_if_identity(
+        marker_removed = _unlink_if_identity(
             self.marker_path,
             stat_dev=self.marker_stat_dev,
             stat_ino=self.marker_stat_ino,
         )
+        if (
+            self.path_claims is not None
+            and self.recovery_record_id is not None
+            and (marker_removed or not _path_exists(self.marker_path))
+        ):
+            self.path_claims.delete_claim(self.recovery_record_id)
 
 
-def reserve_unique_download_path(path: str | Path) -> DownloadPathReservation:
+def reserve_unique_download_path(
+    path: str | Path,
+    *,
+    path_claims: DownloadPathClaimJournal | None = None,
+) -> DownloadPathReservation:
     """Atomically claim the first unused exact filename on the filesystem.
 
     The supplied path must already contain the concrete media extension. Existing
@@ -98,12 +119,25 @@ def reserve_unique_download_path(path: str | Path) -> DownloadPathReservation:
 
     for number in count(0):
         candidate = _numbered_candidate(requested, number)
+        recovery_record = (
+            path_claims.create_claim(DownloadPathClaimType.DIRECT_RESERVATION, candidate)
+            if path_claims is not None
+            else None
+        )
+        if path_claims is not None and recovery_record is None:
+            continue
         marker = _marker_path(candidate)
 
         try:
             marker_fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         except FileExistsError:
+            if recovery_record is not None:
+                path_claims.delete_claim(recovery_record.id)
             continue
+        except BaseException:
+            if recovery_record is not None:
+                path_claims.delete_claim(recovery_record.id)
+            raise
 
         marker_stat = os.fstat(marker_fd)
         destination_fd: int | None = None
@@ -140,11 +174,16 @@ def reserve_unique_download_path(path: str | Path) -> DownloadPathReservation:
                     require_empty=True,
                 )
             if failed or destination_stat is None:
-                _unlink_if_identity(
+                marker_removed = _unlink_if_identity(
                     marker,
                     stat_dev=marker_stat.st_dev,
                     stat_ino=marker_stat.st_ino,
                 )
+                if (
+                    recovery_record is not None
+                    and (marker_removed or not _path_exists(marker))
+                ):
+                    path_claims.delete_claim(recovery_record.id)
 
         return DownloadPathReservation(
             path=candidate,
@@ -153,6 +192,8 @@ def reserve_unique_download_path(path: str | Path) -> DownloadPathReservation:
             stat_ino=destination_stat.st_ino,
             marker_stat_dev=marker_stat.st_dev,
             marker_stat_ino=marker_stat.st_ino,
+            path_claims=path_claims,
+            recovery_record_id=recovery_record.id if recovery_record is not None else None,
         )
 
     raise RuntimeError("Could not allocate a unique download path")
@@ -187,9 +228,17 @@ def _decode_marker(marker: Path, payload: bytes) -> tuple[Path, tuple[int, int] 
     return candidate, identity
 
 
-def cleanup_abandoned_direct_download_path_reservations(download_root: str | Path) -> int:
-    """Remove direct-download filesystem claims left behind by a previous process."""
-    root = Path(download_root)
+def cleanup_abandoned_direct_download_path_reservations(
+    download_root: str | Path,
+    *,
+    path_claims: DownloadPathClaimJournal | None = None,
+) -> int:
+    """Remove abandoned direct-download claims.
+
+    With a durable claim journal, recovery is targeted and never walks the library.
+    Without one, retain the standalone filesystem-only fallback.
+    """
+    root = Path(os.path.abspath(download_root))
     try:
         if not root.is_dir():
             return 0
@@ -202,6 +251,103 @@ def cleanup_abandoned_direct_download_path_reservations(download_root: str | Pat
         return 0
 
     removed = 0
+
+    if path_claims is not None:
+        for recovery_record in path_claims.list_claims(
+            DownloadPathClaimType.DIRECT_RESERVATION
+        ):
+            candidate = recovery_record.candidate_path
+            if not _path_is_within(candidate, root):
+                logger.warning(
+                    "Preserving download path claim '%s' because '%s' is outside the configured download root '%s'",
+                    recovery_record.id,
+                    candidate,
+                    root,
+                )
+                continue
+
+            marker = _marker_path(candidate)
+            try:
+                marker_stat = marker.lstat()
+            except FileNotFoundError:
+                if path_claims.delete_claim(recovery_record.id):
+                    removed += 1
+                continue
+            except OSError:
+                logger.warning(
+                    "Could not inspect download reservation marker '%s'",
+                    marker,
+                    exc_info=True,
+                )
+                continue
+
+            if not stat.S_ISREG(marker_stat.st_mode):
+                if path_claims.delete_claim(recovery_record.id):
+                    removed += 1
+                continue
+
+            try:
+                with marker.open("rb") as handle:
+                    payload = handle.read(_MAX_MARKER_BYTES + 1)
+            except FileNotFoundError:
+                if path_claims.delete_claim(recovery_record.id):
+                    removed += 1
+                continue
+            except OSError:
+                logger.warning(
+                    "Could not inspect download reservation marker '%s'",
+                    marker,
+                    exc_info=True,
+                )
+                continue
+
+            managed_marker = (
+                payload == b""
+                or _RESERVATION_MARKER_MAGIC.startswith(payload)
+                or payload.startswith(_RESERVATION_MARKER_MAGIC)
+            )
+            if not managed_marker:
+                if path_claims.delete_claim(recovery_record.id):
+                    removed += 1
+                continue
+
+            decoded = (
+                _decode_marker(marker, payload)
+                if len(payload) <= _MAX_MARKER_BYTES
+                else None
+            )
+            marker_may_be_released = True
+            if decoded is not None:
+                decoded_candidate, identity = decoded
+                if Path(os.path.abspath(decoded_candidate)) != candidate:
+                    logger.warning(
+                        "Download reservation marker '%s' does not match its recovery journal path '%s'; preserving the filesystem entry",
+                        marker,
+                        candidate,
+                    )
+                    if path_claims.delete_claim(recovery_record.id):
+                        removed += 1
+                    continue
+                marker_may_be_released = _clear_empty_placeholder(candidate, identity)
+
+            if not marker_may_be_released:
+                continue
+
+            marker_removed = _unlink_if_identity(
+                marker,
+                stat_dev=marker_stat.st_dev,
+                stat_ino=marker_stat.st_ino,
+            )
+            if marker_removed or not _path_exists(marker):
+                if path_claims.delete_claim(recovery_record.id):
+                    removed += 1
+
+        if removed:
+            logger.warning(
+                "Recovered %s abandoned direct download path claim(s) from a previous WireLoft process",
+                removed,
+            )
+        return removed
 
     def walk_error(error: OSError) -> None:
         logger.warning("Could not scan downloads directory for abandoned reservations: %s", error)

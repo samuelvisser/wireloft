@@ -15,6 +15,7 @@ from .Show import Show
 from .ShowLocalAsset import ShowLocalAsset
 from .Metadata import Metadata
 from .CustomIndexState import CustomIndexState
+from .DownloadPathClaim import DownloadPathClaim
 
 from .download_profile import DownloadProfileBase
 from .media_download import MediaDownloadBase

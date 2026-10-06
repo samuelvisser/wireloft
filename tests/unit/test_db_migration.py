@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "f2a6c93d8b14"
+HEAD_REVISION = "e7c91a4d2b60"
+WIRELOFT_1_2_1_REVISION = "f2a6c93d8b14"
 WIRELOFT_1_2_REVISION = "6d4a8c1f2b90"
 PRE_HISTORY_HEAD_REVISION = "6d1e8f2a4c73"
 PRE_HISTORY_PARENT_REVISION = "d4a7c2e91b63"
@@ -243,7 +244,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_2_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_2_1_REVISION
+    assert script.get_revision(WIRELOFT_1_2_1_REVISION).down_revision == WIRELOFT_1_2_REVISION
     assert (
         script.get_revision(WIRELOFT_1_2_REVISION).down_revision
         == "d8b4a1f6c203"
@@ -269,6 +271,7 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
     assert "task_operations" in tables
     assert "movie_extra_sources" in tables
     assert "custom_index_states" in tables
+    assert "download_path_claims" in tables
     assert {"requested_generation", "completed_generation"} <= {
         column["name"] for column in inspector.get_columns("custom_index_states")
     }

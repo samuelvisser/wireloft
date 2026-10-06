@@ -167,7 +167,7 @@ def test_application_lifespan_is_ready_while_download_recovery_runs(monkeypatch)
 
     scheduler = FakeScheduler()
 
-    def clean_reservations(_root):
+    def clean_reservations(_root, **_kwargs):
         calls.append("reservation-cleanup")
         cleanup_started.set()
         assert allow_cleanup_to_finish.wait(timeout=2)

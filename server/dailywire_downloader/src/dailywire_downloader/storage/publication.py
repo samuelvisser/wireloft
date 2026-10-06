@@ -14,6 +14,7 @@ from ..errors import DownloadCancelled, DownloadError
 from ..hls_bundle import hls_asset_marker, hls_asset_root
 from ..models import DownloadProgress
 from .copying import copy_file
+from .claims import DownloadPathClaimJournal
 from .helpers import _path_is_within
 from .identity import ArtifactIdentity, inspect_artifact
 
@@ -39,9 +40,16 @@ def _write_record(workspace: Path, record: dict) -> None:
 
 
 class PublicationJournal:
-    def __init__(self, workspace: Path, media_path: Path):
+    def __init__(
+        self,
+        workspace: Path,
+        media_path: Path,
+        *,
+        path_claims: DownloadPathClaimJournal | None = None,
+    ):
         self.workspace = workspace
         self.media_path = media_path
+        self.path_claims = path_claims
         self.record = {
             "format": _MAGIC,
             "media_path": str(media_path.absolute()),
@@ -72,7 +80,10 @@ class PublicationJournal:
         while True:
             if should_cancel():
                 raise DownloadCancelled("Canceled while publishing a sidecar")
-            lock = _claim_publication_lock(destination)
+            lock = _claim_publication_lock(
+                destination,
+                path_claims=self.path_claims,
+            )
             if lock is not None:
                 break
             sleep(0.05)

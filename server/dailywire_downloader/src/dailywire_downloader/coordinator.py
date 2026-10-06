@@ -19,6 +19,7 @@ from .models import DownloadProgress, DownloadResult
 from .plan import DownloadPlan
 from .sidecars import AcquiredSidecar, SidecarDownloads
 from .storage import TemporaryDownloadWorkspace, create_temporary_download_workspace, publish_temporary_download, reserve_unique_download_path
+from .storage.claims import DownloadPathClaimJournal
 from .storage.artifacts import remove_download_artifacts
 from .storage.copying import copy_file
 from .storage.identity import ArtifactIdentity, inspect_artifact
@@ -116,6 +117,7 @@ def execute_download_plan(
     resources: DownloadResources = default_resources,
     on_destination_reserved: Callable[[str], None] | None = None,
     on_media_transfer_complete: Callable[[], None] | None = None,
+    path_claims: DownloadPathClaimJournal | None = None,
 ) -> DownloadExecution:
     """Keep all optional behavior, resource ownership and publication here.
 
@@ -135,7 +137,10 @@ def execute_download_plan(
     transfer_path: Path | None = None
     try:
         if plan.download_mode == "direct":
-            reservation = reserve_unique_download_path(plan.requested_destination)
+            reservation = reserve_unique_download_path(
+                plan.requested_destination,
+                path_claims=path_claims,
+            )
             media_path = reservation.path
             destination = media_path
             if on_destination_reserved is not None:
@@ -194,6 +199,7 @@ def execute_download_plan(
                 destination = publish_temporary_download(
                     media_path, plan.requested_destination, should_cancel=tracker.is_canceled,
                     progress=lambda value: tracker.progress("publish", DownloadProgress(value.bytes_downloaded, total)),
+                    path_claims=path_claims,
                 )
                 # Record ownership before any subsequent HLS publication can
                 # fail, including when the main file crossed filesystems.
@@ -202,7 +208,11 @@ def execute_download_plan(
                     _publish_hls_assets(hls_asset_root(media_path), hls_asset_root(destination), tracker=tracker, transferred=media_size, total=total)
             assert destination is not None
             owned_media = inspect_artifact(destination)
-            journal = PublicationJournal(workspace.workspace, destination)
+            journal = PublicationJournal(
+                workspace.workspace,
+                destination,
+                path_claims=path_claims,
+            )
         for asset in acquired:
             if not asset.spec.publish:
                 continue

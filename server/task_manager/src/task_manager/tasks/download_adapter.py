@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
 from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBase
+from backend.services.download_path_claims import database_download_path_claims
 from backend.services.download_plans import prepare_download_plan
 from backend.services.media_download_history import (
     download_attempt_metadata, record_media_download_history,
@@ -136,6 +137,7 @@ def run_download(
                 plan, tracker=tracker, resources=resources,
                 on_destination_reserved=reserved,
                 on_media_transfer_complete=on_media_download_transfer_complete,
+                path_claims=database_download_path_claims,
             )
             tracker.ensure_active()
             # Stop concurrent reporting before entering the final transaction;

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.services.download_path_claims import database_download_path_claims
 from backend.services.download_recovery import cleanup_abandoned_temporary_downloads
 
 import logging
@@ -50,7 +51,8 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
     try:
         logger.info("Starting background download filesystem recovery")
         reservation_count = cleanup_abandoned_download_path_reservations(
-            download_settings.download_root
+            download_settings.download_root,
+            path_claims=database_download_path_claims,
         )
         temporary_count = cleanup_abandoned_temporary_downloads(
             download_settings.temporary_download_root,

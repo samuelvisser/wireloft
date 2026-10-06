@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .claims import DownloadPathClaimJournal
 from .direct import (
     DownloadPathReservation,
     cleanup_abandoned_direct_download_path_reservations,
@@ -23,9 +24,19 @@ from .temporary import (
 )
 
 
-def cleanup_abandoned_download_path_reservations(download_root: str | Path) -> int:
+def cleanup_abandoned_download_path_reservations(
+    download_root: str | Path,
+    *,
+    path_claims: DownloadPathClaimJournal | None = None,
+) -> int:
     """Remove filesystem claims left behind by either download mode."""
     return (
-        cleanup_abandoned_direct_download_path_reservations(download_root)
-        + cleanup_abandoned_publication_locks(download_root)
+        cleanup_abandoned_direct_download_path_reservations(
+            download_root,
+            path_claims=path_claims,
+        )
+        + cleanup_abandoned_publication_locks(
+            download_root,
+            path_claims=path_claims,
+        )
     )

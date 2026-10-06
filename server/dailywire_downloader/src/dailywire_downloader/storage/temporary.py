@@ -23,6 +23,7 @@ from .copying import copy_file
 from ..models import DownloadProgress
 from ..errors import DownloadCancelled
 
+from .claims import DownloadPathClaimJournal, DownloadPathClaimType
 from .helpers import (
     _numbered_candidate,
     _path_exists,
@@ -68,14 +69,45 @@ def _is_publication_lock_name(filename: str) -> bool:
     return len(digest) == 64 and all(char in "0123456789abcdef" for char in digest)
 
 
+def _decode_publication_lock(marker: Path, payload: bytes) -> Path | None:
+    if not payload.startswith(_PUBLICATION_LOCK_MAGIC):
+        return None
+    encoded_name = payload[len(_PUBLICATION_LOCK_MAGIC):]
+    if not encoded_name.endswith(b"\0"):
+        return None
+    encoded_name = encoded_name[:-1]
+    if not encoded_name:
+        return None
+
+    candidate_name = os.fsdecode(encoded_name)
+    if candidate_name in {"", ".", ".."} or Path(candidate_name).name != candidate_name:
+        return None
+    candidate = marker.parent / candidate_name
+    if _publication_lock_path(candidate).name != marker.name:
+        return None
+    return candidate
+
+
 @dataclass(frozen=True)
 class _PublicationLock:
     path: Path
     stat_dev: int
     stat_ino: int
+    path_claims: DownloadPathClaimJournal | None = None
+    recovery_record_id: str | None = None
 
     def release(self) -> None:
-        _unlink_if_identity(self.path, stat_dev=self.stat_dev, stat_ino=self.stat_ino)
+        marker_removed = _unlink_if_identity(
+            self.path,
+            stat_dev=self.stat_dev,
+            stat_ino=self.stat_ino,
+        )
+        if (
+            self.path_claims is not None
+            and self.recovery_record_id is not None
+            and (marker_removed or not _path_exists(self.path))
+        ):
+            self.path_claims.delete_claim(self.recovery_record_id)
 
 
 @dataclass(frozen=True)
@@ -250,12 +282,30 @@ def _decode_legacy_staging_publication_marker(
     return workspace / staged_name, candidate, identity
 
 
-def _claim_publication_lock(candidate: Path) -> _PublicationLock | None:
+def _claim_publication_lock(
+    candidate: Path,
+    *,
+    path_claims: DownloadPathClaimJournal | None = None,
+) -> _PublicationLock | None:
+    recovery_record = (
+        path_claims.create_claim(DownloadPathClaimType.PUBLICATION_LOCK, candidate)
+        if path_claims is not None
+        else None
+    )
+    if path_claims is not None and recovery_record is None:
+        return None
+
     lock_path = _publication_lock_path(candidate)
     try:
         fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:
+        if recovery_record is not None:
+            path_claims.delete_claim(recovery_record.id)
         return None
+    except BaseException:
+        if recovery_record is not None:
+            path_claims.delete_claim(recovery_record.id)
+        raise
 
     lock_stat = os.fstat(fd)
     failed = False
@@ -268,13 +318,24 @@ def _claim_publication_lock(candidate: Path) -> _PublicationLock | None:
     finally:
         os.close(fd)
         if failed:
-            _unlink_if_identity(
+            marker_removed = _unlink_if_identity(
                 lock_path,
                 stat_dev=lock_stat.st_dev,
                 stat_ino=lock_stat.st_ino,
             )
+            if (
+                recovery_record is not None
+                and (marker_removed or not _path_exists(lock_path))
+            ):
+                path_claims.delete_claim(recovery_record.id)
 
-    return _PublicationLock(lock_path, lock_stat.st_dev, lock_stat.st_ino)
+    return _PublicationLock(
+        lock_path,
+        lock_stat.st_dev,
+        lock_stat.st_ino,
+        path_claims=path_claims,
+        recovery_record_id=recovery_record.id if recovery_record is not None else None,
+    )
 
 
 def _portable_publication_path(parent: Path) -> Path:
@@ -367,6 +428,7 @@ def publish_temporary_download(
     *,
     progress: Callable[[DownloadProgress], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    path_claims: DownloadPathClaimJournal | None = None,
 ) -> Path:
     """Publish a completed staged file under the first unused exact filename.
 
@@ -417,7 +479,7 @@ def publish_temporary_download(
             if should_cancel is not None and should_cancel():
                 raise DownloadCancelled("Canceled while publishing media")
             candidate = _numbered_candidate(requested, number)
-            lock = _claim_publication_lock(candidate)
+            lock = _claim_publication_lock(candidate, path_claims=path_claims)
             if lock is None:
                 continue
             try:
@@ -448,9 +510,17 @@ def publish_temporary_download(
     raise RuntimeError("Could not publish temporary download to a unique path")
 
 
-def cleanup_abandoned_publication_locks(download_root: str | Path) -> int:
-    """Remove temporary-mode publication locks left behind by a previous process."""
-    root = Path(download_root)
+def cleanup_abandoned_publication_locks(
+    download_root: str | Path,
+    *,
+    path_claims: DownloadPathClaimJournal | None = None,
+) -> int:
+    """Remove abandoned publication locks.
+
+    With a durable claim journal, recovery is targeted and never walks the library.
+    Without one, retain the standalone filesystem-only fallback.
+    """
+    root = Path(os.path.abspath(download_root))
     try:
         if not root.is_dir():
             return 0
@@ -463,6 +533,91 @@ def cleanup_abandoned_publication_locks(download_root: str | Path) -> int:
         return 0
 
     removed = 0
+
+    if path_claims is not None:
+        for recovery_record in path_claims.list_claims(
+            DownloadPathClaimType.PUBLICATION_LOCK
+        ):
+            candidate = recovery_record.candidate_path
+            if not _path_is_within(candidate, root):
+                logger.warning(
+                    "Preserving download publication claim '%s' because '%s' is outside the configured download root '%s'",
+                    recovery_record.id,
+                    candidate,
+                    root,
+                )
+                continue
+
+            marker = _publication_lock_path(candidate)
+            try:
+                marker_stat = marker.lstat()
+            except FileNotFoundError:
+                if path_claims.delete_claim(recovery_record.id):
+                    removed += 1
+                continue
+            except OSError:
+                logger.warning("Could not inspect publication lock '%s'", marker, exc_info=True)
+                continue
+
+            if not stat.S_ISREG(marker_stat.st_mode):
+                if path_claims.delete_claim(recovery_record.id):
+                    removed += 1
+                continue
+
+            try:
+                with marker.open("rb") as handle:
+                    payload = handle.read(_MAX_MARKER_BYTES + 1)
+            except FileNotFoundError:
+                if path_claims.delete_claim(recovery_record.id):
+                    removed += 1
+                continue
+            except OSError:
+                logger.warning("Could not inspect publication lock '%s'", marker, exc_info=True)
+                continue
+
+            managed = (
+                payload == b""
+                or _PUBLICATION_LOCK_MAGIC.startswith(payload)
+                or payload.startswith(_PUBLICATION_LOCK_MAGIC)
+            )
+            if not managed:
+                if path_claims.delete_claim(recovery_record.id):
+                    removed += 1
+                continue
+
+            decoded_candidate = (
+                _decode_publication_lock(marker, payload)
+                if len(payload) <= _MAX_MARKER_BYTES
+                else None
+            )
+            if (
+                decoded_candidate is not None
+                and Path(os.path.abspath(decoded_candidate)) != candidate
+            ):
+                logger.warning(
+                    "Download publication lock '%s' does not match its recovery journal path '%s'; preserving the filesystem entry",
+                    marker,
+                    candidate,
+                )
+                if path_claims.delete_claim(recovery_record.id):
+                    removed += 1
+                continue
+
+            marker_removed = _unlink_if_identity(
+                marker,
+                stat_dev=marker_stat.st_dev,
+                stat_ino=marker_stat.st_ino,
+            )
+            if marker_removed or not _path_exists(marker):
+                if path_claims.delete_claim(recovery_record.id):
+                    removed += 1
+
+        if removed:
+            logger.warning(
+                "Recovered %s abandoned download publication lock claim(s) from a previous WireLoft process",
+                removed,
+            )
+        return removed
 
     def walk_error(error: OSError) -> None:
         logger.warning(
