@@ -180,7 +180,8 @@ def _completed_download(db_session, episode, lmp, profile, *, publish_status="pu
 
 # ---------- profile scope ----------
 
-def test_download_profile_worker_runs_after_show_indexing():
+def test_download_profile_worker_uses_dedicated_scoped_event():
+    from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
     from task_manager.tasks.workers.download_profile_worker import download_profile_worker
 
     event_names = {
@@ -188,8 +189,12 @@ def test_download_profile_worker_runs_after_show_indexing():
         for trigger in download_profile_worker._task_meta.triggers
         if trigger.trigger_type == "event"
     }
-    assert "show.indexed" in event_names
-    assert "show.added" not in event_names
+    assert DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT in event_names
+    assert "show.indexed" not in event_names
+    assert "download_profile.added" not in event_names
+    assert "download_profile.updated" not in event_names
+    assert "episode.published_final" not in event_names
+    assert "episode.published_with_countdown" not in event_names
 
 
 def test_episode_trigger_creates_visible_delayed_download_operation(db_session, monkeypatch):

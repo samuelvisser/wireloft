@@ -185,14 +185,18 @@ def setup_triggers_from_registry() -> None:
                     if resource_id is None:
                         resource_id = event_data.get("id")
 
+                    resource_type = resource_type_captured
+                    if resource_type is None:
+                        resource_type = event_data.get("resource_type") or "show"
+
                     forwarded_data = {
                         key: value
                         for key, value in event_data.items()
-                        if key not in {"resource_id", "id"}
+                        if key not in {"resource_id", "id", "resource_type"}
                     }
                     scheduler_trigger_now(
                         def_key=task_key_captured,
-                        resource_type=resource_type_captured or "show",
+                        resource_type=resource_type,
                         resource_id=resource_id,
                         **_task_event_kwargs(task_key_captured, forwarded_data),
                     )

@@ -37,7 +37,7 @@
     "zod": "^4.1.8"
   },
   "optionalDependencies": {
-    "@awesome.me/kit-83fa1ac5a9": "^1.0.4"
+    "@awesome.me/kit-83fa1ac5a9": "^1.0.10"
   },
   "devDependencies": {
     "@types/react": "^19.0.3",

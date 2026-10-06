@@ -91,6 +91,7 @@ in control while not throwing you in the dark.
 
 The best way to run WireLoft is using its Docker container. Everything is managed for you automatically within the container.
 
+
 ### Quick start: use the published image
 
 Run the following to get started immediately:
@@ -104,6 +105,7 @@ docker compose up -d
 Then open http://localhost:5273.
 
 See **Volumes** and **Useful environment variables** below for persistence and configuration options. Edit the Compose file in place if you want to change anything beyond the defaults.
+
 
 ### Or create the Compose file yourself
 
@@ -121,6 +123,7 @@ services:
       # Set the timezone to your local timezone
       - TZ=UTC
 ```
+
 
 ### Setup
 
@@ -140,10 +143,12 @@ using environment variables for anything but the above examples. Any setting con
 
 See the [Settings documentation](https://github.com/samuelvisser/wireloft/wiki/Settings) for all available settings, including their `config.yml` keys, environment variables, defaults, and explanations.
 
+
 ## Special thanks
 
 While WireLoft is built entirely from the ground up with original code, the open-source [DailyWirePodcastProxy](https://github.com/fpnewton/DailyWirePodcastProxy) project has helped tremendously in figuring out how The Daily Wire API works. 
 DailyWirePodcastProxy allows you to access premium versions of Daily Wire shows directly from your podcast app. Definitely check it out if you're interested!
+
 
 ## Disclaimer
 This project is not affiliated with or endorsed by The Daily Wire. Only connect a Daily Wire account you are authorized to access,

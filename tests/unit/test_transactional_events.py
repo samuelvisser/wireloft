@@ -36,3 +36,47 @@ def test_event_is_discarded_on_rollback(monkeypatch):
 
     emit.assert_not_called()
     session.close()
+
+
+def test_committed_event_batch_adapter_derives_one_event_from_full_batch(monkeypatch):
+    from task_manager.events import transactional
+
+    emit = Mock()
+    monkeypatch.setattr(transactional, "emit_event", emit)
+    monkeypatch.setattr(transactional, "_COMMITTED_EVENT_BATCH_ADAPTERS", {})
+    session = Session(create_engine("sqlite+pysqlite:///:memory:"))
+
+    @transactional.committed_event_batch_adapter("test.transactional.batch")
+    def derive(events):
+        assert [event.name for event in events] == [
+            "episode.published_final",
+            "show.indexed",
+        ]
+        return (
+            transactional.PendingEvent(
+                "worker.run_requested",
+                {"resource_type": "show", "resource_id": 12},
+            ),
+        )
+
+    try:
+        transactional.queue_event(
+            session,
+            "episode.published_final",
+            {"resource_id": 501, "show_id": 12},
+        )
+        transactional.queue_event(
+            session,
+            "show.indexed",
+            {"resource_id": 12},
+        )
+        session.commit()
+
+        assert [item.args for item in emit.call_args_list] == [
+            ("episode.published_final", {"resource_id": 501, "show_id": 12}),
+            ("show.indexed", {"resource_id": 12}),
+            ("worker.run_requested", {"resource_type": "show", "resource_id": 12}),
+        ]
+    finally:
+        transactional.unregister_committed_event_batch_adapter("test.transactional.batch")
+        session.close()
