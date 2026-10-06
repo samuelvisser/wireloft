@@ -354,6 +354,44 @@ def test_countdown_redownload_intent_migration_uses_current_episode_table(migrat
         )).scalar_one() == HEAD_REVISION
 
 
+
+def test_countdown_redownload_migration_resumes_after_failed_sqlite_batch(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config, upgrade_database
+
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        WIRELOFT_1_2_1_REVISION,
+    )
+
+    # Reproduce the state left by the original broken migration: its schema
+    # change succeeded far enough to add the column, Alembic did not advance
+    # the revision, and a stale SQLite batch scratch table survived the failure.
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "ALTER TABLE media_downloads_episode "
+            "ADD COLUMN redownload_when_final BOOLEAN DEFAULT 0 NOT NULL"
+        )
+        connection.exec_driver_sql(
+            "CREATE TABLE _alembic_tmp_media_downloads_episode "
+            "AS SELECT * FROM media_downloads_episode WHERE 0"
+        )
+
+    upgrade_database()
+
+    inspector = inspect(engine)
+    assert "_alembic_tmp_media_downloads_episode" not in inspector.get_table_names()
+    episode_download_columns = {
+        column["name"]
+        for column in inspector.get_columns("media_downloads_episode")
+    }
+    assert "redownload_when_final" in episode_download_columns
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT alembic_version_num FROM settings"
+        )).scalar_one() == HEAD_REVISION
+
+
 def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
     database_path, engine = migration_database
     from backend.db.migrations import get_database_status, upgrade_database

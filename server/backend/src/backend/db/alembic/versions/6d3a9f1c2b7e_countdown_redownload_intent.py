@@ -15,18 +15,51 @@ branch_labels = None
 depends_on = None
 
 
+_TABLE = "media_downloads_episode"
+_SQLITE_BATCH_TABLE = "_alembic_tmp_media_downloads_episode"
+
+
+def _prepare_interrupted_sqlite_batch(connection) -> None:
+    """Recover the scratch table Alembic can leave after a failed SQLite batch."""
+    if connection.dialect.name != "sqlite":
+        return
+
+    table_names = set(sa.inspect(connection).get_table_names())
+    if _SQLITE_BATCH_TABLE not in table_names:
+        return
+
+    if _TABLE in table_names:
+        # The real table is authoritative. A previous failed batch can leave
+        # its create/copy scratch table behind even though Alembic did not
+        # advance the revision.
+        op.drop_table(_SQLITE_BATCH_TABLE)
+    else:
+        # If interruption happened after dropping the original table but before
+        # the final rename, the scratch table contains the migrated data.
+        op.rename_table(_SQLITE_BATCH_TABLE, _TABLE)
+
+
 def upgrade() -> None:
-    with op.batch_alter_table("media_downloads_episode") as batch_op:
-        batch_op.add_column(
+    connection = op.get_bind()
+    _prepare_interrupted_sqlite_batch(connection)
+
+    column_names = {
+        column["name"]
+        for column in sa.inspect(connection).get_columns(_TABLE)
+    }
+    if "redownload_when_final" not in column_names:
+        # SQLite supports ADD COLUMN directly. Avoid batch mode here so a later
+        # backfill failure cannot strand another _alembic_tmp_* table.
+        op.add_column(
+            _TABLE,
             sa.Column(
                 "redownload_when_final",
                 sa.Boolean(),
                 nullable=False,
                 server_default=sa.false(),
-            )
+            ),
         )
 
-    connection = op.get_bind()
     connection.execute(
         sa.text(
             "UPDATE media_downloads_episode "
