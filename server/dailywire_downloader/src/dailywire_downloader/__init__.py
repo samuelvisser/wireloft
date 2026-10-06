@@ -13,7 +13,7 @@ from .errors import (
     FfmpegNotFoundError,
     MediaUnavailableError,
 )
-from .ffmpeg import embed_metadata, embed_thumbnail, ffmpeg_available, remux_to_mp4
+from .ffmpeg import convert_video_to_m4a, embed_metadata, embed_thumbnail, ffmpeg_available, remux_to_mp4
 from .hls_bundle import (
     download_hls_bundle,
     hls_asset_marker,
@@ -39,6 +39,7 @@ __all__ = [
     "hls_asset_marker",
     "missing_hls_bundle_files",
     "remux_to_mp4",
+    "convert_video_to_m4a",
     "embed_thumbnail",
     "embed_metadata",
     "ffmpeg_available",

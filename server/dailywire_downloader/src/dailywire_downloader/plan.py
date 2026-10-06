@@ -29,6 +29,7 @@ class ResolvedDownloadSource:
     audio_only: bool
     hls_bundle: bool = False
     expected_bytes: int | None = None
+    convert_video_to_m4a: bool = False
 
 
 @dataclass(frozen=True)
@@ -191,6 +192,10 @@ def build_download_plan(
         raise ValueError("Embedded artwork must reference a planned asset")
     if source.hls_bundle and (metadata_tags or artwork_asset_id):
         raise DownloadError("HLS bundles support sidecars, not container embedding")
+    if source.remux_to_mp4 and source.convert_video_to_m4a:
+        raise DownloadError("A source cannot be remuxed to MP4 and converted to M4A")
+    if source.convert_video_to_m4a and (not source.audio_only or source.extension != "m4a"):
+        raise DownloadError("Video-to-M4A conversion requires an audio-only M4A output")
     if (metadata_tags or artwork_asset_id) and source.extension not in {"mp4", "m4a", "m4v", "mp3", "mkv"}:
         raise DownloadError(f"Cannot embed artwork or metadata in .{source.extension}; select sidecars or an MP4 output")
     suffixes = [a.target_suffix for a in assets if a.publish and a.target_suffix]
@@ -219,8 +224,9 @@ def build_download_plan(
             "transferring", "sidecar", weight=weight, asset_id=asset.id, depends_on=("prepare",),
         ))
     # Dependencies and deadlines are policy, not runtime decisions. Auxiliary
-    # acquisition depends only on preparation; a remux can overlap it, whereas
-    # embedding must await its artwork. The tracker enforces these boundaries.
+    # acquisition depends only on preparation; local media conversion can
+    # overlap it, whereas embedding must await its artwork. The tracker enforces
+    # these boundaries.
     media_ready = "media"
     if source.remux_to_mp4:
         stages.append(StageSpec(
@@ -228,6 +234,12 @@ def build_download_plan(
             depends_on=(media_ready,), deadline_seconds=3600,
         ))
         media_ready = "remux"
+    if source.convert_video_to_m4a:
+        stages.append(StageSpec(
+            "convert_audio", "convert_audio", "finishing", "processing", weight=remux_weight,
+            depends_on=(media_ready,), deadline_seconds=3600,
+        ))
+        media_ready = "convert_audio"
     if metadata_tags or artwork_asset_id:
         code = "embed_artwork_metadata" if metadata_tags and artwork_asset_id else "embed_artwork" if artwork_asset_id else "embed_metadata"
         dependencies = (media_ready,) + ((f"acquire:{artwork_asset_id}",) if artwork_asset_id else ())

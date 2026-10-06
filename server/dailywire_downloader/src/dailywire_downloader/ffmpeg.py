@@ -115,6 +115,61 @@ def remux_to_mp4(
         raise
 
 
+def convert_video_to_m4a(
+        src_path: str,
+        dest_path: str,
+        *,
+        ffmpeg_path: str = "ffmpeg",
+        should_cancel: Optional[CancelCheck] = None,
+) -> None:
+    """Extract the first audio stream from video and package it as M4A.
+
+    The source audio is stream-copied rather than re-encoded. Daily Wire video
+    uses AAC audio, so this preserves quality while discarding the video stream
+    and writing a normal MP4/M4A container for audio-only profiles.
+    """
+    if not ffmpeg_available(ffmpeg_path):
+        raise FfmpegNotFoundError(
+            f"ffmpeg binary '{ffmpeg_path}' not found on PATH; ffmpeg is required "
+            f"to convert a video fallback into M4A audio"
+        )
+
+    part_path = dest_path + ".part"
+    try:
+        command = [
+            ffmpeg_path, "-y",
+            "-i", src_path,
+            "-map", "0:a:0",
+            "-vn",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
+            "-f", "mp4",
+            part_path,
+        ]
+        result = (
+            _run_cancellable(command, should_cancel)
+            if should_cancel is not None
+            else subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+        )
+        if result.returncode != 0:
+            logger.error(
+                "ffmpeg video-to-m4a conversion failed (exit %s) for '%s' -> '%s':\n%s",
+                result.returncode, src_path, dest_path, result.stdout,
+            )
+            raise DownloadError(
+                f"ffmpeg video-to-m4a conversion failed (exit {result.returncode}): {_tail_lines(result.stdout)}"
+            )
+        os.replace(part_path, dest_path)
+    except BaseException:
+        _remove_quietly(part_path)
+        raise
+
+
 def embed_thumbnail(
     media_path: str, thumbnail_path: str, *, audio_only: bool,
     ffmpeg_path: str = "ffmpeg", should_cancel: Optional[CancelCheck] = None,

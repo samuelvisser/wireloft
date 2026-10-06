@@ -60,35 +60,54 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     title, slug, media_id = media.title, media.slug, media.id
     thumbnail_url = select_thumbnail_url(media)
     if episode is not None:
-        url = episode.audio_url if audio_only else episode.video_url
+        video_url, audio_url = episode.video_url, episode.audio_url
         member_only = episode.show.membership_level != WlDwMembershipLevel.FREE.value
         session.rollback()
         refreshed = False
         while True:
             tracker.ensure_active()
+            video_fallback_for_audio = audio_only and not audio_url and bool(video_url)
+            url = audio_url if audio_only and audio_url else video_url
             if not url:
                 if refreshed:
-                    raise MediaUnavailableError(f"The Daily Wire provides no playable media for '{title}'")
+                    media_kind = "audio" if audio_only else "video"
+                    raise MediaUnavailableError(
+                        f"The Daily Wire provides no playable {media_kind} for '{title}'"
+                    )
                 tracker.preparing("resolve_playback")
                 detail = MiddlewareClient().get_episode_details(slug, require_member_exclusive=member_only)
                 tracker.ensure_active()
                 current = session.get(Episode, media_id)
                 if current is None:
                     raise DownloadCancelled("Episode was deleted during preparation")
-                current.video_url, current.audio_url = detail.video_url, detail.audio_url
-                url = detail.audio_url if audio_only else detail.video_url
+                video_url, audio_url = detail.video_url, detail.audio_url
+                current.video_url, current.audio_url = video_url, audio_url
                 session.commit()
                 refreshed = True
-                if not url:
-                    continue
+                continue
             tracker.preparing("inspect_stream")
             try:
-                source = resolve_download_source(url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
+                source = resolve_download_source(
+                    url,
+                    preferred_format=preferred,
+                    audio_only=audio_only,
+                    remux_video_to_mp4=remux,
+                    video_fallback_for_audio=video_fallback_for_audio,
+                    cancellation=tracker.is_canceled,
+                )
                 break
             except MediaUnavailableError as exc:
-                if refreshed or is_no_internet_error(exc):
+                if is_no_internet_error(exc):
                     raise
-                url = None
+                if refreshed:
+                    media_kind = "audio" if audio_only else "video"
+                    raise MediaUnavailableError(
+                        f"The Daily Wire provides no playable {media_kind} for '{title}'"
+                    ) from exc
+                # A stored URL can go stale. Refresh both candidates once, which
+                # also gives an audio request a chance to switch between the
+                # direct audio source and the video fallback.
+                video_url = audio_url = None
     else:
         assert movie is not None
         movie_slug, duration = movie.slug, movie.duration

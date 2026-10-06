@@ -11,7 +11,7 @@ export const ACTIVE_OPERATION_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'
 const ACTIVITIES: Record<string, string> = {
     prepare: 'Preparing', authorize: 'Authorizing', resolve_playback: 'Resolving playback',
     inspect_stream: 'Inspecting stream', plan_outputs: 'Preparing outputs',
-    download_media: 'Downloading', remux: 'Remuxing media',
+    download_media: 'Downloading', remux: 'Remuxing media', convert_audio: 'Converting video to M4A',
     embed_artwork: 'Embedding thumbnail', embed_metadata: 'Embedding metadata',
     embed_artwork_metadata: 'Embedding artwork and metadata',
     publish_media: 'Moving media into the library', verify: 'Verifying files', finalize: 'Finalizing',

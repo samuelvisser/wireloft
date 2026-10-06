@@ -12,7 +12,7 @@ from typing import Callable, Iterator
 from .capacity import DownloadResources, resources as default_resources
 from .downloader import download_file, download_hls
 from .errors import DownloadCancelled, DownloadError
-from .ffmpeg import embed_media, remux_to_mp4
+from .ffmpeg import convert_video_to_m4a, embed_media, remux_to_mp4
 from .hls_bundle import download_hls_bundle, hls_asset_marker, hls_asset_root, missing_hls_bundle_files
 from .lifecycle import DownloadTracker
 from .models import DownloadProgress, DownloadResult
@@ -143,7 +143,12 @@ def execute_download_plan(
         else:
             media_path = workspace.path
         assets = SidecarDownloads(plan.assets, workspace.workspace, tracker, resources)
-        transfer_path = Path(str(media_path) + ".rawts") if plan.source.remux_to_mp4 else media_path
+        if plan.source.remux_to_mp4:
+            transfer_path = Path(str(media_path) + ".rawts")
+        elif plan.source.convert_video_to_m4a:
+            transfer_path = Path(str(media_path) + ".rawmedia")
+        else:
+            transfer_path = media_path
         with tracker.activity("media"):
             with resources.media.acquire(
                 should_cancel=tracker.is_canceled,
@@ -154,7 +159,7 @@ def execute_download_plan(
                     plan.source.url, str(transfer_path),
                     progress=lambda value: tracker.progress("media", value), should_cancel=tracker.is_canceled,
                 )
-        if media_path.is_file() and not plan.source.remux_to_mp4:
+        if media_path.is_file() and not (plan.source.remux_to_mp4 or plan.source.convert_video_to_m4a):
             owned_media = inspect_artifact(media_path)
         # Completion of the transfer releases its lease, not the operation. The
         # adapter can dispatch the next queued media after the snapshot commits.
@@ -164,6 +169,14 @@ def execute_download_plan(
         if plan.source.remux_to_mp4:
             with _local_activity(tracker, resources, "remux"):
                 remux_to_mp4(str(transfer_path), str(media_path), ffmpeg_path=plan.ffmpeg_path, should_cancel=tracker.is_canceled)
+            transfer_path.unlink(missing_ok=True)
+            owned_media = inspect_artifact(media_path)
+        elif plan.source.convert_video_to_m4a:
+            with _local_activity(tracker, resources, "convert_audio"):
+                convert_video_to_m4a(
+                    str(transfer_path), str(media_path),
+                    ffmpeg_path=plan.ffmpeg_path, should_cancel=tracker.is_canceled,
+                )
             transfer_path.unlink(missing_ok=True)
             owned_media = inspect_artifact(media_path)
         if plan.metadata_tags or plan.artwork_asset_id is not None:
@@ -246,7 +259,7 @@ def execute_download_plan(
                     current = None
                 if current == owned_media:
                     remove_download_artifacts(str(destination))
-            if transfer_path is not None and plan.source.remux_to_mp4:
+            if transfer_path is not None and (plan.source.remux_to_mp4 or plan.source.convert_video_to_m4a):
                 transfer_path.unlink(missing_ok=True)
             workspace.cleanup()
         if reservation is not None:

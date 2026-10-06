@@ -51,12 +51,16 @@ def resolve_download_source(
     preferred_format: str,
     audio_only: bool,
     remux_video_to_mp4: bool,
+    video_fallback_for_audio: bool = False,
     cancellation=None,
 ) -> ResolvedDownloadSource:
     """Probe a source and reduce it to the exact URL and format to download."""
     ensure_not_cancelled(cancellation)
     info = probe(url)
     ensure_not_cancelled(cancellation)
+
+    if video_fallback_for_audio and not audio_only:
+        raise DownloadError("Video fallback can only be used for an audio-only download")
 
     if preferred_format == 'format_hls':
         if audio_only:
@@ -75,10 +79,18 @@ def resolve_download_source(
 
     if audio_only:
         if info.kind is MediaKind.HLS_MASTER:
-            raise DownloadError("Audio URL unexpectedly returned an HLS master playlist")
-        source_url = url
+            if not video_fallback_for_audio:
+                raise DownloadError("Audio URL unexpectedly returned an HLS master playlist")
+            # An audio fallback only needs one playable video rendition. Use the
+            # smallest available resolution to avoid downloading excess video
+            # bytes that will be discarded during local processing.
+            rendition = select_rendition(info.renditions, 1)
+            source_url = rendition.url
+            use_hls = True
+        else:
+            source_url = url
+            use_hls = info.kind is MediaKind.HLS_MEDIA
         format_downloaded = "audio"
-        use_hls = info.kind is MediaKind.HLS_MEDIA
     elif info.kind is MediaKind.HLS_MASTER:
         requested_height = FORMAT_HEIGHTS.get(preferred_format)
         if requested_height is None:
@@ -97,13 +109,15 @@ def resolve_download_source(
         use_hls = False
 
     remux = not audio_only and use_hls and remux_video_to_mp4
+    convert_video_to_m4a = audio_only and video_fallback_for_audio
     return ResolvedDownloadSource(
         url=source_url,
         format_downloaded=format_downloaded,
         use_hls=use_hls,
         remux_to_mp4=remux,
-        extension="mp4" if remux else info.suggested_extension,
+        extension="m4a" if convert_video_to_m4a else "mp4" if remux else info.suggested_extension,
         audio_only=audio_only,
         hls_bundle=False,
         expected_bytes=info.content_length,
+        convert_video_to_m4a=convert_video_to_m4a,
     )
