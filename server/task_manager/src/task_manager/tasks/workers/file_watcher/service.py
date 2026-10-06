@@ -278,15 +278,17 @@ def _size_problem(
                 + ", ".join(str(item) for item in missing_files),
             )
 
+    reference_size = download.artifact_size_bytes
     if (
         verify_file_size
         and not is_hls_bundle
-        and download.downloaded_bytes
-        and size < download.downloaded_bytes * _MIN_SIZE_RATIO
+        and reference_size is not None
+        and reference_size > 0
+        and size < reference_size * _MIN_SIZE_RATIO
     ):
         return MediaDownloadArtifactStatus.CORRUPTED, (
             f"File at '{path}' is only {size} bytes, well under the "
-            f"{download.downloaded_bytes} recorded when it finished downloading"
+            f"{reference_size} recorded for the completed artifact"
         )
     return None
 
