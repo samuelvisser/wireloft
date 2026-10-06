@@ -35,7 +35,7 @@ def upgrade() -> None:
             "downloaded_publish_status = :countdown_status "
             "OR id IN ("
             "SELECT md.id FROM media_downloads AS md "
-            "JOIN episodes AS e ON e.id = md.media_item_id "
+            "JOIN media_items_episode AS e ON e.id = md.media_item_id "
             "WHERE e.publish_status = :countdown_status"
             ")"
             ") "

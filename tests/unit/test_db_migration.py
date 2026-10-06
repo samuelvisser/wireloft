@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "f2a6c93d8b14"
+HEAD_REVISION = "6d3a9f1c2b7e"
+WIRELOFT_1_2_1_REVISION = "f2a6c93d8b14"
 WIRELOFT_1_2_REVISION = "6d4a8c1f2b90"
 PRE_HISTORY_HEAD_REVISION = "6d1e8f2a4c73"
 PRE_HISTORY_PARENT_REVISION = "d4a7c2e91b63"
@@ -243,7 +244,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_2_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_2_1_REVISION
+    assert script.get_revision(WIRELOFT_1_2_1_REVISION).down_revision == WIRELOFT_1_2_REVISION
     assert (
         script.get_revision(WIRELOFT_1_2_REVISION).down_revision
         == "d8b4a1f6c203"
@@ -251,6 +253,105 @@ def test_migration_history_has_one_head(migration_database):
     assert script.get_revision("d8b4a1f6c203").down_revision == WIRELOFT_1_0_REVISION
     assert script.get_revision(WIRELOFT_1_0_REVISION).down_revision == BASE_REVISION
     assert script.get_revision(BASE_REVISION) is not None
+
+
+
+def test_countdown_redownload_intent_migration_uses_current_episode_table(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config, upgrade_database
+
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        WIRELOFT_1_2_1_REVISION,
+    )
+
+    with engine.begin() as connection:
+        show_id = connection.execute(text(
+            "INSERT INTO shows "
+            "(uuid, slug, title, description, sharing_url, membership_level, type, "
+            "episode_identifier, author_name, author_slug) VALUES "
+            "('countdown-migration-show', 'countdown-migration-show', 'Countdown Migration', "
+            "NULL, 'https://example.test/countdown-migration-show', 'FREE', 'podcast', "
+            "'numbered', 'Host', 'host')"
+        )).lastrowid
+        season_id = connection.execute(text(
+            "INSERT INTO seasons (show_id, `index`, slug, name) "
+            "VALUES (:show_id, 1, 'season-1', 'Season 1')"
+        ), {"show_id": show_id}).lastrowid
+        media_item_id = connection.execute(text(
+            "INSERT INTO media_items (uuid, type) "
+            "VALUES ('countdown-migration-episode', 'episode')"
+        )).lastrowid
+        connection.execute(text(
+            "INSERT INTO media_items_episode "
+            "(id, show_id, season_id, `index`, episode_identifier, slug, publish_status, "
+            "sharing_url, title, duration, metadata_is_final) VALUES "
+            "(:id, :show_id, :season_id, 1, 'ep.1', 'countdown-migration-episode', "
+            "'published_with_countdown', 'https://example.test/countdown-migration-episode', "
+            "'Countdown Episode', 1800, 1)"
+        ), {
+            "id": media_item_id,
+            "show_id": show_id,
+            "season_id": season_id,
+        })
+
+        local_profile_id = connection.execute(text(
+            "INSERT INTO local_media_profiles "
+            "(slug, name, output_template, preferred_format, type) VALUES "
+            "('countdown-migration-audio', 'Countdown Migration Audio', "
+            "'/downloads/{{ episode_title }}.ext', 'format_audio_only', 'show')"
+        )).lastrowid
+        connection.execute(text(
+            "INSERT INTO local_media_profiles_show (id) VALUES (:id)"
+        ), {"id": local_profile_id})
+
+        download_profile_id = connection.execute(text(
+            "INSERT INTO download_profiles "
+            "(show_id, local_media_profile_id, type, enable_profile, ep_id_type_list) "
+            "VALUES (:show_id, :local_profile_id, 'podcast', 1, '[\"ep\"]')"
+        ), {
+            "show_id": show_id,
+            "local_profile_id": local_profile_id,
+        }).lastrowid
+        connection.execute(text(
+            "INSERT INTO download_profiles_podcast "
+            "(id, download_with_countdown, redownload_final, download_days_in_past, "
+            "delete_older_episodes, download_episode_count) "
+            "VALUES (:id, 1, 1, 0, 0, 0)"
+        ), {"id": download_profile_id})
+
+        media_download_id = connection.execute(text(
+            "INSERT INTO media_downloads "
+            "(type, media_item_id, local_media_profile_id, file_path, artifact_status) "
+            "VALUES ('episode', :media_item_id, :local_profile_id, "
+            "'/downloads/countdown.m4a', 'available')"
+        ), {
+            "media_item_id": media_item_id,
+            "local_profile_id": local_profile_id,
+        }).lastrowid
+        connection.execute(text(
+            "INSERT INTO media_downloads_episode "
+            "(id, download_profile_id, downloaded_publish_status) "
+            "VALUES (:id, :download_profile_id, 'published_with_countdown')"
+        ), {
+            "id": media_download_id,
+            "download_profile_id": download_profile_id,
+        })
+
+    upgrade_database()
+
+    inspector = inspect(engine)
+    assert "redownload_when_final" in {
+        column["name"]
+        for column in inspector.get_columns("media_downloads_episode")
+    }
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT redownload_when_final FROM media_downloads_episode WHERE id = :id"
+        ), {"id": media_download_id}).scalar_one() == 1
+        assert connection.execute(text(
+            "SELECT alembic_version_num FROM settings"
+        )).scalar_one() == HEAD_REVISION
 
 
 def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
