@@ -164,7 +164,6 @@ def _get_local_media_profile_statistics(
                         (
                             physical_download,
                             func.coalesce(
-                                MediaDownloadBase.downloaded_bytes,
                                 MediaDownloadBase.artifact_size_bytes,
                                 0,
                             ),

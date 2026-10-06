@@ -121,7 +121,7 @@ def test_local_media_profile_view_reports_managed_download_statistics() -> None:
         assert view.profile.id == profile.id
         assert view.statistics.managed_media_count == 2
         assert view.statistics.downloaded_media_count == 1
-        assert view.statistics.storage_size_bytes == 2048
+        assert view.statistics.storage_size_bytes == 1024
         assert view.statistics.download_profile_count == 0
     finally:
         session.close()

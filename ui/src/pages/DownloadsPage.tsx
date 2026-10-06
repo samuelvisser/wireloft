@@ -398,10 +398,10 @@ export default function DownloadsPage() {
         },
         {
             header: 'Size',
-            accessor: (row) => formatBytes(row.downloadedBytes) || '—',
+            accessor: (row) => formatBytes(row.artifactSizeBytes) || '—',
             align: 'right',
             dataLabel: 'Size',
-            sortAccessor: (row) => row.downloadedBytes,
+            sortAccessor: (row) => row.artifactSizeBytes,
             width: '10%',
         },
         {
@@ -535,7 +535,7 @@ export default function DownloadsPage() {
                             <span className="mobile-summary-subtitle">{rowContext(row)}</span>
                             <DownloadProgressStatus download={row} compact details={false}/>
                             <span className="mobile-summary-meta">
-                                <span>{formatBytes(row.downloadedBytes)}</span>
+                                <span>{formatBytes(row.artifactSizeBytes)}</span>
                                 <span>{row.formatDownloaded ?? 'Unknown format'}</span>
                             </span>
                         </>

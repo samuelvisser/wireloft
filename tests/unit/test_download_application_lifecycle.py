@@ -83,7 +83,9 @@ def test_artifacts_history_and_execution_commit_atomically(library, tmp_path, mo
         record = session.get(MediaDownloadBase,download_id)
         assert record.artifact_status == 'available'
         assert Path(record.assets[0].path).read_bytes() == b'<movie/>'
-        assert MediaDownloadAPIRead.model_validate(record).assets[0].asset_key == 'nfo'
+        api_download = MediaDownloadAPIRead.model_validate(record)
+        assert api_download.assets[0].asset_key == 'nfo'
+        assert api_download.artifact_size_bytes == 100
         assert session.get(TaskRun,run_id).status == 'SUCCEEDED'
         completed = session.scalar(select(MediaDownloadHistory).where(MediaDownloadHistory.media_download_id == download_id,MediaDownloadHistory.action == 'completed'))
         assert completed.event_metadata['lifecycle']['phase'] == 'complete'

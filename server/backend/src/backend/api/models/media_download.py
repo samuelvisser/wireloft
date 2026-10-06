@@ -56,6 +56,7 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     assets: list[MediaDownloadAssetAPIRead] = Field(default_factory=list)
     artifact_status: MediaDownloadArtifactStatus | str
     artifact_error: Optional[str]
+    artifact_size_bytes: Optional[int]
     automatic_retry_suppressed: bool
     downloaded_bytes: Optional[int]
     format_downloaded: Optional[str]
