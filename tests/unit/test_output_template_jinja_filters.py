@@ -11,6 +11,43 @@ def _render(template: str, title: str) -> str:
     )
 
 
+def test_strftime_formats_wireloft_date_and_datetime_values() -> None:
+    from backend.utils.output_template import SHOW_OUTPUT_TEMPLATE_FIELDS, render_output_template
+
+    assert render_output_template(
+        '/downloads/{{ date | strftime("%d-%m-%Y") }}.ext',
+        {"date": "2026-09-24"},
+        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+    ) == "/downloads/24-09-2026.ext"
+
+    assert render_output_template(
+        '/downloads/{{ datetime | strftime("%Y%m%d-%H%M%S") }}.ext',
+        {"datetime": "2026-09-24 20:13:05"},
+        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+    ) == "/downloads/20260924-201305.ext"
+
+
+def test_strftime_keeps_missing_date_empty() -> None:
+    from backend.utils.output_template import SHOW_OUTPUT_TEMPLATE_FIELDS, render_output_template
+
+    assert render_output_template(
+        '/downloads/prefix{{ date | strftime("%Y%m%d") }}.ext',
+        {"date": ""},
+        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+    ) == "/downloads/prefix.ext"
+
+
+def test_strftime_rejects_non_date_values() -> None:
+    from backend.utils.output_template import SHOW_OUTPUT_TEMPLATE_FIELDS, render_output_template
+
+    with pytest.raises(ValueError, match="strftime requires a WireLoft date/time value"):
+        render_output_template(
+            '/downloads/{{ date | strftime("%Y%m%d") }}.ext',
+            {"date": "not-a-date"},
+            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        )
+
+
 def test_regex_replace_replaces_all_matches_by_default() -> None:
     rendered = _render(
         "/downloads/{{ title | regex_replace('(?<=[0-9])[xX](?=[0-9])', '-by-') }}.ext",
@@ -84,5 +121,7 @@ def test_regex_filters_are_isolated_to_output_template_environment() -> None:
 
     assert "regex_replace" in output_template_environment.filters
     assert "regex_search" in output_template_environment.filters
+    assert "strftime" in output_template_environment.filters
     assert "regex_replace" not in Environment().filters
     assert "regex_search" not in Environment().filters
+    assert "strftime" not in Environment().filters
