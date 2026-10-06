@@ -5,7 +5,7 @@ import {tags} from '@lezer/highlight'
 export const outputTemplateHighlightStyle = HighlightStyle.define([
     {tag: tags.brace, class: 'cm-jinja-brace'},
     {
-        tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.operatorKeyword],
+        tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.operatorKeyword, tags.logicOperator],
         class: 'cm-jinja-keyword',
     },
     {
@@ -15,7 +15,7 @@ export const outputTemplateHighlightStyle = HighlightStyle.define([
     {tag: tags.string, class: 'cm-jinja-string'},
     {tag: [tags.number, tags.bool], class: 'cm-jinja-literal'},
     {
-        tag: [tags.operator, tags.arithmeticOperator, tags.logicOperator, tags.compareOperator],
+        tag: [tags.operator, tags.arithmeticOperator, tags.compareOperator],
         class: 'cm-jinja-operator',
     },
     {tag: tags.comment, class: 'cm-jinja-comment'},

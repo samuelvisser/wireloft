@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from datetime import date, datetime, time
 
 from jinja2 import StrictUndefined, pass_context
 from jinja2.exceptions import TemplateRuntimeError
@@ -37,6 +38,45 @@ def regex_search(value: object, pattern: object) -> bool:
     return _compile_regex(pattern).search(str(value)) is not None
 
 
+def _parse_strftime_value(value: object) -> date | datetime | time | None:
+    """Parse the canonical date/time strings exposed to output templates."""
+    if isinstance(value, (datetime, date, time)):
+        return value
+
+    text = str(value)
+    if not text:
+        return None
+
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        pass
+    try:
+        return time.fromisoformat(text)
+    except ValueError:
+        pass
+
+    raise TemplateRuntimeError(
+        "strftime requires a WireLoft date/time value in ISO format"
+    )
+
+
+def strftime(value: object, format_string: object) -> str:
+    """Format a WireLoft date/time value with Python strftime directives."""
+    parsed = _parse_strftime_value(value)
+    if parsed is None:
+        return ""
+
+    try:
+        return parsed.strftime(str(format_string))
+    except (TypeError, ValueError, OSError) as exc:
+        raise TemplateRuntimeError(f"Invalid strftime format: {exc}") from exc
+
+
 def create_output_template_environment(
     *,
     custom_index_resolver: Callable[[str], object] | None = None,
@@ -66,6 +106,7 @@ def create_output_template_environment(
     environment.filters.update({
         "regex_replace": regex_replace,
         "regex_search": regex_search,
+        "strftime": strftime,
         "custom_index": custom_index,
     })
     return environment
